@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  password      String    // Hashed password
+  role          String    @default("GDO") // ADMIN, MANAGER, GDO
+  leads         Lead[]    // Leads assigned to this user
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  confirmationsNotes ConfirmationsNote[]
+  auditEvents        AuditEvent[]
+  salesLeads         Lead[]    @relation("LeadSalesperson")
+  calendarConnections CalendarConnection[]
+  calendarEvents      CalendarEvent[]
+}
+
+model Lead {
+  id            String    @id @default(cuid())
+  name          String
+  email         String?
+  phone         String    @unique
+  funnel        String?
+  
+  status        String    @default("NEW") // NEW, IN_PROGRESS, REJECTED, APPOINTMENT
+  callCount     Int       @default(0) // increment on each 'not answered' or any call
+  
+  // Pipeline details
+  assignedToId  String?
+  assignedTo    User?     @relation(fields: [assignedToId], references: [id])
+  
+  // Last call snapshot (for fast queries)
+  lastCallDate  DateTime?
+  lastCallNote  String?
+  
+  // If 'richiamo'
+  recallDate    DateTime?
+  
+  // If appointment, we keep track of when they meet and when it was fixed
+  appointmentDate      DateTime?
+  appointmentNote      String?
+  appointmentCreatedAt DateTime?
+  
+  // Conferme Flow
+  confirmationsOutcome         String? // "scartato" | "confermato"
+  confirmationsDiscardReason   String? 
+  confirmationsUserId          String?
+  confirmationsTimestamp       DateTime?
+  salespersonAssigned          String? // Legacy name string
+  salespersonAssignedAt        DateTime?
+  salespersonUserId            String?
+  salespersonUser              User?     @relation("LeadSalesperson", fields: [salespersonUserId], references: [id])
+  salespersonOutcome           String? // "Chiuso" | "Non chiuso" | "Sparito"
+  salespersonOutcomeNotes      String?
+  salespersonOutcomeAt         DateTime?
+  
+  closeProduct                 String? // "advance" | "gold" | "exclusive"
+  closeAmountEur               Float?
+  notClosedReason              String?
+  followUp1Date                DateTime?
+  followUp2Date                DateTime?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  calls         CallLog[]
+  confirmationsNotes ConfirmationsNote[]
+  auditEvents        AuditEvent[]
+}
+
+model CallLog {
+  id            String    @id @default(cuid())
+  leadId        String
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId        String?   // The GDO who made the call
+  
+  outcome       String    // NOT_ANSWERED, RECALL, REJECTED, APPOINTMENT
+  note          String?
+  
+  createdAt     DateTime  @default(now())
+}
+
+model ConfirmationsNote {
+  id            String    @id @default(cuid())
+  leadId        String
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User      @relation(fields: [authorId], references: [id])
+  text          String
+  createdAt     DateTime  @default(now())
+}
+
+model AuditEvent {
+  id            String    @id @default(cuid())
+  entityId      String    
+  lead          Lead      @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  eventType     String    
+  actorId       String
+  actor         User      @relation(fields: [actorId], references: [id])
+  metadata      String?   
+  createdAt     DateTime  @default(now())
+}
+
+model CalendarConnection {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String    @default("google")
+  accessToken       String    // Consider encrypting in production
+  refreshToken      String    // Consider encrypting in production
+  tokenExpiry       DateTime
+  primaryCalendarId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model CalendarEvent {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadId          String
+  eventType       String    // "appointment" | "followup_1" | "followup_2"
+  googleEventId   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}

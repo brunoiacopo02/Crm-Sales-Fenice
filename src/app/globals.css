@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-brand-orange: #FFBE82;
+  --color-brand-orange-hover: #e8a66b;
+  --color-brand-charcoal: #272626;
+  --color-brand-gray: #f3f4f6;
+  --color-brand-light: #ffffff;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-brand-light);
+    color: var(--color-brand-charcoal);
+  }
+}
+
+/* =========================================
+   FENICE STORE - SKIN CLASSES
+   Queste classi vengono salvate nel database (shopItems.cssValue) 
+   e applicate dinamicamente agli elementi UI.
+   ========================================= */
+
+/* --- AVATAR SKINS (FULL AVATAR) --- */
+
+.skin-avatar-baby,
+.skin-avatar-warrior,
+.skin-avatar-fairy,
+.skin-avatar-adult {
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  /* Nascondiamo l'iniziale del nome utente all'interno del div rotondo */
+  color: transparent !important;
+  border: 2px solid var(--color-brand-orange-hover);
+  box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+}
+
+.skin-avatar-baby {
+  background-image: url('/assets/store/avatar_baby_fenice.png?v=fun') !important;
+}
+
+.skin-avatar-warrior {
+  background-image: url('/assets/store/avatar_warrior.png?v=fun') !important;
+}
+
+.skin-avatar-fairy {
+  background-image: url('/assets/store/avatar_fairy.png?v=fun') !important;
+}
+
+.skin-avatar-adult {
+  background-image: url('/assets/store/avatar_adult_phoenix.png?v=fun') !important;
+}
+
+/* --- THEMES (DASHBOARD BACKGROUNDS) --- */
+
+/* Uso selector specifici per assicurarmi che vincano contro bg-gray-50 ma non forzandoli con !important ovunque */
+body .skin-theme-midnight {
+  background-image: url('/assets/store/theme_midnight_executive.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  color: white;
+}
+
+body .skin-theme-ivory {
+  background-image: url('/assets/store/theme_ivory_prestige.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+body .skin-theme-crimson {
+  background-image: url('/assets/store/theme_crimson_horizon.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  color: white;
+}

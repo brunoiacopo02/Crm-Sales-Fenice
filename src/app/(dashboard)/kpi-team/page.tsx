@@ -1,0 +1,33 @@
+import { createClient } from "@/utils/supabase/server"
+import { redirect } from "next/navigation"
+import { KpiTeamDashboard } from "@/components/KpiTeamDashboard"
+
+export default async function KpiTeamPage() {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+
+    // Sicurezza di navigazione Manager/Admin
+    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER')) {
+        redirect("/")
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between max-w-7xl mx-auto">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">
+                        KPI Team Globale & Leaderboard
+                    </h1>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Panoramica aggregata delle performance, grafici dei flussi chiamate/appuntamenti e ranking Operatori.
+                    </p>
+                </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto">
+                <KpiTeamDashboard />
+            </div>
+        </div>
+    )
+}
