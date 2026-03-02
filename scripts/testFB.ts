@@ -5,24 +5,24 @@ import { checkFreeBusy, createGoogleCalendarEvent } from "../src/lib/googleCalen
 
 async function run() {
     try {
-        const testSales = await db.select().from(users).where(eq(users.email, 'sales001@fenice.com')).get();
-        if(!testSales) return console.log('user non trovato');
-        
+        const testSales = (await db.select().from(users).where(eq(users.email, 'sales001@fenice.com')))[0];
+        if (!testSales) return console.log('user non trovato');
+
         console.log('Testing FreeBusy check...');
         const isFree = await checkFreeBusy(testSales.id, new Date(), new Date(Date.now() + 3600000));
         console.log('Is Free?', isFree);
-        
+
         console.log('Testing event creation with attendee...');
         const res = await createGoogleCalendarEvent(testSales.id, {
             summary: 'Test Attendee + FreeBusy CRM',
             description: 'Test automatico',
             startTime: new Date(Date.now() + 86400000), // Domani
             endTime: new Date(Date.now() + 86400000 + 3600000),
-            attendees: [{email: 'testb@example.com'}]
+            attendees: [{ email: 'testb@example.com' }]
         }, "fake_lead", "appointment");
-        
+
         console.log('Risultato evento id:', res?.id || 'fallito');
-    } catch(e) {
+    } catch (e) {
         console.error('ERRORE:', e);
     }
 }

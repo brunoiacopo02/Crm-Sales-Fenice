@@ -212,7 +212,6 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
         weeklyConfirmedTarget: user.weeklyConfirmedTarget,
         weeklyConfirmed: weeklyConfirmedCount
     }
-    console.log(`[getGdoTargetsProgress] GDO: ${gdoId} - Range: ${weekStart.toISOString()} to ${weekEnd.toISOString()} - WeeklyConfirmed: ${weeklyConfirmedCount}`)
 
     return res
 }
