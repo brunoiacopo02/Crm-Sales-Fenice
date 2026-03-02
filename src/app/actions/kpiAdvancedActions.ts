@@ -7,8 +7,8 @@ import { gte, lte, and, eq, desc } from "drizzle-orm"
 import { cache } from "react"
 
 export type KpiFilters = {
-    startDate: Date
-    endDate: Date
+    startDate: Date | string
+    endDate: Date | string
     funnel?: string
     gdoId?: string
 }
@@ -40,10 +40,15 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     let allLeads = await (leadConditions.length > 0 ? leadsQuery.where(and(...leadConditions)) : leadsQuery)
 
+    // Sicurezza Type: converti stringhe ISO in oggetti Date, dato che Next.js 
+    // serializza in JSON senza conservare i prototipi passando ai Server Action.
+    const safeStartDate = new Date(filters.startDate)
+    const safeEndDate = new Date(filters.endDate)
+
     // Now fetch logs within the date range
     let logConditions = [
-        gte(callLogs.createdAt, filters.startDate),
-        lte(callLogs.createdAt, filters.endDate)
+        gte(callLogs.createdAt, safeStartDate),
+        lte(callLogs.createdAt, safeEndDate)
     ]
     if (filters.gdoId) logConditions.push(eq(callLogs.userId, filters.gdoId))
 
@@ -155,7 +160,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     }
 })
 
-export const getGdoTargetsProgress = cache(async (gdoId: string) => {
+export const getGdoTargetsProgress = async (gdoId: string) => {
     // Fetch targets from user
     const user = (await db.select({
         dailyApptTarget: users.dailyApptTarget,
@@ -196,15 +201,18 @@ export const getGdoTargetsProgress = cache(async (gdoId: string) => {
         .from(leads)
         .where(and(
             eq(leads.assignedToId, gdoId),
-            eq(leads.confirmationsOutcome, 'CONFERMATO'),
+            eq(leads.confirmationsOutcome, 'confermato'),
             gte(leads.confirmationsTimestamp, weekStart),
             lte(leads.confirmationsTimestamp, weekEnd)
         ))).length
 
-    return {
+    const res = {
         dailyApptTarget: user.dailyApptTarget,
         todayAppointments: todayAppointmentsCount,
         weeklyConfirmedTarget: user.weeklyConfirmedTarget,
         weeklyConfirmed: weeklyConfirmedCount
     }
-})
+    console.log(`[getGdoTargetsProgress] GDO: ${gdoId} - Range: ${weekStart.toISOString()} to ${weekEnd.toISOString()} - WeeklyConfirmed: ${weeklyConfirmedCount}`)
+
+    return res
+}

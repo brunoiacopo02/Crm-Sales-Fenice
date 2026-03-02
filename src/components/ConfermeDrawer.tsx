@@ -15,6 +15,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const gdo = item.gdo;
 
     const [activeTab, setActiveTab] = useState("dati")
+    const [localVersion, setLocalVersion] = useState(lead.version)
 
     // Form states
     const [editName, setEditName] = useState(lead.name || "")
@@ -57,6 +58,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
     useEffect(() => {
         if (isOpen) {
+            setLocalVersion(lead.version)
             setEditName(lead.name || "")
             setEditEmail(lead.email || "")
             if (lead.appointmentDate) {
@@ -100,12 +102,13 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         setSavingData(true)
         try {
             const combinedDate = new Date(`${editDate}T${editTime}:00`);
-            await updateLeadDataConferme(lead.id, lead.version, {
+            await updateLeadDataConferme(lead.id, localVersion, {
                 name: editName,
                 email: editEmail,
                 appointmentDate: combinedDate,
                 appointmentNote: editNoteGdo
             })
+            setLocalVersion((v: number) => v + 1)
             onRefresh()
             alert("Dati salvati con successo")
         } catch (error) {
@@ -133,11 +136,18 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
     const handleSaveOutcome = async () => {
         if (outcome === "scartato" && !discardReason) return alert("Inserisci motivo scarto");
-        if (outcome === "confermato" && !salesperson) return alert("Seleziona venditore assegnato");
+        if (outcome === "confermato") {
+            if (!salesperson) return alert("Seleziona venditore assegnato");
+            if (!editEmail) {
+                alert("ATTENZIONE: L'email del lead è obbligatoria per fissare un appuntamento e inviargli l'invito su Calendar.\nVai nella tab 'Dati Lead', inserisci la sua email, premi 'Salva Modifiche' e poi potrai confermare l'esito.");
+                setActiveTab("dati");
+                return;
+            }
+        }
 
         setSavingOutcome(true)
         try {
-            const result = await setConfermeOutcome(lead.id, lead.version, outcome as "scartato" | "confermato", discardReason, salesperson)
+            const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", discardReason, salesperson)
             if (result && !result.success) {
                 alert(`Errore salvataggio esito: ${result.error}`)
                 return;
@@ -161,7 +171,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         if (!spOutcome) return alert("Seleziona esito venditore");
         setSavingSpOutcome(true)
         try {
-            const result = await setSalespersonOutcome(lead.id, lead.version, spOutcome as "Chiuso" | "Non chiuso" | "Lead non presenziato", spNotes)
+            const result = await setSalespersonOutcome(lead.id, localVersion, spOutcome as "Chiuso" | "Non chiuso" | "Lead non presenziato", spNotes)
             if (result && !result.success) {
                 alert(`Errore salvataggio esito venditore: ${result.error}`);
                 return;

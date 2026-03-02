@@ -4,15 +4,15 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
 
-// Tipo base per le notifiche, adattabile allo schema reale
 export type Notification = {
     id: string
     recipientUserId: string
+    type: string
     title: string
-    message: string
-    status: 'UNREAD' | 'READ'
+    body: string
+    status: 'unread' | 'read'
+    metadata: any
     createdAt: string
-    [key: string]: any
 }
 
 export function useRealtimeNotifications() {
@@ -20,31 +20,29 @@ export function useRealtimeNotifications() {
     const supabase = createClient()
     const [notifications, setNotifications] = useState<Notification[]>([])
     const [unreadCount, setUnreadCount] = useState(0)
+    const [liveToast, setLiveToast] = useState<Notification | null>(null)
 
     useEffect(() => {
         if (!user) return
 
-        // 1. Carica le notifiche iniziali usando l'API server action o fetch Drizzle esistente
-        // Per pura dimostrazione client-side leggiamo le ultime 10 ignorando Drizzle per un attimo se RLS lo permette
         const fetchInitial = async () => {
             const { data, error } = await supabase
                 .from('notifications')
                 .select('*')
                 .eq('recipientUserId', user.id)
                 .order('createdAt', { ascending: false })
-                .limit(10)
+                .limit(20)
 
-            if (data) {
+            if (data && !error) {
                 setNotifications(data as Notification[])
-                setUnreadCount(data.filter((n) => n.status === 'UNREAD').length)
+                setUnreadCount(data.filter((n) => n.status === 'unread').length)
             }
         }
 
         fetchInitial()
 
-        // 2. Iscrizione al canale Realtime di Supabase
         const channel = supabase
-            .channel('schema-db-changes')
+            .channel('realtime_notifications')
             .on(
                 'postgres_changes',
                 {
@@ -54,10 +52,16 @@ export function useRealtimeNotifications() {
                     filter: `recipientUserId=eq.${user.id}`,
                 },
                 (payload) => {
-                    console.log('🔔 Nuova notifica Live:', payload.new)
-                    // Aggiungi la nuova notifica in cima alla lista
-                    setNotifications((prev) => [payload.new as Notification, ...prev])
+                    const newNotif = payload.new as Notification
+                    console.log('🔔 Nuova notifica Live:', newNotif)
+                    setNotifications((prev) => [newNotif, ...prev])
                     setUnreadCount((prev) => prev + 1)
+                    setLiveToast(newNotif)
+
+                    // Dispatch a global event to let other components re-fetch (e.g. KPI Board)
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('realtime_update', { detail: { type: newNotif.type } }))
+                    }
                 }
             )
             .on(
@@ -69,12 +73,10 @@ export function useRealtimeNotifications() {
                     filter: `recipientUserId=eq.${user.id}`,
                 },
                 (payload) => {
-                    // Aggiorna lo stato se una notifica viene letta da un'altra tab
                     setNotifications((prev) =>
                         prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
                     )
-
-                    if (payload.old.status === 'UNREAD' && payload.new.status === 'READ') {
+                    if (payload.old.status === 'unread' && payload.new.status === 'read') {
                         setUnreadCount((prev) => Math.max(0, prev - 1))
                     }
                 }
@@ -86,5 +88,5 @@ export function useRealtimeNotifications() {
         }
     }, [user, supabase])
 
-    return { notifications, unreadCount, setNotifications, setUnreadCount }
+    return { notifications, unreadCount, setNotifications, setUnreadCount, liveToast, setLiveToast }
 }

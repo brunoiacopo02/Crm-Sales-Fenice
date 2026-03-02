@@ -52,8 +52,46 @@ export async function refreshAccessToken(userId: string) {
     return credentials.access_token;
 }
 
+export async function checkFreeBusy(userId: string, startTime: Date, endTime: Date): Promise<boolean> {
+    const connection = await db.query.calendarConnections.findFirst({
+        where: eq(calendarConnections.userId, userId)
+    });
+
+    if (!connection) return true; // Se non è connesso al calendario passiamo oltre
+
+    let accessToken = connection.accessToken;
+
+    if (connection.tokenExpiry && connection.tokenExpiry < new Date()) {
+        try {
+            accessToken = await refreshAccessToken(userId) as string;
+        } catch (e) {
+            console.error("Unable to refresh token for FreeBusy check", e);
+            return true;
+        }
+    }
+
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    try {
+        const res = await calendar.freebusy.query({
+            requestBody: {
+                timeMin: startTime.toISOString(),
+                timeMax: endTime.toISOString(),
+                items: [{ id: 'primary' }]
+            }
+        });
+
+        const busySlots = res.data.calendars?.['primary']?.busy;
+        return busySlots && busySlots.length > 0 ? false : true; // false = occupato, true = libero
+    } catch (e: any) {
+        console.error("Error checking freebusy", e.message);
+        return true; // Fallback to true su errori API
+    }
+}
+
 export async function createGoogleCalendarEvent(userId: string, eventDetails: any, associatedEntityId: string, eventType: string) {
-    let connection = await db.query.calendarConnections.findFirst({
+    const connection = await db.query.calendarConnections.findFirst({
         where: eq(calendarConnections.userId, userId)
     });
 
@@ -74,26 +112,33 @@ export async function createGoogleCalendarEvent(userId: string, eventDetails: an
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     try {
+        const requestBody: any = {
+            summary: eventDetails.summary,
+            description: eventDetails.description,
+            start: {
+                dateTime: eventDetails.startTime.toISOString(),
+                timeZone: 'Europe/Rome',
+            },
+            end: {
+                dateTime: eventDetails.endTime.toISOString(),
+                timeZone: 'Europe/Rome',
+            },
+            reminders: {
+                useDefault: false,
+                overrides: [
+                    { method: 'popup', minutes: 30 },
+                ],
+            }
+        };
+
+        if (eventDetails.attendees && eventDetails.attendees.length > 0) {
+            requestBody.attendees = eventDetails.attendees;
+        }
+
         const res = await calendar.events.insert({
             calendarId: 'primary',
-            requestBody: {
-                summary: eventDetails.summary,
-                description: eventDetails.description,
-                start: {
-                    dateTime: eventDetails.startTime.toISOString(),
-                    timeZone: 'Europe/Rome',
-                },
-                end: {
-                    dateTime: eventDetails.endTime.toISOString(),
-                    timeZone: 'Europe/Rome',
-                },
-                reminders: {
-                    useDefault: false,
-                    overrides: [
-                        { method: 'popup', minutes: 30 },
-                    ],
-                }
-            }
+            sendUpdates: 'all', // Forza Google a mandare la mail di invito al lead!
+            requestBody
         });
 
         // Controlla se abbiamo il lead in db

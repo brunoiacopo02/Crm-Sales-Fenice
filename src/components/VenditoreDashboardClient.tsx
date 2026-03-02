@@ -8,8 +8,10 @@ import { it } from "date-fns/locale"
 import { VenditoreDrawer } from "@/components/VenditoreDrawer"
 import { KpiVenditoriClient } from "@/components/KpiVenditoriClient"
 import { getGoogleAuthUrl, checkGoogleCalendarConnection, disconnectGoogleCalendar } from "@/app/actions/calendarActions"
+import { createClient } from "@/utils/supabase/client"
 
 export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
+    const supabase = createClient()
     const [view, setView] = useState<'LISTA' | 'AGENDA' | 'CLASSIFICA'>('LISTA')
     const [appointments, setAppointments] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -55,6 +57,27 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     useEffect(() => {
         fetchAppointments()
+
+        const channel = supabase
+            .channel('venditore_leads_updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'leads',
+                    filter: `salespersonUserId=eq.${sellerId}`
+                },
+                (payload) => {
+                    console.log('🔄 Update in arrivo da Supabase per Venditore:', payload)
+                    fetchAppointments()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
     }, [sellerId])
 
     const filteredAppointments = appointments.filter(app => {

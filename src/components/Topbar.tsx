@@ -28,12 +28,18 @@ export function Topbar() {
     const notifRef = useRef<HTMLDivElement>(null)
     const router = useRouter()
 
-    const [notifications, setNotifications] = useState<any[]>([])
+    const { notifications, setNotifications, liveToast, setLiveToast } = useRealtimeNotifications()
     const [isNotifOpen, setIsNotifOpen] = useState(false)
-    const [liveToast, setLiveToast] = useState<any | null>(null)
     const [walletCoins, setWalletCoins] = useState(0)
     const [skinCss, setSkinCss] = useState<string | null>(null)
     const prevNotifIdsRef = useRef<Set<string>>(new Set())
+
+    useEffect(() => {
+        if (session?.user?.id) {
+            getUserWalletCoins(session.user.id).then(setWalletCoins).catch(console.error)
+            getEquippedSkinCss(session.user.id).then(setSkinCss).catch(console.error)
+        }
+    }, [session?.user?.id])
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -52,13 +58,13 @@ export function Topbar() {
         setIsNotifOpen(false)
         // Mark as read immediately
         await markNotificationsAsRead([notif.id])
-        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, status: 'READ' } : n))
+        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, status: 'read' } : n))
 
         // Navigate based on type
         const meta = notif.metadata as Record<string, any>
         if (notif.type === 'leaderboard_overtaken') {
             router.push(`/classifica?period=${meta?.period || 'today'}`)
-        } else if (notif.type === 'appointment_confirmed' || notif.type === 'sales_outcome_set') {
+        } else if (notif.type === 'appointment_confirmed' || notif.type === 'sales_outcome_set' || notif.type === 'appointment_assigned') {
             // Se la notifica riguarda un lead, apriamo la drawer cercando globalmente
             if (meta?.leadId) {
                 setSelectedLeadId(meta.leadId)
@@ -71,7 +77,7 @@ export function Topbar() {
         e.stopPropagation()
         if (!session?.user?.id) return
         await markAllNotificationsAsRead(session.user.id)
-        setNotifications(prev => prev.map(n => ({ ...n, status: 'READ' })))
+        setNotifications(prev => prev.map(n => ({ ...n, status: 'read' })))
     }
 
     useEffect(() => {
@@ -192,9 +198,9 @@ export function Topbar() {
                         className="p-2 text-gray-400 hover:text-gray-500 relative transition-colors"
                     >
                         <Bell className="h-6 w-6" />
-                        {notifications.filter(n => n.status === 'UNREAD').length > 0 && (
+                        {notifications.filter(n => n.status === 'unread').length > 0 && (
                             <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-orange ring-2 ring-white text-[9px] font-bold text-white">
-                                {notifications.filter(n => n.status === 'UNREAD').length}
+                                {notifications.filter(n => n.status === 'unread').length}
                             </span>
                         )}
                     </button>

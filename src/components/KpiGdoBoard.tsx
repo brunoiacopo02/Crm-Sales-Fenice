@@ -90,9 +90,11 @@ export function KpiGdoBoard() {
 
         fetchKpi()
 
-        // Implementazione Short-Polling Real-time per KPI
-        const intervalId = setInterval(fetchKpi, 10000)
-        return () => clearInterval(intervalId)
+        // Supabase Real-time Trigger in ascolto dal custom event del Topbar
+        const handleRealtimeUpdate = () => fetchKpi()
+        window.addEventListener('realtime_update', handleRealtimeUpdate)
+
+        return () => window.removeEventListener('realtime_update', handleRealtimeUpdate)
     }, [dateRange, customStart, customEnd, funnelFilter, gdoFilter, session?.user?.id, isAdminOrManager])
 
     if (!data && loading) {

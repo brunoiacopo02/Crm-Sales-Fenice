@@ -5,7 +5,7 @@ import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications } from "@/db/schema"
 import { eq, asc, desc, and, or, like, between, isNull } from "drizzle-orm"
 import crypto from "crypto"
-import { createGoogleCalendarEvent } from "@/lib/googleCalendar"
+import { createGoogleCalendarEvent, checkFreeBusy } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
 
 export async function getConfermeAppointments(filters: {
@@ -55,12 +55,12 @@ export async function getConfermeAppointments(filters: {
     }
 
     const query = await db.select({
-            lead: leads,
-            gdo: users,
-        }).from(leads)
-            .leftJoin(users, eq(leads.assignedToId, users.id))
-            .where(and(...conditions))
-            .orderBy(asc(leads.appointmentDate))
+        lead: leads,
+        gdo: users,
+    }).from(leads)
+        .leftJoin(users, eq(leads.assignedToId, users.id))
+        .where(and(...conditions))
+        .orderBy(asc(leads.appointmentDate))
 
     let results = await query;
 
@@ -140,13 +140,13 @@ export async function getConfermeNotes(leadId: string) {
     if (!session) throw new Error("Unauthorized")
 
     return await db.select({
-            note: confirmationsNotes,
-            author: users
-        }).from(confirmationsNotes)
-            .leftJoin(users, eq(confirmationsNotes.authorId, users.id))
-            .where(eq(confirmationsNotes.leadId, leadId))
-            .orderBy(desc(confirmationsNotes.createdAt))
-        
+        note: confirmationsNotes,
+        author: users
+    }).from(confirmationsNotes)
+        .leftJoin(users, eq(confirmationsNotes.authorId, users.id))
+        .where(eq(confirmationsNotes.leadId, leadId))
+        .orderBy(desc(confirmationsNotes.createdAt))
+
 }
 
 export async function addConfermeNote(leadId: string, text: string) {
@@ -178,8 +178,8 @@ async function getSalespersonName(userId?: string) {
 export async function setConfermeOutcome(leadId: string, currentVersion: number, outcome: "scartato" | "confermato", reason?: string, salespersonAssigned?: string) {
     try {
         const supabase = await createClient();
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
         if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
             return { success: false, error: "Unauthorized" }
         }
@@ -206,14 +206,23 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         // Handle Calendar Event Creation
         if (outcome === "confermato" && salespersonAssigned && oldLead.appointmentDate) {
             const apptDate = new Date(oldLead.appointmentDate);
+            const endTime = addHours(apptDate, 1);
+
+            // FreeBusy Check
+            const isFree = await checkFreeBusy(salespersonAssigned, apptDate, endTime);
+            if (!isFree) {
+                return { success: false, error: "Il venditore selezionato ha già un impegno in questa fascia oraria in Google Calendar." };
+            }
+
             // Appuntamento durerà di default 1 ora
             await createGoogleCalendarEvent(
                 salespersonAssigned,
                 {
                     summary: `Appuntamento CRM: ${oldLead.name}`,
-                    description: `Lead: ${oldLead.name}\nTelefono: ${oldLead.phone}\nEmail: ${oldLead.email || 'N/A'}\nFunnel: ${oldLead.funnel || 'N/A'}\n\nLink CRM: http://localhost:3000/venditore`,
+                    description: `Lead: ${oldLead.name}\nTelefono: ${oldLead.phone}\nEmail: ${oldLead.email || 'N/A'}\nFunnel: ${oldLead.funnel || 'N/A'}\n\nLink CRM: ${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/venditore`,
                     startTime: apptDate,
-                    endTime: addHours(apptDate, 1)
+                    endTime: endTime,
+                    attendees: oldLead.email ? [{ email: oldLead.email }] : []
                 },
                 leadId,
                 "appointment"
@@ -232,15 +241,31 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             metadata: { outcome, reason, salespersonAssigned }
         })
 
-        // Notifica Live per GDO Target (Pilota E2E)
-        if (outcome === "confermato" && salespersonAssigned && oldLead.assignedToId) {
+        // Notifiche Live (Pilota E2E)
+        if (outcome === "confermato" && salespersonAssigned) {
             const spName = await getSalespersonName(salespersonAssigned) || salespersonAssigned
+
+            // Notifica al GDO
+            if (oldLead.assignedToId) {
+                await db.insert(notifications).values({
+                    id: crypto.randomUUID(),
+                    recipientUserId: oldLead.assignedToId,
+                    type: 'appointment_confirmed',
+                    title: 'Appuntamento Confermato! 🎉',
+                    body: `Ottimo lavoro! Il tuo appuntamento per ${oldLead.name} è stato confermato e assegnato a ${spName}.`,
+                    metadata: { leadId },
+                    status: 'unread',
+                    createdAt: new Date()
+                })
+            }
+
+            // Notifica al Venditore
             await db.insert(notifications).values({
                 id: crypto.randomUUID(),
-                recipientUserId: oldLead.assignedToId,
-                type: 'appointment_confirmed',
-                title: 'Appuntamento Confermato! 🎉',
-                body: `Ottimo lavoro! Il tuo appuntamento per ${oldLead.name} è stato confermato e assegnato a ${spName}.`,
+                recipientUserId: salespersonAssigned, // L'argomento è l'ID utente!
+                type: 'appointment_assigned',
+                title: 'Nuovo Appuntamento! 📅',
+                body: `Ti è stato assegnato un nuovo appuntamento confermato con ${oldLead.name}.`,
                 metadata: { leadId },
                 status: 'unread',
                 createdAt: new Date()
@@ -257,8 +282,8 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
 export async function setSalespersonOutcome(leadId: string, currentVersion: number, outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato", notes?: string) {
     try {
         const supabase = await createClient();
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
         if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
             return { success: false, error: "Unauthorized" }
         }

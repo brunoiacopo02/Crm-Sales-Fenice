@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, boolean, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
     id: text('id').primaryKey(),
@@ -61,6 +61,13 @@ export const leads = pgTable('leads', {
 
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        statusIdx: index('status_idx').on(table.status),
+        assignedToIdx: index('assigned_to_idx').on(table.assignedToId),
+        recallDateIdx: index('recall_date_idx').on(table.recallDate),
+        appointmentDateIdx: index('appointment_date_idx').on(table.appointmentDate),
+    };
 });
 
 export const callLogs = pgTable('callLogs', {
