@@ -228,3 +228,11 @@ export const teamGoals = pgTable('teamGoals', {
     status: text('status').default('active').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
+
+export const marketingBudgets = pgTable('marketingBudgets', {
+    id: text('id').primaryKey(),
+    funnel: text('funnel').notNull(),
+    month: text('month').notNull(), // e.g. '2026-03'
+    spentAmountEur: real('spentAmountEur').default(0).notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});

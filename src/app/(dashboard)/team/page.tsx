@@ -27,6 +27,16 @@ export default async function TeamPage() {
                 </div>
             </div>
 
+            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-900">Dashboard Marketing Analytics</h2>
+                    <p className="text-gray-500 text-sm">Visualizza il ROAS e l'andamento del funnel di acquisizione.</p>
+                </div>
+                <a href="/marketing-analytics" className="px-4 py-2 bg-brand-orange text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors">
+                    Apri Analytics
+                </a>
+            </div>
+
             <ManagerSprintCard managerId={session.user.id} />
 
             <TeamGoalAdminClient />
