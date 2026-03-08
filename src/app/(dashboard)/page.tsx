@@ -9,6 +9,9 @@ export default async function DashboardPage() {
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
 
     if (session?.user?.role === 'ADMIN' || session?.user?.role === 'MANAGER') {
+        if (session.user.email === 'marketing@fenice.local' || session.user.name === 'Marketing') {
+            redirect("/marketing-analytics")
+        }
         redirect("/team")
     }
 

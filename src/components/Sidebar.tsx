@@ -55,18 +55,24 @@ export function Sidebar() {
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
         ]
     } else if (role === "ADMIN" || role === "MANAGER") {
-        navItems = [
-            { name: "Gestione Team", href: "/team", icon: UserCog },
-            { name: "Gestione Store", href: "/team/store", icon: Store },
-            { name: "KPI Team GDO", href: "/kpi-team", icon: LayoutDashboard },
-            { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
-            { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
-            { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
-            { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
-            { name: "Importa Lead", href: "/import", icon: Upload },
-            { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
-            { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
-        ]
+        if (session?.user?.email === "marketing@fenice.local" || session?.user?.name === "Marketing") {
+            navItems = [
+                { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
+            ]
+        } else {
+            navItems = [
+                { name: "Gestione Team", href: "/team", icon: UserCog },
+                { name: "Gestione Store", href: "/team/store", icon: Store },
+                { name: "KPI Team GDO", href: "/kpi-team", icon: LayoutDashboard },
+                { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
+                { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
+                { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
+                { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
+                { name: "Importa Lead", href: "/import", icon: Upload },
+                { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
+                { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
+            ]
+        }
     }
 
     return (

@@ -12,22 +12,24 @@ export default async function KpiTeamPage() {
         redirect("/")
     }
 
+    if (session.user.email === 'marketing@fenice.local' || session.user.name === 'Marketing') {
+        const { redirect } = await import("next/navigation");
+        redirect("/marketing-analytics");
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">
-                        KPI Team Globale & Leaderboard
-                    </h1>
                     <p className="text-sm text-gray-500 mt-1">
                         Panoramica aggregata delle performance, grafici dei flussi chiamate/appuntamenti e ranking Operatori.
                     </p>
-                </div>
-            </div>
+                </div >
+            </div >
 
             <div className="max-w-7xl mx-auto">
                 <KpiTeamDashboard />
             </div>
-        </div>
+        </div >
     )
 }

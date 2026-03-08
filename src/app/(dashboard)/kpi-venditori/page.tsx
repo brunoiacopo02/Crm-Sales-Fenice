@@ -12,20 +12,22 @@ export default async function KpiVenditoriPage() {
         redirect("/")
     }
 
+    if (session.user.email === 'marketing@fenice.local' || session.user.name === 'Marketing') {
+        const { redirect } = await import("next/navigation");
+        redirect("/marketing-analytics");
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">
-                        KPI Venditori & Classifica
-                    </h1>
                     <p className="text-sm text-gray-500 mt-1">
                         Monitoraggio del fatturato, closing rate e performance del team di Closer.
                     </p>
-                </div>
-            </div>
+                </div >
+            </div >
 
             <KpiVenditoriClient currentUserRole={session.user.role} currentUserId={session.user.id} />
-        </div>
+        </div >
     )
 }

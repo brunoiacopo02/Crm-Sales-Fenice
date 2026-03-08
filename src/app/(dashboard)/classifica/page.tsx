@@ -3,6 +3,7 @@ import { Trophy, Medal, MapPin, Calendar, Clock, Star } from "lucide-react"
 import { LeaderboardClient } from "./LeaderboardClient"
 import { getLeaderboard, LeaderboardPeriod } from "@/app/actions/leaderboardActions"
 import { TeamGoalBanner } from "@/components/TeamGoalBanner"
+
 export default async function ClassificaPage({
     searchParams
 }: {
@@ -11,6 +12,12 @@ export default async function ClassificaPage({
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+
+    if (session?.user?.email === 'marketing@fenice.local' || session?.user?.name === 'Marketing') {
+        const { redirect } = await import("next/navigation");
+        redirect("/marketing-analytics");
+    }
+
     const loggedUserId = session?.user?.id
 
     const period = (searchParams.period as LeaderboardPeriod) || 'today'

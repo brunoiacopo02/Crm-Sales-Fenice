@@ -13,6 +13,11 @@ export default async function ScartatiPage() {
         redirect("/")
     }
 
+    if (session.user.email === 'marketing@fenice.local' || session.user.name === 'Marketing') {
+        const { redirect } = await import("next/navigation");
+        redirect("/marketing-analytics");
+    }
+
     const data = await getDiscardedLeadsForMarketing()
 
     return (
@@ -30,6 +35,6 @@ export default async function ScartatiPage() {
 
             <DiscardedBoard initialData={data} />
 
-        </div>
+        </div >
     )
 }

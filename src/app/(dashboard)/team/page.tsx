@@ -14,6 +14,10 @@ export default async function TeamPage() {
         redirect("/")
     }
 
+    if (session.user.email === 'marketing@fenice.local' || session.user.name === 'Marketing') {
+        redirect("/marketing-analytics")
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">

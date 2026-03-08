@@ -12,21 +12,23 @@ export default async function AnalisiQualitaPage() {
         redirect("/")
     }
 
+    if (session.user.email === 'marketing@fenice.local' || session.user.name === 'Marketing') {
+        const { redirect } = await import("next/navigation");
+        redirect("/marketing-analytics");
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">
-                        Analisi Qualità e Dispersioni
-                    </h1>
                     <p className="text-sm text-gray-500 mt-1">
                         Reportistica avanzata sui Funnel e Ranking scarti per analizzare l'imbuto di conversione e i colli di bottiglia del Team.
                     </p>
-                </div>
-            </div>
+                </div >
+            </div >
 
             <KpiBoardAdvanced />
 
-        </div>
+        </div >
     )
 }
