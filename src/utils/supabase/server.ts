@@ -1,7 +1,23 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 
 export async function createClient() {
+    if (process.env.E2E_CLI_MODE === 'true') {
+        return {
+            auth: {
+                getUser: async () => ({
+                    data: {
+                        user: {
+                            id: process.env.E2E_USER_ID || '00000000-0000-0000-0000-000000000000',
+                            email: 'admin@fenice.local',
+                            user_metadata: { role: 'ADMIN', name: 'Admin Test' }
+                        }
+                    }
+                })
+            }
+        } as any;
+    }
+
+    const { cookies } = await import("next/headers");
     const cookieStore = await cookies();
 
     return createServerClient(
