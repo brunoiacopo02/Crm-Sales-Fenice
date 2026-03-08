@@ -5,6 +5,17 @@ import { leads, marketingBudgets } from "@/db/schema";
 import { and, eq, ne, isNotNull, gte, lte } from "drizzle-orm";
 import { startOfMonth, endOfMonth, parseISO } from "date-fns";
 
+const OFFICIAL_FUNNELS = [
+    "TELEGRAM",
+    "JOB SIMULATOR",
+    "CORSO 10 ORE",
+    "ORG",
+    "DATABASE",
+    "TELEGRAM-TK",
+    "GOOGLE",
+    "SOCIAL"
+];
+
 export async function getMarketingStats(monthString: string) {
     // monthString format: "YYYY-MM"
     const startDate = startOfMonth(parseISO(`${monthString}-01`));
@@ -29,53 +40,57 @@ export async function getMarketingStats(monthString: string) {
     // Grouping
     const grouped: Record<string, any> = {};
 
+    // Inizializza TUTTI i funnel ufficiali a zero
+    for (const f of OFFICIAL_FUNNELS) {
+        grouped[f] = {
+            funnel: f,
+            leads: 0,
+            apps: 0,
+            conferme: 0,
+            trattative: 0,
+            close: 0,
+            fatturato: 0,
+        };
+    }
+
     for (const l of allLeads) {
-        const f = l.funnel as string;
-        if (!grouped[f]) {
-            grouped[f] = {
-                funnel: f,
-                leads: 0,
-                apps: 0,
-                conferme: 0,
-                trattative: 0,
-                close: 0,
-                fatturato: 0,
-            };
-        }
+        const rawFunnel = (l.funnel as string).toUpperCase();
 
-        grouped[f].leads++;
+        // Count only if the funnel is in the official list
+        if (grouped[rawFunnel]) {
+            grouped[rawFunnel].leads++;
 
-        if (l.appointmentDate) {
-            grouped[f].apps++;
+            if (l.appointmentDate) {
+                grouped[rawFunnel].apps++;
 
-            const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
-            if (isConfirmed) {
-                grouped[f].conferme++;
+                const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
+                if (isConfirmed) {
+                    grouped[rawFunnel].conferme++;
 
-                const showUp = l.salespersonOutcome &&
-                    l.salespersonOutcome !== 'Sparito' &&
-                    l.salespersonOutcome !== 'Lead non presenziato';
+                    const showUp = l.salespersonOutcome &&
+                        l.salespersonOutcome !== 'Sparito' &&
+                        l.salespersonOutcome !== 'Lead non presenziato' &&
+                        l.salespersonOutcome !== 'KO - Assente';
 
-                if (showUp) {
-                    grouped[f].trattative++;
+                    if (showUp) {
+                        grouped[rawFunnel].trattative++;
 
-                    if (l.salespersonOutcome === 'Chiuso') {
-                        grouped[f].close++;
-                        grouped[f].fatturato += l.closeAmountEur || 0;
+                        if (l.salespersonOutcome === 'Chiuso') {
+                            grouped[rawFunnel].close++;
+                            grouped[rawFunnel].fatturato += l.closeAmountEur || 0;
+                        }
                     }
                 }
             }
         }
     }
 
-    // Now convert to array, merge budget, calc percentages
-    const statsArray = Object.values(grouped).map(stat => {
-        const budgetRow = budgets.find(b => b.funnel === stat.funnel);
+    // Now convert to array exactly following OFFICIAL_FUNNELS order
+    const statsArray = OFFICIAL_FUNNELS.map(funnelName => {
+        const stat = grouped[funnelName];
+        const budgetRow = budgets.find(b => b.funnel === funnelName);
         const spentAmountEur = budgetRow?.spentAmountEur || 0;
 
-        const appsPerc = stat.leads > 0 ? (stat.apps / stat.leads) * 100 : 0;
-        const confermePerc = stat.leads > 0 ? (stat.conferme / stat.leads) * 100 : 0; // Wait, prompt says "(Valore / Totale Lead) * 100", but typically it's over the previous step. The prompt specifically says "le relative percentuali (Valore / Totale Lead) * 100 :". Let me check his prompt: "per ogni funnel, devi calcolare queste colonne (e le relative percentuali (Valore / Totale Lead) * 100)".
-        // So they ALL want to be divided by Totale Lead! Let's follow the prompt exactly.
         const appsPercLead = stat.leads > 0 ? (stat.apps / stat.leads) * 100 : 0;
         const confermePercLead = stat.leads > 0 ? (stat.conferme / stat.leads) * 100 : 0;
         const trattativePercLead = stat.leads > 0 ? (stat.trattative / stat.leads) * 100 : 0;
