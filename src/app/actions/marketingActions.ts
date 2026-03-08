@@ -138,3 +138,130 @@ export async function saveMarketingBudget(funnel: string, month: string, spentAm
 
     return { success: true };
 }
+
+export async function getMarketingStatsByGdo(monthString: string) {
+    const startDate = startOfMonth(parseISO(`${monthString}-01`));
+    const endDate = endOfMonth(parseISO(`${monthString}-01`));
+
+    // Get leads for the month that have a funnel != 'BLT'
+    const allLeads = await db.select().from(leads).where(
+        and(
+            isNotNull(leads.funnel),
+            ne(leads.funnel, 'BLT'),
+            ne(leads.funnel, ''),
+            gte(leads.createdAt, startDate),
+            lte(leads.createdAt, endDate)
+        )
+    );
+
+    // Fetch all relevant users for quick reference
+    const { users } = await import("@/db/schema");
+    const allUsers = await db.select({ id: users.id, displayName: users.displayName, name: users.name, gdoCode: users.gdoCode }).from(users);
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+
+    const result: Record<string, Record<string, {
+        gdoName: string;
+        appsFissati: number;
+        appsConfermati: number;
+        appsPresenziati: number;
+        closed: number;
+    }>> = {};
+
+    // Inizializza TUTTI i funnel ufficiali a vuoto
+    for (const f of OFFICIAL_FUNNELS) {
+        result[f] = {};
+    }
+
+    for (const l of allLeads) {
+        const rawFunnel = (l.funnel as string).toUpperCase();
+
+        if (result[rawFunnel]) {
+            const assignedId = l.assignedToId || 'UNASSIGNED';
+            let gdoName = 'Non Assegnato';
+
+            if (assignedId !== 'UNASSIGNED') {
+                const u = userMap.get(assignedId);
+                gdoName = u ? `${u.displayName || u.name || assignedId} ${u.gdoCode ? `(${u.gdoCode})` : ''}`.trim() : assignedId;
+            }
+
+            if (!result[rawFunnel][assignedId]) {
+                result[rawFunnel][assignedId] = {
+                    gdoName,
+                    appsFissati: 0,
+                    appsConfermati: 0,
+                    appsPresenziati: 0,
+                    closed: 0,
+                };
+            }
+
+            const gdoStat = result[rawFunnel][assignedId];
+
+            if (l.appointmentDate) {
+                gdoStat.appsFissati++;
+
+                const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
+                if (isConfirmed) {
+                    gdoStat.appsConfermati++;
+
+                    const showUp = l.salespersonOutcome &&
+                        l.salespersonOutcome !== 'Sparito' &&
+                        l.salespersonOutcome !== 'Lead non presenziato' &&
+                        l.salespersonOutcome !== 'KO - Assente';
+
+                    if (showUp) {
+                        gdoStat.appsPresenziati++;
+
+                        if (l.salespersonOutcome === 'Chiuso') {
+                            gdoStat.closed++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Convert to Array output with proper percentages
+    const finalArray: {
+        funnel: string;
+        gdoStats: {
+            gdoName: string;
+            appsFissati: number;
+            appsConfermati: number;
+            confermePerc: number;
+            appsPresenziati: number;
+            presenziatiPerc: number;
+            closed: number;
+            closedPerc: number;
+        }[]
+    }[] = [];
+
+    for (const f of OFFICIAL_FUNNELS) {
+        const gdoKeys = Object.keys(result[f]);
+        const gdoStatsArr = gdoKeys.map(key => {
+            const stat = result[f][key];
+
+            const confermePerc = stat.appsFissati > 0 ? (stat.appsConfermati / stat.appsFissati) * 100 : 0;
+            const presenziatiPerc = stat.appsConfermati > 0 ? (stat.appsPresenziati / stat.appsConfermati) * 100 : 0;
+            const closedPerc = stat.appsPresenziati > 0 ? (stat.closed / stat.appsPresenziati) * 100 : 0;
+
+            return {
+                gdoName: stat.gdoName,
+                appsFissati: stat.appsFissati,
+                appsConfermati: stat.appsConfermati,
+                confermePerc,
+                appsPresenziati: stat.appsPresenziati,
+                presenziatiPerc,
+                closed: stat.closed,
+                closedPerc
+            };
+        });
+
+        // Add to final array even if empty (to render the card structure natively)
+        finalArray.push({
+            funnel: f,
+            gdoStats: gdoStatsArr.sort((a, b) => b.appsFissati - a.appsFissati) // Ordina per chi ha fissato di più
+        });
+    }
+
+    return finalArray;
+}

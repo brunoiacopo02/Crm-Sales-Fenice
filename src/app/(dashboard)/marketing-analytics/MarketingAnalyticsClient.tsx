@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { getMarketingStats, saveMarketingBudget } from "@/app/actions/marketingActions";
-import { Loader2, TrendingUp, Save, Filter } from "lucide-react";
+import { getMarketingStats, saveMarketingBudget, getMarketingStatsByGdo } from "@/app/actions/marketingActions";
+import { Loader2, TrendingUp, Save, Filter, Users } from "lucide-react";
 
 type Stat = {
     funnel: string;
@@ -20,15 +20,34 @@ type Stat = {
     roas: number;
 };
 
+type GdoStatTableRow = {
+    gdoName: string;
+    appsFissati: number;
+    appsConfermati: number;
+    confermePerc: number;
+    appsPresenziati: number;
+    presenziatiPerc: number;
+    closed: number;
+    closedPerc: number;
+}
+
+type FunnelGdoStats = {
+    funnel: string;
+    gdoStats: GdoStatTableRow[]
+};
+
 export default function MarketingAnalyticsClient({
     initialStats,
+    initialStatsByGdo,
     initialMonth
 }: {
     initialStats: Stat[],
+    initialStatsByGdo: FunnelGdoStats[],
     initialMonth: string
 }) {
     const [month, setMonth] = useState(initialMonth);
     const [stats, setStats] = useState<Stat[]>(initialStats);
+    const [statsByGdo, setStatsByGdo] = useState<FunnelGdoStats[]>(initialStatsByGdo);
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -39,8 +58,12 @@ export default function MarketingAnalyticsClient({
     const fetchStats = async (m: string) => {
         setIsLoading(true);
         try {
-            const data = await getMarketingStats(m);
+            const [data, gdoData] = await Promise.all([
+                getMarketingStats(m),
+                getMarketingStatsByGdo(m)
+            ]);
             setStats(data);
+            setStatsByGdo(gdoData);
         } catch (e) {
             console.error(e);
         } finally {
@@ -84,7 +107,7 @@ export default function MarketingAnalyticsClient({
 
     return (
         <div className="flex-1 overflow-auto p-8">
-            <div className="max-w-7xl mx-auto space-y-8">
+            <div className="max-w-7xl mx-auto space-y-8 pb-16">
 
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -150,7 +173,7 @@ export default function MarketingAnalyticsClient({
                     </form>
                 </div>
 
-                {/* Data Table */}
+                {/* GLOBALI Data Table */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
                         {isLoading ? (
@@ -165,7 +188,7 @@ export default function MarketingAnalyticsClient({
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-gray-50 text-gray-700 border-b border-gray-200">
                                     <tr>
-                                        <th className="px-4 py-4 font-semibold">Funnel</th>
+                                        <th className="px-4 py-4 font-semibold">Funnel Globali</th>
                                         <th className="px-4 py-4 font-semibold text-right">Lead</th>
                                         <th className="px-4 py-4 font-semibold text-right">App</th>
                                         <th className="px-4 py-4 font-semibold text-right text-gray-500">App %</th>
@@ -205,6 +228,91 @@ export default function MarketingAnalyticsClient({
                         )}
                     </div>
                 </div>
+
+                {/* DRILL-DOWN PER GDO */}
+                <div className="space-y-6 pt-8 border-t border-gray-200 mt-8">
+                    <div className="flex items-center gap-2 mb-6">
+                        <Users className="w-7 h-7 text-indigo-600" />
+                        <h2 className="text-2xl font-bold text-gray-900">Drill-Down per GDO</h2>
+                    </div>
+
+                    {isLoading ? (
+                        <div className="flex justify-center items-center p-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                        </div>
+                    ) : statsByGdo.length === 0 ? (
+                        <div className="p-12 text-center text-gray-500 bg-white rounded-xl border border-gray-200">
+                            Nessun dato GDO disponibile.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-8">
+                            {statsByGdo.map((funnelItem) => {
+                                // Calculate Totals for the bottom row
+                                const tAppsFissati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsFissati, 0);
+                                const tAppsConfermati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsConfermati, 0);
+                                const tAppsPresenziati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsPresenziati, 0);
+                                const tClosed = funnelItem.gdoStats.reduce((acc, row) => acc + row.closed, 0);
+
+                                const tConfPerc = tAppsFissati > 0 ? (tAppsConfermati / tAppsFissati) * 100 : 0;
+                                const tPresPerc = tAppsConfermati > 0 ? (tAppsPresenziati / tAppsConfermati) * 100 : 0;
+                                const tClosePerc = tAppsPresenziati > 0 ? (tClosed / tAppsPresenziati) * 100 : 0;
+
+                                return (
+                                    <div key={funnelItem.funnel} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                        <div className="bg-indigo-50 border-b border-indigo-100 px-6 py-4 flex items-center justify-between">
+                                            <h3 className="text-lg font-bold text-indigo-900 uppercase tracking-wider">{funnelItem.funnel}</h3>
+                                            <span className="text-sm font-medium text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full">
+                                                {funnelItem.gdoStats.length} GDO attivi
+                                            </span>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left">
+                                                <thead className="bg-white text-gray-500 border-b border-gray-200 text-xs uppercase">
+                                                    <tr>
+                                                        <th className="px-6 py-3 font-semibold">GDO</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">App Fissati</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">App Confermati</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">% Conferma</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">App Presenziati</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">% Presenziati</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">Closed</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">% Closed</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {funnelItem.gdoStats.map((row, idx) => (
+                                                        <tr key={idx} className="hover:bg-gray-50">
+                                                            <td className="px-6 py-3 font-medium text-gray-900">{row.gdoName}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-600 font-medium">{row.appsFissati}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-600 font-medium">{row.appsConfermati}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-500">{formatPercent(row.confermePerc)}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-600 font-medium">{row.appsPresenziati}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-500">{formatPercent(row.presenziatiPerc)}</td>
+                                                            <td className="px-4 py-3 text-right font-semibold text-indigo-700">{row.closed}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-500 font-medium">{formatPercent(row.closedPerc)}</td>
+                                                        </tr>
+                                                    ))}
+                                                    {/* TOTALE ROW */}
+                                                    <tr className="bg-gray-50 border-t-2 border-gray-200">
+                                                        <td className="px-6 py-4 font-bold text-gray-900 uppercase">Totale</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-gray-900">{tAppsFissati}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-gray-900">{tAppsConfermati}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-gray-700">{formatPercent(tConfPerc)}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-gray-900">{tAppsPresenziati}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-gray-700">{formatPercent(tPresPerc)}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-indigo-700">{tClosed}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-indigo-700">{formatPercent(tClosePerc)}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
             </div>
         </div>
     );
