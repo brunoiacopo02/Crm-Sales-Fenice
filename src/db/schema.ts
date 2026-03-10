@@ -236,3 +236,20 @@ export const marketingBudgets = pgTable('marketingBudgets', {
     spentAmountEur: real('spentAmountEur').default(0).notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
+
+export const monthlyTargets = pgTable('monthlyTargets', {
+    id: text('id').primaryKey(),
+    month: text('month').notNull().unique(), // e.g. '2026-03'
+    targetAppFissati: integer('targetAppFissati').default(0).notNull(),
+    targetAppConfermati: integer('targetAppConfermati').default(0).notNull(),
+    targetTrattative: integer('targetTrattative').default(0).notNull(),
+    targetClosed: integer('targetClosed').default(0).notNull(),
+    targetValoreContratti: real('targetValoreContratti').default(0).notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const dailyKpiSnapshots = pgTable('dailyKpiSnapshots', {
+    id: text('id').primaryKey(),
+    date: text('date').notNull().unique(), // 'YYYY-MM-DD'
+    fissaggioVariazionePerc: real('fissaggioVariazionePerc').default(0).notNull(),
+});

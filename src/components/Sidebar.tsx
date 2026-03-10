@@ -3,7 +3,7 @@ import { useAuth } from "@/components/AuthProvider"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Phone, Users, Calendar, LayoutDashboard, Search, LogOut, Upload, Database, Clock, UserCog, Trophy, Store } from "lucide-react"
+import { Phone, Users, Calendar, LayoutDashboard, Search, LogOut, Upload, Database, Clock, UserCog, Trophy, Store, Target } from "lucide-react"
 
 import { useEffect, useState } from "react"
 import { getRecallLeads } from "@/app/actions/recallActions"
@@ -63,6 +63,7 @@ export function Sidebar() {
             navItems = [
                 { name: "Gestione Team", href: "/team", icon: UserCog },
                 { name: "Gestione Store", href: "/team/store", icon: Store },
+                { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
                 { name: "KPI Team GDO", href: "/kpi-team", icon: LayoutDashboard },
                 { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                 { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
