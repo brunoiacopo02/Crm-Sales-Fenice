@@ -46,7 +46,7 @@ function isPresenziato(outcome: string | null) {
 /**
  * Funzione Helper: Divide il mese in blocchi di settimane solari (Lunedì-Domenica).
  */
-export function getMonthWeeks(monthStr: string) {
+function getMonthWeeks(monthStr: string) {
     const startObj = parseISO(`${monthStr}-01T00:00:00`);
     const endObj = endOfMonth(startObj);
 
