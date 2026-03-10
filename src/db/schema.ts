@@ -253,3 +253,13 @@ export const dailyKpiSnapshots = pgTable('dailyKpiSnapshots', {
     date: text('date').notNull().unique(), // 'YYYY-MM-DD'
     fissaggioVariazionePerc: real('fissaggioVariazionePerc').default(0).notNull(),
 });
+
+export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
+    id: text('id').primaryKey(),
+    month: text('month').notNull().unique(), // e.g. '2026-03'
+    targetTier1: integer('targetTier1').default(10).notNull(),
+    rewardTier1: real('rewardTier1').default(135).notNull(),
+    targetTier2: integer('targetTier2').default(13).notNull(),
+    rewardTier2: real('rewardTier2').default(270).notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});

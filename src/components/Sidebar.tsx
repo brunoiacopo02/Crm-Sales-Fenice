@@ -64,6 +64,7 @@ export function Sidebar() {
                 { name: "Gestione Team", href: "/team", icon: UserCog },
                 { name: "Gestione Store", href: "/team/store", icon: Store },
                 { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
+                { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
                 { name: "KPI Team GDO", href: "/kpi-team", icon: LayoutDashboard },
                 { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                 { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },

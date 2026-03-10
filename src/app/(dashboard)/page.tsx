@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { getPipelineLeads } from "@/app/actions/pipelineActions"
 import { PipelineBoard } from "@/components/PipelineBoard"
+import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
@@ -36,6 +37,8 @@ export default async function DashboardPage() {
                     Benvenuto, <span className="font-semibold text-brand-orange">{session?.user?.name}</span>
                 </div>
             </div>
+
+            <WeeklyBonusWidget userId={session?.user?.id as string} />
 
             <PipelineBoard
                 firstCall={firstCall}
