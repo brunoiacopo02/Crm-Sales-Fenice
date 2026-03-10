@@ -3,21 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TargetStatsResponse, MonthlyTargetInput, saveMonthlyTarget } from '@/app/actions/targetActions';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle, Target, TrendingDown, TrendingUp, Calendar, CalendarDays, Activity } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
 
 interface Props {
     initialData: TargetStatsResponse;
@@ -87,117 +73,119 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role 
                 <div className="flex items-center gap-4 bg-white p-2 rounded-lg border shadow-sm">
                     <div className="flex items-center gap-2">
                         <CalendarDays className="h-5 w-5 text-slate-500" />
-                        <Input
+                        <input
                             type="month"
                             value={monthInput}
                             onChange={handleMonthChange}
-                            className="w-40"
+                            className="w-40 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         />
                     </div>
-                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                        <DialogTrigger asChild>
-                            <Button className="bg-orange-600 hover:bg-orange-700 text-white">
-                                Imposta Target
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px]">
-                            <DialogHeader>
-                                <DialogTitle>Imposta Target Mese - {monthInput}</DialogTitle>
-                                <DialogDescription>
-                                    Inserisci i target previsionali previsti per questo mese solare.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="tFissati" className="text-right">Fissati</Label>
-                                    <Input id="tFissati" type="number" className="col-span-3" value={formData.targetAppFissati} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetAppFissati: Number(e.target.value) })} />
+                    <button
+                        onClick={() => setDialogOpen(true)}
+                        className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-orange-600 text-white hover:bg-orange-700 h-10 px-4 py-2"
+                    >
+                        Imposta Target
+                    </button>
+                    {dialogOpen && (
+                        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0">
+                            <div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-slate-200 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg">
+                                <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+                                    <h2 className="text-lg font-semibold leading-none tracking-tight">Imposta Target Mese - {monthInput}</h2>
+                                    <p className="text-sm text-slate-500">Inserisci i target previsionali previsti per questo mese solare.</p>
                                 </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="tConfermati" className="text-right">Confermati</Label>
-                                    <Input id="tConfermati" type="number" className="col-span-3" value={formData.targetAppConfermati} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetAppConfermati: Number(e.target.value) })} />
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <label htmlFor="tFissati" className="text-sm font-medium leading-none text-right">Fissati</label>
+                                        <input id="tFissati" type="number" className="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" value={formData.targetAppFissati} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetAppFissati: Number(e.target.value) })} />
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <label htmlFor="tConfermati" className="text-sm font-medium leading-none text-right">Confermati</label>
+                                        <input id="tConfermati" type="number" className="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" value={formData.targetAppConfermati} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetAppConfermati: Number(e.target.value) })} />
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <label htmlFor="tTrattative" className="text-sm font-medium leading-none text-right">Trattative</label>
+                                        <input id="tTrattative" type="number" className="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" value={formData.targetTrattative} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetTrattative: Number(e.target.value) })} />
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <label htmlFor="tClosed" className="text-sm font-medium leading-none text-right">Closed</label>
+                                        <input id="tClosed" type="number" className="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" value={formData.targetClosed} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetClosed: Number(e.target.value) })} />
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <label htmlFor="tEur" className="text-sm font-medium leading-none text-right">Stima €</label>
+                                        <input id="tEur" type="number" className="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" value={formData.targetValoreContratti} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetValoreContratti: Number(e.target.value) })} />
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="tTrattative" className="text-right">Trattative</Label>
-                                    <Input id="tTrattative" type="number" className="col-span-3" value={formData.targetTrattative} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetTrattative: Number(e.target.value) })} />
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="tClosed" className="text-right">Closed</Label>
-                                    <Input id="tClosed" type="number" className="col-span-3" value={formData.targetClosed} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetClosed: Number(e.target.value) })} />
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="tEur" className="text-right">Stima €</Label>
-                                    <Input id="tEur" type="number" className="col-span-3" value={formData.targetValoreContratti} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetValoreContratti: Number(e.target.value) })} />
+                                <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                                    <button onClick={() => setDialogOpen(false)} className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2 mt-2 sm:mt-0">Annulla</button>
+                                    <button disabled={isSaving} onClick={handleSaveTargets} className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-slate-900 text-slate-50 hover:bg-slate-900/90 h-10 px-4 py-2">Salva Cambiamenti</button>
                                 </div>
                             </div>
-                            <DialogFooter>
-                                <Button disabled={isSaving} onClick={handleSaveTargets} className="bg-slate-900 text-white">Salva Cambiamenti</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* Global Calendar Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Giorni Lavorativi Mese</CardTitle>
+                <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm">
+                    <div className="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
+                        <h3 className="tracking-tight text-sm font-medium">Giorni Lavorativi Mese</h3>
                         <Calendar className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
+                    </div>
+                    <div className="p-6 pt-0">
                         <div className="text-2xl font-bold text-slate-900">{initialData.giorniLavorativiTotaliMese}</div>
                         <p className="text-xs text-slate-400 mt-1">Domeniche Escluse</p>
-                    </CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Giorni Trascorsi</CardTitle>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm">
+                    <div className="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
+                        <h3 className="tracking-tight text-sm font-medium">Giorni Trascorsi</h3>
                         <Activity className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
+                    </div>
+                    <div className="p-6 pt-0">
                         <div className="text-2xl font-bold text-orange-600">{initialData.giorniLavorativiTrascorsiOggi}</div>
                         <p className="text-xs text-slate-400 mt-1">Fino a Oggi inclusa</p>
-                    </CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Forza Vendita Attiva</CardTitle>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm">
+                    <div className="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
+                        <h3 className="tracking-tight text-sm font-medium">Forza Vendita Attiva</h3>
                         <Target className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
+                    </div>
+                    <div className="p-6 pt-0">
                         <div className="text-2xl font-bold text-slate-900">{initialData.gdoAttivi} GDO</div>
                         <p className="text-xs text-slate-400 mt-1">Esclusi inattivi/sospesi</p>
-                    </CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Lead Totali Mese</CardTitle>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm">
+                    <div className="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
+                        <h3 className="tracking-tight text-sm font-medium">Lead Totali Mese</h3>
                         <CalendarDays className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
+                    </div>
+                    <div className="p-6 pt-0">
                         <div className="text-2xl font-bold text-slate-900">{initialData.totaleLeadDelMese}</div>
                         <p className="text-xs text-slate-400 mt-1">Acquisiti nel CRM / Mese</p>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
 
             {/* ALERT CRITICO */}
             {initialData.is7DaysAlertActive && (
-                <Alert variant="destructive" className="border-red-600 bg-red-50 text-red-900">
+                <div className="relative w-full rounded-lg border border-red-600 bg-red-50 text-red-900 p-4 [&>svg]:absolute [&>svg]:text-red-900 [&>svg]:left-4 [&>svg]:top-4 [&>svg+div]:translate-y-[-3px] [&:has(svg)]:pl-11">
                     <AlertCircle className="h-5 w-5" />
-                    <AlertTitle className="font-bold text-lg">ATTENZIONE CRITICA</AlertTitle>
-                    <AlertDescription>
+                    <h5 className="mb-1 font-bold leading-none tracking-tight text-lg">ATTENZIONE CRITICA</h5>
+                    <div className="text-sm [&_p]:leading-relaxed">
                         Fissaggio sotto il <strong>-20%</strong> da 7 o più giorni lavorativi consecutivi. Primo drop il {initialData.dataPrimoMeno20}. Investigare le dinamiche dei lead e script al più presto.
-                    </AlertDescription>
-                </Alert>
+                    </div>
+                </div>
             )}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 {/* TABELLA A: Numeri Mensili */}
-                <Card className="shadow-sm overflow-hidden col-span-1 xl:col-span-2">
-                    <CardHeader className="bg-slate-50 border-b">
-                        <CardTitle className="text-lg text-slate-800">1. Numeri Mensili</CardTitle>
-                    </CardHeader>
+                <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm overflow-hidden col-span-1 xl:col-span-2">
+                    <div className="flex flex-col space-y-1.5 p-6 bg-slate-50 border-b">
+                        <h3 className="font-semibold leading-none tracking-tight text-lg text-slate-800">1. Numeri Mensili</h3>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
@@ -258,13 +246,13 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role 
                             </tbody>
                         </table>
                     </div>
-                </Card>
+                </div>
 
                 {/* TABELLA B: DATO & FORECAST */}
-                <Card className="shadow-sm overflow-hidden col-span-1 xl:col-span-2">
-                    <CardHeader className="bg-slate-50 border-b">
-                        <CardTitle className="text-lg text-slate-800">2. Dato Operativo & Forecast</CardTitle>
-                    </CardHeader>
+                <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm overflow-hidden col-span-1 xl:col-span-2">
+                    <div className="flex flex-col space-y-1.5 p-6 bg-slate-50 border-b">
+                        <h3 className="font-semibold leading-none tracking-tight text-lg text-slate-800">2. Dato Operativo & Forecast</h3>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
@@ -308,7 +296,7 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role 
                             </tbody>
                         </table>
                     </div>
-                </Card>
+                </div>
             </div>
 
         </div>

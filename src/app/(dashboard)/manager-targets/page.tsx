@@ -1,18 +1,19 @@
 import { getManagerTargetsData } from '@/app/actions/targetActions';
 import ManagerTargetsClient from './ManagerTargetsClient';
 import { redirect } from 'next/navigation';
-import { getServerSession } from "next-auth";
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { createClient } from "@/utils/supabase/server"
 
 export default async function ManagerTargetsPage({
     searchParams
 }: {
     searchParams: { month?: string }
 }) {
-    const session = await getServerSession(authOptions);
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
 
     // Sicurezza: Limita a MANAGER o ADMIN
-    if (!session || (session.user.role !== 'MANAGER' && session.user.role !== 'ADMIN')) {
+    const role = supabaseUser?.user_metadata?.role;
+    if (!supabaseUser || (role !== 'MANAGER' && role !== 'ADMIN')) {
         redirect('/unauthorized');
     }
 
@@ -27,7 +28,7 @@ export default async function ManagerTargetsPage({
         <ManagerTargetsClient
             initialData={data}
             selectedMonth={selectedMonth}
-            role={session.user.role}
+            role={role}
         />
     );
 }
