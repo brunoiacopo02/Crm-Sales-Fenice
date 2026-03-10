@@ -86,7 +86,7 @@ async function runGdoBonusE2E() {
 
         // Manager View assert
         let tables = await getManagerGdoTables(testMonth);
-        let gdoTable = tables.find(t => t.gdoName === "Super GDO Test");
+        let gdoTable = tables.find(t => t.gdoName === "Super GDO Test")!;
         console.assert(gdoTable.weeklyRows[1].data[0] === 1, "Tabella Manager: W1 deve avere 1 Presenziato"); // W1 = index 0, presenze = row 1
         console.assert(gdoTable.weeklyRows[1].data[1] === 12, "Tabella Manager: W2 deve avere 12 Presenziati");
 
@@ -103,7 +103,7 @@ async function runGdoBonusE2E() {
 
         // Manager View assert
         tables = await getManagerGdoTables(testMonth);
-        gdoTable = tables.find(t => t.gdoName === "Super GDO Test");
+        gdoTable = tables.find(t => t.gdoName === "Super GDO Test")!;
         console.assert(gdoTable.weeklyRows[1].data[0] === 0, "Errore Manager UI: W1 non si è svuotata!");
         console.assert(gdoTable.weeklyRows[1].data[1] === 13, "Errore Manager UI: W2 non si è riempita fino a 13!");
 
