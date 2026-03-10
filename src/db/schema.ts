@@ -19,6 +19,13 @@ export const users = pgTable('users', {
     dailyApptTarget: integer('dailyApptTarget').default(2).notNull(),
     weeklyConfirmedTarget: integer('weeklyConfirmedTarget').default(5).notNull(),
 
+    // --- GAME & FINANCIAL FIELDS ---
+    baseSalaryEur: real('baseSalaryEur').default(1350).notNull(),
+    level: integer('level').default(1).notNull(),
+    experience: integer('experience').default(0).notNull(),
+    totalBonusesEur: real('totalBonusesEur').default(0).notNull(),
+    coins: integer('coins').default(0).notNull(),
+
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 

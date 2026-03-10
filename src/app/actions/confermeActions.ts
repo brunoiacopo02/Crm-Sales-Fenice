@@ -7,6 +7,7 @@ import { eq, asc, desc, and, or, like, between, isNull } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent, checkFreeBusy } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
+import { awardXpAndCoins } from "@/lib/gamificationEngine"
 
 export async function getConfermeAppointments(filters: {
     startDate?: Date;
@@ -291,6 +292,15 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
         const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
         if (!oldLead) return { success: false, error: "Lead not found" }
         if (oldLead.version !== currentVersion) return { success: false, error: `CONCURRENCY_ERROR` }
+
+        // Gamification RPC: Award only if it's the first time outcome is set
+        if (!oldLead.salespersonOutcome && oldLead.assignedToId) {
+            if (outcome === 'Chiuso') {
+                await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId).catch(e => console.error("GameEngine CHIUSO err:", e));
+            } else if (outcome === 'Non chiuso') {
+                await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId).catch(e => console.error("GameEngine PRESENZIATO err:", e));
+            }
+        }
 
         await db.update(leads).set({
             salespersonOutcome: outcome,

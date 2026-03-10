@@ -3,7 +3,14 @@ import { useAuth } from "@/components/AuthProvider"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Phone, Users, Calendar, LayoutDashboard, Search, LogOut, Upload, Database, Clock, UserCog, Trophy, Store, Target } from "lucide-react"
+import {
+    Phone, Users, Calendar, LayoutDashboard, Search, LogOut, Upload, Database, Clock,
+    UserCog,
+    Trophy,
+    Store,
+    Target,
+    Gamepad2
+} from "lucide-react"
 
 import { useEffect, useState } from "react"
 import { getRecallLeads } from "@/app/actions/recallActions"
@@ -40,6 +47,7 @@ export function Sidebar() {
     if (role === "GDO") {
         navItems = [
             { name: "La mia Pipeline", href: "/", icon: Phone },
+            { name: "Il mio Profilo / RPG", href: "/profilo", icon: Gamepad2 },
             { name: "I miei Richiami", href: "/richiami", icon: Calendar, badge: expiredCount },
             { name: "I miei Appuntamenti", href: "/appuntamenti", icon: Users },
             { name: "Classifica", href: "/classifica", icon: Trophy },
@@ -63,6 +71,7 @@ export function Sidebar() {
             navItems = [
                 { name: "Gestione Team", href: "/team", icon: UserCog },
                 { name: "Gestione Store", href: "/team/store", icon: Store },
+                { name: "Monitor RPG GDO", href: "/manager-rpg-monitor", icon: Gamepad2 },
                 { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
                 { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
                 { name: "KPI Team GDO", href: "/kpi-team", icon: LayoutDashboard },

@@ -10,23 +10,24 @@ import { checkLeaderboardOvertake } from "@/app/actions/leaderboardActions"
 import { checkAndCompleteExpiredSprint } from "@/app/actions/sprintActions"
 import { subDays } from "date-fns"
 import { evaluateTeamGoals } from "@/app/actions/teamGoalActions"
+import { awardXpAndCoins } from "@/lib/gamificationEngine"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
 async function checkFourthCallEligibility(gdoId: string): Promise<boolean> {
     const sevenDaysAgo = subDays(new Date(), 7)
 
     const recentLogs = await db.select({
-            leadId: callLogs.leadId,
-            outcome: callLogs.outcome
-        })
-            .from(callLogs)
-            .where(
-                and(
-                    eq(callLogs.userId, gdoId),
-                    gte(callLogs.createdAt, sevenDaysAgo)
-                )
+        leadId: callLogs.leadId,
+        outcome: callLogs.outcome
+    })
+        .from(callLogs)
+        .where(
+            and(
+                eq(callLogs.userId, gdoId),
+                gte(callLogs.createdAt, sevenDaysAgo)
             )
-        
+        )
+
 
     if (recentLogs.length === 0) return false // Nessuna chiamata -> nessuna quarta chiamata attivata per default
 
@@ -62,10 +63,10 @@ export async function getPipelineLeads() {
     if (isGdo) pipelineBaseConditions.push(eq(leads.assignedToId, userId))
 
     const pipelineLeads = await db.select()
-            .from(leads)
-            .where(and(...pipelineBaseConditions))
-            .orderBy(leads.createdAt)
-        
+        .from(leads)
+        .where(and(...pipelineBaseConditions))
+        .orderBy(leads.createdAt)
+
 
     const firstCall = pipelineLeads.filter(l => l.callCount === 0)
     const secondCall = pipelineLeads.filter(l => l.callCount === 1)
@@ -80,10 +81,10 @@ export async function getPipelineLeads() {
     if (isGdo) recallBaseConditions.push(eq(leads.assignedToId, userId))
 
     const recallsLeads = await db.select()
-            .from(leads)
-            .where(and(...recallBaseConditions))
-            .orderBy(leads.recallDate)
-        
+        .from(leads)
+        .where(and(...recallBaseConditions))
+        .orderBy(leads.recallDate)
+
 
     // 3. Appointments
     const apptBaseConditions = [
@@ -92,10 +93,10 @@ export async function getPipelineLeads() {
     if (isGdo) apptBaseConditions.push(eq(leads.assignedToId, userId))
 
     const appointmentsLeads = await db.select()
-            .from(leads)
-            .where(and(...apptBaseConditions))
-            .orderBy(desc(leads.appointmentCreatedAt))
-        
+        .from(leads)
+        .where(and(...apptBaseConditions))
+        .orderBy(desc(leads.appointmentCreatedAt))
+
 
     // 4. Fourth Call "Recupero"
     let isFourthCallActive = false
@@ -117,10 +118,10 @@ export async function getPipelineLeads() {
             if (isGdo) fourthCallConditions.push(eq(leads.assignedToId, userId))
 
             fourthCallLeads = await db.select()
-                            .from(leads)
-                            .where(and(...fourthCallConditions))
-                            .orderBy(desc(leads.updatedAt))
-                
+                .from(leads)
+                .where(and(...fourthCallConditions))
+                .orderBy(desc(leads.updatedAt))
+
         }
     }
 
@@ -163,14 +164,14 @@ export async function updateLeadOutcome(
 
     // Create Call Log (legacy)
     await db.insert(callLogs).values({
-            id: crypto.randomUUID(),
-            leadId,
-            userId: effectiveUserId || null,
-            outcome,
-            note,
-            discardReason: discardReason || null,
-            createdAt: now,
-        })
+        id: crypto.randomUUID(),
+        leadId,
+        userId: effectiveUserId || null,
+        outcome,
+        note,
+        discardReason: discardReason || null,
+        createdAt: now,
+    })
 
     if (outcome === 'DA_SCARTARE') {
         newStatus = 'REJECTED'
@@ -198,69 +199,18 @@ export async function updateLeadOutcome(
 
     // Update lead record
     await db.update(leads)
-            .set({
-                status: newStatus,
-                callCount: newCallCount,
-                lastCallDate: now,
-                lastCallNote: note,
-                recallDate,
-                appointmentDate,
-                appointmentNote: outcome === 'APPUNTAMENTO' ? note : lead.appointmentNote,
-                appointmentCreatedAt,
-                discardReason: discardReason || lead.discardReason,
-                updatedAt: now,
-            })
-            .where(eq(leads.id, leadId))
-        
-
-    // Calc To Section logic locally to bypass need for re-fetching
-    const updatedLeadMock = {
-        ...lead,
-        status: newStatus,
-        callCount: newCallCount,
-        recallDate: recallDate,
-        appointmentDate: appointmentDate
-    }
-    const toSection = determineLeadSection(updatedLeadMock)
-
-    // LOG1: Azione Specifica
-    let eventType: 'CALL_LOGGED' | 'DISCARDED' | 'RECALL_SET' | 'APPOINTMENT_SET' = 'CALL_LOGGED'
-    if (outcome === 'DA_SCARTARE' || newStatus === 'REJECTED') eventType = 'DISCARDED'
-    else if (outcome === 'RICHIAMO') eventType = 'RECALL_SET'
-    else if (outcome === 'APPUNTAMENTO') eventType = 'APPOINTMENT_SET'
-
-    await logLeadEvent({
-        leadId,
-        eventType,
-        userId: effectiveUserId || null,
-        fromSection,
-        metadata: { outcome, note, discardReason, date }
-    })
-
-    // LOG2: Se la section è cambiata, salviamo anche il "SECTION_MOVED" event
-    if (fromSection !== toSection) {
-        await logLeadEvent({
-            leadId,
-            eventType: 'SECTION_MOVED',
-            userId: effectiveUserId || null,
-            fromSection,
-            toSection,
-            metadata: { reason: outcome }
+        .set({
+            status: newStatus,
+            callCount: newCallCount,
+            lastCallDate: now,
+            lastCallNote: note,
+            recallDate,
+            appointmentDate,
+            appointmentNote: outcome === 'APPUNTAMENTO' ? note : lead.appointmentNote,
+            appointmentCreatedAt,
+            discardReason: discardReason || lead.discardReason,
+            updatedAt: now,
         })
-    }
-
-    if (outcome === 'APPUNTAMENTO' && effectiveUserId) {
-        // Run in background so we don't block the request, or await it if we want strict consistency.
-        // We do await to ensure we don't get unhandled rejections if something crashes
-        await checkLeaderboardOvertake(effectiveUserId).catch(e => {
-            console.error("Leaderboard check failed:", e)
-        })
-    }
-
-    // Focus Sprint trigger evaluation logic - if there's an active sprint, evaluate it
-    await checkAndCompleteExpiredSprint().catch(e => {
-        console.error("Sprint check failed:", e)
-    })
 
     // Team Goal trigger evaluation logic
     if (outcome === 'APPUNTAMENTO') {

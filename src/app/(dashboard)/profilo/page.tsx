@@ -1,0 +1,24 @@
+import { getGdoRpgProfile } from '@/app/actions/rpgProfileActions';
+import ProfileClient from './ProfileClient';
+import { redirect } from 'next/navigation';
+import { createClient } from "@/utils/supabase/server"
+
+export default async function ProfiloPage() {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+
+    if (!supabaseUser) {
+        redirect('/login');
+    }
+
+    try {
+        const profileData = await getGdoRpgProfile(supabaseUser.id);
+
+        return (
+            <ProfileClient profileData={profileData} />
+        );
+    } catch (e) {
+        console.error(e);
+        return <div>Errore caricamento profilo.</div>;
+    }
+}
