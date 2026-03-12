@@ -37,9 +37,13 @@ export default function ProfileClient({ profileData }: { profileData: any }) {
                 <div className="col-span-1 border border-slate-200 bg-white rounded-2xl shadow-sm p-6 flex flex-col items-center text-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-orange-100 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
 
-                    {/* Placeholder per Immagine Avatar reale (per ora cerchio stilizzato) */}
+                    {/* Immagine Avatar reale */}
                     <div className="relative w-32 h-32 rounded-full border-4 border-orange-100 shadow-xl bg-orange-50 flex items-center justify-center mb-6 mt-4">
-                        <ArrowUpCircle className={`w-16 h-16 ${stage.color}`} />
+                        {stage.imageUrl ? (
+                            <img src={stage.imageUrl} alt={stage.name} className="w-full h-full rounded-full object-cover" />
+                        ) : (
+                            <ArrowUpCircle className={`w-16 h-16 ${stage.color}`} />
+                        )}
                         <div className="absolute -bottom-3 bg-slate-900 text-white font-bold text-sm px-3 py-1 rounded-full border-2 border-slate-800 shadow-md">
                             Liv. {level}
                         </div>

@@ -16,11 +16,11 @@ export const GAME_CONSTANTS = {
 };
 
 export const EVOLUTION_STAGES = [
-    { minLevel: 1, maxLevel: 7, name: 'Uovo', imageUrl: '/avatars/stage1-egg.png', color: 'text-slate-400', badgeClass: 'bg-slate-100 text-slate-600 border-slate-300' },
-    { minLevel: 8, maxLevel: 17, name: 'Pulcino', imageUrl: '/avatars/stage2-chick.png', color: 'text-yellow-600', badgeClass: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-    { minLevel: 18, maxLevel: 25, name: 'Fenice Giovane', imageUrl: '/avatars/stage3-young.png', color: 'text-orange-500', badgeClass: 'bg-orange-100 text-orange-800 border-orange-300' },
-    { minLevel: 26, maxLevel: 34, name: 'Fenice di Fuoco', imageUrl: '/avatars/stage4-fire.png', color: 'text-red-600', badgeClass: 'bg-red-100 text-red-800 border-red-300' },
-    { minLevel: 35, maxLevel: 999, name: 'Divinità Fenice', imageUrl: '/avatars/stage5-god.png', color: 'text-purple-600', badgeClass: 'bg-purple-100 text-purple-800 border-purple-400' },
+    { minLevel: 1, maxLevel: 7, name: 'Uovo', imageUrl: '/avatars/evo-1-uovo.png', color: 'text-slate-400', badgeClass: 'bg-slate-100 text-slate-600 border-slate-300' },
+    { minLevel: 8, maxLevel: 17, name: 'Pulcino', imageUrl: '/avatars/evo-2-pulcino.png', color: 'text-yellow-600', badgeClass: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+    { minLevel: 18, maxLevel: 25, name: 'Fenice Giovane', imageUrl: '/avatars/evo-3-giovane.png', color: 'text-orange-500', badgeClass: 'bg-orange-100 text-orange-800 border-orange-300' },
+    { minLevel: 26, maxLevel: 34, name: 'Fenice di Fuoco', imageUrl: '/avatars/evo-4-adulta.png', color: 'text-red-600', badgeClass: 'bg-red-100 text-red-800 border-red-300' },
+    { minLevel: 35, maxLevel: 999, name: 'Divinità Fenice', imageUrl: '/avatars/evo-5-divinita.png', color: 'text-purple-600', badgeClass: 'bg-purple-100 text-purple-800 border-purple-400' },
 ];
 
 export const ROADMAP_REWARDS = [
