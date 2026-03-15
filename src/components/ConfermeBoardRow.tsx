@@ -10,12 +10,15 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
     // States for Popovers
     const [showSnoozePopover, setShowSnoozePopover] = useState(false)
     const [snoozeTime, setSnoozeTime] = useState("")
+    const [snoozeVslUnseen, setSnoozeVslUnseen] = useState(false)
+    const [snoozeNotes, setSnoozeNotes] = useState("")
     const [isSavingSnooze, setIsSavingSnooze] = useState(false)
 
     const [showRecallPopover, setShowRecallPopover] = useState(false)
     const [recallDate, setRecallDate] = useState("")
     const [recallTime, setRecallTime] = useState("")
     const [vslUnseen, setVslUnseen] = useState(false)
+    const [recallNotes, setRecallNotes] = useState("")
     const [isSavingRecall, setIsSavingRecall] = useState(false)
 
     // Click outside to close popovers
@@ -59,9 +62,14 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
             const d = new Date();
             d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
 
-            const res = await setConfermeSnooze(lead.id, lead.version, d);
+            const res = await setConfermeSnooze(lead.id, lead.version, d, {
+                vslUnseen: snoozeVslUnseen,
+                snoozeNotes: snoozeNotes
+            });
             if (res.success) {
                 setShowSnoozePopover(false);
+                setSnoozeNotes(""); // Resetting
+                setSnoozeVslUnseen(false);
                 onRefresh();
             } else {
                 alert(res.error);
@@ -86,12 +94,14 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                 vslUnseen,
                 needsReschedule: true, // Always park
                 newAppointmentDate: null,
+                recallNotes
             });
 
             if (res && (!res.success)) {
                 alert(res.error || "Errore");
             } else {
                 setShowRecallPopover(false);
+                setRecallNotes(""); // Resetting
                 onRefresh();
             }
         } catch (e: any) {
@@ -135,6 +145,15 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                 )}
             </div>
 
+            {/* In-Line Expanded Note (if present) */}
+            {lead.confRecallNotes && !lead.confirmationsOutcome && (
+                <div className="absolute top-8 left-4 right-64 pointer-events-none mt-0.5">
+                    <p className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 truncate shadow-sm flex items-center max-w-fit italic">
+                        <span className="font-semibold text-amber-800 mr-1 shrink-0">Nota:</span> {lead.confRecallNotes}
+                    </p>
+                </div>
+            )}
+
             {/* Right side: Actions */}
             <div className="flex items-center gap-2 shrink-0 relative">
                 {lead.confirmationsOutcome === "confermato" ? (
@@ -176,8 +195,27 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                         type="time"
                                         value={snoozeTime}
                                         onChange={e => setSnoozeTime(e.target.value)}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-3 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                                     />
+
+                                    <label className="flex items-center gap-2 mb-3 text-[11px] font-semibold text-gray-700 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={snoozeVslUnseen}
+                                            onChange={e => setSnoozeVslUnseen(e.target.checked)}
+                                            className="w-3.5 h-3.5 text-purple-600 rounded border-gray-300"
+                                        />
+                                        Segna VSL Non Vista
+                                    </label>
+
+                                    <textarea
+                                        value={snoozeNotes}
+                                        onChange={e => setSnoozeNotes(e.target.value)}
+                                        placeholder="Note snooze brevi..."
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px] outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 bg-white resize-none shadow-sm text-purple-900 placeholder:text-gray-400 mb-2"
+                                        rows={2}
+                                    />
+
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => setShowSnoozePopover(false)} className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 font-semibold">Annulla</button>
                                         <button onClick={handleSaveSnooze} disabled={isSavingSnooze} className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded font-bold disabled:opacity-50">
@@ -218,7 +256,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                         />
                                     </div>
 
-                                    <label className="flex items-center gap-2 mb-4 text-xs font-semibold text-gray-700 cursor-pointer">
+                                    <label className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-700 cursor-pointer">
                                         <input
                                             type="checkbox"
                                             checked={vslUnseen}
@@ -227,6 +265,14 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                         />
                                         Segna VSL Non Vista
                                     </label>
+
+                                    <textarea
+                                        value={recallNotes}
+                                        onChange={e => setRecallNotes(e.target.value)}
+                                        placeholder="Note di parcheggio opzionali..."
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white resize-none shadow-sm text-blue-900 placeholder:text-gray-400 mb-3"
+                                        rows={2}
+                                    />
 
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => setShowRecallPopover(false)} className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-semibold">Annulla</button>

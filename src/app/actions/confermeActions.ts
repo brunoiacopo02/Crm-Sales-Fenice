@@ -84,22 +84,22 @@ export async function getConfermeAppointments(filters: {
     // Filter time slot in JS to handle timezone easily
     if (filters.timeSlot && filters.timeSlot !== "tutto") {
         results = results.filter(row => {
+            if (row.lead.confNeedsReschedule) return true; // Bypass timeframe hide for Parcheggiati
             if (!row.lead.appointmentDate) return false;
-            if (row.lead.appointmentDate) {
-                // Get hour in Europe/Rome
-                const d = new Date(row.lead.appointmentDate);
-                const hourStr = new Intl.DateTimeFormat('it-IT', {
-                    hour: 'numeric',
-                    timeZone: 'Europe/Rome',
-                    hour12: false
-                }).format(d);
-                const hour = parseInt(hourStr, 10);
 
-                if (filters.timeSlot === "mattina") {
-                    return hour >= 8 && hour < 15;
-                } else if (filters.timeSlot === "pomeriggio") {
-                    return hour >= 15 && hour <= 23;
-                }
+            // Get hour in Europe/Rome
+            const d = new Date(row.lead.appointmentDate);
+            const hourStr = new Intl.DateTimeFormat('it-IT', {
+                hour: 'numeric',
+                timeZone: 'Europe/Rome',
+                hour12: false
+            }).format(d);
+            const hour = parseInt(hourStr, 10);
+
+            if (filters.timeSlot === "mattina") {
+                return hour >= 8 && hour < 15;
+            } else if (filters.timeSlot === "pomeriggio") {
+                return hour >= 15 && hour <= 23;
             }
             return true;
         })
@@ -564,7 +564,7 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
     }
 }
 
-export async function setConfermeSnooze(leadId: string, currentVersion: number, snoozeAt: Date | null) {
+export async function setConfermeSnooze(leadId: string, currentVersion: number, snoozeAt: Date | null, payload?: { vslUnseen?: boolean, snoozeNotes?: string }) {
     try {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -577,11 +577,16 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
         if (!oldLead) throw new Error("Lead not found");
         if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
 
-        await db.update(leads).set({
+        let toUpdate: any = {
             confSnoozeAt: snoozeAt,
             version: oldLead.version + 1,
             updatedAt: new Date()
-        }).where(eq(leads.id, leadId));
+        };
+
+        if (payload?.vslUnseen !== undefined) toUpdate.confVslUnseen = payload.vslUnseen;
+        if (payload?.snoozeNotes !== undefined) toUpdate.confRecallNotes = payload.snoozeNotes;
+
+        await db.update(leads).set(toUpdate).where(eq(leads.id, leadId));
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
