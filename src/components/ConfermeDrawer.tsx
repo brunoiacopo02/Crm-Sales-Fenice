@@ -48,18 +48,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
     // Quick Action States
     const [isSavingNR, setIsSavingNR] = useState(false)
-    const [showRecallForm, setShowRecallForm] = useState(false)
-    const [recallDate, setRecallDate] = useState(lead.recallDate ? format(new Date(lead.recallDate), 'yyyy-MM-dd') : "")
-    const [recallTime, setRecallTime] = useState(lead.recallDate ? format(new Date(lead.recallDate), 'HH:mm') : "")
-    const [vslUnseen, setVslUnseen] = useState(lead.confVslUnseen || false)
-    const [needsReschedule, setNeedsReschedule] = useState(lead.confNeedsReschedule || false)
-    const [newApptDate, setNewApptDate] = useState("")
-    const [newApptTime, setNewApptTime] = useState("")
-    const [isSavingRecall, setIsSavingRecall] = useState(false)
-    const [recallNotes, setRecallNotes] = useState(lead.confRecallNotes || "")
-
-    const [snoozeTimeObj, setSnoozeTimeObj] = useState(lead.confSnoozeAt ? format(new Date(lead.confSnoozeAt), 'HH:mm') : "")
-    const [isSavingSnooze, setIsSavingSnooze] = useState(false)
 
     const [now, setNow] = useState(new Date())
 
@@ -90,15 +78,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setSalesperson(lead.salespersonAssigned || "")
             setSpOutcome(lead.salespersonOutcome || "")
             setSpNotes(lead.salespersonOutcomeNotes || "")
-            setShowRecallForm(false)
-            setRecallDate(lead.recallDate ? format(new Date(lead.recallDate), 'yyyy-MM-dd') : "")
-            setRecallTime(lead.recallDate ? format(new Date(lead.recallDate), 'HH:mm') : "")
-            setVslUnseen(lead.confVslUnseen || false)
-            setNeedsReschedule(lead.confNeedsReschedule || false)
-            setNewApptDate("")
-            setNewApptTime("")
-            setRecallNotes(lead.confRecallNotes || "")
-            setSnoozeTimeObj(lead.confSnoozeAt ? format(new Date(lead.confSnoozeAt), 'HH:mm') : "")
             setActiveTab("dati")
 
             setLoadingNotes(true)
@@ -240,54 +219,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         }
     }
 
-    const handleSaveRecall = async () => {
-        setIsSavingRecall(true);
-        try {
-            const rDate = recallDate ? new Date(`${recallDate}T${recallTime || '00:00'}:00`) : null;
-            const res = await scheduleConfermeRecall(lead.id, localVersion, {
-                recallDate: rDate,
-                vslUnseen,
-                needsReschedule: true, // ALWAYS PARK
-                newAppointmentDate: null,
-                recallNotes
-            });
-
-            if (res && (!res.success)) {
-                alert(res.error || "Errore");
-            } else {
-                setLocalVersion((v: number) => v + 1);
-                onRefresh();
-                setShowRecallForm(false);
-            }
-        } catch (e: any) {
-            alert(e.message);
-        } finally {
-            setIsSavingRecall(false);
-        }
-    }
-
-    const handleSnooze = async () => {
-        if (!snoozeTimeObj) return alert("Seleziona un orario per la sveglia");
-        setIsSavingSnooze(true);
-        try {
-            const [hours, minutes] = snoozeTimeObj.split(":");
-            const d = new Date();
-            d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
-
-            const res = await setConfermeSnooze(lead.id, localVersion, d);
-            if (res.success) {
-                setLocalVersion((v: number) => v + 1);
-                onRefresh();
-            } else {
-                alert(res.error);
-            }
-        } catch (e: any) {
-            alert(e.message);
-        } finally {
-            setIsSavingSnooze(false);
-        }
-    }
-
     const getLastNRDate = () => {
         if (lead.confCall3At) return new Date(lead.confCall3At);
         if (lead.confCall2At) return new Date(lead.confCall2At);
@@ -295,8 +226,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         return null;
     }
     const lastNR = getLastNRDate();
-
-    const preventRecallSave = false; // Parcheggio is always allowed since it clears apptDate
 
     const isLocked = activeUsers.length > 0;
 
@@ -345,18 +274,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         <div className={`w-2 h-2 rounded-full ${lead.confCall3At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
                                     </div>
                                 </button>
-
-                                <div className="flex items-center gap-2 ml-2">
-                                    <input type="time" value={snoozeTimeObj} onChange={e => setSnoozeTimeObj(e.target.value)} className="px-2 py-1.5 border border-purple-200 rounded-md text-sm outline-none shadow-sm focus:ring-2 focus:ring-purple-400 bg-purple-50 text-purple-900 font-semibold h-full" />
-                                    <button
-                                        onClick={handleSnooze}
-                                        disabled={isSavingSnooze || !!lead.confirmationsOutcome}
-                                        className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 border border-purple-300"
-                                        title="Risentire in giornata"
-                                    >
-                                        <Clock className="w-4 h-4" /> {isSavingSnooze ? "..." : "Snooze"}
-                                    </button>
-                                </div>
 
                                 {lastNR && !lead.confirmationsOutcome && (
                                     <span className="text-xs text-gray-600 flex items-center gap-1 font-semibold bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
@@ -535,45 +452,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                                 <p className="text-[11px] text-emerald-600 font-medium mt-2 leading-tight">Salvando, confermerai l'appuntamento, il lead verrà smistato al venditore e verrà creato l'evento sul Google Calendar con invito via email.</p>
                                             </div>
                                         )}
-
-                                        <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "richiama" ? "border-amber-400 bg-amber-50 shadow-sm" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50 bg-white"}`}>
-                                            <input type="radio" name="outcome" value="richiama" checked={outcome === "richiama"} onChange={() => setOutcome("richiama")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
-                                            <span className={`font-bold ${outcome === "richiama" ? "text-amber-800" : "text-gray-700"}`}>Programma Richiamo (Parcheggio)</span>
-                                        </label>
-
-                                        {outcome === "richiama" && (
-                                            <div className="pl-11 -mt-2 mb-5 animate-in slide-in-from-top-2">
-                                                <div className="grid grid-cols-2 gap-3 mb-4">
-                                                    <input type="date" value={recallDate} onChange={e => setRecallDate(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
-                                                    <input type="time" value={recallTime} onChange={e => setRecallTime(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
-                                                </div>
-
-                                                <label className="flex items-center gap-2.5 mb-4 text-sm font-semibold text-amber-900 cursor-pointer w-max">
-                                                    <input type="checkbox" checked={vslUnseen} onChange={e => setVslUnseen(e.target.checked)} className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500" />
-                                                    VSL Non Vista
-                                                </label>
-
-                                                <textarea
-                                                    value={recallNotes}
-                                                    onChange={e => setRecallNotes(e.target.value)}
-                                                    placeholder="Note opzionali per questo richiamo programmato..."
-                                                    className="w-full px-3 py-2 border border-amber-200 rounded-md text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white resize-none shadow-sm text-amber-900 placeholder:text-amber-300"
-                                                    rows={3}
-                                                />
-                                                <p className="text-[11px] text-amber-700 font-medium mt-2 leading-tight">Salvando questo esito, il lead verrà PARCHEGGIATO nella tab "Richiami" in attesa della data prestabilita. L'appuntamento originario sul calendario del venditore (se esistente) verrà rimosso per il reset iterativo.</p>
-                                            </div>
-                                        )}
                                     </div>
 
-                                    {outcome === "richiama" ? (
-                                        <button onClick={handleSaveRecall} disabled={isSavingRecall || !recallDate} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
-                                            {isSavingRecall ? "Salvataggio in corso..." : "Parcheggia nel DB (Sposta in Richiami)"}
-                                        </button>
-                                    ) : (
-                                        <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
-                                            {savingOutcome ? "Salvataggio in corso..." : "Piazza Esito Definitivo"}
-                                        </button>
-                                    )}
+                                    <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
+                                        {savingOutcome ? "Salvataggio in corso..." : "Piazza Esito Definitivo"}
+                                    </button>
                                 </div>
 
                                 {/* Salesperson Outcome (only if confirmed & assigned) */}
