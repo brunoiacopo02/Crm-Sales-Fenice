@@ -13,11 +13,12 @@ import { createClient } from "@/utils/supabase/client"
 type LeadData = any;
 
 type ViewMode = 'pomeriggio' | 'mattina' | 'da_definire' | 'table';
-type NrFilterMode = 'tutti' | '0_chiamate' | '1_piu_chiamate';
+type NrFilterMode = 'tutti' | '0' | '1' | '2' | '3';
 
 export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     const [viewMode, setViewMode] = useState<ViewMode>('pomeriggio')
     const [nrFilter, setNrFilter] = useState<NrFilterMode>('tutti')
+    const [selectedHour, setSelectedHour] = useState<string | null>(null)
 
     // Dataset
     const [kanbanData, setKanbanData] = useState<{ flatList: LeadData[], daDefinire: LeadData[] }>({ flatList: [], daDefinire: [] })
@@ -116,6 +117,15 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         return () => clearTimeout(timer)
     }, [viewMode, searchQuery, dateRange])
 
+    // Auto-select first hour when views change
+    useEffect(() => {
+        if (viewMode === 'pomeriggio' && oggiHours.length > 0 && !oggiHours.includes(selectedHour || '')) {
+            setSelectedHour(oggiHours[0]);
+        } else if (viewMode === 'mattina' && domaniHours.length > 0 && !domaniHours.includes(selectedHour || '')) {
+            setSelectedHour(domaniHours[0]);
+        }
+    }, [viewMode, oggiHours, domaniHours, selectedHour]);
+
     useEffect(() => {
         const supabase = createClient();
         const channel = supabase.channel('conferme_realtime_board');
@@ -187,7 +197,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     }
 
     // --- RENDER COMPACT LEAD ROW ---
-    const renderLeadCard = (item: LeadData) => {
+    const renderLeadRow = (item: LeadData) => {
         const lead = item.lead
         const isLocked = globalPresence.some(p => p.leadId === lead.id && p.user.id !== currentUser.id)
 
@@ -201,21 +211,17 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             <div
                 key={lead.id}
                 onClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
-                className={`bg-white rounded-lg border py-2 px-3 flex items-center justify-between gap-3 cursor-pointer transition-all hover:bg-slate-50 ${isLocked ? 'border-amber-400 bg-amber-50' : 'border-gray-200 hover:border-brand-blue-light'} group mb-1.5 w-full`}
+                className={`flex items-center justify-between py-1.5 px-3 mb-1 text-[13px] border rounded-lg cursor-pointer transition-colors group ${isLocked ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200 hover:border-brand-blue-light hover:bg-slate-50'}`}
             >
                 {/* Left side: Info */}
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <h4 className="font-semibold text-slate-800 text-sm whitespace-nowrap truncate w-48">{lead.name}</h4>
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <span className="font-bold text-slate-800 truncate w-48">{lead.name}</span>
+                    <span className="text-slate-500 font-medium w-32 truncate flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400" />{lead.phone}</span>
+                    <span className="text-brand-orange font-bold w-40 truncate">{item.gdo?.displayName || item.gdo?.name || "N/A"}</span>
 
-                    <div className="flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap">
-                        <span className="font-medium flex items-center gap-1"><Phone className="w-3 h-3" /> {lead.phone}</span>
-                        <div className="w-1 h-1 bg-gray-300 rounded-full" />
-                        <span className="text-brand-orange/90 font-medium truncate w-32">GDO: {item.gdo?.displayName || item.gdo?.name || "N/A"}</span>
-                    </div>
-
-                    {/* NR Badges explicit text */}
+                    {/* Badge NR */}
                     {!lead.confirmationsOutcome && callsMade > 0 && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase ml-2 border border-amber-200">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase border border-amber-200 shadow-sm ml-2">
                             {callsMade}° Chiamata a vuoto
                         </span>
                     )}
@@ -228,32 +234,27 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 </div>
 
                 {/* Right side: Actions */}
-                <div className="flex items-center gap-2 shrink-0">
-                    {/* Urgency Status */}
+                <div className="flex items-center gap-3 shrink-0">
                     {lead.confirmationsOutcome === "confermato" ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
                         </span>
                     ) : lead.confirmationsOutcome === "scartato" ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                             <XCircle className="w-3.5 h-3.5 mr-1" /> Scartato
                         </span>
-                    ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                            Da lavorare
-                        </span>
-                    )}
+                    ) : null}
 
+                    {/* NR rapido integrato riga - visibile solo per i da lavorare */}
                     {!isLocked && !lead.confirmationsOutcome && (
                         <button
                             onClick={(e) => handleQuickNR(e, item)}
-                            className="flex items-center justify-center bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-200 text-slate-500 hover:text-rose-600 px-2 py-1 rounded transition-colors shadow-sm font-bold text-xs shadow-sm z-10"
-                            title="Segna Non Risponde Veloce"
+                            disabled={callsMade >= 3}
+                            className="bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-300 text-slate-500 hover:text-rose-600 px-2 py-1 rounded-md text-[11px] font-bold transition-colors z-10 disabled:opacity-50"
                         >
-                            NR rapido
+                            NR Rapido
                         </button>
                     )}
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-brand-blue transition-colors ml-1" />
                 </div>
             </div>
         )
@@ -269,102 +270,135 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         </div>
     )
 
-    const renderHourSection = (hours: string[], leadsList: LeadData[]) => {
+    const renderActiveTimeline = () => {
+        const activeLeads = viewMode === "pomeriggio" ? oggiLeads : viewMode === "mattina" ? domaniLeads : [];
+        const activeHours = viewMode === "pomeriggio" ? oggiHours : viewMode === "mattina" ? domaniHours : [];
+
+        if (activeHours.length === 0) return null;
+
         return (
-            <div className="flex flex-col w-full max-w-5xl mx-auto space-y-8 pb-12">
-                {hours.map(hourKey => {
-                    const targetHour = parseInt(hourKey.split(':')[0], 10);
-                    let leadsInThisHour = leadsList.filter(l => {
-                        const h = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
-                        return h === targetHour;
+            <div className="flex items-center gap-2 overflow-x-auto pb-4 pt-1 px-1 mb-2 scrollbar-none w-full border-b border-gray-200/60 sticky top-0 bg-gray-50 z-10">
+                {activeHours.map((hourParam) => {
+                    const hNum = parseInt(hourParam.split(':')[0], 10);
+                    const leadsForHour = activeLeads.filter(l => {
+                        if (!l.lead.appointmentDate) return false;
+                        const lHour = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
+                        return lHour === hNum && !l.lead.confNeedsReschedule;
                     });
 
-                    // NR Filter
-                    if (nrFilter === '0_chiamate') {
-                        leadsInThisHour = leadsInThisHour.filter(l => !l.lead.confCall1At);
-                    } else if (nrFilter === '1_piu_chiamate') {
-                        leadsInThisHour = leadsInThisHour.filter(l => !!l.lead.confCall1At);
-                    }
+                    const allDone = leadsForHour.length > 0 && leadsForHour.every(l => !!l.lead.confirmationsOutcome);
+                    const trafficColor = leadsForHour.length === 0 ? "bg-gray-300" : allDone ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-rose-500 shadow-[0_0_5px_rgba(244,63,94,0.5)]";
 
                     return (
-                        <div key={hourKey} className="flex flex-col w-full">
-                            {/* Compact Hour Divider */}
-                            <div className="flex items-center mb-2 sticky top-0 bg-gray-50/95 backdrop-blur z-10 py-1">
-                                <div className="flex items-center gap-2 bg-white border border-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)] rounded-lg px-3 py-1 text-slate-700 font-bold text-sm">
-                                    <Clock className="w-4 h-4 text-brand-blue" />
-                                    ORE {hourKey}
-                                </div>
-                                <div className="h-px bg-slate-200 flex-1 ml-4" />
-                            </div>
-
-                            {/* Cards Container */}
-                            <div className="flex flex-col w-full">
-                                {leadsInThisHour.length === 0 ? (
-                                    <div className="flex items-center gap-2 text-emerald-600 px-4 py-2 font-medium">
-                                        <CheckCircle2 className="w-5 h-5" /> Nessun appuntamento
-                                    </div>
-                                ) : (
-                                    leadsInThisHour.map(renderLeadCard)
-                                )}
-                            </div>
-                        </div>
+                        <button
+                            key={hourParam}
+                            onClick={() => { setSelectedHour(hourParam); setNrFilter('tutti'); }}
+                            className={`flex items-center gap-2 shrink-0 px-4 py-2 rounded-xl text-sm font-bold border transition-all duration-200 ${selectedHour === hourParam ? 'bg-white border-brand-blue ring-1 ring-brand-blue text-brand-blue-dark shadow-md scale-105' : 'bg-gray-100 border-gray-200 hover:bg-gray-200 text-gray-600'}`}
+                        >
+                            {hourParam}
+                            <div className={`w-2.5 h-2.5 rounded-full ${trafficColor} border border-white/50`} />
+                        </button>
                     )
                 })}
             </div>
         )
     }
 
+    const renderNRFilters = (leadsForHour: LeadData[]) => {
+        const counts = {
+            'tutti': leadsForHour.length,
+            '0': leadsForHour.filter(l => !l.lead.confCall1At).length,
+            '1': leadsForHour.filter(l => l.lead.confCall1At && !l.lead.confCall2At && !l.lead.confCall3At).length,
+            '2': leadsForHour.filter(l => l.lead.confCall2At && !l.lead.confCall3At).length,
+            '3': leadsForHour.filter(l => l.lead.confCall3At).length,
+        }
+
+        const filterButton = (key: NrFilterMode, label: string) => (
+            <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[13px] font-bold cursor-pointer transition-all ${nrFilter === key ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 border-gray-200 hover:border-gray-300 hover:bg-slate-50'}`}>
+                <input type="radio" value={key} checked={nrFilter === key} onChange={() => setNrFilter(key)} className="hidden" />
+                {label} <span className={`ml-1 px-1.5 rounded-full text-[11px] ${nrFilter === key ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'}`}>{counts[key]}</span>
+            </label>
+        );
+
+        return (
+            <div className="flex flex-wrap items-center gap-2 mb-4 px-1 mt-4">
+                {filterButton('tutti', 'Tutti')}
+                {filterButton('0', '0 Chiamate')}
+                {filterButton('1', '1 Chiamata')}
+                {filterButton('2', '2 Chiamate')}
+                {filterButton('3', '3 Chiamate')}
+            </div>
+        )
+    }
+
+    const renderSelectedHourLeads = () => {
+        if (!selectedHour) return null;
+        const activeLeads = viewMode === "pomeriggio" ? oggiLeads : viewMode === "mattina" ? domaniLeads : [];
+        const hNum = parseInt(selectedHour.split(':')[0], 10);
+
+        let targetLeads = activeLeads.filter(l => {
+            if (!l.lead.appointmentDate) return false;
+            const lHour = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
+            return lHour === hNum && !l.lead.confNeedsReschedule;
+        });
+
+        // Render the pill filters first
+        const filtersJSX = renderNRFilters(targetLeads);
+
+        // Apply filters
+        if (nrFilter === '0') targetLeads = targetLeads.filter(l => !l.lead.confCall1At);
+        if (nrFilter === '1') targetLeads = targetLeads.filter(l => l.lead.confCall1At && !l.lead.confCall2At && !l.lead.confCall3At);
+        if (nrFilter === '2') targetLeads = targetLeads.filter(l => l.lead.confCall2At && !l.lead.confCall3At);
+        if (nrFilter === '3') targetLeads = targetLeads.filter(l => l.lead.confCall3At);
+
+        return (
+            <div className="flex flex-col w-full max-w-5xl mx-auto pb-12">
+                {filtersJSX}
+                <div className="flex flex-col w-full bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
+                    {targetLeads.length === 0 ? (
+                        <div className="text-center py-6 text-slate-500 text-sm font-medium">Nessun lead corrispondente ai filtri in questa fascia oraria.</div>
+                    ) : (
+                        targetLeads.map(renderLeadRow)
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] relative">
             <GlobalAlertListener currentUser={currentUser} />
 
-            {/* MEGA TOGGLES NAVIGATION */}
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 sticky top-0 z-20 bg-gray-50 pt-2 pb-4 border-b border-gray-200">
-                <div className="flex p-1 bg-gray-200/80 rounded-2xl w-full lg:w-3/4 max-w-4xl shadow-inner border border-gray-300">
+            {/* MEGA TOGGLES NAVIGATION - Plancia Desktop Segmented Control */}
+            <div className="flex items-center justify-between gap-4 mb-2 sticky top-0 z-20 bg-gray-50 pt-3 pb-3">
+                <div className="flex p-1 bg-gray-200/60 rounded-xl max-w-2xl border border-gray-200 shadow-inner">
                     <button
                         onClick={() => setViewMode('pomeriggio')}
-                        className={`flex-1 py-3 px-2 rounded-xl font-black text-sm sm:text-base uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'pomeriggio' ? 'bg-white text-brand-blue-dark shadow-md scale-[1.02] border border-gray-200 z-10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/50'}`}
+                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'pomeriggio' ? 'bg-white text-slate-800 shadow-sm border border-gray-300' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/30'}`}
                     >
-                        <Clock className="w-5 h-5 opacity-70" />
-                        App Pomeriggio
+                        App Pomeriggio <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'pomeriggio' ? 'bg-slate-800 text-white' : 'bg-gray-300 text-gray-700'}`}>{oggiLeads.length}</span>
                     </button>
                     <button
                         onClick={() => setViewMode('mattina')}
-                        className={`flex-1 py-3 px-2 rounded-xl font-black text-sm sm:text-base uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'mattina' ? 'bg-white text-brand-blue-dark shadow-md scale-[1.02] border border-gray-200 z-10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/50'}`}
+                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'mattina' ? 'bg-white text-slate-800 shadow-sm border border-gray-300' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/30'}`}
                     >
-                        <Calendar className="w-5 h-5 opacity-70" />
-                        App Mattina
+                        App Mattina <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'mattina' ? 'bg-slate-800 text-white' : 'bg-gray-300 text-gray-700'}`}>{domaniLeads.length}</span>
                     </button>
                     <button
                         onClick={() => setViewMode('da_definire')}
-                        className={`flex-1 py-3 px-2 rounded-xl font-black text-sm sm:text-base uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'da_definire' ? 'bg-white text-brand-blue-dark shadow-md scale-[1.02] border border-gray-200 z-10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/50'}`}
+                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'da_definire' ? 'bg-white text-rose-700 shadow-sm border border-gray-300' : 'text-rose-600/70 hover:text-rose-700 hover:bg-rose-100/50'}`}
                     >
-                        <AlertCircle className="w-5 h-5 opacity-70" />
-                        Da Definire
-                        {kanbanData.daDefinire.length > 0 && (
-                            <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-xs font-bold ml-1">{kanbanData.daDefinire.length}</span>
-                        )}
+                        Da Definire <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'da_definire' ? 'bg-rose-600 text-white' : 'bg-rose-200 text-rose-800'}`}>{kanbanData.daDefinire.length}</span>
                     </button>
                 </div>
-
-                {/* Sub-Filters for NR (Only show if not in Table View) */}
-                {viewMode !== 'table' && (
-                    <div className="flex items-center justify-center w-full mt-2">
-                        <div className="flex bg-white border border-slate-200 rounded-full p-1 shadow-sm">
-                            <button onClick={() => setNrFilter('tutti')} className={`px-4 py-1 text-xs font-bold rounded-full transition-colors ${nrFilter === 'tutti' ? 'bg-brand-blue-dark text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Tutti</button>
-                            <button onClick={() => setNrFilter('0_chiamate')} className={`px-4 py-1 text-xs font-bold rounded-full transition-colors ${nrFilter === '0_chiamate' ? 'bg-brand-blue-dark text-white' : 'text-slate-500 hover:bg-slate-100'}`}>0 chiamate</button>
-                            <button onClick={() => setNrFilter('1_piu_chiamate')} className={`px-4 py-1 text-xs font-bold rounded-full transition-colors ${nrFilter === '1_piu_chiamate' ? 'bg-brand-blue-dark text-white' : 'text-slate-500 hover:bg-slate-100'}`}>1+ chiamate (NR)</button>
-                        </div>
-                    </div>
-                )}
 
                 <div className="w-full lg:w-auto">
                     <button
                         onClick={() => setViewMode('table')}
-                        className={`w-full lg:w-auto px-6 py-3.5 rounded-2xl font-bold transition-all text-sm uppercase tracking-wider flex items-center justify-center border ${viewMode === 'table' ? 'bg-slate-800 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50 border-gray-300 shadow-sm'}`}
+                        className={`w-full lg:w-auto px-5 py-2.5 rounded-lg font-bold transition-all text-xs uppercase tracking-wider flex items-center justify-center border ${viewMode === 'table' ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 border-gray-300 shadow-sm'}`}
                     >
-                        <Search className="w-4 h-4 mr-2" />
-                        Vista Globale
+                        <Search className="w-3.5 h-3.5 mr-1.5" />
+                        Vista Globale DB
                     </button>
                 </div>
             </div>
@@ -378,28 +412,30 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 ) : (
                     <>
                         {viewMode === 'pomeriggio' && (
-                            <div className="w-full h-full flex flex-col items-center pt-2">
-                                {renderHourSection(oggiHours, oggiLeads)}
+                            <div className="w-full h-full flex flex-col pt-0">
+                                {renderActiveTimeline()}
+                                {renderSelectedHourLeads()}
                             </div>
                         )}
 
                         {viewMode === 'mattina' && (
-                            <div className="w-full h-full flex flex-col items-center pt-2">
-                                {renderHourSection(domaniHours, domaniLeads)}
+                            <div className="w-full h-full flex flex-col pt-0">
+                                {renderActiveTimeline()}
+                                {renderSelectedHourLeads()}
                             </div>
                         )}
 
                         {viewMode === 'da_definire' && (
-                            <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-2 pb-12">
-                                <div className="w-full mb-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl">
-                                    <h2 className="text-xl font-black text-amber-800 uppercase tracking-widest mb-1">Richiami Parcheggiati</h2>
-                                    <p className="text-amber-700/80 font-medium">Lead da ricollocare con urgenza nei buchi di agenda.</p>
+                            <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-12">
+                                <div className="w-full mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
+                                    <h2 className="text-lg font-black text-amber-800 uppercase tracking-wide mb-1 flex items-center gap-2"><AlertCircle className="w-5 h-5" /> Richiami Parcheggiati</h2>
+                                    <p className="text-amber-700/80 font-medium text-sm">Lead non completi da reinserire in coda operativa.</p>
                                 </div>
-                                <div className="w-full flex flex-col gap-3">
+                                <div className="w-full flex flex-col bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
                                     {kanbanData.daDefinire.length === 0 ? (
-                                        renderEmptyState("La coda dei richiami Ãš perfettamente pulita.")
+                                        renderEmptyState("La coda dei parcheggiati è vuota.")
                                     ) : (
-                                        kanbanData.daDefinire.map(renderLeadCard)
+                                        kanbanData.daDefinire.map(renderLeadRow)
                                     )}
                                 </div>
                             </div>
