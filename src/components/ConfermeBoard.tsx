@@ -212,7 +212,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     }
 
     // --- RENDER COMPACT LEAD ROW ---
-    const renderRowComponent = (item: LeadData) => {
+    const renderRowComponent = (item: LeadData, layoutMode: 'default' | 'snooze' | 'richiami' = 'default') => {
         const isLocked = globalPresence.some(p => p.leadId === item.lead.id && p.user.id !== currentUser.id)
         return (
             <ConfermeBoardRow
@@ -220,6 +220,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 item={item}
                 currentUser={currentUser}
                 isLocked={isLocked}
+                layoutMode={layoutMode}
                 onRefresh={() => fetchLeads(false)}
                 onRowClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
             />
@@ -327,7 +328,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         {normalTargetLeads.length === 0 ? (
                             <div className="text-center py-6 text-slate-500 text-sm font-medium">Nessun lead corrispondente ai filtri in questa fascia oraria.</div>
                         ) : (
-                            normalTargetLeads.map(renderRowComponent)
+                            normalTargetLeads.map(l => renderRowComponent(l, 'default'))
                         )}
                     </div>
                 </div>
@@ -341,7 +342,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         {snoozedLeads.length === 0 ? (
                             <div className="text-center my-auto py-6 text-slate-400 text-xs font-semibold">Nessun richiamo attivo.</div>
                         ) : (
-                            snoozedLeads.map(renderRowComponent)
+                            snoozedLeads.map(l => renderRowComponent(l, 'snooze'))
                         )}
                     </div>
                 </div>
@@ -419,7 +420,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                     {kanbanData.daDefinire.length === 0 ? (
                                         renderEmptyState("La coda dei parcheggiati è vuota.")
                                     ) : (
-                                        kanbanData.daDefinire.map(renderRowComponent)
+                                        kanbanData.daDefinire.map(l => renderRowComponent(l, 'richiami'))
                                     )}
                                 </div>
                             </div>
