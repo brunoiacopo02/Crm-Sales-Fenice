@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users } from "lucide-react"
-import { updateLeadDataConferme, getConfermeNotes, addConfermeNote, setConfermeOutcome, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall } from "@/app/actions/confermeActions"
-import { setPresence, removePresence, getLeadPresence } from "@/app/actions/presenceActions"
+import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall } from "@/app/actions/confermeActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
+import { createClient } from "@/utils/supabase/client"
 import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
 
@@ -98,20 +98,42 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setLoadingNotes(true)
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))
 
-            const sendHeartbeat = () => setPresence(lead.id, `Sulla scheda di: ${lead.name}`)
-            sendHeartbeat()
-            const heartbeatInterval = setInterval(sendHeartbeat, 5000)
+            const supabase = createClient();
+            const channel = supabase.channel(`presence_lead_${lead.id}`);
 
-            const checkPresence = () => {
-                getLeadPresence(lead.id).then(users => setActiveUsers(users))
-            }
-            checkPresence()
-            const checkInterval = setInterval(checkPresence, 4000)
+            // 1. Invia il nostro stato di presenza "In Lavorazione" a tutti
+            channel.on('presence', { event: 'sync' }, () => {
+                const newState = channel.presenceState();
+                const usersPresent: any[] = [];
+                for (const id in newState) {
+                    const presenceArray = newState[id];
+                    presenceArray.forEach((p: any) => {
+                        // Se c'è un utente ed è diverso da noi, è un "Lock"
+                        if (p.user && p.user.id !== currentUser.id) {
+                            usersPresent.push(p);
+                        }
+                    });
+                }
+                setActiveUsers(usersPresent);
+            });
+
+            // 2. Entra nella stanza di questo utente
+            channel.subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await channel.track({
+                        online_at: new Date().toISOString(),
+                        leadId: lead.id,
+                        user: {
+                            id: currentUser.id,
+                            name: currentUser.name,
+                            displayName: currentUser.displayName
+                        }
+                    });
+                }
+            });
 
             return () => {
-                clearInterval(heartbeatInterval)
-                clearInterval(checkInterval)
-                removePresence(lead.id)
+                supabase.removeChannel(channel);
             }
         }
     }, [isOpen, lead.id, lead.version]) // update when version changes too
@@ -119,6 +141,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const handleSaveData = async () => {
         setSavingData(true)
         try {
+            const { updateLeadDataConferme } = await import('@/app/actions/confermeActions');
             const combinedDate = new Date(`${editDate}T${editTime}:00`);
             await updateLeadDataConferme(lead.id, localVersion, {
                 name: editName,
@@ -139,6 +162,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const handleAddNote = async () => {
         if (!newNote.trim()) return;
         try {
+            const { addConfermeNote } = await import('@/app/actions/confermeActions');
             const note = await addConfermeNote(lead.id, newNote)
             setNotes([{ note, author: currentUser }, ...notes])
             setNewNote("")
@@ -160,6 +184,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
         setSavingOutcome(true)
         try {
+            const { setConfermeOutcome } = await import('@/app/actions/confermeActions');
             const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", discardReason, salesperson)
             if (result && !result.success) {
                 alert(`Errore salvataggio esito: ${result.error}`)

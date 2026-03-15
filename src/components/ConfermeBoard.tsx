@@ -8,6 +8,7 @@ import { ConfermeDrawer } from "@/components/ConfermeDrawer"
 import { GlobalAlertListener } from "@/components/GlobalAlertListener"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
+import { createClient } from "@/utils/supabase/client"
 
 type LeadData = any;
 
@@ -114,11 +115,38 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     }, [viewMode, searchQuery, dateRange])
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            loadPresence()
-            if (viewMode !== 'table') fetchLeads(false); // keep kanban updated without spinner
-        }, 5000)
-        return () => clearInterval(interval)
+        const supabase = createClient();
+        const channel = supabase.channel('conferme_realtime_board');
+
+        // Listen for ANY change on the leads table (insert or update)
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
+            // Silently refetch when a change occurs to avoid stale data
+            if (viewMode !== 'table') fetchLeads(false);
+        });
+
+        // Listen for presence state changes (colleagues opening a drawer)
+        channel.on('presence', { event: 'sync' }, () => {
+            const newState = channel.presenceState();
+            const presenceArray: any[] = [];
+
+            for (const id in newState) {
+                const presenceGroup = newState[id];
+                presenceGroup.forEach((p: any) => p.leadId && presenceArray.push(p));
+            }
+            // Update global presence for those locked cards
+            setGlobalPresence(presenceArray);
+        });
+
+        channel.subscribe();
+
+        // Initial setup for presence right after mount
+        loadPresence();
+        const initialLoadInterval = setInterval(loadPresence, 30000); // 30s slow catch-all fallback
+
+        return () => {
+            supabase.removeChannel(channel);
+            clearInterval(initialLoadInterval);
+        };
     }, [viewMode])
 
     const handleDatePreset = (preset: string) => {
