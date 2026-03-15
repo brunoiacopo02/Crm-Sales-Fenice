@@ -478,7 +478,8 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
     recallDate?: Date | null,
     vslUnseen: boolean,
     newAppointmentDate?: Date | null,
-    needsReschedule?: boolean
+    needsReschedule?: boolean,
+    recallNotes?: string
 }) {
     try {
         const supabase = await createClient();
@@ -496,6 +497,7 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             recallDate: payload.recallDate || null,
             confVslUnseen: payload.vslUnseen,
             confNeedsReschedule: payload.needsReschedule || false,
+            confRecallNotes: payload.recallNotes || null,
             version: oldLead.version + 1,
             updatedAt: new Date()
         };
@@ -554,6 +556,40 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             userId: session.user.id,
             timestamp: new Date(),
             metadata: { payload }
+        });
+
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function setConfermeSnooze(leadId: string, currentVersion: number, snoozeAt: Date | null) {
+    try {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
+            throw new Error("Unauthorized")
+        }
+
+        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        if (!oldLead) throw new Error("Lead not found");
+        if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
+
+        await db.update(leads).set({
+            confSnoozeAt: snoozeAt,
+            version: oldLead.version + 1,
+            updatedAt: new Date()
+        }).where(eq(leads.id, leadId));
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: "conferme_snooze_set",
+            userId: session.user.id,
+            timestamp: new Date(),
+            metadata: { snoozeAt }
         });
 
         return { success: true };

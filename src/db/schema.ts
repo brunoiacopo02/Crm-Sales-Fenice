@@ -52,6 +52,8 @@ export const leads = pgTable('leads', {
     confCall3At: timestamp('confCall3At', { withTimezone: true, mode: 'date' }),
     confVslUnseen: boolean('confVslUnseen').default(false).notNull(),
     confNeedsReschedule: boolean('confNeedsReschedule').default(false).notNull(),
+    confSnoozeAt: timestamp('confSnoozeAt', { withTimezone: true, mode: 'date' }),
+    confRecallNotes: text('confRecallNotes'),
 
     confirmationsOutcome: text('confirmationsOutcome'),
     confirmationsDiscardReason: text('confirmationsDiscardReason'),

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users } from "lucide-react"
-import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall } from "@/app/actions/confermeActions"
+import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze } from "@/app/actions/confermeActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { createClient } from "@/utils/supabase/client"
 import { format, formatDistanceToNow } from "date-fns"
@@ -56,6 +56,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const [newApptDate, setNewApptDate] = useState("")
     const [newApptTime, setNewApptTime] = useState("")
     const [isSavingRecall, setIsSavingRecall] = useState(false)
+    const [recallNotes, setRecallNotes] = useState(lead.confRecallNotes || "")
+
+    const [snoozeTimeObj, setSnoozeTimeObj] = useState(lead.confSnoozeAt ? format(new Date(lead.confSnoozeAt), 'HH:mm') : "")
+    const [isSavingSnooze, setIsSavingSnooze] = useState(false)
 
     const [now, setNow] = useState(new Date())
 
@@ -93,6 +97,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setNeedsReschedule(lead.confNeedsReschedule || false)
             setNewApptDate("")
             setNewApptTime("")
+            setRecallNotes(lead.confRecallNotes || "")
+            setSnoozeTimeObj(lead.confSnoozeAt ? format(new Date(lead.confSnoozeAt), 'HH:mm') : "")
             setActiveTab("dati")
 
             setLoadingNotes(true)
@@ -238,15 +244,12 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         setIsSavingRecall(true);
         try {
             const rDate = recallDate ? new Date(`${recallDate}T${recallTime || '00:00'}:00`) : null;
-            let nApptDate = null;
-            if (!needsReschedule && newApptDate && newApptTime) {
-                nApptDate = new Date(`${newApptDate}T${newApptTime}:00`);
-            }
             const res = await scheduleConfermeRecall(lead.id, localVersion, {
                 recallDate: rDate,
                 vslUnseen,
-                needsReschedule,
-                newAppointmentDate: nApptDate
+                needsReschedule: true, // ALWAYS PARK
+                newAppointmentDate: null,
+                recallNotes
             });
 
             if (res && (!res.success)) {
@@ -263,6 +266,28 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         }
     }
 
+    const handleSnooze = async () => {
+        if (!snoozeTimeObj) return alert("Seleziona un orario per la sveglia");
+        setIsSavingSnooze(true);
+        try {
+            const [hours, minutes] = snoozeTimeObj.split(":");
+            const d = new Date();
+            d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+
+            const res = await setConfermeSnooze(lead.id, localVersion, d);
+            if (res.success) {
+                setLocalVersion((v: number) => v + 1);
+                onRefresh();
+            } else {
+                alert(res.error);
+            }
+        } catch (e: any) {
+            alert(e.message);
+        } finally {
+            setIsSavingSnooze(false);
+        }
+    }
+
     const getLastNRDate = () => {
         if (lead.confCall3At) return new Date(lead.confCall3At);
         if (lead.confCall2At) return new Date(lead.confCall2At);
@@ -271,10 +296,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     }
     const lastNR = getLastNRDate();
 
-    // Prevent recall submit validation logic
-    const recallDateObj = recallDate ? new Date(`${recallDate}T${recallTime || '00:00'}:00`) : null;
-    const isRecallExceedingAppt = recallDateObj && lead.appointmentDate && recallDateObj > new Date(lead.appointmentDate);
-    const preventRecallSave = isRecallExceedingAppt && !needsReschedule && (!newApptDate || !newApptTime);
+    const preventRecallSave = false; // Parcheggio is always allowed since it clears apptDate
 
     const isLocked = activeUsers.length > 0;
 
@@ -323,6 +345,18 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         <div className={`w-2 h-2 rounded-full ${lead.confCall3At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
                                     </div>
                                 </button>
+
+                                <div className="flex items-center gap-2 ml-2">
+                                    <input type="time" value={snoozeTimeObj} onChange={e => setSnoozeTimeObj(e.target.value)} className="px-2 py-1.5 border border-purple-200 rounded-md text-sm outline-none shadow-sm focus:ring-2 focus:ring-purple-400 bg-purple-50 text-purple-900 font-semibold h-full" />
+                                    <button
+                                        onClick={handleSnooze}
+                                        disabled={isSavingSnooze || !!lead.confirmationsOutcome}
+                                        className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 border border-purple-300"
+                                        title="Risentire in giornata"
+                                    >
+                                        <Clock className="w-4 h-4" /> {isSavingSnooze ? "..." : "Snooze"}
+                                    </button>
+                                </div>
 
                                 {lastNR && !lead.confirmationsOutcome && (
                                     <span className="text-xs text-gray-600 flex items-center gap-1 font-semibold bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
@@ -504,7 +538,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                                         <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "richiama" ? "border-amber-400 bg-amber-50 shadow-sm" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50 bg-white"}`}>
                                             <input type="radio" name="outcome" value="richiama" checked={outcome === "richiama"} onChange={() => setOutcome("richiama")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
-                                            <span className={`font-bold ${outcome === "richiama" ? "text-amber-800" : "text-gray-700"}`}>Riprogramma Chiamata</span>
+                                            <span className={`font-bold ${outcome === "richiama" ? "text-amber-800" : "text-gray-700"}`}>Programma Richiamo (Parcheggio)</span>
                                         </label>
 
                                         {outcome === "richiama" && (
@@ -514,40 +548,26 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                                     <input type="time" value={recallTime} onChange={e => setRecallTime(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
                                                 </div>
 
-                                                <label className="flex items-center gap-2.5 mb-5 text-sm font-semibold text-amber-900 cursor-pointer w-max">
+                                                <label className="flex items-center gap-2.5 mb-4 text-sm font-semibold text-amber-900 cursor-pointer w-max">
                                                     <input type="checkbox" checked={vslUnseen} onChange={e => setVslUnseen(e.target.checked)} className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500" />
                                                     VSL Non Vista
                                                 </label>
 
-                                                {isRecallExceedingAppt && (
-                                                    <div className="bg-white p-4 rounded-xl border border-rose-200 mb-5 shadow-sm">
-                                                        <p className="text-xs text-rose-600 font-bold mb-3 flex items-start gap-1.5 leading-tight">
-                                                            <AlertTriangle className="w-4 h-4 shrink-0" />
-                                                            Il richiamo supera l'appuntamento originale. È obbligatorio aggiornare o parcheggiare la data.
-                                                        </p>
-
-                                                        <div className="space-y-4">
-                                                            <label className="flex items-center gap-2.5 text-sm text-slate-800 font-bold cursor-pointer bg-slate-50 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
-                                                                <input type="checkbox" checked={needsReschedule} onChange={e => { setNeedsReschedule(e.target.checked); if (e.target.checked) { setNewApptDate(""); setNewApptTime(""); } }} className="w-4 h-4 text-brand-blue" />
-                                                                Sposta in: "Da Definire"
-                                                            </label>
-
-                                                            {!needsReschedule && (
-                                                                <div className="flex gap-2">
-                                                                    <input type="date" value={newApptDate} onChange={e => setNewApptDate(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" placeholder="Nuova Data App." />
-                                                                    <input type="time" value={newApptTime} onChange={e => setNewApptTime(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" />
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                <textarea
+                                                    value={recallNotes}
+                                                    onChange={e => setRecallNotes(e.target.value)}
+                                                    placeholder="Note opzionali per questo richiamo programmato..."
+                                                    className="w-full px-3 py-2 border border-amber-200 rounded-md text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white resize-none shadow-sm text-amber-900 placeholder:text-amber-300"
+                                                    rows={3}
+                                                />
+                                                <p className="text-[11px] text-amber-700 font-medium mt-2 leading-tight">Salvando questo esito, il lead verrà PARCHEGGIATO nella tab "Richiami" in attesa della data prestabilita. L'appuntamento originario sul calendario del venditore (se esistente) verrà rimosso per il reset iterativo.</p>
                                             </div>
                                         )}
                                     </div>
 
                                     {outcome === "richiama" ? (
-                                        <button onClick={handleSaveRecall} disabled={isSavingRecall || !recallDate || preventRecallSave} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
-                                            {isSavingRecall ? "Salvataggio in corso..." : "Salva Richiamo"}
+                                        <button onClick={handleSaveRecall} disabled={isSavingRecall || !recallDate} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
+                                            {isSavingRecall ? "Salvataggio in corso..." : "Parcheggia nel DB (Sposta in Richiami)"}
                                         </button>
                                     ) : (
                                         <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">

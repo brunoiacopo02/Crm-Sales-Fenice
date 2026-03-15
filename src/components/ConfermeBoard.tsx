@@ -161,6 +161,39 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         };
     }, [viewMode])
 
+    // --- SNOOZE WATCHER ---
+    const [alertedSnoozes, setAlertedSnoozes] = useState<Set<string>>(new Set())
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const nowTime = new Date().getTime();
+            const allLeads = [...oggiLeads, ...domaniLeads];
+
+            setAlertedSnoozes(prev => {
+                const updatedSet = new Set(prev);
+                let newlyAlerted = false;
+
+                allLeads.forEach(item => {
+                    const lead = item.lead;
+                    if (!lead.confirmationsOutcome && lead.confSnoozeAt) {
+                        const snoozeTime = new Date(lead.confSnoozeAt).getTime();
+                        if (snoozeTime <= nowTime && !updatedSet.has(lead.id)) {
+                            // Trigger alert!
+                            alert(`⏰ SVEGLIA SNOOZE (Richiamo Programmato Odierno)\n\nÈ arrivato il momento di chiamare:\n👤 ${lead.name}\n📞 ${lead.phone}`);
+                            updatedSet.add(lead.id);
+                            newlyAlerted = true;
+                        }
+                    }
+                });
+
+                return newlyAlerted ? updatedSet : prev;
+            });
+
+        }, 30000); // Check every 30 seconds
+
+        return () => clearInterval(interval);
+    }, [oggiLeads, domaniLeads]);
+
     const handleDatePreset = (preset: string) => {
         setDatePreset(preset)
         const now = new Date()
@@ -221,13 +254,21 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
                     {/* Badge NR */}
                     {!lead.confirmationsOutcome && callsMade > 0 && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase border border-amber-200 shadow-sm ml-2">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase border border-amber-200 shadow-sm ml-2 flex items-center shrink-0">
                             {callsMade}° Chiamata a vuoto
                         </span>
                     )}
 
+                    {/* Badge Snooze */}
+                    {!lead.confirmationsOutcome && lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() > new Date().getTime() && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shadow-sm ml-2 flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3" />
+                            {new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(lead.confSnoozeAt))}
+                        </span>
+                    )}
+
                     {isLocked && (
-                        <span className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse border border-amber-200 ml-2">
+                        <span className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse border border-amber-200 ml-2 shrink-0">
                             <Users className="w-3 h-3" /> In Lavorazione
                         </span>
                     )}
@@ -252,7 +293,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                             disabled={callsMade >= 3}
                             className="bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-300 text-slate-500 hover:text-rose-600 px-2 py-1 rounded-md text-[11px] font-bold transition-colors z-10 disabled:opacity-50"
                         >
-                            NR Rapido
+                            NR
                         </button>
                     )}
                 </div>
@@ -386,9 +427,9 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     </button>
                     <button
                         onClick={() => setViewMode('da_definire')}
-                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'da_definire' ? 'bg-white text-rose-700 shadow-sm border border-gray-300' : 'text-rose-600/70 hover:text-rose-700 hover:bg-rose-100/50'}`}
+                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'da_definire' ? 'bg-white text-blue-700 shadow-sm border border-blue-200' : 'text-blue-600/70 hover:text-blue-700 hover:bg-blue-50/50'}`}
                     >
-                        Da Definire <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'da_definire' ? 'bg-rose-600 text-white' : 'bg-rose-200 text-rose-800'}`}>{kanbanData.daDefinire.length}</span>
+                        Richiami <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'da_definire' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800'}`}>{kanbanData.daDefinire.length}</span>
                     </button>
                 </div>
 
@@ -427,9 +468,9 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
                         {viewMode === 'da_definire' && (
                             <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-12">
-                                <div className="w-full mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
-                                    <h2 className="text-lg font-black text-amber-800 uppercase tracking-wide mb-1 flex items-center gap-2"><AlertCircle className="w-5 h-5" /> Richiami Parcheggiati</h2>
-                                    <p className="text-amber-700/80 font-medium text-sm">Lead non completi da reinserire in coda operativa.</p>
+                                <div className="w-full mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
+                                    <h2 className="text-lg font-black text-blue-800 uppercase tracking-wide mb-1 flex items-center gap-2"><Clock className="w-5 h-5" /> Richiami Programmati</h2>
+                                    <p className="text-blue-700/80 font-medium text-sm">Lead parcheggiati in attesa della data prestabilita.</p>
                                 </div>
                                 <div className="w-full flex flex-col bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
                                     {kanbanData.daDefinire.length === 0 ? (
