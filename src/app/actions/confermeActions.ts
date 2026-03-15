@@ -476,7 +476,7 @@ import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar";
 
 export async function scheduleConfermeRecall(leadId: string, currentVersion: number, payload: {
     recallDate?: Date | null,
-    vslUnseen: boolean,
+    vslSeen: boolean,
     newAppointmentDate?: Date | null,
     needsReschedule?: boolean,
     recallNotes?: string
@@ -495,7 +495,7 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
 
         let toUpdate: any = {
             recallDate: payload.recallDate || null,
-            confVslUnseen: payload.vslUnseen,
+            confVslSeen: payload.vslSeen,
             confNeedsReschedule: payload.needsReschedule || false,
             confRecallNotes: payload.recallNotes || null,
             version: oldLead.version + 1,
@@ -564,7 +564,7 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
     }
 }
 
-export async function setConfermeSnooze(leadId: string, currentVersion: number, snoozeAt: Date | null, payload?: { vslUnseen?: boolean, snoozeNotes?: string }) {
+export async function setConfermeSnooze(leadId: string, currentVersion: number, snoozeAt: Date | null, payload?: { vslSeen?: boolean, snoozeNotes?: string }) {
     try {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -583,7 +583,7 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
             updatedAt: new Date()
         };
 
-        if (payload?.vslUnseen !== undefined) toUpdate.confVslUnseen = payload.vslUnseen;
+        if (payload?.vslSeen !== undefined) toUpdate.confVslSeen = payload.vslSeen;
         if (payload?.snoozeNotes !== undefined) toUpdate.confRecallNotes = payload.snoozeNotes;
 
         await db.update(leads).set(toUpdate).where(eq(leads.id, leadId));

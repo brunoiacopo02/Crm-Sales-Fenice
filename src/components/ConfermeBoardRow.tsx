@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare } from "lucide-react"
+import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay } from "lucide-react"
 import { recordConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall } from "@/app/actions/confermeActions"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRowClick, layoutMode = 'default' }: any) {
@@ -10,15 +10,15 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
     // States for Popovers
     const [showSnoozePopover, setShowSnoozePopover] = useState(false)
     const [snoozeTime, setSnoozeTime] = useState("")
-    const [snoozeVslUnseen, setSnoozeVslUnseen] = useState(false)
-    const [snoozeNotes, setSnoozeNotes] = useState("")
+    const [snoozeVslSeen, setSnoozeVslSeen] = useState(lead.confVslSeen || false)
+    const [snoozeNotes, setSnoozeNotes] = useState(lead.confRecallNotes || "")
     const [isSavingSnooze, setIsSavingSnooze] = useState(false)
 
     const [showRecallPopover, setShowRecallPopover] = useState(false)
     const [recallDate, setRecallDate] = useState("")
     const [recallTime, setRecallTime] = useState("")
-    const [vslUnseen, setVslUnseen] = useState(false)
-    const [recallNotes, setRecallNotes] = useState("")
+    const [vslSeen, setVslSeen] = useState(lead.confVslSeen || false)
+    const [recallNotes, setRecallNotes] = useState(lead.confRecallNotes || "")
     const [isSavingRecall, setIsSavingRecall] = useState(false)
 
     // Click outside to close popovers
@@ -63,13 +63,13 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
             d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
 
             const res = await setConfermeSnooze(lead.id, lead.version, d, {
-                vslUnseen: snoozeVslUnseen,
+                vslSeen: snoozeVslSeen,
                 snoozeNotes: snoozeNotes
             });
             if (res.success) {
                 setShowSnoozePopover(false);
                 setSnoozeNotes(""); // Resetting
-                setSnoozeVslUnseen(false);
+                setSnoozeVslSeen(false);
                 onRefresh();
             } else {
                 alert(res.error);
@@ -91,7 +91,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
 
             const res = await scheduleConfermeRecall(lead.id, lead.version, {
                 recallDate: rDate,
-                vslUnseen,
+                vslSeen,
                 needsReschedule: true, // Always park
                 newAppointmentDate: null,
                 recallNotes
@@ -122,7 +122,10 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
 
                 {/* Left side: Info */}
                 <div className={`flex items-center gap-2 md:gap-4 flex-1 min-w-0 pointer-events-none flex-wrap ${layoutMode === 'snooze' ? 'w-full' : ''}`}>
-                    <span className={`font-bold text-slate-800 leading-tight ${layoutMode === 'snooze' ? 'w-full text-sm' : 'truncate max-w-[150px] md:max-w-[200px]'}`}>{lead.name}</span>
+                    <span className={`font-bold text-slate-800 leading-tight flex items-center gap-2 ${layoutMode === 'snooze' ? 'w-full text-sm' : 'truncate max-w-[150px] md:max-w-[200px]'}`}>
+                        {lead.name}
+                        {lead.confVslSeen && <span title="VSL Vista" className="flex items-center justify-center bg-blue-100 text-blue-600 rounded-full p-1"><MonitorPlay className="w-3.5 h-3.5" /></span>}
+                    </span>
                     <span className={`text-slate-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-slate-400" />{lead.phone}</span>
 
                     {/* Hide GDO name in Snooze mode on small columns to save space */}
@@ -206,11 +209,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                         <label className="flex items-center gap-2 mb-3 text-[11px] font-semibold text-gray-700 cursor-pointer">
                                             <input
                                                 type="checkbox"
-                                                checked={snoozeVslUnseen}
-                                                onChange={e => setSnoozeVslUnseen(e.target.checked)}
+                                                checked={snoozeVslSeen}
+                                                onChange={e => setSnoozeVslSeen(e.target.checked)}
                                                 className="w-3.5 h-3.5 text-purple-600 rounded border-gray-300"
                                             />
-                                            Segna VSL Non Vista
+                                            VSL Vista
                                         </label>
 
                                         <textarea
@@ -264,11 +267,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                         <label className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-700 cursor-pointer">
                                             <input
                                                 type="checkbox"
-                                                checked={vslUnseen}
-                                                onChange={e => setVslUnseen(e.target.checked)}
+                                                checked={vslSeen}
+                                                onChange={e => setVslSeen(e.target.checked)}
                                                 className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300"
                                             />
-                                            Segna VSL Non Vista
+                                            VSL Vista
                                         </label>
 
                                         <textarea
