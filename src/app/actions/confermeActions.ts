@@ -67,13 +67,17 @@ export async function getConfermeAppointments(filters: {
         conditions.push(between(leads.appointmentDate, filters.startDate, filters.endDate))
     }
 
-    const query = await db.select({
+    let query = db.select({
         lead: leads,
         gdo: users,
     }).from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
         .where(and(...conditions))
-        .orderBy(asc(leads.appointmentDate))
+        .orderBy(desc(leads.appointmentCreatedAt)) // Better default ordering for all
+
+    if (filters.fetchMode === 'all') {
+        query = query.limit(500) as any;
+    }
 
     let results = await query;
 
