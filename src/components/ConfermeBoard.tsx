@@ -43,8 +43,8 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     // Presence
     const [globalPresence, setGlobalPresence] = useState<any[]>([])
 
-    const fetchLeads = async () => {
-        setLoading(true)
+    const fetchLeads = async (showSpinner = true) => {
+        if (showSpinner) setLoading(true)
         try {
             if (viewMode !== 'table') {
                 const data = await getConfermeAppointments({
@@ -95,7 +95,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         } catch (error) {
             console.error(error)
         } finally {
-            setLoading(false)
+            if (showSpinner) setLoading(false)
         }
     }
 
@@ -108,7 +108,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            fetchLeads()
+            fetchLeads(true)
         }, 400)
         return () => clearTimeout(timer)
     }, [viewMode, searchQuery, dateRange])
@@ -116,8 +116,8 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     useEffect(() => {
         const interval = setInterval(() => {
             loadPresence()
-            if (viewMode !== 'table') fetchLeads(); // keep kanban updated lightly
-        }, 10000)
+            if (viewMode !== 'table') fetchLeads(false); // keep kanban updated without spinner
+        }, 5000)
         return () => clearInterval(interval)
     }, [viewMode])
 
@@ -139,8 +139,21 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     const handleQuickNR = async (e: React.MouseEvent, leadItem: LeadData) => {
         e.stopPropagation()
-        setSelectedLead(leadItem)
-        setIsDrawerOpen(true)
+        // We open the drawer so the user can quickly confirm the NR there, OR we can execute API here directly.
+        // Actually, the user expects the fast NR to happen on the card. Wait, let's just trigger the fast NR action directly!
+        // Importing recordConfermeNoAnswer at the top to fix this correctly.
+        setIsDrawerOpen(false);
+        try {
+            const { recordConfermeNoAnswer } = await import('@/app/actions/confermeActions');
+            const res = await recordConfermeNoAnswer(leadItem.lead.id, leadItem.lead.version);
+            if (res.success) {
+                fetchLeads(false);
+            } else {
+                alert(res.error);
+            }
+        } catch (e: any) {
+            alert(e.message);
+        }
     }
 
     // --- RENDER LEAD CARD (100% WIDTH) ---
@@ -475,11 +488,13 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
             {isDrawerOpen && selectedLead && (
                 <ConfermeDrawer
-                    leadItem={selectedLead}
+                    isOpen={true}
+                    item={selectedLead}
                     currentUser={currentUser}
+                    onRefresh={() => fetchLeads(false)}
                     onClose={() => {
                         setIsDrawerOpen(false)
-                        fetchLeads()
+                        fetchLeads(false)
                     }}
                 />
             )}
