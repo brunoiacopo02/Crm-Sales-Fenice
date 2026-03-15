@@ -5,6 +5,8 @@ import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, U
 import { getConfermeAppointments } from "@/app/actions/confermeActions"
 import { getGlobalPresence } from "@/app/actions/presenceActions"
 import { ConfermeDrawer } from "@/components/ConfermeDrawer"
+import { GlobalAlertListener } from "@/components/GlobalAlertListener"
+import { TeamRadarWidget } from "@/components/TeamRadarWidget"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
 
@@ -117,6 +119,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <GlobalAlertListener currentUser={currentUser} />
             <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex items-center bg-white border border-gray-300 rounded-lg px-3 py-2 shrink-0 shadow-sm">
@@ -187,6 +190,10 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         <span className="font-semibold text-sm">Da Definire</span>
                         <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${selectedSlot === "da_definire" ? "bg-black/10" : "bg-amber-100 text-amber-800"}`}>{leadsResponse.daDefinire.length}</span>
                     </button>
+
+                    <div className="mt-4">
+                        <TeamRadarWidget currentUser={currentUser} />
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-auto bg-white">

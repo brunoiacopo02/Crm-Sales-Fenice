@@ -9,7 +9,7 @@ import crypto from "crypto"
 // Threshold in milliseconds for a heartbeat to be considered valid (e.g., 20 seconds)
 const HEARTBEAT_TIMEOUT_MS = 20 * 1000
 
-export async function setPresence(leadId: string, status: "viewing" | "editing" = "viewing") {
+export async function setPresence(leadId: string, status: string = "viewing") {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -72,25 +72,25 @@ export async function getLeadPresence(leadId: string) {
     const validTime = new Date(Date.now() - HEARTBEAT_TIMEOUT_MS)
 
     return await db.select({
-            user: {
-                id: users.id,
-                name: users.name,
-                displayName: users.displayName,
-                avatarUrl: users.avatarUrl
-            },
-            presence: {
-                status: appointmentPresence.status,
-                startedAt: appointmentPresence.startedAt,
-                lastHeartbeatAt: appointmentPresence.lastHeartbeatAt
-            }
-        }).from(appointmentPresence)
-            .innerJoin(users, eq(appointmentPresence.userId, users.id))
-            .where(and(
-                eq(appointmentPresence.leadId, leadId),
-                gt(appointmentPresence.lastHeartbeatAt, validTime),
-                ne(appointmentPresence.userId, session.user.id) // Escludiamo noi stessi
-            ))
-        
+        user: {
+            id: users.id,
+            name: users.name,
+            displayName: users.displayName,
+            avatarUrl: users.avatarUrl
+        },
+        presence: {
+            status: appointmentPresence.status,
+            startedAt: appointmentPresence.startedAt,
+            lastHeartbeatAt: appointmentPresence.lastHeartbeatAt
+        }
+    }).from(appointmentPresence)
+        .innerJoin(users, eq(appointmentPresence.userId, users.id))
+        .where(and(
+            eq(appointmentPresence.leadId, leadId),
+            gt(appointmentPresence.lastHeartbeatAt, validTime),
+            ne(appointmentPresence.userId, session.user.id) // Escludiamo noi stessi
+        ))
+
 }
 
 export async function getGlobalPresence() {
@@ -102,17 +102,17 @@ export async function getGlobalPresence() {
     const validTime = new Date(Date.now() - HEARTBEAT_TIMEOUT_MS)
 
     return await db.select({
-            leadId: appointmentPresence.leadId,
-            user: {
-                id: users.id,
-                name: users.name,
-                displayName: users.displayName,
-            }
-        }).from(appointmentPresence)
-            .innerJoin(users, eq(appointmentPresence.userId, users.id))
-            .where(and(
-                gt(appointmentPresence.lastHeartbeatAt, validTime),
-                ne(appointmentPresence.userId, session.user.id)
-            ))
-        
+        leadId: appointmentPresence.leadId,
+        user: {
+            id: users.id,
+            name: users.name,
+            displayName: users.displayName,
+        }
+    }).from(appointmentPresence)
+        .innerJoin(users, eq(appointmentPresence.userId, users.id))
+        .where(and(
+            gt(appointmentPresence.lastHeartbeatAt, validTime),
+            ne(appointmentPresence.userId, session.user.id)
+        ))
+
 }

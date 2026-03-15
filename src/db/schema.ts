@@ -208,6 +208,16 @@ export const appointmentPresence = pgTable('appointmentPresence', {
     lastHeartbeatAt: timestamp('lastHeartbeatAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+export const internalAlerts = pgTable('internalAlerts', {
+    id: text('id').primaryKey(),
+    senderId: text('senderId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    receiverId: text('receiverId').references(() => users.id, { onDelete: 'cascade' }), // Nullable for broadcast
+    message: text('message').notNull(),
+    isRead: boolean('isRead').default(false).notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+
 export const calendarConnections = pgTable('calendarConnections', {
     id: text('id').primaryKey(),
     userId: text('userId').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
