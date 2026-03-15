@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server"
 import { ConfermeBoard } from "@/components/ConfermeBoard"
+import { TeamRadarWidget } from "@/components/TeamRadarWidget"
 import { redirect } from "next/navigation"
 
 export default async function ConfermePage() {
@@ -12,7 +13,11 @@ export default async function ConfermePage() {
     }
 
     return (
-        <div className="space-y-6 h-full flex flex-col">
+        <div className="space-y-6 h-full flex flex-col pt-0">
+            <div className="-mx-8 -mt-8 mb-6 relative z-50">
+                <TeamRadarWidget currentUser={session.user} />
+            </div>
+
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight text-brand-blue-dark">
                     Dashboard Conferme

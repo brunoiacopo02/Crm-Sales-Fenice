@@ -15,6 +15,7 @@ export async function getConfermeAppointments(filters: {
     timeSlot?: "mattina" | "pomeriggio" | "tutto";
     searchQuery?: string;
     confermeStatus?: "da_lavorare" | "confermati" | "scartati" | "tutti";
+    fetchMode?: "strict_kanban" | "all";
 }) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -51,7 +52,18 @@ export async function getConfermeAppointments(filters: {
         conditions.push(isNull(leads.confirmationsOutcome))
     }
 
-    if (filters.startDate && filters.endDate) {
+    if (filters.fetchMode === 'strict_kanban') {
+        const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        const [month, day, year] = todayStr.split('/');
+        const todayRome = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+
+        const start = new Date(todayRome);
+        start.setDate(start.getDate() - 1);
+        const end = new Date(todayRome);
+        end.setDate(end.getDate() + 4);
+
+        conditions.push(between(leads.appointmentDate, start, end));
+    } else if (filters.startDate && filters.endDate) {
         conditions.push(between(leads.appointmentDate, filters.startDate, filters.endDate))
     }
 
@@ -87,6 +99,69 @@ export async function getConfermeAppointments(filters: {
             }
             return true;
         })
+    }
+
+    if (filters.fetchMode === 'strict_kanban') {
+        const now = new Date();
+        const romeDayOfWeekStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', weekday: 'short' }).format(now); // Mon, Tue, etc.
+        const romeDayOfWeek = romeDayOfWeekStr.substring(0, 3).toLowerCase();
+
+        const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+
+        results = results.filter(row => {
+            if (row.lead.confNeedsReschedule) return true; // Always show da definire
+            if (!row.lead.appointmentDate) return false;
+
+            const appt = new Date(row.lead.appointmentDate);
+            const apptDateStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(appt);
+            const apptHour = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(appt), 10);
+
+            const isToday = apptDateStr === todayStr;
+
+            // Calculate tomorrow/next working day string
+            const nextWorkDay = new Date(now);
+            if (romeDayOfWeek === 'fri') {
+                nextWorkDay.setDate(nextWorkDay.getDate() + 1); // Saturday
+            } else if (romeDayOfWeek === 'sat') {
+                nextWorkDay.setDate(nextWorkDay.getDate() + 2); // Monday
+            } else if (romeDayOfWeek === 'sun') {
+                nextWorkDay.setDate(nextWorkDay.getDate() + 1); // Monday
+            } else {
+                nextWorkDay.setDate(nextWorkDay.getDate() + 1); // Next day
+            }
+            const nextWorkDayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(nextWorkDay);
+
+            const isNextWorkDay = apptDateStr === nextWorkDayStr;
+
+            if (romeDayOfWeek === 'sat') {
+                // Saturday Rule: Today 13:00-21:00, Monday 09:00-14:00
+                if (isToday && apptHour >= 13 && apptHour <= 21) return true;
+                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) return true;
+            } else if (romeDayOfWeek === 'fri') {
+                // Friday Rule: Today 15:00-21:00, Saturday 09:00-14:00
+                if (isToday && apptHour >= 15 && apptHour <= 21) return true;
+                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) {
+                    // Exception for 13:00 and 14:00 on Saturday
+                    if (apptHour === 13 || apptHour === 14) {
+                        if (!row.lead.appointmentCreatedAt) return false;
+                        const created = new Date(row.lead.appointmentCreatedAt);
+                        const hoursSinceCreated = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+                        if (hoursSinceCreated >= 12) return true;
+                        return false;
+                    }
+                    return true;
+                }
+            } else if (romeDayOfWeek === 'sun') {
+                // Sunday Rule: Tomorrow (Monday) 09:00-14:00
+                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) return true;
+            } else {
+                // Mon-Thu Rule: Today 15:00-21:00, Tomorrow 09:00-14:00
+                if (isToday && apptHour >= 15 && apptHour <= 21) return true;
+                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) return true;
+            }
+
+            return false;
+        });
     }
 
     const grouped: Record<string, typeof results> = {};

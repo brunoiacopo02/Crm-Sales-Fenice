@@ -49,45 +49,46 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     if (!currentUser) return null
 
     return (
-        <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden mt-6">
-            <div className="bg-slate-800 text-white p-3 flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                <h3 className="font-bold uppercase tracking-wider text-sm">Team Radar</h3>
-            </div>
+        <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40 px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className="bg-brand-blue-dark text-white p-2 rounded-lg flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span className="font-bold text-xs uppercase tracking-wider">Radar Team</span>
+                </div>
 
-            <div className="p-3 max-h-[300px] overflow-y-auto">
-                {activeUsers.length === 0 ? (
-                    <div className="text-sm text-slate-500 italic py-4 text-center">
-                        Nessun altro collega attivo al momento.
-                    </div>
-                ) : (
-                    <ul className="space-y-3">
-                        {activeUsers.map((p) => (
-                            <li key={p.user.id} className="flex flex-col border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                                        <span className="font-bold text-slate-700 text-sm">
+                <div className="flex items-center gap-4 ml-2">
+                    {activeUsers.length === 0 ? (
+                        <div className="text-xs text-slate-400 font-medium italic">
+                            Nessun altro collega online.
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+                            {activeUsers.map((p) => (
+                                <div key={p.user.id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 py-1.5 px-3 rounded-full shrink-0 group hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
+                                    <div className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-slate-700 text-[11px] leading-none uppercase tracking-wide">
                                             {p.user.displayName || p.user.name}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 leading-none mt-0.5 truncate max-w-[150px]">
+                                            {p.leadId ? `Su Lead: ${p.leadId.substring(0, 6)}...` : 'Attivo'}
                                         </span>
                                     </div>
                                     <button
                                         onClick={() => setSelectedUser(p)}
-                                        className="text-indigo-600 hover:text-indigo-800 transition-colors p-1"
+                                        className="ml-1 text-indigo-400 hover:text-indigo-600 transition-colors p-1 rounded-full hover:bg-indigo-100 opacity-0 group-hover:opacity-100"
                                         title="Invia Avviso P2P"
                                     >
-                                        <MessageSquarePlus className="w-4 h-4" />
+                                        <MessageSquarePlus className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
-                                {/* Context extracted from current presence logic in getGlobalPresence which could be joined with the full record */}
-                                <div className="text-xs text-slate-500 mt-1 pl-4 flex items-center gap-1.5 break-all">
-                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
-                                    Attivo (Lead: {p.leadId?.substring(0, 8)}...)
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* P2P Messaging Dialog */}
