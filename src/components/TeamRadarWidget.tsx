@@ -49,44 +49,44 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     if (!currentUser) return null
 
     return (
-        <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40 px-6 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="bg-brand-blue-dark text-white p-2 rounded-lg flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    <span className="font-bold text-xs uppercase tracking-wider">Radar Team</span>
+        <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40 px-4 h-10 flex items-center justify-between">
+            <div className="flex items-center gap-3 w-full">
+                <div className="bg-brand-blue-dark text-white px-2 py-0.5 rounded flex items-center gap-1.5 shrink-0">
+                    <Users className="w-3 h-3" />
+                    <span className="font-bold text-[10px] uppercase tracking-wider">Radar</span>
                 </div>
 
-                <div className="flex items-center gap-4 ml-2">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1">
                     {activeUsers.length === 0 ? (
-                        <div className="text-xs text-slate-400 font-medium italic">
+                        <div className="text-[10px] text-slate-400 font-medium italic">
                             Nessun altro collega online.
                         </div>
                     ) : (
-                        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
-                            {activeUsers.map((p) => (
-                                <div key={p.user.id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 py-1.5 px-3 rounded-full shrink-0 group hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
-                                    <div className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-slate-700 text-[11px] leading-none uppercase tracking-wide">
-                                            {p.user.displayName || p.user.name}
-                                        </span>
-                                        <span className="text-[10px] text-slate-500 leading-none mt-0.5 truncate max-w-[150px]">
-                                            {p.leadId ? `Su Lead: ${p.leadId.substring(0, 6)}...` : 'Attivo'}
-                                        </span>
-                                    </div>
-                                    <button
-                                        onClick={() => setSelectedUser(p)}
-                                        className="ml-1 text-indigo-400 hover:text-indigo-600 transition-colors p-1 rounded-full hover:bg-indigo-100 opacity-0 group-hover:opacity-100"
-                                        title="Invia Avviso P2P"
-                                    >
-                                        <MessageSquarePlus className="w-3.5 h-3.5" />
-                                    </button>
+                        activeUsers.map((p) => (
+                            <div key={p.user.id} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 py-0.5 px-2 rounded-full shrink-0 group hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
+                                <div className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="flex items-center gap-1">
+                                    <span className="font-bold text-slate-700 text-[10px] leading-none uppercase tracking-wide">
+                                        {p.user.displayName || p.user.name}
+                                    </span>
+                                    {p.leadId && (
+                                        <span className="text-[9px] text-slate-500 leading-none truncate max-w-[100px] border-l border-slate-300 pl-1">
+                                            L-{p.leadId.substring(0, 4)}
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => setSelectedUser(p)}
+                                    className="ml-0.5 text-indigo-400 hover:text-indigo-600 transition-colors p-0.5 rounded-full hover:bg-indigo-100 opacity-0 group-hover:opacity-100"
+                                    title="Invia Avviso P2P"
+                                >
+                                    <MessageSquarePlus className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))
                     )}
                 </div>
             </div>

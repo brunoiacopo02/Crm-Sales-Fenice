@@ -279,8 +279,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const isLocked = activeUsers.length > 0;
 
     return (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm transition-opacity">
-            <div className="w-[500px] h-full bg-white shadow-2xl flex flex-col transform transition-transform border-l border-gray-200">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm animate-in fade-in transition-opacity">
+            <div className="w-[500px] h-full bg-white shadow-2xl flex flex-col transform transition-transform border-l border-gray-200 animate-in slide-in-from-right duration-300">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gray-50 shrink-0">
                     <div className="flex-1">
@@ -331,66 +331,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     </span>
                                 )}
                             </div>
-
-                            <button
-                                onClick={() => setShowRecallForm(!showRecallForm)}
-                                disabled={!!lead.confirmationsOutcome}
-                                className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors border shadow-sm ${showRecallForm ? 'bg-brand-orange text-white border-brand-orange' : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50 disabled:opacity-50'}`}
-                            >
-                                Richiama
-                            </button>
                         </div>
-
-                        {showRecallForm && (
-                            <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5 mt-1 animate-in slide-in-from-top-2">
-                                <h4 className="text-sm font-extrabold text-amber-900 mb-4 flex items-center gap-2 tracking-wide uppercase">
-                                    Programma Richiamo
-                                </h4>
-                                <div className="grid grid-cols-2 gap-3 mb-4">
-                                    <input type="date" value={recallDate} onChange={e => setRecallDate(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
-                                    <input type="time" value={recallTime} onChange={e => setRecallTime(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
-                                </div>
-
-                                <label className="flex items-center gap-2.5 mb-5 text-sm font-semibold text-amber-900 cursor-pointer w-max">
-                                    <input type="checkbox" checked={vslUnseen} onChange={e => setVslUnseen(e.target.checked)} className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500" />
-                                    VSL Non Vista
-                                </label>
-
-                                {isRecallExceedingAppt && (
-                                    <div className="bg-white p-4 rounded-xl border border-rose-200 mb-5 shadow-sm">
-                                        <p className="text-xs text-rose-600 font-bold mb-3 flex items-start gap-1.5 leading-tight">
-                                            <AlertTriangle className="w-4 h-4 shrink-0" />
-                                            Il richiamo supera l'appuntamento originale. È obbligatorio aggiornare o parcheggiare la data.
-                                        </p>
-
-                                        <div className="space-y-4">
-                                            <label className="flex items-center gap-2.5 text-sm text-slate-800 font-bold cursor-pointer bg-slate-50 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
-                                                <input type="checkbox" checked={needsReschedule} onChange={e => { setNeedsReschedule(e.target.checked); if (e.target.checked) { setNewApptDate(""); setNewApptTime(""); } }} className="w-4 h-4 text-brand-blue" />
-                                                Sposta in: "Da Definire"
-                                            </label>
-
-                                            {!needsReschedule && (
-                                                <div className="flex gap-2">
-                                                    <input type="date" value={newApptDate} onChange={e => setNewApptDate(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" placeholder="Nuova Data App." />
-                                                    <input type="time" value={newApptTime} onChange={e => setNewApptTime(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="flex justify-end gap-2 pt-2 border-t border-amber-200/60">
-                                    <button onClick={() => setShowRecallForm(false)} className="px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 border border-transparent rounded-lg transition-colors">Annulla</button>
-                                    <button
-                                        onClick={handleSaveRecall}
-                                        disabled={isSavingRecall || !recallDate || preventRecallSave}
-                                        className="px-5 py-2 text-sm font-bold bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shadow transition-colors"
-                                    >
-                                        {isSavingRecall ? "Salvataggio..." : "Salva Richiamo"}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </fieldset>
 
@@ -560,11 +501,59 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                                 <p className="text-[11px] text-emerald-600 font-medium mt-2 leading-tight">Salvando, confermerai l'appuntamento, il lead verrà smistato al venditore e verrà creato l'evento sul Google Calendar con invito via email.</p>
                                             </div>
                                         )}
+
+                                        <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "richiama" ? "border-amber-400 bg-amber-50 shadow-sm" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50 bg-white"}`}>
+                                            <input type="radio" name="outcome" value="richiama" checked={outcome === "richiama"} onChange={() => setOutcome("richiama")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
+                                            <span className={`font-bold ${outcome === "richiama" ? "text-amber-800" : "text-gray-700"}`}>Riprogramma Chiamata</span>
+                                        </label>
+
+                                        {outcome === "richiama" && (
+                                            <div className="pl-11 -mt-2 mb-5 animate-in slide-in-from-top-2">
+                                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                                    <input type="date" value={recallDate} onChange={e => setRecallDate(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
+                                                    <input type="time" value={recallTime} onChange={e => setRecallTime(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
+                                                </div>
+
+                                                <label className="flex items-center gap-2.5 mb-5 text-sm font-semibold text-amber-900 cursor-pointer w-max">
+                                                    <input type="checkbox" checked={vslUnseen} onChange={e => setVslUnseen(e.target.checked)} className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500" />
+                                                    VSL Non Vista
+                                                </label>
+
+                                                {isRecallExceedingAppt && (
+                                                    <div className="bg-white p-4 rounded-xl border border-rose-200 mb-5 shadow-sm">
+                                                        <p className="text-xs text-rose-600 font-bold mb-3 flex items-start gap-1.5 leading-tight">
+                                                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                                                            Il richiamo supera l'appuntamento originale. È obbligatorio aggiornare o parcheggiare la data.
+                                                        </p>
+
+                                                        <div className="space-y-4">
+                                                            <label className="flex items-center gap-2.5 text-sm text-slate-800 font-bold cursor-pointer bg-slate-50 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                                                                <input type="checkbox" checked={needsReschedule} onChange={e => { setNeedsReschedule(e.target.checked); if (e.target.checked) { setNewApptDate(""); setNewApptTime(""); } }} className="w-4 h-4 text-brand-blue" />
+                                                                Sposta in: "Da Definire"
+                                                            </label>
+
+                                                            {!needsReschedule && (
+                                                                <div className="flex gap-2">
+                                                                    <input type="date" value={newApptDate} onChange={e => setNewApptDate(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" placeholder="Nuova Data App." />
+                                                                    <input type="time" value={newApptTime} onChange={e => setNewApptTime(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
-                                    <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
-                                        {savingOutcome ? "Salvataggio in corso..." : "Piazza Esito Definitivo"}
-                                    </button>
+                                    {outcome === "richiama" ? (
+                                        <button onClick={handleSaveRecall} disabled={isSavingRecall || !recallDate || preventRecallSave} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
+                                            {isSavingRecall ? "Salvataggio in corso..." : "Salva Richiamo"}
+                                        </button>
+                                    ) : (
+                                        <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
+                                            {savingOutcome ? "Salvataggio in corso..." : "Piazza Esito Definitivo"}
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Salesperson Outcome (only if confirmed & assigned) */}

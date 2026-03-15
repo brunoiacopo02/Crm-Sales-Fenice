@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff } from "lucide-react"
+import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme } from "@/app/actions/confermeActions"
 import { getGlobalPresence } from "@/app/actions/presenceActions"
 import { ConfermeDrawer } from "@/components/ConfermeDrawer"
@@ -13,9 +13,11 @@ import { createClient } from "@/utils/supabase/client"
 type LeadData = any;
 
 type ViewMode = 'pomeriggio' | 'mattina' | 'da_definire' | 'table';
+type NrFilterMode = 'tutti' | '0_chiamate' | '1_piu_chiamate';
 
 export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     const [viewMode, setViewMode] = useState<ViewMode>('pomeriggio')
+    const [nrFilter, setNrFilter] = useState<NrFilterMode>('tutti')
 
     // Dataset
     const [kanbanData, setKanbanData] = useState<{ flatList: LeadData[], daDefinire: LeadData[] }>({ flatList: [], daDefinire: [] })
@@ -184,75 +186,74 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
     }
 
-    // --- RENDER LEAD CARD (100% WIDTH) ---
+    // --- RENDER COMPACT LEAD ROW ---
     const renderLeadCard = (item: LeadData) => {
         const lead = item.lead
         const isLocked = globalPresence.some(p => p.leadId === lead.id && p.user.id !== currentUser.id)
+
+        // Count calls made
+        let callsMade = 0;
+        if (lead.confCall1At) callsMade = 1;
+        if (lead.confCall2At) callsMade = 2;
+        if (lead.confCall3At) callsMade = 3;
 
         return (
             <div
                 key={lead.id}
                 onClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
-                className={`bg-white rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer transition-all hover:shadow-md ${isLocked ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200 hover:border-brand-blue-light'} group mb-3 w-full`}
+                className={`bg-white rounded-lg border py-2 px-3 flex items-center justify-between gap-3 cursor-pointer transition-all hover:bg-slate-50 ${isLocked ? 'border-amber-400 bg-amber-50' : 'border-gray-200 hover:border-brand-blue-light'} group mb-1.5 w-full`}
             >
                 {/* Left side: Info */}
-                <div className="flex flex-col gap-1.5 flex-1 w-full min-w-0">
-                    <div className="flex items-center gap-3">
-                        <h4 className="font-bold text-gray-900 text-lg sm:text-lg truncate">{lead.name}</h4>
-                        {isLocked && (
-                            <span className="flex items-center gap-1.5 bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded uppercase animate-pulse shrink-0 border border-amber-200">
-                                <Users className="w-4 h-4" /> In Lavorazione
-                            </span>
-                        )}
-                        {!lead.confirmationsOutcome && (
-                            <div className="flex gap-1 ml-2" title="Tentativi di chiamata">
-                                <div className={`w-3 h-3 rounded-full ${lead.confCall1At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                                <div className={`w-3 h-3 rounded-full ${lead.confCall2At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                                <div className={`w-3 h-3 rounded-full ${lead.confCall3At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                        <span className="font-medium">{lead.phone}</span>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <h4 className="font-semibold text-slate-800 text-sm whitespace-nowrap truncate w-48">{lead.name}</h4>
+
+                    <div className="flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap">
+                        <span className="font-medium flex items-center gap-1"><Phone className="w-3 h-3" /> {lead.phone}</span>
                         <div className="w-1 h-1 bg-gray-300 rounded-full" />
-                        <span className="font-semibold text-brand-orange">
-                            GDO: {item.gdo?.displayName || item.gdo?.name || "N/A"}
-                        </span>
+                        <span className="text-brand-orange/90 font-medium truncate w-32">GDO: {item.gdo?.displayName || item.gdo?.name || "N/A"}</span>
                     </div>
+
+                    {/* NR Badges explicit text */}
+                    {!lead.confirmationsOutcome && callsMade > 0 && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase ml-2 border border-amber-200">
+                            {callsMade}° Chiamata a vuoto
+                        </span>
+                    )}
+
+                    {isLocked && (
+                        <span className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse border border-amber-200 ml-2">
+                            <Users className="w-3 h-3" /> In Lavorazione
+                        </span>
+                    )}
                 </div>
 
                 {/* Right side: Actions */}
-                <div className="flex items-center gap-3 shrink-0 sm:ml-auto">
+                <div className="flex items-center gap-2 shrink-0">
                     {/* Urgency Status */}
-                    <div className="flex items-center">
-                        {lead.confirmationsOutcome === "confermato" ? (
-                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 shadow-sm">
-                                <CheckCircle2 className="w-5 h-5 mr-1.5" /> Confermato
-                            </span>
-                        ) : lead.confirmationsOutcome === "scartato" ? (
-                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/10 shadow-sm">
-                                <XCircle className="w-5 h-5 mr-1.5" /> Scartato
-                            </span>
-                        ) : (
-                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-600/20 shadow-sm">
-                                Da lavorare
-                            </span>
-                        )}
-                    </div>
+                    {lead.confirmationsOutcome === "confermato" ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
+                        </span>
+                    ) : lead.confirmationsOutcome === "scartato" ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <XCircle className="w-3.5 h-3.5 mr-1" /> Scartato
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                            Da lavorare
+                        </span>
+                    )}
 
                     {!isLocked && !lead.confirmationsOutcome && (
                         <button
                             onClick={(e) => handleQuickNR(e, item)}
-                            className="flex items-center justify-center bg-gray-50 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 text-gray-500 hover:text-rose-600 h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-1.5 rounded-lg transition-colors shadow-sm font-bold shadow-sm"
+                            className="flex items-center justify-center bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-200 text-slate-500 hover:text-rose-600 px-2 py-1 rounded transition-colors shadow-sm font-bold text-xs shadow-sm z-10"
                             title="Segna Non Risponde Veloce"
                         >
-                            <PhoneOff className="w-4 h-4 sm:mr-1.5" />
-                            <span className="hidden sm:inline">NR</span>
+                            NR rapido
                         </button>
                     )}
-                    <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-brand-blue group-hover:text-white transition-colors duration-200 border border-gray-200 cursor-pointer">
-                        <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
-                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-brand-blue transition-colors ml-1" />
                 </div>
             </div>
         )
@@ -273,20 +274,27 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             <div className="flex flex-col w-full max-w-5xl mx-auto space-y-8 pb-12">
                 {hours.map(hourKey => {
                     const targetHour = parseInt(hourKey.split(':')[0], 10);
-                    const leadsInThisHour = leadsList.filter(l => {
+                    let leadsInThisHour = leadsList.filter(l => {
                         const h = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
                         return h === targetHour;
                     });
 
+                    // NR Filter
+                    if (nrFilter === '0_chiamate') {
+                        leadsInThisHour = leadsInThisHour.filter(l => !l.lead.confCall1At);
+                    } else if (nrFilter === '1_piu_chiamate') {
+                        leadsInThisHour = leadsInThisHour.filter(l => !!l.lead.confCall1At);
+                    }
+
                     return (
                         <div key={hourKey} className="flex flex-col w-full">
-                            {/* Giant Hour Divider */}
-                            <div className="flex items-center mb-4 sticky top-0 bg-gray-50/95 backdrop-blur z-10 py-2">
-                                <div className="flex items-center gap-3 bg-white border border-gray-200 shadow-sm rounded-xl px-4 py-2 text-brand-blue-dark font-black tracking-widest text-lg">
-                                    <Clock className="w-6 h-6 text-brand-orange" />
+                            {/* Compact Hour Divider */}
+                            <div className="flex items-center mb-2 sticky top-0 bg-gray-50/95 backdrop-blur z-10 py-1">
+                                <div className="flex items-center gap-2 bg-white border border-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)] rounded-lg px-3 py-1 text-slate-700 font-bold text-sm">
+                                    <Clock className="w-4 h-4 text-brand-blue" />
                                     ORE {hourKey}
                                 </div>
-                                <div className="h-0.5 bg-gray-200 flex-1 ml-4 rounded-full" />
+                                <div className="h-px bg-slate-200 flex-1 ml-4" />
                             </div>
 
                             {/* Cards Container */}
@@ -338,6 +346,17 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         )}
                     </button>
                 </div>
+
+                {/* Sub-Filters for NR (Only show if not in Table View) */}
+                {viewMode !== 'table' && (
+                    <div className="flex items-center justify-center w-full mt-2">
+                        <div className="flex bg-white border border-slate-200 rounded-full p-1 shadow-sm">
+                            <button onClick={() => setNrFilter('tutti')} className={`px-4 py-1 text-xs font-bold rounded-full transition-colors ${nrFilter === 'tutti' ? 'bg-brand-blue-dark text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Tutti</button>
+                            <button onClick={() => setNrFilter('0_chiamate')} className={`px-4 py-1 text-xs font-bold rounded-full transition-colors ${nrFilter === '0_chiamate' ? 'bg-brand-blue-dark text-white' : 'text-slate-500 hover:bg-slate-100'}`}>0 chiamate</button>
+                            <button onClick={() => setNrFilter('1_piu_chiamate')} className={`px-4 py-1 text-xs font-bold rounded-full transition-colors ${nrFilter === '1_piu_chiamate' ? 'bg-brand-blue-dark text-white' : 'text-slate-500 hover:bg-slate-100'}`}>1+ chiamate (NR)</button>
+                        </div>
+                    </div>
+                )}
 
                 <div className="w-full lg:w-auto">
                     <button
