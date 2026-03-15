@@ -53,7 +53,8 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         try {
             if (viewMode !== 'table') {
                 const data = await getConfermeAppointments({
-                    fetchMode: "strict_kanban" // Automatically ignores dates
+                    fetchMode: "strict_kanban", // Automatically ignores dates
+                    searchQuery: searchQuery
                 })
                 setKanbanData({ flatList: data.flatList, daDefinire: data.daDefinire })
 
@@ -377,12 +378,23 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     </button>
                 </div>
 
-                <div className="w-full lg:w-auto">
+                <div className="flex w-full lg:w-auto items-center gap-3">
+                    {/* GLOBAL SEARCH INPUT */}
+                    <div className="flex items-center bg-white border border-gray-300 rounded-lg px-3 py-2 w-full lg:w-64 xl:w-80 shadow-sm transition-all focus-within:ring-2 focus-within:ring-brand-blue/30 focus-within:border-brand-blue">
+                        <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                        <input
+                            type="text"
+                            placeholder="Cerca per nome, email o telefono..."
+                            className="bg-transparent border-none outline-none text-[13px] w-full placeholder:text-gray-400"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+
                     <button
                         onClick={() => setViewMode('table')}
-                        className={`w-full lg:w-auto px-5 py-2.5 rounded-lg font-bold transition-all text-xs uppercase tracking-wider flex items-center justify-center border ${viewMode === 'table' ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 border-gray-300 shadow-sm'}`}
+                        className={`px-5 py-2 rounded-lg font-bold transition-all text-xs uppercase tracking-wider flex items-center justify-center border shrink-0 ${viewMode === 'table' ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 border-gray-300 shadow-sm'}`}
                     >
-                        <Search className="w-3.5 h-3.5 mr-1.5" />
                         Vista Globale DB
                     </button>
                 </div>
@@ -438,16 +450,6 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                             <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8 max-w-[1400px] mx-auto w-full">
                                 <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <div className="flex items-center bg-white border border-gray-300 rounded-xl px-3 py-2 shrink-0 shadow-sm">
-                                            <Search className="w-4 h-4 text-gray-400 mr-2" />
-                                            <input
-                                                type="text"
-                                                placeholder="Cerca per nome, email o telefono..."
-                                                className="bg-transparent border-none outline-none text-sm w-64"
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                            />
-                                        </div>
                                         <div className="flex bg-white border border-gray-300 rounded-xl p-1 shrink-0 shadow-sm">
                                             <button onClick={() => handleDatePreset("today")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "today" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Oggi</button>
                                             <button onClick={() => handleDatePreset("tomorrow")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "tomorrow" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Domani</button>
