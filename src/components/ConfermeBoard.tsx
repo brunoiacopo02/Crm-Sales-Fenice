@@ -11,15 +11,20 @@ import { it } from "date-fns/locale"
 
 type LeadData = any;
 
-const KANBAN_HOURS_OGGI = Array.from({ length: 9 }, (_, i) => `${(i + 13).toString().padStart(2, '0')}:00`); // 13:00 to 21:00
-const KANBAN_HOURS_DOMANI = Array.from({ length: 6 }, (_, i) => `${(i + 9).toString().padStart(2, '0')}:00`); // 09:00 to 14:00
+type ViewMode = 'pomeriggio' | 'mattina' | 'da_definire' | 'table';
 
 export function ConfermeBoard({ currentUser }: { currentUser: any }) {
-    const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban')
+    const [viewMode, setViewMode] = useState<ViewMode>('pomeriggio')
 
     // Dataset
     const [kanbanData, setKanbanData] = useState<{ flatList: LeadData[], daDefinire: LeadData[] }>({ flatList: [], daDefinire: [] })
     const [tableData, setTableData] = useState<LeadData[]>([])
+
+    // Derived Data for Views
+    const [oggiLeads, setOggiLeads] = useState<LeadData[]>([])
+    const [domaniLeads, setDomaniLeads] = useState<LeadData[]>([])
+    const [oggiHours, setOggiHours] = useState<string[]>([])
+    const [domaniHours, setDomaniHours] = useState<string[]>([])
 
     const [loading, setLoading] = useState(true)
 
@@ -41,11 +46,41 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     const fetchLeads = async () => {
         setLoading(true)
         try {
-            if (viewMode === 'kanban') {
+            if (viewMode !== 'table') {
                 const data = await getConfermeAppointments({
                     fetchMode: "strict_kanban" // Automatically ignores dates
                 })
                 setKanbanData({ flatList: data.flatList, daDefinire: data.daDefinire })
+
+                // Process Data Split
+                const now = new Date();
+                const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+                const romeDayOfWeekStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', weekday: 'short' }).format(now);
+                const romeDayOfWeek = romeDayOfWeekStr.substring(0, 3).toLowerCase();
+
+                const oLeads = data.flatList.filter(l => {
+                    if (!l.lead.appointmentDate) return false;
+                    const dateStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(l.lead.appointmentDate));
+                    return dateStr === todayStr;
+                });
+
+                const dLeads = data.flatList.filter(l => {
+                    if (!l.lead.appointmentDate) return false;
+                    const dateStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(l.lead.appointmentDate));
+                    return dateStr !== todayStr;
+                });
+
+                setOggiLeads(oLeads);
+                setDomaniLeads(dLeads);
+
+                // Set Dynamic Hours based on Day of Week rules
+                if (romeDayOfWeek === 'sat') {
+                    setOggiHours(Array.from({ length: 9 }, (_, i) => `${(i + 13).toString().padStart(2, '0')}:00`)); // 13-21
+                } else {
+                    setOggiHours(Array.from({ length: 7 }, (_, i) => `${(i + 15).toString().padStart(2, '0')}:00`)); // 15-21
+                }
+                setDomaniHours(Array.from({ length: 6 }, (_, i) => `${(i + 9).toString().padStart(2, '0')}:00`)); // 09-14
+
             } else {
                 const data = await getConfermeAppointments({
                     fetchMode: "all",
@@ -81,7 +116,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     useEffect(() => {
         const interval = setInterval(() => {
             loadPresence()
-            if (viewMode === 'kanban') fetchLeads(); // keep kanban updated lightly
+            if (viewMode !== 'table') fetchLeads(); // keep kanban updated lightly
         }, 10000)
         return () => clearInterval(interval)
     }, [viewMode])
@@ -104,13 +139,11 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     const handleQuickNR = async (e: React.MouseEvent, leadItem: LeadData) => {
         e.stopPropagation()
-        // Here we could implement a quick NR action directly without opening drawer
-        // But drawer is safer for business logic. Let's just open drawer for now or add direct server action.
         setSelectedLead(leadItem)
         setIsDrawerOpen(true)
     }
 
-    // --- KANBAN LOGIC ---
+    // --- RENDER LEAD CARD (100% WIDTH) ---
     const renderLeadCard = (item: LeadData) => {
         const lead = item.lead
         const isLocked = globalPresence.some(p => p.leadId === lead.id && p.user.id !== currentUser.id)
@@ -119,266 +152,326 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             <div
                 key={lead.id}
                 onClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
-                className={`bg-white rounded-xl border p-3 flex flex-col gap-2 cursor-pointer transition-all hover:shadow-md ${isLocked ? 'border-amber-400 opacity-90' : 'border-gray-200 hover:border-brand-blue/30'} group`}
+                className={`bg-white rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer transition-all hover:shadow-md ${isLocked ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200 hover:border-brand-blue-light'} group mb-3 w-full`}
             >
-                <div className="flex justify-between items-start">
-                    <div>
-                        <h4 className="font-bold text-gray-900 leading-tight">{lead.name}</h4>
-                        <p className="text-xs text-gray-500 mt-0.5">{lead.phone}</p>
+                {/* Left side: Info */}
+                <div className="flex flex-col gap-1.5 flex-1 w-full min-w-0">
+                    <div className="flex items-center gap-3">
+                        <h4 className="font-bold text-gray-900 text-lg sm:text-lg truncate">{lead.name}</h4>
+                        {isLocked && (
+                            <span className="flex items-center gap-1.5 bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded uppercase animate-pulse shrink-0 border border-amber-200">
+                                <Users className="w-4 h-4" /> In Lavorazione
+                            </span>
+                        )}
+                        {!lead.confirmationsOutcome && (
+                            <div className="flex gap-1 ml-2" title="Tentativi di chiamata">
+                                <div className={`w-3 h-3 rounded-full ${lead.confCall1At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
+                                <div className={`w-3 h-3 rounded-full ${lead.confCall2At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
+                                <div className={`w-3 h-3 rounded-full ${lead.confCall3At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
+                            </div>
+                        )}
                     </div>
-                    {isLocked ? (
-                        <span className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse">
-                            <Users className="w-3 h-3" /> In Uso
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                        <span className="font-medium">{lead.phone}</span>
+                        <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                        <span className="font-semibold text-brand-orange">
+                            GDO: {item.gdo?.displayName || item.gdo?.name || "N/A"}
                         </span>
-                    ) : (
-                        <button
-                            onClick={(e) => handleQuickNR(e, item)}
-                            className="text-gray-400 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 p-1.5 rounded-full transition-colors"
-                            title="Segna Non Risponde Veloce"
-                        >
-                            <PhoneOff className="w-4 h-4" />
-                        </button>
-                    )}
+                    </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                    <div className="flex gap-1">
-                        <div className={`w-2.5 h-2.5 rounded-full ${lead.confCall1At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} title="1Â° Chiamata" />
-                        <div className={`w-2.5 h-2.5 rounded-full ${lead.confCall2At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} title="2Â° Chiamata" />
-                        <div className={`w-2.5 h-2.5 rounded-full ${lead.confCall3At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} title="3Â° Chiamata" />
+                {/* Right side: Actions */}
+                <div className="flex items-center gap-3 shrink-0 sm:ml-auto">
+                    {/* Urgency Status */}
+                    <div className="flex items-center">
+                        {lead.confirmationsOutcome === "confermato" ? (
+                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 shadow-sm">
+                                <CheckCircle2 className="w-5 h-5 mr-1.5" /> Confermato
+                            </span>
+                        ) : lead.confirmationsOutcome === "scartato" ? (
+                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/10 shadow-sm">
+                                <XCircle className="w-5 h-5 mr-1.5" /> Scartato
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-600/20 shadow-sm">
+                                Da lavorare
+                            </span>
+                        )}
                     </div>
-                    <div className="text-[10px] font-semibold uppercase text-gray-400">
-                        {item.gdo?.displayName || "Sconosciuto"}
+
+                    {!isLocked && !lead.confirmationsOutcome && (
+                        <button
+                            onClick={(e) => handleQuickNR(e, item)}
+                            className="flex items-center justify-center bg-gray-50 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 text-gray-500 hover:text-rose-600 h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-1.5 rounded-lg transition-colors shadow-sm font-bold shadow-sm"
+                            title="Segna Non Risponde Veloce"
+                        >
+                            <PhoneOff className="w-4 h-4 sm:mr-1.5" />
+                            <span className="hidden sm:inline">NR</span>
+                        </button>
+                    )}
+                    <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-brand-blue group-hover:text-white transition-colors duration-200 border border-gray-200 cursor-pointer">
+                        <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
                     </div>
                 </div>
             </div>
         )
     }
 
-    const renderKanbanColumn = (title: string, hours: string[], isToday: boolean) => {
-        const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const renderEmptyState = (message: string) => (
+        <div className="flex flex-col items-center justify-center p-8 text-center bg-white rounded-2xl border border-gray-100 shadow-sm mb-6">
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-3">
+                <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-1">Tutto Pulito!</h3>
+            <p className="text-gray-500 text-sm font-medium">{message}</p>
+        </div>
+    )
 
-        // Filter leads for this column
-        const columnLeads = kanbanData.flatList.filter(l => {
-            if (!l.lead.appointmentDate) return false;
-            const dateStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(l.lead.appointmentDate));
-            if (isToday) return dateStr === todayStr;
-            return dateStr !== todayStr;
-        });
-
+    const renderHourSection = (hours: string[], leadsList: LeadData[]) => {
         return (
-            <div className="flex-1 flex flex-col bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
-                <div className="bg-slate-800 text-white p-4 shrink-0 shadow-sm z-10">
-                    <h2 className="font-black text-lg uppercase tracking-wider">{title}</h2>
-                    <p className="text-slate-300 text-xs mt-1">
-                        {isToday ? "Turno Pomeridiano (Dalle 13:00 alle 21:00)" : "Turno Mattutino (Dalle 09:00 alle 14:00)"}
-                    </p>
-                </div>
+            <div className="flex flex-col w-full max-w-5xl mx-auto space-y-8 pb-12">
+                {hours.map(hourKey => {
+                    const targetHour = parseInt(hourKey.split(':')[0], 10);
+                    const leadsInThisHour = leadsList.filter(l => {
+                        const h = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
+                        return h === targetHour;
+                    });
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                    {hours.map(hourKey => {
-                        const targetHour = parseInt(hourKey.split(':')[0], 10);
-                        const leadsInThisHour = columnLeads.filter(l => {
-                            const h = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
-                            return h === targetHour;
-                        });
-
-                        return (
-                            <div key={hourKey} className="relative">
-                                <div className="flex items-center gap-3 mb-3 sticky top-0 bg-gray-50/90 backdrop-blur pb-2 z-10">
-                                    <div className="bg-white border-2 border-slate-200 text-slate-700 font-bold px-3 py-1 rounded-lg shadow-sm text-sm flex items-center gap-2">
-                                        <Clock className="w-4 h-4 text-brand-orange" />
-                                        {hourKey}
-                                    </div>
-                                    <div className="h-px bg-gray-200 flex-1" />
+                    return (
+                        <div key={hourKey} className="flex flex-col w-full">
+                            {/* Giant Hour Divider */}
+                            <div className="flex items-center mb-4 sticky top-0 bg-gray-50/95 backdrop-blur z-10 py-2">
+                                <div className="flex items-center gap-3 bg-white border border-gray-200 shadow-sm rounded-xl px-4 py-2 text-brand-blue-dark font-black tracking-widest text-lg">
+                                    <Clock className="w-6 h-6 text-brand-orange" />
+                                    ORE {hourKey}
                                 </div>
+                                <div className="h-0.5 bg-gray-200 flex-1 ml-4 rounded-full" />
+                            </div>
 
+                            {/* Cards Container */}
+                            <div className="flex flex-col w-full">
                                 {leadsInThisHour.length === 0 ? (
-                                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50/50 px-4 py-3 rounded-xl border border-emerald-100">
-                                        <CheckCircle2 className="w-5 h-5" />
-                                        <span className="text-sm font-medium">Nessun appuntamento in questa fascia.</span>
+                                    <div className="flex items-center gap-2 text-emerald-600 px-4 py-2 font-medium">
+                                        <CheckCircle2 className="w-5 h-5" /> Nessun appuntamento
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-2">
-                                        {leadsInThisHour.map(renderLeadCard)}
-                                    </div>
+                                    leadsInThisHour.map(renderLeadCard)
                                 )}
                             </div>
-                        )
-                    })}
-                </div>
+                        </div>
+                    )
+                })}
             </div>
         )
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] gap-4 relative">
+        <div className="flex flex-col h-[calc(100vh-140px)] relative">
             <GlobalAlertListener currentUser={currentUser} />
 
-            {/* Tabs */}
-            <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
-                <button
-                    onClick={() => setViewMode('kanban')}
-                    className={`px-6 py-2.5 rounded-t-xl font-bold transition-all text-sm uppercase tracking-wider ${viewMode === 'kanban' ? 'bg-brand-blue-dark text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                >
-                    Torre di Controllo
-                </button>
-                <button
-                    onClick={() => setViewMode('table')}
-                    className={`px-6 py-2.5 rounded-t-xl font-bold transition-all text-sm uppercase tracking-wider ${viewMode === 'table' ? 'bg-brand-blue-dark text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                >
-                    Tutti gli Appuntamenti
-                </button>
+            {/* MEGA TOGGLES NAVIGATION */}
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 sticky top-0 z-20 bg-gray-50 pt-2 pb-4 border-b border-gray-200">
+                <div className="flex p-1 bg-gray-200/80 rounded-2xl w-full lg:w-3/4 max-w-4xl shadow-inner border border-gray-300">
+                    <button
+                        onClick={() => setViewMode('pomeriggio')}
+                        className={`flex-1 py-3 px-2 rounded-xl font-black text-sm sm:text-base uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'pomeriggio' ? 'bg-white text-brand-blue-dark shadow-md scale-[1.02] border border-gray-200 z-10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/50'}`}
+                    >
+                        <Clock className="w-5 h-5 opacity-70" />
+                        App Pomeriggio
+                    </button>
+                    <button
+                        onClick={() => setViewMode('mattina')}
+                        className={`flex-1 py-3 px-2 rounded-xl font-black text-sm sm:text-base uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'mattina' ? 'bg-white text-brand-blue-dark shadow-md scale-[1.02] border border-gray-200 z-10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/50'}`}
+                    >
+                        <Calendar className="w-5 h-5 opacity-70" />
+                        App Mattina
+                    </button>
+                    <button
+                        onClick={() => setViewMode('da_definire')}
+                        className={`flex-1 py-3 px-2 rounded-xl font-black text-sm sm:text-base uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'da_definire' ? 'bg-white text-brand-blue-dark shadow-md scale-[1.02] border border-gray-200 z-10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/50'}`}
+                    >
+                        <AlertCircle className="w-5 h-5 opacity-70" />
+                        Da Definire
+                        {kanbanData.daDefinire.length > 0 && (
+                            <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-xs font-bold ml-1">{kanbanData.daDefinire.length}</span>
+                        )}
+                    </button>
+                </div>
+
+                <div className="w-full lg:w-auto">
+                    <button
+                        onClick={() => setViewMode('table')}
+                        className={`w-full lg:w-auto px-6 py-3.5 rounded-2xl font-bold transition-all text-sm uppercase tracking-wider flex items-center justify-center border ${viewMode === 'table' ? 'bg-slate-800 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50 border-gray-300 shadow-sm'}`}
+                    >
+                        <Search className="w-4 h-4 mr-2" />
+                        Vista Globale
+                    </button>
+                </div>
             </div>
 
-            {viewMode === 'kanban' ? (
-                // --- KANBAN VIEW ---
-                <div className="flex flex-1 gap-6 overflow-hidden">
-                    {renderKanbanColumn("Oggi", KANBAN_HOURS_OGGI, true)}
-                    {renderKanbanColumn("Prossimo Turno", KANBAN_HOURS_DOMANI, false)}
-
-                    {/* Da Definire Panel */}
-                    <div className="w-72 flex flex-col bg-amber-50/30 rounded-2xl border border-amber-200 overflow-hidden shrink-0">
-                        <div className="bg-amber-500 text-white p-4 shrink-0 shadow-sm border-b border-amber-600">
-                            <h2 className="font-black text-lg uppercase tracking-wider">Da Definire</h2>
-                            <p className="text-amber-100 text-xs mt-1">Richiami da riprogrammare</p>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                            {kanbanData.daDefinire.length === 0 ? (
-                                <div className="text-sm text-amber-700/60 font-medium italic text-center mt-10">Coda vuota. Ãš tutto in ordine!</div>
-                            ) : kanbanData.daDefinire.map(renderLeadCard)}
-                        </div>
+            {/* MAIN CONTENT AREA */}
+            <div className="flex-1 overflow-auto bg-gray-50 px-2 sm:px-4">
+                {loading ? (
+                    <div className="flex items-center justify-center h-full text-brand-blue">
+                        <div className="animate-spin w-10 h-10 border-4 border-brand-orange border-t-transparent rounded-full mb-4 mx-auto"></div>
                     </div>
-                </div>
-            ) : (
-                // --- TABLE VIEW ---
-                <div className="flex flex-col flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <div className="flex items-center bg-white border border-gray-300 rounded-lg px-3 py-2 shrink-0 shadow-sm">
-                                <Search className="w-4 h-4 text-gray-400 mr-2" />
-                                <input
-                                    type="text"
-                                    placeholder="Cerca per nome, email o telefono..."
-                                    className="bg-transparent border-none outline-none text-sm w-64"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
+                ) : (
+                    <>
+                        {viewMode === 'pomeriggio' && (
+                            <div className="w-full h-full flex flex-col items-center pt-2">
+                                {renderHourSection(oggiHours, oggiLeads)}
                             </div>
-                            <div className="flex bg-white border border-gray-300 rounded-lg p-1 shrink-0 shadow-sm">
-                                <button onClick={() => handleDatePreset("today")} className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${datePreset === "today" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Oggi</button>
-                                <button onClick={() => handleDatePreset("tomorrow")} className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${datePreset === "tomorrow" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Domani</button>
-                                <button onClick={() => handleDatePreset("7days")} className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${datePreset === "7days" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Ultimi 7 gg</button>
-                                <button onClick={() => handleDatePreset("all")} className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${datePreset === "all" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Tutti</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-auto bg-white">
-                        {loading ? (
-                            <div className="flex items-center justify-center h-full text-brand-blue">
-                                <div className="animate-spin w-8 h-8 border-4 border-brand-orange border-t-transparent rounded-full mb-4 mx-auto"></div>
-                            </div>
-                        ) : tableData.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
-                                <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
-                                    <Filter className="w-8 h-8 text-slate-300" />
-                                </div>
-                                <p className="text-sm font-medium">Nessun appuntamento trovato</p>
-                            </div>
-                        ) : (
-                            <table className="w-full text-left border-collapse min-w-max">
-                                <thead>
-                                    <tr className="bg-slate-50 sticky top-0 border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-slate-500 z-10 shadow-sm">
-                                        <th className="p-4 pl-6">Data / Ora</th>
-                                        <th className="p-4">Lead</th>
-                                        <th className="p-4">GDO</th>
-                                        <th className="p-4">Stato</th>
-                                        <th className="p-4"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {tableData.map((item) => (
-                                        <tr
-                                            key={item.lead.id}
-                                            className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
-                                            onClick={() => {
-                                                setSelectedLead(item)
-                                                setIsDrawerOpen(true)
-                                            }}
-                                        >
-                                            <td className="p-4 pl-6 align-top pt-5">
-                                                {item.lead.confNeedsReschedule ? (
-                                                    <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold bg-amber-100 text-amber-800 uppercase tracking-widest">Da Definire</span>
-                                                ) : (
-                                                    <>
-                                                        <div className="flex items-center gap-2">
-                                                            <Calendar className="w-4 h-4 text-slate-400" />
-                                                            <span className="font-semibold text-slate-900">
-                                                                {item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "dd MMM yyyy", { locale: it }) : "N/D"}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 mt-1.5 text-sm font-medium text-brand-orange">
-                                                            <Clock className="w-4 h-4" />
-                                                            <span>
-                                                                {item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "HH:mm") : "N/D"}
-                                                            </span>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </td>
-                                            <td className="p-4 align-top pt-5">
-                                                <p className="font-bold text-slate-900 text-[15px]">{item.lead.name}</p>
-                                                <p className="text-sm text-slate-500 mt-0.5">{item.lead.phone}</p>
-                                            </td>
-                                            <td className="p-4 align-top pt-5">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700">
-                                                    {item.gdo?.displayName || item.gdo?.name || "Sconosciuto"}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 align-top pt-5">
-                                                <div className="flex flex-col gap-2 items-start">
-                                                    {globalPresence.find(p => p.leadId === item.lead.id) && (
-                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] uppercase tracking-widest font-bold bg-amber-100 text-amber-800 animate-pulse border border-amber-200">
-                                                            <Users className="w-3 h-3" /> In Lavoro
-                                                        </span>
-                                                    )}
-                                                    {item.lead.confirmationsOutcome === "confermato" ? (
-                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                                                            <CheckCircle2 className="w-4 h-4 mr-1.5" /> Confermato
-                                                        </span>
-                                                    ) : item.lead.confirmationsOutcome === "scartato" ? (
-                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/10">
-                                                            <XCircle className="w-4 h-4 mr-1.5" /> Scartato
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-600/20">
-                                                            Da lavorare
-                                                        </span>
-                                                    )}
-
-                                                    {(!item.lead.confirmationsOutcome) && (
-                                                        <div className="flex gap-1.5 mt-1" title="Tentativi NR">
-                                                            <div className={`w-2.5 h-2.5 rounded-full ${item.lead.confCall1At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                                                            <div className={`w-2.5 h-2.5 rounded-full ${item.lead.confCall2At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                                                            <div className={`w-2.5 h-2.5 rounded-full ${item.lead.confCall3At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-right align-middle">
-                                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center ml-auto group-hover:bg-brand-blue group-hover:text-white transition-colors duration-200">
-                                                    <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
                         )}
-                    </div>
-                </div>
-            )}
+
+                        {viewMode === 'mattina' && (
+                            <div className="w-full h-full flex flex-col items-center pt-2">
+                                {renderHourSection(domaniHours, domaniLeads)}
+                            </div>
+                        )}
+
+                        {viewMode === 'da_definire' && (
+                            <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-2 pb-12">
+                                <div className="w-full mb-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl">
+                                    <h2 className="text-xl font-black text-amber-800 uppercase tracking-widest mb-1">Richiami Parcheggiati</h2>
+                                    <p className="text-amber-700/80 font-medium">Lead da ricollocare con urgenza nei buchi di agenda.</p>
+                                </div>
+                                <div className="w-full flex flex-col gap-3">
+                                    {kanbanData.daDefinire.length === 0 ? (
+                                        renderEmptyState("La coda dei richiami Ãš perfettamente pulita.")
+                                    ) : (
+                                        kanbanData.daDefinire.map(renderLeadCard)
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {viewMode === 'table' && (
+                            <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8 max-w-[1400px] mx-auto w-full">
+                                <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="flex items-center bg-white border border-gray-300 rounded-xl px-3 py-2 shrink-0 shadow-sm">
+                                            <Search className="w-4 h-4 text-gray-400 mr-2" />
+                                            <input
+                                                type="text"
+                                                placeholder="Cerca per nome, email o telefono..."
+                                                className="bg-transparent border-none outline-none text-sm w-64"
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="flex bg-white border border-gray-300 rounded-xl p-1 shrink-0 shadow-sm">
+                                            <button onClick={() => handleDatePreset("today")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "today" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Oggi</button>
+                                            <button onClick={() => handleDatePreset("tomorrow")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "tomorrow" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Domani</button>
+                                            <button onClick={() => handleDatePreset("7days")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "7days" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Ultimi 7 gg</button>
+                                            <button onClick={() => handleDatePreset("all")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "all" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Tutti</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 overflow-auto bg-white p-0">
+                                    {tableData.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 py-10">
+                                            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
+                                                <Filter className="w-8 h-8 text-slate-300" />
+                                            </div>
+                                            <p className="text-sm font-medium">Nessun appuntamento trovato</p>
+                                        </div>
+                                    ) : (
+                                        <table className="w-full text-left border-collapse min-w-max">
+                                            <thead>
+                                                <tr className="bg-slate-50 sticky top-0 border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-slate-500 z-10 shadow-sm">
+                                                    <th className="p-4 pl-6">Data / Ora</th>
+                                                    <th className="p-4">Lead</th>
+                                                    <th className="p-4">GDO</th>
+                                                    <th className="p-4">Stato</th>
+                                                    <th className="p-4"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {tableData.map((item) => (
+                                                    <tr
+                                                        key={item.lead.id}
+                                                        className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
+                                                        onClick={() => {
+                                                            setSelectedLead(item)
+                                                            setIsDrawerOpen(true)
+                                                        }}
+                                                    >
+                                                        <td className="p-4 pl-6 align-top pt-5">
+                                                            {item.lead.confNeedsReschedule ? (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold bg-amber-100 text-amber-800 uppercase tracking-widest">Da Definire</span>
+                                                            ) : (
+                                                                <>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Calendar className="w-4 h-4 text-slate-400" />
+                                                                        <span className="font-semibold text-slate-900">
+                                                                            {item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "dd MMM yyyy", { locale: it }) : "N/D"}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 mt-1.5 text-sm font-medium text-brand-orange">
+                                                                        <Clock className="w-4 h-4" />
+                                                                        <span>
+                                                                            {item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "HH:mm") : "N/D"}
+                                                                        </span>
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-4 align-top pt-5">
+                                                            <p className="font-bold text-slate-900 text-[15px]">{item.lead.name}</p>
+                                                            <p className="text-sm text-slate-500 mt-0.5">{item.lead.phone}</p>
+                                                        </td>
+                                                        <td className="p-4 align-top pt-5">
+                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">
+                                                                {item.gdo?.displayName || item.gdo?.name || "Sconosciuto"}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 align-top pt-5">
+                                                            <div className="flex flex-col gap-2 items-start">
+                                                                {globalPresence.find(p => p.leadId === item.lead.id) && (
+                                                                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] uppercase tracking-widest font-bold bg-amber-100 text-amber-800 animate-pulse border border-amber-200 shadow-sm">
+                                                                        <Users className="w-3 h-3" /> In Uso
+                                                                    </span>
+                                                                )}
+                                                                {item.lead.confirmationsOutcome === "confermato" ? (
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 shadow-sm">
+                                                                        <CheckCircle2 className="w-4 h-4 mr-1.5" /> Confermato
+                                                                    </span>
+                                                                ) : item.lead.confirmationsOutcome === "scartato" ? (
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/10 shadow-sm">
+                                                                        <XCircle className="w-4 h-4 mr-1.5" /> Scartato
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-600/20 shadow-sm">
+                                                                        Da lavorare
+                                                                    </span>
+                                                                )}
+
+                                                                {(!item.lead.confirmationsOutcome) && (
+                                                                    <div className="flex gap-1.5 mt-1" title="Tentativi NR">
+                                                                        <div className={`w-2.5 h-2.5 rounded-full shadow-inner ${item.lead.confCall1At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
+                                                                        <div className={`w-2.5 h-2.5 rounded-full shadow-inner ${item.lead.confCall2At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
+                                                                        <div className={`w-2.5 h-2.5 rounded-full shadow-inner ${item.lead.confCall3At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-right align-middle">
+                                                            <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center ml-auto group-hover:bg-brand-blue group-hover:border-brand-blue group-hover:text-white transition-all duration-200 shadow-sm">
+                                                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
 
             {isDrawerOpen && selectedLead && (
                 <ConfermeDrawer
