@@ -160,3 +160,36 @@ export async function createGoogleCalendarEvent(userId: string, eventDetails: an
         return null;
     }
 }
+
+export async function deleteGoogleCalendarEvent(userId: string, eventId: string) {
+    const connection = await db.query.calendarConnections.findFirst({
+        where: eq(calendarConnections.userId, userId)
+    });
+
+    if (!connection) return false;
+
+    let accessToken = connection.accessToken;
+    if (connection.tokenExpiry && connection.tokenExpiry < new Date()) {
+        try {
+            accessToken = await refreshAccessToken(userId) as string;
+        } catch (e) {
+            console.error("Unable to refresh token for delete", e);
+            return false;
+        }
+    }
+
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    try {
+        await calendar.events.delete({
+            calendarId: 'primary',
+            eventId: eventId,
+            sendUpdates: 'all'
+        });
+        return true;
+    } catch (e: any) {
+        console.error("Error deleting calendar event", e.message);
+        return false;
+    }
+}

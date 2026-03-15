@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users } from "lucide-react"
-import { updateLeadDataConferme, getConfermeNotes, addConfermeNote, setConfermeOutcome, setSalespersonOutcome } from "@/app/actions/confermeActions"
+import { updateLeadDataConferme, getConfermeNotes, addConfermeNote, setConfermeOutcome, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall } from "@/app/actions/confermeActions"
 import { setPresence, removePresence, getLeadPresence } from "@/app/actions/presenceActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
-import { format } from "date-fns"
+import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
 
 export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }: any) {
@@ -20,7 +20,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     // Form states
     const [editName, setEditName] = useState(lead.name || "")
     const [editEmail, setEditEmail] = useState(lead.email || "")
-    // Extract date and time for inputs
     const appointmentDateObj = lead.appointmentDate ? new Date(lead.appointmentDate) : new Date();
     const [editDate, setEditDate] = useState(format(appointmentDateObj, 'yyyy-MM-dd'))
     const [editTime, setEditTime] = useState(format(appointmentDateObj, 'HH:mm'))
@@ -45,15 +44,27 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
     // Presence states
     const [activeUsers, setActiveUsers] = useState<any[]>([])
-
-    // Salespeople state
     const [salespeopleList, setSalespeopleList] = useState<any[]>([])
 
+    // Quick Action States
+    const [isSavingNR, setIsSavingNR] = useState(false)
+    const [showRecallForm, setShowRecallForm] = useState(false)
+    const [recallDate, setRecallDate] = useState(lead.recallDate ? format(new Date(lead.recallDate), 'yyyy-MM-dd') : "")
+    const [recallTime, setRecallTime] = useState(lead.recallDate ? format(new Date(lead.recallDate), 'HH:mm') : "")
+    const [vslUnseen, setVslUnseen] = useState(lead.confVslUnseen || false)
+    const [needsReschedule, setNeedsReschedule] = useState(lead.confNeedsReschedule || false)
+    const [newApptDate, setNewApptDate] = useState("")
+    const [newApptTime, setNewApptTime] = useState("")
+    const [isSavingRecall, setIsSavingRecall] = useState(false)
+
+    const [now, setNow] = useState(new Date())
+
     useEffect(() => {
-        // Fetch real salespeople
         getTeamAccounts().then(users => {
             setSalespeopleList(users.filter((u: any) => u.role === "VENDITORE"))
         })
+        const t = setInterval(() => setNow(new Date()), 60000);
+        return () => clearInterval(t);
     }, [])
 
     useEffect(() => {
@@ -65,6 +76,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 const d = new Date(lead.appointmentDate)
                 setEditDate(format(d, 'yyyy-MM-dd'))
                 setEditTime(format(d, 'HH:mm'))
+            } else {
+                setEditDate("")
+                setEditTime("")
             }
             setEditNoteGdo(lead.appointmentNote || "")
             setOutcome(lead.confirmationsOutcome || "")
@@ -72,22 +86,26 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setSalesperson(lead.salespersonAssigned || "")
             setSpOutcome(lead.salespersonOutcome || "")
             setSpNotes(lead.salespersonOutcomeNotes || "")
+            setShowRecallForm(false)
+            setRecallDate(lead.recallDate ? format(new Date(lead.recallDate), 'yyyy-MM-dd') : "")
+            setRecallTime(lead.recallDate ? format(new Date(lead.recallDate), 'HH:mm') : "")
+            setVslUnseen(lead.confVslUnseen || false)
+            setNeedsReschedule(lead.confNeedsReschedule || false)
+            setNewApptDate("")
+            setNewApptTime("")
             setActiveTab("dati")
 
-            // Load notes
             setLoadingNotes(true)
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))
 
-            // Presence Heartbeat Loop (every 5 seconds)
             const sendHeartbeat = () => setPresence(lead.id, "viewing")
-            sendHeartbeat() // initial
+            sendHeartbeat()
             const heartbeatInterval = setInterval(sendHeartbeat, 5000)
 
-            // Presence Check Loop (every 4 seconds)
             const checkPresence = () => {
                 getLeadPresence(lead.id).then(users => setActiveUsers(users))
             }
-            checkPresence() // initial
+            checkPresence()
             const checkInterval = setInterval(checkPresence, 4000)
 
             return () => {
@@ -96,7 +114,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 removePresence(lead.id)
             }
         }
-    }, [isOpen, lead.id])
+    }, [isOpen, lead.id, lead.version]) // update when version changes too
 
     const handleSaveData = async () => {
         setSavingData(true)
@@ -112,12 +130,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             onRefresh()
             alert("Dati salvati con successo")
         } catch (error) {
-            if (error instanceof Error && error.message.includes("CONCURRENCY_ERROR")) {
-                alert("Questo appuntamento è stato aggiornato da un altro utente. Ricarica la pagina per vederne lo stato attuale ed evitare sovrascritture.")
-            } else {
-                alert(`Errore salvataggio: ${error instanceof Error ? error.message : String(error)}`)
-            }
-            console.error(error)
+            alert(`Errore salvataggio: ${error instanceof Error ? error.message : String(error)}`)
         } finally {
             setSavingData(false)
         }
@@ -139,7 +152,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         if (outcome === "confermato") {
             if (!salesperson) return alert("Seleziona venditore assegnato");
             if (!editEmail) {
-                alert("ATTENZIONE: L'email del lead è obbligatoria per fissare un appuntamento e inviargli l'invito su Calendar.\nVai nella tab 'Dati Lead', inserisci la sua email, premi 'Salva Modifiche' e poi potrai confermare l'esito.");
+                alert("ATTENZIONE: L'email del lead è obbligatoria per fissare un appuntamento e inviargli l'invito su Calendar.");
                 setActiveTab("dati");
                 return;
             }
@@ -154,14 +167,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             }
             onRefresh()
             onClose()
-            setTimeout(() => alert("Esito salvato con successo"), 300)
         } catch (error) {
-            if (error instanceof Error && error.message.includes("CONCURRENCY_ERROR")) {
-                alert("Questo appuntamento è stato aggiornato da un altro utente. Ricarica la pagina per vederne lo stato attuale ed evitare sovrascritture.")
-            } else {
-                alert(`Errore salvataggio esito: ${error instanceof Error ? error.message : String(error)}`)
-            }
-            console.error(error)
+            alert(`Errore salvataggio esito: ${error}`)
         } finally {
             setSavingOutcome(false)
         }
@@ -178,66 +185,211 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             }
             onRefresh()
             onClose()
-            setTimeout(() => alert("Esito venditore salvato"), 300)
         } catch (error) {
-            if (error instanceof Error && error.message.includes("CONCURRENCY_ERROR")) {
-                alert("Questo appuntamento è stato aggiornato da un altro utente. Ricarica la pagina per vederne lo stato attuale ed evitare sovrascritture.")
-            } else {
-                alert(`Errore salvataggio esito venditore: ${error instanceof Error ? error.message : String(error)}`)
-            }
-            console.error(error)
+            alert(`Errore salvataggio esito venditore: ${error}`)
         } finally {
             setSavingSpOutcome(false)
         }
     }
 
+    const handleQuickNR = async () => {
+        setIsSavingNR(true);
+        try {
+            const res = await recordConfermeNoAnswer(lead.id, localVersion);
+            if (res.success) {
+                setLocalVersion((v: number) => v + 1);
+                onRefresh();
+            } else {
+                alert(res.error);
+            }
+        } catch (e: any) {
+            alert(e.message);
+        } finally {
+            setIsSavingNR(false);
+        }
+    }
+
+    const handleSaveRecall = async () => {
+        setIsSavingRecall(true);
+        try {
+            const rDate = recallDate ? new Date(`${recallDate}T${recallTime || '00:00'}:00`) : null;
+            let nApptDate = null;
+            if (!needsReschedule && newApptDate && newApptTime) {
+                nApptDate = new Date(`${newApptDate}T${newApptTime}:00`);
+            }
+            const res = await scheduleConfermeRecall(lead.id, localVersion, {
+                recallDate: rDate,
+                vslUnseen,
+                needsReschedule,
+                newAppointmentDate: nApptDate
+            });
+
+            if (res && (!res.success)) {
+                alert(res.error || "Errore");
+            } else {
+                setLocalVersion((v: number) => v + 1);
+                onRefresh();
+                setShowRecallForm(false);
+            }
+        } catch (e: any) {
+            alert(e.message);
+        } finally {
+            setIsSavingRecall(false);
+        }
+    }
+
+    const getLastNRDate = () => {
+        if (lead.confCall3At) return new Date(lead.confCall3At);
+        if (lead.confCall2At) return new Date(lead.confCall2At);
+        if (lead.confCall1At) return new Date(lead.confCall1At);
+        return null;
+    }
+    const lastNR = getLastNRDate();
+
+    // Prevent recall submit validation logic
+    const recallDateObj = recallDate ? new Date(`${recallDate}T${recallTime || '00:00'}:00`) : null;
+    const isRecallExceedingAppt = recallDateObj && lead.appointmentDate && recallDateObj > new Date(lead.appointmentDate);
+    const preventRecallSave = isRecallExceedingAppt && !needsReschedule && (!newApptDate || !newApptTime);
+
     return (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm transition-opacity">
-            <div className="w-[500px] h-full bg-white shadow-2xl flex flex-col transform transition-transform">
+            <div className="w-[500px] h-full bg-white shadow-2xl flex flex-col transform transition-transform border-l border-gray-200">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gray-50/50">
-                    <div>
-                        <h2 className="text-xl font-bold tracking-tight text-gray-900">{lead.name}</h2>
-                        <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-                            <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {lead.phone}</span>
+                <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gray-50 shrink-0">
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                            {lead.confNeedsReschedule ? (
+                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">DA DEFINIRE</span>
+                            ) : null}
                             {lead.confirmationsOutcome === "confermato" && (
-                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">CONFERMATO</span>
+                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">CONFERMATO</span>
                             )}
                             {lead.confirmationsOutcome === "scartato" && (
-                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800">SCARTATO</span>
+                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">SCARTATO</span>
                             )}
                         </div>
+                        <h2 className="text-2xl font-bold tracking-tight text-gray-900 leading-tight">{lead.name}</h2>
+                        <div className="flex items-center gap-3 mt-1.5 text-sm text-gray-500 font-medium">
+                            <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-brand-orange" /> {lead.phone}</span>
+                            {lead.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-brand-blue" /> {lead.email}</span>}
+                        </div>
                     </div>
-                    <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+                    <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-200 rounded-full transition-colors self-start">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
+                {/* Quick Actions Bar */}
+                <div className="bg-white border-b border-gray-200 p-4 shrink-0 flex flex-col gap-3 z-10 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)]">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleQuickNR}
+                                disabled={isSavingNR || !!lead.confCall3At || !!lead.confirmationsOutcome}
+                                className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {isSavingNR ? "..." : "NR (Non Risponde)"}
+                                <div className="flex gap-1 ml-1" title="Tentativi NR">
+                                    <div className={`w-2 h-2 rounded-full ${lead.confCall1At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
+                                    <div className={`w-2 h-2 rounded-full ${lead.confCall2At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
+                                    <div className={`w-2 h-2 rounded-full ${lead.confCall3At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
+                                </div>
+                            </button>
+
+                            {lastNR && !lead.confirmationsOutcome && (
+                                <span className="text-xs text-gray-600 flex items-center gap-1 font-semibold bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
+                                    <Clock className="w-3.5 h-3.5 text-brand-orange" />
+                                    {formatDistanceToNow(lastNR, { locale: it })} fa
+                                </span>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => setShowRecallForm(!showRecallForm)}
+                            disabled={!!lead.confirmationsOutcome}
+                            className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors border shadow-sm ${showRecallForm ? 'bg-brand-orange text-white border-brand-orange' : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50 disabled:opacity-50'}`}
+                        >
+                            Richiama
+                        </button>
+                    </div>
+
+                    {showRecallForm && (
+                        <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5 mt-1 animate-in slide-in-from-top-2">
+                            <h4 className="text-sm font-extrabold text-amber-900 mb-4 flex items-center gap-2 tracking-wide uppercase">
+                                Programma Richiamo
+                            </h4>
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <input type="date" value={recallDate} onChange={e => setRecallDate(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
+                                <input type="time" value={recallTime} onChange={e => setRecallTime(e.target.value)} className="px-3 py-2 border border-amber-200 rounded-md text-sm outline-none w-full shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white" />
+                            </div>
+
+                            <label className="flex items-center gap-2.5 mb-5 text-sm font-semibold text-amber-900 cursor-pointer w-max">
+                                <input type="checkbox" checked={vslUnseen} onChange={e => setVslUnseen(e.target.checked)} className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500" />
+                                VSL Non Vista
+                            </label>
+
+                            {isRecallExceedingAppt && (
+                                <div className="bg-white p-4 rounded-xl border border-rose-200 mb-5 shadow-sm">
+                                    <p className="text-xs text-rose-600 font-bold mb-3 flex items-start gap-1.5 leading-tight">
+                                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                                        Il richiamo supera l'appuntamento originale. È obbligatorio aggiornare o parcheggiare la data.
+                                    </p>
+
+                                    <div className="space-y-4">
+                                        <label className="flex items-center gap-2.5 text-sm text-slate-800 font-bold cursor-pointer bg-slate-50 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                                            <input type="checkbox" checked={needsReschedule} onChange={e => { setNeedsReschedule(e.target.checked); if (e.target.checked) { setNewApptDate(""); setNewApptTime(""); } }} className="w-4 h-4 text-brand-blue" />
+                                            Sposta in: "Da Definire"
+                                        </label>
+
+                                        {!needsReschedule && (
+                                            <div className="flex gap-2">
+                                                <input type="date" value={newApptDate} onChange={e => setNewApptDate(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" placeholder="Nuova Data App." />
+                                                <input type="time" value={newApptTime} onChange={e => setNewApptTime(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm outline-none w-full bg-slate-50 focus:bg-white focus:border-brand-blue" />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-2 pt-2 border-t border-amber-200/60">
+                                <button onClick={() => setShowRecallForm(false)} className="px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 border border-transparent rounded-lg transition-colors">Annulla</button>
+                                <button
+                                    onClick={handleSaveRecall}
+                                    disabled={isSavingRecall || !recallDate || preventRecallSave}
+                                    className="px-5 py-2 text-sm font-bold bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shadow transition-colors"
+                                >
+                                    {isSavingRecall ? "Salvataggio..." : "Salva Richiamo"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {activeUsers.length > 0 && (
-                    <div className="bg-yellow-50 border-b border-yellow-200 p-3 px-6 flex items-center gap-3 text-sm text-yellow-800 animate-in fade-in slide-in-from-top-4">
+                    <div className="bg-yellow-50 border-b border-yellow-200 p-3 px-6 flex items-center gap-3 text-sm text-yellow-800 animate-in fade-in slide-in-from-top-4 shrink-0 shadow-inner">
                         <Users className="w-4 h-4 text-yellow-600 flex-shrink-0" />
                         <span>
-                            <strong>Attenzione:</strong> {activeUsers.map(u => u.user.displayName || u.user.name).join(", ")} {activeUsers.length === 1 ? "sta" : "stanno"} lavorando su questa pratica.
+                            <strong>Attenzione:</strong> {activeUsers.map(u => u.user.displayName || u.user.name).join(", ")} {activeUsers.length === 1 ? "sta" : "stanno"} lavorando su questa pratica al momento.
                         </span>
                     </div>
                 )}
 
                 {/* Tabs */}
-                <div className="flex border-b border-gray-200">
+                <div className="flex border-b border-gray-200 shrink-0 bg-white">
                     <button
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "dati" ? "border-brand-orange text-brand-orange" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"}`}
+                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "dati" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
                         onClick={() => setActiveTab("dati")}
                     >
                         Dati Lead
                     </button>
                     <button
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "note" ? "border-brand-orange text-brand-orange" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"}`}
+                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === "note" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
                         onClick={() => setActiveTab("note")}
                     >
-                        Note Conferme ({notes.length})
+                        Note {notes.length > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === "note" ? "bg-brand-orange text-white" : "bg-gray-200 text-gray-600"}`}>{notes.length}</span>}
                     </button>
                     <button
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "esito" ? "border-brand-orange text-brand-orange" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"}`}
+                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "esito" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
                         onClick={() => setActiveTab("esito")}
                     >
                         Gestione Esiti
@@ -245,102 +397,113 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 custom-scrollbar">
 
                     {activeTab === "dati" && (
-                        <div className="space-y-4">
-                            <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 mb-6">
-                                <p className="text-sm text-blue-800 font-medium flex items-center gap-2">
-                                    <User className="w-4 h-4" /> Fissato da: {gdo?.displayName || gdo?.name || "Sconosciuto"}
-                                </p>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase">Nome</label>
-                                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-brand-orange outline-none" />
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase">Email</label>
-                                <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-brand-orange outline-none" />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase">Data Appuntamento</label>
-                                    <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-brand-orange outline-none text-sm" />
+                        <div className="space-y-5 animate-in fade-in duration-200">
+                            <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-100 flex items-center gap-3 shadow-sm">
+                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <User className="w-4 h-4 text-blue-700" />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase">Ora Appuntamento</label>
-                                    <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-brand-orange outline-none text-sm" />
+                                <div>
+                                    <p className="text-xs text-blue-600/80 font-bold uppercase tracking-wider mb-0.5">Fissato da</p>
+                                    <p className="text-sm text-blue-900 font-bold">{gdo?.displayName || gdo?.name || "Sconosciuto"}</p>
                                 </div>
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase">Note GDO</label>
-                                <textarea rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-brand-orange outline-none text-sm resize-none"></textarea>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nome Completo</label>
+                                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none shadow-sm transition-shadow font-medium text-slate-900 bg-white" />
                             </div>
 
-                            <button onClick={handleSaveData} disabled={savingData} className="w-full mt-4 flex justify-center items-center gap-2 py-2.5 bg-gray-900 hover:bg-black text-white rounded-lg transition-colors font-medium">
-                                <Save className="w-4 h-4" /> {savingData ? "Salvataggio..." : "Salva Modifiche"}
-                            </button>
-                            <p className="text-xs text-center text-gray-400 mt-2">Ogni modifica viene tracciata nell'Audit Log.</p>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Indirizzo Email</label>
+                                <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none shadow-sm transition-shadow font-medium text-slate-900 bg-white" placeholder="Nessuna email fornita" />
+                            </div>
+
+                            {!lead.confNeedsReschedule && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Data Appuntamento</label>
+                                        <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Ora Appuntamento</label>
+                                        <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-1.5 pt-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Note del Fissatore (GDO)</label>
+                                <textarea rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm resize-none shadow-sm text-slate-700 bg-white leading-relaxed" placeholder="Aggiungi una nota..."></textarea>
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-200">
+                                <button onClick={handleSaveData} disabled={savingData} className="w-full flex justify-center items-center gap-2 py-3 bg-slate-900 hover:bg-black text-white rounded-xl transition-all font-bold shadow-md hover:shadow-lg disabled:opacity-50">
+                                    <Save className="w-4 h-4" /> {savingData ? "Salvataggio in corso..." : "Salva Tutti i Dati"}
+                                </button>
+                                <p className="text-[11px] text-center text-slate-400 mt-3 font-medium">Le modifiche sono tracciate nell'Audit Log.</p>
+                            </div>
                         </div>
                     )}
 
                     {activeTab === "note" && (
-                        <div className="h-full flex flex-col">
+                        <div className="h-full flex flex-col animate-in fade-in duration-200">
                             <div className="flex-1 space-y-4 mb-6">
                                 {loadingNotes ? (
                                     <div className="text-center text-gray-500 py-10">Caricamento note...</div>
                                 ) : notes.length === 0 ? (
-                                    <div className="text-center text-gray-400 py-10">Nessuna nota presente.</div>
+                                    <div className="text-center text-gray-400 py-16 flex flex-col items-center">
+                                        <FileText className="w-12 h-12 text-gray-200 mb-3" />
+                                        Nessuna nota presente per questo lead.
+                                    </div>
                                 ) : (
                                     notes.map((n, idx) => (
-                                        <div key={n.note.id || idx} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <span className="text-xs font-semibold text-gray-700">{n.author?.name || "Utente"}</span>
-                                                <span className="text-xs text-gray-400">{format(new Date(n.note.createdAt), "dd/MM/yy HH:mm")}</span>
+                                        <div key={n.note.id || idx} className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm transition-shadow hover:shadow-md">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <span className="text-xs font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{n.author?.name || "Utente"}</span>
+                                                <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">{format(new Date(n.note.createdAt), "dd/MM/yy HH:mm")}</span>
                                             </div>
-                                            <p className="text-sm text-gray-800 whitespace-pre-wrap">{n.note.text}</p>
+                                            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{n.note.text}</p>
                                         </div>
                                     ))
                                 )}
                             </div>
-                            <div className="mt-auto">
+                            <div className="mt-auto pt-4 border-t border-gray-200 bg-slate-50/50 -bottom-6 -mx-6 px-6 pb-6 pt-4 sticky">
                                 <textarea
                                     value={newNote}
                                     onChange={e => setNewNote(e.target.value)}
-                                    placeholder="Scrivi una nuova nota..."
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-brand-orange outline-none text-sm resize-none"
+                                    placeholder="Scrivi una nuova nota qui..."
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none text-sm resize-none shadow-sm mb-3"
                                     rows={3}
                                 />
-                                <button onClick={handleAddNote} disabled={!newNote.trim()} className="w-full mt-2 py-2 bg-brand-orange hover:bg-orange-600 text-white rounded-lg transition-colors font-medium cursor-pointer disabled:opacity-50">
-                                    Aggiungi Nota
+                                <button onClick={handleAddNote} disabled={!newNote.trim()} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold cursor-pointer disabled:opacity-50 shadow-md">
+                                    Aggiungi Nota e Salva
                                 </button>
                             </div>
                         </div>
                     )}
 
                     {activeTab === "esito" && (
-                        <div className="space-y-8">
+                        <div className="space-y-6 animate-in fade-in duration-200 pb-8">
                             {/* Conferme Outcome */}
-                            <div className="bg-white border-2 border-gray-100 rounded-xl p-5 shadow-sm">
-                                <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                    <CheckCircle className="w-4 h-4 text-brand-orange" />
+                            <div className="bg-white border text-slate-800 border-gray-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-brand-orange"></div>
+                                <h3 className="text-base font-extrabold text-gray-900 mb-5 flex items-center gap-2">
                                     Esito Pre-Trattativa (Team Conferme)
                                 </h3>
 
-                                <div className="space-y-3 mb-4">
-                                    <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                                <div className="space-y-3.5 mb-6">
+                                    <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "scartato" ? "border-rose-400 bg-rose-50 shadow-sm" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50 bg-white"}`}>
                                         <input type="radio" name="outcome" value="scartato" checked={outcome === "scartato"} onChange={() => setOutcome("scartato")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
-                                        <span className="font-medium text-gray-900">Scartato</span>
+                                        <span className={`font-bold ${outcome === "scartato" ? "text-rose-800" : "text-gray-700"}`}>Scartato Direttamente</span>
                                     </label>
 
                                     {outcome === "scartato" && (
-                                        <div className="pl-8 -mt-2 mb-4 animate-in slide-in-from-top-2">
-                                            <select value={discardReason} onChange={e => setDiscardReason(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:ring-1 focus:ring-brand-orange">
-                                                <option value="">Seleziona motivo scarto...</option>
+                                        <div className="pl-11 -mt-2 mb-5 animate-in slide-in-from-top-2">
+                                            <select value={discardReason} onChange={e => setDiscardReason(e.target.value)} className="w-full px-4 py-2.5 border-2 border-rose-200 rounded-lg text-sm outline-none focus:border-rose-400 bg-white text-rose-900 font-medium">
+                                                <option value="">-- Seleziona il motivo esatto --</option>
                                                 <option value="non interessato">Non interessato</option>
                                                 <option value="disoccupato">Disoccupato</option>
                                                 <option value="straniero">Straniero</option>
@@ -350,54 +513,55 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         </div>
                                     )}
 
-                                    <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                                    <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "confermato" ? "border-emerald-400 bg-emerald-50 shadow-sm" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50 bg-white"}`}>
                                         <input type="radio" name="outcome" value="confermato" checked={outcome === "confermato"} onChange={() => setOutcome("confermato")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
-                                        <span className="font-medium text-gray-900">Confermato ed Assegnato</span>
+                                        <span className={`font-bold ${outcome === "confermato" ? "text-emerald-800" : "text-gray-700"}`}>Confermato ed Assegnato</span>
                                     </label>
 
                                     {outcome === "confermato" && (
-                                        <div className="pl-8 -mt-2 mb-4 animate-in slide-in-from-top-2">
-                                            <select value={salesperson} onChange={e => setSalesperson(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:ring-1 focus:ring-brand-orange">
-                                                <option value="">Assegna Venditore...</option>
+                                        <div className="pl-11 -mt-2 mb-2 animate-in slide-in-from-top-2">
+                                            <select value={salesperson} onChange={e => setSalesperson(e.target.value)} className="w-full px-4 py-2.5 border-2 border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400 bg-white text-emerald-900 font-bold shadow-sm">
+                                                <option value="">-- Assegna a un Venditore --</option>
                                                 {salespeopleList.map(s => (
                                                     <option key={s.id} value={s.id}>{s.name || s.email}</option>
                                                 ))}
                                             </select>
+                                            <p className="text-[11px] text-emerald-600 font-medium mt-2 leading-tight">Salvando, confermerai l'appuntamento, il lead verrà smistato al venditore e verrà creato l'evento sul Google Calendar con invito via email.</p>
                                         </div>
                                     )}
                                 </div>
 
-                                <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-2.5 bg-brand-orange hover:bg-orange-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50">
-                                    {savingOutcome ? "Salvataggio..." : "Imposta Esito Conferme"}
+                                <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
+                                    {savingOutcome ? "Salvataggio in corso..." : "Piazza Esito Definitivo"}
                                 </button>
                             </div>
 
                             {/* Salesperson Outcome (only if confirmed & assigned) */}
                             {lead.confirmationsOutcome === "confermato" && lead.salespersonAssigned && (
-                                <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-5 border-dashed">
-                                    <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <User className="w-4 h-4 text-gray-600" />
-                                        Esito Appuntamento ({lead.salespersonAssigned})
+                                <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 border-dashed animate-in fade-in">
+                                    <h3 className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-2">
+                                        <User className="w-4 h-4 text-slate-500" />
+                                        Esito Post Appuntamento ({lead.salespersonAssigned})
                                     </h3>
 
                                     <div className="space-y-4">
-                                        <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:ring-1 focus:ring-gray-400 bg-white">
+                                        <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} className="w-full px-4 py-3 border-2 border-slate-300 rounded-xl font-bold text-slate-700 outline-none focus:border-slate-500 bg-white shadow-sm transition-colors">
                                             <option value="">Seleziona esito finale...</option>
-                                            <option value="Chiuso">✅ Chiuso</option>
-                                            <option value="Non chiuso">❌ Non chiuso</option>
+                                            <option value="Chiuso">✅ Vendita Chiusa</option>
+                                            <option value="Non chiuso">❌ Non Chiuso</option>
                                             <option value="Lead non presenziato">⏳ Lead non presenziato</option>
                                         </select>
 
                                         <textarea
                                             value={spNotes}
                                             onChange={e => setSpNotes(e.target.value)}
-                                            placeholder="Note opzionali esito venditore..."
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:ring-1 focus:ring-gray-400 bg-white resize-none"
+                                            placeholder="Note opzionali per l'esito finale..."
+                                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-400 bg-white resize-none shadow-sm font-medium text-slate-700"
                                             rows={2}
                                         />
 
-                                        <button onClick={handleSaveSpOutcome} disabled={savingSpOutcome || !spOutcome} className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-lg transition-colors font-medium disabled:opacity-50">
-                                            {savingSpOutcome ? "Salvataggio..." : "Salva Esito Finale"}
+                                        <button onClick={handleSaveSpOutcome} disabled={savingSpOutcome || !spOutcome} className="w-full mt-2 py-3 bg-slate-800 hover:bg-black text-white rounded-xl transition-colors font-bold disabled:opacity-50 shadow-md">
+                                            {savingSpOutcome ? "Salvataggio..." : "Registra Esito Finale"}
                                         </button>
                                     </div>
                                 </div>

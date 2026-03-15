@@ -47,6 +47,12 @@ export const leads = pgTable('leads', {
     discardReason: text('discardReason'),
 
     // Conferme Flow
+    confCall1At: timestamp('confCall1At', { withTimezone: true, mode: 'date' }),
+    confCall2At: timestamp('confCall2At', { withTimezone: true, mode: 'date' }),
+    confCall3At: timestamp('confCall3At', { withTimezone: true, mode: 'date' }),
+    confVslUnseen: boolean('confVslUnseen').default(false).notNull(),
+    confNeedsReschedule: boolean('confNeedsReschedule').default(false).notNull(),
+
     confirmationsOutcome: text('confirmationsOutcome'),
     confirmationsDiscardReason: text('confirmationsDiscardReason'),
     confirmationsUserId: text('confirmationsUserId'),
