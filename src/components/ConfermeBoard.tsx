@@ -315,17 +315,35 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         if (nrFilter === '0') targetLeads = targetLeads.filter(l => !l.lead.confCall1At);
         if (nrFilter === '1') targetLeads = targetLeads.filter(l => l.lead.confCall1At && !l.lead.confCall2At && !l.lead.confCall3At);
         if (nrFilter === '2') targetLeads = targetLeads.filter(l => l.lead.confCall2At && !l.lead.confCall3At);
-        if (nrFilter === '3') targetLeads = targetLeads.filter(l => l.lead.confCall3At);
+        // Calculate Snoozed logic
+        const snoozedLeads = activeLeads.filter(l => l.lead.confSnoozeAt && new Date(l.lead.confSnoozeAt).getTime() > new Date().getTime());
+        const normalTargetLeads = targetLeads.filter(l => !l.lead.confSnoozeAt || new Date(l.lead.confSnoozeAt).getTime() <= new Date().getTime());
 
         return (
-            <div className="flex flex-col w-full max-w-5xl mx-auto pb-12">
-                {filtersJSX}
-                <div className="flex flex-col w-full bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
-                    {targetLeads.length === 0 ? (
-                        <div className="text-center py-6 text-slate-500 text-sm font-medium">Nessun lead corrispondente ai filtri in questa fascia oraria.</div>
-                    ) : (
-                        targetLeads.map(renderRowComponent)
-                    )}
+            <div className="flex flex-col xl:flex-row w-full max-w-[1400px] mx-auto pb-12 gap-6 items-start px-2">
+                <div className="flex flex-col w-full xl:w-2/3">
+                    {filtersJSX}
+                    <div className="flex flex-col w-full bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
+                        {normalTargetLeads.length === 0 ? (
+                            <div className="text-center py-6 text-slate-500 text-sm font-medium">Nessun lead corrispondente ai filtri in questa fascia oraria.</div>
+                        ) : (
+                            normalTargetLeads.map(renderRowComponent)
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex flex-col w-full xl:w-1/3 mt-4 xl:mt-0 pt-0 xl:pt-[72px]">
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 shadow-sm mb-4">
+                        <h3 className="text-purple-800 font-bold mb-1 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Richiamati In Giornata</h3>
+                        <p className="text-[12px] text-purple-700/80 leading-tight">Lead spostati temporaneamente ("Snooze"). Suonerà una sveglia all'orario stabilito.</p>
+                    </div>
+                    <div className="flex flex-col bg-white border border-gray-200 rounded-xl p-2 shadow-sm min-h-[150px]">
+                        {snoozedLeads.length === 0 ? (
+                            <div className="text-center my-auto py-6 text-slate-400 text-xs font-semibold">Nessun richiamo attivo.</div>
+                        ) : (
+                            snoozedLeads.map(renderRowComponent)
+                        )}
+                    </div>
                 </div>
             </div>
         );

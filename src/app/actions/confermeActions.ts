@@ -62,7 +62,7 @@ export async function getConfermeAppointments(filters: {
         const end = new Date(todayRome);
         end.setDate(end.getDate() + 4);
 
-        conditions.push(between(leads.appointmentDate, start, end));
+        conditions.push(or(between(leads.appointmentDate, start, end), eq(leads.confNeedsReschedule, true))!);
     } else if (filters.startDate && filters.endDate) {
         conditions.push(between(leads.appointmentDate, filters.startDate, filters.endDate))
     }
