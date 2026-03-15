@@ -5,6 +5,7 @@ import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, U
 import { getConfermeAppointments, updateLeadDataConferme } from "@/app/actions/confermeActions"
 import { getGlobalPresence } from "@/app/actions/presenceActions"
 import { ConfermeDrawer } from "@/components/ConfermeDrawer"
+import { ConfermeBoardRow } from "@/components/ConfermeBoardRow"
 import { GlobalAlertListener } from "@/components/GlobalAlertListener"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
@@ -210,94 +211,18 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
     }
 
-    const handleQuickNR = async (e: React.MouseEvent, leadItem: LeadData) => {
-        e.stopPropagation()
-        // We open the drawer so the user can quickly confirm the NR there, OR we can execute API here directly.
-        // Actually, the user expects the fast NR to happen on the card. Wait, let's just trigger the fast NR action directly!
-        // Importing recordConfermeNoAnswer at the top to fix this correctly.
-        setIsDrawerOpen(false);
-        try {
-            const { recordConfermeNoAnswer } = await import('@/app/actions/confermeActions');
-            const res = await recordConfermeNoAnswer(leadItem.lead.id, leadItem.lead.version);
-            if (res.success) {
-                fetchLeads(false);
-            } else {
-                alert(res.error);
-            }
-        } catch (e: any) {
-            alert(e.message);
-        }
-    }
-
     // --- RENDER COMPACT LEAD ROW ---
-    const renderLeadRow = (item: LeadData) => {
-        const lead = item.lead
-        const isLocked = globalPresence.some(p => p.leadId === lead.id && p.user.id !== currentUser.id)
-
-        // Count calls made
-        let callsMade = 0;
-        if (lead.confCall1At) callsMade = 1;
-        if (lead.confCall2At) callsMade = 2;
-        if (lead.confCall3At) callsMade = 3;
-
+    const renderRowComponent = (item: LeadData) => {
+        const isLocked = globalPresence.some(p => p.leadId === item.lead.id && p.user.id !== currentUser.id)
         return (
-            <div
-                key={lead.id}
-                onClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
-                className={`flex items-center justify-between py-1.5 px-3 mb-1 text-[13px] border rounded-lg cursor-pointer transition-colors group ${isLocked ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200 hover:border-brand-blue-light hover:bg-slate-50'}`}
-            >
-                {/* Left side: Info */}
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <span className="font-bold text-slate-800 truncate w-48">{lead.name}</span>
-                    <span className="text-slate-500 font-medium w-32 truncate flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400" />{lead.phone}</span>
-                    <span className="text-brand-orange font-bold w-40 truncate">{item.gdo?.displayName || item.gdo?.name || "N/A"}</span>
-
-                    {/* Badge NR */}
-                    {!lead.confirmationsOutcome && callsMade > 0 && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase border border-amber-200 shadow-sm ml-2 flex items-center shrink-0">
-                            {callsMade}° Chiamata a vuoto
-                        </span>
-                    )}
-
-                    {/* Badge Snooze */}
-                    {!lead.confirmationsOutcome && lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() > new Date().getTime() && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shadow-sm ml-2 flex items-center gap-1 shrink-0">
-                            <Clock className="w-3 h-3" />
-                            {new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(lead.confSnoozeAt))}
-                        </span>
-                    )}
-
-                    {isLocked && (
-                        <span className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse border border-amber-200 ml-2 shrink-0">
-                            <Users className="w-3 h-3" /> In Lavorazione
-                        </span>
-                    )}
-                </div>
-
-                {/* Right side: Actions */}
-                <div className="flex items-center gap-3 shrink-0">
-                    {lead.confirmationsOutcome === "confermato" ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
-                        </span>
-                    ) : lead.confirmationsOutcome === "scartato" ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                            <XCircle className="w-3.5 h-3.5 mr-1" /> Scartato
-                        </span>
-                    ) : null}
-
-                    {/* NR rapido integrato riga - visibile solo per i da lavorare */}
-                    {!isLocked && !lead.confirmationsOutcome && (
-                        <button
-                            onClick={(e) => handleQuickNR(e, item)}
-                            disabled={callsMade >= 3}
-                            className="bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-300 text-slate-500 hover:text-rose-600 px-2 py-1 rounded-md text-[11px] font-bold transition-colors z-10 disabled:opacity-50"
-                        >
-                            NR
-                        </button>
-                    )}
-                </div>
-            </div>
+            <ConfermeBoardRow
+                key={item.lead.id}
+                item={item}
+                currentUser={currentUser}
+                isLocked={isLocked}
+                onRefresh={() => fetchLeads(false)}
+                onRowClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
+            />
         )
     }
 
@@ -399,7 +324,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     {targetLeads.length === 0 ? (
                         <div className="text-center py-6 text-slate-500 text-sm font-medium">Nessun lead corrispondente ai filtri in questa fascia oraria.</div>
                     ) : (
-                        targetLeads.map(renderLeadRow)
+                        targetLeads.map(renderRowComponent)
                     )}
                 </div>
             </div>
@@ -476,7 +401,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                     {kanbanData.daDefinire.length === 0 ? (
                                         renderEmptyState("La coda dei parcheggiati è vuota.")
                                     ) : (
-                                        kanbanData.daDefinire.map(renderLeadRow)
+                                        kanbanData.daDefinire.map(renderRowComponent)
                                     )}
                                 </div>
                             </div>
