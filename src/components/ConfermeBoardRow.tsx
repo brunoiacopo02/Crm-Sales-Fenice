@@ -118,12 +118,12 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
             className={`flex flex-col py-2 px-3 mb-2 text-[13px] border rounded-lg cursor-pointer transition-colors group relative ${isLocked ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200 hover:border-brand-blue-light hover:bg-slate-50 shadow-sm'}`}
         >
             {/* Top Row: Info & Actions */}
-            <div className={`flex items-start md:items-center justify-between gap-y-3 gap-x-2 ${layoutMode === 'snooze' ? 'flex-col lg:flex-row' : 'flex-row flex-wrap'}`}>
+            <div className={`flex items-start md:items-center justify-between gap-y-3 gap-x-2 ${layoutMode === 'snooze' ? 'flex-col w-full' : 'flex-row flex-wrap'}`}>
 
                 {/* Left side: Info */}
-                <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0 pointer-events-none flex-wrap">
-                    <span className="font-bold text-slate-800 truncate max-w-[150px] md:max-w-[200px] leading-tight">{lead.name}</span>
-                    <span className="text-slate-500 font-medium whitespace-nowrap flex items-center gap-1.5 shrink-0"><Phone className="w-3.5 h-3.5 text-slate-400" />{lead.phone}</span>
+                <div className={`flex items-center gap-2 md:gap-4 flex-1 min-w-0 pointer-events-none flex-wrap ${layoutMode === 'snooze' ? 'w-full' : ''}`}>
+                    <span className={`font-bold text-slate-800 leading-tight ${layoutMode === 'snooze' ? 'w-full text-sm' : 'truncate max-w-[150px] md:max-w-[200px]'}`}>{lead.name}</span>
+                    <span className={`text-slate-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-slate-400" />{lead.phone}</span>
 
                     {/* Hide GDO name in Snooze mode on small columns to save space */}
                     {layoutMode !== 'snooze' && (
@@ -160,7 +160,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                 </div>
 
                 {/* Right side: Actions */}
-                <div className={`flex items-center gap-2 shrink-0 relative ${layoutMode === 'snooze' ? 'w-full lg:w-auto justify-end' : ''}`}>
+                <div className={`flex items-center gap-2 shrink-0 relative ${layoutMode === 'snooze' ? 'w-full mt-2 pt-2 border-t border-gray-100 flex-wrap justify-start' : 'justify-end'}`}>
                     {lead.confirmationsOutcome === "confermato" ? (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato

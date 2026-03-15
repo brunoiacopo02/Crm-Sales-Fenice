@@ -410,21 +410,29 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                             </div>
                         )}
 
-                        {viewMode === 'da_definire' && (
-                            <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-12">
-                                <div className="w-full mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
-                                    <h2 className="text-lg font-black text-blue-800 uppercase tracking-wide mb-1 flex items-center gap-2"><Clock className="w-5 h-5" /> Richiami Programmati</h2>
-                                    <p className="text-blue-700/80 font-medium text-sm">Lead parcheggiati in attesa della data prestabilita.</p>
+                        {viewMode === 'da_definire' && (() => {
+                            const sortedDaDefinire = [...kanbanData.daDefinire].sort((a, b) => {
+                                if (!a.lead.recallDate) return 1;
+                                if (!b.lead.recallDate) return -1;
+                                return new Date(a.lead.recallDate).getTime() - new Date(b.lead.recallDate).getTime();
+                            });
+
+                            return (
+                                <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-12">
+                                    <div className="w-full mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
+                                        <h2 className="text-lg font-black text-blue-800 uppercase tracking-wide mb-1 flex items-center gap-2"><Clock className="w-5 h-5" /> Richiami Programmati</h2>
+                                        <p className="text-blue-700/80 font-medium text-sm">Lead parcheggiati in attesa della data prestabilita.</p>
+                                    </div>
+                                    <div className="w-full flex flex-col bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
+                                        {sortedDaDefinire.length === 0 ? (
+                                            renderEmptyState("La coda dei parcheggiati è vuota.")
+                                        ) : (
+                                            sortedDaDefinire.map(l => renderRowComponent(l, 'richiami'))
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="w-full flex flex-col bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
-                                    {kanbanData.daDefinire.length === 0 ? (
-                                        renderEmptyState("La coda dei parcheggiati è vuota.")
-                                    ) : (
-                                        kanbanData.daDefinire.map(l => renderRowComponent(l, 'richiami'))
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                            );
+                        })()}
 
                         {viewMode === 'table' && (
                             <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8 max-w-[1400px] mx-auto w-full">
