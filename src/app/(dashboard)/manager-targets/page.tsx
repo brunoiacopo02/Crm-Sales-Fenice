@@ -2,6 +2,7 @@ import { getManagerTargetsData } from '@/app/actions/targetActions';
 import ManagerTargetsClient from './ManagerTargetsClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
+import { ManagerOperativaBoard } from "@/components/ManagerOperativaBoard"
 
 export default async function ManagerTargetsPage({
     searchParams
@@ -25,10 +26,16 @@ export default async function ManagerTargetsPage({
     const data = await getManagerTargetsData(selectedMonth);
 
     return (
-        <ManagerTargetsClient
-            initialData={data}
-            selectedMonth={selectedMonth}
-            role={role}
-        />
+        <div className="space-y-8">
+            <ManagerTargetsClient
+                initialData={data}
+                selectedMonth={selectedMonth}
+                role={role}
+            />
+
+            <div className="max-w-7xl mx-auto mb-8 px-4 sm:px-6 lg:px-8">
+                <ManagerOperativaBoard />
+            </div>
+        </div>
     );
 }

@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { TeamManagementClient } from "@/components/TeamManagementClient"
 import { ManagerSprintCard } from "@/components/ManagerSprintCard"
 import { TeamGoalAdminClient } from "@/components/TeamGoalAdminClient"
-import { ManagerOperativaBoard } from "@/components/ManagerOperativaBoard"
 
 export default async function TeamPage() {
     const supabase = await createClient();
@@ -43,8 +42,6 @@ export default async function TeamPage() {
             </div>
 
             <ManagerSprintCard managerId={session.user.id} />
-
-            <ManagerOperativaBoard />
 
             <TeamGoalAdminClient />
 
