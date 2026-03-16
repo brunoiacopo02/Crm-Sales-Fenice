@@ -57,6 +57,7 @@ export function Sidebar() {
     } else if (role === "CONFERME") {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
+            { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
         ]
     } else if (role === "VENDITORE") {
         navItems = [
@@ -82,6 +83,7 @@ export function Sidebar() {
                 { name: "Importa Lead", href: "/import", icon: Upload },
                 { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
                 { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
+                { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
             ]
         }
     }
