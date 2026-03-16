@@ -14,7 +14,25 @@ export function TeamManagementClient() {
 
     // State per l'editing in linea
     const [editingId, setEditingId] = useState<string | null>(null)
-    const [editData, setEditData] = useState<{ displayName: string, isActive: boolean, dailyApptTarget: number, weeklyConfirmedTarget: number, confermeTargetTier1: number, confermeTargetTier2: number }>({ displayName: '', isActive: true, dailyApptTarget: 2, weeklyConfirmedTarget: 5, confermeTargetTier1: 19, confermeTargetTier2: 24 })
+    const [editData, setEditData] = useState<{
+        displayName: string,
+        isActive: boolean,
+        dailyApptTarget: number,
+        weeklyConfirmedTarget: number,
+        confermeTargetTier1: number,
+        confermeTargetTier2: number,
+        confermeExtraTier1: number,
+        confermeExtraTier2: number
+    }>({
+        displayName: '',
+        isActive: true,
+        dailyApptTarget: 2,
+        weeklyConfirmedTarget: 5,
+        confermeTargetTier1: 19,
+        confermeTargetTier2: 24,
+        confermeExtraTier1: 0,
+        confermeExtraTier2: 0
+    })
 
     // State per Mass Update Targets
     const [massDailyTarget, setMassDailyTarget] = useState(2)
@@ -23,6 +41,8 @@ export function TeamManagementClient() {
     // State per Mass Update Targets Conferme
     const [massConfermeTier1, setMassConfermeTier1] = useState(19)
     const [massConfermeTier2, setMassConfermeTier2] = useState(24)
+    const [massConfermeExtra1, setMassConfermeExtra1] = useState(0)
+    const [massConfermeExtra2, setMassConfermeExtra2] = useState(0)
 
     const [isSavingMass, setIsSavingMass] = useState(false)
 
@@ -65,6 +85,8 @@ export function TeamManagementClient() {
             weeklyConfirmedTarget: user.weeklyConfirmedTarget ?? 5,
             confermeTargetTier1: user.confermeTargetTier1 ?? 19,
             confermeTargetTier2: user.confermeTargetTier2 ?? 24,
+            confermeExtraTier1: user.confermeExtraTier1 ?? 0,
+            confermeExtraTier2: user.confermeExtraTier2 ?? 0,
         })
     }
 
@@ -79,7 +101,7 @@ export function TeamManagementClient() {
                 isActive: editData.isActive
             })
             if (activeTab === 'CONFERME') {
-                await updateConfermeTargets(editData.confermeTargetTier1, editData.confermeTargetTier2, userId)
+                await updateConfermeTargets(editData.confermeTargetTier1, editData.confermeTargetTier2, editData.confermeExtraTier1, editData.confermeExtraTier2, userId)
             } else if (activeTab === 'GDO') {
                 await updateGdoTargets(editData.dailyApptTarget, editData.weeklyConfirmedTarget, userId)
             }
@@ -95,7 +117,7 @@ export function TeamManagementClient() {
             if (!confirm(`Impostare per TUTTI i membri Conferme il target base a ${massConfermeTier1} e avanzato a ${massConfermeTier2}?`)) return
             setIsSavingMass(true)
             try {
-                await updateConfermeTargets(massConfermeTier1, massConfermeTier2, 'ALL')
+                await updateConfermeTargets(massConfermeTier1, massConfermeTier2, massConfermeExtra1, massConfermeExtra2, 'ALL')
                 fetchTeam()
             } catch {
                 alert("Errore salvataggio massivo")
@@ -173,8 +195,16 @@ export function TeamManagementClient() {
                                 <input type="number" min="0" value={massConfermeTier1} onChange={e => setMassConfermeTier1(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                             <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Extra per T1 (€)</label>
+                                <input type="number" min="0" step="50" value={massConfermeExtra1} onChange={e => setMassConfermeExtra1(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                            </div>
+                            <div>
                                 <label className="block text-xs text-gray-500 mb-1 font-medium">Target Plus (T2)</label>
                                 <input type="number" min="0" value={massConfermeTier2} onChange={e => setMassConfermeTier2(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Extra per T2 (€)</label>
+                                <input type="number" min="0" step="50" value={massConfermeExtra2} onChange={e => setMassConfermeExtra2(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                         </>
                     ) : (
@@ -223,7 +253,9 @@ export function TeamManagementClient() {
                             {activeTab === 'GDO' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target G.</th>}
                             {activeTab === 'GDO' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target S.</th>}
                             {activeTab === 'CONFERME' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target Base (T1)</th>}
+                            {activeTab === 'CONFERME' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Extra T1</th>}
                             {activeTab === 'CONFERME' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target Plus (T2)</th>}
+                            {activeTab === 'CONFERME' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Extra T2</th>}
                             <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Stato</th>
                             <th scope="col" className="px-6 py-3 text-right uppercase tracking-wider">Azioni</th>
                         </tr>
@@ -316,12 +348,38 @@ export function TeamManagementClient() {
                                                         <input
                                                             type="number"
                                                             min="0"
+                                                            value={editData.confermeExtraTier1}
+                                                            onChange={e => setEditData({ ...editData, confermeExtraTier1: Number(e.target.value) })}
+                                                            className="w-16 px-2 py-1 border border-brand-orange rounded text-center focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                                                        />
+                                                    ) : (
+                                                        <span className="font-medium text-brand-blue">€{user.confermeExtraTier1 ?? 0}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="number"
+                                                            min="0"
                                                             value={editData.confermeTargetTier2}
                                                             onChange={e => setEditData({ ...editData, confermeTargetTier2: Number(e.target.value) })}
                                                             className="w-16 px-2 py-1 border border-brand-orange rounded text-center focus:outline-none focus:ring-1 focus:ring-brand-orange"
                                                         />
                                                     ) : (
                                                         <span className="font-bold text-green-700">{user.confermeTargetTier2 ?? 24}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={editData.confermeExtraTier2}
+                                                            onChange={e => setEditData({ ...editData, confermeExtraTier2: Number(e.target.value) })}
+                                                            className="w-16 px-2 py-1 border border-brand-orange rounded text-center focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                                                        />
+                                                    ) : (
+                                                        <span className="font-medium text-brand-blue">€{user.confermeExtraTier2 ?? 0}</span>
                                                     )}
                                                 </td>
                                             </>

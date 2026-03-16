@@ -101,14 +101,14 @@ export async function updateGdoTargets(dailyApptTarget: number, weeklyConfirmedT
     return { success: true }
 }
 
-export async function updateConfermeTargets(confermeTargetTier1: number, confermeTargetTier2: number, scope: 'ALL' | string) {
+export async function updateConfermeTargets(confermeTargetTier1: number, confermeTargetTier2: number, confermeExtraTier1: number, confermeExtraTier2: number, scope: 'ALL' | string) {
     if (scope === 'ALL') {
         await db.update(users)
-            .set({ confermeTargetTier1, confermeTargetTier2 })
+            .set({ confermeTargetTier1, confermeTargetTier2, confermeExtraTier1, confermeExtraTier2 })
             .where(eq(users.role, 'CONFERME'))
     } else {
         await db.update(users)
-            .set({ confermeTargetTier1, confermeTargetTier2 })
+            .set({ confermeTargetTier1, confermeTargetTier2, confermeExtraTier1, confermeExtraTier2 })
             .where(eq(users.id, scope))
     }
     return { success: true }

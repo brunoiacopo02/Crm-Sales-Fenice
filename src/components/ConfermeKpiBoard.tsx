@@ -341,9 +341,9 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                 </div>
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
+            <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 overflow-y-auto w-full pb-10">
                 {/* Main KPI Flow */}
-                <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex-1 flex flex-col min-w-0 overflow-x-auto w-full">
                     {renderProgressBar()}
                     {renderBlockGrid()}
                     {renderMonthlyTabular()}

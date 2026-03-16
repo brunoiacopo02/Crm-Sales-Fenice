@@ -56,8 +56,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const totalConfirmedAct = dailyStats.reduce((acc, curr) => acc + curr.confirmed, 0)
 
     // Calculate Targets based on user info if confermeUserId is provided, else aggregate defaults
-    let tier1Target = 19 * 4; // approximate month
-    let tier2Target = 24 * 4;
+    let tier1Target = 0;
+    let tier2Target = 0;
 
     if (confermeUserId) {
         const userRow = await db.select().from(users).where(eq(users.id, confermeUserId)).limit(1);
@@ -66,7 +66,15 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             tier2Target = (userRow[0].confermeTargetTier2 || 24) * 4;
         }
     } else {
-        // Alternatively, calculate for the whole team if no userId. Or assume global target.
+        // Aggregate for the whole conferme team
+        const allConferme = await db.select().from(users).where(eq(users.role, 'CONFERME'));
+        if (allConferme.length > 0) {
+            tier1Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier1 || 19), 0) * 4;
+            tier2Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier2 || 24), 0) * 4;
+        } else {
+            tier1Target = 19 * 4;
+            tier2Target = 24 * 4;
+        }
     }
 
     // For weekly targets visual progress bar on the current week
@@ -82,14 +90,23 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         ).length;
     }
 
-    let weeklyTier1Target = 19;
-    let weeklyTier2Target = 24;
+    let weeklyTier1Target = 0;
+    let weeklyTier2Target = 0;
 
     if (confermeUserId) {
         const userRow = await db.select().from(users).where(eq(users.id, confermeUserId)).limit(1);
         if (userRow.length > 0) {
             weeklyTier1Target = userRow[0].confermeTargetTier1 || 19;
             weeklyTier2Target = userRow[0].confermeTargetTier2 || 24;
+        }
+    } else {
+        const allConferme = await db.select().from(users).where(eq(users.role, 'CONFERME'));
+        if (allConferme.length > 0) {
+            weeklyTier1Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier1 || 19), 0);
+            weeklyTier2Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier2 || 24), 0);
+        } else {
+            weeklyTier1Target = 19;
+            weeklyTier2Target = 24;
         }
     }
 
