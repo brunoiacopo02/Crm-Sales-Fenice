@@ -93,17 +93,65 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         }
     }
 
+    const workingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
+    const totalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
+
+    // --- EXCEL FORMULAS & MOCKS ---
+    const buildRow = (label: string, actAbs: number, targetMax: number, today: number) => {
+        const targetDay = targetMax / (totalWorkingDays || 1)
+        const targetPrev = Math.round(targetDay * workingDaysPassed)
+
+        const actPct = targetMax ? (actAbs / targetMax) * 100 : 0
+        const prevPct = targetMax ? (targetPrev / targetMax) * 100 : 0
+
+        const scostamentoAbs = actAbs - targetPrev
+        const scostamentoPct = targetPrev ? (scostamentoAbs / targetPrev) * 100 : 0
+
+        let badge: 'OK' | 'PRE-RISK' | 'ALLERT' = 'OK'
+        if (scostamentoPct < -20) badge = 'ALLERT'
+        else if (scostamentoPct < -5) badge = 'PRE-RISK'
+
+        // Mock data primo -20% string if alert
+        const dataPrimo = badge === 'ALLERT' ? format(new Date(Date.now() - 3 * 86400000), 'dd/MM/yyyy') : '-'
+
+        return {
+            label,
+            actAbs,
+            actPct,
+            prevAbs: targetPrev,
+            prevPct,
+            targetDay,
+            today,
+            targetMax,
+            scostamentoAbs,
+            scostamentoPct,
+            dataPrimo,
+            badge
+        }
+    }
+
+    const todayConfirmed = dailyStats.find(d => d.date === format(new Date(), 'yyyy-MM-dd'))?.confirmed || 0
+
+    // Appuntamenti
+    const rowAppuntamenti = buildRow("Appuntamenti Confermati", totalConfirmedAct, tier2Target, todayConfirmed)
+
+    // Trattative (Mocked: ~65% of Appuntamenti)
+    const mockTargetTrat = Math.round(tier2Target * 0.65)
+    const mockActTrat = Math.round(totalConfirmedAct * 0.60) // underperforming slightly
+    const todayTrat = Math.round(todayConfirmed * 0.5)
+    const rowTrattative = buildRow("Trattative Presenziate", mockActTrat, mockTargetTrat, todayTrat)
+
+    // Closed (Mocked: ~25% of Trattative)
+    const mockTargetClosed = Math.round(mockTargetTrat * 0.25)
+    const mockActClosed = Math.round(mockActTrat * 0.20)
+    const todayClosed = Math.round(todayTrat * 0.2)
+    const rowClosed = buildRow("Closed (Contratti)", mockActClosed, mockTargetClosed, todayClosed)
+
+    const tableData = [rowAppuntamenti, rowTrattative, rowClosed]
+
     return {
         dailyStats,
-        monthly: {
-            fixed: totalFixed,
-            confirmedAct: totalConfirmedAct,
-            targetTier1: tier1Target,
-            targetTier2: tier2Target,
-            // Calculate pace based on how many days have passed
-            workingDaysPassed: dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length,
-            totalWorkingDays: dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
-        },
+        tableData,
         weekly: {
             confirmedAct: weeklyConfirmedAct,
             targetTier1: weeklyTier1Target,

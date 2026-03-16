@@ -159,36 +159,115 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
 
     const renderMonthlyTabular = () => {
         if (!stats) return null
-        const ms = stats.monthly
-        const targetDay = ms.targetTier1 / ms.totalWorkingDays
-        const targetPrev = Math.round(targetDay * ms.workingDaysPassed)
-
-        let scostamento = ms.confirmedAct - targetPrev
-        const inLoss = scostamento < 0
+        const tableData: any[] = stats.tableData || []
 
         return (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 mt-auto">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4 uppercase tracking-wide text-xs"><TrendingUp className="w-4 h-4 text-gray-400" /> Analisi ACT vs TARGET (Mese)</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="text-xs text-gray-500 font-semibold mb-1">Target MAX (T2)</div>
-                        <div className="text-xl font-black text-gray-800">{ms.targetTier2}</div>
+            <div className="flex flex-col gap-6 mt-auto">
+                {/* Prima Tabella: NUMERI MENSILI */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-4 py-2 border-b border-slate-900">
+                        <h3 className="font-bold text-white text-xs tracking-widest uppercase flex items-center gap-2">
+                            <Target className="w-4 h-4 text-brand-orange" />
+                            Numeri Mensili: ACT vs TARGET
+                        </h3>
                     </div>
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="text-xs text-gray-500 font-semibold mb-1">ACT (Confermati)</div>
-                        <div className="text-xl font-black text-blue-600">{ms.confirmedAct}</div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left text-gray-700 border-collapse">
+                            <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-[10px] border-b border-gray-200">
+                                <tr>
+                                    <th className="px-3 py-2 border-r border-gray-200 w-1/4">Nucleo Obiettivo</th>
+                                    <th colSpan={2} className="px-3 py-2 border-r border-gray-200 text-center bg-blue-50/50 text-blue-800">ACT</th>
+                                    <th colSpan={2} className="px-3 py-2 border-r border-gray-200 text-center bg-slate-100/50">Target Prev</th>
+                                    <th className="px-3 py-2 border-r border-gray-200 text-center">Target / Day</th>
+                                    <th className="px-3 py-2 text-center bg-orange-50/50 text-orange-800">Today</th>
+                                </tr>
+                                <tr className="border-b border-gray-200 bg-white">
+                                    <th className="px-3 py-1 border-r border-gray-200 font-normal">Metriche operative</th>
+                                    <th className="px-3 py-1 border-r border-gray-200 text-center font-semibold text-gray-900">Valore Assoluto</th>
+                                    <th className="px-3 py-1 border-r border-gray-200 text-center font-semibold text-gray-900">Valore %</th>
+                                    <th className="px-3 py-1 border-r border-gray-200 text-center font-semibold text-gray-900">Valore Assoluto</th>
+                                    <th className="px-3 py-1 border-r border-gray-200 text-center font-semibold text-gray-900">Valore %</th>
+                                    <th className="px-3 py-1 border-r border-gray-200 text-center font-semibold text-gray-900">Rate</th>
+                                    <th className="px-3 py-1 text-center font-semibold text-gray-900">Attività</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {tableData.map((row, i) => (
+                                    <tr key={i} className="border-b border-gray-100 hover:bg-slate-50 transition-colors">
+                                        <td className="px-3 py-2 font-bold text-gray-900 border-r border-gray-200">{row.label}</td>
+
+                                        {/* ACT */}
+                                        <td className="px-3 py-2 text-center font-black text-blue-700 bg-blue-50/20">{row.actAbs}</td>
+                                        <td className="px-3 py-2 text-center font-semibold border-r border-gray-200 bg-blue-50/20">{row.actPct.toFixed(1)}%</td>
+
+                                        {/* TARGET PREV */}
+                                        <td className="px-3 py-2 text-center font-bold text-gray-800 bg-slate-50/50">{row.prevAbs}</td>
+                                        <td className="px-3 py-2 text-center font-semibold border-r border-gray-200 bg-slate-50/50">{row.prevPct.toFixed(1)}%</td>
+
+                                        {/* TARGET/DAY */}
+                                        <td className="px-3 py-2 text-center text-gray-500 border-r border-gray-200">{row.targetDay.toFixed(2)}</td>
+
+                                        {/* TODAY */}
+                                        <td className="px-3 py-2 text-center font-black text-brand-orange bg-orange-50/20">{row.today}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="text-xs text-gray-500 font-semibold mb-1">Target PREV (Ad oggi)</div>
-                        <div className="text-xl font-black text-gray-800">{targetPrev}</div>
+                </div>
+
+                {/* Seconda Tabella: SCOSTAMENTO */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-2 border-t-4 border-t-red-400">
+                    <div className="bg-gradient-to-r from-red-50 to-white px-4 py-2 border-b border-gray-200">
+                        <h3 className="font-bold text-red-800 text-xs tracking-widest uppercase flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-400" />
+                            Scostamento Mensile
+                        </h3>
                     </div>
-                    <div className={`p-3 rounded-lg border flex flex-col justify-center ${inLoss ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
-                        <div className={`text-xs font-semibold mb-1 flex items-center gap-1 ${inLoss ? 'text-red-600' : 'text-green-600'}`}>
-                            Scostamento {inLoss ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                        </div>
-                        <div className={`text-xl font-black ${inLoss ? 'text-red-700' : 'text-green-700'}`}>
-                            {scostamento > 0 ? '+' : ''}{scostamento}
-                        </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left text-gray-700 border-collapse">
+                            <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-[10px] border-b border-gray-200">
+                                <tr>
+                                    <th className="px-3 py-2 border-r border-gray-200 w-1/4">Nucleo Obiettivo</th>
+                                    <th className="px-3 py-2 border-r border-gray-200 text-center">Val Assoluto (-/+)</th>
+                                    <th className="px-3 py-2 border-r border-gray-200 text-center">Valore %</th>
+                                    <th className="px-3 py-2 border-r border-gray-200 text-center">Data Primo -20%</th>
+                                    <th className="px-3 py-2 text-center">Da Segnalare</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {tableData.map((row, i) => {
+                                    const isNegative = row.scostamentoAbs < 0;
+                                    return (
+                                        <tr key={i} className="border-b border-gray-100 hover:bg-slate-50 transition-colors">
+                                            <td className="px-3 py-2 font-bold text-gray-900 border-r border-gray-200 bg-slate-50/30">{row.label}</td>
+
+                                            <td className={`px-3 py-2 text-center font-black border-r border-gray-200 ${isNegative ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                                                {row.scostamentoAbs > 0 ? '+' : ''}{row.scostamentoAbs}
+                                            </td>
+
+                                            <td className={`px-3 py-2 text-center font-bold border-r border-gray-200 ${isNegative ? 'text-red-600' : 'text-green-600'}`}>
+                                                {row.scostamentoPct > 0 ? '+' : ''}{row.scostamentoPct.toFixed(1)}%
+                                            </td>
+
+                                            <td className="px-3 py-2 text-center border-r border-gray-200 text-gray-500 font-mono">
+                                                {row.dataPrimo}
+                                            </td>
+
+                                            <td className="px-3 py-2 text-center">
+                                                <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider
+                                                    ${row.badge === 'ALLERT' ? 'bg-red-100 text-red-800 border border-red-200 shadow-sm' :
+                                                        row.badge === 'PRE-RISK' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 shadow-sm' :
+                                                            'bg-green-100 text-green-800 border border-green-200 shadow-sm'}`}
+                                                >
+                                                    {row.badge}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
