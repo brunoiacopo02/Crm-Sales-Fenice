@@ -25,16 +25,16 @@ export async function seedGdoAccounts() {
             const newId = crypto.randomUUID()
 
             await db.insert(users).values({
-                            id: newId,
-                            name: `GDO ${code}`, // Display Name di default
-                            email: `${username}@fenice.local`, // Fake internal email, usata come username nel login
-                            password: hashedPassword,
-                            role: 'GDO',
-                            gdoCode: code,
-                            displayName: `GDO ${code}`,
-                            isActive: true,
-                            createdAt: new Date(),
-                        })
+                id: newId,
+                name: `GDO ${code}`, // Display Name di default
+                email: `${username}@fenice.local`, // Fake internal email, usata come username nel login
+                password: hashedPassword,
+                role: 'GDO',
+                gdoCode: code,
+                displayName: `GDO ${code}`,
+                isActive: true,
+                createdAt: new Date(),
+            })
 
             newAccounts.push({
                 username: `${username}@fenice.local`,
@@ -56,30 +56,32 @@ export async function seedGdoAccounts() {
 
 export async function getTeamAccounts() {
     return await db.select({
-            id: users.id,
-            name: users.name,
-            email: users.email,
-            gdoCode: users.gdoCode,
-            displayName: users.displayName,
-            avatarUrl: users.avatarUrl,
-            isActive: users.isActive,
-            dailyApptTarget: users.dailyApptTarget,
-            weeklyConfirmedTarget: users.weeklyConfirmedTarget,
-            role: users.role,
-        })
-            .from(users)
-            .where(inArray(users.role, ['GDO', 'VENDITORE']))
-            .orderBy(users.role, users.gdoCode)
-        
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        gdoCode: users.gdoCode,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        isActive: users.isActive,
+        dailyApptTarget: users.dailyApptTarget,
+        weeklyConfirmedTarget: users.weeklyConfirmedTarget,
+        confermeTargetTier1: users.confermeTargetTier1,
+        confermeTargetTier2: users.confermeTargetTier2,
+        role: users.role,
+    })
+        .from(users)
+        .where(inArray(users.role, ['GDO', 'VENDITORE', 'CONFERME']))
+        .orderBy(users.role, users.gdoCode)
+
 }
 
 export async function updateGdoProfile(userId: string, data: { displayName?: string, avatarUrl?: string, isActive?: boolean }) {
     await db.update(users)
-            .set({
-                ...data,
-            })
-            .where(eq(users.id, userId))
-        
+        .set({
+            ...data,
+        })
+        .where(eq(users.id, userId))
+
 
     return { success: true }
 }
@@ -87,14 +89,27 @@ export async function updateGdoProfile(userId: string, data: { displayName?: str
 export async function updateGdoTargets(dailyApptTarget: number, weeklyConfirmedTarget: number, scope: 'ALL' | string) {
     if (scope === 'ALL') {
         await db.update(users)
-                    .set({ dailyApptTarget, weeklyConfirmedTarget })
-                    .where(eq(users.role, 'GDO'))
-            
+            .set({ dailyApptTarget, weeklyConfirmedTarget })
+            .where(eq(users.role, 'GDO'))
+
     } else {
         await db.update(users)
-                    .set({ dailyApptTarget, weeklyConfirmedTarget })
-                    .where(eq(users.id, scope))
-            
+            .set({ dailyApptTarget, weeklyConfirmedTarget })
+            .where(eq(users.id, scope))
+
+    }
+    return { success: true }
+}
+
+export async function updateConfermeTargets(confermeTargetTier1: number, confermeTargetTier2: number, scope: 'ALL' | string) {
+    if (scope === 'ALL') {
+        await db.update(users)
+            .set({ confermeTargetTier1, confermeTargetTier2 })
+            .where(eq(users.role, 'CONFERME'))
+    } else {
+        await db.update(users)
+            .set({ confermeTargetTier1, confermeTargetTier2 })
+            .where(eq(users.id, scope))
     }
     return { success: true }
 }

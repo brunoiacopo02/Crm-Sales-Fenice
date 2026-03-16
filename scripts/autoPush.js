@@ -14,7 +14,7 @@ proc.stdout.on('data', (data) => {
         proc.stdin.write('\r\n');
     }
 
-    if (output.includes('Do you still want to push changes?')) {
+    if (output.includes('Do you still want to push changes?') || output.includes('You are about to execute current statements:')) {
         // Option 1 is 'No, abort'. Option 2 is 'Yes, I want to execute all statements'.
         // Press down arrow then enter.
         proc.stdin.write('\x1b[B\r\n');

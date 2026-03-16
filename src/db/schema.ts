@@ -18,6 +18,8 @@ export const users = pgTable('users', {
     // Targets
     dailyApptTarget: integer('dailyApptTarget').default(2).notNull(),
     weeklyConfirmedTarget: integer('weeklyConfirmedTarget').default(5).notNull(),
+    confermeTargetTier1: integer('confermeTargetTier1').default(19).notNull(),
+    confermeTargetTier2: integer('confermeTargetTier2').default(24).notNull(),
 
     // --- GAME & FINANCIAL FIELDS ---
     baseSalaryEur: real('baseSalaryEur').default(1350).notNull(),

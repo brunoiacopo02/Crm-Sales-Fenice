@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getTeamAccounts, seedGdoAccounts, updateGdoProfile, updateGdoTargets } from "@/app/actions/teamActions"
+import { getTeamAccounts, seedGdoAccounts, updateGdoProfile, updateGdoTargets, updateConfermeTargets } from "@/app/actions/teamActions"
 import { User, ShieldAlert, Check, X, Edit2, KeyRound } from "lucide-react"
 
 export function TeamManagementClient() {
@@ -10,15 +10,20 @@ export function TeamManagementClient() {
     const [seedResult, setSeedResult] = useState<any>(null)
     const [isSeeding, setIsSeeding] = useState(false)
 
-    const [activeTab, setActiveTab] = useState<'GDO' | 'VENDITORE'>('GDO')
+    const [activeTab, setActiveTab] = useState<'GDO' | 'VENDITORE' | 'CONFERME'>('GDO')
 
     // State per l'editing in linea
     const [editingId, setEditingId] = useState<string | null>(null)
-    const [editData, setEditData] = useState<{ displayName: string, isActive: boolean, dailyApptTarget: number, weeklyConfirmedTarget: number }>({ displayName: '', isActive: true, dailyApptTarget: 2, weeklyConfirmedTarget: 5 })
+    const [editData, setEditData] = useState<{ displayName: string, isActive: boolean, dailyApptTarget: number, weeklyConfirmedTarget: number, confermeTargetTier1: number, confermeTargetTier2: number }>({ displayName: '', isActive: true, dailyApptTarget: 2, weeklyConfirmedTarget: 5, confermeTargetTier1: 19, confermeTargetTier2: 24 })
 
     // State per Mass Update Targets
     const [massDailyTarget, setMassDailyTarget] = useState(2)
     const [massWeeklyTarget, setMassWeeklyTarget] = useState(5)
+
+    // State per Mass Update Targets Conferme
+    const [massConfermeTier1, setMassConfermeTier1] = useState(19)
+    const [massConfermeTier2, setMassConfermeTier2] = useState(24)
+
     const [isSavingMass, setIsSavingMass] = useState(false)
 
     const fetchTeam = async () => {
@@ -57,7 +62,9 @@ export function TeamManagementClient() {
             displayName: user.displayName || user.name || '',
             isActive: user.isActive,
             dailyApptTarget: user.dailyApptTarget ?? 2,
-            weeklyConfirmedTarget: user.weeklyConfirmedTarget ?? 5
+            weeklyConfirmedTarget: user.weeklyConfirmedTarget ?? 5,
+            confermeTargetTier1: user.confermeTargetTier1 ?? 19,
+            confermeTargetTier2: user.confermeTargetTier2 ?? 24,
         })
     }
 
@@ -71,7 +78,11 @@ export function TeamManagementClient() {
                 displayName: editData.displayName,
                 isActive: editData.isActive
             })
-            await updateGdoTargets(editData.dailyApptTarget, editData.weeklyConfirmedTarget, userId)
+            if (activeTab === 'CONFERME') {
+                await updateConfermeTargets(editData.confermeTargetTier1, editData.confermeTargetTier2, userId)
+            } else if (activeTab === 'GDO') {
+                await updateGdoTargets(editData.dailyApptTarget, editData.weeklyConfirmedTarget, userId)
+            }
             setEditingId(null)
             fetchTeam()
         } catch (error) {
@@ -80,15 +91,28 @@ export function TeamManagementClient() {
     }
 
     const handleMassUpdateTargets = async () => {
-        if (!confirm(`Impostare per TUTTI i GDO il target a ${massDailyTarget} giornaliero e ${massWeeklyTarget} settimanale?`)) return
-        setIsSavingMass(true)
-        try {
-            await updateGdoTargets(massDailyTarget, massWeeklyTarget, 'ALL')
-            fetchTeam()
-        } catch {
-            alert("Errore salvataggio massivo")
-        } finally {
-            setIsSavingMass(false)
+        if (activeTab === 'CONFERME') {
+            if (!confirm(`Impostare per TUTTI i membri Conferme il target base a ${massConfermeTier1} e avanzato a ${massConfermeTier2}?`)) return
+            setIsSavingMass(true)
+            try {
+                await updateConfermeTargets(massConfermeTier1, massConfermeTier2, 'ALL')
+                fetchTeam()
+            } catch {
+                alert("Errore salvataggio massivo")
+            } finally {
+                setIsSavingMass(false)
+            }
+        } else if (activeTab === 'GDO') {
+            if (!confirm(`Impostare per TUTTI i GDO il target a ${massDailyTarget} giornaliero e ${massWeeklyTarget} settimanale?`)) return
+            setIsSavingMass(true)
+            try {
+                await updateGdoTargets(massDailyTarget, massWeeklyTarget, 'ALL')
+                fetchTeam()
+            } catch {
+                alert("Errore salvataggio massivo")
+            } finally {
+                setIsSavingMass(false)
+            }
         }
     }
 
@@ -127,6 +151,12 @@ export function TeamManagementClient() {
                 >
                     Venditori (Closer)
                 </button>
+                <button
+                    onClick={() => setActiveTab('CONFERME')}
+                    className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${activeTab === 'CONFERME' ? 'border-b-2 border-brand-orange text-brand-orange bg-orange-50/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                >
+                    Operatori Conferme
+                </button>
             </div>
 
             {/* Mass Target Settings */}
@@ -136,15 +166,30 @@ export function TeamManagementClient() {
                     <p className="text-xs text-gray-500 max-w-sm">Imposta o sovrascrivi gli obiettivi per tutti i membri del team contemporaneamente.</p>
                 </div>
                 <div className="flex items-end gap-3 ml-auto">
-                    <div>
-                        <label className="block text-xs text-gray-500 mb-1 font-medium">Target Appuntamenti/Giorno</label>
-                        <input type="number" min="0" value={massDailyTarget} onChange={e => setMassDailyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
-                    </div>
-                    <div>
-                        <label className="block text-xs text-gray-500 mb-1 font-medium">Target Conferme/Settimana</label>
-                        <input type="number" min="0" value={massWeeklyTarget} onChange={e => setMassWeeklyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
-                    </div>
-                    <button onClick={handleMassUpdateTargets} disabled={isSavingMass} className="px-4 py-1.5 bg-brand-orange text-white text-sm font-medium rounded hover:bg-orange-600 transition-colors disabled:opacity-50 h-[34px]">
+                    {activeTab === 'CONFERME' ? (
+                        <>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Base (T1)</label>
+                                <input type="number" min="0" value={massConfermeTier1} onChange={e => setMassConfermeTier1(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Plus (T2)</label>
+                                <input type="number" min="0" value={massConfermeTier2} onChange={e => setMassConfermeTier2(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Appuntamenti/Giorno</label>
+                                <input type="number" min="0" value={massDailyTarget} onChange={e => setMassDailyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Conferme/Settimana</label>
+                                <input type="number" min="0" value={massWeeklyTarget} onChange={e => setMassWeeklyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                            </div>
+                        </>
+                    )}
+                    <button onClick={handleMassUpdateTargets} disabled={isSavingMass || activeTab === 'VENDITORE'} className="px-4 py-1.5 bg-brand-orange text-white text-sm font-medium rounded hover:bg-orange-600 transition-colors disabled:opacity-50 h-[34px]">
                         Applica a Tutti
                     </button>
                 </div>
@@ -177,6 +222,8 @@ export function TeamManagementClient() {
                             <th scope="col" className="px-6 py-3 text-left uppercase tracking-wider">Display Name</th>
                             {activeTab === 'GDO' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target G.</th>}
                             {activeTab === 'GDO' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target S.</th>}
+                            {activeTab === 'CONFERME' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target Base (T1)</th>}
+                            {activeTab === 'CONFERME' && <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Target Plus (T2)</th>}
                             <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Stato</th>
                             <th scope="col" className="px-6 py-3 text-right uppercase tracking-wider">Azioni</th>
                         </tr>
@@ -245,6 +292,36 @@ export function TeamManagementClient() {
                                                         />
                                                     ) : (
                                                         <span className="font-bold text-green-700">{user.weeklyConfirmedTarget ?? 5}</span>
+                                                    )}
+                                                </td>
+                                            </>
+                                        )}
+                                        {activeTab === 'CONFERME' && (
+                                            <>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={editData.confermeTargetTier1}
+                                                            onChange={e => setEditData({ ...editData, confermeTargetTier1: Number(e.target.value) })}
+                                                            className="w-16 px-2 py-1 border border-brand-orange rounded text-center focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                                                        />
+                                                    ) : (
+                                                        <span className="font-bold">{user.confermeTargetTier1 ?? 19}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={editData.confermeTargetTier2}
+                                                            onChange={e => setEditData({ ...editData, confermeTargetTier2: Number(e.target.value) })}
+                                                            className="w-16 px-2 py-1 border border-brand-orange rounded text-center focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                                                        />
+                                                    ) : (
+                                                        <span className="font-bold text-green-700">{user.confermeTargetTier2 ?? 24}</span>
                                                     )}
                                                 </td>
                                             </>
