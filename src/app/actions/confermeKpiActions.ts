@@ -3,23 +3,25 @@
 import { db } from "@/db"
 import { leads, users } from "@/db/schema"
 import { eq, and, gte, lte, asc, sql } from "drizzle-orm"
-import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek } from "date-fns"
+import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 
 export async function getConfermeKpiStats(monthDate: Date = new Date(), confermeUserId?: string) {
     const start = startOfMonth(monthDate)
     const end = endOfMonth(monthDate)
+    const calendarStart = startOfWeek(start, { weekStartsOn: 1 })
+    const calendarEnd = endOfWeek(end, { weekStartsOn: 1 })
 
     const conditionsConfirmations = [
-        gte(leads.confirmationsTimestamp, start),
-        lte(leads.confirmationsTimestamp, end)
+        gte(leads.confirmationsTimestamp, calendarStart),
+        lte(leads.confirmationsTimestamp, calendarEnd)
     ]
     if (confermeUserId) {
         conditionsConfirmations.push(eq(leads.confirmationsUserId, confermeUserId))
     }
 
     const conditionsFixed = [
-        gte(leads.appointmentCreatedAt, start),
-        lte(leads.appointmentCreatedAt, end)
+        gte(leads.appointmentCreatedAt, calendarStart),
+        lte(leads.appointmentCreatedAt, calendarEnd)
     ]
 
     // Fetch confirmed & discarded leads
@@ -77,19 +79,6 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         }
     }
 
-    // For weekly targets visual progress bar on the current week
-    const currentStartOfWeek = startOfWeek(new Date(), { weekStartsOn: 1 }) // Monday
-    const currentEndOfWeek = endOfWeek(new Date(), { weekStartsOn: 1 })
-
-    let weeklyConfirmedAct = 0;
-    if (monthDate.getMonth() === new Date().getMonth()) {
-        weeklyConfirmedAct = confirmedLeads.filter(l =>
-            l.date && l.outcome === 'confermato' &&
-            new Date(l.date) >= currentStartOfWeek &&
-            new Date(l.date) <= currentEndOfWeek
-        ).length;
-    }
-
     let weeklyTier1Target = 0;
     let weeklyTier2Target = 0;
 
@@ -109,6 +98,34 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             weeklyTier2Target = 24;
         }
     }
+
+    // Build weekly history array based on full ISO weeks that overlap this month
+    const weeksInMonth = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 }) // Mondays
+
+    const weeklyHistory = weeksInMonth.map((weekStart, index) => {
+        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
+
+        const actThisWeek = confirmedLeads.filter(l =>
+            l.date && l.outcome === 'confermato' &&
+            new Date(l.date) >= weekStart &&
+            new Date(l.date) <= weekEnd
+        ).length;
+
+        const isCurrent = new Date() >= weekStart && new Date() <= weekEnd
+
+        return {
+            weekName: `Sett. ${index + 1}`,
+            dateRange: `${format(weekStart, 'dd/MM')} - ${format(weekEnd, 'dd/MM')}`,
+            act: actThisWeek,
+            t1: weeklyTier1Target,
+            t2: weeklyTier2Target,
+            hitT1: actThisWeek >= weeklyTier1Target,
+            hitT2: actThisWeek >= weeklyTier2Target,
+            isCurrent
+        }
+    })
+
+    const currentWeekData = weeklyHistory.find(w => w.isCurrent) || weeklyHistory[weeklyHistory.length - 1]
 
     const workingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
     const totalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
@@ -169,8 +186,9 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     return {
         dailyStats,
         tableData,
+        weeklyHistory,
         weekly: {
-            confirmedAct: weeklyConfirmedAct,
+            confirmedAct: currentWeekData ? currentWeekData.act : 0,
             targetTier1: weeklyTier1Target,
             targetTier2: weeklyTier2Target
         }

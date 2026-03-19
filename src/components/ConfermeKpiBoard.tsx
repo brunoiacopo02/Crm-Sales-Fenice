@@ -83,7 +83,6 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                         style={{ width: `${(Math.max(0, act - wT1) / wT2) * 100}%` }}
                     ></div>
 
-                    {/* Tick Marks for Targets */}
                     <div className="absolute top-0 bottom-0 border-l-2 border-dashed border-gray-400 z-10" style={{ left: `${(wT1 / wT2) * 100}%` }}></div>
                 </div>
 
@@ -93,6 +92,25 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                     </span>
                     <span className="w-full text-right">T2 ({wT2})</span>
                 </div>
+
+                {/* Storico Settimanale */}
+                {stats.weeklyHistory && stats.weeklyHistory.length > 0 && (
+                    <div className="mt-8 pt-4 border-t border-gray-100">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Storico Mensile Obiettivi</h3>
+                        <div className="flex flex-wrap gap-2">
+                            {stats.weeklyHistory.map((w: any, idx: number) => (
+                                <div key={idx} className={`text-[10px] sm:text-xs px-2.5 py-1.5 rounded-md border flex items-center gap-2 ${w.isCurrent ? 'border-brand-orange bg-orange-50/30' : 'border-gray-200 bg-gray-50'}`}>
+                                    <span className="font-bold text-gray-700">{w.weekName}</span>
+                                    <span className="text-gray-400">({w.dateRange})</span>
+                                    <span className="font-black ml-1 border-l pl-2 border-gray-300 flex items-center gap-1 text-gray-800">
+                                        {w.act} <span className="font-normal text-[10px]">app.</span>
+                                        {w.hitT2 ? <span className="text-green-600 bg-green-100 px-1 rounded ml-1">✅ T2</span> : w.hitT1 ? <span className="text-blue-600 bg-blue-100 px-1 rounded ml-1">✅ T1</span> : <span className="text-red-500 ml-1">❌</span>}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         )
     }
@@ -117,9 +135,9 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                     <h3 className="font-bold text-gray-800 flex items-center gap-2"><CalendarDays className="w-5 h-5 text-brand-orange" /> Calendario Mese</h3>
                 </div>
-                <div className="p-4 flex-1 flex flex-col gap-4 overflow-y-auto">
+                <div className="p-4 flex-1 flex flex-col gap-4 overflow-x-auto overflow-y-auto">
                     {weeks.map((week, idx) => (
-                        <div key={idx} className="flex gap-2">
+                        <div key={idx} className="flex gap-2 min-w-[700px]">
                             {week.map((day: any) => {
                                 const isToday = day.date === new Date().toISOString().split('T')[0]
                                 const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6
