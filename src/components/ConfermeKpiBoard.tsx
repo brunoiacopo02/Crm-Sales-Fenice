@@ -131,13 +131,13 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
         const weeks = chunkArray(dailyStats, 7)
 
         return (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-6 flex-1 flex flex-col">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 flex flex-col w-full">
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                     <h3 className="font-bold text-gray-800 flex items-center gap-2"><CalendarDays className="w-5 h-5 text-brand-orange" /> Calendario Mese</h3>
                 </div>
-                <div className="p-4 flex-1 flex flex-col gap-4 overflow-x-auto overflow-y-auto">
+                <div className="p-4 flex flex-col gap-4 overflow-x-auto w-full">
                     {weeks.map((week, idx) => (
-                        <div key={idx} className="flex gap-2 min-w-[700px]">
+                        <div key={idx} className="flex gap-2 min-w-[700px] md:min-w-0 pb-1">
                             {week.map((day: any) => {
                                 const isToday = day.date === new Date().toISOString().split('T')[0]
                                 const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6
