@@ -43,10 +43,10 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
 
     if (isRowLayout) {
         return (
-            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md hover:border-brand-orange/30 transition-all flex items-center justify-between gap-4 group cursor-pointer relative overflow-hidden">
+            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md hover:border-brand-orange/30 transition-all flex items-center justify-between gap-4 group cursor-pointer relative">
                 {/* Visual Highlight indicator left */}
                 {lead.recallDate && new Date(lead.recallDate) < new Date() && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-lg"></div>
                 )}
 
                 {/* 1. Nome & Contatti (Orizzontale compatto) */}
