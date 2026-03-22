@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { LeadCard } from "./LeadCard"
 import { OutcomeModal } from "./OutcomeModal"
 import { AlertCircle, Clock } from "lucide-react"
@@ -16,6 +16,37 @@ export function RecallBoard({
 }) {
     const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'expired' | 'upcoming'>('expired')
+
+    // --- RECALL WATCHER ---
+    const [alertedRecalls, setAlertedRecalls] = useState<Set<string>>(new Set())
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const nowTime = new Date().getTime();
+            const allLeads = [...expired, ...upcoming];
+
+            setAlertedRecalls(prev => {
+                const updatedSet = new Set(prev);
+                let newlyAlerted = false;
+
+                allLeads.forEach(lead => {
+                    if (lead.recallDate) {
+                        const recallTime = new Date(lead.recallDate).getTime();
+                        if (recallTime <= nowTime && !updatedSet.has(lead.id)) {
+                            alert(`⏰ SVEGLIA RICHIAMO GDO\n\nÈ arrivato il momento di chiamare:\n👤 ${lead.name}\n📞 ${lead.phone}`);
+                            updatedSet.add(lead.id);
+                            newlyAlerted = true;
+                        }
+                    }
+                });
+
+                return newlyAlerted ? updatedSet : prev;
+            });
+
+        }, 30000); // Check every 30s
+
+        return () => clearInterval(interval);
+    }, [expired, upcoming]);
 
     const currentList = activeTab === 'expired' ? expired : upcoming
 

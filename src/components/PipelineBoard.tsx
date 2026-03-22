@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { LeadCard } from "./LeadCard"
 import { OutcomeModal } from "./OutcomeModal"
 
@@ -11,16 +11,48 @@ export function PipelineBoard({
     secondCall,
     thirdCall,
     fourthCall = [],
-    isFourthCallActive = false
+    isFourthCallActive = false,
+    recalls = []
 }: {
     firstCall: LeadList
     secondCall: LeadList
     thirdCall: LeadList
     fourthCall?: LeadList
     isFourthCallActive?: boolean
+    recalls?: LeadList
 }) {
     const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'first' | 'second' | 'third' | 'fourth'>('first')
+
+    // --- RECALL WATCHER ---
+    const [alertedRecalls, setAlertedRecalls] = useState<Set<string>>(new Set())
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const nowTime = new Date().getTime();
+
+            setAlertedRecalls(prev => {
+                const updatedSet = new Set(prev);
+                let newlyAlerted = false;
+
+                recalls.forEach(lead => {
+                    if (lead.recallDate) {
+                        const recallTime = new Date(lead.recallDate).getTime();
+                        if (recallTime <= nowTime && !updatedSet.has(lead.id)) {
+                            alert(`⏰ SVEGLIA RICHIAMO GDO\n\nÈ arrivato il momento di chiamare:\n👤 ${lead.name}\n📞 ${lead.phone}`);
+                            updatedSet.add(lead.id);
+                            newlyAlerted = true;
+                        }
+                    }
+                });
+
+                return newlyAlerted ? updatedSet : prev;
+            });
+
+        }, 30000); // Check every 30s
+
+        return () => clearInterval(interval);
+    }, [recalls]);
 
     // Helper per ottenere la lista corrente
     const getCurrentList = () => {

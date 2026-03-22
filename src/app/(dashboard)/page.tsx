@@ -24,7 +24,7 @@ export default async function DashboardPage() {
     }
 
     // Fetch leads for the current pipeline state
-    const { firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive } = await getPipelineLeads()
+    const { firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive, recalls } = await getPipelineLeads()
 
     return (
         <div className="space-y-6">
@@ -43,6 +43,7 @@ export default async function DashboardPage() {
                 thirdCall={thirdCall}
                 fourthCall={fourthCall}
                 isFourthCallActive={isFourthCallActive}
+                recalls={recalls}
             />
         </div>
     )
