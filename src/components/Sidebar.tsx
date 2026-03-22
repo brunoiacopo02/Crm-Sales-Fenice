@@ -81,6 +81,7 @@ export function Sidebar() {
                 { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                 { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
                 { name: "Importa Lead", href: "/import", icon: Upload },
+                { name: "Archivio Storico", href: "/archivio", icon: Database },
                 { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
                 { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
                 { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
