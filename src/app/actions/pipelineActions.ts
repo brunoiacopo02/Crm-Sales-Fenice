@@ -211,6 +211,7 @@ export async function updateLeadOutcome(
             discardReason: discardReason || lead.discardReason,
             updatedAt: now,
         })
+        .where(eq(leads.id, leadId))
 
     // Team Goal trigger evaluation logic
     if (outcome === 'APPUNTAMENTO') {
