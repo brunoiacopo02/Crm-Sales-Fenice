@@ -404,7 +404,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             </div>
 
             {/* MAIN CONTENT AREA */}
-            <div className="flex-1 overflow-auto bg-gray-50 px-2 sm:px-4">
+            <div className="flex-1 overflow-auto bg-gray-50 px-2 sm:px-4 pb-48">
                 {loading ? (
                     <div className="flex items-center justify-center h-full text-brand-blue">
                         <div className="animate-spin w-10 h-10 border-4 border-brand-orange border-t-transparent rounded-full mb-4 mx-auto"></div>
