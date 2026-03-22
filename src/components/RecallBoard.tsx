@@ -47,7 +47,7 @@ export function RecallBoard({
             </div>
 
             {/* LIST AREA */}
-            <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4">
+            <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 pb-48">
                 <div className="flex flex-col gap-3 max-w-5xl mx-auto">
                     {currentList.map((lead) => (
                         <div key={lead.id} className="relative">
