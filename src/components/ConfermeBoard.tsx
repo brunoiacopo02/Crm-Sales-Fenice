@@ -317,9 +317,12 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         if (nrFilter === '0') targetLeads = targetLeads.filter(l => !l.lead.confCall1At);
         if (nrFilter === '1') targetLeads = targetLeads.filter(l => l.lead.confCall1At && !l.lead.confCall2At && !l.lead.confCall3At);
         if (nrFilter === '2') targetLeads = targetLeads.filter(l => l.lead.confCall2At && !l.lead.confCall3At);
-        // Calculate Snoozed logic
-        const snoozedLeads = activeLeads.filter(l => l.lead.confSnoozeAt && new Date(l.lead.confSnoozeAt).getTime() > new Date().getTime());
-        const normalTargetLeads = targetLeads.filter(l => !l.lead.confSnoozeAt || new Date(l.lead.confSnoozeAt).getTime() <= new Date().getTime());
+        // Calculate Snoozed logic (Global visibility across the day, regardless of selected hour views)
+        const snoozedLeads = kanbanData.flatList
+            .filter(l => l.lead.confSnoozeAt && !l.lead.confirmationsOutcome)
+            .sort((a,b) => new Date(a.lead.confSnoozeAt).getTime() - new Date(b.lead.confSnoozeAt).getTime());
+            
+        const normalTargetLeads = targetLeads.filter(l => !l.lead.confSnoozeAt);
 
         return (
             <div className="flex flex-col xl:flex-row w-full max-w-[1400px] mx-auto pb-12 gap-6 items-start px-2">

@@ -13,10 +13,14 @@ export function AppointmentBoard({
     past: LeadList
 }) {
     const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
-    const currentList = activeTab === 'upcoming' ? upcoming : past
+    
+    // Sort chronologically
+    const sortedUpcoming = [...upcoming].sort((a,b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime())
+    const sortedPast = [...past].sort((a,b) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime()) // Past descending
+    const currentList = activeTab === 'upcoming' ? sortedUpcoming : sortedPast
 
     const renderCard = (lead: any, isUpcoming: boolean) => (
-        <div key={lead.id} className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group relative overflow-hidden ${isUpcoming ? 'border-green-200 hover:border-green-400' : 'border-gray-200 hover:border-gray-300'}`}>
+        <div key={lead.id} className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all flex flex-wrap items-center justify-between gap-x-4 gap-y-2 group relative overflow-hidden ${isUpcoming ? 'border-green-200 hover:border-green-400' : 'border-gray-200 hover:border-gray-300'}`}>
             {/* Visual Highlight indicator left */}
             {isUpcoming && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>}
 
@@ -65,9 +69,70 @@ export function AppointmentBoard({
                     {lead.appointmentDate ? new Date(lead.appointmentDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/D'}
                 </div>
                 <div className="text-[10px] text-gray-400 flex items-center gap-1 w-full justify-end">
-                    <Clock className="h-3 w-3" /> Generato il: {lead.appointmentCreatedAt ? new Date(lead.appointmentCreatedAt).toLocaleDateString() : 'N/D'}
+                    <Clock className="h-3 w-3" /> Fissato il: {lead.appointmentCreatedAt ? new Date(lead.appointmentCreatedAt).toLocaleDateString() : 'N/D'}
                 </div>
             </div>
+
+            {/* 5. GDO Feedback Loop (Conferme & Vendita) */}
+            {(lead.confirmationsOutcome || lead.salespersonOutcome) && (
+                <div className="w-full mt-3 pt-3 border-t border-dashed border-gray-200 flex flex-wrap items-start gap-3 col-span-full">
+                    
+                    {/* Conferme Badge */}
+                    {lead.confirmationsOutcome === 'confermato' && (
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Conferme: OK
+                        </div>
+                    )}
+                    {lead.confirmationsOutcome === 'scartato' && (
+                        <div className="flex flex-col items-start gap-0.5 text-[11px] font-bold bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-200">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                Conferme: Scartato
+                            </div>
+                            {lead.confirmationsDiscardReason && (
+                                <span className="font-normal italic text-rose-600 ml-3">"{lead.confirmationsDiscardReason}"</span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Salesperson Badge */}
+                    {lead.salespersonOutcome === 'Chiuso' && (
+                        <div className="flex flex-col items-start gap-0.5 text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded border border-indigo-200">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                Esito Finale: CHIUSO
+                            </div>
+                            {lead.salespersonOutcomeNotes && (
+                                <span className="font-normal italic text-indigo-600 ml-3">"{lead.salespersonOutcomeNotes}"</span>
+                            )}
+                        </div>
+                    )}
+                    {lead.salespersonOutcome === 'Non chiuso' && (
+                        <div className="flex flex-col items-start gap-0.5 text-[11px] font-bold bg-slate-50 text-slate-700 px-2 py-1 rounded border border-slate-200">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                                Esito Finale: Non Chiuso
+                            </div>
+                            {lead.salespersonOutcomeNotes && (
+                                <span className="font-normal italic text-slate-600 ml-3">"{lead.salespersonOutcomeNotes}"</span>
+                            )}
+                        </div>
+                    )}
+                    {lead.salespersonOutcome === 'Lead non presenziato' && (
+                        <div className="flex flex-col items-start gap-0.5 text-[11px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-200">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                Esito Finale: Buca (No Show)
+                            </div>
+                            {lead.salespersonOutcomeNotes && (
+                                <span className="font-normal italic text-amber-600 ml-3">"{lead.salespersonOutcomeNotes}"</span>
+                            )}
+                        </div>
+                    )}
+
+                </div>
+            )}
         </div>
     )
 

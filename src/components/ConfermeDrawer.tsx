@@ -344,17 +344,25 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none shadow-sm transition-shadow font-medium text-slate-900 bg-white" placeholder="Nessuna email fornita" />
                                 </div>
 
-                                {!lead.confNeedsReschedule && (
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Data Appuntamento</label>
-                                            <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Ora Appuntamento</label>
-                                            <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
-                                        </div>
+                                {/* Data e Ora Appuntamento (sempre visibili, anche per i Richiami) */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                                            {lead.confNeedsReschedule ? "Data App. (Originaria)" : "Data Appuntamento"}
+                                        </label>
+                                        <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
                                     </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                                            {lead.confNeedsReschedule ? "Ora App. (Originaria)" : "Ora Appuntamento"}
+                                        </label>
+                                        <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
+                                    </div>
+                                </div>
+                                {lead.confNeedsReschedule && (
+                                    <p className="text-[11px] text-blue-600 font-medium ml-1 leading-tight">
+                                        Questo lead è un Richiamo. Puoi comunque modificare la data e l'ora originaria dell'appuntamento fissato dal GDO se necessario.
+                                    </p>
                                 )}
 
                                 <div className="space-y-1.5 pt-2">

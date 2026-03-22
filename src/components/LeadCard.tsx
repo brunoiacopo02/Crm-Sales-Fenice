@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical } from "lucide-react"
+import { GdoQuickActions } from "./GdoQuickActions"
 
 type LeadProps = {
     lead: {
@@ -104,16 +105,8 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                 </div>
 
                 {/* 4. Actions Right */}
-                <div className="flex items-center justify-end gap-2 shrink-0">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onOutcomeClick(lead.id); }}
-                        className="bg-brand-charcoal hover:bg-brand-orange text-white text-xs font-semibold py-1.5 px-4 rounded-md shadow-sm transition-all flex items-center gap-1"
-                    >
-                        Aggiorna Esito
-                    </button>
-                    <button className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors opacity-0 group-hover:opacity-100" title="Apri dettagli">
-                        <MoreVertical className="h-4 w-4" />
-                    </button>
+                <div className="flex items-center justify-end shrink-0 pl-2">
+                    <GdoQuickActions leadId={lead.id} />
                 </div>
             </div>
         )
@@ -142,9 +135,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                 </div>
             )}
             <div className="mt-auto pt-3 border-t border-gray-100 flex items-center justify-between">
-                <button onClick={() => onOutcomeClick(lead.id)} className="bg-brand-orange hover:bg-brand-orange-hover text-white text-xs font-medium py-1.5 px-3 rounded shadow-sm transition-colors">
-                    Aggiorna Esito
-                </button>
+                <GdoQuickActions leadId={lead.id} />
             </div>
         </div>
     )
