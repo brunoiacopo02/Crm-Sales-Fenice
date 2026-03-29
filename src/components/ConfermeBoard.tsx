@@ -245,8 +245,9 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         if (activeHours.length === 0) return null;
 
         return (
-            <div className="flex items-center gap-2 overflow-x-auto pb-4 pt-1 px-1 mb-2 scrollbar-none w-full border-b border-gray-200/60 sticky top-0 bg-gray-50 z-10">
-                {activeHours.map((hourParam) => {
+            <div className="w-full border-b border-gray-200/60 sticky top-0 bg-gray-50 z-10 pt-2 pb-3 mb-4">
+                <div className="flex flex-wrap items-center gap-3 w-full max-w-[1400px] mx-auto px-2">
+                    {activeHours.map((hourParam) => {
                     const hNum = parseInt(hourParam.split(':')[0], 10);
                     const leadsForHour = activeLeads.filter(l => {
                         if (!l.lead.appointmentDate) return false;
@@ -268,6 +269,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         </button>
                     )
                 })}
+                </div>
             </div>
         )
     }
