@@ -84,7 +84,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))
 
             const supabase = createClient();
-            const channel = supabase.channel(`presence_lead_${lead.id}`);
+            const channel = supabase.channel('conferme_realtime_board');
 
             // 1. Invia il nostro stato di presenza "In Lavorazione" a tutti
             channel.on('presence', { event: 'sync' }, () => {
@@ -93,8 +93,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 for (const id in newState) {
                     const presenceArray = newState[id];
                     presenceArray.forEach((p: any) => {
-                        // Se c'è un utente ed è diverso da noi, è un "Lock"
-                        if (p.user && p.user.id !== currentUser.id) {
+                        // Se c'è un utente ed è diverso da noi, ed è sullo stesso lead, è un "Lock"
+                        if (p.user && p.user.id !== currentUser.id && p.leadId === lead.id) {
                             usersPresent.push(p);
                         }
                     });
@@ -102,7 +102,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 setActiveUsers(usersPresent);
             });
 
-            // 2. Entra nella stanza di questo utente
+            // 2. Notifica a tutti che stiamo guardando questo lead
             channel.subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
                     await channel.track({

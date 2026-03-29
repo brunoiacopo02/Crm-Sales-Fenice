@@ -151,17 +151,25 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             setGlobalPresence(presenceArray);
         });
 
-        channel.subscribe();
-
-        // Initial setup for presence right after mount
-        loadPresence();
-        const initialLoadInterval = setInterval(loadPresence, 30000); // 30s slow catch-all fallback
+        channel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                // Broadcast that we are online on the CRM looking at the board
+                await channel.track({
+                    online_at: new Date().toISOString(),
+                    leadId: null, // Not inside a specific drawer
+                    user: {
+                        id: currentUser.id,
+                        name: currentUser.name,
+                        displayName: currentUser.displayName
+                    }
+                });
+            }
+        });
 
         return () => {
             supabase.removeChannel(channel);
-            clearInterval(initialLoadInterval);
         };
-    }, [viewMode])
+    }, [viewMode, currentUser.id])
 
     // --- SNOOZE WATCHER ---
     const [alertedSnoozes, setAlertedSnoozes] = useState<Set<string>>(new Set())

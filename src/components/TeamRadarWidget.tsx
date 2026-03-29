@@ -11,25 +11,28 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     const [message, setMessage] = useState("")
     const [isSending, setIsSending] = useState(false)
 
-    // Poll every 5 seconds for team radar
+    // Real-time radar using Supabase WebSockets
     useEffect(() => {
-        const fetchPresence = async () => {
-            const presences = await getGlobalPresence()
-            // Distinct users
-            const map = new Map()
-            for (const p of presences) {
-                // Keep the most recent presence info or all of them
-                if (!map.has(p.user.id)) {
-                    map.set(p.user.id, p)
-                }
-            }
-            setActiveUsers(Array.from(map.values()))
-        }
+        const { createClient } = require("@/utils/supabase/client");
+        const supabase = createClient();
+        const channel = supabase.channel('conferme_realtime_board');
 
-        fetchPresence()
-        const int = setInterval(fetchPresence, 5000)
-        return () => clearInterval(int)
-    }, [])
+        channel.on('presence', { event: 'sync' }, () => {
+            const newState = channel.presenceState();
+            const map = new Map();
+            for (const id in newState) {
+                newState[id].forEach((p: any) => {
+                    if (p.user && p.user.id !== currentUser.id) {
+                        map.set(p.user.id, p);
+                    }
+                });
+            }
+            setActiveUsers(Array.from(map.values()));
+        });
+
+        channel.subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [currentUser.id])
 
     const handleSend = async () => {
         if (!selectedUser || !message.trim()) return
