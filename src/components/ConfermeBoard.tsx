@@ -326,7 +326,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
         return (
             <div className="flex flex-col xl:flex-row w-full max-w-[1400px] mx-auto pb-12 gap-6 items-start px-2">
-                <div className="flex flex-col w-full xl:w-2/3">
+                <div className="flex flex-col w-full xl:w-2/3 min-w-0">
                     {filtersJSX}
                     <div className="flex flex-col w-full bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
                         {normalTargetLeads.length === 0 ? (
@@ -337,7 +337,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     </div>
                 </div>
 
-                <div className="flex flex-col w-full xl:w-1/3 mt-4 xl:mt-0 pt-0 xl:pt-[72px]">
+                <div className="flex flex-col w-full xl:w-1/3 min-w-0 mt-4 xl:mt-0 pt-0 xl:pt-[72px]">
                     <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 shadow-sm mb-4">
                         <h3 className="text-purple-800 font-bold mb-1 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Richiamati In Giornata</h3>
                         <p className="text-[12px] text-purple-700/80 leading-tight">Lead spostati temporaneamente ("Snooze"). Suonerà una sveglia all'orario stabilito.</p>
