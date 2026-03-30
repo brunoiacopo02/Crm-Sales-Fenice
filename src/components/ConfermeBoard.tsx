@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme } from "@/app/actions/confermeActions"
-import { getGlobalPresence } from "@/app/actions/presenceActions"
+
 import { ConfermeDrawer } from "@/components/ConfermeDrawer"
 import { ConfermeBoardRow } from "@/components/ConfermeBoardRow"
 import { GlobalAlertListener } from "@/components/GlobalAlertListener"
@@ -105,12 +105,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
     }
 
-    const loadPresence = async () => {
-        try {
-            const data = await getGlobalPresence()
-            setGlobalPresence(data)
-        } catch (e) { }
-    }
+
 
     useEffect(() => {
         const timer = setTimeout(() => {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getGlobalPresence } from "@/app/actions/presenceActions"
+
 import { sendInternalAlert } from "@/app/actions/alertActions"
 import { Users, Send, AlertTriangle, MessageSquarePlus } from "lucide-react"
 
