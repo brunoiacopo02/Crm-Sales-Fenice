@@ -205,15 +205,6 @@ export const confirmationsNotes = pgTable('confirmationsNotes', {
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
-export const appointmentPresence = pgTable('appointmentPresence', {
-    id: text('id').primaryKey(),
-    leadId: text('leadId').notNull().references(() => leads.id, { onDelete: 'cascade' }),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    status: text('status').notNull().default('viewing'),
-    startedAt: timestamp('startedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
-    lastHeartbeatAt: timestamp('lastHeartbeatAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
-});
-
 export const internalAlerts = pgTable('internalAlerts', {
     id: text('id').primaryKey(),
     senderId: text('senderId').notNull().references(() => users.id, { onDelete: 'cascade' }),
