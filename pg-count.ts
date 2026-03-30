@@ -25,7 +25,6 @@ async function checkCounts() {
         { name: 'importLogs', pgSchema: schema.importLogs },
         { name: 'userPurchases', pgSchema: schema.userPurchases },
         { name: 'coinTransactions', pgSchema: schema.coinTransactions },
-        { name: 'appointmentPresence', pgSchema: schema.appointmentPresence },
         { name: 'calendarEvents', pgSchema: schema.calendarEvents }
     ];
 
