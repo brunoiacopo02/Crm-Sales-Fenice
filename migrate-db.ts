@@ -18,7 +18,6 @@ async function migrateData() {
     console.log("Iniziando migrazione da SQLite a Supabase PostgreSQL...");
 
     const tablesToMigrate: any = [
-        { name: 'appointmentPresence', pgSchema: schema.appointmentPresence },
         { name: 'calendarEvents', pgSchema: schema.calendarEvents } // we can run this again using ON CONFLICT DO NOTHING or simply skip if it's already done
     ];
 
