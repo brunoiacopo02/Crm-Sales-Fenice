@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Calendar, Clock, X, Save } from "lucide-react"
 
 type EditAppointmentModalProps = {
@@ -30,6 +30,14 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
     const [time, setTime] = useState(getInitialTimeStr())
     const [note, setNote] = useState(initialNote || "")
     const [isSaving, setIsSaving] = useState(false)
+
+    useEffect(() => {
+        if (isOpen) {
+            setDate(getInitialDateStr())
+            setTime(getInitialTimeStr())
+            setNote(initialNote || "")
+        }
+    }, [isOpen, initialDate, initialNote])
 
     if (!isOpen) return null
 
