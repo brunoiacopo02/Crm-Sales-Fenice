@@ -56,24 +56,28 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                         {lead.status === 'APPOINTMENT' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                     </h3>
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-                        <span 
-                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato: ' + lead.phone); }}
-                            className="flex items-center gap-1 hover:text-brand-orange cursor-copy transition-colors group/action"
-                            title="Copia numero"
-                        >
+                        <span className="flex items-center gap-1 group/phone">
                             <Phone className="h-3 w-3" />
                             {lead.phone}
-                            <Copy className="h-3 w-3 ml-1 opacity-0 group-hover/action:opacity-100 text-gray-400 group-hover/action:text-brand-orange transition-opacity" />
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato!'); }}
+                                className="ml-1 p-1 hover:bg-gray-200 text-gray-400 hover:text-brand-orange rounded transition-colors opacity-0 group-hover/phone:opacity-100"
+                                title="Copia numero"
+                            >
+                                <Copy className="h-3 w-3" />
+                            </button>
                         </span>
                         {lead.email && (
-                            <span 
-                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.email ?? ''); alert('Email copiata: ' + lead.email); }}
-                                className="flex items-center gap-1 truncate max-w-[140px] hover:text-brand-orange cursor-copy transition-colors group/action" 
-                                title={`Copia email: ${lead.email}`}
-                            >
-                                <Mail className="h-3 w-3" />
-                                {lead.email}
-                                <Copy className="h-3 w-3 ml-1 opacity-0 group-hover/action:opacity-100 text-gray-400 group-hover/action:text-brand-orange transition-opacity" />
+                            <span className="flex items-center gap-1 max-w-[170px] group/email text-xs">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                <span className="truncate" title={lead.email}>{lead.email}</span>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.email ?? ''); alert('Email copiata!'); }}
+                                    className="ml-0.5 p-1 hover:bg-gray-200 text-gray-400 hover:text-brand-orange rounded transition-colors opacity-0 group-hover/email:opacity-100 shrink-0"
+                                    title="Copia email"
+                                >
+                                    <Copy className="h-3 w-3" />
+                                </button>
                             </span>
                         )}
                     </div>
@@ -128,15 +132,16 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
             <div className="flex justify-between items-start mb-2">
                 <div>
                     <h3 className="font-semibold text-gray-800 text-base">{lead.name}</h3>
-                    <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                    <div className="flex items-center gap-2 text-sm text-gray-500 mt-1 group/phone">
                         <Phone className="h-3 w-3" />
-                        <span 
-                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato: ' + lead.phone); }}
-                            className="flex items-center gap-1 hover:text-brand-orange transition-colors cursor-copy group/action" title="Copia {lead.phone}"
+                        {lead.phone}
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato!'); }}
+                            className="ml-1 p-1 hover:bg-gray-100 text-gray-400 hover:text-brand-orange rounded transition-colors opacity-0 group-hover/phone:opacity-100"
+                            title="Copia numero"
                         >
-                            {lead.phone}
-                            <Copy className="h-3 w-3 ml-1 opacity-0 group-hover/action:opacity-100 text-gray-400 transition-opacity" />
-                        </span>
+                            <Copy className="h-3.5 w-3.5" />
+                        </button>
                     </div>
                 </div>
                 <button className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
