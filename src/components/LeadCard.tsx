@@ -56,7 +56,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                         {lead.status === 'APPOINTMENT' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                     </h3>
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-                        <span className="flex items-center gap-1 group/phone">
+                        <div className="flex items-center gap-1 group/phone">
                             <Phone className="h-3 w-3" />
                             {lead.phone}
                             <button 
@@ -66,9 +66,9 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                             >
                                 <Copy className="h-3 w-3" />
                             </button>
-                        </span>
+                        </div>
                         {lead.email && (
-                            <span className="flex items-center gap-1 max-w-[170px] group/email text-xs">
+                            <div className="flex items-center gap-1 max-w-[170px] group/email text-xs">
                                 <Mail className="h-3 w-3 shrink-0" />
                                 <span className="truncate" title={lead.email}>{lead.email}</span>
                                 <button 
@@ -78,7 +78,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                                 >
                                     <Copy className="h-3 w-3" />
                                 </button>
-                            </span>
+                            </div>
                         )}
                     </div>
                 </div>
