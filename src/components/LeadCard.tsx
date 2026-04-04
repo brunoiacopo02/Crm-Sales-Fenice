@@ -56,12 +56,20 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                         {lead.status === 'APPOINTMENT' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                     </h3>
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-                        <span className="flex items-center gap-1 hover:text-brand-orange cursor-copy transition-colors group/phone">
+                        <span 
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato: ' + lead.phone); }}
+                            className="flex items-center gap-1 hover:text-brand-orange cursor-copy transition-colors group/phone"
+                            title="Copia numero"
+                        >
                             <Phone className="h-3 w-3" />
                             {lead.phone}
                         </span>
                         {lead.email && (
-                            <span className="flex items-center gap-1 truncate max-w-[140px]" title={lead.email}>
+                            <span 
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.email ?? ''); alert('Email copiata: ' + lead.email); }}
+                                className="flex items-center gap-1 truncate max-w-[140px] hover:text-brand-orange cursor-copy transition-colors" 
+                                title={`Copia email: ${lead.email}`}
+                            >
                                 <Mail className="h-3 w-3" />
                                 {lead.email}
                             </span>
@@ -120,7 +128,12 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                     <h3 className="font-semibold text-gray-800 text-base">{lead.name}</h3>
                     <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
                         <Phone className="h-3 w-3" />
-                        <a href={`tel:${lead.phone}`} className="hover:text-brand-orange transition-colors">{lead.phone}</a>
+                        <span 
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato: ' + lead.phone); }}
+                            className="hover:text-brand-orange transition-colors cursor-copy" title="Copia {lead.phone}"
+                        >
+                            {lead.phone}
+                        </span>
                     </div>
                 </div>
                 <button className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">

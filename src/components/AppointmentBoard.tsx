@@ -1,7 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Phone, Mail, CalendarCheck, Clock, CheckCircle2 } from "lucide-react"
+import { Phone, Mail, CalendarCheck, Clock, CheckCircle2, Pencil } from "lucide-react"
+import { EditAppointmentModal } from "./EditAppointmentModal"
+import { updateGdoAppointment } from "@/app/actions/appointmentActions"
+import { useRouter } from "next/navigation"
 
 type LeadList = any[]
 
@@ -13,6 +16,8 @@ export function AppointmentBoard({
     past: LeadList
 }) {
     const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
+    const [editingLead, setEditingLead] = useState<any>(null)
+    const router = useRouter()
     
     // Sort chronologically
     const sortedUpcoming = [...upcoming].sort((a,b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime())
@@ -23,6 +28,17 @@ export function AppointmentBoard({
         <div key={lead.id} className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all flex flex-wrap items-center justify-between gap-x-4 gap-y-2 group relative overflow-hidden ${isUpcoming ? 'border-green-200 hover:border-green-400' : 'border-gray-200 hover:border-gray-300'}`}>
             {/* Visual Highlight indicator left */}
             {isUpcoming && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>}
+            
+            {/* Pulsante Modifica Veloce */}
+            {isUpcoming && (
+                <button 
+                    onClick={() => setEditingLead(lead)}
+                    className="absolute right-2 top-2 p-1.5 text-gray-400 hover:text-brand-orange hover:bg-orange-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 z-10 bg-white shadow-sm border border-gray-100"
+                    title="Modifica Orario/Note Appuntamento"
+                >
+                    <Pencil className="h-3.5 w-3.5" />
+                </button>
+            )}
 
             {/* 1. Nome & Contatti */}
             <div className="flex-1 min-w-[220px] pl-2 flex flex-col justify-center">
@@ -181,6 +197,22 @@ export function AppointmentBoard({
                     )}
                 </div>
             </div>
+
+            {/* Edit Modal Render */}
+            <EditAppointmentModal 
+                isOpen={!!editingLead}
+                onClose={() => setEditingLead(null)}
+                leadName={editingLead?.name || ""}
+                initialDate={editingLead?.appointmentDate || null}
+                initialNote={editingLead?.appointmentNote || ""}
+                onSave={async (dateStr, timeStr, noteStr) => {
+                    if (!editingLead) return
+                    const newDate = new Date(`${dateStr}T${timeStr}:00`)
+                    await updateGdoAppointment(editingLead.id, newDate, noteStr)
+                    setEditingLead(null)
+                    router.refresh()
+                }}
+            />
         </div>
     )
 }
