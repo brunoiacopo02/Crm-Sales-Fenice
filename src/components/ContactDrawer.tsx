@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { getLeadProfile } from "@/app/actions/eventActions"
 import { X, CalendarCheck, Phone, Mail, User, Clock, AlertCircle, History, FileText, CheckCircle2 } from "lucide-react"
+import { GdoQuickActions } from "./GdoQuickActions"
+import { useAuth } from "./AuthProvider"
 
 export function ContactDrawer({
     isOpen,
@@ -16,6 +18,19 @@ export function ContactDrawer({
     const [profile, setProfile] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [activeTab, setActiveTab] = useState<'details' | 'timeline'>('details')
+    const { user: authUser } = useAuth()
+
+    const refreshProfile = () => {
+        if (!leadId) return
+        setIsLoading(true)
+        getLeadProfile(leadId).then(data => {
+            setProfile(data)
+            setIsLoading(false)
+        }).catch(err => {
+            console.error(err)
+            setIsLoading(false)
+        })
+    }
 
     useEffect(() => {
         if (!isOpen || !leadId) {
@@ -24,19 +39,9 @@ export function ContactDrawer({
             return
         }
 
-        let isMounted = true
-        setIsLoading(true)
-        getLeadProfile(leadId).then(data => {
-            if (isMounted) {
-                setProfile(data)
-                setIsLoading(false)
-            }
-        }).catch(err => {
-            console.error(err)
-            if (isMounted) setIsLoading(false)
-        })
+        refreshProfile()
 
-        return () => { isMounted = false }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, leadId])
 
     if (!isOpen) return null
@@ -100,6 +105,7 @@ export function ContactDrawer({
                             <X className="h-5 w-5" />
                         </button>
                     </div>
+                    
                 </div>
 
                 {/* Tabs */}
@@ -162,6 +168,20 @@ export function ContactDrawer({
                                         <div className="text-sm font-bold text-gray-900">{lead.callCount} / 3</div>
                                     </div>
                                 </div>
+                            </div>
+
+                            <hr className="border-gray-100" />
+
+                            <div className="space-y-4 bg-brand-orange/5 p-4 rounded-xl border border-brand-orange/20">
+                                <h3 className="text-sm font-bold text-brand-orange uppercase tracking-wider flex items-center justify-between">
+                                    Azioni Rapide sull'Esito
+                                </h3>
+                                <div className="pt-2">
+                                    <GdoQuickActions leadId={lead.id} onSettled={refreshProfile} />
+                                </div>
+                                <p className="text-xs text-brand-orange/70 mt-2">
+                                    Clicca un pulsante per esitare il lead e fisserà automaticamente lo storico o l'appuntamento.
+                                </p>
                             </div>
                         </div>
                     ) : activeTab === 'timeline' && events ? (
