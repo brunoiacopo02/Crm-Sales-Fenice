@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 
 type LeadProps = {
@@ -58,20 +58,22 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
                         <span 
                             onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato: ' + lead.phone); }}
-                            className="flex items-center gap-1 hover:text-brand-orange cursor-copy transition-colors group/phone"
+                            className="flex items-center gap-1 hover:text-brand-orange cursor-copy transition-colors group/action"
                             title="Copia numero"
                         >
                             <Phone className="h-3 w-3" />
                             {lead.phone}
+                            <Copy className="h-3 w-3 ml-1 opacity-0 group-hover/action:opacity-100 text-gray-400 group-hover/action:text-brand-orange transition-opacity" />
                         </span>
                         {lead.email && (
                             <span 
                                 onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.email ?? ''); alert('Email copiata: ' + lead.email); }}
-                                className="flex items-center gap-1 truncate max-w-[140px] hover:text-brand-orange cursor-copy transition-colors" 
+                                className="flex items-center gap-1 truncate max-w-[140px] hover:text-brand-orange cursor-copy transition-colors group/action" 
                                 title={`Copia email: ${lead.email}`}
                             >
                                 <Mail className="h-3 w-3" />
                                 {lead.email}
+                                <Copy className="h-3 w-3 ml-1 opacity-0 group-hover/action:opacity-100 text-gray-400 group-hover/action:text-brand-orange transition-opacity" />
                             </span>
                         )}
                     </div>
@@ -130,9 +132,10 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                         <Phone className="h-3 w-3" />
                         <span 
                             onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato: ' + lead.phone); }}
-                            className="hover:text-brand-orange transition-colors cursor-copy" title="Copia {lead.phone}"
+                            className="flex items-center gap-1 hover:text-brand-orange transition-colors cursor-copy group/action" title="Copia {lead.phone}"
                         >
                             {lead.phone}
+                            <Copy className="h-3 w-3 ml-1 opacity-0 group-hover/action:opacity-100 text-gray-400 transition-opacity" />
                         </span>
                     </div>
                 </div>
