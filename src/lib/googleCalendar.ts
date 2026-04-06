@@ -4,11 +4,15 @@ import { calendarConnections, calendarEvents } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import crypto from "crypto"
 
-const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-);
+// Factory: crea un nuovo OAuth2 client per ogni operazione.
+// Evita race condition su Vercel dove warm instances condividono stato modulo singleton.
+function createOAuth2Client() {
+    return new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI
+    );
+}
 
 export function getAuthUrl(state: string) {
     const scopes = [
@@ -16,7 +20,8 @@ export function getAuthUrl(state: string) {
         'https://www.googleapis.com/auth/calendar.events',
     ];
 
-    return oauth2Client.generateAuthUrl({
+    const client = createOAuth2Client();
+    return client.generateAuthUrl({
         access_type: 'offline',
         prompt: 'consent',
         scope: scopes,
@@ -25,7 +30,8 @@ export function getAuthUrl(state: string) {
 }
 
 export async function getTokensFromCode(code: string) {
-    const { tokens } = await oauth2Client.getToken(code);
+    const client = createOAuth2Client();
+    const { tokens } = await client.getToken(code);
     return tokens;
 }
 
@@ -37,17 +43,31 @@ export async function refreshAccessToken(userId: string) {
     if (!connection) throw new Error("Connection not found");
     if (!connection.refreshToken) throw new Error("No refresh token");
 
-    oauth2Client.setCredentials({
+    const client = createOAuth2Client();
+    client.setCredentials({
         refresh_token: connection.refreshToken
     });
 
-    const { credentials } = await oauth2Client.refreshAccessToken();
+    const { credentials } = await client.refreshAccessToken();
 
-    // Update tokens in db
-    await db.update(calendarConnections).set({
-        accessToken: credentials.access_token!,
-        tokenExpiry: new Date(credentials.expiry_date || Date.now() + 3600000)
-    }).where(eq(calendarConnections.id, connection.id))
+    if (!credentials.access_token) {
+        throw new Error("Failed to refresh: no access_token returned by Google");
+    }
+
+    // Salva access_token, expiry, E il nuovo refresh_token se Google lo ruota.
+    // Google ruota periodicamente i refresh_token: se non salviamo il nuovo,
+    // il vecchio diventa invalido e il calendario smette di funzionare (invalid_grant).
+    const updateData: Record<string, unknown> = {
+        accessToken: credentials.access_token,
+        tokenExpiry: new Date(credentials.expiry_date || Date.now() + 3600000),
+        updatedAt: new Date()
+    };
+
+    if (credentials.refresh_token) {
+        updateData.refreshToken = credentials.refresh_token;
+    }
+
+    await db.update(calendarConnections).set(updateData).where(eq(calendarConnections.id, connection.id));
 
     return credentials.access_token;
 }
@@ -70,8 +90,9 @@ export async function checkFreeBusy(userId: string, startTime: Date, endTime: Da
         }
     }
 
-    oauth2Client.setCredentials({ access_token: accessToken });
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const client = createOAuth2Client();
+    client.setCredentials({ access_token: accessToken });
+    const calendar = google.calendar({ version: 'v3', auth: client });
 
     try {
         const res = await calendar.freebusy.query({
@@ -107,9 +128,10 @@ export async function createGoogleCalendarEvent(userId: string, eventDetails: an
         accessToken = await refreshAccessToken(userId) as string;
     }
 
-    oauth2Client.setCredentials({ access_token: accessToken });
+    const client = createOAuth2Client();
+    client.setCredentials({ access_token: accessToken });
 
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: client });
 
     try {
         const requestBody: any = {
@@ -178,8 +200,9 @@ export async function deleteGoogleCalendarEvent(userId: string, eventId: string)
         }
     }
 
-    oauth2Client.setCredentials({ access_token: accessToken });
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const client = createOAuth2Client();
+    client.setCredentials({ access_token: accessToken });
+    const calendar = google.calendar({ version: 'v3', auth: client });
 
     try {
         await calendar.events.delete({

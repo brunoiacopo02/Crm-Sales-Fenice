@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
             await db.update(calendarConnections).set({
                 accessToken: tokens.access_token!,
                 refreshToken: tokens.refresh_token || existing.refreshToken, // keep old if not provided
-                tokenExpiry: new Date(tokens.expiry_date || Date.now() + 3600000)
+                tokenExpiry: new Date(tokens.expiry_date || Date.now() + 3600000),
+                updatedAt: new Date()
             }).where(eq(calendarConnections.id, existing.id))
         } else {
             await db.insert(calendarConnections).values({
