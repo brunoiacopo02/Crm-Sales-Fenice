@@ -17,6 +17,34 @@ export type ArchiveFilters = {
     exportAll?: boolean;
 };
 
+/** Convert "YYYY-MM-DD" to UTC Date at start of that day in Europe/Rome */
+function toRomeStartOfDay(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const noon = new Date(Date.UTC(y, m - 1, d, 12));
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Rome',
+        timeZoneName: 'longOffset'
+    });
+    const parts = fmt.formatToParts(noon);
+    const tzPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+01:00';
+    const offset = tzPart.replace('GMT', '') || '+00:00';
+    return new Date(`${dateStr}T00:00:00${offset}`);
+}
+
+/** Convert "YYYY-MM-DD" to UTC Date at end of that day (23:59:59.999) in Europe/Rome */
+function toRomeEndOfDay(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const noon = new Date(Date.UTC(y, m - 1, d, 12));
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Rome',
+        timeZoneName: 'longOffset'
+    });
+    const parts = fmt.formatToParts(noon);
+    const tzPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+01:00';
+    const offset = tzPart.replace('GMT', '') || '+00:00';
+    return new Date(`${dateStr}T23:59:59.999${offset}`);
+}
+
 export async function getArchiveLeads({
     fromDate,
     toDate,
@@ -41,14 +69,12 @@ export async function getArchiveLeads({
     try {
         const conditions = [];
 
-        // 1. Date Range Filter
+        // 1. Date Range Filter — convert user dates from Rome timezone to UTC
         if (fromDate) {
-            conditions.push(gte(leads[dateFilterType], new Date(fromDate)));
+            conditions.push(gte(leads[dateFilterType], toRomeStartOfDay(fromDate)));
         }
         if (toDate) {
-            const endDate = new Date(toDate);
-            endDate.setHours(23, 59, 59, 999);
-            conditions.push(lte(leads[dateFilterType], endDate));
+            conditions.push(lte(leads[dateFilterType], toRomeEndOfDay(toDate)));
         }
 
         // 2. GDO Filter
@@ -61,18 +87,14 @@ export async function getArchiveLeads({
             conditions.push(eq(leads.salespersonUserId, salespersonId));
         }
 
-        // 4. Outcome Filter
+        // 4. Outcome Filter — values match client dropdown options exactly
         if (outcome && outcome !== 'all') {
-            if (outcome === 'Confermato') {
-                conditions.push(eq(leads.status, 'CONFERMATO'));
-            } else if (outcome === 'Scartato') {
-                conditions.push(eq(leads.status, 'SCARTATO'));
-            } else if (outcome === 'Chiuso') {
+            if (outcome === 'Chiuso') {
                 conditions.push(eq(leads.salespersonOutcome, 'Chiuso'));
             } else if (outcome === 'Non chiuso') {
                 conditions.push(eq(leads.salespersonOutcome, 'Non chiuso'));
             } else {
-                // Generic fallback for status
+                // CONFERMATO, SCARTATO, or any other DB status value
                 conditions.push(eq(leads.status, outcome));
             }
         }
