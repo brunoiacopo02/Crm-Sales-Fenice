@@ -13,8 +13,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000"
+  ),
   title: "Fenice Academy CRM",
   description: "Il CRM Ufficiale di Fenice Academy",
+  openGraph: {
+    title: "Fenice Academy CRM",
+    description: "Il CRM Ufficiale di Fenice Academy",
+    siteName: "Fenice Academy CRM",
+    type: "website",
+  },
 };
 
 import AuthProvider from "@/components/AuthProvider";
@@ -25,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="it">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
