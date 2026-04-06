@@ -5,6 +5,11 @@ import { leads, users } from "@/db/schema"
 import { eq, and, gte, lte, asc, sql } from "drizzle-orm"
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 
+/** Format a Date to 'yyyy-MM-dd' in Europe/Rome timezone */
+function toRomeDateStr(date: Date): string {
+    return date.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
+}
+
 export async function getConfermeKpiStats(monthDate: Date = new Date(), confermeUserId?: string) {
     const start = startOfMonth(monthDate)
     const end = endOfMonth(monthDate)
@@ -41,9 +46,9 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const daysInMonth = eachDayOfInterval({ start, end })
     const dailyStats = daysInMonth.map(d => {
         const dayStr = format(d, 'yyyy-MM-dd')
-        const fixed = fixedLeadsRaw.filter(l => l.date && format(new Date(l.date), 'yyyy-MM-dd') === dayStr).length
-        const confirmed = confirmedLeads.filter(l => l.date && l.outcome === 'confermato' && format(new Date(l.date), 'yyyy-MM-dd') === dayStr).length
-        const discarded = confirmedLeads.filter(l => l.date && l.outcome === 'scartato' && format(new Date(l.date), 'yyyy-MM-dd') === dayStr).length
+        const fixed = fixedLeadsRaw.filter(l => l.date && toRomeDateStr(new Date(l.date)) === dayStr).length
+        const confirmed = confirmedLeads.filter(l => l.date && l.outcome === 'confermato' && toRomeDateStr(new Date(l.date)) === dayStr).length
+        const discarded = confirmedLeads.filter(l => l.date && l.outcome === 'scartato' && toRomeDateStr(new Date(l.date)) === dayStr).length
 
         return {
             date: dayStr,
@@ -57,28 +62,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const totalFixed = dailyStats.reduce((acc, curr) => acc + curr.fixed, 0)
     const totalConfirmedAct = dailyStats.reduce((acc, curr) => acc + curr.confirmed, 0)
 
-    // Calculate Targets based on user info if confermeUserId is provided, else aggregate defaults
-    let tier1Target = 0;
-    let tier2Target = 0;
-
-    if (confermeUserId) {
-        const userRow = await db.select().from(users).where(eq(users.id, confermeUserId)).limit(1);
-        if (userRow.length > 0) {
-            tier1Target = (userRow[0].confermeTargetTier1 || 19) * 4;
-            tier2Target = (userRow[0].confermeTargetTier2 || 24) * 4;
-        }
-    } else {
-        // Aggregate for the whole conferme team
-        const allConferme = await db.select().from(users).where(eq(users.role, 'CONFERME'));
-        if (allConferme.length > 0) {
-            tier1Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier1 || 19), 0) * 4;
-            tier2Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier2 || 24), 0) * 4;
-        } else {
-            tier1Target = 19 * 4;
-            tier2Target = 24 * 4;
-        }
-    }
-
+    // Calculate weekly and monthly targets (single query, no duplication)
     let weeklyTier1Target = 0;
     let weeklyTier2Target = 0;
 
@@ -98,6 +82,10 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             weeklyTier2Target = 24;
         }
     }
+
+    // Monthly targets = weekly * 4
+    const tier1Target = weeklyTier1Target * 4;
+    const tier2Target = weeklyTier2Target * 4;
 
     // Build weekly history array based on full ISO weeks that overlap this month
     const weeksInMonth = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 }) // Mondays
@@ -164,7 +152,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         }
     }
 
-    const todayConfirmed = dailyStats.find(d => d.date === format(new Date(), 'yyyy-MM-dd'))?.confirmed || 0
+    const todayConfirmed = dailyStats.find(d => d.date === toRomeDateStr(new Date()))?.confirmed || 0
 
     // Appuntamenti
     const rowAppuntamenti = buildRow("Appuntamenti Confermati", totalConfirmedAct, tier2Target, todayConfirmed)

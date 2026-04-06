@@ -48,12 +48,6 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
         const wT1 = stats.weekly.targetTier1
         const wT2 = stats.weekly.targetTier2
 
-        const pctT1 = Math.min((act / wT1) * 100, 100)
-        let pctT2 = 0
-        if (act > wT1) {
-            pctT2 = Math.min(((act - wT1) / (wT2 - wT1)) * 100, 100)
-        }
-
         return (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
                 <div className="flex justify-between items-end mb-4">
@@ -119,16 +113,33 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
         if (!stats) return null
         const dailyStats = stats.dailyStats
 
-        // Funzione per chunkare l'array in settimane (7 giorni)
-        const chunkArray = (arr: any[], size: number) => {
-            const chunked = []
-            for (let i = 0; i < arr.length; i += size) {
-                chunked.push(arr.slice(i, i + size))
+        // Group days into Mon-Sun calendar weeks
+        const weeks: (typeof dailyStats[0] | null)[][] = []
+        let currentWeek: (typeof dailyStats[0] | null)[] = []
+
+        // Pad the first week with nulls before the first day
+        if (dailyStats.length > 0) {
+            // dayOfWeek: 0=Sun, 1=Mon. Convert to Mon-based index: Mon=0, Tue=1, ..., Sun=6
+            const firstDayIdx = dailyStats[0].dayOfWeek === 0 ? 6 : dailyStats[0].dayOfWeek - 1
+            for (let i = 0; i < firstDayIdx; i++) {
+                currentWeek.push(null)
             }
-            return chunked
         }
 
-        const weeks = chunkArray(dailyStats, 7)
+        for (const day of dailyStats) {
+            currentWeek.push(day)
+            if (currentWeek.length === 7) {
+                weeks.push(currentWeek)
+                currentWeek = []
+            }
+        }
+        // Pad the last week with nulls after the last day
+        if (currentWeek.length > 0) {
+            while (currentWeek.length < 7) currentWeek.push(null)
+            weeks.push(currentWeek)
+        }
+
+        const weekdayHeaders = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
         return (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 flex flex-col w-full">
@@ -136,10 +147,19 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                     <h3 className="font-bold text-gray-800 flex items-center gap-2"><CalendarDays className="w-5 h-5 text-brand-orange" /> Calendario Mese</h3>
                 </div>
                 <div className="p-4 flex flex-col gap-4 overflow-x-auto w-full">
+                    {/* Weekday headers */}
+                    <div className="flex gap-2 min-w-[700px] md:min-w-0">
+                        {weekdayHeaders.map(h => (
+                            <div key={h} className="flex-1 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">{h}</div>
+                        ))}
+                    </div>
                     {weeks.map((week, idx) => (
                         <div key={idx} className="flex gap-2 min-w-[700px] md:min-w-0 pb-1">
-                            {week.map((day: any) => {
-                                const isToday = day.date === new Date().toISOString().split('T')[0]
+                            {week.map((day, colIdx) => {
+                                if (!day) {
+                                    return <div key={`empty-${idx}-${colIdx}`} className="flex-1 bg-transparent border border-dashed border-gray-200 rounded-xl opacity-20"></div>
+                                }
+                                const isToday = day.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
                                 const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6
 
                                 return (
@@ -164,10 +184,6 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                                     </div>
                                 )
                             })}
-                            {/* Fill empty days if week is less than 7 */}
-                            {Array.from({ length: 7 - week.length }).map((_, i) => (
-                                <div key={`empty-${i}`} className="flex-1 bg-transparent border border-dashed border-gray-200 rounded-xl opacity-20"></div>
-                            ))}
                         </div>
                     ))}
                 </div>
