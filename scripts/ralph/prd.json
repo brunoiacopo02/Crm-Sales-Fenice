@@ -1,0 +1,168 @@
+{
+  "project": "CRM Fenice",
+  "branchName": "ralph/fase-0-stabilita",
+  "description": "Fase 0 — Verifica & Stabilità Critica: audit feature esistenti, fix Google Calendar, verifica account GDO, hardening concurrency",
+  "userStories": [
+    {
+      "id": "F0-001",
+      "title": "Audit e fix sistema notifiche live e Realtime DB",
+      "description": "Verificare che il sistema di notifiche live (useRealtimeNotifications, RealtimeProvider) funzioni correttamente: subscriptions Supabase corrette, toast notifications, unread count, e che il RealtimeProvider triggeri router.refresh() su cambiamenti lead.",
+      "acceptanceCriteria": [
+        "Leggere e auditare src/hooks/useRealtimeNotifications.ts per bug o pattern obsoleti",
+        "Leggere e auditare src/components/providers/RealtimeProvider.tsx per subscriptions corrette",
+        "Verificare che i filtri per recipientUserId siano applicati correttamente",
+        "Verificare che gli eventi custom realtime_update siano dispatchati e ascoltati dove servono",
+        "Fixare qualsiasi bug o inconsistenza trovata",
+        "npx next build compila senza errori"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Focus su correttezza del codice. Il test live con Supabase reale richiede verifica manuale."
+    },
+    {
+      "id": "F0-002",
+      "title": "Audit e fix KPI Conferme e Dashboard Conferme",
+      "description": "Verificare che la dashboard Conferme e i KPI Conferme funzionino: calcoli corretti, target Tier1/Tier2, calendario giornaliero, comparazione mensile, deviation tracking.",
+      "acceptanceCriteria": [
+        "Leggere e auditare src/components/ConfermeKpiBoard.tsx per calcoli KPI corretti",
+        "Leggere e auditare src/app/(dashboard)/kpi-conferme/page.tsx per data fetching corretto",
+        "Verificare che i progress bar settimanali calcolino correttamente ACT vs Target",
+        "Verificare che il calendario giornaliero mostri correttamente appuntamenti fissati/confermati/scartati",
+        "Fixare qualsiasi bug trovato nei calcoli o nel rendering",
+        "npx next build compila senza errori"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F0-003",
+      "title": "Audit e fix Archivio Manager e filtri",
+      "description": "Verificare che l'archivio lead del manager funzioni: filtri multi-criterio, paginazione, export CSV, ricerca.",
+      "acceptanceCriteria": [
+        "Leggere e auditare src/app/(dashboard)/archivio/ArchiveClient.tsx",
+        "Verificare che tutti i filtri (date, GDO, venditore, esito) funzionino correttamente nelle query",
+        "Verificare che la paginazione (50 righe/pagina) sia implementata correttamente",
+        "Verificare che l'export CSV generi output valido con encoding UTF-8 BOM",
+        "Fixare qualsiasi bug trovato",
+        "npx next build compila senza errori"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F0-004",
+      "title": "Audit e fix Marketing Analytics Dashboard",
+      "description": "Verificare che la dashboard Marketing Analytics funzioni: metriche funnel, ROAS, budget management, breakdown GDO.",
+      "acceptanceCriteria": [
+        "Leggere e auditare src/app/(dashboard)/marketing-analytics/ (page.tsx e MarketingAnalyticsClient.tsx)",
+        "Verificare che i calcoli di ROAS siano corretti (revenue / ad spend)",
+        "Verificare che il breakdown GDO mostri percentuali appuntamenti e chiusure corrette",
+        "Verificare che il form budget salvi correttamente per funnel/mese",
+        "Fixare qualsiasi bug trovato",
+        "npx next build compila senza errori"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F0-005",
+      "title": "Audit e fix sistema Richiami GDO",
+      "description": "Verificare che il sistema notifica richiami funzioni: polling 30s, separazione scaduti vs in arrivo, alert browser con nome/telefono lead.",
+      "acceptanceCriteria": [
+        "Leggere e auditare src/components/RecallBoard.tsx per logica di polling e filtraggio",
+        "Leggere e auditare src/app/actions/recallActions.ts per query corrette",
+        "Verificare che il filtro scaduti (recallDate <= now) funzioni con timezone Europe/Rome",
+        "Verificare che l'alert browser si triggeri correttamente",
+        "Fixare qualsiasi bug trovato",
+        "npx next build compila senza errori"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F0-006",
+      "title": "Verifica favicon e metadata app",
+      "description": "Verificare che favicon, metadata Open Graph, e titolo app siano configurati correttamente per la produzione.",
+      "acceptanceCriteria": [
+        "Verificare che src/app/favicon.ico esista e sia un'icona valida",
+        "Verificare che il layout root (src/app/layout.tsx) abbia metadata corretti: title, description, icons",
+        "Aggiungere metadata mancanti se necessario (og:title, og:description)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F0-007",
+      "title": "Debug e fix integrazione Google Calendar - OAuth e token refresh",
+      "description": "Il Google Calendar non manda piu' inviti email e non crea eventi. Debuggare il flusso OAuth, il token refresh, e la creazione eventi.",
+      "acceptanceCriteria": [
+        "Leggere e auditare src/lib/googleCalendar.ts completamente",
+        "Verificare che il flusso OAuth2 usi gli scope corretti (calendar.events, calendar.readonly)",
+        "Verificare che il token refresh funzioni correttamente (controllo expiry, refresh automatico)",
+        "Verificare che createEvent usi sendUpdates: 'all' per inviare inviti email",
+        "Verificare che gli attendee siano aggiunti correttamente all'evento",
+        "Verificare la connessione con la tabella calendarEvents e calendarConnections nel DB",
+        "Controllare che le route API per OAuth callback gestiscano correttamente i token",
+        "Fixare qualsiasi bug trovato nel flusso",
+        "npx next build compila senza errori"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Bug critico segnalato: il calendar non funziona piu'. Probabile problema di token scaduti o scope mancanti."
+    },
+    {
+      "id": "F0-008",
+      "title": "Script verifica e creazione account GDO",
+      "description": "Creare uno script che verifichi quali account GDO (105-119) esistono e funzionano, e che crei quelli mancanti per arrivare a 16 account attivi.",
+      "acceptanceCriteria": [
+        "Creare script scripts/verifyGdoAccounts.ts che si connetta a Supabase",
+        "Lo script deve listare tutti gli utenti con ruolo GDO e verificare che siano attivi",
+        "Lo script deve identificare account mancanti nella sequenza 105-119",
+        "Lo script deve poter creare gli account mancanti (con flag --create)",
+        "Lo script deve generare un report di stato di tutti gli account",
+        "npx next build compila senza errori"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Attualmente solo l'account 114 e' testato. Servono 16 account funzionanti totali."
+    },
+    {
+      "id": "F0-009",
+      "title": "Audit e hardening optimistic locking su tutti i flussi lead",
+      "description": "Verificare che l'optimistic locking (campo version) sia implementato in TUTTI i server action che modificano lead, non solo in confermeActions.",
+      "acceptanceCriteria": [
+        "Auditare src/app/actions/ per tutti i server action che fanno UPDATE su leads",
+        "Verificare che OGNI update su leads includa il check version e l'incremento version",
+        "Aggiungere optimistic locking dove manca (specialmente in gdo actions, venditore actions)",
+        "Verificare che il client passi la version corrente al server action",
+        "Gestire CONCURRENCY_ERROR con messaggio utente chiaro in tutti i flussi",
+        "npx next build compila senza errori"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Attualmente implementato solo in confermeActions. Deve coprire anche pipeline GDO e venditori."
+    },
+    {
+      "id": "F0-010",
+      "title": "Audit concurrency su pipeline GDO e assegnazioni",
+      "description": "Verificare che la pipeline GDO gestisca correttamente accessi concorrenti: drag-and-drop, esiti, assegnazioni lead non devono creare conflitti.",
+      "acceptanceCriteria": [
+        "Auditare src/app/actions/ per le azioni di pipeline GDO (move, assign, esito)",
+        "Verificare che le assegnazioni lead non possano assegnare lo stesso lead a due GDO",
+        "Verificare che il drag-and-drop nella pipeline usi optimistic locking",
+        "Verificare che gli esiti lead (APPOINTMENT, REJECTED, etc.) non possano essere settati in concorrenza",
+        "Fixare race condition trovate",
+        "npx next build compila senza errori"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Questa story completa l'hardening concurrency della F0-009."
+    }
+  ]
+}

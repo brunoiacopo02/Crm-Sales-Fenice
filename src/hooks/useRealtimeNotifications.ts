@@ -36,6 +36,8 @@ export function useRealtimeNotifications() {
             if (data && !error) {
                 setNotifications(data as Notification[])
                 setUnreadCount(data.filter((n) => n.status === 'unread').length)
+            } else if (error) {
+                console.error('❌ Errore fetch notifiche iniziali:', error)
             }
         }
 
@@ -73,12 +75,14 @@ export function useRealtimeNotifications() {
                     filter: `recipientUserId=eq.${user.id}`,
                 },
                 (payload) => {
-                    setNotifications((prev) =>
-                        prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
-                    )
-                    if (payload.old.status === 'unread' && payload.new.status === 'read') {
-                        setUnreadCount((prev) => Math.max(0, prev - 1))
-                    }
+                    const updated = payload.new as Notification
+                    setNotifications((prev) => {
+                        const newList = prev.map(n => n.id === updated.id ? updated : n)
+                        // Recompute unread count from the full updated list
+                        // (payload.old may lack status without REPLICA IDENTITY FULL)
+                        setUnreadCount(newList.filter(n => n.status === 'unread').length)
+                        return newList
+                    })
                 }
             )
             .subscribe()

@@ -1,0 +1,24 @@
+# Ralph Progress Log — CRM Fenice
+Started: 2026-04-06
+---
+
+## Codebase Patterns
+- `createClient()` da `@supabase/ssr` (`createBrowserClient`) è un singleton — restituisce la stessa istanza ogni volta. Safe come dependency in useEffect.
+- Supabase Realtime `payload.old` contiene solo PK senza `REPLICA IDENTITY FULL` — non fidarsi mai di `payload.old.<campo>` per logica business. Ricomputare dallo stato aggiornato.
+- Il custom event `realtime_update` viene dispatchato da `useRealtimeNotifications` su INSERT notifiche e consumato da `KpiGdoBoard` per re-fetch KPI.
+- I Server Action in `notificationActions.ts` ritornano `true` su successo.
+- `RealtimeProvider` wrappa il dashboard layout e triggera `router.refresh()` su qualsiasi cambiamento leads.
+
+---
+
+## 2026-04-07 - F0-001
+- **Audit completo** di `useRealtimeNotifications.ts` e `RealtimeProvider.tsx`
+- **Bug fixato**: UPDATE handler in `useRealtimeNotifications.ts` usava `payload.old.status` (unreliable senza REPLICA IDENTITY FULL) per decrementare `unreadCount`. Fixato ricomputando `unreadCount` dalla lista aggiornata completa.
+- **Miglioramento**: Aggiunto error logging su fetch iniziale notifiche fallito.
+- **Verificato OK**: filtro `recipientUserId` corretto, flow `realtime_update` custom event corretto (dispatch su INSERT → KpiGdoBoard consume), `RealtimeProvider` subscriptions corrette con cleanup.
+- File modificati: `src/hooks/useRealtimeNotifications.ts`
+- **Learnings per iterazioni future:**
+  - Il Topbar non usa `unreadCount` dal hook — computa unread direttamente da `notifications.filter(n => n.status === 'unread').length`
+  - `getUnreadNotifications` in `notificationActions.ts` è naming misleading: fetcha TUTTE le notifiche (non solo unread)
+  - Il channel name in RealtimeProvider è `'public:leads-changes'` — non toccare per regola CLAUDE.md
+---
