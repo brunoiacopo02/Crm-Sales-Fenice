@@ -140,6 +140,10 @@ export function PipelineBoard({
             <OutcomeModal
                 isOpen={!!selectedLeadId}
                 leadId={selectedLeadId || ""}
+                leadVersion={(() => {
+                    const allLeads = [...firstCall, ...secondCall, ...thirdCall, ...fourthCall]
+                    return allLeads.find(l => l.id === selectedLeadId)?.version ?? 0
+                })()}
                 onClose={() => setSelectedLeadId(null)}
             />
         </div>

@@ -208,7 +208,12 @@ export function AppointmentBoard({
                 onSave={async (dateStr, timeStr, noteStr) => {
                     if (!editingLead) return
                     const newDate = new Date(`${dateStr}T${timeStr}:00`)
-                    await updateGdoAppointment(editingLead.id, newDate, noteStr)
+                    const result = await updateGdoAppointment(editingLead.id, newDate, noteStr, editingLead.version)
+                    if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
+                        alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
+                        router.refresh()
+                        return
+                    }
                     setEditingLead(null)
                     router.refresh()
                 }}

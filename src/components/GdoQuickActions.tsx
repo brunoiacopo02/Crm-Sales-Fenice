@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 
 type GdoQuickActionsProps = {
     leadId: string
+    leadVersion: number
     onSettled?: () => void
 }
 
@@ -18,7 +19,7 @@ const DISCARD_REASONS = [
     "non vuole prendere l'appuntamento"
 ]
 
-export function GdoQuickActions({ leadId, onSettled }: GdoQuickActionsProps) {
+export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActionsProps) {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
 
@@ -48,14 +49,20 @@ export function GdoQuickActions({ leadId, onSettled }: GdoQuickActionsProps) {
                 targetDate = new Date(dateStr)
             }
 
-            await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined)
-            
+            const result = await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion)
+
+            if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
+                alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
+                router.refresh()
+                return
+            }
+
             // Reset states
             setActivePopover(null)
             setNote("")
             setDateStr("")
             setDiscardReason("")
-            
+
             router.refresh()
             if (onSettled) onSettled()
         } catch (e) {

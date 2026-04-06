@@ -115,6 +115,10 @@ export function RecallBoard({
             <OutcomeModal
                 isOpen={!!selectedLeadId}
                 leadId={selectedLeadId || ""}
+                leadVersion={(() => {
+                    const allLeads = [...expired, ...upcoming]
+                    return allLeads.find(l => l.id === selectedLeadId)?.version ?? 0
+                })()}
                 onClose={() => setSelectedLeadId(null)}
             />
         </div>

@@ -145,8 +145,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": "Attualmente implementato solo in confermeActions. Deve coprire anche pipeline GDO e venditori."
+      "passes": true,
+      "notes": "Implementato in tutti i server action: pipelineActions, venditoreActions, appointmentActions. Client components aggiornati per passare version e gestire CONCURRENCY_ERROR."
     },
     {
       "id": "F0-010",

@@ -54,7 +54,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
 
         setIsSaving(true)
         try {
-            await saveVenditoreOutcome(lead.id, {
+            const result = await saveVenditoreOutcome(lead.id, {
                 outcome,
                 notes,
                 closeProduct: outcome === "Chiuso" ? closeProduct : undefined,
@@ -62,7 +62,13 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                 notClosedReason: outcome === "Non chiuso" ? notClosedReason : undefined,
                 followUp1Date: outcome === "Non chiuso" && followUp1Date ? new Date(followUp1Date) : null,
                 followUp2Date: outcome === "Non chiuso" && followUp2Date ? new Date(followUp2Date) : null,
-            })
+            }, lead.version)
+
+            if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
+                alert("Questo lead è stato modificato da un altro utente. Ricarica la pagina e riprova.")
+                return
+            }
+
             onSaved()
         } catch (error) {
             alert("Errore durante il salvataggio")

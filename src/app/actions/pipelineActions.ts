@@ -142,7 +142,8 @@ export async function updateLeadOutcome(
     note: string,
     date?: Date, // recallDate or appointmentDate
     userId?: string,
-    discardReason?: string // New field
+    discardReason?: string, // New field
+    currentVersion?: number // Optimistic locking
 ) {
 
     const supabase = await createClient();
@@ -152,6 +153,11 @@ export async function updateLeadOutcome(
 
     const lead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
     if (!lead) throw new Error("Lead non trovato")
+
+    // Optimistic locking check
+    if (currentVersion !== undefined && lead.version !== currentVersion) {
+        return { success: false, error: 'CONCURRENCY_ERROR' }
+    }
 
     const fromSection = determineLeadSection(lead)
 
@@ -209,6 +215,7 @@ export async function updateLeadOutcome(
             appointmentNote: outcome === 'APPUNTAMENTO' ? note : lead.appointmentNote,
             appointmentCreatedAt,
             discardReason: discardReason || lead.discardReason,
+            version: lead.version + 1,
             updatedAt: now,
         })
         .where(eq(leads.id, leadId))
@@ -220,5 +227,5 @@ export async function updateLeadOutcome(
         })
     }
 
-    return true
+    return { success: true }
 }

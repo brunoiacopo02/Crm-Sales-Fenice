@@ -177,7 +177,7 @@ export function ContactDrawer({
                                     Azioni Rapide sull'Esito
                                 </h3>
                                 <div className="pt-2">
-                                    <GdoQuickActions leadId={lead.id} onSettled={refreshProfile} />
+                                    <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} />
                                 </div>
                                 <p className="text-xs text-brand-orange/70 mt-2">
                                     Clicca un pulsante per esitare il lead e fisserà automaticamente lo storico o l'appuntamento.

@@ -14,6 +14,7 @@ type LeadProps = {
         callCount: number
         lastCallDate: Date | null
         status: string
+        version: number
         recallDate?: Date | null
         appointmentDate?: Date | null
     }
@@ -120,7 +121,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
 
                 {/* 4. Actions Right */}
                 <div className="flex items-center justify-end shrink-0 pl-2">
-                    <GdoQuickActions leadId={lead.id} />
+                    <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
                 </div>
             </div>
         )
@@ -156,7 +157,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                 </div>
             )}
             <div className="mt-auto pt-3 border-t border-gray-100 flex items-center justify-between">
-                <GdoQuickActions leadId={lead.id} />
+                <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
             </div>
         </div>
     )

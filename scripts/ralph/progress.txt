@@ -4,6 +4,7 @@ Started: 2026-04-06
 
 ## Codebase Patterns
 - `createClient()` da `@supabase/ssr` (`createBrowserClient`) è un singleton — restituisce la stessa istanza ogni volta. Safe come dependency in useEffect.
+- **Optimistic locking pattern**: Ogni `db.update(leads)` DEVE includere `version: lead.version + 1` nel set e il server action deve accettare `currentVersion` dal client. Check: `if (currentVersion !== undefined && lead.version !== currentVersion) return { success: false, error: 'CONCURRENCY_ERROR' }`. Client deve mostrare alert e refreshare la pagina su CONCURRENCY_ERROR.
 - Supabase Realtime `payload.old` contiene solo PK senza `REPLICA IDENTITY FULL` — non fidarsi mai di `payload.old.<campo>` per logica business. Ricomputare dallo stato aggiornato.
 - Il custom event `realtime_update` viene dispatchato da `useRealtimeNotifications` su INSERT notifiche e consumato da `KpiGdoBoard` per re-fetch KPI.
 - I Server Action in `notificationActions.ts` ritornano `true` su successo.
@@ -144,4 +145,27 @@ Started: 2026-04-06
   - Supabase Auth admin.listUsers ha paginazione (perPage: 1000 per fetchare tutti)
   - Se un utente Auth esiste gia' ma manca in public.users, lo script recupera l'ID Auth e inserisce solo in DB
   - Lo script e' standalone (non parte della build Next.js) — non impatta `npx next build`
+---
+
+## 2026-04-07 - F0-009
+- **Audit completo** di tutti i server action che fanno `db.update(leads)`: `pipelineActions.ts`, `venditoreActions.ts`, `appointmentActions.ts`, `confermeActions.ts`
+- **Optimistic locking aggiunto** a `pipelineActions.ts` (`updateLeadOutcome`): parametro `currentVersion`, check version prima di update, `version: lead.version + 1` nel set, return `{ success: false, error: 'CONCURRENCY_ERROR' }` su mismatch. Return type cambiato da `true` a `{ success: true }`.
+- **Optimistic locking aggiunto** a `venditoreActions.ts` (`saveVenditoreOutcome`): parametro `currentVersion`, check version, increment version.
+- **Optimistic locking aggiunto** a `appointmentActions.ts` (`updateGdoAppointment`): parametro `currentVersion`, check version, increment version.
+- **Client components aggiornati**:
+  - `GdoQuickActions.tsx`: aggiunto prop `leadVersion`, passato a `updateLeadOutcome`, gestione CONCURRENCY_ERROR con alert + refresh
+  - `OutcomeModal.tsx`: aggiunto prop `leadVersion`, passato a `updateLeadOutcome`, gestione CONCURRENCY_ERROR
+  - `VenditoreDrawer.tsx`: passa `lead.version` a `saveVenditoreOutcome`, gestione CONCURRENCY_ERROR
+  - `AppointmentBoard.tsx`: passa `editingLead.version` a `updateGdoAppointment`, gestione CONCURRENCY_ERROR
+  - `LeadCard.tsx`: aggiunto `version` al tipo `LeadProps`, passa `lead.version` a `GdoQuickActions`
+  - `ContactDrawer.tsx`: passa `lead.version` a `GdoQuickActions`
+  - `PipelineBoard.tsx`: cerca version dal lead selezionato tra le liste, passa a `OutcomeModal`
+  - `RecallBoard.tsx`: cerca version dal lead selezionato tra le liste, passa a `OutcomeModal`
+- **Verificato**: `confermeActions.ts` aveva già optimistic locking completo su tutti i suoi update (5 check points) — nessuna modifica necessaria.
+- File modificati: `src/app/actions/pipelineActions.ts`, `src/app/actions/venditoreActions.ts`, `src/app/actions/appointmentActions.ts`, `src/components/GdoQuickActions.tsx`, `src/components/OutcomeModal.tsx`, `src/components/VenditoreDrawer.tsx`, `src/components/AppointmentBoard.tsx`, `src/components/LeadCard.tsx`, `src/components/ContactDrawer.tsx`, `src/components/PipelineBoard.tsx`, `src/components/RecallBoard.tsx`
+- **Learnings per iterazioni future:**
+  - Il parametro `currentVersion` è opzionale (`?`) nei server action per backward compatibility — se non passato, il check viene saltato. Questo permette di aggiungere locking gradualmente senza rompere chiamate esistenti.
+  - `updateLeadOutcome` ha cambiato return type da `true` a `{ success: true }` — i client non usavano il return value prima, quindi nessun breaking change.
+  - In PipelineBoard/RecallBoard, la version del lead selezionato viene cercata concatenando tutte le liste lead disponibili nel componente (firstCall + secondCall + thirdCall + fourthCall, oppure expired + upcoming).
+  - `VenditoreDashboardClient.tsx` importa `saveVenditoreOutcome` ma non lo chiama direttamente — l'import è residuo o usato solo da `VenditoreDrawer`.
 ---

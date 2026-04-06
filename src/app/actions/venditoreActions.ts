@@ -52,7 +52,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     notClosedReason?: string,
     followUp1Date?: Date | null,
     followUp2Date?: Date | null
-}) {
+}, currentVersion?: number) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -62,6 +62,11 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
 
     const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
     if (!oldLead) throw new Error("Lead non trovato")
+
+    // Optimistic locking check
+    if (currentVersion !== undefined && oldLead.version !== currentVersion) {
+        return { success: false, error: 'CONCURRENCY_ERROR' }
+    }
 
     await db.update(leads)
         .set({
@@ -73,6 +78,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             followUp1Date: payload.followUp1Date || null,
             followUp2Date: payload.followUp2Date || null,
             salespersonOutcomeAt: new Date(),
+            version: oldLead.version + 1,
         })
         .where(eq(leads.id, leadId))
         

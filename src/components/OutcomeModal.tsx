@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 
 type OutcomeModalProps = {
     leadId: string
+    leadVersion: number
     isOpen: boolean
     onClose: () => void
 }
@@ -19,7 +20,7 @@ const DISCARD_REASONS = [
     "non vuole prendere l'appuntamento"
 ]
 
-export function OutcomeModal({ leadId, isOpen, onClose }: OutcomeModalProps) {
+export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeModalProps) {
     const router = useRouter()
     const [outcome, setOutcome] = useState<'DA_SCARTARE' | 'NON_RISPOSTO' | 'RICHIAMO' | 'APPUNTAMENTO' | null>(null)
     const [note, setNote] = useState("")
@@ -39,7 +40,15 @@ export function OutcomeModal({ leadId, isOpen, onClose }: OutcomeModalProps) {
                 targetDate = new Date(dateStr)
             }
 
-            await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined)
+            const result = await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion)
+
+            if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
+                alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
+                router.refresh()
+                onClose()
+                return
+            }
+
             router.refresh()
             onClose()
         } catch (e) {

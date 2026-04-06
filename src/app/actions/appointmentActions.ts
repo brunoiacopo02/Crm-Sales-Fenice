@@ -46,7 +46,7 @@ export async function getAppointments() {
     return { upcoming, past }
 }
 
-export async function updateGdoAppointment(leadId: string, appointmentDate: Date, note: string) {
+export async function updateGdoAppointment(leadId: string, appointmentDate: Date, note: string, currentVersion?: number) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     if (!supabaseUser || supabaseUser.user_metadata?.role !== 'GDO') throw new Error("Unauthorized");
@@ -55,12 +55,18 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
     const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.assignedToId, supabaseUser.id)));
     if (!lead) throw new Error("Lead not found or unassigned");
 
+    // Optimistic locking check
+    if (currentVersion !== undefined && lead.version !== currentVersion) {
+        return { success: false, error: 'CONCURRENCY_ERROR' };
+    }
+
     // Assicurarsi che appointmentDate sia un oggetto Date valido se Next lo passasse come stringa in JSON
     const dateObj = new Date(appointmentDate);
 
     await db.update(leads).set({
         appointmentDate: dateObj,
         appointmentNote: note,
+        version: lead.version + 1,
         updatedAt: new Date(),
     }).where(eq(leads.id, leadId));
 
