@@ -9,6 +9,8 @@ Started: 2026-04-06
 - I Server Action in `notificationActions.ts` ritornano `true` su successo.
 - `RealtimeProvider` wrappa il dashboard layout e triggera `router.refresh()` su qualsiasi cambiamento leads.
 - **Timezone pattern**: Per ottenere data `yyyy-MM-dd` in Europe/Rome usare `date.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })` — pattern già usato in `pauseUtils.ts`. Mai usare `toISOString().split('T')[0]` o `format(new Date(), 'yyyy-MM-dd')` su Vercel (UTC).
+- **Google Calendar OAuth2 client**: Mai usare un `oauth2Client` singleton a livello di modulo — su Vercel warm instances condividono stato e richieste concorrenti si sovrascrivono i credentials. Usare factory `createOAuth2Client()` per creare istanza nuova per ogni operazione.
+- **Google Calendar refresh_token rotation**: Google ruota periodicamente i refresh_token. Quando si fa refresh, SEMPRE salvare `credentials.refresh_token` se presente, altrimenti il vecchio diventa invalido → `invalid_grant` permanente.
 - `confermeKpiActions.ts`: i target settimanali sono su `users.confermeTargetTier1/Tier2`, quelli mensili = weekly * 4.
 - **Timezone pattern (month range filter)**: Per filtrare lead per mese "YYYY-MM", usare `getMonthBounds(monthString)` per ottenere prima/ultima data del mese come stringhe, poi `toRomeStartOfDay()`/`toRomeEndOfDay()` per convertirle in Date UTC Rome-aware. Vedi `marketingActions.ts`.
 - **Timezone pattern (date range filter)**: Per convertire una data "YYYY-MM-DD" (Rome) in Date UTC per filtri `gte`/`lte`, usare `Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', timeZoneName: 'longOffset' })` per ricavare l'offset e costruire `new Date(\`${dateStr}T00:00:00${offset}\`)`. Vedi `toRomeStartOfDay()`/`toRomeEndOfDay()` in `archiveActions.ts`.
@@ -103,4 +105,23 @@ Started: 2026-04-06
   - Next.js App Router auto-detects `favicon.ico` e `icon.png` in `src/app/` — non serve dichiararli in metadata.icons
   - `VERCEL_URL` è disponibile automaticamente su Vercel deployments (senza `https://` prefix — va aggiunto)
   - `metadataBase` è necessario per OG images e canonical URLs assoluti in produzione
+---
+
+## 2026-04-07 - F0-007
+- **Audit completo** di `src/lib/googleCalendar.ts`, `src/app/api/google/callback/route.ts`, `src/app/actions/calendarActions.ts`, e consumer in `confermeActions.ts` e `VenditoreDashboardClient.tsx`
+- **Bug fixato (CRITICO - singleton race condition)**: `oauth2Client` era un singleton a livello di modulo. Su Vercel warm instances, richieste concorrenti sovrascrivevano i credentials dell'oauth2Client, potenzialmente creando eventi nel calendario dell'utente sbagliato. Fixato con factory `createOAuth2Client()` che crea un'istanza nuova per ogni operazione.
+- **Bug fixato (CRITICO - refresh_token rotation)**: `refreshAccessToken()` salvava solo il nuovo `access_token` ma scartava il nuovo `refresh_token` se Google lo ruotava. Google ruota periodicamente i refresh token → il vecchio diventa invalido → `invalid_grant` permanente → calendario smette di funzionare. Fixato salvando `credentials.refresh_token` quando presente.
+- **Bug fixato (null safety)**: Aggiunto check esplicito su `credentials.access_token` dopo refresh — prima usava `!` assertion che poteva salvare `undefined` in DB.
+- **Bug fixato (updatedAt mancante)**: `refreshAccessToken()` e OAuth callback update non aggiornavano il campo `updatedAt` su `calendarConnections`.
+- **Verificato OK**: Scopes corretti (`calendar` + `calendar.events`), `sendUpdates: 'all'` presente su insert e delete, attendees aggiunti correttamente, FreeBusy check con fallback su errore, OAuth callback gestisce re-auth preservando vecchio refresh_token.
+- **Verificato OK**: `calendarActions.ts` — `getGoogleAuthUrl`, `checkGoogleCalendarConnection`, `disconnectGoogleCalendar` sono corretti e semplici wrapper.
+- **Verificato OK**: `VenditoreDashboardClient.tsx` — Connect/disconnect UI corretta, no hydration issues.
+- File modificati: `src/lib/googleCalendar.ts`, `src/app/api/google/callback/route.ts`
+- **Learnings per iterazioni future:**
+  - Il calendar è usato solo dal flusso Conferme → Venditore (setConfermeOutcome, scheduleConfermeRecall)
+  - `checkFreeBusy` è chiamato prima di creare l'evento per verificare slot libero — ritorna `true` (libero) su qualsiasi errore per non bloccare il flusso
+  - La connessione calendar è per-venditore (userId nella calendarConnections)
+  - `scheduleConfermeRecall` cancella e ricrea l'evento calendar quando l'appuntamento viene riprogrammato
+  - Il redirect post-OAuth va a `/venditore?success=calendar_connected` — solo venditori possono connettere il calendario
+  - Per testare il fix serve un re-connect OAuth (disconnect + reconnect) per ottenere un refresh_token fresco
 ---
