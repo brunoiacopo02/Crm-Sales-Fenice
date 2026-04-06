@@ -2,9 +2,9 @@ import { getMarketingStats, getMarketingStatsByGdo } from "@/app/actions/marketi
 import MarketingAnalyticsClient from "./MarketingAnalyticsClient";
 
 export default async function MarketingAnalyticsPage() {
-    // By default, grab current month "YYYY-MM"
-    const now = new Date();
-    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    // Compute current month in Europe/Rome timezone (Vercel runs UTC — around midnight IT this matters)
+    const romeToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }); // "YYYY-MM-DD"
+    const currentMonthStr = romeToday.substring(0, 7); // "YYYY-MM"
 
     const initialStats = await getMarketingStats(currentMonthStr);
     const initialStatsByGdo = await getMarketingStatsByGdo(currentMonthStr);

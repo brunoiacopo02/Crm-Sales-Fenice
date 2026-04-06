@@ -3,7 +3,6 @@
 import { db } from "@/db";
 import { leads, marketingBudgets } from "@/db/schema";
 import { and, eq, ne, isNotNull, gte, lte } from "drizzle-orm";
-import { startOfMonth, endOfMonth, parseISO } from "date-fns";
 
 const OFFICIAL_FUNNELS = [
     "TELEGRAM",
@@ -16,10 +15,51 @@ const OFFICIAL_FUNNELS = [
     "SOCIAL"
 ];
 
+/** Convert "YYYY-MM-DD" to UTC Date at start of that day in Europe/Rome */
+function toRomeStartOfDay(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const noon = new Date(Date.UTC(y, m - 1, d, 12));
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Rome',
+        timeZoneName: 'longOffset'
+    });
+    const parts = fmt.formatToParts(noon);
+    const tzPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+01:00';
+    const offset = tzPart.replace('GMT', '') || '+00:00';
+    return new Date(`${dateStr}T00:00:00${offset}`);
+}
+
+/** Convert "YYYY-MM-DD" to UTC Date at end of that day (23:59:59.999) in Europe/Rome */
+function toRomeEndOfDay(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const noon = new Date(Date.UTC(y, m - 1, d, 12));
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Rome',
+        timeZoneName: 'longOffset'
+    });
+    const parts = fmt.formatToParts(noon);
+    const tzPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+01:00';
+    const offset = tzPart.replace('GMT', '') || '+00:00';
+    return new Date(`${dateStr}T23:59:59.999${offset}`);
+}
+
+/** Get first and last day strings of a month from "YYYY-MM" */
+function getMonthBounds(monthString: string): { startDateStr: string; endDateStr: string } {
+    const [yearStr, monthStr] = monthString.split('-');
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStr);
+    const lastDay = new Date(year, month, 0).getDate(); // day 0 of next month = last day of this month
+    return {
+        startDateStr: `${monthString}-01`,
+        endDateStr: `${monthString}-${String(lastDay).padStart(2, '0')}`
+    };
+}
+
 export async function getMarketingStats(monthString: string) {
     // monthString format: "YYYY-MM"
-    const startDate = startOfMonth(parseISO(`${monthString}-01`));
-    const endDate = endOfMonth(parseISO(`${monthString}-01`));
+    const { startDateStr, endDateStr } = getMonthBounds(monthString);
+    const startDate = toRomeStartOfDay(startDateStr);
+    const endDate = toRomeEndOfDay(endDateStr);
 
     // Get leads for the month that have a funnel != 'BLT'
     const allLeads = await db.select().from(leads).where(
@@ -98,7 +138,7 @@ export async function getMarketingStats(monthString: string) {
 
         let roas = 0;
         if (spentAmountEur > 0) {
-            roas = ((stat.fatturato - spentAmountEur) / spentAmountEur) * 100;
+            roas = (stat.fatturato / spentAmountEur) * 100;
         }
 
         return {
@@ -140,8 +180,9 @@ export async function saveMarketingBudget(funnel: string, month: string, spentAm
 }
 
 export async function getMarketingStatsByGdo(monthString: string) {
-    const startDate = startOfMonth(parseISO(`${monthString}-01`));
-    const endDate = endOfMonth(parseISO(`${monthString}-01`));
+    const { startDateStr, endDateStr } = getMonthBounds(monthString);
+    const startDate = toRomeStartOfDay(startDateStr);
+    const endDate = toRomeEndOfDay(endDateStr);
 
     // Get leads for the month that have a funnel != 'BLT'
     const allLeads = await db.select().from(leads).where(
