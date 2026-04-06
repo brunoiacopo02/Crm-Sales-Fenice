@@ -90,3 +90,17 @@ Started: 2026-04-06
   - I lead con `recallDate` non-null ma status `REJECTED` o `APPOINTMENT` sono esclusi dai richiami — quando un lead passa a APPUNTAMENTO, il `recallDate` viene settato a `null` dal server action `updateLeadOutcome`.
   - L'alert `window.alert()` è bloccante — se 5 richiami scadono insieme, l'utente deve chiudere 5 alert sequenziali. Da considerare in futuro un sistema toast non-bloccante.
 ---
+
+## 2026-04-07 - F0-006
+- **Audit completo** di `layout.tsx`, `favicon.ico`, e `icon.png`
+- **Verificato OK**: `favicon.ico` (1063 bytes) e `icon.png` (47011 bytes) esistono e sono file validi. Next.js li serve automaticamente da `src/app/`.
+- **Fix (lang)**: `<html lang="en">` cambiato a `<html lang="it">` — il CRM è in italiano.
+- **Aggiunto**: `metadataBase` con fallback `VERCEL_URL` → `localhost:3000` per URL assoluti corretti.
+- **Aggiunto**: Open Graph metadata (`og:title`, `og:description`, `og:site_name`, `og:type`).
+- **Verificato OK**: Build compila senza errori. `/icon.png` appare correttamente come route statica prerendered.
+- File modificati: `src/app/layout.tsx`
+- **Learnings per iterazioni future:**
+  - Next.js App Router auto-detects `favicon.ico` e `icon.png` in `src/app/` — non serve dichiararli in metadata.icons
+  - `VERCEL_URL` è disponibile automaticamente su Vercel deployments (senza `https://` prefix — va aggiunto)
+  - `metadataBase` è necessario per OG images e canonical URLs assoluti in produzione
+---
