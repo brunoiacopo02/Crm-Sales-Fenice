@@ -12,6 +12,7 @@ Started: 2026-04-06
 - `confermeKpiActions.ts`: i target settimanali sono su `users.confermeTargetTier1/Tier2`, quelli mensili = weekly * 4.
 - **Timezone pattern (month range filter)**: Per filtrare lead per mese "YYYY-MM", usare `getMonthBounds(monthString)` per ottenere prima/ultima data del mese come stringhe, poi `toRomeStartOfDay()`/`toRomeEndOfDay()` per convertirle in Date UTC Rome-aware. Vedi `marketingActions.ts`.
 - **Timezone pattern (date range filter)**: Per convertire una data "YYYY-MM-DD" (Rome) in Date UTC per filtri `gte`/`lte`, usare `Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', timeZoneName: 'longOffset' })` per ricavare l'offset e costruire `new Date(\`${dateStr}T00:00:00${offset}\`)`. Vedi `toRomeStartOfDay()`/`toRomeEndOfDay()` in `archiveActions.ts`.
+- **Timezone pattern (client-side display)**: Per mostrare date nel client usare `toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })`. Mai usare `toLocaleString([], ...)` senza `timeZone` — funziona solo se il browser è in Italy.
 
 ---
 
@@ -71,4 +72,21 @@ Started: 2026-04-06
   - Le righe del drill-down GDO sono ordinate per `appsFissati` decrescente (chi ha fissato di più in cima)
   - ROAS in marketing = Revenue / Ad Spend (non profitto/costo). Es. spesa 1000€, fatturato 5000€ → ROAS = 500%
   - Il pattern `getMonthBounds()` + `toRomeStartOfDay()`/`toRomeEndOfDay()` è riusabile per qualsiasi filtro per mese
+---
+
+## 2026-04-07 - F0-005
+- **Audit completo** di `RecallBoard.tsx`, `recallActions.ts`, e `richiami/page.tsx`
+- **Verificato anche** `PipelineBoard.tsx` (recall watcher duplicato) e `LeadCard.tsx` (date display)
+- **Bug fixato (timezone display)**: `RecallBoard.tsx` e `LeadCard.tsx` usavano `toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })` senza `timeZone: 'Europe/Rome'`. Se l'utente accede da fuso orario diverso, le date richiamo/appuntamento/ultima chiamata venivano mostrate nel fuso del browser. Fixato con `toLocaleString('it-IT', { ..., timeZone: 'Europe/Rome' })`.
+- **Stesso fix applicato a** `AppointmentBoard.tsx` (stessa classe di bug per appointmentDate display).
+- **Verificato OK (server-side filtering)**: `recallActions.ts` usa `new Date()` per split expired/upcoming — confronto tra Date objects è timezone-safe (UTC ms internamente). Nessun bug.
+- **Verificato OK (polling 30s)**: `RecallBoard.tsx` useEffect con setInterval 30s controlla `recallTime <= nowTime` su tutti i lead (expired + upcoming). `alertedRecalls` Set previene alert duplicati. Cleanup corretto su unmount.
+- **Verificato OK (query Drizzle)**: Filtri `ne(status, 'REJECTED')`, `ne(status, 'APPOINTMENT')`, `isNotNull(recallDate)` corretti. GDO vede solo i propri lead, Manager vede tutti.
+- **Verificato OK (nessun hydration issue)**: Nessun bottone interattivo in `<span>` o `<p>`.
+- File modificati: `src/components/RecallBoard.tsx`, `src/components/LeadCard.tsx`, `src/components/AppointmentBoard.tsx`
+- **Learnings per iterazioni future:**
+  - Il recall watcher esiste in DUE posti: `RecallBoard.tsx` (pagina /richiami) e `PipelineBoard.tsx` (pagina / dashboard). Non sono mai montati contemporaneamente, nessun conflitto.
+  - `recallActions.ts` è usato solo dalla pagina /richiami. La pipeline usa `pipelineActions.ts` che ha la sua logica recall identica.
+  - I lead con `recallDate` non-null ma status `REJECTED` o `APPOINTMENT` sono esclusi dai richiami — quando un lead passa a APPUNTAMENTO, il `recallDate` viene settato a `null` dal server action `updateLeadOutcome`.
+  - L'alert `window.alert()` è bloccante — se 5 richiami scadono insieme, l'utente deve chiudere 5 alert sequenziali. Da considerare in futuro un sistema toast non-bloccante.
 ---
