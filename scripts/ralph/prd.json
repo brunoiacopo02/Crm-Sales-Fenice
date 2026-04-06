@@ -161,8 +161,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": "Questa story completa l'hardening concurrency della F0-009."
+      "passes": true,
+      "notes": "TOCTOU race condition fixata in tutti i server action: version check atomico nel WHERE clause dell'UPDATE + .returning() per detect 0 affected rows. Assegnazioni lead safe (solo INSERT, nessun UPDATE su assignedToId). Nessun drag-and-drop nel PipelineBoard (tab-based)."
     }
   ]
 }

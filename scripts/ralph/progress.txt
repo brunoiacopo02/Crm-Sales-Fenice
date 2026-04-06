@@ -4,7 +4,8 @@ Started: 2026-04-06
 
 ## Codebase Patterns
 - `createClient()` da `@supabase/ssr` (`createBrowserClient`) è un singleton — restituisce la stessa istanza ogni volta. Safe come dependency in useEffect.
-- **Optimistic locking pattern**: Ogni `db.update(leads)` DEVE includere `version: lead.version + 1` nel set e il server action deve accettare `currentVersion` dal client. Check: `if (currentVersion !== undefined && lead.version !== currentVersion) return { success: false, error: 'CONCURRENCY_ERROR' }`. Client deve mostrare alert e refreshare la pagina su CONCURRENCY_ERROR.
+- **Optimistic locking pattern (ATOMIC)**: Ogni `db.update(leads)` DEVE: (1) includere `version: lead.version + 1` nel set, (2) includere `eq(leads.version, lead.version)` nel WHERE clause per atomic check, (3) usare `.returning({ id: leads.id })` e controllare `updated.length === 0` per CONCURRENCY_ERROR. Il fast-fail `if (currentVersion !== undefined && lead.version !== currentVersion)` è un'ottimizzazione aggiuntiva ma NON sufficiente da sola (TOCTOU race). Client deve mostrare alert e refreshare la pagina su CONCURRENCY_ERROR.
+- **assignedToId immutabile**: `assignedToId` è settato solo via INSERT durante import CSV. Nessun server action lo modifica — niente race condition su riassegnazioni.
 - Supabase Realtime `payload.old` contiene solo PK senza `REPLICA IDENTITY FULL` — non fidarsi mai di `payload.old.<campo>` per logica business. Ricomputare dallo stato aggiornato.
 - Il custom event `realtime_update` viene dispatchato da `useRealtimeNotifications` su INSERT notifiche e consumato da `KpiGdoBoard` per re-fetch KPI.
 - I Server Action in `notificationActions.ts` ritornano `true` su successo.
@@ -168,4 +169,18 @@ Started: 2026-04-06
   - `updateLeadOutcome` ha cambiato return type da `true` a `{ success: true }` — i client non usavano il return value prima, quindi nessun breaking change.
   - In PipelineBoard/RecallBoard, la version del lead selezionato viene cercata concatenando tutte le liste lead disponibili nel componente (firstCall + secondCall + thirdCall + fourthCall, oppure expired + upcoming).
   - `VenditoreDashboardClient.tsx` importa `saveVenditoreOutcome` ma non lo chiama direttamente — l'import è residuo o usato solo da `VenditoreDrawer`.
+---
+
+## 2026-04-07 - F0-010
+- **Audit completo** di tutti i server action che fanno `db.update(leads)` per race condition TOCTOU
+- **Bug fixato (CRITICO - TOCTOU race condition)**: Tutti i server action avevano un pattern vulnerabile: SELECT per leggere il lead → check version in JS → UPDATE con WHERE solo su `id`. Tra il check e l'update, un'altra richiesta poteva modificare il lead e l'update sovrascriveva silenziosamente. Fixato aggiungendo `eq(leads.version, lead.version)` nel WHERE clause dell'UPDATE e usando `.returning({ id: leads.id })` per verificare che almeno 1 riga sia stata aggiornata. Se 0 righe → CONCURRENCY_ERROR.
+- **File fixati**: `pipelineActions.ts` (updateLeadOutcome), `venditoreActions.ts` (saveVenditoreOutcome), `appointmentActions.ts` (updateGdoAppointment), `confermeActions.ts` (updateLeadDataConferme, setConfermeOutcome, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze — 6 funzioni)
+- **Verificato OK (assegnazioni)**: `assignedToId` è settato solo via INSERT durante import CSV (`importLeads.ts`). Nessun server action lo modifica. Impossibile assegnare lo stesso lead a due GDO via race condition.
+- **Verificato OK (pipeline)**: PipelineBoard è tab-based (non drag-and-drop). L'OutcomeModal usa optimistic locking con version passata dal client. Nessuna race condition aggiuntiva.
+- File modificati: `src/app/actions/pipelineActions.ts`, `src/app/actions/venditoreActions.ts`, `src/app/actions/appointmentActions.ts`, `src/app/actions/confermeActions.ts`
+- **Learnings per iterazioni future:**
+  - Il pattern TOCTOU è insidioso: il fast-fail `if (version !== currentVersion)` dà falsa sicurezza. L'unico modo sicuro è avere il version check DENTRO il WHERE dell'UPDATE SQL (atomic).
+  - Drizzle ORM supporta `.returning()` su `.update()` per PostgreSQL — ritorna le righe aggiornate. Se 0 righe, l'update non ha matchato il WHERE.
+  - Il fast-fail resta utile come ottimizzazione (evita di eseguire logica inutile e inserire call logs orfani) ma non è sufficiente da solo.
+  - `confermeActions.ts` usa mix di pattern: alcune funzioni `throw new Error("CONCURRENCY_ERROR")` (updateLeadDataConferme, recordConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze), altre `return { success: false, error: 'CONCURRENCY_ERROR' }` (setConfermeOutcome, setSalespersonOutcome). Il nuovo TOCTOU check segue lo stesso pattern della funzione in cui si trova.
 ---
