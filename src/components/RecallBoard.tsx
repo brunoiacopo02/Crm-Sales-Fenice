@@ -87,7 +87,7 @@ export function RecallBoard({
                             )}
                             {activeTab === 'upcoming' && (
                                 <div className="absolute top-3 right-48 z-10 bg-white/90 backdrop-blur px-2 py-0.5 rounded text-xs font-mono font-medium text-brand-orange border border-orange-100 shadow-sm">
-                                    {new Date(lead.recallDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                    {new Date(lead.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
                                 </div>
                             )}
                             <LeadCard

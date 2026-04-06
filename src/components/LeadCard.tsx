@@ -101,17 +101,17 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                     {lead.recallDate ? (
                         <div className="flex items-center gap-1.5 font-medium text-orange-600">
                             <CalendarIcon className="h-3.5 w-3.5" />
-                            {new Date(lead.recallDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            {new Date(lead.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
                         </div>
                     ) : lead.appointmentDate ? (
                         <div className="flex items-center gap-1.5 font-bold text-green-600">
                             <CalendarIcon className="h-3.5 w-3.5" />
-                            {new Date(lead.appointmentDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            {new Date(lead.appointmentDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
                         </div>
                     ) : lead.lastCallDate ? (
                         <div className="flex items-center gap-1.5 text-gray-600">
                             <Clock className="h-3.5 w-3.5 text-gray-400" />
-                            {new Date(lead.lastCallDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            {new Date(lead.lastCallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
                         </div>
                     ) : (
                         <span className="text-gray-400 italic">Mai chiamato</span>

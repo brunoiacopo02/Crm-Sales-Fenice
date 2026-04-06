@@ -82,7 +82,7 @@ export function AppointmentBoard({
             <div className="flex flex-col items-end gap-1.5 shrink-0 w-48 text-right">
                 <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center justify-end gap-1 w-full ${isUpcoming ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                     <CalendarCheck className="h-3 w-3" />
-                    {lead.appointmentDate ? new Date(lead.appointmentDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/D'}
+                    {lead.appointmentDate ? new Date(lead.appointmentDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' }) : 'N/D'}
                 </div>
                 <div className="text-[10px] text-gray-400 flex items-center gap-1 w-full justify-end">
                     <Clock className="h-3 w-3" /> Fissato il: {lead.appointmentCreatedAt ? new Date(lead.appointmentCreatedAt).toLocaleDateString() : 'N/D'}
