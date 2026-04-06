@@ -68,7 +68,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         return { success: false, error: 'CONCURRENCY_ERROR' }
     }
 
-    await db.update(leads)
+    const updated = await db.update(leads)
         .set({
             salespersonOutcome: payload.outcome,
             salespersonOutcomeNotes: payload.notes || null,
@@ -80,7 +80,12 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             salespersonOutcomeAt: new Date(),
             version: oldLead.version + 1,
         })
-        .where(eq(leads.id, leadId))
+        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .returning({ id: leads.id })
+
+    if (updated.length === 0) {
+        return { success: false, error: 'CONCURRENCY_ERROR' }
+    }
         
 
     // 1. Audit Log per la cronologia completa (Timeline)

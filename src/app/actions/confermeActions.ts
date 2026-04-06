@@ -217,14 +217,19 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
         throw new Error("CONCURRENCY_ERROR")
     }
 
-    await db.update(leads).set({
+    const updated = await db.update(leads).set({
         name: data.name,
         email: data.email,
         appointmentDate: data.appointmentDate,
         appointmentNote: data.appointmentNote,
         version: oldLead.version + 1,
         updatedAt: new Date()
-    }).where(eq(leads.id, leadId))
+    }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+    .returning({ id: leads.id })
+
+    if (updated.length === 0) {
+        throw new Error("CONCURRENCY_ERROR")
+    }
 
     // Audit Log
     await db.insert(leadEvents).values({
@@ -300,7 +305,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             return { success: false, error: `CONCURRENCY_ERROR: DB è alla versione ${oldLead.version} ma il client ha inviato la versione ${currentVersion}` }
         }
 
-        await db.update(leads).set({
+        const updated = await db.update(leads).set({
             confirmationsOutcome: outcome,
             confirmationsDiscardReason: reason || null,
             confirmationsUserId: session.user.id,
@@ -310,7 +315,12 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             salespersonAssignedAt: salespersonAssigned ? new Date() : null,
             version: oldLead.version + 1,
             updatedAt: new Date()
-        }).where(eq(leads.id, leadId))
+        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .returning({ id: leads.id })
+
+        if (updated.length === 0) {
+            return { success: false, error: 'CONCURRENCY_ERROR' }
+        }
 
         // Handle Calendar Event Creation
         if (outcome === "confermato" && salespersonAssigned && oldLead.appointmentDate) {
@@ -410,13 +420,18 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
             }
         }
 
-        await db.update(leads).set({
+        const updated = await db.update(leads).set({
             salespersonOutcome: outcome,
             salespersonOutcomeNotes: notes || null,
             salespersonOutcomeAt: new Date(),
             version: oldLead.version + 1,
             updatedAt: new Date()
-        }).where(eq(leads.id, leadId))
+        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .returning({ id: leads.id })
+
+        if (updated.length === 0) {
+            return { success: false, error: 'CONCURRENCY_ERROR' }
+        }
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
@@ -458,7 +473,13 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
         return { success: false, error: "Tutti i tentalivi NR sono stati effettuati." };
     }
 
-    await db.update(leads).set(toUpdate).where(eq(leads.id, leadId));
+    const updated = await db.update(leads).set(toUpdate)
+    .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+    .returning({ id: leads.id });
+
+    if (updated.length === 0) {
+        throw new Error("CONCURRENCY_ERROR");
+    }
 
     await db.insert(leadEvents).values({
         id: crypto.randomUUID(),
@@ -518,7 +539,13 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             }
         }
 
-        await db.update(leads).set(toUpdate).where(eq(leads.id, leadId));
+        const updated = await db.update(leads).set(toUpdate)
+        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            throw new Error("CONCURRENCY_ERROR");
+        }
 
         // Handle Calendar if already confirmed and shift/removal happened
         if (calendarNeedsUpdate && oldLead.salespersonUserId) {
@@ -586,7 +613,13 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
         if (payload?.vslSeen !== undefined) toUpdate.confVslSeen = payload.vslSeen;
         if (payload?.snoozeNotes !== undefined) toUpdate.confRecallNotes = payload.snoozeNotes;
 
-        await db.update(leads).set(toUpdate).where(eq(leads.id, leadId));
+        const updated = await db.update(leads).set(toUpdate)
+        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            throw new Error("CONCURRENCY_ERROR");
+        }
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),

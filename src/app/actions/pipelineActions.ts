@@ -203,8 +203,8 @@ export async function updateLeadOutcome(
         appointmentCreatedAt = now
     }
 
-    // Update lead record
-    await db.update(leads)
+    // Update lead record (atomic version check in WHERE prevents TOCTOU race)
+    const updated = await db.update(leads)
         .set({
             status: newStatus,
             callCount: newCallCount,
@@ -218,7 +218,12 @@ export async function updateLeadOutcome(
             version: lead.version + 1,
             updatedAt: now,
         })
-        .where(eq(leads.id, leadId))
+        .where(and(eq(leads.id, leadId), eq(leads.version, lead.version)))
+        .returning({ id: leads.id })
+
+    if (updated.length === 0) {
+        return { success: false, error: 'CONCURRENCY_ERROR' }
+    }
 
     // Team Goal trigger evaluation logic
     if (outcome === 'APPUNTAMENTO') {

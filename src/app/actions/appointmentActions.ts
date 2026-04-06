@@ -63,12 +63,17 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
     // Assicurarsi che appointmentDate sia un oggetto Date valido se Next lo passasse come stringa in JSON
     const dateObj = new Date(appointmentDate);
 
-    await db.update(leads).set({
+    const updated = await db.update(leads).set({
         appointmentDate: dateObj,
         appointmentNote: note,
         version: lead.version + 1,
         updatedAt: new Date(),
-    }).where(eq(leads.id, leadId));
+    }).where(and(eq(leads.id, leadId), eq(leads.version, lead.version)))
+    .returning({ id: leads.id });
+
+    if (updated.length === 0) {
+        return { success: false, error: 'CONCURRENCY_ERROR' };
+    }
 
     return { success: true };
 }
