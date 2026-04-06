@@ -125,3 +125,23 @@ Started: 2026-04-06
   - Il redirect post-OAuth va a `/venditore?success=calendar_connected` — solo venditori possono connettere il calendario
   - Per testare il fix serve un re-connect OAuth (disconnect + reconnect) per ottenere un refresh_token fresco
 ---
+
+## 2026-04-07 - F0-008
+- **Creato script** `scripts/verifyGdoAccounts.ts` per verifica e creazione account GDO
+- **Funzionalita'**:
+  - Connessione a Supabase Auth (admin API) e public.users (Drizzle ORM)
+  - Lista tutti gli utenti con ruolo GDO, verifica stato attivo
+  - Report tabellare con: gdoCode, esistenza, attivita', presenza in Auth, email, displayName
+  - Identifica account mancanti nel range 105-120 (16 account)
+  - Segnala account GDO con gdoCode fuori range o NULL
+  - Flag `--create` per creare account mancanti (Auth + DB sync)
+  - Verifica post-creazione automatica
+- **Pattern creazione**: Supabase Auth admin.createUser (email_confirm: true) + Drizzle insert con stesso UUID, bcrypt password hash (10 rounds)
+- **Esecuzione**: `npx tsx scripts/verifyGdoAccounts.ts` (report) oppure `npx tsx scripts/verifyGdoAccounts.ts --create` (crea mancanti)
+- File creati: `scripts/verifyGdoAccounts.ts`
+- **Learnings per iterazioni future:**
+  - Pattern email GDO: `gdo{code}@fenice.local`, password default: `Gdo2026!`
+  - Supabase Auth admin.listUsers ha paginazione (perPage: 1000 per fetchare tutti)
+  - Se un utente Auth esiste gia' ma manca in public.users, lo script recupera l'ID Auth e inserisce solo in DB
+  - Lo script e' standalone (non parte della build Next.js) — non impatta `npx next build`
+---

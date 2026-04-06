@@ -129,7 +129,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Attualmente solo l'account 114 e' testato. Servono 16 account funzionanti totali."
     },
     {
