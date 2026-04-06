@@ -8,6 +8,10 @@ Started: 2026-04-06
 - Il custom event `realtime_update` viene dispatchato da `useRealtimeNotifications` su INSERT notifiche e consumato da `KpiGdoBoard` per re-fetch KPI.
 - I Server Action in `notificationActions.ts` ritornano `true` su successo.
 - `RealtimeProvider` wrappa il dashboard layout e triggera `router.refresh()` su qualsiasi cambiamento leads.
+- **Timezone pattern**: Per ottenere data `yyyy-MM-dd` in Europe/Rome usare `date.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })` — pattern già usato in `pauseUtils.ts`. Mai usare `toISOString().split('T')[0]` o `format(new Date(), 'yyyy-MM-dd')` su Vercel (UTC).
+- `confermeKpiActions.ts`: i target settimanali sono su `users.confermeTargetTier1/Tier2`, quelli mensili = weekly * 4.
+- **Timezone pattern (month range filter)**: Per filtrare lead per mese "YYYY-MM", usare `getMonthBounds(monthString)` per ottenere prima/ultima data del mese come stringhe, poi `toRomeStartOfDay()`/`toRomeEndOfDay()` per convertirle in Date UTC Rome-aware. Vedi `marketingActions.ts`.
+- **Timezone pattern (date range filter)**: Per convertire una data "YYYY-MM-DD" (Rome) in Date UTC per filtri `gte`/`lte`, usare `Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', timeZoneName: 'longOffset' })` per ricavare l'offset e costruire `new Date(\`${dateStr}T00:00:00${offset}\`)`. Vedi `toRomeStartOfDay()`/`toRomeEndOfDay()` in `archiveActions.ts`.
 
 ---
 
@@ -21,4 +25,50 @@ Started: 2026-04-06
   - Il Topbar non usa `unreadCount` dal hook — computa unread direttamente da `notifications.filter(n => n.status === 'unread').length`
   - `getUnreadNotifications` in `notificationActions.ts` è naming misleading: fetcha TUTTE le notifiche (non solo unread)
   - Il channel name in RealtimeProvider è `'public:leads-changes'` — non toccare per regola CLAUDE.md
+---
+
+## 2026-04-07 - F0-002
+- **Audit completo** di `ConfermeKpiBoard.tsx` e `confermeKpiActions.ts`
+- **Bug fixato (timezone)**: `confermeKpiActions.ts` usava `format(new Date(), 'yyyy-MM-dd')` che su Vercel (UTC) produce data sbagliata intorno a mezzanotte IT. Fixato con helper `toRomeDateStr()` che usa `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })`.
+- **Bug fixato (isToday client)**: `ConfermeKpiBoard.tsx` usava `toISOString().split('T')[0]` per isToday — sempre UTC. Fixato con `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })`.
+- **Bug fixato (calendario)**: Il calendario giornaliero chunkava i giorni in gruppi di 7 dal giorno 1, senza rispettare le settimane Lun-Dom. Fixato con padding corretto per allineare a settimane calendario + header giorni settimana (Lun, Mar, ..., Dom).
+- **Ottimizzazione**: Rimossa query duplicata su tabella `users` per target Tier1/Tier2 (era fetchata 2 volte per calcolare weekly e monthly targets separatamente). Consolidata in singola query.
+- **Dead code rimosso**: Variabili `pctT1`/`pctT2` calcolate ma mai usate in `renderProgressBar()`.
+- **Verificato OK**: Progress bar settimanale calcola correttamente ACT vs Target, storico settimanale corretto, tabella mensile ACT vs TARGET con scostamento funzionante.
+- **Nota**: Le righe "Trattative Presenziate" e "Closed (Contratti)" nella tabella mensile usano dati mockati (percentuali fisse degli appuntamenti confermati). Non è un bug — è esplicitamente marcato come "MOCKS" nel codice. Da sostituire con dati reali quando disponibili.
+- File modificati: `src/app/actions/confermeKpiActions.ts`, `src/components/ConfermeKpiBoard.tsx`
+- **Learnings per iterazioni future:**
+  - Il dropdown filtro per singolo operatore Conferme è placeholder WIP (solo "Tutto il Team" funziona)
+  - `getConfermeSalesList` fetcha venditori e conta lead confermati assegnati a ciascuno — usata per sidebar "Bilanciamento Venditori"
+  - Il `dataPrimo` nella tabella scostamento è mockato (3 giorni fa hardcoded) — da computare se necessario
+---
+
+## 2026-04-07 - F0-003
+- **Audit completo** di `ArchiveClient.tsx`, `archiveActions.ts`, e `page.tsx`
+- **Bug fixato (timezone)**: `fromDate`/`toDate` erano parsati come UTC midnight (`new Date("YYYY-MM-DD")` → UTC). Su Vercel (UTC) i lead creati tra 00:00-02:00 Rome time venivano esclusi/inclusi erroneamente. Fixato con helper `toRomeStartOfDay()`/`toRomeEndOfDay()` che calcolano l'offset Europe/Rome via `Intl.DateTimeFormat` e costruiscono la Date UTC corretta.
+- **Bug fixato (outcome filter dead code)**: Le condizioni `outcome === 'Confermato'` e `outcome === 'Scartato'` nel server action non matchavano mai i valori client `"CONFERMATO"`/`"SCARTATO"`. Funzionava solo per il fallback generico. Rimossi i branch morti, lasciato solo il check esplicito per `'Chiuso'`/`'Non chiuso'` (salespersonOutcome) e il fallback per status DB.
+- **Verificato OK**: Paginazione (50 righe/pagina, offset corretto), export CSV (UTF-8 BOM, separatore `;`, escape `""`), filtri GDO/venditore, flow `handleSearch` con reset page, rendering tabella client-side con timezone browser corretta.
+- File modificati: `src/app/actions/archiveActions.ts`
+- **Learnings per iterazioni future:**
+  - La page `/archivio` è gated a MANAGER/ADMIN nel server component `page.tsx`
+  - `ArchiveClient` usa `fetchData()` via `useEffect` solo su `[filters.page, filters.limit]` — il bottone "Applica Filtri" chiama `handleSearch()` che o resetta page a 1 (triggering useEffect) o chiama `fetchData()` direttamente se già su page 1
+  - CSV export usa `exportAll: true` che bypassa pagination e ritorna tutti i risultati
+  - Le date nella tabella client sono renderizzate con `format()` di date-fns sul browser — timezone del browser (Italy) si applica automaticamente
+  - `confUser` (conferme user) è joinato nella query ma non usato nella tabella — disponibile per future colonne
+---
+
+## 2026-04-07 - F0-004
+- **Audit completo** di `marketingActions.ts`, `page.tsx`, e `MarketingAnalyticsClient.tsx`
+- **Bug fixato (ROAS formula)**: `marketingActions.ts` calcolava ROI `((revenue - cost) / cost) * 100` invece di ROAS `(revenue / cost) * 100`. Fixato con formula ROAS corretta.
+- **Bug fixato (timezone page.tsx)**: `new Date()` su Vercel (UTC) poteva dare mese sbagliato intorno a mezzanotte IT. Fixato con `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })`.
+- **Bug fixato (timezone server actions)**: `startOfMonth(parseISO(...))` e `endOfMonth(parseISO(...))` producevano boundaries UTC. Lead creati tra 00:00-02:00 Rome time potevano essere esclusi/inclusi erroneamente. Fixato con helper `toRomeStartOfDay()`/`toRomeEndOfDay()` e `getMonthBounds()` per calcolare inizio/fine mese in timezone Europe/Rome.
+- **Rimossa dipendenza**: Rimosso import `date-fns` (`startOfMonth`, `endOfMonth`, `parseISO`) non più necessario.
+- **Verificato OK**: Calcoli percentuali funnel (apps%, conferme%, trattative%, close%) corretti con protezione divisione per zero, form budget salva correttamente per funnel/mese (upsert), breakdown GDO con percentuali conferma/presenziati/closed corrette, totali row nel drill-down GDO, `formatPercent` gestisce NaN/Infinity.
+- **Verificato OK (client)**: Nessun problema di hydration React, nessun bottone in `<span>` o `<p>`, componenti interattivi safe.
+- File modificati: `src/app/actions/marketingActions.ts`, `src/app/(dashboard)/marketing-analytics/page.tsx`
+- **Learnings per iterazioni future:**
+  - `marketingBudgets` table non ha unique constraint su (funnel, month) — l'upsert si basa su query SELECT + conditional INSERT/UPDATE. Non è un bug attivo ma un'area di miglioramento DB.
+  - Le righe del drill-down GDO sono ordinate per `appsFissati` decrescente (chi ha fissato di più in cima)
+  - ROAS in marketing = Revenue / Ad Spend (non profitto/costo). Es. spesa 1000€, fatturato 5000€ → ROAS = 500%
+  - Il pattern `getMonthBounds()` + `toRomeStartOfDay()`/`toRomeEndOfDay()` è riusabile per qualsiasi filtro per mese
 ---
