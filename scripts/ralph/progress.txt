@@ -395,3 +395,75 @@ Started: 2026-04-07
   - Snooze sidebar was previously purple — changed to warm brand-orange/gold for design system consistency
   - Table row hover uses `brand-orange-50/30` for subtle warm accent matching overall theme
 ---
+
+## 2026-04-07 - F2-018
+- **Feature**: UI: Redesign Dashboard Venditori e KPI pages
+- **What was done:**
+  - **VenditoreDashboardClient.tsx redesign:**
+    - Toolbar: glass-like `bg-white/90 backdrop-blur-sm`, ash-* warm palette, `shadow-soft` cards
+    - View toggle: `bg-ash-100/80` segmented control matching F2-015/016 pattern
+    - Table: gradient header `from-ash-50 to-ash-100/50`, staggered row fade-in, `hover:bg-brand-orange-50/30`
+    - Agenda cards: `shadow-soft hover:shadow-card hover:border-brand-orange/30`, staggered animation
+    - Status badges: emerald for Chiuso, ash for Sparito, ember for Non Chiuso (replaced gray/orange)
+    - Drawer: `backdrop-blur-sm`, `shadow-elevated`, `animate-slide-in-right`
+    - All `<span>` in data cells replaced with `<div>` for hydration safety
+  - **KpiVenditoriClient.tsx redesign:**
+    - **Podium for top 3**: gold/ash/brand-orange gradient circles with Crown/Medal icons, animated `slide-up`
+    - Trophy position indicators: gradient circles (gold-300→500, ash-300→400, brand-orange-300→500)
+    - Progress bars: `transition-all duration-700` for smooth animation, emerald/gold/ember color coding
+    - "TU" badge: brand-orange-100 with border, BONUS badge with emerald and animate-fade-in
+    - Table rows: staggered fade-in, brand-orange-50/30 highlight for current user
+  - **KpiGdoBoard.tsx redesign:**
+    - Filter toolbar: glass-like, ash palette, rounded-lg inputs with `focus:ring-brand-orange/30`
+    - KPI cards: icon boxes in `rounded-xl` containers, `hover:shadow-card` transition, grouped hover colors
+    - Appuntamenti card: emerald gradient background (not just border)
+    - Fissaggio card: `bg-gradient-to-br from-brand-charcoal to-ash-900`
+    - Target widgets: left accent gradient bars, `rounded-xl` icon containers
+    - Chart tooltip: `borderRadius: '12px'`, ash border
+    - Pie chart: ember/gold/emerald colors replacing red/amber/green
+    - Productivity ranking: `hover:bg-brand-orange-50/20`, progress bars with `duration-700`
+  - **ManagerTargetsClient.tsx redesign:**
+    - Table headers: `bg-gradient-to-r from-ash-800 to-brand-charcoal`
+    - Section headers: `bg-gradient-to-r from-ash-50 to-ash-100/50`
+    - Stat cards: `hover:shadow-card transition-all duration-200`, ash palette
+    - Critical alert: ember gradient with rounded-xl
+    - Modal: `backdrop-blur-sm`, `rounded-2xl`, `shadow-elevated`
+    - Buttons: using `btn-primary`, `btn-ghost` design system classes
+    - All table rows: `hover:bg-brand-orange-50/20 transition-colors duration-200`
+  - **ManagerOperativaBoard.tsx redesign:**
+    - Header: gradient background, ash-100/80 tab bar
+    - Totals row: `bg-gradient-to-r from-brand-charcoal to-ash-800`
+    - Data rows: `hover:bg-brand-orange-50/20 transition-colors duration-200`
+    - Appointments column: emerald-50/30 background accent
+  - **ManagerGdoClient.tsx redesign:**
+    - GDO card headers: `bg-gradient-to-r from-brand-charcoal to-ash-800`, avatar with `shadow-glow-orange`
+    - Sub-tables: `rounded-xl`, gradient section headers, `hover:bg-brand-orange-50/20`
+    - Staggered card entry animation per GDO card
+    - Presence highlights: brand-orange-600 on brand-orange-50/30
+  - **ManagerRpgClient.tsx redesign:**
+    - Table header: gradient from-brand-charcoal to-ash-800
+    - XP bars: `bg-gradient-to-r from-brand-orange to-brand-orange-600` with `duration-700`
+    - Coins: gold-600 text, gold button styling
+    - Staggered row animations, `hover:bg-brand-orange-50/20`
+    - Dialog: `shadow-elevated`, coins button gradient from-gold-400 to-gold-500
+  - **Page headers updated:** venditore, kpi-gdo, kpi-venditori — ash-800 text, ash-500 subtitles, `<div>` for hydration safety
+  - ALL existing functionality preserved across all pages
+- **Files modified:**
+  - `src/components/VenditoreDashboardClient.tsx` — full redesign
+  - `src/components/KpiVenditoriClient.tsx` — full redesign with podium
+  - `src/components/KpiGdoBoard.tsx` — full redesign
+  - `src/app/(dashboard)/manager-targets/ManagerTargetsClient.tsx` — full redesign
+  - `src/components/ManagerOperativaBoard.tsx` — full redesign
+  - `src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx` — full redesign
+  - `src/app/(dashboard)/manager-rpg-monitor/ManagerRpgClient.tsx` — full redesign
+  - `src/app/(dashboard)/venditore/page.tsx` — header styling
+  - `src/app/(dashboard)/kpi-gdo/page.tsx` — header styling
+  - `src/app/(dashboard)/kpi-venditori/page.tsx` — header styling
+- **Learnings per iterazioni future:**
+  - Podium pattern: flex items-end with different heights (h-28, h-20, h-16) creates visual hierarchy
+  - `animationDelay` + `animationFillMode: 'backwards'` pattern works consistently across all redesigned components
+  - `btn-primary` and `btn-ghost` from design system replace long inline button classes — keeps code cleaner
+  - `hover:shadow-card` paired with `shadow-soft` base creates subtle depth on hover without being heavy
+  - Table row `hover:bg-brand-orange-50/20` is the standard warm hover across all manager/KPI tables
+  - Crown/Medal lucide icons work well for podium — Trophy for rankings
+---
