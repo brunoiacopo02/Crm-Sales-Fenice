@@ -78,7 +78,8 @@ export type ImportReport = {
 
 export async function processCsvImport(
     rows: CsvRowPayload[],
-    modeOptions?: { mode: AssignmentMode, customSettings: Record<string, number> }
+    modeOptions?: { mode: AssignmentMode, customSettings: Record<string, number> },
+    importOptions?: { allowDuplicates?: boolean }
 ): Promise<ImportReport> {
     const report: ImportReport = {
         total: rows.length,
@@ -120,26 +121,23 @@ export async function processCsvImport(
     const processedPhones = new Set<string>()
     const processedEmails = new Set<string>()
 
+    const allowDuplicates = importOptions?.allowDuplicates ?? false
+
     for (const row of rows) {
         try {
-            const name = row.nome?.trim()
+            const name = row.nome?.trim() || 'Lead senza nome'
             let phone = row.telefono?.trim()
             let rawEmail = row.email?.trim()
             const funnel = row.cognome?.trim()
 
-            // 1. Validation Name & Funnel
-            if (!name) {
-                report.rejected++
-                report.errors.push(`Riga ${row.rowIndex}: "Nome" vuoto o mancante.`)
-                continue
-            }
+            // 1. Validation Funnel (obbligatorio)
             if (!funnel) {
                 report.rejected++
                 report.errors.push(`Riga ${row.rowIndex}: "Cognome" (Funnel) vuoto o mancante per ${name}.`)
                 continue
             }
 
-            // 2. Validation Phone
+            // 2. Validation Phone (obbligatorio, minimo 5 cifre)
             if (!phone) {
                 report.rejected++
                 report.errors.push(`Riga ${row.rowIndex}: "Telefono1" vuoto per ${name}.`)
@@ -152,33 +150,26 @@ export async function processCsvImport(
                 continue
             }
 
-            // 3. Validation Email
+            // 3. Email (opzionale)
             let email: string | null = null
-            if (!rawEmail) {
-                report.rejected++
-                report.errors.push(`Riga ${row.rowIndex}: "Email" vuota o mancante. Obbligatoria per riutilizzo Marketing.`)
-                continue
-            }
-            if (rawEmail.includes('@') && rawEmail.includes('.')) {
+            if (rawEmail && rawEmail.includes('@') && rawEmail.includes('.')) {
                 email = rawEmail
-            } else {
-                report.rejected++
-                report.errors.push(`Riga ${row.rowIndex}: Email non valida (${rawEmail}) per ${name}.`)
-                continue
             }
 
-            // 4. Deduplication
-            const logicConditions = [eq(leads.phone, phone)]
-            if (email) {
-                logicConditions.push(eq(leads.email, email))
-            }
+            // 4. Deduplication (skippabile con allowDuplicates)
+            if (!allowDuplicates) {
+                const logicConditions = [eq(leads.phone, phone)]
+                if (email) {
+                    logicConditions.push(eq(leads.email, email))
+                }
 
-            const existingLead = (await db.select().from(leads).where(or(...logicConditions)))[0]
+                const existingLead = (await db.select().from(leads).where(or(...logicConditions)))[0]
 
-            if (existingLead || processedPhones.has(phone) || (email && processedEmails.has(email))) {
-                report.rejected++
-                report.errors.push(`Riga ${row.rowIndex}: Scartato (Duplicato) - Telefono o Email già presenti nel CRM o doppi in questo file per [${name}].`)
-                continue
+                if (existingLead || processedPhones.has(phone) || (email && processedEmails.has(email))) {
+                    report.rejected++
+                    report.errors.push(`Riga ${row.rowIndex}: Scartato (Duplicato) - Telefono o Email già presenti nel CRM o doppi in questo file per [${name}].`)
+                    continue
+                }
             }
 
             processedPhones.add(phone)

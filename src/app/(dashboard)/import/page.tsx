@@ -32,6 +32,7 @@ export default function ImportPage() {
     const [mode, setMode] = useState<AssignmentMode>('equal')
     const [customSettings, setCustomSettings] = useState<Record<string, number>>({})
     const [distributionPreview, setDistributionPreview] = useState<Record<string, { count: number, name: string }>>({})
+    const [allowDuplicates, setAllowDuplicates] = useState(false)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -91,9 +92,8 @@ export default function ImportPage() {
                 const colEmail = fields.find(f => /email/i.test(f.trim()))
                 const colCognome = fields.find(f => /(cognome|funnel)/i.test(f.trim()))
 
-                if (!colNome || !colTelefono || !colCognome) {
+                if (!colTelefono || !colCognome) {
                     const missing = []
-                    if (!colNome) missing.push("Nome")
                     if (!colTelefono) missing.push("Telefono1")
                     if (!colCognome) missing.push("Cognome (per Funnel)")
 
@@ -102,7 +102,7 @@ export default function ImportPage() {
                 }
 
                 const mapCols = {
-                    nome: colNome,
+                    nome: colNome || "NON TROVATA",
                     email: colEmail || "NON TROVATA",
                     telefono: colTelefono,
                     cognome: colCognome
@@ -114,7 +114,7 @@ export default function ImportPage() {
                 const rows: CsvRowPayload[] = results.data.map((row: any, i: number) => {
                     return {
                         rowIndex: i + 2, // Header is row 1, 0-index is row 2
-                        nome: row[mapCols.nome] || "",
+                        nome: colNome ? (row[mapCols.nome] || "") : "",
                         email: colEmail ? row[mapCols.email] : "",
                         telefono: row[mapCols.telefono] || "",
                         cognome: row[mapCols.cognome] || "",
@@ -139,7 +139,7 @@ export default function ImportPage() {
             // Save preferred settings persistently
             await saveAssignmentSettings(mode, customSettings)
 
-            const res = await processCsvImport(payload, { mode, customSettings })
+            const res = await processCsvImport(payload, { mode, customSettings }, { allowDuplicates })
             setReport(res)
             if (res.inserted > 0) {
                 router.refresh()
@@ -200,9 +200,9 @@ export default function ImportPage() {
                         <p className="font-semibold text-blue-800 flex items-center gap-1"><AlertCircle className="h-3.5 w-3.5" /> Requisiti CSV:</p>
                         <ul className="list-disc pl-4 space-y-1">
                             <li>Separatore gestito in automatico ( Virgola o Punto e Virgola ).</li>
-                            <li>Le colonne indispensabili sono: <strong>Nome</strong>, <strong>Telefono1</strong> e <strong>Cognome</strong>.</li>
+                            <li>Le colonne indispensabili sono: <strong>Telefono1</strong> e <strong>Cognome</strong>.</li>
                             <li>Il <strong>Cognome</strong> verrà mappato come Funnel di provenienza.</li>
-                            <li>L'<strong>Email</strong> è facoltativa.</li>
+                            <li><strong>Nome</strong> ed <strong>Email</strong> sono facoltativi.</li>
                             <li>Le colonne superflue (es. Info, Unnamed) verranno ignorate.</li>
                         </ul>
                     </div>
@@ -365,7 +365,22 @@ export default function ImportPage() {
                                 </div>
                             </div>
 
-                            <div className="pt-8 mb-4 border-t border-gray-100 flex justify-end">
+                            <div className="pt-6 border-t border-gray-100">
+                                <label className="flex items-center gap-3 cursor-pointer group">
+                                    <input
+                                        type="checkbox"
+                                        checked={allowDuplicates}
+                                        onChange={(e) => setAllowDuplicates(e.target.checked)}
+                                        className="h-4 w-4 rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
+                                    />
+                                    <div>
+                                        <span className="text-sm font-medium text-gray-800 group-hover:text-brand-orange transition-colors">Consenti duplicati</span>
+                                        <p className="text-xs text-gray-500">Ignora il controllo telefono/email duplicati nel CRM e nel file</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div className="pt-4 mb-4 flex justify-end">
                                 <button
                                     onClick={confirmImport}
                                     disabled={loading || activeGdos.length === 0}
