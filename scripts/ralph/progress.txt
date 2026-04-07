@@ -146,3 +146,20 @@ Started: 2026-04-07
   - Follow `getManagerPauseReport` pattern for live in_corso sync in read-only queries
   - GDO pages use same auth pattern: createClient → getUser → check role → redirect if unauthorized
 ---
+
+## 2026-04-07 - F2-008
+- **Feature**: Form aggiunta lead singolo manuale
+- **What was done:**
+  - Created `createManualLead` server action in `importLeads.ts` — validates phone (5+ digits), optional email, required funnel, deduplication check, assigns via stored assignment settings (round-robin/custom quota)
+  - Created `AddLeadModal.tsx` component — modal with form fields (nome, telefono, email, funnel), client-side + server-side validation, success/error feedback
+  - Added "Aggiungi Lead Singolo" button on the import page header, opening the modal
+  - Lead created with status=NEW, callCount=0, logs IMPORTED + ASSIGNED events with metadata `source: 'manual'`
+- **Files modified:**
+  - `src/app/actions/importLeads.ts` — added ManualLeadInput type + createManualLead server action
+  - `src/components/AddLeadModal.tsx` — new modal component
+  - `src/app/(dashboard)/import/page.tsx` — added button + modal integration
+- **Learnings per iterazioni future:**
+  - `previewLeadDistribution(1, ...)` with round-robin assigns to the first active GDO — works correctly for single lead
+  - Reuse same validation logic (phone cleaning, email format check) as processCsvImport for consistency
+  - Modal pattern: fixed inset-0 z-50, backdrop with onClick close, form with onSubmit
+---
