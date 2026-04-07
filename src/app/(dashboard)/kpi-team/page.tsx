@@ -1,7 +1,9 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
-import { KpiTeamDashboard } from "@/components/KpiTeamDashboard"
-import { ManagerOperativaBoard } from "@/components/ManagerOperativaBoard"
+import dynamic from "next/dynamic"
+
+const KpiTeamDashboard = dynamic(() => import("@/components/KpiTeamDashboard").then(mod => mod.KpiTeamDashboard), { loading: () => <div className="flex items-center justify-center min-h-[400px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" /></div> })
+const ManagerOperativaBoard = dynamic(() => import("@/components/ManagerOperativaBoard").then(mod => mod.ManagerOperativaBoard), { loading: () => <div className="flex items-center justify-center min-h-[200px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" /></div> })
 
 export default async function KpiTeamPage() {
     const supabase = await createClient();

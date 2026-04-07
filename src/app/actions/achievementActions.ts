@@ -101,22 +101,19 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             return result[0]?.value ?? 0;
         }
         case 'tasso_conferma_percent': {
-            // (conferme / (conferme + scartate)) * 100
-            const confermati = await db.select({ value: count() })
+            // (conferme / (conferme + scartate)) * 100 — single query
+            const result = await db.select({
+                confermati: sql<number>`COUNT(CASE WHEN ${leads.confirmationsOutcome} = 'confermato' THEN 1 END)`,
+                totale: sql<number>`COUNT(*)`,
+            })
                 .from(leads)
                 .where(and(
                     eq(leads.confirmationsUserId, userId),
-                    eq(leads.confirmationsOutcome, 'confermato')
+                    sql`${leads.confirmationsOutcome} IN ('confermato', 'scartato')`
                 ));
-            const scartati = await db.select({ value: count() })
-                .from(leads)
-                .where(and(
-                    eq(leads.confirmationsUserId, userId),
-                    eq(leads.confirmationsOutcome, 'scartato')
-                ));
-            const tot = (confermati[0]?.value ?? 0) + (scartati[0]?.value ?? 0);
+            const tot = Number(result[0]?.totale) || 0;
             if (tot === 0) return 0;
-            return Math.round(((confermati[0]?.value ?? 0) / tot) * 100);
+            return Math.round((Number(result[0]?.confermati) / tot) * 100);
         }
         // --- VENDITORE achievement metrics (lifetime) ---
         case 'total_deals_chiusi': {
@@ -140,22 +137,19 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             return Number(result[0]?.value) ?? 0;
         }
         case 'tasso_chiusura_percent': {
-            // (chiusi / (chiusi + non chiusi + spariti)) * 100
-            const chiusi = await db.select({ value: count() })
-                .from(leads)
-                .where(and(
-                    eq(leads.salespersonUserId, userId),
-                    eq(leads.salespersonOutcome, 'Chiuso')
-                ));
-            const totEsiti = await db.select({ value: count() })
+            // (chiusi / totale esiti) * 100 — single query
+            const result = await db.select({
+                chiusi: sql<number>`COUNT(CASE WHEN ${leads.salespersonOutcome} = 'Chiuso' THEN 1 END)`,
+                totale: sql<number>`COUNT(*)`,
+            })
                 .from(leads)
                 .where(and(
                     eq(leads.salespersonUserId, userId),
                     isNotNull(leads.salespersonOutcome)
                 ));
-            const totalEsiti = totEsiti[0]?.value ?? 0;
+            const totalEsiti = Number(result[0]?.totale) || 0;
             if (totalEsiti === 0) return 0;
-            return Math.round(((chiusi[0]?.value ?? 0) / totalEsiti) * 100);
+            return Math.round((Number(result[0]?.chiusi) / totalEsiti) * 100);
         }
         default:
             return 0;
@@ -214,6 +208,9 @@ export async function checkAchievements(userId: string): Promise<{
 
         const tierLabels = ['', 'Bronzo', 'Argento', 'Oro'];
 
+        // Pre-fetch event multipliers once (was inside inner loop before)
+        const eventMult = await getActiveEventMultipliers();
+
         // For each distinct metric, measure once and check all related achievements
         for (const [metric, achs] of metricGroups) {
             const currentValue = await measureAchievementMetric(userId, metric);
@@ -240,22 +237,19 @@ export async function checkAchievements(userId: string): Promise<{
                         const tierCoinKey = tierLabels[tierNumber].toUpperCase();
                         const tierCoinMap: Record<string, string> = { 'BRONZO': 'BRONZE', 'ARGENTO': 'SILVER', 'ORO': 'GOLD' };
                         const baseCoinReward = GAME_CONSTANTS.ACHIEVEMENT_COINS[tierCoinMap[tierCoinKey] || 'BRONZE'] || 0;
-                        const eventMult = await getActiveEventMultipliers();
                         const coinReward = Math.floor(baseCoinReward * eventMult.coins);
                         if (coinReward > 0) {
-                            const userRow = (await db.select({ coins: users.coins }).from(users).where(eq(users.id, userId)))[0];
-                            if (userRow) {
-                                await db.update(users).set({ coins: userRow.coins + coinReward }).where(eq(users.id, userId));
-                                const achReason = eventMult.coins > 1
-                                    ? `Achievement ${tierLabels[tierNumber]}: ${ach.name} (x${eventMult.coins} evento)`
-                                    : `Achievement ${tierLabels[tierNumber]}: ${ach.name}`;
-                                await db.insert(coinTransactions).values({
-                                    id: crypto.randomUUID(),
-                                    userId,
-                                    amount: coinReward,
-                                    reason: achReason,
-                                });
-                            }
+                            // Use SQL increment to avoid fetching user coins each time
+                            await db.update(users).set({ coins: sql`${users.coins} + ${coinReward}` }).where(eq(users.id, userId));
+                            const achReason = eventMult.coins > 1
+                                ? `Achievement ${tierLabels[tierNumber]}: ${ach.name} (x${eventMult.coins} evento)`
+                                : `Achievement ${tierLabels[tierNumber]}: ${ach.name}`;
+                            await db.insert(coinTransactions).values({
+                                id: crypto.randomUUID(),
+                                userId,
+                                amount: coinReward,
+                                reason: achReason,
+                            });
                         }
 
                         // Create notification

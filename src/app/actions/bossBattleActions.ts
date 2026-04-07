@@ -2,7 +2,7 @@
 
 import { db } from '@/db';
 import { bossBattles, bossContributions, users, coinTransactions, notifications } from '@/db/schema';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { GAME_CONSTANTS } from '@/lib/gamificationEngine';
 import { getActiveEventMultipliers } from '@/lib/seasonalEventUtils';
 
@@ -180,35 +180,42 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
         const effectiveCoins = Math.floor(rewardCoins * eventMult.coins);
         const effectiveXp = Math.floor(rewardXp * eventMult.xp);
 
-        // Award coins and XP to each contributor
-        for (const contributor of contributors) {
+        // Award coins and XP to all contributors (batch operations)
+        const contributorIds = contributors.map(c => c.userId);
+        if (contributorIds.length > 0) {
+            // Single UPDATE for all contributors
             await db.update(users)
                 .set({
                     coins: sql`${users.coins} + ${effectiveCoins}`,
                     experience: sql`${users.experience} + ${effectiveXp}`,
                 })
-                .where(eq(users.id, contributor.userId));
+                .where(inArray(users.id, contributorIds));
 
-            // Log coin transaction
             const bossReason = eventMult.coins > 1
                 ? `Boss sconfitto: ${battle?.title || 'Boss Battle'} (x${eventMult.coins} evento)`
                 : `Boss sconfitto: ${battle?.title || 'Boss Battle'}`;
-            await db.insert(coinTransactions).values({
-                id: crypto.randomUUID(),
-                userId: contributor.userId,
-                amount: effectiveCoins,
-                reason: bossReason,
-            });
 
-            // Notify
-            await db.insert(notifications).values({
-                id: crypto.randomUUID(),
-                recipientUserId: contributor.userId,
-                type: 'boss_defeated',
-                title: 'Boss Sconfitto! 🎉',
-                body: `Il team ha sconfitto "${battle?.title}"! Hai guadagnato ${effectiveCoins} coins e ${effectiveXp} XP!`,
-                metadata: { battleId, rewardCoins: effectiveCoins, rewardXp: effectiveXp, bossTitle: battle?.title },
-            });
+            // Batch INSERT coin transactions
+            await db.insert(coinTransactions).values(
+                contributorIds.map(uid => ({
+                    id: crypto.randomUUID(),
+                    userId: uid,
+                    amount: effectiveCoins,
+                    reason: bossReason,
+                }))
+            );
+
+            // Batch INSERT notifications
+            await db.insert(notifications).values(
+                contributorIds.map(uid => ({
+                    id: crypto.randomUUID(),
+                    recipientUserId: uid,
+                    type: 'boss_defeated',
+                    title: 'Boss Sconfitto! 🎉',
+                    body: `Il team ha sconfitto "${battle?.title}"! Hai guadagnato ${effectiveCoins} coins e ${effectiveXp} XP!`,
+                    metadata: { battleId, rewardCoins: effectiveCoins, rewardXp: effectiveXp, bossTitle: battle?.title },
+                }))
+            );
         }
     } catch (error) {
         console.error('Error defeating boss:', error);

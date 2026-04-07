@@ -1,8 +1,10 @@
 import { createClient } from "@/utils/supabase/server"
 import { Sidebar } from "@/components/Sidebar"
 import { Topbar } from "@/components/Topbar"
-import { SprintBanner } from "@/components/SprintBanner"
+import dynamic from "next/dynamic"
 import { redirect } from "next/navigation"
+
+const SprintBanner = dynamic(() => import("@/components/SprintBanner").then(mod => mod.SprintBanner))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"

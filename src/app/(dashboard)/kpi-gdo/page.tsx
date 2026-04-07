@@ -1,5 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
-import { KpiGdoBoard } from "@/components/KpiGdoBoard"
+import dynamic from "next/dynamic"
+
+const KpiGdoBoard = dynamic(() => import("@/components/KpiGdoBoard").then(mod => mod.KpiGdoBoard), { loading: () => <div className="flex items-center justify-center min-h-[400px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" /></div> })
 
 export default async function KpiGdoPage() {
     const supabase = await createClient();

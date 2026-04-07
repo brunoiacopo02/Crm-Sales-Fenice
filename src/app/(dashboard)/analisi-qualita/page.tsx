@@ -1,6 +1,8 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
-import { KpiBoardAdvanced } from "@/components/KpiBoardAdvanced"
+import dynamic from "next/dynamic"
+
+const KpiBoardAdvanced = dynamic(() => import("@/components/KpiBoardAdvanced").then(mod => mod.KpiBoardAdvanced), { loading: () => <div className="flex items-center justify-center min-h-[400px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" /></div> })
 
 export default async function AnalisiQualitaPage() {
     const supabase = await createClient();

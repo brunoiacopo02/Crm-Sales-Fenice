@@ -314,12 +314,19 @@ export async function checkQuestProgress(userId: string): Promise<{
 
         const newlyCompleted: Array<{ questTitle: string; rewardXp: number; rewardCoins: number }> = [];
 
+        // Pre-measure each unique metric+type combo once (avoids N+1 measureMetric calls)
+        const metricCache = new Map<string, number>();
         for (const qp of activeProgress) {
-            // Determine time bounds based on quest type
             const bounds = qp.questType === 'daily' ? todayBounds : weekBounds;
+            const cacheKey = `${qp.targetMetric}:${qp.questType}`;
+            if (!metricCache.has(cacheKey)) {
+                metricCache.set(cacheKey, await measureMetric(userId, qp.targetMetric, bounds.start, bounds.end));
+            }
+        }
 
-            // Measure current metric value
-            const currentValue = await measureMetric(userId, qp.targetMetric, bounds.start, bounds.end);
+        for (const qp of activeProgress) {
+            const cacheKey = `${qp.targetMetric}:${qp.questType}`;
+            const currentValue = metricCache.get(cacheKey) ?? 0;
 
             const isNowComplete = currentValue >= qp.targetValue;
 
