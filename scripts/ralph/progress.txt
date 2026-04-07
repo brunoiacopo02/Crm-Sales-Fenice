@@ -23,7 +23,9 @@ Started: 2026-04-07
 - Lead singolo form creato in F2-008 nella pagina /import. Aggiungere dropdown GDO
 - Bottone copia in LeadCard.tsx o componente simile — verificare che usi lead.phone
 - Achievement Conferme: 4 metriche lifetime (total_conferme, total_conferme_chiamate, total_conferme_richiami_ok, tasso_conferma_percent) in measureAchievementMetric
-- Achievement seeding: usare ON CONFLICT (id) DO NOTHING per idempotenza, ID pattern: ach-conf-*
+- Achievement seeding: usare ON CONFLICT (id) DO NOTHING per idempotenza, ID pattern: ach-conf-*, ach-vend-*
+- Achievement Venditori: 3 metriche lifetime (total_deals_chiusi, total_fatturato_eur, tasso_chiusura_percent) in measureAchievementMetric
+- Supabase REST API seed: usare POST con Prefer: resolution=ignore-duplicates per upsert senza deploy
 - Account test: GDO 114 (gdo114@fenice.local / 1234), Conferme (andrea@fenice.local / 1234), Venditori (sales001@fenice.com / 1234), Manager (marketing@fenice.local / Marketing2026!)
 - REST API Supabase: usare SUPABASE_SERVICE_ROLE_KEY dal .env per apikey e Authorization
 - Quest role filtering: quests table has `role` column ('GDO'|'CONFERME'|'VENDITORE'), generateDailyQuests fetches user role and filters
@@ -98,4 +100,25 @@ Started: 2026-04-07
   - fatturato_eur usa SUM con COALESCE per evitare NULL, ritorna Number() per type safety
   - Quest VENDITORE ID pattern: vend-d-* (daily), vend-w-* (weekly) — consistente con conf-d/w per CONFERME
   - Migrazione da eseguire su prod dopo deploy: /api/migrate-quests-venditori
+---
+
+## 2026-04-07 - F3-014
+- Aggiunto QuestPanel (dynamic import) e StreakCounter alla dashboard Venditori per ruolo VENDITORE
+- In Sidebar.tsx aggiunto 3 link gamification per VENDITORE: Profilo RPG, Classifica, Fenice Store
+- In achievementActions.ts aggiunto 3 nuove metriche Venditori a measureAchievementMetric:
+  - total_deals_chiusi: COUNT leads con salespersonOutcome='Chiuso' per venditore
+  - total_fatturato_eur: SUM closeAmountEur per lead chiusi dal venditore
+  - tasso_chiusura_percent: (chiusi / totale esiti) * 100
+- Creato 8 achievement Venditori in 3 categorie:
+  - Closer + Macchina da Vendite + Primo Deal (metric: total_deals_chiusi)
+  - Fatturatore + Milionario + Broker (metric: total_fatturato_eur)
+  - Persuasore + Inarrestabile (metric: tasso_chiusura_percent)
+- Migrazione ESEGUITA su DB produzione via Supabase REST API (8 achievement inseriti e verificati)
+- Creato migration route: src/app/api/migrate-achievements-venditori/route.ts
+- File modificati: src/app/(dashboard)/venditore/page.tsx, src/components/Sidebar.tsx, src/app/actions/achievementActions.ts, src/app/api/migrate-achievements-venditori/route.ts (new)
+- **Learnings per iterazioni future:**
+  - Production deploys only from main branch — per seeding dati usare Supabase REST API con POST + Prefer: resolution=ignore-duplicates
+  - Store/Profilo/Classifica non hanno auth check specifici per ruolo — accesso aperto a tutti gli utenti autenticati
+  - Pattern: StreakCounter import statico, QuestPanel dynamic import — stesso pattern per GDO, Conferme, Venditori
+  - Le metriche achievement Venditori usano salespersonUserId (non assignedToId) per il tracking
 ---
