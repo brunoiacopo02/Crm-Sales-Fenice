@@ -1,7 +1,8 @@
 "use client"
 import { useAuth } from "@/components/AuthProvider"
+import { useSidebar } from "@/components/providers/SidebarProvider"
 
-import { Search, Bell, X, Phone, User, Trophy } from "lucide-react"
+import { Search, Bell, X, Phone, User, Trophy, Menu } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { searchLeads, SearchResult } from "@/app/actions/searchActions"
 import { usePathname, useRouter } from "next/navigation"
@@ -13,6 +14,7 @@ import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications"
 
 export function Topbar() {
+    const { toggle } = useSidebar()
     const { user: authUser, isLoading } = useAuth();
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;
     const status = isLoading ? "loading" : (session ? "authenticated" : "unauthenticated");
@@ -116,103 +118,114 @@ export function Topbar() {
     }
 
     return (
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm z-30">
-            {session?.user?.role === "GDO" ? (
-                <div className="flex items-center max-w-xl w-full relative" ref={wrapperRef}>
-                    <div className="relative w-full">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            onFocus={() => {
-                                if (query.trim().length >= 2) setIsOpen(true)
-                            }}
-                            className="block w-full pl-10 pr-10 py-2 border border-gray-200 rounded-md leading-5 bg-gray-50 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange focus:border-brand-orange sm:text-sm transition-colors"
-                            placeholder="Cerca lead per nome, email o telefono..."
-                        />
-                        {query && (
-                            <button
-                                onClick={handleClear}
-                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        )}
-                    </div>
+        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-ash-200/60 flex items-center justify-between px-4 lg:px-6 shadow-soft z-30">
+            <div className="flex items-center flex-1 min-w-0">
+                {/* Mobile hamburger */}
+                <button
+                    onClick={toggle}
+                    className="lg:hidden p-2 -ml-1 mr-2 text-ash-500 hover:text-brand-charcoal hover:bg-ash-100 rounded-lg transition-colors shrink-0"
+                >
+                    <Menu className="h-5 w-5" />
+                </button>
 
-                    {/* Dropdown Results */}
-                    {isOpen && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                            {isSearching ? (
-                                <div className="p-4 text-center text-sm text-gray-500">Ricerca in corso...</div>
-                            ) : results.length > 0 ? (
-                                <ul className="max-h-96 overflow-y-auto custom-scrollbar">
-                                    {results.map(lead => (
-                                        <li
-                                            key={lead.id}
-                                            className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
-                                            onClick={() => handleResultClick(lead.id)}
-                                        >
-                                            <div className="px-4 py-3 flex items-start justify-between">
-                                                <div>
-                                                    <div className="font-medium text-gray-800 text-sm flex items-center gap-1.5">
-                                                        <User className="h-3.5 w-3.5 text-gray-400" />
-                                                        {lead.name}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                                                        <span className="flex items-center gap-1">
-                                                            <Phone className="h-3 w-3" />
-                                                            {lead.phone}
-                                                        </span>
-                                                        {lead.email && <span>• {lead.email}</span>}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${lead.statusColor}`}>
-                                                        {lead.statusLabel}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : (
-                                <div className="p-4 text-center text-sm text-gray-500">Nessun lead trovato</div>
+                {session?.user?.role === "GDO" ? (
+                    <div className="flex items-center max-w-xl w-full relative" ref={wrapperRef}>
+                        <div className="relative w-full">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Search className="h-4 w-4 text-ash-400" />
+                            </div>
+                            <input
+                                type="text"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                onFocus={() => {
+                                    if (query.trim().length >= 2) setIsOpen(true)
+                                }}
+                                className="block w-full pl-10 pr-10 py-2 border border-ash-200 rounded-lg leading-5 bg-ash-50/50 placeholder-ash-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange sm:text-sm transition-all duration-200"
+                                placeholder="Cerca lead per nome, email o telefono..."
+                            />
+                            {query && (
+                                <button
+                                    onClick={handleClear}
+                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-ash-400 hover:text-ash-600 transition-colors"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
                             )}
                         </div>
-                    )}
-                </div>
-            ) : (
-                <div className="flex-1" />
-            )}
 
-            <div className="flex items-center gap-6">
+                        {/* Dropdown Results */}
+                        {isOpen && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-ash-200 rounded-xl shadow-elevated overflow-hidden z-50 animate-fade-in">
+                                {isSearching ? (
+                                    <div className="p-4 text-center text-sm text-ash-500">Ricerca in corso...</div>
+                                ) : results.length > 0 ? (
+                                    <ul className="max-h-96 overflow-y-auto custom-scrollbar">
+                                        {results.map(lead => (
+                                            <li
+                                                key={lead.id}
+                                                className="border-b border-ash-100 last:border-0 hover:bg-ash-50 transition-colors cursor-pointer"
+                                                onClick={() => handleResultClick(lead.id)}
+                                            >
+                                                <div className="px-4 py-3 flex items-start justify-between">
+                                                    <div>
+                                                        <div className="font-medium text-ash-800 text-sm flex items-center gap-1.5">
+                                                            <User className="h-3.5 w-3.5 text-ash-400" />
+                                                            {lead.name}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-1 text-xs text-ash-500">
+                                                            <div className="flex items-center gap-1">
+                                                                <Phone className="h-3 w-3" />
+                                                                {lead.phone}
+                                                            </div>
+                                                            {lead.email && <div>• {lead.email}</div>}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${lead.statusColor}`}>
+                                                            {lead.statusLabel}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="p-4 text-center text-sm text-ash-500">Nessun lead trovato</div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex-1" />
+                )}
+            </div>
+
+            <div className="flex items-center gap-3 lg:gap-5 shrink-0">
                 {session?.user?.role === "GDO" && <PauseTimer />}
 
+                {/* Notifications */}
                 <div className="relative" ref={notifRef}>
                     <button
                         onClick={() => setIsNotifOpen(!isNotifOpen)}
-                        className="p-2 text-gray-400 hover:text-gray-500 relative transition-colors"
+                        className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-lg relative transition-all duration-200"
                     >
-                        <Bell className="h-6 w-6" />
+                        <Bell className="h-5 w-5" />
                         {notifications.filter(n => n.status === 'unread').length > 0 && (
-                            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-orange ring-2 ring-white text-[9px] font-bold text-white">
+                            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-ember-500 ring-2 ring-white text-[9px] font-bold text-white">
                                 {notifications.filter(n => n.status === 'unread').length}
                             </span>
                         )}
                     </button>
 
                     {isNotifOpen && (
-                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 bg-gray-50/50">
-                                <h3 className="font-semibold text-gray-800 text-sm">Notifiche</h3>
+                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-elevated border border-ash-200/50 overflow-hidden z-50 animate-fade-in">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-ash-100 bg-ash-50/50">
+                                <h3 className="font-semibold text-ash-800 text-sm">Notifiche</h3>
                                 {notifications.filter(n => n.status === 'unread').length > 0 && (
                                     <button
                                         onClick={handleMarkAllRead}
-                                        className="text-[11px] font-medium text-brand-orange hover:text-brand-orange/80 transition-colors"
+                                        className="text-[11px] font-medium text-brand-orange hover:text-brand-orange-600 transition-colors"
                                     >
                                         Segna tutte lette
                                     </button>
@@ -221,30 +234,30 @@ export function Topbar() {
 
                             <div className="max-h-[28rem] overflow-y-auto custom-scrollbar">
                                 {notifications.length > 0 ? (
-                                    <ul className="divide-y divide-gray-50">
+                                    <ul className="divide-y divide-ash-100">
                                         {notifications.map(notif => (
                                             <li
                                                 key={notif.id}
                                                 onClick={() => handleNotifClick(notif)}
-                                                className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer group ${notif.status === 'unread' ? 'bg-orange-50/30' : ''}`}
+                                                className={`p-4 hover:bg-ash-50 transition-colors cursor-pointer group ${notif.status === 'unread' ? 'bg-brand-orange-50/40' : ''}`}
                                             >
                                                 <div className="flex gap-3">
                                                     <div className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${notif.status === 'unread' ? 'bg-brand-orange' : 'bg-transparent'}`} />
                                                     <div>
-                                                        <p className="text-sm font-medium text-gray-800 line-clamp-1">{notif.title}</p>
-                                                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{notif.body}</p>
-                                                        <p className="text-[10px] text-gray-400 mt-2 font-medium">
+                                                        <div className="text-sm font-medium text-ash-800 line-clamp-1">{notif.title}</div>
+                                                        <div className="text-xs text-ash-500 mt-1 line-clamp-2">{notif.body}</div>
+                                                        <div className="text-[10px] text-ash-400 mt-2 font-medium">
                                                             {new Date(notif.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                                                        </p>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </li>
                                         ))}
                                     </ul>
                                 ) : (
-                                    <div className="p-8 text-center flex flex-col items-center justify-center text-gray-400">
+                                    <div className="p-8 text-center flex flex-col items-center justify-center text-ash-400">
                                         <Bell className="h-8 w-8 mb-3 opacity-20" />
-                                        <p className="text-sm">Nessuna notifica</p>
+                                        <div className="text-sm">Nessuna notifica</div>
                                     </div>
                                 )}
                             </div>
@@ -252,19 +265,23 @@ export function Topbar() {
                     )}
                 </div>
 
-                <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
+                {/* User section */}
+                <div className="flex items-center gap-3 pl-3 lg:pl-4 border-l border-ash-200">
                     {session?.user?.role === "GDO" && (
-                        <div className="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 font-bold px-2.5 py-1 rounded-full text-xs shadow-sm border border-yellow-200" title="I tuoi Fenice Coin vinti nello Sprint">
+                        <div className="flex items-center gap-1.5 bg-gradient-to-r from-gold-50 to-brand-orange-50 text-gold-700 font-bold px-2.5 py-1 rounded-full text-xs shadow-soft border border-gold-200" title="I tuoi Fenice Coin vinti nello Sprint">
                             <img src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" className="w-4 h-4 object-contain drop-shadow-sm" />
                             {walletCoins}
                         </div>
                     )}
 
-                    <div className="text-sm font-medium text-gray-700">
+                    <div className="text-sm font-medium text-ash-700 hidden sm:block">
                         {session?.user?.name || "GDO"}
                     </div>
-                    <div className={`h-8 w-8 rounded-full bg-brand-orange flex items-center justify-center text-white font-bold shadow-sm ${skinCss?.includes('skin-avatar') ? skinCss : ''}`}>
-                        {session?.user?.name?.charAt(0) || "U"}
+                    <div className="relative">
+                        <div className={`h-9 w-9 rounded-full bg-gradient-to-br from-brand-orange to-brand-orange-500 flex items-center justify-center text-white font-bold text-sm shadow-soft ring-2 ring-brand-orange/20 ${skinCss?.includes('skin-avatar') ? skinCss : ''}`}>
+                            {session?.user?.name?.charAt(0) || "U"}
+                        </div>
+                        <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 ring-2 ring-white" />
                     </div>
                 </div>
             </div>
@@ -277,19 +294,19 @@ export function Topbar() {
 
             {/* Live Toast Form per eventi Leaderboard Overtaken */}
             {liveToast && (
-                <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-right-10 fade-in duration-500">
-                    <div className="bg-white border-l-4 border-yellow-500 rounded-xl shadow-2xl p-4 pr-10 relative max-w-sm mb-4 cursor-pointer"
+                <div className="fixed bottom-6 right-6 z-50 animate-slide-in-right">
+                    <div className="bg-white border-l-4 border-gold-400 rounded-xl shadow-elevated p-4 pr-10 relative max-w-sm mb-4 cursor-pointer"
                         onClick={() => { setLiveToast(null); handleNotifClick(liveToast); }}>
-                        <button onClick={(e) => { e.stopPropagation(); setLiveToast(null) }} className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full p-1">
+                        <button onClick={(e) => { e.stopPropagation(); setLiveToast(null) }} className="absolute top-2 right-2 text-ash-400 hover:text-ash-600 bg-ash-50 rounded-full p-1 transition-colors">
                             <X className="h-4 w-4" />
                         </button>
                         <div className="flex gap-4 items-center">
-                            <div className="h-10 w-10 bg-gradient-to-br from-yellow-100 to-orange-100 text-yellow-600 rounded-full flex items-center justify-center shrink-0 shadow-sm border border-yellow-200">
+                            <div className="h-10 w-10 bg-gradient-to-br from-gold-100 to-brand-orange-100 text-gold-600 rounded-full flex items-center justify-center shrink-0 shadow-soft border border-gold-200">
                                 <Bell className="h-5 w-5" />
                             </div>
                             <div>
-                                <h4 className="font-bold text-gray-800 text-sm leading-tight">{liveToast.title}</h4>
-                                <p className="text-xs text-gray-600 mt-1 leading-snug">{liveToast.body}</p>
+                                <div className="font-bold text-ash-800 text-sm leading-tight">{liveToast.title}</div>
+                                <div className="text-xs text-ash-600 mt-1 leading-snug">{liveToast.body}</div>
                             </div>
                         </div>
                     </div>

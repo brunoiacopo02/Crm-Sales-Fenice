@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
+import { SidebarProvider } from "@/components/providers/SidebarProvider"
 
 export default async function DashboardLayout({
     children,
@@ -28,16 +29,18 @@ export default async function DashboardLayout({
 
     return (
         <RealtimeProvider>
-            <div className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                <Sidebar />
-                <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
-                    {showSprintBanner && <SprintBanner />}
-                    <Topbar />
-                    <main className={`flex-1 overflow-y-auto p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
-                        {children}
-                    </main>
+            <SidebarProvider>
+                <div className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
+                    <Sidebar />
+                    <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
+                        {showSprintBanner && <SprintBanner />}
+                        <Topbar />
+                        <main className={`flex-1 overflow-y-auto p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
+                            {children}
+                        </main>
+                    </div>
                 </div>
-            </div>
+            </SidebarProvider>
         </RealtimeProvider>
     )
 }

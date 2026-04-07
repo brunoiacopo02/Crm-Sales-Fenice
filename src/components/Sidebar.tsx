@@ -1,6 +1,6 @@
 "use client"
 import { useAuth } from "@/components/AuthProvider"
-
+import { useSidebar } from "@/components/providers/SidebarProvider"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -10,7 +10,8 @@ import {
     Store,
     Target,
     Gamepad2,
-    FileText
+    FileText,
+    X
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
@@ -26,9 +27,9 @@ type NavItem = {
 
 export function Sidebar() {
     const pathname = usePathname()
+    const { isOpen, close } = useSidebar()
     const { user: authUser, isLoading } = useAuth();
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;
-    const status = isLoading ? "loading" : (session ? "authenticated" : "unauthenticated");
     const role = session?.user?.role
     const [expiredCount, setExpiredCount] = useState(0)
     const supabase = createClient()
@@ -41,7 +42,12 @@ export function Sidebar() {
         getRecallLeads().then(data => {
             setExpiredCount(data.expired.length)
         }).catch(() => { })
-    }, [pathname]) // refresh badge when navigation happens
+    }, [pathname])
+
+    // Close sidebar on route change (mobile)
+    useEffect(() => {
+        close()
+    }, [pathname, close])
 
     let navItems: NavItem[] = []
 
@@ -93,51 +99,80 @@ export function Sidebar() {
     }
 
     return (
-        <div className="flex flex-col w-64 h-screen bg-brand-charcoal text-white custom-scrollbar border-r border-gray-800">
-            <div className="p-6 flex items-center gap-3">
-                <div className="w-8 h-8 rounded bg-brand-orange flex items-center justify-center font-bold text-white shadow-lg">
-                    F
+        <>
+            {/* Mobile backdrop */}
+            {isOpen && (
+                <div
+                    className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
+                    onClick={close}
+                />
+            )}
+
+            <aside
+                className={`flex flex-col h-screen bg-gradient-to-b from-ash-800 via-brand-charcoal to-ash-900 text-white custom-scrollbar fixed inset-y-0 left-0 z-40 w-72 transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:relative lg:z-auto lg:w-64 lg:translate-x-0 lg:border-r lg:border-white/5`}
+            >
+                {/* Logo */}
+                <div className="p-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-orange to-brand-orange-600 flex items-center justify-center font-bold text-brand-charcoal shadow-glow-orange text-sm">
+                            F
+                        </div>
+                        <span className="font-semibold text-base text-white tracking-wide">Fenice CRM</span>
+                    </div>
+                    <button
+                        onClick={close}
+                        className="lg:hidden p-1.5 rounded-md text-ash-400 hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
                 </div>
-                <span className="font-bold text-xl tracking-wide">Fenice CRM</span>
-            </div>
 
-            <div className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto pb-4">
-                {navItems.map((item) => {
-                    const isActive = pathname === item.href
+                {/* Gradient divider */}
+                <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${isActive
-                                ? "bg-brand-orange text-white font-medium shadow-sm"
-                                : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                                }`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <item.icon className={`h-5 w-5 ${isActive ? "text-white" : "text-gray-400"}`} />
-                                {item.name}
-                            </div>
+                {/* Navigation */}
+                <nav className="flex-1 px-3 mt-4 space-y-1 overflow-y-auto pb-4 custom-scrollbar">
+                    {navItems.map((item) => {
+                        const isActive = pathname === item.href
 
-                            {item.badge !== undefined && item.badge > 0 && (
-                                <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow">
-                                    {item.badge}
-                                </span>
-                            )}
-                        </Link>
-                    )
-                })}
-            </div>
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={`group flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
+                                    ? "bg-brand-orange/15 text-white font-medium shadow-[inset_3px_0_0_var(--color-brand-orange)]"
+                                    : "text-ash-400 hover:text-white hover:bg-white/5"
+                                    }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-brand-orange" : "text-ash-500 group-hover:text-brand-orange-300"}`} />
+                                    <span className="text-sm">{item.name}</span>
+                                </div>
 
-            <div className="p-4 border-t border-gray-800">
-                <button
-                    onClick={handleSignOut}
-                    className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-lg text-gray-300 hover:bg-gray-800 transition-colors"
-                >
-                    <LogOut className="h-5 w-5 text-gray-400" />
-                    Disconnetti
-                </button>
-            </div>
-        </div >
+                                {item.badge !== undefined && item.badge > 0 && (
+                                    <span className="bg-ember-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow-glow-ember">
+                                        {item.badge}
+                                    </span>
+                                )}
+                            </Link>
+                        )
+                    })}
+                </nav>
+
+                {/* Bottom divider */}
+                <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+                {/* Sign out */}
+                <div className="p-3">
+                    <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-3 px-3 py-2.5 w-full text-left rounded-lg text-ash-400 hover:text-ember-300 hover:bg-white/5 transition-all duration-200"
+                    >
+                        <LogOut className="h-[18px] w-[18px]" />
+                        <span className="text-sm">Disconnetti</span>
+                    </button>
+                </div>
+            </aside>
+        </>
     )
 }
