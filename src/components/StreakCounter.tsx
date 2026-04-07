@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Flame, TrendingUp, Zap } from 'lucide-react';
 import { getStreakInfo } from '@/app/actions/streakActions';
+import { getAnimationsEnabled } from '@/lib/animationUtils';
 
 interface StreakData {
     streakCount: number;
@@ -65,6 +66,10 @@ export function StreakCounter({ userId }: { userId: string }) {
 
     const glowClass = streakCount >= 7 ? 'animate-glow-pulse' : '';
 
+    // Streak at risk: not active today and has an active streak — show shake warning
+    const atRisk = !isActiveToday && streakCount > 0;
+    const shakeClass = atRisk && getAnimationsEnabled() ? 'animate-streak-shake' : '';
+
     // Progress toward next milestone
     const milestoneProgress = nextMilestone
         ? (() => {
@@ -78,7 +83,7 @@ export function StreakCounter({ userId }: { userId: string }) {
         : 100;
 
     return (
-        <div className={`w-full border shadow-elevated rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/30 border-ash-700 ${glowClass}`}>
+        <div className={`w-full border shadow-elevated rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/30 border-ash-700 ${glowClass} ${shakeClass}`}>
             {/* Background glow for active streaks */}
             {streakCount >= 3 && (
                 <div className="absolute top-0 right-0 w-32 h-32 bg-ember-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />

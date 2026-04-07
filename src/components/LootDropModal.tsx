@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Package, Sparkles, Coins, Zap, Crown, X } from 'lucide-react';
 import { getUserPendingLootDrops, openLootDrop } from '@/app/actions/lootDropActions';
 import { useRouter } from 'next/navigation';
+import { triggerCelebration } from '@/lib/animationUtils';
 
 interface PendingDrop {
     id: string;
@@ -50,7 +51,7 @@ const RARITY_CONFIG: Record<string, {
         label: 'Epico',
         gradient: 'from-purple-800 via-purple-500 to-purple-800',
         border: 'border-purple-400',
-        glow: 'shadow-[0_0_40px_rgba(168,85,247,0.6)]',
+        glow: 'animate-loot-glow-purple',
         icon: '🔮',
         textColor: 'text-purple-300',
         bgColor: 'bg-purple-900',
@@ -59,7 +60,7 @@ const RARITY_CONFIG: Record<string, {
         label: 'Leggendario',
         gradient: 'from-yellow-700 via-amber-400 to-yellow-700',
         border: 'border-yellow-400',
-        glow: 'shadow-[0_0_60px_rgba(251,191,36,0.7)]',
+        glow: 'animate-loot-glow-gold',
         icon: '👑',
         textColor: 'text-yellow-300',
         bgColor: 'bg-yellow-900',
@@ -104,6 +105,10 @@ export function LootDropModal({ userId }: { userId: string }) {
         if (result.success && result.reward) {
             setReward(result.reward);
             setPhase('revealed');
+            // Trigger confetti for epic/legendary drops
+            if (result.reward.rarity === 'epic' || result.reward.rarity === 'legendary') {
+                triggerCelebration('confetti');
+            }
         } else {
             setPhase('idle');
         }

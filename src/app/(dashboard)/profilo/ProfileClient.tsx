@@ -1,11 +1,15 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
-    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles
+    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
 import TitleSelector from "@/components/TitleSelector"
+import { AnimationToggle } from "@/components/AnimationToggle"
+import { CelebrationOverlay } from "@/components/CelebrationOverlay"
+import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import type { UnlockedTitle } from "@/app/actions/titleActions"
 
 export default function ProfileClient({ profileData, achievements = [], titleData }: {
@@ -22,8 +26,27 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
 
     const progressPerc = Math.min((experience / targetXpForNext) * 100, 100);
 
+    // Fenice evolution transition: detect stage change and trigger pulse
+    const [showEvolutionPulse, setShowEvolutionPulse] = useState(false);
+    const [showEvolutionRing, setShowEvolutionRing] = useState(false);
+
+    useEffect(() => {
+        const lastStage = localStorage.getItem('crm-fenice-last-stage');
+        if (lastStage && lastStage !== stage.name && getAnimationsEnabled()) {
+            setShowEvolutionPulse(true);
+            setShowEvolutionRing(true);
+            triggerCelebration('fire');
+            setTimeout(() => {
+                setShowEvolutionPulse(false);
+                setShowEvolutionRing(false);
+            }, 2000);
+        }
+        localStorage.setItem('crm-fenice-last-stage', stage.name);
+    }, [stage.name]);
+
     return (
         <div className="flex-1 space-y-8 p-4 lg:p-8 pt-6 pb-20 max-w-7xl mx-auto w-full">
+            <CelebrationOverlay />
 
             {/* Header Profilo e Level */}
             <div className="flex items-center justify-between animate-fade-in">
@@ -57,9 +80,9 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     <div className="absolute bottom-0 left-1/2 w-64 h-32 bg-gold-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
 
                     {/* Avatar */}
-                    <div className="relative w-36 h-36 rounded-full border-4 border-ember-400/60 shadow-glow-ember bg-gradient-to-br from-ember-800 to-brand-charcoal flex items-center justify-center mb-6 mt-4 z-10">
+                    <div className={`relative w-36 h-36 rounded-full border-4 border-ember-400/60 shadow-glow-ember bg-gradient-to-br from-ember-800 to-brand-charcoal flex items-center justify-center mb-6 mt-4 z-10 transition-transform duration-500 ${showEvolutionPulse ? 'animate-evolution-pulse' : ''}`}>
                         {stage.imageUrl ? (
-                            <img src={stage.imageUrl} alt={stage.name} className="w-full h-full rounded-full object-cover" />
+                            <img src={stage.imageUrl} alt={stage.name} className="w-full h-full rounded-full object-cover transition-opacity duration-700" />
                         ) : (
                             <ArrowUpCircle className="w-16 h-16 text-ember-400" />
                         )}
@@ -69,6 +92,13 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         </div>
                         {/* Glow ring */}
                         <div className="absolute inset-0 rounded-full animate-glow-pulse border-2 border-ember-400/30"></div>
+                        {/* Evolution ring burst on stage change */}
+                        {showEvolutionRing && (
+                            <div
+                                className="absolute inset-0 rounded-full border-4 border-brand-orange/60"
+                                style={{ animation: 'evolution-ring 1.5s ease-out forwards' }}
+                            />
+                        )}
                     </div>
 
                     <h2 className="text-2xl font-bold text-white tracking-tight z-10">{stage.name}</h2>
@@ -199,6 +229,14 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
             {achievements.length > 0 && (
                 <AchievementShowcase achievements={achievements} />
             )}
+
+            {/* IMPOSTAZIONI ANIMAZIONI */}
+            <div className="animate-fade-in" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
+                <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-ash-500" /> Impostazioni
+                </h3>
+                <AnimationToggle />
+            </div>
 
         </div>
     );

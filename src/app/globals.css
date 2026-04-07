@@ -93,6 +93,12 @@
   --animate-loot-particle-1: loot-particle-1 1.5s ease-out infinite;
   --animate-loot-particle-2: loot-particle-2 1.2s ease-out infinite;
   --animate-loot-particle-3: loot-particle-3 1.8s ease-out infinite;
+
+  /* === CELEBRATION ANIMATIONS === */
+  --animate-streak-shake: streak-shake 0.6s ease-in-out;
+  --animate-evolution-pulse: evolution-pulse 1.5s ease-in-out forwards;
+  --animate-loot-glow-gold: loot-glow-gold 2s ease-in-out infinite;
+  --animate-loot-glow-purple: loot-glow-purple 2s ease-in-out infinite;
 }
 
 @keyframes fade-in {
@@ -176,6 +182,56 @@
 @keyframes loot-particle-3 {
   0% { opacity: 1; transform: translate(0, 0) scale(1); }
   100% { opacity: 0; transform: translate(-20px, 16px) scale(0.3); }
+}
+
+/* === CELEBRATION KEYFRAMES === */
+
+@keyframes confetti-fall {
+  0% { opacity: 1; transform: translateY(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
+}
+
+@keyframes fire-rise {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  40% { opacity: 0.8; transform: translateY(-35vh) scale(0.9); }
+  100% { opacity: 0; transform: translateY(-85vh) scale(0.2); }
+}
+
+@keyframes streak-shake {
+  0%, 100% { transform: translateX(0); }
+  10% { transform: translateX(-3px) rotate(-0.5deg); }
+  20% { transform: translateX(3px) rotate(0.5deg); }
+  30% { transform: translateX(-3px) rotate(-0.5deg); }
+  40% { transform: translateX(3px) rotate(0.5deg); }
+  50% { transform: translateX(-2px); }
+  60% { transform: translateX(2px); }
+  70% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+}
+
+@keyframes evolution-pulse {
+  0% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0 rgba(232, 82, 63, 0); }
+  25% { transform: scale(1.06); filter: brightness(1.2); box-shadow: 0 0 30px rgba(232, 82, 63, 0.4); }
+  50% { transform: scale(1.1); filter: brightness(1.4); box-shadow: 0 0 60px rgba(255, 190, 130, 0.6); }
+  75% { transform: scale(1.04); filter: brightness(1.15); box-shadow: 0 0 20px rgba(201, 161, 60, 0.3); }
+  100% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0 rgba(232, 82, 63, 0); }
+}
+
+@keyframes evolution-ring {
+  0% { opacity: 0; transform: scale(0.8); }
+  30% { opacity: 0.8; }
+  60% { opacity: 0.4; transform: scale(1.25); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
+@keyframes loot-glow-gold {
+  0%, 100% { box-shadow: 0 0 30px rgba(251, 191, 36, 0.4), 0 0 60px rgba(201, 161, 60, 0.2); }
+  50% { box-shadow: 0 0 60px rgba(251, 191, 36, 0.7), 0 0 100px rgba(201, 161, 60, 0.4); }
+}
+
+@keyframes loot-glow-purple {
+  0%, 100% { box-shadow: 0 0 25px rgba(168, 85, 247, 0.3), 0 0 50px rgba(139, 92, 246, 0.15); }
+  50% { box-shadow: 0 0 50px rgba(168, 85, 247, 0.6), 0 0 80px rgba(139, 92, 246, 0.3); }
 }
 
 @layer base {

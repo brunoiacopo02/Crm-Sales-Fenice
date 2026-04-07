@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Scroll, Swords, Star, Coins, Zap, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { generateDailyQuests, getUserQuests, checkQuestProgress, completeQuest } from '@/app/actions/questActions';
+import { triggerCelebration } from '@/lib/animationUtils';
 
 interface QuestItem {
     progressId: string;
@@ -120,6 +121,7 @@ export function QuestPanel({ userId }: { userId: string }) {
             const result = await completeQuest(userId, progressId);
             if (result.success) {
                 setJustClaimed(prev => new Set(prev).add(progressId));
+                triggerCelebration('fire');
                 // Reload quests to reflect updated state
                 const data = await getUserQuests(userId);
                 setQuests(data);
