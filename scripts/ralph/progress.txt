@@ -325,3 +325,34 @@ Started: 2026-04-07
   - All `<p>` and `<span>` containing interactive elements replaced with `<div>` to prevent hydration WSOD
   - `backdrop-blur-md` on header creates a glass effect that works with theme backgrounds
 ---
+
+## 2026-04-07 - F2-016
+- **Feature**: UI: Redesign Pipeline GDO
+- **What was done:**
+  - **PipelineBoard redesign:**
+    - Premium tab bar: `bg-ash-100/80` container with sliding active indicator animated via `transition-all duration-300`
+    - Tab badges color-coded per call stage: brand-orange (1st), gold (2nd), ember (3rd/4th)
+    - Glass-like sticky header: `bg-white/90 backdrop-blur-sm border-ash-200/60`
+    - Smooth tab transitions: opacity fade (150ms) on tab switch using `isTransitioning` state
+    - Staggered card entry: `animate-fade-in` with `animationDelay` per card (max 300ms)
+    - List area: subtle gradient `from-ash-50/50 to-white`
+    - Empty state: icon-based (Inbox) with `ash-*` warm neutral palette
+    - 4th call tab: Flame icon with ember accents
+  - **LeadCard redesign:**
+    - Premium card container: `rounded-xl shadow-soft hover:shadow-card hover:border-brand-orange/30 transition-all duration-200`
+    - Status badges: dot indicator + border + gradient backgrounds using design token colors (blue/gold/ember/emerald/brand-orange)
+    - Expired recall: gradient left accent via `before:` pseudo-element (`from-ember-400 to-ember-600`)
+    - Activity info: icon boxes (`w-7 h-7 rounded-lg`) with label + date two-line layout
+    - Copy buttons: `hover:bg-brand-orange-50 hover:text-brand-orange` with `rounded-md`
+    - Warm neutral palette (`ash-*`) replacing all `gray-*` for text and borders
+    - Hydration safety: all interactive elements use `<div>` containers, never `<span>` or `<p>`
+  - ALL existing functionality preserved: quick actions, outcome modal, recall watcher, copy buttons, responsive columns
+- **Files modified:**
+  - `src/components/PipelineBoard.tsx` — full redesign with sliding tabs, transitions, staggered animations
+  - `src/components/LeadCard.tsx` — full redesign with premium status badges, activity boxes, warm palette
+- **Learnings per iterazioni future:**
+  - Sliding tab indicator via `getBoundingClientRect()` + `ref` is more elegant than conditional CSS classes
+  - `animationDelay` with `animationFillMode: 'backwards'` creates staggered list entrance
+  - `before:` pseudo-element for left accent avoids extra DOM and works with `relative` parent
+  - Status dot (`w-1.5 h-1.5 rounded-full`) inside badge gives at-a-glance color signal
+---

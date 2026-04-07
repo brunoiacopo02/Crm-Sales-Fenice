@@ -247,7 +247,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "NON rompere la logica di pipeline. Solo restyling."
     },
     {

@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { LeadCard } from "./LeadCard"
 import { OutcomeModal } from "./OutcomeModal"
+import { Flame, Inbox } from "lucide-react"
 
 type LeadList = any[]
 
@@ -23,6 +24,9 @@ export function PipelineBoard({
 }) {
     const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'first' | 'second' | 'third' | 'fourth'>('first')
+    const [isTransitioning, setIsTransitioning] = useState(false)
+    const tabIndicatorRef = useRef<HTMLDivElement>(null)
+    const tabContainerRef = useRef<HTMLDivElement>(null)
 
     // --- RECALL WATCHER ---
     const [alertedRecalls, setAlertedRecalls] = useState<Set<string>>(new Set())
@@ -49,12 +53,34 @@ export function PipelineBoard({
                 return newlyAlerted ? updatedSet : prev;
             });
 
-        }, 30000); // Check every 30s
+        }, 30000);
 
         return () => clearInterval(interval);
     }, [recalls]);
 
-    // Helper per ottenere la lista corrente
+    // Tab transition handler
+    const switchTab = (tab: 'first' | 'second' | 'third' | 'fourth') => {
+        if (tab === activeTab) return
+        setIsTransitioning(true)
+        setTimeout(() => {
+            setActiveTab(tab)
+            setIsTransitioning(false)
+        }, 150)
+    }
+
+    // Sliding indicator position
+    useEffect(() => {
+        if (!tabIndicatorRef.current || !tabContainerRef.current) return
+        const tabs = tabContainerRef.current.querySelectorAll<HTMLButtonElement>('[data-tab]')
+        const activeBtn = tabContainerRef.current.querySelector<HTMLButtonElement>(`[data-tab="${activeTab}"]`)
+        if (activeBtn) {
+            const containerRect = tabContainerRef.current.getBoundingClientRect()
+            const btnRect = activeBtn.getBoundingClientRect()
+            tabIndicatorRef.current.style.left = `${btnRect.left - containerRect.left}px`
+            tabIndicatorRef.current.style.width = `${btnRect.width}px`
+        }
+    }, [activeTab, isFourthCallActive])
+
     const getCurrentList = () => {
         switch (activeTab) {
             case 'first': return firstCall
@@ -67,47 +93,77 @@ export function PipelineBoard({
 
     const currentList = getCurrentList()
 
+    const tabConfig = [
+        { key: 'first' as const, label: '1ª Chiamata', count: firstCall.length, color: 'brand-orange' },
+        { key: 'second' as const, label: '2ª Chiamata', count: secondCall.length, color: 'gold' },
+        { key: 'third' as const, label: '3ª Chiamata', count: thirdCall.length, color: 'ember' },
+    ]
+
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl border border-ash-200 shadow-card overflow-hidden">
 
             {/* STICKY HEADER & TAB BAR */}
-            <div className="sticky top-0 z-20 bg-white border-b border-gray-100 p-4">
+            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-sm border-b border-ash-200/60 px-4 pt-4 pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-4">
 
                     {/* TABS */}
-                    <div className="flex space-x-1 bg-gray-100/80 p-1 rounded-lg">
-                        <button
-                            onClick={() => setActiveTab('first')}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'first' ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            1ª Chiamata <span className="ml-1.5 text-xs bg-gray-200/80 px-1.5 py-0.5 rounded-full">{firstCall.length}</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('second')}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'second' ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            2ª Chiamata <span className="ml-1.5 text-xs bg-gray-200/80 px-1.5 py-0.5 rounded-full">{secondCall.length}</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('third')}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'third' ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            3ª Chiamata <span className="ml-1.5 text-xs bg-gray-200/80 px-1.5 py-0.5 rounded-full">{thirdCall.length}</span>
-                        </button>
+                    <div className="relative flex space-x-1 bg-ash-100/80 p-1 rounded-xl" ref={tabContainerRef}>
+                        {/* Sliding active indicator */}
+                        <div
+                            ref={tabIndicatorRef}
+                            className="absolute top-1 bottom-1 bg-white rounded-lg shadow-card transition-all duration-300 ease-out"
+                            style={{ zIndex: 0 }}
+                        />
+
+                        {tabConfig.map(tab => (
+                            <button
+                                key={tab.key}
+                                data-tab={tab.key}
+                                onClick={() => switchTab(tab.key)}
+                                className={`relative z-10 px-4 py-2.5 text-sm font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2 ${
+                                    activeTab === tab.key
+                                        ? 'text-ash-900'
+                                        : 'text-ash-500 hover:text-ash-700'
+                                }`}
+                            >
+                                {tab.label}
+                                <div className={`text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors duration-200 ${
+                                    activeTab === tab.key
+                                        ? tab.key === 'first' ? 'bg-brand-orange-100 text-brand-orange-700'
+                                        : tab.key === 'second' ? 'bg-gold-100 text-gold-700'
+                                        : 'bg-ember-100 text-ember-700'
+                                        : 'bg-ash-200/80 text-ash-500'
+                                }`}>
+                                    {tab.count}
+                                </div>
+                            </button>
+                        ))}
+
                         {isFourthCallActive && (
-                            <div className="relative group">
+                            <div className="relative group z-10">
                                 <button
-                                    onClick={() => setActiveTab('fourth')}
-                                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-1 ${activeTab === 'fourth' ? 'bg-orange-50 text-brand-orange shadow-sm ring-1 ring-orange-200' : 'text-orange-600/70 hover:text-brand-orange'}`}
+                                    data-tab="fourth"
+                                    onClick={() => switchTab('fourth')}
+                                    className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2 ${
+                                        activeTab === 'fourth'
+                                            ? 'text-ember-700'
+                                            : 'text-ember-400 hover:text-ember-600'
+                                    }`}
                                 >
-                                    4ª Chiamata
-                                    <span className="ml-1 text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">Recupero</span>
-                                    <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'fourth' ? 'bg-orange-200 text-orange-800' : 'bg-orange-100 text-orange-800'}`}>{fourthCall.length}</span>
+                                    <Flame className={`w-3.5 h-3.5 ${activeTab === 'fourth' ? 'text-ember-500' : 'text-ember-300'}`} />
+                                    4ª Recupero
+                                    <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${
+                                        activeTab === 'fourth'
+                                            ? 'bg-ember-100 text-ember-700'
+                                            : 'bg-ember-50 text-ember-400'
+                                    }`}>
+                                        {fourthCall.length}
+                                    </div>
                                 </button>
                                 {/* Tooltip */}
-                                <div className="absolute hidden group-hover:block w-64 p-2 bg-gray-800 text-white text-xs rounded-md shadow-lg -bottom-10 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none">
+                                <div className="absolute hidden group-hover:block w-64 p-2.5 bg-ash-800 text-white text-xs rounded-lg shadow-elevated -bottom-12 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none">
                                     Attiva perché il tuo tasso di fissaggio è sotto 14% (ultimi 7 giorni).
-                                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-gray-800" />
+                                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-ash-800" />
                                 </div>
                             </div>
                         )}
@@ -115,23 +171,30 @@ export function PipelineBoard({
                 </div>
             </div>
 
-            {/* LIST AREA (SINGLE SECTION ROW LAYOUT) */}
-            <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 pb-48">
-                <div className="flex flex-col gap-3 max-w-7xl mx-auto">
-                    {currentList.map((lead) => (
-                        <LeadCard
+            {/* LIST AREA */}
+            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-ash-50/50 to-white p-4 pb-48">
+                <div className={`flex flex-col gap-2.5 max-w-7xl mx-auto transition-opacity duration-150 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+                    {currentList.map((lead, index) => (
+                        <div
                             key={lead.id}
-                            lead={lead}
-                            onOutcomeClick={setSelectedLeadId}
-                            isRowLayout={true}
-                        />
+                            className="animate-fade-in"
+                            style={{ animationDelay: `${Math.min(index * 30, 300)}ms`, animationFillMode: 'backwards' }}
+                        >
+                            <LeadCard
+                                lead={lead}
+                                onOutcomeClick={setSelectedLeadId}
+                                isRowLayout={true}
+                            />
+                        </div>
                     ))}
 
                     {currentList.length === 0 && (
-                        <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-dashed border-gray-300 rounded-xl">
-                            <span className="text-5xl mb-4">📭</span>
-                            <h3 className="text-lg font-medium text-gray-900">Nessun lead in questa vista</h3>
-                            <p className="text-gray-500 mt-1 max-w-sm">Hai completato tutti i contatti di questa fase o non ci sono nuovi import.</p>
+                        <div className="flex flex-col items-center justify-center p-16 text-center bg-white border border-dashed border-ash-300 rounded-xl">
+                            <div className="w-16 h-16 rounded-2xl bg-ash-100 flex items-center justify-center mb-4">
+                                <Inbox className="w-8 h-8 text-ash-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-ash-700">Nessun lead in questa vista</h3>
+                            <div className="text-ash-500 mt-1.5 max-w-sm text-sm">Hai completato tutti i contatti di questa fase o non ci sono nuovi import.</div>
                         </div>
                     )}
                 </div>
