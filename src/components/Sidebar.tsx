@@ -25,6 +25,11 @@ type NavItem = {
     badge?: number
 }
 
+type NavGroup = {
+    label: string
+    items: NavItem[]
+}
+
 export function Sidebar() {
     const pathname = usePathname()
     const { isOpen, close } = useSidebar()
@@ -50,6 +55,7 @@ export function Sidebar() {
     }, [pathname, close])
 
     let navItems: NavItem[] = []
+    let navGroups: NavGroup[] | null = null
 
     if (role === "GDO") {
         navItems = [
@@ -77,23 +83,44 @@ export function Sidebar() {
                 { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
             ]
         } else {
-            navItems = [
-                { name: "Gestione Team", href: "/team", icon: UserCog },
-                { name: "Gestione Store", href: "/team/store", icon: Store },
-                { name: "Monitor RPG GDO", href: "/manager-rpg-monitor", icon: Gamepad2 },
-                { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
-                { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
-                { name: "KPI Team GDO", href: "/kpi-team", icon: LayoutDashboard },
-                { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
-                { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
-                { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
-                { name: "Note GDO", href: "/note-gdo", icon: FileText },
-                { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
-                { name: "Importa Lead", href: "/import", icon: Upload },
-                { name: "Archivio Storico", href: "/archivio", icon: Database },
-                { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
-                { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
-                { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
+            navGroups = [
+                {
+                    label: "Operativo",
+                    items: [
+                        { name: "Dashboard Operativa", href: "/team", icon: UserCog },
+                        { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
+                        { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
+                        { name: "Importa Lead", href: "/import", icon: Upload },
+                        { name: "Archivio Storico", href: "/archivio", icon: Database },
+                        { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
+                    ],
+                },
+                {
+                    label: "KPI & Analytics",
+                    items: [
+                        { name: "KPI Team", href: "/kpi-team", icon: LayoutDashboard },
+                        { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
+                        { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
+                        { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
+                        { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
+                        { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
+                        { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
+                    ],
+                },
+                {
+                    label: "Team & HR",
+                    items: [
+                        { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
+                        { name: "Note GDO", href: "/note-gdo", icon: FileText },
+                    ],
+                },
+                {
+                    label: "Gamification",
+                    items: [
+                        { name: "Monitor RPG GDO", href: "/manager-rpg-monitor", icon: Gamepad2 },
+                        { name: "Gestione Store", href: "/team/store", icon: Store },
+                    ],
+                },
             ]
         }
     }
@@ -132,31 +159,67 @@ export function Sidebar() {
 
                 {/* Navigation */}
                 <nav className="flex-1 px-3 mt-4 space-y-1 overflow-y-auto pb-4 custom-scrollbar">
-                    {navItems.map((item) => {
-                        const isActive = pathname === item.href
-
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={`group flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
-                                    ? "bg-brand-orange/15 text-white font-medium shadow-[inset_3px_0_0_var(--color-brand-orange)]"
-                                    : "text-ash-400 hover:text-white hover:bg-white/5"
-                                    }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-brand-orange" : "text-ash-500 group-hover:text-brand-orange-300"}`} />
-                                    <span className="text-sm">{item.name}</span>
-                                </div>
-
-                                {item.badge !== undefined && item.badge > 0 && (
-                                    <span className="bg-ember-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow-glow-ember">
-                                        {item.badge}
-                                    </span>
+                    {navGroups ? (
+                        navGroups.map((group, groupIdx) => (
+                            <div key={group.label}>
+                                {groupIdx > 0 && (
+                                    <div className="mx-1 my-2 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                                 )}
-                            </Link>
-                        )
-                    })}
+                                <div className="px-3 pt-3 pb-1.5">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-ash-500">
+                                        {group.label}
+                                    </span>
+                                </div>
+                                {group.items.map((item) => {
+                                    const isActive = pathname === item.href
+                                    return (
+                                        <Link
+                                            key={item.href}
+                                            href={item.href}
+                                            className={`group flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 ${isActive
+                                                ? "bg-brand-orange/15 text-white font-medium shadow-[inset_3px_0_0_var(--color-brand-orange)]"
+                                                : "text-ash-400 hover:text-white hover:bg-white/5"
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-brand-orange" : "text-ash-500 group-hover:text-brand-orange-300"}`} />
+                                                <span className="text-sm">{item.name}</span>
+                                            </div>
+                                            {item.badge !== undefined && item.badge > 0 && (
+                                                <span className="bg-ember-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow-glow-ember">
+                                                    {item.badge}
+                                                </span>
+                                            )}
+                                        </Link>
+                                    )
+                                })}
+                            </div>
+                        ))
+                    ) : (
+                        navItems.map((item) => {
+                            const isActive = pathname === item.href
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    className={`group flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
+                                        ? "bg-brand-orange/15 text-white font-medium shadow-[inset_3px_0_0_var(--color-brand-orange)]"
+                                        : "text-ash-400 hover:text-white hover:bg-white/5"
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-brand-orange" : "text-ash-500 group-hover:text-brand-orange-300"}`} />
+                                        <span className="text-sm">{item.name}</span>
+                                    </div>
+                                    {item.badge !== undefined && item.badge > 0 && (
+                                        <span className="bg-ember-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow-glow-ember">
+                                            {item.badge}
+                                        </span>
+                                    )}
+                                </Link>
+                            )
+                        })
+                    )}
                 </nav>
 
                 {/* Bottom divider */}
