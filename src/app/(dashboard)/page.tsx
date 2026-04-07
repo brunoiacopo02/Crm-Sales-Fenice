@@ -6,6 +6,7 @@ import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
 import { QuestPanel } from "@/components/QuestPanel"
 import { StreakCounter } from "@/components/StreakCounter"
 import { LootDropModal } from "@/components/LootDropModal"
+import { BossBattleBanner } from "@/components/BossBattleBanner"
 import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
@@ -42,6 +43,8 @@ export default async function DashboardPage() {
                     Benvenuto, <span className="font-semibold text-brand-orange">{session?.user?.name}</span>
                 </div>
             </div>
+
+            <BossBattleBanner userId={session!.user.id} />
 
             <GdoDailyObjectives gdoUserId={session!.user.id} />
 

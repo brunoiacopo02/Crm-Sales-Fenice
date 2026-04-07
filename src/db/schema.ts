@@ -353,6 +353,32 @@ export const lootDrops = pgTable('lootDrops', {
     droppedAt: timestamp('droppedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- BOSS BATTLE SYSTEM ---
+export const bossBattles = pgTable('bossBattles', {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    totalHp: integer('totalHp').notNull(),
+    currentHp: integer('currentHp').notNull(),
+    rewardCoins: integer('rewardCoins').notNull(),
+    rewardXp: integer('rewardXp').default(0).notNull(),
+    startTime: timestamp('startTime', { withTimezone: true, mode: 'date' }).notNull(),
+    endTime: timestamp('endTime', { withTimezone: true, mode: 'date' }).notNull(),
+    status: text('status').default('active').notNull(), // 'active' | 'defeated' | 'expired'
+    createdBy: text('createdBy').references(() => users.id),
+    defeatedAt: timestamp('defeatedAt', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const bossContributions = pgTable('bossContributions', {
+    id: text('id').primaryKey(),
+    battleId: text('battleId').notNull().references(() => bossBattles.id),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    damage: integer('damage').notNull(),
+    action: text('action').notNull(), // 'appointment_set' | 'manual'
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     id: text('id').primaryKey(),
     month: text('month').notNull().unique(), // e.g. '2026-03'

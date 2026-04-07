@@ -12,6 +12,7 @@ import { subDays } from "date-fns"
 import { evaluateTeamGoals } from "@/app/actions/teamGoalActions"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
 import { triggerLootDrop } from "@/app/actions/lootDropActions"
+import { contributeToBoss } from "@/app/actions/bossBattleActions"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
 async function checkFourthCallEligibility(gdoId: string): Promise<boolean> {
@@ -235,6 +236,10 @@ export async function updateLeadOutcome(
         if (effectiveUserId) {
             await triggerLootDrop(effectiveUserId).catch((e: any) => {
                 console.error("Loot drop trigger failed:", e)
+            })
+            // Boss battle contribution (fire-and-forget)
+            contributeToBoss(effectiveUserId).catch((e: any) => {
+                console.error("Boss battle contribution failed:", e)
             })
         }
     }

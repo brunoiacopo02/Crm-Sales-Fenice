@@ -28,6 +28,12 @@ export const GAME_CONSTANTS = {
         COINS: 50, // awarded every INTERVAL days
         INTERVAL: 7,
     },
+    BOSS_BATTLE: {
+        DAMAGE_PER_APPOINTMENT: 10, // HP removed per appointment
+        DEFAULT_HP: 500,
+        DEFAULT_REWARD_COINS: 100,
+        DEFAULT_REWARD_XP: 200,
+    },
     LOOT_DROP: {
         TRIGGER_EVERY: 10, // every N appointments
         RARITY_WEIGHTS: [
