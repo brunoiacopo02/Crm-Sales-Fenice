@@ -315,3 +315,20 @@ Started: 2026-04-07
   - Profile data fetching uses 6 parallel Promise.all calls: rpgProfile, achievements, titles, streak, quests, lifetimeStats
   - LeaderboardMetric type is exported from leaderboardActions for use in client components
 ---
+
+## 2026-04-07 - F2-033
+- Build verification: `npx next build` compiles with ZERO errors, all 44 pages rendered (static + dynamic)
+- TypeScript check: `tsc --noEmit` passes clean with zero errors
+- Fixed critical `react-hooks/rules-of-hooks` violation in `ConfermeDrawer.tsx` (24 violations):
+  - Cause: early return `if (!isOpen || !item) return null;` before all 22 useState + 2 useEffect calls
+  - Fix: moved early return AFTER all hooks, added optional chaining for lead property access in initializers
+  - Changed `lead.X` to `lead?.X` in all hook initializers and dependency arrays
+  - Added `&& lead` guard in useEffect to prevent accessing lead properties when null
+- Remaining eslint issues are pre-existing (164 no-explicit-any, 162 no-unused-vars, 41 no-unescaped-entities) — not significant React warnings
+- File modificati: `src/components/ConfermeDrawer.tsx`
+- **Learnings per iterazioni future:**
+  - Early returns before hooks is the #1 cause of rules-of-hooks violations — always define hooks first, then return null
+  - Optional chaining (`lead?.X || ""`) in useState initializers is safe — React only uses initial value on first render
+  - ConfermeDrawer receives `item` prop which wraps `lead` and `gdo` — always access via `item?.lead`
+  - The middleware deprecation warning (middleware → proxy) is a Next.js 16 migration notice, not an error
+---
