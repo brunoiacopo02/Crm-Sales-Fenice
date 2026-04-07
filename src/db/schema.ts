@@ -266,6 +266,7 @@ export const monthlyTargets = pgTable('monthlyTargets', {
     targetTrattative: integer('targetTrattative').default(0).notNull(),
     targetClosed: integer('targetClosed').default(0).notNull(),
     targetValoreContratti: real('targetValoreContratti').default(0).notNull(),
+    workingDaysOverride: integer('workingDaysOverride'), // nullable — manager manual override
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 

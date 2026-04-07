@@ -41,6 +41,7 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role,
         targetTrattative: initialData.targetData.targetTrattative || 0,
         targetClosed: initialData.targetData.targetClosed || 0,
         targetValoreContratti: initialData.targetData.targetValoreContratti || 0,
+        workingDaysOverride: initialData.workingDaysOverride ?? null,
     });
 
     const handleMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +112,21 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role,
                                 </div>
                                 <div className="grid gap-4 py-4">
                                     <div className="grid grid-cols-4 items-center gap-4">
+                                        <label htmlFor="tWorkingDays" className="text-sm font-medium leading-none text-right">Giorni Lav.</label>
+                                        <div className="col-span-3 flex items-center gap-2">
+                                            <input id="tWorkingDays" type="number" min="1" max="31" placeholder="Auto" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" value={formData.workingDaysOverride ?? ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, workingDaysOverride: e.target.value ? Number(e.target.value) : null })} />
+                                            {formData.workingDaysOverride != null && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, workingDaysOverride: null })}
+                                                    className="text-xs text-slate-500 hover:text-red-500 whitespace-nowrap"
+                                                >
+                                                    Reset Auto
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
                                         <label htmlFor="tFissati" className="text-sm font-medium leading-none text-right">Fissati</label>
                                         <input id="tFissati" type="number" className="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" value={formData.targetAppFissati} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, targetAppFissati: Number(e.target.value) })} />
                                     </div>
@@ -150,7 +166,11 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role,
                     </div>
                     <div className="p-6 pt-0">
                         <div className="text-2xl font-bold text-slate-900">{initialData.giorniLavorativiTotaliMese}</div>
-                        <p className="text-xs text-slate-400 mt-1">Domeniche Escluse</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                            {initialData.workingDaysOverride != null
+                                ? <span className="text-orange-600 font-semibold">Override manuale</span>
+                                : 'Domeniche Escluse'}
+                        </p>
                     </div>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm">

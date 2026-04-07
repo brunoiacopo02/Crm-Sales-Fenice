@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { leads, users } from "@/db/schema"
+import { leads, users, monthlyTargets } from "@/db/schema"
 import { eq, and, gte, lte, asc, sql } from "drizzle-orm"
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 
@@ -115,8 +115,15 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
 
     const currentWeekData = weeklyHistory.find(w => w.isCurrent) || weeklyHistory[weeklyHistory.length - 1]
 
-    const workingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
-    const totalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
+    const calcWorkingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
+    const calcTotalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
+
+    // Check for manager override of working days
+    const monthStr = format(start, 'yyyy-MM')
+    const mtQuery = await db.select().from(monthlyTargets).where(eq(monthlyTargets.month, monthStr))
+    const overrideVal = mtQuery.length > 0 ? mtQuery[0].workingDaysOverride : null
+    const totalWorkingDays = (overrideVal != null && overrideVal > 0) ? overrideVal : calcTotalWorkingDays
+    const workingDaysPassed = Math.min(calcWorkingDaysPassed, totalWorkingDays)
 
     // --- EXCEL FORMULAS & MOCKS ---
     const buildRow = (label: string, actAbs: number, targetMax: number, today: number) => {

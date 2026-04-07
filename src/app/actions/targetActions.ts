@@ -14,6 +14,7 @@ export interface MonthlyTargetInput {
     targetTrattative: number;
     targetClosed: number;
     targetValoreContratti: number;
+    workingDaysOverride?: number | null;
 }
 
 export interface TargetStatsResponse {
@@ -58,6 +59,9 @@ export interface TargetStatsResponse {
     fissaggioVariazioneAss: number; // ACT_Perc - TARGET_PREV_Perc
     mediaAppDayGdo: number;
     mediaVenditePrevisteMeseGdo: number;
+
+    // Working Days Override
+    workingDaysOverride: number | null;
 
     // Logica 7 Giorni Alert
     dataPrimoMeno20: string | null;
@@ -196,7 +200,8 @@ async function processDailySnapshots(monthString: string, currentFissaggioVariaz
 }
 
 export async function getManagerTargetsData(monthString: string, testTodayOverride?: Date): Promise<TargetStatsResponse> {
-    const { giorniLavorativiTotaliMese, giorniLavorativiTrascorsiOggi, today } = getDateMetrics(monthString, testTodayOverride);
+    const dateMetrics = getDateMetrics(monthString, testTodayOverride);
+    const today = dateMetrics.today;
     const todayFormatted = today.toISOString().split('T')[0];
 
     // 1. Setup Targets e Utenti
@@ -208,7 +213,19 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         targetTrattative: 0,
         targetClosed: 0,
         targetValoreContratti: 0,
+        workingDaysOverride: null as number | null,
     };
+
+    // Se il manager ha impostato un override manuale dei giorni lavorativi, usalo
+    const hasOverride = targetData.workingDaysOverride != null && targetData.workingDaysOverride > 0;
+    const giorniLavorativiTotaliMese = hasOverride
+        ? targetData.workingDaysOverride!
+        : dateMetrics.giorniLavorativiTotaliMese;
+    // I giorni trascorsi non possono superare il totale
+    const giorniLavorativiTrascorsiOggi = Math.min(
+        dateMetrics.giorniLavorativiTrascorsiOggi,
+        giorniLavorativiTotaliMese
+    );
 
     const gdoUsersObj = await db.select().from(users)
         .where(
@@ -374,6 +391,8 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         fissaggioVariazioneAss,
         mediaAppDayGdo,
         mediaVenditePrevisteMeseGdo,
+
+        workingDaysOverride: targetData.workingDaysOverride ?? null,
 
         dataPrimoMeno20: snapshotAlert.dataPrimoMeno20,
         is7DaysAlertActive: snapshotAlert.is7DaysAlertActive
