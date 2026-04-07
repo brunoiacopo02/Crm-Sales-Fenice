@@ -78,7 +78,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "BREAK_RULES in pauseUtils.ts: MAX_PAUSES_PER_DAY: 2, MAX_MINUTES_PER_PAUSE: 15. Il blocking e' su riga ~174 di pauseActions.ts."
     },
     {

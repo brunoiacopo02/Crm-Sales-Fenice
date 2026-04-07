@@ -73,3 +73,16 @@ Started: 2026-04-07
   - `log.createdAt.getHours()` su Vercel restituisce ore UTC, NON Rome. Usare `toLocaleString` con timeZone per ottenere l'ora corretta
   - Il grafico trend usa `trendMap` con chiavi stringa come labels — l'ordine di inserzione della Map definisce l'ordine nel grafico
 ---
+
+## 2026-04-07 - F1-005
+- **Implementato**: Rimosso limite 2 pause/giorno, auditato calcolo tempi
+- **pauseUtils.ts**: Rimosso `MAX_PAUSES_PER_DAY` da `BREAK_RULES`, mantenuto `MAX_MINUTES_PER_PAUSE: 15`
+- **pauseActions.ts**:
+  - Rimosso `maxPauses` e `isBlocked` da `PauseSummary` type
+  - Rimosso calcolo `isBlocked` basato su `usedPauses >= MAX_PAUSES_PER_DAY`
+  - Rimosso check `status.isBlocked` in `startPause()` che bloccava la creazione di nuove pause
+  - **Audit durationSeconds**: calcolo `Math.floor((now - startTime) / 1000)` e' corretto sia in `getGdoPauseStatus` che in `stopPause`
+  - **Audit exceededSeconds**: calcolo `diffSeconds - (MAX_MINUTES_PER_PAUSE * 60)` e' corretto in tutti i punti
+- **PauseTimer.tsx**: Rimosso check `!status.isBlocked` da `canStart`, cambiato display da "X/2" a solo "X" pause usate
+- File modificati: `src/lib/pauseUtils.ts`, `src/app/actions/pauseActions.ts`, `src/components/PauseTimer.tsx`
+---
