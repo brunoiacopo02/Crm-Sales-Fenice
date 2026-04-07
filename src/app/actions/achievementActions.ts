@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications } from "@/db/schema";
-import { eq, and, gte, isNotNull, sql, count, countDistinct } from "drizzle-orm";
+import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications, leadEvents } from "@/db/schema";
+import { eq, and, gte, isNotNull, sql, count, countDistinct, inArray } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 
@@ -61,6 +61,62 @@ export async function measureAchievementMetric(userId: string, metric: string): 
                 .from(coinTransactions)
                 .where(eq(coinTransactions.userId, userId));
             return Number(result[0]?.value) ?? 0;
+        }
+        // --- CONFERME achievement metrics (lifetime) ---
+        case 'total_conferme': {
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato'),
+                    isNotNull(leads.confirmationsTimestamp)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'total_conferme_chiamate': {
+            const confermeEventTypes = [
+                'conferme_no_answer',
+                'conferme_recall_scheduled',
+                'conferme_outcome_set',
+                'conferme_snooze_set',
+                'conferme_vsl_toggled',
+            ];
+            const result = await db.select({ value: count() })
+                .from(leadEvents)
+                .where(and(
+                    eq(leadEvents.userId, userId),
+                    inArray(leadEvents.eventType, confermeEventTypes)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'total_conferme_richiami_ok': {
+            // Leads that had a snooze/recall AND were eventually confirmed
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato'),
+                    isNotNull(leads.confSnoozeAt)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'tasso_conferma_percent': {
+            // (conferme / (conferme + scartate)) * 100
+            const confermati = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato')
+                ));
+            const scartati = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'scartato')
+                ));
+            const tot = (confermati[0]?.value ?? 0) + (scartati[0]?.value ?? 0);
+            if (tot === 0) return 0;
+            return Math.round(((confermati[0]?.value ?? 0) / tot) * 100);
         }
         default:
             return 0;
