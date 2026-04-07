@@ -3,6 +3,7 @@ import { getPipelineLeads } from "@/app/actions/pipelineActions"
 import { PipelineBoard } from "@/components/PipelineBoard"
 import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
+import { QuestPanel } from "@/components/QuestPanel"
 import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
@@ -42,6 +43,8 @@ export default async function DashboardPage() {
             <GdoDailyObjectives gdoUserId={session!.user.id} />
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />
+
+            <QuestPanel userId={session!.user.id} />
 
             <PipelineBoard
                 firstCall={firstCall}
