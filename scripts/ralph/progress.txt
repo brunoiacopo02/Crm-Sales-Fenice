@@ -143,3 +143,15 @@ Started: 2026-04-07
   - Le role tabs sono al livello superiore, le metric tabs GDO restano visibili solo quando GDO è selezionato
   - I trigger XP/coins per Conferme e Venditori sono fire-and-forget con .catch() per non bloccare il flusso principale
 ---
+
+## 2026-04-07 - F3-016
+- In ConfermeBoardRow.tsx: aggiunto icona EyeOff (rosso bg-red-100 text-red-500) quando confVslSeen è false/null. L'icona MonitorPlay blu resta per VSL vista.
+- In ConfermeBoardRow.tsx: aggiunto badge funnel (uppercase, bg-ash-100 text-ash-600) accanto al nome GDO nella vista card
+- In ConfermeBoard.tsx: aggiunto funnel sotto il nome GDO nella vista tabella
+- GDO name era già visibile (text-brand-orange-600), confermato presente in entrambe le viste
+- File modificati: src/components/ConfermeBoardRow.tsx, src/components/ConfermeBoard.tsx
+- **Learnings per iterazioni future:**
+  - confVslSeen è boolean: true = VSL vista, false/null = NON vista
+  - lead.funnel è text, può essere null — sempre wrappare con condizionale
+  - La vista card (ConfermeBoardRow) e la vista tabella (ConfermeBoard) sono due rendering separati da aggiornare entrambi
+---
