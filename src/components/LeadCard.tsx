@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 
@@ -23,6 +23,9 @@ type LeadProps = {
 }
 
 export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
+    // Client-side time for expiry checks (avoids hydration mismatch)
+    const [clientNow, setClientNow] = useState(0)
+    useEffect(() => { setClientNow(Date.now()) }, [])
 
     // Status badge config with gradient styling
     let statusText = "Nuovo"
@@ -42,7 +45,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
         }
 
         if (lead.recallDate) {
-            const isExpired = new Date(lead.recallDate) < new Date()
+            const isExpired = clientNow > 0 && new Date(lead.recallDate).getTime() < clientNow
             if (isExpired) {
                 statusText = "Richiamo Scaduto"
                 statusClasses = "bg-ember-100 text-ember-700 border-ember-300 font-bold"

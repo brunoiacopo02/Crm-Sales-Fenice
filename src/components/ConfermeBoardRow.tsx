@@ -7,6 +7,14 @@ import { recordConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall } fro
 export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRowClick, layoutMode = 'default' }: any) {
     const lead = item.lead
 
+    // Client-side time for overdue checks (avoids hydration mismatch)
+    const [clientNow, setClientNow] = useState(0)
+    useEffect(() => {
+        setClientNow(Date.now())
+        const interval = setInterval(() => setClientNow(Date.now()), 60000)
+        return () => clearInterval(interval)
+    }, [])
+
     // States for Popovers
     const [showSnoozePopover, setShowSnoozePopover] = useState(false)
     const [snoozeTime, setSnoozeTime] = useState("")
@@ -111,7 +119,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
     }
 
     // Determine card accent based on state
-    const isSnoozeOverdue = lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() <= new Date().getTime() && !lead.confirmationsOutcome;
+    const isSnoozeOverdue = clientNow > 0 && lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() <= clientNow && !lead.confirmationsOutcome;
     const cardClasses = isLocked
         ? 'bg-gradient-to-r from-amber-50/80 to-amber-50/40 border-amber-200/60'
         : isSnoozeOverdue
@@ -156,7 +164,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
 
                     {/* Badge Snooze */}
                     {!lead.confirmationsOutcome && lead.confSnoozeAt && (() => {
-                        const isOverdue = new Date(lead.confSnoozeAt).getTime() <= new Date().getTime();
+                        const isOverdue = clientNow > 0 && new Date(lead.confSnoozeAt).getTime() <= clientNow;
                         return (
                             <div className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border shadow-soft ml-1 flex items-center gap-1 shrink-0 transition-all ${isOverdue ? 'bg-gradient-to-r from-ember-50 to-ember-100 text-ember-700 border-ember-300 animate-pulse' : 'bg-gradient-to-r from-brand-orange-50 to-gold-50 text-brand-orange-700 border-brand-orange-200/60'}`}>
                                 <Clock className="w-3.5 h-3.5" />
