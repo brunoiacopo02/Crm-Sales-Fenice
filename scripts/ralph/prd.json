@@ -186,7 +186,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "Usare next/dynamic con ssr: false per componenti client-only."
     },
     {

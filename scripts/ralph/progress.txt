@@ -33,6 +33,7 @@ Started: 2026-04-07
 - VENDITORE metrics in measureMetric: deals_chiusi (salespersonOutcome='Chiuso'), fatturato_eur (SUM closeAmountEur), esiti_registrati (any salespersonOutcomeAt), trattative_presentate (salespersonAssignedAt)
 - VENDITORE quest IDs: vend-d-* (daily), vend-w-* (weekly). Migration route: /api/migrate-quests-venditori
 - Leaderboard multi-role: getRoleLeaderboard(period, role) dispatcher, getConfermeLeaderboard/getVenditoriLeaderboard per ruolo
+- Lazy loading drawers/modals: `dynamic(() => import(...).then(mod => mod.X), { ssr: false, loading: () => <Spinner/> })` — tutti conditional-rendered
 - Gamification triggers: CONFERMATO (Conferme confirms appt), DEAL_CHIUSO (Venditore closes deal) — fire-and-forget in server actions
 
 ---
@@ -216,4 +217,17 @@ Started: 2026-04-07
   - getActiveGdosForImport restituisce { id, name: string|null, displayName: string|null, gdoCode: number|null, isActive: boolean }
   - gdoCode è di tipo `number`, non `string` — attenzione ai tipi quando si usa in template literals
   - Il copy button in LeadCard.tsx usa `lead.phone` direttamente — il campo è passato da getPipelineLeads che fa db.select() completo dalla tabella leads
+---
+
+## 2026-04-07 - F3-021
+- Convertito 5 componenti pesanti da import statici a next/dynamic con ssr: false
+- ConfermeDrawer (in ConfermeBoard.tsx), VenditoreDrawer (in VenditoreDashboardClient.tsx), ContactDrawer (in Topbar.tsx), OutcomeModal (in RecallBoard.tsx + PipelineBoard.tsx), EditAppointmentModal (in AppointmentBoard.tsx)
+- Tutti usano named exports → pattern: `dynamic(() => import(...).then(mod => mod.Component), { ssr: false })`
+- Loading fallback: overlay semitrasparente con spinner animato (border-amber-500)
+- Tutti i componenti erano già conditionally rendered (isOpen/selectedLead guards), quindi si caricano solo su interazione utente
+- File modificati: src/components/ConfermeBoard.tsx, src/components/VenditoreDashboardClient.tsx, src/components/Topbar.tsx, src/components/RecallBoard.tsx, src/components/PipelineBoard.tsx, src/components/AppointmentBoard.tsx
+- **Learnings per iterazioni future:**
+  - Per named exports con next/dynamic: `.then(mod => mod.NamedExport)` — non serve wrappare in `{ default: ... }`
+  - Componenti conditionally rendered sono i migliori candidati per lazy loading — zero impatto UX
+  - `ssr: false` è obbligatorio per componenti client-only che usano browser APIs o DOM events
 ---
