@@ -118,3 +118,20 @@ Started: 2026-04-07
   - Tier progress calculation: `(currentValue - prevTierTarget) / (nextTierTarget - prevTierTarget)` handles all tiers correctly
   - Category grouping uses reduce pattern for clean visual separation in the grid
 ---
+
+## 2026-04-07 - F2-026
+- Rebalanced gamification economy with new constants in `GAME_CONSTANTS`:
+  - `SPRINT_WIN`: max 25 coins proportional to sprint duration (1-25 range, 120min = full reward)
+  - `ACHIEVEMENT_COINS`: Bronze 20, Silver 75, Gold 200 coins on badge unlock
+  - `STREAK_MILESTONE`: 50 coins every 7 days of streak
+- Updated `sprintActions.ts`: sprint win reward from flat 1 coin to proportional 1-25 coins based on `differenceInMinutes`
+- Updated `achievementActions.ts`: `checkAchievements()` now awards coins per tier on unlock + logs coinTransaction + includes coins in notification body/metadata
+- Updated `streakActions.ts`: `updateStreak()` now checks if streak is a multiple of 7 and awards 50 milestone coins + notification
+- Quest rewards already within target ranges (daily 10-50, weekly 50-200) — no changes needed
+- File modificati: `src/lib/gamificationEngine.ts`, `src/app/actions/sprintActions.ts`, `src/app/actions/achievementActions.ts`, `src/app/actions/streakActions.ts`
+- **Learnings per iterazioni future:**
+  - `GAME_CONSTANTS.ACHIEVEMENT_COINS` uses string keys ('BRONZE'/'SILVER'/'GOLD') mapped from Italian tier labels
+  - Sprint proportional formula: `Math.round(durationMin * MAX / BASE_DURATION)` clamped to [1, MAX]
+  - Streak milestone check: `newStreak % INTERVAL === 0` — only triggers on exact multiples (7, 14, 21...)
+  - Achievement coin rewards use `users.coins` (game economy), not `walletCoins` (shop wallet)
+---
