@@ -1,130 +1,318 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fase-1-bugfix",
-  "description": "Fase 1 — Correzioni & Bug Fix: dati mancanti in Performance GDO e Marketing, riorganizzazione dashboard, fix orari, pause, esiti, import lead",
+  "branchName": "ralph/fase-2a-funzionalita-redesign",
+  "description": "Fase 2 Run 1 — Backend funzionale + UI/UX Redesign con Stitch. Gamification e debug nella Run 2.",
   "userStories": [
     {
-      "id": "F1-001",
-      "title": "Performance GDO: aggiungere lead assegnati e percentuale fissaggio",
-      "description": "Nella sezione Performance GDO (manager-gdo-performance) mancano due metriche chiave: il numero di lead assegnati a ciascun GDO e la percentuale di fissaggio (appuntamenti / lead lavorati).",
+      "id": "F2-001",
+      "title": "Debug dashboard venditori: appuntamenti confermati non visibili",
+      "description": "Gli appuntamenti confermati dalle Conferme non appaiono nella dashboard venditori. Debug e fix del flusso di query.",
       "acceptanceCriteria": [
-        "Aggiungere colonna 'Lead Assegnati' nella tabella GDO in src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx",
-        "Aggiungere colonna '% Fissaggio' calcolata come (appuntamenti fissati / lead assegnati * 100)",
-        "Aggiornare il server action in managerAdvancedActions o simile per fornire i dati necessari",
-        "Le nuove colonne devono essere visibili nel periodo selezionato (oggi/mese/trimestre)",
+        "Auditare getVenditoreAppointments in venditoreActions.ts per filtri errati",
+        "Verificare che setConfermeOutcome setti correttamente salespersonUserId",
+        "Fix la query per mostrare tutti gli appuntamenti assegnati al venditore",
+        "NON modificare lead esistenti - solo fix logica query",
         "npx next build compila senza errori"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "ManagerOperativaBoard ha gia' leadAssegnati e fissaggioTotale — riusare la stessa logica di query."
+      "notes": "Bug critico segnalato. I lead reali NON devono essere toccati."
     },
     {
-      "id": "F1-002",
-      "title": "Marketing Analytics: aggiungere lead assegnati e percentuale fissaggio",
-      "description": "Nella sezione Marketing Analytics mancano le metriche 'lead assegnati' e 'percentuale di fissaggio' per ogni funnel e per ogni GDO nel drill-down.",
+      "id": "F2-002",
+      "title": "Target bonus venditori per fatturato",
+      "description": "Aggiungere campo target fatturato per ogni venditore e UI manager per impostarlo.",
       "acceptanceCriteria": [
-        "Aggiungere 'Lead Assegnati' nella tabella funnel di MarketingAnalyticsClient.tsx",
-        "Aggiungere '% Fissaggio' (appuntamenti / lead assegnati * 100) nella tabella funnel",
-        "Aggiungere le stesse metriche nel drill-down GDO per funnel",
-        "Aggiornare il server action marketingActions.ts per calcolare e ritornare questi dati",
-        "Protezione divisione per zero sui calcoli percentuali",
+        "Aggiungere campo salesTargetEur (real, nullable) alla tabella users in schema.ts",
+        "Applicare migrazione con Supabase MCP (ADD COLUMN, mai drop)",
+        "Creare server action per impostare il target fatturato di un venditore",
+        "Aggiungere UI in manager-targets per impostare target per ogni venditore",
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Il tipo GdoStatTableRow va esteso con i nuovi campi."
+      "passes": false,
+      "notes": "Migrazione ADDITIVA. Mai droppare colonne."
     },
     {
-      "id": "F1-003",
-      "title": "Riorganizzare Dashboard Operativa in KPI Team GDO",
-      "description": "Spostare la tabella 'Dashboard Operativa Aziendale' (ManagerOperativaBoard) dentro la sezione KPI Team GDO. Rimuovere la tabella 'Classifica GDO' dalla sezione KPI Team GDO.",
+      "id": "F2-003",
+      "title": "KPI Venditori: classifica con obiettivo bonus",
+      "description": "Mostrare nella classifica venditori il progresso vs target fatturato e indicatore bonus.",
       "acceptanceCriteria": [
-        "Integrare il componente ManagerOperativaBoard (o i suoi dati) dentro la pagina kpi-team",
-        "Rimuovere la 'Classifica GDO' dalla pagina kpi-team se presente",
-        "La tabella operativa deve mantenere tutte le sue colonne e il filtro periodo (oggi/mese/trimestre)",
-        "Il layout deve essere coerente con il resto della pagina KPI Team",
-        "Se ManagerOperativaBoard era usato altrove, verificare che non si rompa nulla",
+        "In KpiVenditoriClient.tsx aggiungere colonna Target e colonna Progresso %",
+        "Mostrare barra progresso colorata (verde se >= 100%, giallo se >= 70%, rosso altrimenti)",
+        "Indicatore visivo BONUS RAGGIUNTO quando fatturato >= target",
+        "La classifica deve restare ordinata per fatturato decrescente",
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "ManagerOperativaBoard e' in src/components/ManagerOperativaBoard.tsx, KPI Team e' in src/app/(dashboard)/kpi-team/"
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "F1-004",
-      "title": "Fix orario andamento chiamate KPI Team GDO a 13:30-20:00",
-      "description": "Nella tabella 'Andamento Chiamate e Appuntamenti' in KPI Team GDO, l'orario lavorativo deve essere 13:30-20:00, non calcolato da primo all'ultimo log.",
+      "id": "F2-004",
+      "title": "Setup 5 account venditori funzionanti",
+      "description": "Verificare e creare 5 account venditori pronti all'uso tramite script.",
       "acceptanceCriteria": [
-        "Modificare il calcolo in kpiTeamActions.ts per usare range fisso 13:30-20:00 Europe/Rome",
-        "Il calcolo chiamate/ora deve basarsi sulle ore lavorate nel range 13:30-20:00 (6.5 ore)",
-        "Se il GDO ha loggato chiamate fuori orario, quelle chiamate contano ma le ore restano 6.5",
-        "Il grafico/tabella andamento deve mostrare solo le fasce orarie 13:30-20:00",
+        "Aggiornare scripts/seedVenditori.ts per creare 5 account venditori attivi",
+        "Ogni account deve avere: email, password hashata, ruolo VENDITORE, isActive=true",
+        "Lo script deve essere idempotente (non duplicare se eseguito piu' volte)",
+        "Generare report degli account creati con credenziali",
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Attualmente teamHoursWorked e' calcolato da timestamp primo-ultimo log."
+      "passes": false,
+      "notes": "NON toccare account esistenti. Solo creare nuovi o verificare esistenti."
     },
     {
-      "id": "F1-005",
-      "title": "Fix Monitor Pause: calcolo tempo e rimozione limite 2 pause",
-      "description": "Il conteggio del tempo in pausa non e' corretto. Inoltre il limite di 2 pause al giorno va rimosso per permettere pause illimitate (mantenendo il limite di 15 min per pausa).",
+      "id": "F2-005",
+      "title": "Scheda lead editabile dal ContactDrawer",
+      "description": "Quando si cerca un lead dalla Topbar, i dati nel ContactDrawer devono essere editabili.",
       "acceptanceCriteria": [
-        "Auditare e fixare il calcolo durationSeconds e exceededSeconds in pauseUtils.ts e pauseActions.ts",
-        "Rimuovere o alzare significativamente MAX_PAUSES_PER_DAY in pauseUtils.ts (attualmente 2)",
-        "Mantenere MAX_MINUTES_PER_PAUSE a 15 minuti",
-        "Rimuovere la logica isBlocked basata su usedPauses >= MAX_PAUSES_PER_DAY in pauseActions.ts",
-        "Verificare che il monitor pause del manager mostri i dati corretti",
+        "In ContactDrawer.tsx rendere editabili: nome, telefono, email, note",
+        "Aggiungere bottone Salva che chiama un server action per aggiornare i campi",
+        "Il server action deve usare optimistic locking (version check)",
+        "Feedback visivo su salvataggio (successo/errore)",
+        "NON alterare lead reali durante lo sviluppo - solo aggiungere la funzionalita'",
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "BREAK_RULES in pauseUtils.ts: MAX_PAUSES_PER_DAY: 2, MAX_MINUTES_PER_PAUSE: 15. Il blocking e' su riga ~174 di pauseActions.ts."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "F1-006",
-      "title": "Aggiungere esito 'Numero inesistente' tra le cause scarto",
-      "description": "Tra le cause di scarto lead chiamato manca l'opzione 'Numero inesistente'. Va aggiunta come nuova opzione nel modale esiti.",
+      "id": "F2-006",
+      "title": "Giorni lavorativi mensili manuali",
+      "description": "Il manager puo' impostare manualmente il numero di giorni lavorativi mensili per tutto il team nella pagina manager-targets.",
       "acceptanceCriteria": [
-        "Aggiungere 'numero inesistente' alla lista discardReasons in OutcomeModal.tsx",
-        "Verificare che il nuovo esito venga salvato correttamente nel database (campo rejectReason o simile)",
-        "Verificare che il nuovo esito appaia correttamente nell'archivio e nei report",
+        "Aggiungere campo workingDaysOverride (integer, nullable) alla tabella monthlyTargets",
+        "Applicare migrazione ADDITIVA",
+        "In manager-targets aggiungere input per impostare giorni lavorativi del mese",
+        "Dove si calcolano medie giornaliere, usare workingDaysOverride se presente, altrimenti calcolo automatico",
         "npx next build compila senza errori"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Le discard reasons attuali: non interessato, disoccupato, straniero, solo informazioni, non vuole prendere l'appuntamento."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "F1-007",
-      "title": "Fix Import Lead: permettere duplicati e lead senza nome",
-      "description": "L'import CSV attualmente rifiuta lead con telefono/email duplicati e lead senza nome. Bisogna rendere entrambi opzionali.",
+      "id": "F2-007",
+      "title": "Storico pause mensile visibile ai GDO",
+      "description": "I GDO devono poter vedere il proprio storico pause mensili, non solo i manager.",
       "acceptanceCriteria": [
-        "Aggiungere checkbox/opzione 'Consenti duplicati' nel form di import che bypassa il check duplicati",
-        "Permettere il caricamento di lead senza nome (campo nome vuoto o placeholder)",
-        "Se il nome manca, usare un placeholder tipo 'Lead senza nome' o lasciare vuoto",
-        "Rimuovere il requisito di email obbligatoria (renderla opzionale)",
-        "Mantenere la validazione telefono (minimo 5 cifre)",
+        "Creare componente GdoPauseHistory che mostra lo storico pause del mese corrente",
+        "Mostrare: data, ora inizio, durata, tempo ecceduto",
+        "Posizionare nella dashboard GDO (profilo o sezione dedicata)",
+        "Il GDO vede solo le proprie pause, non quelle degli altri",
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "importLeads.ts riga 131-135 rifiuta lead senza nome. Il check duplicati usa processedPhones/processedEmails Sets + query DB."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "F1-008",
-      "title": "Import Lead: migliorare mapping colonne CSV",
-      "description": "Il mapping colonne CSV e' rigido (Nome, Telefono1, Cognome/Funnel, Email). Aggiungere piu' opzioni di mapping per supportare CSV con header diversi.",
+      "id": "F2-008",
+      "title": "Form aggiunta lead singolo manuale",
+      "description": "Creare modale per aggiungere manualmente lead singoli organici (non da CSV).",
       "acceptanceCriteria": [
-        "Mostrare un'anteprima delle prime 3-5 righe del CSV prima dell'import",
-        "Permettere all'utente di mappare manualmente le colonne CSV ai campi del CRM (nome, telefono, email, funnel)",
-        "Supportare header alternativi comuni (es. 'Nome e Cognome', 'Phone', 'Cellulare', 'Fonte')",
-        "Se una colonna non viene mappata, il campo resta vuoto (tranne telefono che e' obbligatorio)",
+        "Creare modale/drawer con form: nome, telefono, email, funnel",
+        "Accessibile dalla pagina import o dalla topbar",
+        "Il lead viene creato con status NEW e callCount 0",
+        "Validazione telefono (min 5 cifre) e email opzionale",
+        "Il lead viene assegnato secondo le regole di assegnazione esistenti",
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "Attualmente il mapping e' case-insensitive e hardcoded in importLeads.ts."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F2-009",
+      "title": "Note GDO: sistema HR/formazione (schema e backend)",
+      "description": "Creare tabella e server actions per le note del Team Leader sui singoli GDO.",
+      "acceptanceCriteria": [
+        "Creare tabella gdoNotes in schema.ts: id, gdoUserId, authorUserId, content, category (formazione/positivo/negativo/disciplinare), createdAt",
+        "Applicare migrazione ADDITIVA con Supabase MCP",
+        "Creare server actions: createGdoNote, getGdoNotes(userId), deleteGdoNote",
+        "Le note sono separate dalle note sui lead",
+        "npx next build compila senza errori"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F2-010",
+      "title": "Note GDO: pagina UI dashboard Team Leader",
+      "description": "Creare pagina dedicata dove il TL puo' commentare e prendere appunti sui GDO.",
+      "acceptanceCriteria": [
+        "Creare pagina /note-gdo con lista GDO e relative annotazioni",
+        "Per ogni GDO: mostrare nome, livello, e lista note con categoria e data",
+        "Form per aggiungere nuova nota con selezione categoria",
+        "Filtro per categoria (formazione/positivo/negativo/disciplinare)",
+        "Accessibile solo a MANAGER e ADMIN",
+        "Aggiungere voce nel Sidebar per MANAGER/ADMIN",
+        "npx next build compila senza errori"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F2-011",
+      "title": "Dashboard GDO: aggiungere chiusure, presenze e conferme",
+      "description": "Nella dashboard GDO aggiungere metriche sui propri lead: chiusure, presenze, conferme.",
+      "acceptanceCriteria": [
+        "Nella dashboard GDO mostrare: numero conferme, numero presenze, numero chiusure dei propri lead",
+        "I dati vengono dai campi confermeOutcome e salespersonOutcome dei lead assegnati al GDO",
+        "Mostrare come card metriche nella parte alta della dashboard",
+        "npx next build compila senza errori"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F2-012",
+      "title": "Obiettivi giornalieri sempre visibili",
+      "description": "Mostrare sempre in evidenza: per GDO chiamate e fissaggi da fare, per Conferme confermati da fare.",
+      "acceptanceCriteria": [
+        "In dashboard GDO: banner/card con 'Chiamate da fare oggi: X/Y' e 'Lead da fissare oggi: X/Y'",
+        "In dashboard Conferme: banner con 'Confermati da fare oggi: X/Y'",
+        "I target giornalieri vengono dai campi dailyApptTarget e simili",
+        "Il conteggio attuale viene dalle azioni effettuate oggi",
+        "Visivamente prominente (top della pagina, colori progress)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F2-013",
+      "title": "Coefficiente produttivita' GDO nei KPI",
+      "description": "Aggiungere il coefficiente di produttivita' nella dashboard KPI GDO.",
+      "acceptanceCriteria": [
+        "Formula: (chiamate/ora lavorata) * (% fissaggio / 100) = coefficiente",
+        "Mostrare nella pagina KPI GDO per ogni operatore",
+        "Ordinabile per coefficiente (chi produce di piu' in cima)",
+        "Ore lavorate = 6.5 (range fisso 13:30-20:00 come fixato in F1-004)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Formula: (calls/6.5h) * (apps/leads * 100). Piu' alto = piu' produttivo."
+    },
+    {
+      "id": "F2-014",
+      "title": "UI: Design system premium con Stitch",
+      "description": "Generare design system coerente con Stitch e implementarlo come design tokens Tailwind.",
+      "acceptanceCriteria": [
+        "Usare Stitch MCP per generare palette premium (warm tones fuoco/oro + neutrali)",
+        "Definire design tokens in globals.css: colori estesi, shadows, border-radius, spacing",
+        "Tipografia hierarchy: headings, body, caption, mono",
+        "Componenti base: button variants, input, badge, card, avatar",
+        "NON rompere componenti esistenti - aggiungere nuovi token, migrare gradualmente",
+        "npx next build compila senza errori"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Usare Stitch in modalita Pro. Skill tailwindcss e ui-design-system."
+    },
+    {
+      "id": "F2-015",
+      "title": "UI: Redesign Sidebar e Topbar",
+      "description": "Look moderno per navigazione: sidebar con gradiente scuro, topbar con search e wallet migliorati.",
+      "acceptanceCriteria": [
+        "Sidebar: gradiente scuro, icone con hover glow, indicatore attivo animato",
+        "Topbar: search con dropdown migliorato, wallet coins animato, avatar con stato",
+        "Transizioni fluide su hover e active states",
+        "Responsive: sidebar collassa su mobile",
+        "Verificare con Playwright che il rendering sia corretto",
+        "npx next build compila senza errori"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Usare Stitch per prototipare, poi implementare in Tailwind."
+    },
+    {
+      "id": "F2-016",
+      "title": "UI: Redesign Pipeline GDO",
+      "description": "Card lead piu' ricche con gerarchia visiva e transizioni.",
+      "acceptanceCriteria": [
+        "LeadCard: status con colore gradient, info piu' leggibili, hover preview",
+        "Tab pipeline con transizioni fluide tra 1a/2a/3a/4a chiamata",
+        "Gerarchia visiva chiara: nome prominente, status badge, info secondarie",
+        "Mantenere TUTTE le funzionalita' esistenti (quick actions, esiti, click)",
+        "Verificare con Playwright",
+        "npx next build compila senza errori"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "NON rompere la logica di pipeline. Solo restyling."
+    },
+    {
+      "id": "F2-017",
+      "title": "UI: Redesign Dashboard Conferme",
+      "description": "Board conferme con colonne visivamente distinte e card compatte.",
+      "acceptanceCriteria": [
+        "Colonne con header colorati per status (Da Confermare, Confermato, Scartato)",
+        "Card lead compatte ma leggibili con info essenziali",
+        "Micro-animazioni su azioni (conferma, scarta)",
+        "Mantenere TUTTE le funzionalita' esistenti del ConfermeDrawer",
+        "Verificare con Playwright",
+        "npx next build compila senza errori"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Solo restyling. Logica intatta."
+    },
+    {
+      "id": "F2-018",
+      "title": "UI: Redesign Dashboard Venditori e KPI pages",
+      "description": "Layout premium per venditori e tutte le pagine KPI/manager.",
+      "acceptanceCriteria": [
+        "Dashboard venditori: KPI cards in evidenza, agenda visiva, classifica con podio",
+        "KPI pages: grafici con design coerente, progress bar animate, color coding",
+        "Manager pages: tabelle con hover states, sparkline, tooltip ricchi",
+        "Mantenere TUTTE le funzionalita' esistenti",
+        "Verificare con Playwright",
+        "npx next build compila senza errori"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F2-019",
+      "title": "UI: Redesign componenti comuni (modali, drawer, form)",
+      "description": "Migliorare LeadCard, ContactDrawer, modali con micro-interazioni.",
+      "acceptanceCriteria": [
+        "Modali: backdrop blur, animazione entrata/uscita fluida, close con ESC",
+        "Drawer: slide-in con spring animation, header sticky",
+        "Form input: focus ring brand-orange, label floating o animata",
+        "Loading states: skeleton shimmer invece di spinner",
+        "Mantenere TUTTE le funzionalita' esistenti",
+        "npx next build compila senza errori"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F2-020",
+      "title": "UI: Redesign gamification visivo (Store, Profilo, Leaderboard)",
+      "description": "Store, profilo RPG e leaderboard con tema Fenice (fuoco, oro, cenere).",
+      "acceptanceCriteria": [
+        "Store: card prodotto con immagine, prezzo in coins, rarity border, effetto hover",
+        "Profilo RPG: tema caldo (arancione/rosso/oro), background effetto fiamma",
+        "Leaderboard: podio top 3 con effetto 3D, animazioni ranking",
+        "Sprint banner: countdown dinamico con effetto urgenza",
+        "Coerenza visiva Fenice su tutti i componenti gamification",
+        "npx next build compila senza errori"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "Usare Stitch per generare design, skill ui-design-system."
     }
   ]
 }

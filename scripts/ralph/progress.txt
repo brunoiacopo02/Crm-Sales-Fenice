@@ -1,136 +1,33 @@
-# Ralph Progress Log — CRM Fenice (Fase 1)
+# Ralph Progress Log — CRM Fenice (Fase 2)
 Started: 2026-04-07
----
 
 ## Codebase Patterns
-- `getManagerGdoTables()` in `gdoPerformanceActions.ts` queries leads by `appointmentDate` in month and groups by `assignedToId` + `funnel`
-- Per-GDO metrics (leadAssegnati, percFissaggio) are displayed in the GDO card header, not as table columns, since the table is funnel-level
-- Lead assignment count uses `createdAt` in month period + `isNotNull(assignedToId)` (all statuses, not just NEW)
+- Optimistic locking: ogni UPDATE su leads DEVE includere `eq(leads.version, lead.version)` nel WHERE + version increment + check `.returning()` length
+- Timezone: usare `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })` per date stringa, mai `toISOString().split('T')[0]`
+- Timezone client: `toLocaleString('it-IT', { timeZone: 'Europe/Rome' })` per display
+- Google Calendar: factory `createOAuth2Client()` per ogni operazione, mai singleton
+- Server Actions ritornano `{ success: boolean, error?: string }`
+- Tailwind v4: custom theme via @theme in globals.css, colori brand: brand-orange (#FFBE82), brand-charcoal (#272626)
+- Gamification XP formula: `100 * (Level ^ 1.5)` per target XP, 5 stadi evoluzione Fenice
+- `assignedToId` e' immutabile dopo import CSV — mai modificarlo
+- DATI REALI: NON toccare lead GDO 114, appuntamenti Conferme, account esistenti
+
+- ConfermeDrawer salesperson init: use `salespersonUserId` (UUID) NOT `salespersonAssigned` (display name) to prevent re-save corruption
+- FreeBusy check: always run BEFORE db.update(), never after — returning success:false after commit causes phantom state
 
 ---
 
-## 2026-04-07 - F1-001
-- **Implementato**: Aggiunto "Lead Assegnati" e "% Fissaggio" nella pagina Performance GDO
-- **Server action** (`gdoPerformanceActions.ts`):
-  - Aggiunta query parallela per contare lead assegnati a ciascun GDO nel mese (filtro su `createdAt` nel periodo, `assignedToId` non null)
-  - Aggiunto campo `leadAssegnati` nello stats map di ogni GDO
-  - Calcolato `percFissaggio` = (fissati / leadAssegnati * 100) con protezione divisione per zero
-  - Nuovi campi `leadAssegnati` e `percFissaggio` aggiunti al return object
-- **Client component** (`ManagerGdoClient.tsx`):
-  - Aggiunto display "Lead Assegn." e "% Fissaggio" nell'header di ogni card GDO (accanto al nome)
-  - Posizionamento: `ml-auto` nel flex header, colore arancione per la percentuale
-- File modificati: `src/app/actions/gdoPerformanceActions.ts`, `src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx`
+## 2026-04-07 - F2-001
+- **Bug**: Confirmed appointments not visible in venditori dashboard
+- **Root cause (DB audit)**: ALL confirmed leads had `appointmentDate = null` (rescheduled/test data). The `isNotNull(appointmentDate)` filter in `getVenditoreAppointments` excluded them all.
+- **Secondary bug**: ConfermeDrawer initialized `salesperson` from `lead.salespersonAssigned` (display name) instead of `lead.salespersonUserId` (UUID), causing data corruption on re-saves
+- **Third bug**: `setConfermeOutcome` ran FreeBusy check AFTER DB update — if check failed, DB was committed but function returned `success: false`
+- **Files modified:**
+  - `src/app/actions/venditoreActions.ts` — removed `isNotNull(appointmentDate)` filter
+  - `src/components/ConfermeDrawer.tsx` — init salesperson from `salespersonUserId`
+  - `src/app/actions/confermeActions.ts` — moved FreeBusy check before DB update
 - **Learnings per iterazioni future:**
-  - La query `leadAssegnati` NON filtra per `status: NEW` (diversamente da `managerAdvancedActions.ts`) per contare tutti i lead assegnati nel periodo indipendentemente dallo stato attuale
-  - `percFissaggio` usa `toFixed(1)` per un decimale di precisione (es. "42.3%")
-  - Le metriche per-GDO sono mostrate nell'header card perche' la tabella e' a livello funnel (ogni riga = un funnel)
----
-
-## 2026-04-07 - F1-002
-- **Implementato**: Aggiunto "Lead Assegnati" e "% Fissaggio" in Marketing Analytics (tabella funnel + drill-down GDO)
-- **Server action** (`marketingActions.ts`):
-  - `getMarketingStats`: Aggiunto conteggio `leadAssegnati` per funnel (lead con `assignedToId` non null), calcolato `fissaggioPerc` = apps / leadAssegnati * 100
-  - `getMarketingStatsByGdo`: Aggiunto `leadAssegnati` per GDO per funnel (tutti i lead assegnati, non solo quelli con appuntamento), calcolato `fissaggioPerc`
-  - Protezione divisione per zero su tutti i calcoli percentuali
-- **Client component** (`MarketingAnalyticsClient.tsx`):
-  - Aggiornati tipi `Stat` e `GdoStatTableRow` con nuovi campi
-  - Tabella funnel: aggiunte colonne "Lead Assegn." e "% Fiss." dopo "Lead" e prima di "App %"
-  - Drill-down GDO: aggiunte colonne "Lead Assegn.", "App Fissati", "% Fiss." per ogni GDO
-  - Riga TOTALE drill-down: aggiunti totali e percentuali calcolate
-- File modificati: `src/app/actions/marketingActions.ts`, `src/app/(dashboard)/marketing-analytics/MarketingAnalyticsClient.tsx`
-- **Learnings per iterazioni future:**
-  - `leadAssegnati` nel drill-down GDO conta TUTTI i lead assegnati a quel GDO in quel funnel (non solo quelli con appointmentDate), perche' rappresenta il bacino totale di lavoro
-  - La tabella funnel e il drill-down GDO condividono lo stesso dataset (`allLeads` filtrati per `createdAt` nel mese)
----
-
-## 2026-04-07 - F1-003
-- **Implementato**: Spostato ManagerOperativaBoard nella pagina KPI Team GDO, rimossa Classifica GDO
-- **KpiTeamDashboard.tsx**:
-  - Rimossa intera sezione "Classifica GDO (Ranking)" (tabella + modal Quick Analytics)
-  - Rimosso stato `selectedGdoId` e variabile `selectedGdoDetails`/`ranking`
-  - Puliti import non piu' usati (Trophy, Search, Phone, ChevronRight)
-- **kpi-team/page.tsx**:
-  - Aggiunto import e rendering di `ManagerOperativaBoard` sotto `KpiTeamDashboard`
-  - ManagerOperativaBoard ha il suo filtro periodo (OGGI/MESE/TRIMESTRE) indipendente
-- **Verifica**: ManagerOperativaBoard resta anche in `manager-targets/page.tsx` (non rimosso da li')
-- File modificati: `src/components/KpiTeamDashboard.tsx`, `src/app/(dashboard)/kpi-team/page.tsx`
-- **Learnings per iterazioni future:**
-  - ManagerOperativaBoard e' esportato come named export (`export function`), non default
-  - Il componente e' self-contained: fetcha i suoi dati via `getManagerOperativaData()` e gestisce il suo stato di periodo
----
-
-## 2026-04-07 - F1-004
-- **Implementato**: Fixato orario lavorativo in KPI Team GDO a 13:30-20:00
-- **kpiTeamActions.ts**:
-  - `teamCallsPerHour`: rimosso calcolo dinamico first-to-last log, usato costante `FIXED_HOURS_WORKED = 6.5`
-  - Per-GDO `callsPerHour`: rimosso calcolo first/lastCallTime, usato stessa costante 6.5h
-  - Grafico trend (oggi/ieri): cambiato range da 08:00-20:00 a 13:30-20:00
-  - Aggiunto timezone Europe/Rome per parsing ore (`toLocaleString('en-GB', { timeZone: 'Europe/Rome' })`)
-  - Bucket `13:30` cattura chiamate dalle 13:30 alle 13:59, bucket `14:00`-`20:00` catturano chiamate nell'ora intera
-  - Chiamate fuori orario (prima delle 13:30 o dopo le 20:59) contano nei totali ma non nel grafico
-- File modificati: `src/app/actions/kpiTeamActions.ts`
-- **Learnings per iterazioni future:**
-  - `log.createdAt.getHours()` su Vercel restituisce ore UTC, NON Rome. Usare `toLocaleString` con timeZone per ottenere l'ora corretta
-  - Il grafico trend usa `trendMap` con chiavi stringa come labels — l'ordine di inserzione della Map definisce l'ordine nel grafico
----
-
-## 2026-04-07 - F1-005
-- **Implementato**: Rimosso limite 2 pause/giorno, auditato calcolo tempi
-- **pauseUtils.ts**: Rimosso `MAX_PAUSES_PER_DAY` da `BREAK_RULES`, mantenuto `MAX_MINUTES_PER_PAUSE: 15`
-- **pauseActions.ts**:
-  - Rimosso `maxPauses` e `isBlocked` da `PauseSummary` type
-  - Rimosso calcolo `isBlocked` basato su `usedPauses >= MAX_PAUSES_PER_DAY`
-  - Rimosso check `status.isBlocked` in `startPause()` che bloccava la creazione di nuove pause
-  - **Audit durationSeconds**: calcolo `Math.floor((now - startTime) / 1000)` e' corretto sia in `getGdoPauseStatus` che in `stopPause`
-  - **Audit exceededSeconds**: calcolo `diffSeconds - (MAX_MINUTES_PER_PAUSE * 60)` e' corretto in tutti i punti
-- **PauseTimer.tsx**: Rimosso check `!status.isBlocked` da `canStart`, cambiato display da "X/2" a solo "X" pause usate
-- File modificati: `src/lib/pauseUtils.ts`, `src/app/actions/pauseActions.ts`, `src/components/PauseTimer.tsx`
----
-
-## 2026-04-07 - F1-006
-- **Implementato**: Aggiunto "numero inesistente" come causa scarto in 3 componenti
-- `OutcomeModal.tsx`: aggiunto a `DISCARD_REASONS` array
-- `GdoQuickActions.tsx`: aggiunto a `DISCARD_REASONS` array
-- `ConfermeDrawer.tsx`: aggiunto `<option>` nel select scarto
-- **Nessuna modifica server-side**: il valore viene salvato nel campo `rejectReason` (text) del callLog — accetta qualsiasi stringa
-- **Report/archivio**: `kpiAdvancedActions.ts` conta motivi scarto dinamicamente da `discardReason`, nessuna lista hardcoded server-side
-- File modificati: `src/components/OutcomeModal.tsx`, `src/components/GdoQuickActions.tsx`, `src/components/ConfermeDrawer.tsx`
----
-
-## 2026-04-07 - F1-007
-- **Implementato**: Import lead ora permette duplicati e lead senza nome/email
-- **importLeads.ts**:
-  - Aggiunto parametro `importOptions?: { allowDuplicates?: boolean }` a `processCsvImport`
-  - Nome: se vuoto, usa placeholder "Lead senza nome" (non piu' rifiutato)
-  - Email: resa opzionale — se presente e valida viene salvata, altrimenti null (non rifiuta piu')
-  - Deduplication: wrappata in `if (!allowDuplicates)` — quando allowDuplicates=true, skip completo del check
-  - Mantenuta validazione telefono (minimo 5 cifre) e funnel (obbligatorio)
-- **import/page.tsx**:
-  - Aggiunto stato `allowDuplicates` (checkbox)
-  - Checkbox "Consenti duplicati" visibile prima del bottone di conferma
-  - Passato `{ allowDuplicates }` come terzo parametro a `processCsvImport`
-  - Colonna "Nome" non piu' obbligatoria nel CSV (rimossa dal check colonne mancanti)
-  - Aggiornato testo requisiti CSV
-- File modificati: `src/app/actions/importLeads.ts`, `src/app/(dashboard)/import/page.tsx`
-- **Learnings per iterazioni future:**
-  - Il campo `leads.name` nello schema Drizzle e' text NOT NULL — "Lead senza nome" come fallback evita errori DB
-  - `processedPhones`/`processedEmails` Set restano populati anche con allowDuplicates (non causa problemi, ma il check e' dentro l'if)
----
-
-## 2026-04-07 - F1-008
-- **Implementato**: Mapping colonne CSV manuale con anteprima e auto-detect esteso
-- **import/page.tsx**:
-  - Aggiunto stato `csvFields` (header CSV) e `csvRawData` (tutti i dati raw)
-  - Dopo il parse, mostra 4 dropdown per mappare colonne CSV → campi CRM (Nome, Telefono*, Email, Funnel*)
-  - Auto-detect esteso con regex piu' ampi: `nome|name`, `telefono|phone|cellulare|cell|tel`, `email|e-mail|mail`, `cognome|funnel|fonte|source|campagna`
-  - Anteprima live delle prime 5 righe del CSV basata sul mapping corrente
-  - Payload ricostruito dinamicamente quando l'utente cambia mapping (`handleMappingChange`)
-  - Sezione assegnazione + bottone import visibili solo quando il mapping e' valido (telefono + funnel mappati)
-  - Se una colonna non e' mappata, il campo resta vuoto (server-side: nome -> "Lead senza nome", email -> null)
-- File modificati: `src/app/(dashboard)/import/page.tsx`
-- **Learnings per iterazioni future:**
-  - PapaParse auto-detect delimiter funziona bene con virgola, punto e virgola, tab
-  - `results.meta.fields` contiene gli header originali del CSV — usare come opzioni nei dropdown
-  - Il mapping viene ricostruito ad ogni cambio dropdown, triggering `buildPayloadFromMapping` che ricalcola il payload
-  - Codebase pattern: `csvFields` e `csvRawData` sono set una volta sola al parse, `mapping` e `payload` vengono ricalcolati interattivamente
+  - Always check actual DB data via Supabase MCP before assuming code-level bugs
+  - `salespersonUserId` is only set for confirmed leads, so it's sufficient as the sole filter
+  - Never perform side-effect checks (calendar, external APIs) after DB commits
 ---
