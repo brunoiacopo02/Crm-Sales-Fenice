@@ -293,3 +293,43 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
         weekEnd: currentWeekEnd.toISOString().split('T')[0]
     };
 }
+
+/**
+ * F2-011: Metriche conferme/presenze/chiusure per i lead di un GDO (mese corrente)
+ */
+export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
+    const now = new Date();
+    const monthStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }).slice(0, 7);
+    const startObj = parseISO(`${monthStr}-01T00:00:00`);
+    const endObj = new Date(endOfMonth(startObj).getFullYear(), endOfMonth(startObj).getMonth(), endOfMonth(startObj).getDate(), 23, 59, 59, 999);
+
+    const gdoLeads = await db.select({
+        confirmationsOutcome: leads.confirmationsOutcome,
+        salespersonOutcome: leads.salespersonOutcome,
+    }).from(leads).where(
+        and(
+            eq(leads.assignedToId, gdoUserId),
+            isNotNull(leads.appointmentDate),
+            gte(leads.appointmentDate, startObj),
+            lte(leads.appointmentDate, endObj)
+        )
+    );
+
+    let fissati = 0;
+    let confermati = 0;
+    let presenziati = 0;
+    let chiusi = 0;
+
+    for (const lead of gdoLeads) {
+        fissati++;
+        const isConfermato = lead.confirmationsOutcome && lead.confirmationsOutcome.toLowerCase() !== 'scartato';
+        const isPresenziatoFlag = isPresenziato(lead.salespersonOutcome);
+        const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
+
+        if (isConfermato) confermati++;
+        if (isPresenziatoFlag) presenziati++;
+        if (isChiuso) chiusi++;
+    }
+
+    return { fissati, confermati, presenziati, chiusi, month: monthStr };
+}
