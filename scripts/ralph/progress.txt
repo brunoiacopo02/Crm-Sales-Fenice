@@ -1,0 +1,27 @@
+# Ralph Progress Log — CRM Fenice (Fase 1)
+Started: 2026-04-07
+---
+
+## Codebase Patterns
+- `getManagerGdoTables()` in `gdoPerformanceActions.ts` queries leads by `appointmentDate` in month and groups by `assignedToId` + `funnel`
+- Per-GDO metrics (leadAssegnati, percFissaggio) are displayed in the GDO card header, not as table columns, since the table is funnel-level
+- Lead assignment count uses `createdAt` in month period + `isNotNull(assignedToId)` (all statuses, not just NEW)
+
+---
+
+## 2026-04-07 - F1-001
+- **Implementato**: Aggiunto "Lead Assegnati" e "% Fissaggio" nella pagina Performance GDO
+- **Server action** (`gdoPerformanceActions.ts`):
+  - Aggiunta query parallela per contare lead assegnati a ciascun GDO nel mese (filtro su `createdAt` nel periodo, `assignedToId` non null)
+  - Aggiunto campo `leadAssegnati` nello stats map di ogni GDO
+  - Calcolato `percFissaggio` = (fissati / leadAssegnati * 100) con protezione divisione per zero
+  - Nuovi campi `leadAssegnati` e `percFissaggio` aggiunti al return object
+- **Client component** (`ManagerGdoClient.tsx`):
+  - Aggiunto display "Lead Assegn." e "% Fissaggio" nell'header di ogni card GDO (accanto al nome)
+  - Posizionamento: `ml-auto` nel flex header, colore arancione per la percentuale
+- File modificati: `src/app/actions/gdoPerformanceActions.ts`, `src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx`
+- **Learnings per iterazioni future:**
+  - La query `leadAssegnati` NON filtra per `status: NEW` (diversamente da `managerAdvancedActions.ts`) per contare tutti i lead assegnati nel periodo indipendentemente dallo stato attuale
+  - `percFissaggio` usa `toFixed(1)` per un decimale di precisione (es. "42.3%")
+  - Le metriche per-GDO sono mostrate nell'header card perche' la tabella e' a livello funnel (ogni riga = un funnel)
+---

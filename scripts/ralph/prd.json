@@ -1,0 +1,130 @@
+{
+  "project": "CRM Fenice",
+  "branchName": "ralph/fase-1-bugfix",
+  "description": "Fase 1 — Correzioni & Bug Fix: dati mancanti in Performance GDO e Marketing, riorganizzazione dashboard, fix orari, pause, esiti, import lead",
+  "userStories": [
+    {
+      "id": "F1-001",
+      "title": "Performance GDO: aggiungere lead assegnati e percentuale fissaggio",
+      "description": "Nella sezione Performance GDO (manager-gdo-performance) mancano due metriche chiave: il numero di lead assegnati a ciascun GDO e la percentuale di fissaggio (appuntamenti / lead lavorati).",
+      "acceptanceCriteria": [
+        "Aggiungere colonna 'Lead Assegnati' nella tabella GDO in src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx",
+        "Aggiungere colonna '% Fissaggio' calcolata come (appuntamenti fissati / lead assegnati * 100)",
+        "Aggiornare il server action in managerAdvancedActions o simile per fornire i dati necessari",
+        "Le nuove colonne devono essere visibili nel periodo selezionato (oggi/mese/trimestre)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "ManagerOperativaBoard ha gia' leadAssegnati e fissaggioTotale — riusare la stessa logica di query."
+    },
+    {
+      "id": "F1-002",
+      "title": "Marketing Analytics: aggiungere lead assegnati e percentuale fissaggio",
+      "description": "Nella sezione Marketing Analytics mancano le metriche 'lead assegnati' e 'percentuale di fissaggio' per ogni funnel e per ogni GDO nel drill-down.",
+      "acceptanceCriteria": [
+        "Aggiungere 'Lead Assegnati' nella tabella funnel di MarketingAnalyticsClient.tsx",
+        "Aggiungere '% Fissaggio' (appuntamenti / lead assegnati * 100) nella tabella funnel",
+        "Aggiungere le stesse metriche nel drill-down GDO per funnel",
+        "Aggiornare il server action marketingActions.ts per calcolare e ritornare questi dati",
+        "Protezione divisione per zero sui calcoli percentuali",
+        "npx next build compila senza errori"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Il tipo GdoStatTableRow va esteso con i nuovi campi."
+    },
+    {
+      "id": "F1-003",
+      "title": "Riorganizzare Dashboard Operativa in KPI Team GDO",
+      "description": "Spostare la tabella 'Dashboard Operativa Aziendale' (ManagerOperativaBoard) dentro la sezione KPI Team GDO. Rimuovere la tabella 'Classifica GDO' dalla sezione KPI Team GDO.",
+      "acceptanceCriteria": [
+        "Integrare il componente ManagerOperativaBoard (o i suoi dati) dentro la pagina kpi-team",
+        "Rimuovere la 'Classifica GDO' dalla pagina kpi-team se presente",
+        "La tabella operativa deve mantenere tutte le sue colonne e il filtro periodo (oggi/mese/trimestre)",
+        "Il layout deve essere coerente con il resto della pagina KPI Team",
+        "Se ManagerOperativaBoard era usato altrove, verificare che non si rompa nulla",
+        "npx next build compila senza errori"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "ManagerOperativaBoard e' in src/components/ManagerOperativaBoard.tsx, KPI Team e' in src/app/(dashboard)/kpi-team/"
+    },
+    {
+      "id": "F1-004",
+      "title": "Fix orario andamento chiamate KPI Team GDO a 13:30-20:00",
+      "description": "Nella tabella 'Andamento Chiamate e Appuntamenti' in KPI Team GDO, l'orario lavorativo deve essere 13:30-20:00, non calcolato da primo all'ultimo log.",
+      "acceptanceCriteria": [
+        "Modificare il calcolo in kpiTeamActions.ts per usare range fisso 13:30-20:00 Europe/Rome",
+        "Il calcolo chiamate/ora deve basarsi sulle ore lavorate nel range 13:30-20:00 (6.5 ore)",
+        "Se il GDO ha loggato chiamate fuori orario, quelle chiamate contano ma le ore restano 6.5",
+        "Il grafico/tabella andamento deve mostrare solo le fasce orarie 13:30-20:00",
+        "npx next build compila senza errori"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Attualmente teamHoursWorked e' calcolato da timestamp primo-ultimo log."
+    },
+    {
+      "id": "F1-005",
+      "title": "Fix Monitor Pause: calcolo tempo e rimozione limite 2 pause",
+      "description": "Il conteggio del tempo in pausa non e' corretto. Inoltre il limite di 2 pause al giorno va rimosso per permettere pause illimitate (mantenendo il limite di 15 min per pausa).",
+      "acceptanceCriteria": [
+        "Auditare e fixare il calcolo durationSeconds e exceededSeconds in pauseUtils.ts e pauseActions.ts",
+        "Rimuovere o alzare significativamente MAX_PAUSES_PER_DAY in pauseUtils.ts (attualmente 2)",
+        "Mantenere MAX_MINUTES_PER_PAUSE a 15 minuti",
+        "Rimuovere la logica isBlocked basata su usedPauses >= MAX_PAUSES_PER_DAY in pauseActions.ts",
+        "Verificare che il monitor pause del manager mostri i dati corretti",
+        "npx next build compila senza errori"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "BREAK_RULES in pauseUtils.ts: MAX_PAUSES_PER_DAY: 2, MAX_MINUTES_PER_PAUSE: 15. Il blocking e' su riga ~174 di pauseActions.ts."
+    },
+    {
+      "id": "F1-006",
+      "title": "Aggiungere esito 'Numero inesistente' tra le cause scarto",
+      "description": "Tra le cause di scarto lead chiamato manca l'opzione 'Numero inesistente'. Va aggiunta come nuova opzione nel modale esiti.",
+      "acceptanceCriteria": [
+        "Aggiungere 'numero inesistente' alla lista discardReasons in OutcomeModal.tsx",
+        "Verificare che il nuovo esito venga salvato correttamente nel database (campo rejectReason o simile)",
+        "Verificare che il nuovo esito appaia correttamente nell'archivio e nei report",
+        "npx next build compila senza errori"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Le discard reasons attuali: non interessato, disoccupato, straniero, solo informazioni, non vuole prendere l'appuntamento."
+    },
+    {
+      "id": "F1-007",
+      "title": "Fix Import Lead: permettere duplicati e lead senza nome",
+      "description": "L'import CSV attualmente rifiuta lead con telefono/email duplicati e lead senza nome. Bisogna rendere entrambi opzionali.",
+      "acceptanceCriteria": [
+        "Aggiungere checkbox/opzione 'Consenti duplicati' nel form di import che bypassa il check duplicati",
+        "Permettere il caricamento di lead senza nome (campo nome vuoto o placeholder)",
+        "Se il nome manca, usare un placeholder tipo 'Lead senza nome' o lasciare vuoto",
+        "Rimuovere il requisito di email obbligatoria (renderla opzionale)",
+        "Mantenere la validazione telefono (minimo 5 cifre)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "importLeads.ts riga 131-135 rifiuta lead senza nome. Il check duplicati usa processedPhones/processedEmails Sets + query DB."
+    },
+    {
+      "id": "F1-008",
+      "title": "Import Lead: migliorare mapping colonne CSV",
+      "description": "Il mapping colonne CSV e' rigido (Nome, Telefono1, Cognome/Funnel, Email). Aggiungere piu' opzioni di mapping per supportare CSV con header diversi.",
+      "acceptanceCriteria": [
+        "Mostrare un'anteprima delle prime 3-5 righe del CSV prima dell'import",
+        "Permettere all'utente di mappare manualmente le colonne CSV ai campi del CRM (nome, telefono, email, funnel)",
+        "Supportare header alternativi comuni (es. 'Nome e Cognome', 'Phone', 'Cellulare', 'Fonte')",
+        "Se una colonna non viene mappata, il campo resta vuoto (tranne telefono che e' obbligatorio)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Attualmente il mapping e' case-insensitive e hardcoded in importLeads.ts."
+    }
+  ]
+}
