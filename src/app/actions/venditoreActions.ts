@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { leads, users, callLogs, notifications, leadEvents } from "@/db/schema"
-import { eq, and, isNotNull, desc, sql, gte, lte } from "drizzle-orm"
+import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 
 export async function getVenditoreAppointments(sellerId: string) {
@@ -32,10 +32,7 @@ export async function getVenditoreAppointments(sellerId: string) {
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
         .where(
-            and(
-                eq(leads.salespersonUserId, sellerId),
-                isNotNull(leads.appointmentDate)
-            )
+            eq(leads.salespersonUserId, sellerId)
         )
         .orderBy(desc(leads.appointmentDate))
         

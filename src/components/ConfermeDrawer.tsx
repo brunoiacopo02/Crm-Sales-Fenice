@@ -34,7 +34,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     // Outcome states
     const [outcome, setOutcome] = useState(lead.confirmationsOutcome || "")
     const [discardReason, setDiscardReason] = useState(lead.confirmationsDiscardReason || "")
-    const [salesperson, setSalesperson] = useState(lead.salespersonAssigned || "")
+    const [salesperson, setSalesperson] = useState(lead.salespersonUserId || "")
     const [savingOutcome, setSavingOutcome] = useState(false)
 
     // Salesperson outcome states
@@ -75,7 +75,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setEditNoteGdo(lead.appointmentNote || "")
             setOutcome(lead.confirmationsOutcome || "")
             setDiscardReason(lead.confirmationsDiscardReason || "")
-            setSalesperson(lead.salespersonAssigned || "")
+            setSalesperson(lead.salespersonUserId || "")
             setSpOutcome(lead.salespersonOutcome || "")
             setSpNotes(lead.salespersonOutcomeNotes || "")
             setActiveTab("dati")

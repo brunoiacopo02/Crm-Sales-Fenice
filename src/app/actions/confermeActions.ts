@@ -305,6 +305,17 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             return { success: false, error: `CONCURRENCY_ERROR: DB è alla versione ${oldLead.version} ma il client ha inviato la versione ${currentVersion}` }
         }
 
+        // FreeBusy Check BEFORE DB update to avoid inconsistent state
+        if (outcome === "confermato" && salespersonAssigned && oldLead.appointmentDate) {
+            const apptDate = new Date(oldLead.appointmentDate);
+            const endTime = addHours(apptDate, 1);
+
+            const isFree = await checkFreeBusy(salespersonAssigned, apptDate, endTime);
+            if (!isFree) {
+                return { success: false, error: "Il venditore selezionato ha già un impegno in questa fascia oraria in Google Calendar." };
+            }
+        }
+
         const updated = await db.update(leads).set({
             confirmationsOutcome: outcome,
             confirmationsDiscardReason: reason || null,
@@ -322,18 +333,11 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             return { success: false, error: 'CONCURRENCY_ERROR' }
         }
 
-        // Handle Calendar Event Creation
+        // Create Calendar Event after successful DB update
         if (outcome === "confermato" && salespersonAssigned && oldLead.appointmentDate) {
             const apptDate = new Date(oldLead.appointmentDate);
             const endTime = addHours(apptDate, 1);
 
-            // FreeBusy Check
-            const isFree = await checkFreeBusy(salespersonAssigned, apptDate, endTime);
-            if (!isFree) {
-                return { success: false, error: "Il venditore selezionato ha già un impegno in questa fascia oraria in Google Calendar." };
-            }
-
-            // Appuntamento durerà di default 1 ora
             await createGoogleCalendarEvent(
                 salespersonAssigned,
                 {
