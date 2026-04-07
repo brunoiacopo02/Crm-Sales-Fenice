@@ -33,3 +33,20 @@ export async function addGdoCoins(userId: string, amount: number) {
         await db.update(users).set({ coins: u[0].coins + amount }).where(eq(users.id, userId));
     }
 }
+
+export async function updateVenditoreSalesTarget(userId: string, salesTargetEur: number) {
+    if (salesTargetEur < 0) throw new Error("Target non valido");
+    await db.update(users).set({ salesTargetEur }).where(eq(users.id, userId));
+}
+
+export async function getVenditoriWithTargets() {
+    const venditori = await db.select({
+        id: users.id,
+        name: users.name,
+        displayName: users.displayName,
+        email: users.email,
+        isActive: users.isActive,
+        salesTargetEur: users.salesTargetEur,
+    }).from(users).where(eq(users.role, 'VENDITORE'));
+    return venditori.filter(v => v.isActive);
+}

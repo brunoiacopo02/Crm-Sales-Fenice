@@ -1,4 +1,5 @@
 import { getManagerTargetsData } from '@/app/actions/targetActions';
+import { getVenditoriWithTargets } from '@/app/actions/managerRpgActions';
 import ManagerTargetsClient from './ManagerTargetsClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
@@ -23,7 +24,10 @@ export default async function ManagerTargetsPage({
     const selectedMonth = searchParams.month || currentMonthStr;
 
     // Fetch in server component per la math geniale
-    const data = await getManagerTargetsData(selectedMonth);
+    const [data, venditori] = await Promise.all([
+        getManagerTargetsData(selectedMonth),
+        getVenditoriWithTargets(),
+    ]);
 
     return (
         <div className="space-y-8">
@@ -31,6 +35,7 @@ export default async function ManagerTargetsPage({
                 initialData={data}
                 selectedMonth={selectedMonth}
                 role={role}
+                venditori={venditori}
             />
 
             <div className="max-w-7xl mx-auto mb-8 px-4 sm:px-6 lg:px-8">

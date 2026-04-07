@@ -24,6 +24,7 @@ export const users = pgTable('users', {
     confermeExtraTier2: real('confermeExtraTier2').default(0).notNull(),
 
     // --- GAME & FINANCIAL FIELDS ---
+    salesTargetEur: real('salesTargetEur'), // Target fatturato venditore (nullable)
     baseSalaryEur: real('baseSalaryEur').default(1350).notNull(),
     level: integer('level').default(1).notNull(),
     experience: integer('experience').default(0).notNull(),

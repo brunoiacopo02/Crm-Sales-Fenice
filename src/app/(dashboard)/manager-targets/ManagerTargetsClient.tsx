@@ -3,19 +3,35 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TargetStatsResponse, MonthlyTargetInput, saveMonthlyTarget } from '@/app/actions/targetActions';
-import { AlertCircle, Target, TrendingDown, TrendingUp, Calendar, CalendarDays, Activity } from 'lucide-react';
+import { updateVenditoreSalesTarget } from '@/app/actions/managerRpgActions';
+import { AlertCircle, Target, TrendingDown, TrendingUp, Calendar, CalendarDays, Activity, UserCheck, Euro } from 'lucide-react';
+
+interface VenditoreTarget {
+    id: string;
+    name: string | null;
+    displayName: string | null;
+    email: string | null;
+    isActive: boolean;
+    salesTargetEur: number | null;
+}
 
 interface Props {
     initialData: TargetStatsResponse;
     selectedMonth: string;
     role: string;
+    venditori: VenditoreTarget[];
 }
 
-export default function ManagerTargetsClient({ initialData, selectedMonth, role }: Props) {
+export default function ManagerTargetsClient({ initialData, selectedMonth, role, venditori }: Props) {
     const router = useRouter();
     const [monthInput, setMonthInput] = useState(selectedMonth);
     const [isSaving, setIsSaving] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
+
+    // Venditori target state
+    const [editingVenditoreId, setEditingVenditoreId] = useState<string | null>(null);
+    const [editTargetValue, setEditTargetValue] = useState('');
+    const [savingVenditoreId, setSavingVenditoreId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<MonthlyTargetInput>({
@@ -296,6 +312,118 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role 
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            {/* SEZIONE: Target Fatturato Venditori */}
+            <div className="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm overflow-hidden">
+                <div className="flex flex-col space-y-1.5 p-6 bg-slate-50 border-b">
+                    <h3 className="font-semibold leading-none tracking-tight text-lg text-slate-800 flex items-center gap-2">
+                        <UserCheck className="h-5 w-5 text-orange-600" />
+                        Target Fatturato Venditori
+                    </h3>
+                    <p className="text-sm text-slate-500">Imposta il target di fatturato mensile per ogni venditore</p>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr>
+                                <th className={thClass}>Venditore</th>
+                                <th className={thClass}>Email</th>
+                                <th className={thClass}>Target Fatturato (€)</th>
+                                <th className={thClass}>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {venditori.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="p-6 text-center text-slate-400">
+                                        Nessun venditore attivo trovato
+                                    </td>
+                                </tr>
+                            )}
+                            {venditori.map(v => (
+                                <tr key={v.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className={tdClass}>
+                                        <div className="font-semibold text-slate-900">
+                                            {v.displayName || v.name || 'N/D'}
+                                        </div>
+                                    </td>
+                                    <td className={tdClass}>
+                                        <div className="text-slate-500">{v.email || '-'}</div>
+                                    </td>
+                                    <td className={tdClass}>
+                                        {editingVenditoreId === v.id ? (
+                                            <div className="flex items-center gap-2">
+                                                <Euro className="h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="100"
+                                                    value={editTargetValue}
+                                                    onChange={(e) => setEditTargetValue(e.target.value)}
+                                                    className="w-32 flex h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1">
+                                                {v.salesTargetEur != null ? (
+                                                    <div className="font-semibold text-orange-600">
+                                                        {formatCurrency(v.salesTargetEur)}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-slate-400 italic">Non impostato</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className={tdClass}>
+                                        {editingVenditoreId === v.id ? (
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    disabled={savingVenditoreId === v.id}
+                                                    onClick={async () => {
+                                                        const val = parseFloat(editTargetValue);
+                                                        if (isNaN(val) || val < 0) return;
+                                                        setSavingVenditoreId(v.id);
+                                                        try {
+                                                            await updateVenditoreSalesTarget(v.id, val);
+                                                            setEditingVenditoreId(null);
+                                                            router.refresh();
+                                                        } catch (e) {
+                                                            console.error('Errore salvataggio target:', e);
+                                                        } finally {
+                                                            setSavingVenditoreId(null);
+                                                        }
+                                                    }}
+                                                    className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-orange-600 text-white hover:bg-orange-700 h-8 px-3 disabled:opacity-50"
+                                                >
+                                                    {savingVenditoreId === v.id ? 'Salvo...' : 'Salva'}
+                                                </button>
+                                                <button
+                                                    onClick={() => setEditingVenditoreId(null)}
+                                                    className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-slate-200 bg-white hover:bg-slate-100 h-8 px-3"
+                                                >
+                                                    Annulla
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => {
+                                                    setEditingVenditoreId(v.id);
+                                                    setEditTargetValue(v.salesTargetEur != null ? String(v.salesTargetEur) : '');
+                                                }}
+                                                className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 h-8 px-3"
+                                            >
+                                                Modifica
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
