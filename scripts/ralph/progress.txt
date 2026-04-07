@@ -11,6 +11,8 @@ Started: 2026-04-07
 - Gamification XP formula: `100 * (Level ^ 1.5)` per target XP, 5 stadi evoluzione Fenice
 - `assignedToId` e' immutabile dopo import CSV — mai modificarlo
 - DATI REALI: NON toccare lead GDO 114, appuntamenti Conferme, account esistenti
+- Streak multiplier: getStreakMultiplier() in `src/lib/streakUtils.ts` — pure function, importable ovunque
+- `'use server'` files: TUTTE le export devono essere async. Utility pure functions vanno in `src/lib/`
 - Design system premium gia' implementato in Run 1 (F2-014): usare i nuovi token/colori per coerenza
 - ConfermeDrawer: usare `salespersonUserId` (UUID) per init, mai `salespersonAssigned` (display name)
 - FreeBusy check: SEMPRE prima di db.update(), mai dopo
@@ -50,4 +52,24 @@ Started: 2026-04-07
   - Collapsible pattern keeps dashboard clean — quest panel is visible but not intrusive
   - `animate-fade-in` class from globals.css for smooth content reveal
   - Quest cards use `line-clamp-1` for description truncation on mobile
+---
+
+## 2026-04-07 - F2-023
+- Added `streakCount` (int, default 0) and `lastStreakDate` (text, nullable) to `users` table in schema
+- Created ADDITIVE migration at `src/app/api/migrate-streaks/route.ts` (ADD COLUMN IF NOT EXISTS)
+- Created `src/lib/streakUtils.ts` with pure utility functions: `getStreakMultiplier`, `getStreakTierLabel`, `getNextStreakMilestone`
+- Created `src/app/actions/streakActions.ts` with server actions: `getStreakInfo(userId)`, `updateStreak(userId)`
+- Streak logic: completes 1+ quest today → streak++ (idempotent per day). Breaks if workday skipped (Mon-Fri only)
+- Multiplier tiers: day 1-2 = x1, day 3-6 = x1.5, day 7-13 = x2, day 14+ = x3
+- Modified `completeQuest` in questActions.ts to call `updateStreak()` and apply multiplier to XP/coins rewards
+- Coin transaction reason shows multiplier when > 1 (e.g. "Quest completata: Trittico Vincente (x1.5 streak)")
+- Created `StreakCounter` client component with flame icon, multiplier badge, progress bar to next tier
+- Positioned StreakCounter between GdoDailyObjectives and GdoLeadMetrics in dashboard
+- File modificati: `src/db/schema.ts`, `src/app/api/migrate-streaks/route.ts`, `src/lib/streakUtils.ts`, `src/app/actions/streakActions.ts`, `src/app/actions/questActions.ts`, `src/components/StreakCounter.tsx`, `src/app/(dashboard)/page.tsx`
+- **Learnings per iterazioni future:**
+  - `'use server'` files require ALL exports to be async — pure utility functions must live in separate lib files
+  - `getPreviousWorkday()` helper skips weekends by iterating backwards — reusable for future workday logic
+  - Streak multiplier is applied at quest completion time, not at display time — coins transaction logs the actual earned amount
+  - StreakCounter uses same dark gradient theme as QuestPanel: from-brand-charcoal via-ash-900 to-ember-900
+  - `animate-glow-pulse` from globals.css used for streak >= 7 days visual emphasis
 ---
