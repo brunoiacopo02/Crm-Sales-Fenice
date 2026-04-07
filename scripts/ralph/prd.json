@@ -62,7 +62,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Attualmente teamHoursWorked e' calcolato da timestamp primo-ultimo log."
     },
     {

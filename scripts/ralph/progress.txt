@@ -58,3 +58,18 @@ Started: 2026-04-07
   - ManagerOperativaBoard e' esportato come named export (`export function`), non default
   - Il componente e' self-contained: fetcha i suoi dati via `getManagerOperativaData()` e gestisce il suo stato di periodo
 ---
+
+## 2026-04-07 - F1-004
+- **Implementato**: Fixato orario lavorativo in KPI Team GDO a 13:30-20:00
+- **kpiTeamActions.ts**:
+  - `teamCallsPerHour`: rimosso calcolo dinamico first-to-last log, usato costante `FIXED_HOURS_WORKED = 6.5`
+  - Per-GDO `callsPerHour`: rimosso calcolo first/lastCallTime, usato stessa costante 6.5h
+  - Grafico trend (oggi/ieri): cambiato range da 08:00-20:00 a 13:30-20:00
+  - Aggiunto timezone Europe/Rome per parsing ore (`toLocaleString('en-GB', { timeZone: 'Europe/Rome' })`)
+  - Bucket `13:30` cattura chiamate dalle 13:30 alle 13:59, bucket `14:00`-`20:00` catturano chiamate nell'ora intera
+  - Chiamate fuori orario (prima delle 13:30 o dopo le 20:59) contano nei totali ma non nel grafico
+- File modificati: `src/app/actions/kpiTeamActions.ts`
+- **Learnings per iterazioni future:**
+  - `log.createdAt.getHours()` su Vercel restituisce ore UTC, NON Rome. Usare `toLocaleString` con timeZone per ottenere l'ora corretta
+  - Il grafico trend usa `trendMap` con chiavi stringa come labels — l'ordine di inserzione della Map definisce l'ordine nel grafico
+---
