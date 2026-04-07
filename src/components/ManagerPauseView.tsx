@@ -141,7 +141,7 @@ export function ManagerPauseView() {
                         <thead className="bg-gray-50 text-gray-500 font-medium">
                             <tr>
                                 <th scope="col" className="px-6 py-3 text-left uppercase tracking-wider">Membro GDO</th>
-                                <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Pause (su 2)</th>
+                                <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Pause Usate</th>
                                 <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Durata Totale</th>
                                 <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Abusi/Extra</th>
                                 <th scope="col" className="px-6 py-3 text-center uppercase tracking-wider">Turno / Stato</th>
@@ -161,7 +161,7 @@ export function ManagerPauseView() {
                                             {row.userName}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
-                                            {row.pausesUsed} / 2
+                                            {row.pausesUsed}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700 font-mono">
                                             {formatDuration(row.totalSecondsDay)}
