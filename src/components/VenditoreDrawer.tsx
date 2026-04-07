@@ -81,17 +81,17 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
 
     return (
         <div className="flex flex-col h-full bg-white">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+            {/* Header - sticky with glass effect */}
+            <div className="px-6 py-4 drawer-header flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                     <User className="h-5 w-5 text-gray-400" />
                     Scheda Appuntamento
                 </h2>
                 <button
                     onClick={onClose}
-                    className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                    className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors"
                 >
-                    <X className="h-5 w-5 text-gray-500" />
+                    <X className="h-5 w-5" />
                 </button>
             </div>
 
@@ -181,7 +181,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                                     <select
                                         value={closeProduct}
                                         onChange={e => setCloseProduct(e.target.value)}
-                                        className="w-full bg-white border border-green-200 rounded p-2 text-sm focus:ring-green-500 focus:border-green-500"
+                                        className="input-fenice text-sm !border-green-200"
                                     >
                                         <option value="advance">Advance</option>
                                         <option value="gold">Gold</option>
@@ -215,7 +215,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                                 <select
                                     value={notClosedReason}
                                     onChange={e => setNotClosedReason(e.target.value)}
-                                    className="w-full bg-white border border-orange-200 rounded p-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+                                    className="input-fenice text-sm !border-orange-200"
                                 >
                                     <option value="" disabled>Seleziona un motivo...</option>
                                     {NOT_CLOSED_REASONS.map(r => (
@@ -233,7 +233,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                                             type="datetime-local"
                                             value={followUp1Date}
                                             onChange={e => setFollowUp1Date(e.target.value)}
-                                            className="flex-1 border text-sm border-orange-200 rounded p-1.5 bg-white"
+                                            className="input-fenice text-sm !border-orange-200 !p-1.5 flex-1"
                                         />
                                         {followUp1Date && (
                                             <button onClick={() => setFollowUp1Date('')} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
@@ -245,7 +245,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                                             type="datetime-local"
                                             value={followUp2Date}
                                             onChange={e => setFollowUp2Date(e.target.value)}
-                                            className="flex-1 border text-sm border-orange-200 rounded p-1.5 bg-white"
+                                            className="input-fenice text-sm !border-orange-200 !p-1.5 flex-1"
                                         />
                                         {followUp2Date && (
                                             <button onClick={() => setFollowUp2Date('')} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
@@ -276,7 +276,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                             rows={3}
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            className="w-full bg-white border border-gray-300 rounded-lg p-3 text-sm focus:ring-brand-orange focus:border-brand-orange"
+                            className="input-fenice text-sm"
                             placeholder="Aggiungi ulteriori dettagli..."
                         />
                     </div>
@@ -285,19 +285,23 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3 sticky bottom-0">
+            <div className="p-6 border-t border-ash-200 bg-ash-50 flex justify-end gap-3 sticky bottom-0">
                 <button
                     onClick={onClose}
-                    className="px-6 py-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
+                    className="btn-secondary text-sm py-2.5 px-6"
                 >
                     Annulla
                 </button>
                 <button
                     onClick={handleSave}
                     disabled={isSaving || !outcome}
-                    className="px-6 py-2.5 rounded-lg bg-brand-orange hover:bg-brand-orange-hover text-white flex items-center gap-2 text-sm font-bold transition-colors shadow-sm disabled:opacity-50"
+                    className="btn-primary text-sm py-2.5 px-6 disabled:opacity-50"
                 >
-                    <Save className="h-4 w-4" />
+                    {isSaving ? (
+                        <span className="h-4 w-4 border-2 border-brand-charcoal/30 border-t-brand-charcoal rounded-full animate-spin" />
+                    ) : (
+                        <Save className="h-4 w-4" />
+                    )}
                     {isSaving ? "Salvataggio..." : "Salva Esito"}
                 </button>
             </div>

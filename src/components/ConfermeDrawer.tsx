@@ -1,12 +1,48 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users } from "lucide-react"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze } from "@/app/actions/confermeActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { createClient } from "@/utils/supabase/client"
 import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
+
+function ConfermeDrawerSkeleton() {
+    return (
+        <div className="space-y-5 p-6">
+            <div className="skeleton-card p-4 flex items-center gap-3">
+                <div className="skeleton-circle w-8 h-8" />
+                <div className="flex-1 space-y-2">
+                    <div className="skeleton-line w-1/3 h-3" />
+                    <div className="skeleton-line w-1/2 h-4" />
+                </div>
+            </div>
+            <div className="space-y-3">
+                <div className="skeleton-line w-1/4 h-3" />
+                <div className="skeleton-card h-12" />
+            </div>
+            <div className="space-y-3">
+                <div className="skeleton-line w-1/4 h-3" />
+                <div className="skeleton-card h-12" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <div className="skeleton-line w-1/2 h-3" />
+                    <div className="skeleton-card h-12" />
+                </div>
+                <div className="space-y-2">
+                    <div className="skeleton-line w-1/2 h-3" />
+                    <div className="skeleton-card h-12" />
+                </div>
+            </div>
+            <div className="space-y-3">
+                <div className="skeleton-line w-1/3 h-3" />
+                <div className="skeleton-card h-24" />
+            </div>
+        </div>
+    )
+}
 
 export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }: any) {
     if (!isOpen || !item) return null;
@@ -230,10 +266,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const isLocked = activeUsers.length > 0;
 
     return (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm animate-in fade-in transition-opacity">
-            <div className="w-[500px] h-full bg-white shadow-2xl flex flex-col transform transition-transform border-l border-gray-200 animate-in slide-in-from-right duration-300">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gray-50 shrink-0">
+        <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="drawer-overlay" onClick={onClose} />
+            <div className="w-[500px] h-full bg-white shadow-elevated flex flex-col drawer-panel z-50">
+                {/* Header - sticky */}
+                <div className="flex items-center justify-between p-6 drawer-header shrink-0">
                     <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                             {lead.confNeedsReschedule ? (
@@ -252,7 +289,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                             {lead.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-brand-blue" /> {lead.email}</span>}
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-200 rounded-full transition-colors self-start">
+                    <button onClick={onClose} className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors self-start">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -336,12 +373,12 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nome Completo</label>
-                                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none shadow-sm transition-shadow font-medium text-slate-900 bg-white" />
+                                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="input-fenice font-medium text-slate-900" />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Indirizzo Email</label>
-                                    <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none shadow-sm transition-shadow font-medium text-slate-900 bg-white" placeholder="Nessuna email fornita" />
+                                    <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="input-fenice font-medium text-slate-900" placeholder="Nessuna email fornita" />
                                 </div>
 
                                 {/* Data e Ora Appuntamento (sempre visibili, anche per i Richiami) */}
@@ -350,13 +387,13 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
                                             {lead.confNeedsReschedule ? "Data App. (Originaria)" : "Data Appuntamento"}
                                         </label>
-                                        <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
+                                        <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="input-fenice text-sm font-medium" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
                                             {lead.confNeedsReschedule ? "Ora App. (Originaria)" : "Ora Appuntamento"}
                                         </label>
-                                        <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm shadow-sm font-medium bg-white" />
+                                        <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="input-fenice text-sm font-medium" />
                                     </div>
                                 </div>
                                 {lead.confNeedsReschedule && (
@@ -367,7 +404,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                                 <div className="space-y-1.5 pt-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Note del Fissatore (GDO)</label>
-                                    <textarea rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none text-sm resize-none shadow-sm text-slate-700 bg-white leading-relaxed" placeholder="Aggiungi una nota..."></textarea>
+                                    <textarea rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className="input-fenice text-sm resize-none text-slate-700 leading-relaxed" placeholder="Aggiungi una nota..."></textarea>
                                 </div>
 
                                 <div className="pt-4 border-t border-slate-200">
@@ -383,7 +420,18 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                             <div className="h-full flex flex-col animate-in fade-in duration-200">
                                 <div className="flex-1 space-y-4 mb-6">
                                     {loadingNotes ? (
-                                        <div className="text-center text-gray-500 py-10">Caricamento note...</div>
+                                        <div className="space-y-4 py-4">
+                                            {[1, 2, 3].map(i => (
+                                                <div key={i} className="skeleton-card p-4 space-y-3">
+                                                    <div className="flex justify-between">
+                                                        <div className="skeleton-line w-20 h-4" />
+                                                        <div className="skeleton-line w-24 h-3" />
+                                                    </div>
+                                                    <div className="skeleton-line w-full h-4" />
+                                                    <div className="skeleton-line w-2/3 h-4" />
+                                                </div>
+                                            ))}
+                                        </div>
                                     ) : notes.length === 0 ? (
                                         <div className="text-center text-gray-400 py-16 flex flex-col items-center">
                                             <FileText className="w-12 h-12 text-gray-200 mb-3" />
@@ -406,7 +454,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         value={newNote}
                                         onChange={e => setNewNote(e.target.value)}
                                         placeholder="Scrivi una nuova nota qui..."
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none text-sm resize-none shadow-sm mb-3"
+                                        className="input-fenice text-sm resize-none mb-3 rounded-xl"
                                         rows={3}
                                     />
                                     <button onClick={handleAddNote} disabled={!newNote.trim()} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold cursor-pointer disabled:opacity-50 shadow-md">

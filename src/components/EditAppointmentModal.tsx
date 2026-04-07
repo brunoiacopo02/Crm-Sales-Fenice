@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Calendar, Clock, X, Save } from "lucide-react"
 
 type EditAppointmentModalProps = {
@@ -39,6 +39,17 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
         }
     }, [isOpen, initialDate, initialNote])
 
+    // ESC key handler
+    const handleEsc = useCallback((e: KeyboardEvent) => {
+        if (e.key === "Escape") onClose()
+    }, [onClose])
+
+    useEffect(() => {
+        if (!isOpen) return
+        document.addEventListener("keydown", handleEsc)
+        return () => document.removeEventListener("keydown", handleEsc)
+    }, [isOpen, handleEsc])
+
     if (!isOpen) return null
 
     const handleSave = async () => {
@@ -55,15 +66,18 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
     }
 
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden relative animate-in fade-in zoom-in-95 duration-200">
-                
-                <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div className="modal-backdrop" onClick={onClose} />
+
+            {/* Modal */}
+            <div className="relative modal-content w-full max-w-md z-50">
+                <div className="flex items-center justify-between p-4 border-b border-ash-200 drawer-header rounded-t-xl">
                     <h3 className="font-bold text-gray-900 pr-8 truncate">
                         Modifica Appuntamento
-                        <span className="block text-xs font-normal text-gray-500 truncate">{leadName}</span>
+                        <span className="block text-xs font-normal text-ash-500 truncate">{leadName}</span>
                     </h3>
-                    <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+                    <button onClick={onClose} className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors">
                         <X className="h-5 w-5" />
                     </button>
                 </div>
@@ -74,56 +88,55 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
                             <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <Calendar className="h-4 w-4 text-brand-orange" /> Data
                             </label>
-                            <input 
-                                type="date" 
+                            <input
+                                type="date"
                                 value={date}
                                 onChange={e => setDate(e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all"
+                                className="input-fenice text-sm"
                             />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <Clock className="h-4 w-4 text-brand-orange" /> Ora
                             </label>
-                            <input 
-                                type="time" 
+                            <input
+                                type="time"
                                 value={time}
                                 onChange={e => setTime(e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all"
+                                className="input-fenice text-sm"
                             />
                         </div>
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-gray-700">Note per the Conferme / GDO</label>
-                        <textarea 
+                        <label className="text-sm font-semibold text-gray-700">Note per le Conferme / GDO</label>
+                        <textarea
                             value={note}
                             onChange={e => setNote(e.target.value)}
                             rows={3}
                             placeholder="Es. Richiamare dopo le 18..."
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all resize-none"
+                            className="input-fenice text-sm resize-none"
                         ></textarea>
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
-                    <button 
+                <div className="p-4 border-t border-ash-200 bg-ash-50 rounded-b-xl flex justify-end gap-3">
+                    <button
                         onClick={onClose}
                         disabled={isSaving}
-                        className="px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        className="btn-secondary text-sm py-2 px-4"
                     >
                         Annulla
                     </button>
-                    <button 
+                    <button
                         onClick={handleSave}
                         disabled={isSaving || !date || !time}
-                        className="px-4 py-2 text-sm font-semibold text-white bg-black rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2 disabled:opacity-50"
+                        className="btn-primary text-sm py-2 px-4 disabled:opacity-50"
                     >
-                        {isSaving ? <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <Save className="h-4 w-4" />}
+                        {isSaving ? <span className="h-4 w-4 border-2 border-brand-charcoal/30 border-t-brand-charcoal rounded-full animate-spin"></span> : <Save className="h-4 w-4" />}
                         Salva Modifiche
                     </button>
                 </div>
-
             </div>
         </div>
     )

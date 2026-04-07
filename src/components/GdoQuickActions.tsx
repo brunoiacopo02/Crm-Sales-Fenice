@@ -131,7 +131,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                     <select
                         value={discardReason}
                         onChange={(e) => setDiscardReason(e.target.value)}
-                        className="w-full px-2.5 py-2 border border-rose-200 rounded-lg text-xs outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 mb-2 font-medium bg-white"
+                        className="input-fenice !text-xs !py-2 !px-2.5 !border-rose-200 mb-2 font-medium"
                     >
                         <option value="" disabled>-- Motivo Scarto --</option>
                         {DISCARD_REASONS.map(reason => (
@@ -160,7 +160,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                         type="datetime-local"
                         value={dateStr}
                         onChange={(e) => setDateStr(e.target.value)}
-                        className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue mb-3 bg-white"
+                        className="input-fenice !text-xs !py-2 !px-2.5 mb-3"
                         required
                     />
 
@@ -169,7 +169,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         placeholder={activePopover === 'appuntamento' ? "Note per le Conferme..." : "Motivo del richiamo..."}
-                        className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue resize-none h-16 bg-white placeholder:text-gray-400 mb-3"
+                        className="input-fenice !text-xs !py-2 !px-2.5 resize-none h-16 mb-3"
                     />
 
                     <div className="flex justify-end gap-2">

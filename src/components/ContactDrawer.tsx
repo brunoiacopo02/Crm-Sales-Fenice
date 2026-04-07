@@ -1,11 +1,45 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getLeadProfile, updateLeadContactInfo } from "@/app/actions/eventActions"
 import { X, CalendarCheck, Phone, Mail, User, Clock, AlertCircle, History, FileText, CheckCircle2, Pencil, Save, Loader2 } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { useAuth } from "./AuthProvider"
 import { useRouter } from "next/navigation"
+
+function DrawerSkeleton() {
+    return (
+        <div className="space-y-6 p-6">
+            {/* Name skeleton */}
+            <div className="space-y-3">
+                <div className="skeleton-line w-1/3 h-5" />
+                <div className="skeleton-line w-1/2 h-3" />
+            </div>
+            {/* Fields skeleton */}
+            <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                    <div className="skeleton-circle w-8 h-8" />
+                    <div className="skeleton-line flex-1 h-4" />
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="skeleton-circle w-8 h-8" />
+                    <div className="skeleton-line flex-1 h-4" />
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="skeleton-circle w-8 h-8" />
+                    <div className="skeleton-line w-2/3 h-4" />
+                </div>
+            </div>
+            {/* CRM status skeleton */}
+            <hr className="border-ash-100" />
+            <div className="grid grid-cols-2 gap-4">
+                <div className="skeleton-card h-20" />
+                <div className="skeleton-card h-20" />
+                <div className="skeleton-card h-20" />
+            </div>
+        </div>
+    )
+}
 
 export function ContactDrawer({
     isOpen,
@@ -42,6 +76,17 @@ export function ContactDrawer({
             setIsLoading(false)
         })
     }
+
+    // ESC key handler
+    const handleEsc = useCallback((e: KeyboardEvent) => {
+        if (e.key === "Escape") onClose()
+    }, [onClose])
+
+    useEffect(() => {
+        if (!isOpen) return
+        document.addEventListener("keydown", handleEsc)
+        return () => document.removeEventListener("keydown", handleEsc)
+    }, [isOpen, handleEsc])
 
     useEffect(() => {
         if (!isOpen || !leadId) {
@@ -122,7 +167,7 @@ export function ContactDrawer({
             case 'DISCARDED': return <AlertCircle className="h-4 w-4 text-red-500" />
             case 'RECALL_SET': return <Clock className="h-4 w-4 text-yellow-600" />
             case 'APPOINTMENT_SET': return <CalendarCheck className="h-4 w-4 text-green-500" />
-            default: return <CheckCircle2 className="h-4 w-4 text-gray-400" />
+            default: return <CheckCircle2 className="h-4 w-4 text-ash-400" />
         }
     }
 
@@ -142,56 +187,53 @@ export function ContactDrawer({
 
     return (
         <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
-            <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
+            <div className="drawer-overlay" onClick={onClose} />
 
-            <div className="relative w-full max-w-md flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 border-l border-gray-200 z-50">
-                {/* Header */}
-                <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50 flex flex-col gap-2">
+            <div className="relative w-full max-w-md flex flex-col bg-white shadow-elevated z-50 drawer-panel">
+                {/* Header - sticky */}
+                <div className="px-6 py-5 drawer-header flex flex-col gap-2">
                     <div className="flex items-start justify-between">
                         <div>
                             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                                 {lead?.name || 'Caricamento...'}
                             </h2>
                             {lead?.funnel && (
-                                <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-200 text-gray-700 uppercase tracking-wide">
+                                <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-ash-200 text-ash-700 uppercase tracking-wide">
                                     {lead.funnel}
                                 </span>
                             )}
                         </div>
-                        <button onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+                        <button onClick={onClose} className="p-2 -mr-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors">
                             <X className="h-5 w-5" />
                         </button>
                     </div>
-
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-gray-200 bg-white px-2">
+                <div className="flex border-b border-ash-200 bg-white px-2">
                     <button
                         onClick={() => setActiveTab('details')}
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
                     >
                         Dettagli Contatto
                     </button>
                     <button
                         onClick={() => setActiveTab('timeline')}
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
                     >
                         Timeline Eventi
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-white custom-scrollbar p-6">
+                <div className="flex-1 overflow-y-auto bg-white custom-scrollbar">
                     {isLoading ? (
-                        <div className="flex justify-center py-12">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-orange" />
-                        </div>
+                        <DrawerSkeleton />
                     ) : activeTab === 'details' && lead ? (
-                        <div className="space-y-6">
+                        <div className="space-y-6 p-6 animate-fade-in">
                             {/* Save feedback message */}
                             {saveMessage && (
-                                <div className={`px-4 py-2.5 rounded-lg text-sm font-medium ${saveMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                <div className={`px-4 py-2.5 rounded-lg text-sm font-medium animate-slide-up ${saveMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                                     {saveMessage.text}
                                 </div>
                             )}
@@ -212,7 +254,7 @@ export function ContactDrawer({
                                             <button
                                                 onClick={cancelEdit}
                                                 disabled={isSaving}
-                                                className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-gray-100"
+                                                className="text-xs font-medium text-ash-500 hover:text-ash-700 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-ash-100"
                                             >
                                                 Annulla
                                             </button>
@@ -235,67 +277,67 @@ export function ContactDrawer({
                                 {isEditing ? (
                                     <div className="space-y-3">
                                         <div>
-                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                            <label className="flex items-center gap-2 text-xs font-medium text-ash-500 mb-1">
                                                 <User className="h-3.5 w-3.5" /> Nome
                                             </label>
                                             <input
                                                 type="text"
                                                 value={editName}
                                                 onChange={(e) => setEditName(e.target.value)}
-                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors"
+                                                className="input-fenice text-sm"
                                             />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                            <label className="flex items-center gap-2 text-xs font-medium text-ash-500 mb-1">
                                                 <Phone className="h-3.5 w-3.5" /> Telefono
                                             </label>
                                             <input
                                                 type="tel"
                                                 value={editPhone}
                                                 onChange={(e) => setEditPhone(e.target.value)}
-                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors"
+                                                className="input-fenice text-sm"
                                             />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                            <label className="flex items-center gap-2 text-xs font-medium text-ash-500 mb-1">
                                                 <Mail className="h-3.5 w-3.5" /> Email
                                             </label>
                                             <input
                                                 type="email"
                                                 value={editEmail}
                                                 onChange={(e) => setEditEmail(e.target.value)}
-                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors"
+                                                className="input-fenice text-sm"
                                             />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                            <label className="flex items-center gap-2 text-xs font-medium text-ash-500 mb-1">
                                                 <FileText className="h-3.5 w-3.5" /> Note
                                             </label>
                                             <textarea
                                                 value={editNote}
                                                 onChange={(e) => setEditNote(e.target.value)}
                                                 rows={3}
-                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors resize-none"
+                                                className="input-fenice text-sm resize-none"
                                             />
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
                                         <div className="flex items-center gap-3 text-sm">
-                                            <User className="h-4 w-4 text-gray-400" />
+                                            <User className="h-4 w-4 text-ash-400" />
                                             <div className="text-gray-700">{lead.name}</div>
                                         </div>
                                         <div className="flex items-center gap-3 text-sm">
-                                            <Phone className="h-4 w-4 text-gray-400" />
+                                            <Phone className="h-4 w-4 text-ash-400" />
                                             <div className="text-gray-900 font-medium cursor-copy hover:text-brand-orange transition-colors">{lead.phone}</div>
                                         </div>
                                         <div className="flex items-center gap-3 text-sm">
-                                            <Mail className="h-4 w-4 text-gray-400" />
+                                            <Mail className="h-4 w-4 text-ash-400" />
                                             <div className="text-gray-700">{lead.email || '-'}</div>
                                         </div>
                                         {lead.lastCallNote && (
                                             <div className="flex items-start gap-3 text-sm">
-                                                <FileText className="h-4 w-4 text-gray-400 mt-0.5" />
+                                                <FileText className="h-4 w-4 text-ash-400 mt-0.5" />
                                                 <div className="text-gray-600 italic">{lead.lastCallNote}</div>
                                             </div>
                                         )}
@@ -303,27 +345,27 @@ export function ContactDrawer({
                                 )}
                             </div>
 
-                            <hr className="border-gray-100" />
+                            <hr className="border-ash-100" />
 
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Stato CRM</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                        <div className="text-xs text-gray-500 mb-1">Stato DB</div>
+                                    <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
+                                        <div className="text-xs text-ash-500 mb-1">Stato DB</div>
                                         <div className="text-sm font-bold text-gray-900">{lead.status}</div>
                                     </div>
-                                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                        <div className="text-xs text-gray-500 mb-1">Assegnazione</div>
+                                    <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
+                                        <div className="text-xs text-ash-500 mb-1">Assegnazione</div>
                                         <div className="text-sm font-bold text-gray-900">{lead.assignedToName || 'Nessuno'}</div>
                                     </div>
-                                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                        <div className="text-xs text-gray-500 mb-1">Tentativi Chiamate</div>
+                                    <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
+                                        <div className="text-xs text-ash-500 mb-1">Tentativi Chiamate</div>
                                         <div className="text-sm font-bold text-gray-900">{lead.callCount} / 3</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <hr className="border-gray-100" />
+                            <hr className="border-ash-100" />
 
                             <div className="space-y-4 bg-brand-orange/5 p-4 rounded-xl border border-brand-orange/20">
                                 <h3 className="text-sm font-bold text-brand-orange uppercase tracking-wider flex items-center justify-between">
@@ -338,25 +380,25 @@ export function ContactDrawer({
                             </div>
                         </div>
                     ) : activeTab === 'timeline' && events ? (
-                        <div className="relative pl-3">
+                        <div className="relative pl-3 p-6 animate-fade-in">
                             {/* Vertical Line */}
-                            <div className="absolute left-[19px] top-2 bottom-0 w-px bg-gray-200" />
+                            <div className="absolute left-[19px] top-8 bottom-6 w-px bg-ash-200" />
 
                             {events.length === 0 ? (
-                                <div className="text-center text-sm text-gray-500 py-8">Nessun evento registrato.</div>
+                                <div className="text-center text-sm text-ash-500 py-8">Nessun evento registrato.</div>
                             ) : (
                                 <div className="space-y-6">
                                     {events.map((ev: any) => (
                                         <div key={ev.id} className="relative pl-8">
                                             {/* dot */}
-                                            <div className="absolute left-0 top-0.5 h-6 w-6 rounded-full bg-white border-2 border-gray-200 flex items-center justify-center shadow-sm z-10">
+                                            <div className="absolute left-0 top-0.5 h-6 w-6 rounded-full bg-white border-2 border-ash-200 flex items-center justify-center shadow-sm z-10">
                                                 {getEventIcon(ev.eventType)}
                                             </div>
 
-                                            <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 hover:shadow-sm transition-shadow">
-                                                <div className="flex flex-col gap-1 mb-2 border-b border-gray-100 pb-2">
+                                            <div className="bg-ash-50 border border-ash-100 rounded-lg p-3 hover:shadow-sm transition-shadow">
+                                                <div className="flex flex-col gap-1 mb-2 border-b border-ash-100 pb-2">
                                                     <h4 className="text-sm font-bold text-gray-900">{getEventLabel(ev.eventType)}</h4>
-                                                    <time className="text-xs text-gray-500 font-mono flex items-center gap-1">
+                                                    <time className="text-xs text-ash-500 font-mono flex items-center gap-1">
                                                         <Clock className="h-3 w-3" />
                                                         {formatTimestamp(ev.timestamp)}
                                                     </time>
@@ -366,14 +408,14 @@ export function ContactDrawer({
                                                 <div className="text-sm text-gray-700 space-y-1.5">
                                                     {ev.eventType === 'SECTION_MOVED' && (
                                                         <div className="flex items-center gap-2 text-xs">
-                                                            <div className="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">{ev.fromSection || '?'}</div>
-                                                            <div className="text-gray-400">→</div>
+                                                            <div className="bg-ash-200 text-ash-700 px-1.5 py-0.5 rounded">{ev.fromSection || '?'}</div>
+                                                            <div className="text-ash-400">→</div>
                                                             <div className="bg-brand-orange/10 text-brand-orange px-1.5 py-0.5 rounded">{ev.toSection}</div>
                                                         </div>
                                                     )}
 
                                                     {ev.userName && (
-                                                        <div className="text-xs text-gray-500">Operatore: <span className="font-medium text-gray-700">{ev.userName}</span></div>
+                                                        <div className="text-xs text-ash-500">Operatore: <span className="font-medium text-gray-700">{ev.userName}</span></div>
                                                     )}
 
                                                     {ev.metadata?.note && (
