@@ -173,3 +173,18 @@ Started: 2026-04-07
   - undoConfermeNoAnswer segue il pattern inverso di recordConfermeNoAnswer: confCall3At → 2At → 1At
   - Il badge snooze in ConfermeBoardRow si attiva automaticamente se confSnoozeAt esiste — non serve logica aggiuntiva per mostrarlo nella vista principale
 ---
+
+## 2026-04-07 - F3-018
+- Aggiunta sezione 'Storico' nella dashboard Conferme con tab dedicato nella navigazione principale
+- Storico mostra tabella con: nome, telefono, GDO fissatore, esito (confermato/scartato con badge colorato), motivo scarto, data esito
+- In confermeActions.ts: aggiunto confermeStatus='storico' che filtra con isNotNull(confirmationsOutcome)
+- Aggiunto 'ATTACCATO IN FACCIA' alla lista motivi scarto in ConfermeDrawer.tsx (option value: 'attaccato in faccia')
+- In ConfermeBoard.tsx: aggiunto ViewMode 'storico', stato storicoData, fetch dedicato, tab Archive nella nav bar
+- Il motivo scarto viene salvato nel campo confirmationsDiscardReason (già esistente)
+- File modificati: src/app/actions/confermeActions.ts, src/components/ConfermeBoard.tsx, src/components/ConfermeDrawer.tsx
+- **Learnings per iterazioni future:**
+  - confermeStatus type union in getConfermeAppointments va aggiornato quando si aggiungono nuovi filtri (TypeScript strict)
+  - isNotNull importato da drizzle-orm per filtrare lead con outcome definito
+  - La vista Storico non ha date filter — mostra tutti i lead esitati senza limiti temporali (fino a 500 per limit query)
+  - Il tab Storico non ha conteggio badge perché i dati sono fetchati solo quando la vista è attiva
+---

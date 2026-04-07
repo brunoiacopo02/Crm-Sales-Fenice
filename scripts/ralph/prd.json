@@ -141,7 +141,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "I lead scartati hanno confirmationsOutcome='scartato', i confermati hanno 'confermato'."
     },
     {
