@@ -314,6 +314,28 @@ export const questProgress = pgTable('questProgress', {
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- ACHIEVEMENT / BADGE SYSTEM ---
+export const achievements = pgTable('achievements', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    icon: text('icon').notNull(), // Lucide icon name (e.g. 'Phone', 'Trophy')
+    category: text('category').notNull(), // 'calls' | 'appointments' | 'streak' | 'quests' | 'level' | 'leads' | 'coins'
+    metric: text('metric').notNull(), // 'total_calls' | 'total_appointments' | 'current_streak' | 'total_quests_completed' | 'current_level' | 'total_leads_contacted' | 'total_coins_earned'
+    tier1Target: integer('tier1Target').notNull(),
+    tier2Target: integer('tier2Target').notNull(),
+    tier3Target: integer('tier3Target').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const userAchievements = pgTable('userAchievements', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    achievementId: text('achievementId').notNull().references(() => achievements.id),
+    tier: integer('tier').notNull(), // 1 = bronze, 2 = silver, 3 = gold
+    unlockedAt: timestamp('unlockedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     id: text('id').primaryKey(),
     month: text('month').notNull().unique(), // e.g. '2026-03'
