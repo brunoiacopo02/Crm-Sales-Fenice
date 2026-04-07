@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { LeadCard } from "./LeadCard"
-import { OutcomeModal } from "./OutcomeModal"
+import dynamic from "next/dynamic"
+
+const OutcomeModal = dynamic(
+  () => import("./OutcomeModal").then(mod => mod.OutcomeModal),
+  { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
+)
 import { AlertCircle, Clock } from "lucide-react"
 
 type LeadList = any[]

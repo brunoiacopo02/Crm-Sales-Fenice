@@ -4,7 +4,12 @@ import { useState, useEffect } from "react"
 import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise, Archive } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme } from "@/app/actions/confermeActions"
 
-import { ConfermeDrawer } from "@/components/ConfermeDrawer"
+import dynamic from "next/dynamic"
+
+const ConfermeDrawer = dynamic(
+  () => import("@/components/ConfermeDrawer").then(mod => mod.ConfermeDrawer),
+  { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
+)
 import { ConfermeBoardRow } from "@/components/ConfermeBoardRow"
 import { GlobalAlertListener } from "@/components/GlobalAlertListener"
 import { format, subDays, addDays } from "date-fns"

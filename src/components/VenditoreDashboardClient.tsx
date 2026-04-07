@@ -5,7 +5,12 @@ import { getVenditoreAppointments, saveVenditoreOutcome } from "@/app/actions/ve
 import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy } from "lucide-react"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
-import { VenditoreDrawer } from "@/components/VenditoreDrawer"
+import dynamic from "next/dynamic"
+
+const VenditoreDrawer = dynamic(
+  () => import("@/components/VenditoreDrawer").then(mod => mod.VenditoreDrawer),
+  { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
+)
 import { KpiVenditoriClient } from "@/components/KpiVenditoriClient"
 import { getGoogleAuthUrl, checkGoogleCalendarConnection, disconnectGoogleCalendar } from "@/app/actions/calendarActions"
 import { createClient } from "@/utils/supabase/client"

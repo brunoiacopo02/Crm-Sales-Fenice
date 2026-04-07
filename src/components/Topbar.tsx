@@ -6,7 +6,12 @@ import { Search, Bell, X, Phone, User, Trophy, Menu } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { searchLeads, SearchResult } from "@/app/actions/searchActions"
 import { usePathname, useRouter } from "next/navigation"
-import { ContactDrawer } from "./ContactDrawer"
+import dynamic from "next/dynamic"
+
+const ContactDrawer = dynamic(
+  () => import("./ContactDrawer").then(mod => mod.ContactDrawer),
+  { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
+)
 import { PauseTimer } from "./PauseTimer"
 import { getUnreadNotifications, markNotificationsAsRead, markAllNotificationsAsRead } from "@/app/actions/notificationActions"
 import { getUserWalletCoins } from "@/app/actions/sprintActions"
