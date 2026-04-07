@@ -215,10 +215,10 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                             {/* BOTTONE NR */}
                             <button
                                 onClick={handleQuickNR}
-                                disabled={callsMade >= 3 || isLocked}
-                                className="bg-white hover:bg-ember-50 border border-ash-200 hover:border-ember-300 text-ash-500 hover:text-ember-600 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card"
+                                disabled={isLocked}
+                                className={`border px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card ${callsMade >= 3 ? 'bg-ember-50 hover:bg-ember-100 border-ember-300 text-ember-600 hover:text-ember-700' : 'bg-white hover:bg-ember-50 border-ash-200 hover:border-ember-300 text-ash-500 hover:text-ember-600'}`}
                             >
-                                NR
+                                {callsMade >= 3 ? '4° NR (Scarta)' : 'NR'}
                             </button>
 
                             {/* BOTTONE ANNULLA NR */}

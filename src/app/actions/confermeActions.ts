@@ -461,47 +461,59 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
 }
 
 export async function recordConfermeNoAnswer(leadId: string, currentVersion: number) {
-    const supabase = await createClient();
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
-    if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
-        throw new Error("Unauthorized")
+    try {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
+            return { success: false, error: "Unauthorized" }
+        }
+
+        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        if (!oldLead) return { success: false, error: "Lead not found" };
+        if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
+
+        let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date() };
+        let isAutoDiscard = false;
+
+        if (!oldLead.confCall1At) {
+            toUpdate.confCall1At = new Date();
+        } else if (!oldLead.confCall2At) {
+            toUpdate.confCall2At = new Date();
+        } else if (!oldLead.confCall3At) {
+            toUpdate.confCall3At = new Date();
+        } else {
+            // 4th NR: auto-discard the lead
+            isAutoDiscard = true;
+            toUpdate.confirmationsOutcome = 'scartato';
+            toUpdate.confirmationsDiscardReason = '4 NR consecutivi';
+            toUpdate.confirmationsUserId = session.user.id;
+            toUpdate.confirmationsTimestamp = new Date();
+        }
+
+        const updated = await db.update(leads).set(toUpdate)
+        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false, error: "CONCURRENCY_ERROR" }
+        }
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: isAutoDiscard ? "conferme_auto_discarded_4nr" : "conferme_no_answer",
+            userId: session.user.id,
+            timestamp: new Date(),
+            metadata: isAutoDiscard
+                ? { reason: '4 NR consecutivi', autoDiscard: true }
+                : { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) }
+        });
+
+        return { success: true, autoDiscarded: isAutoDiscard };
+    } catch (error: any) {
+        return { success: false, error: error.message };
     }
-
-    const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
-    if (!oldLead) throw new Error("Lead not found");
-    if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
-
-    let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date() };
-
-    if (!oldLead.confCall1At) {
-        toUpdate.confCall1At = new Date();
-    } else if (!oldLead.confCall2At) {
-        toUpdate.confCall2At = new Date();
-    } else if (!oldLead.confCall3At) {
-        toUpdate.confCall3At = new Date();
-    } else {
-        return { success: false, error: "Tutti i tentalivi NR sono stati effettuati." };
-    }
-
-    const updated = await db.update(leads).set(toUpdate)
-    .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
-    .returning({ id: leads.id });
-
-    if (updated.length === 0) {
-        throw new Error("CONCURRENCY_ERROR");
-    }
-
-    await db.insert(leadEvents).values({
-        id: crypto.randomUUID(),
-        leadId,
-        eventType: "conferme_no_answer",
-        userId: session.user.id,
-        timestamp: new Date(),
-        metadata: { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) }
-    });
-
-    return { success: true };
 }
 
 export async function undoConfermeNoAnswer(leadId: string, currentVersion: number) {

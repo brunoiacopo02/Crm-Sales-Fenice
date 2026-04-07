@@ -319,10 +319,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={handleQuickNR}
-                                    disabled={isSavingNR || !!lead.confCall3At || !!lead.confirmationsOutcome}
-                                    className="bg-ash-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    disabled={isSavingNR || !!lead.confirmationsOutcome}
+                                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${lead.confCall3At && !lead.confirmationsOutcome ? 'bg-ember-600 hover:bg-ember-700 text-white' : 'bg-ash-900 hover:bg-black text-white'}`}
                                 >
-                                    {isSavingNR ? "..." : "NR (Non Risponde)"}
+                                    {isSavingNR ? "..." : lead.confCall3At ? "4° NR (Scarta Auto)" : "NR (Non Risponde)"}
                                     <div className="flex gap-1 ml-1" title="Tentativi NR">
                                         <div className={`w-2 h-2 rounded-full ${lead.confCall1At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-ash-500'}`} />
                                         <div className={`w-2 h-2 rounded-full ${lead.confCall2At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-ash-500'}`} />
