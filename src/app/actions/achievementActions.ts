@@ -118,6 +118,45 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             if (tot === 0) return 0;
             return Math.round(((confermati[0]?.value ?? 0) / tot) * 100);
         }
+        // --- VENDITORE achievement metrics (lifetime) ---
+        case 'total_deals_chiusi': {
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    eq(leads.salespersonOutcome, 'Chiuso')
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'total_fatturato_eur': {
+            const result = await db.select({
+                value: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)`
+            })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    eq(leads.salespersonOutcome, 'Chiuso')
+                ));
+            return Number(result[0]?.value) ?? 0;
+        }
+        case 'tasso_chiusura_percent': {
+            // (chiusi / (chiusi + non chiusi + spariti)) * 100
+            const chiusi = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    eq(leads.salespersonOutcome, 'Chiuso')
+                ));
+            const totEsiti = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    isNotNull(leads.salespersonOutcome)
+                ));
+            const totalEsiti = totEsiti[0]?.value ?? 0;
+            if (totalEsiti === 0) return 0;
+            return Math.round(((chiusi[0]?.value ?? 0) / totalEsiti) * 100);
+        }
         default:
             return 0;
     }

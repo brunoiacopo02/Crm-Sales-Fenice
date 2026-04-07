@@ -1,6 +1,10 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { VenditoreDashboardClient } from "@/components/VenditoreDashboardClient"
+import { StreakCounter } from "@/components/StreakCounter"
+import dynamic from "next/dynamic"
+
+const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 
 export default async function VenditorePage() {
     const supabase = await createClient();
@@ -23,6 +27,13 @@ export default async function VenditorePage() {
                     </div>
                 </div>
             </div>
+
+            {session.user.role === 'VENDITORE' && (
+                <>
+                    <StreakCounter userId={session.user.id} />
+                    <QuestPanel userId={session.user.id} />
+                </>
+            )}
 
             <VenditoreDashboardClient sellerId={session.user.id} />
         </div>
