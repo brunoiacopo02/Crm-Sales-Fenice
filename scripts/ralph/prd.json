@@ -106,7 +106,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "CRITICO: verificare PRIMA di qualsiasi altro lavoro che il DB sia allineato allo schema."
     },
     {

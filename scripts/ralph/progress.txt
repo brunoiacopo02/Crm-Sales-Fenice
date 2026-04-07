@@ -111,3 +111,16 @@ Started: 2026-04-07
   - Responsive tab labels: `<div className="hidden sm:block">{tab.label}</div>` for icon-only on mobile
   - Content can be reorganized from flat sections into tabs without touching server component or data flow
 ---
+
+## 2026-04-07 - F3-007
+- Full audit of all 30 tables in schema.ts vs production DB via Supabase REST API
+- **All tables exist** (HTTP 200): users, leads, callLogs, leadEvents, breakSessions, notifications, assignmentSettings, importLogs, sprints, shopItems, userPurchases, coinTransactions, confirmationsNotes, internalAlerts, calendarConnections, calendarEvents, teamGoals, marketingBudgets, monthlyTargets, dailyKpiSnapshots, gdoNotes, quests, questProgress, achievements, userAchievements, lootDrops, bossBattles, bossContributions, seasonalEvents, weeklyGamificationRules
+- **All columns verified** via SELECT with explicit column lists — no missing columns detected
+- Key verified columns: users (streakCount, lastStreakDate, activeTitle, coins, level, experience), leads (all conferme + salesperson fields, version), quests (all 10 cols), achievements (all 10 cols), lootDrops (all 10 cols), bossBattles (all 13 cols), seasonalEvents (all 11 cols)
+- **No migrations needed** — schema.ts is fully aligned with production DB
+- npx next build passes
+- No files modified (verification-only task)
+- **Learnings per iterazioni future:**
+  - Supabase REST API returns empty array `[]` for tables with no data but valid columns — distinguishes from 404 for missing tables
+  - All 30 tables confirmed: original (14 core tables) + gamification (16 newer tables) all present
+---
