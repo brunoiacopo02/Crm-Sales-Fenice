@@ -123,7 +123,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Attualmente il mapping e' case-insensitive e hardcoded in importLeads.ts."
     }
   ]

@@ -116,3 +116,21 @@ Started: 2026-04-07
   - Il campo `leads.name` nello schema Drizzle e' text NOT NULL — "Lead senza nome" come fallback evita errori DB
   - `processedPhones`/`processedEmails` Set restano populati anche con allowDuplicates (non causa problemi, ma il check e' dentro l'if)
 ---
+
+## 2026-04-07 - F1-008
+- **Implementato**: Mapping colonne CSV manuale con anteprima e auto-detect esteso
+- **import/page.tsx**:
+  - Aggiunto stato `csvFields` (header CSV) e `csvRawData` (tutti i dati raw)
+  - Dopo il parse, mostra 4 dropdown per mappare colonne CSV → campi CRM (Nome, Telefono*, Email, Funnel*)
+  - Auto-detect esteso con regex piu' ampi: `nome|name`, `telefono|phone|cellulare|cell|tel`, `email|e-mail|mail`, `cognome|funnel|fonte|source|campagna`
+  - Anteprima live delle prime 5 righe del CSV basata sul mapping corrente
+  - Payload ricostruito dinamicamente quando l'utente cambia mapping (`handleMappingChange`)
+  - Sezione assegnazione + bottone import visibili solo quando il mapping e' valido (telefono + funnel mappati)
+  - Se una colonna non e' mappata, il campo resta vuoto (server-side: nome -> "Lead senza nome", email -> null)
+- File modificati: `src/app/(dashboard)/import/page.tsx`
+- **Learnings per iterazioni future:**
+  - PapaParse auto-detect delimiter funziona bene con virgola, punto e virgola, tab
+  - `results.meta.fields` contiene gli header originali del CSV — usare come opzioni nei dropdown
+  - Il mapping viene ricostruito ad ogni cambio dropdown, triggering `buildPayloadFromMapping` che ricalcola il payload
+  - Codebase pattern: `csvFields` e `csvRawData` sono set una volta sola al parse, `mapping` e `payload` vengono ricalcolati interattivamente
+---
