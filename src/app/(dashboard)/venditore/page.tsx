@@ -15,12 +15,12 @@ export default async function VenditorePage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">
+                    <h1 className="text-2xl font-bold tracking-tight text-ash-800">
                         Dashboard Vendite
                     </h1>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <div className="text-sm text-ash-500 mt-1">
                         Gestisci i tuoi appuntamenti, registra gli esiti e tieni traccia delle performance.
-                    </p>
+                    </div>
                 </div>
             </div>
 

@@ -21,9 +21,9 @@ export default async function KpiVenditoriPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <div className="text-sm text-ash-500 mt-1">
                         Monitoraggio del fatturato, closing rate e performance del team di Closer.
-                    </p>
+                    </div>
                 </div >
             </div >
 

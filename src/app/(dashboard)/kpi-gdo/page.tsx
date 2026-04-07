@@ -9,7 +9,7 @@ export default async function KpiGdoPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                <h1 className="text-2xl font-bold tracking-tight text-ash-800">
                     KPI GDO
                 </h1>
             </div>
