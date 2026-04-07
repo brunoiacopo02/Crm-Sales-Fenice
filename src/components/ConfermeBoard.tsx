@@ -536,6 +536,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-ash-100 text-ash-700 border border-ash-200/60">
                                                                 {item.gdo?.displayName || item.gdo?.name || "Sconosciuto"}
                                                             </span>
+                                                            {item.lead.funnel && <div className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-ash-50 text-ash-500 uppercase truncate max-w-[120px]">{item.lead.funnel}</div>}
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <div className="flex flex-col gap-2 items-start">

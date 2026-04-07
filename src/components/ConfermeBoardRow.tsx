@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay } from "lucide-react"
+import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff } from "lucide-react"
 import { recordConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall } from "@/app/actions/confermeActions"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRowClick, layoutMode = 'default' }: any) {
@@ -139,13 +139,16 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                 <div className={`flex items-center gap-2 md:gap-4 flex-1 min-w-0 pointer-events-none flex-wrap ${layoutMode === 'snooze' ? 'w-full' : ''}`}>
                     <div className={`font-bold text-ash-800 leading-tight flex items-center gap-2 ${layoutMode === 'snooze' ? 'w-full text-sm' : 'truncate max-w-[150px] md:max-w-[200px]'}`}>
                         {lead.name}
-                        {lead.confVslSeen && <div title="VSL Vista" className="flex items-center justify-center bg-blue-100 text-blue-600 rounded-lg p-1"><MonitorPlay className="w-3.5 h-3.5" /></div>}
+                        {lead.confVslSeen ? <div title="VSL Vista" className="flex items-center justify-center bg-blue-100 text-blue-600 rounded-lg p-1"><MonitorPlay className="w-3.5 h-3.5" /></div> : <div title="VSL NON Vista" className="flex items-center justify-center bg-red-100 text-red-500 rounded-lg p-1"><EyeOff className="w-3.5 h-3.5" /></div>}
                     </div>
                     <div className={`text-ash-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-ash-400" />{lead.phone}</div>
 
-                    {/* Hide GDO name in Snooze mode on small columns to save space */}
+                    {/* GDO name + Funnel (hidden in Snooze mode to save space) */}
                     {layoutMode !== 'snooze' && (
-                        <div className="text-brand-orange-600 font-bold truncate max-w-[150px] shrink-0 hidden sm:inline-block">{item.gdo?.displayName || item.gdo?.name || "N/A"}</div>
+                        <div className="flex items-center gap-1.5 shrink-0 hidden sm:inline-flex">
+                            <div className="text-brand-orange-600 font-bold truncate max-w-[150px]">{item.gdo?.displayName || item.gdo?.name || "N/A"}</div>
+                            {lead.funnel && <div className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-ash-100 text-ash-600 uppercase truncate max-w-[100px]">{lead.funnel}</div>}
+                        </div>
                     )}
 
                     {/* Badge NR or Recall Date */}
