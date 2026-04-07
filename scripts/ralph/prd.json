@@ -1,329 +1,128 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fase-2b-gamification-debug",
-  "description": "Fase 2 Run 2 — Gamification Reinventata + Debug Finale e Deploy",
+  "branchName": "ralph/fase-3a-manager-store",
+  "description": "Fase 3A — Riorganizzazione sezioni Manager + Ribilanciamento Store Gamification",
   "userStories": [
     {
-      "id": "F2-021",
-      "title": "Gamification: sistema Quest giornaliere e settimanali (schema + engine)",
-      "description": "Creare infrastruttura per quest giornaliere/settimanali con reward XP e coins.",
+      "id": "F3-001",
+      "title": "Riorganizzare sidebar Manager: raggruppamento logico",
+      "description": "Le voci del menu Manager sono confuse. Raggruppare logicamente con separatori e sezioni chiare.",
       "acceptanceCriteria": [
-        "Creare tabella quests: id, title, description, type (daily/weekly), targetMetric, targetValue, rewardXp, rewardCoins, isActive",
-        "Creare tabella questProgress: id, questId, userId, currentValue, completed, completedAt, dateScope",
-        "Creare server actions: generateDailyQuests, checkQuestProgress, completeQuest",
-        "Le quest giornaliere si generano automaticamente (es. 'Fissa 3 appuntamenti', 'Chiama 50 lead')",
-        "Usare la skill gamification-loops per best practice engagement",
+        "In Sidebar.tsx raggruppare le voci Manager in sezioni con header: 'Operativo', 'KPI & Analytics', 'Team & HR', 'Gamification'",
+        "Operativo: Dashboard Operativa, Monitor Pause, Import Lead, Archivio",
+        "KPI & Analytics: KPI Team, KPI GDO, KPI Venditori, KPI Conferme, Marketing Analytics, Analisi Qualita, Performance GDO",
+        "Team & HR: Target, Note GDO",
+        "Gamification: RPG Monitor, Team Goals, Store Admin",
+        "Aggiungere separatori visivi tra i gruppi",
         "npx next build compila senza errori"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Migrazioni ADDITIVE. Consultare skill gamification-loops."
+      "notes": "Solo riordinamento sidebar. Non spostare pagine o route."
     },
     {
-      "id": "F2-022",
-      "title": "Gamification: UI Quest con progress tracking",
-      "description": "Componente UI per mostrare le quest attive con progress bar e reward.",
+      "id": "F3-002",
+      "title": "Unificare pagina KPI in hub centrale Manager",
+      "description": "Creare una landing page /kpi che faccia da hub per tutti i KPI con card di navigazione rapida.",
       "acceptanceCriteria": [
-        "Creare componente QuestPanel con lista quest giornaliere e settimanali",
-        "Ogni quest mostra: titolo, progress bar, reward (XP + coins), stato",
-        "Animazione di completamento quando si raggiunge il target",
-        "Posizionare nella dashboard GDO (visibile ma non invadente)",
-        "Seguire il design system premium creato in F2-014",
+        "Creare pagina /kpi-hub con card per ogni sezione KPI (Team, GDO, Venditori, Conferme, Marketing)",
+        "Ogni card mostra: titolo, icona, breve descrizione, link alla pagina specifica",
+        "Accessibile da Sidebar sotto 'KPI & Analytics'",
+        "Layout pulito con grid responsive",
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "NON rimuovere le pagine KPI esistenti. Questa e' una pagina di navigazione aggiuntiva."
     },
     {
-      "id": "F2-023",
-      "title": "Gamification: streak system con multiplier XP/coins",
-      "description": "Sistema di streak giornaliere consecutive con multiplier crescente.",
+      "id": "F3-003",
+      "title": "Audit e ribilanciamento prezzi Store esistenti",
+      "description": "Con la nuova economia coins (quest, streak, achievement), i prezzi store vanno ribilanciati.",
       "acceptanceCriteria": [
-        "Aggiungere campi streakCount e lastStreakDate alla tabella users",
-        "Migrazione ADDITIVA",
-        "Logica: se il GDO completa almeno 1 quest oggi, streak++ e aggiorna lastStreakDate",
-        "Multiplier: giorno 1-2 = x1, giorno 3-6 = x1.5, giorno 7-13 = x2, giorno 14+ = x3",
-        "Il multiplier si applica a tutti i guadagni XP e coins",
-        "Streak si rompe se salta un giorno lavorativo",
-        "Mostrare streak counter con icona fiamma nella dashboard GDO",
+        "Leggere tutti gli item esistenti nello store dal DB",
+        "Ribilanciare i prezzi in base alla nuova economia: item base 50-200 coins, item rari 500-1000, item premium 2000-5000",
+        "Aggiornare i prezzi nel DB tramite server action o script",
+        "NON eliminare item esistenti, solo aggiornare i prezzi",
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Consultare skill gamification-loops per variable reward patterns."
+      "passes": false,
+      "notes": "Usare la REST API Supabase per verificare gli item attuali."
     },
     {
-      "id": "F2-024",
-      "title": "Gamification: achievement/badge permanenti (schema + engine)",
-      "description": "Sistema di 30+ badge con 3 livelli (bronzo/argento/oro) sbloccabili.",
+      "id": "F3-004",
+      "title": "Creare nuovi item Store: skin avatar e temi",
+      "description": "Aggiungere 8-10 nuovi item stimolanti nel negozio: skin avatar, temi, effetti.",
       "acceptanceCriteria": [
-        "Creare tabella achievements: id, name, description, icon, category, tier1Target, tier2Target, tier3Target, metric",
-        "Creare tabella userAchievements: id, userId, achievementId, tier (1/2/3), unlockedAt",
-        "Seedare almeno 15 achievement (es. Telefonista 100/500/1000 chiamate, Fissatore 50/200/500 apps, Maratoneta 7/30/90 giorni streak)",
-        "Server action: checkAchievements(userId) che controlla e sblocca badge",
-        "Notifica quando un badge viene sbloccato",
+        "Aggiungere almeno 8 nuovi item nello store tramite seed/script",
+        "Categorie: skin avatar (3-4 nuove), temi dashboard (2-3 nuovi), effetti speciali (2-3)",
+        "Ogni item ha: nome creativo, descrizione accattivante, prezzo bilanciato, cssValue funzionante",
+        "I nuovi item devono apparire nel negozio come attivi",
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Migrazioni ADDITIVE. I badge seed sono NUOVI record."
+      "passes": false,
+      "notes": "Solo INSERT nuovi record. Mai modificare item esistenti degli utenti."
     },
     {
-      "id": "F2-025",
-      "title": "Gamification: achievement UI + showcase nel profilo",
-      "description": "UI per visualizzare i badge ottenuti nel profilo RPG e notifiche di sblocco.",
+      "id": "F3-005",
+      "title": "Aggiungere categorie e filtri allo Store",
+      "description": "Lo store mostra tutti gli item in lista piatta. Aggiungere categorie e filtro per tipo.",
       "acceptanceCriteria": [
-        "Sezione Badge nel profilo RPG con griglia badge (sbloccati luminosi, locked in grigio)",
-        "Ogni badge mostra: icona, nome, tier attuale, progress verso tier successivo",
-        "Badge con bordo colorato per tier: bronzo, argento, oro",
-        "Toast/animazione quando si sblocca un nuovo badge",
-        "Seguire il design system premium e tema Fenice",
+        "Aggiungere tabs o filtri per categoria: Tutti, Skin Avatar, Temi, Effetti, Titoli",
+        "Ogni item mostra la categoria con badge colorato",
+        "Ordinamento per prezzo (crescente/decrescente) opzionale",
+        "Mantenere il design premium del redesign Fase 2",
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "F2-026",
-      "title": "Gamification: ribilanciamento economia coins e reward",
-      "description": "Ribilanciare l'economia: sprint reward piu' alti, nuove fonti coins, senso di progressione.",
+      "id": "F3-006",
+      "title": "Migliorare la pagina Target Manager",
+      "description": "La pagina target ha troppi elementi sparsi. Organizzare meglio con tab o accordion.",
       "acceptanceCriteria": [
-        "Sprint win reward: da 1 coin a 25 coins (proporzionale alla durata)",
-        "Quest completion: 10-50 coins per quest giornaliera, 50-200 per settimanale",
-        "Achievement unlock: 20 coins (bronzo), 75 coins (argento), 200 coins (oro)",
-        "Streak milestone: 50 coins ogni 7 giorni di streak",
-        "Aggiornare gamificationEngine.ts con i nuovi valori",
+        "Raggruppare in tabs o sezioni collassabili: Target GDO, Target Conferme, Target Venditori, Giorni Lavorativi, Regole Gamification",
+        "Ogni sezione ha header chiaro con icona",
+        "Il contenuto di ogni sezione resta identico (solo riorganizzazione layout)",
         "npx next build compila senza errori"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Solo layout, non toccare la logica."
     },
     {
-      "id": "F2-027",
-      "title": "Gamification: loot box con reward randomici",
-      "description": "Dopo milestone (es. ogni 10 appuntamenti) drop casuale con rarita'.",
+      "id": "F3-007",
+      "title": "Quick fix: verificare tutte le migrazioni applicate",
+      "description": "Controllare che TUTTE le colonne e tabelle nello schema.ts esistano nel DB di produzione.",
       "acceptanceCriteria": [
-        "Creare tabella lootDrops: id, userId, rarity (common/rare/epic/legendary), rewardType, rewardValue, droppedAt",
-        "Logica drop: ogni 10 appuntamenti fissati trigger un loot drop",
-        "Rarita': 60% comune (10-30 coins), 25% raro (50-100 coins), 12% epico (200 coins + XP boost), 3% leggendario (500 coins + titolo)",
-        "Server action: triggerLootDrop(userId) con logica random pesata",
-        "UI: modale apertura loot con suspense e reveal animato",
+        "Confrontare src/db/schema.ts con le colonne reali nel DB via REST API",
+        "Se mancano colonne o tabelle, creare e ESEGUIRE la migrazione",
+        "Verificare: users (tutti i campi gamification), leads (tutti i campi), tutte le nuove tabelle",
+        "Reportare in progress.txt le migrazioni eseguite",
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "Consultare skill gamification-loops per variable reward schedules."
+      "passes": false,
+      "notes": "CRITICO: verificare PRIMA di qualsiasi altro lavoro che il DB sia allineato allo schema."
     },
     {
-      "id": "F2-028",
-      "title": "Gamification: titoli e ranghi personalizzati",
-      "description": "Titoli guadagnati da achievement e streak, visibili nel leaderboard e profilo.",
-      "acceptanceCriteria": [
-        "Aggiungere campo activeTitle (text, nullable) alla tabella users",
-        "Creare lista titoli sbloccabili (es. Lo Squalo = 500 chiamate, La Fenice d Oro = livello 30, Il Veterano = 90 giorni streak)",
-        "UI per selezionare il titolo attivo tra quelli sbloccati",
-        "Il titolo appare accanto al nome nel leaderboard e nel profilo",
-        "npx next build compila senza errori"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": "Migrazione ADDITIVA."
-    },
-    {
-      "id": "F2-029",
-      "title": "Gamification: Boss Battle / sfide team evento",
-      "description": "Il manager lancia un Boss con barra vita che decresce con ogni contributo del team.",
-      "acceptanceCriteria": [
-        "Creare tabella bossBattles: id, title, description, totalHp, currentHp, rewardCoins, startTime, endTime, status",
-        "Creare tabella bossContributions: id, battleId, userId, damage, action, createdAt",
-        "Server action: createBossBattle, contributeToBoss (ogni appuntamento = danno)",
-        "Quando currentHp <= 0, il boss e' sconfitto e tutti i GDO attivi ricevono reward",
-        "Banner visivo nella dashboard con barra vita del boss e contributi",
-        "npx next build compila senza errori"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-030",
-      "title": "Gamification: seasonal events framework",
-      "description": "Infrastruttura per eventi stagionali con tema, meccaniche e reward speciali.",
-      "acceptanceCriteria": [
-        "Creare tabella seasonalEvents: id, title, description, theme, startDate, endDate, xpMultiplier, coinsMultiplier, isActive",
-        "Server action: getActiveEvent, createEvent (solo manager)",
-        "Quando un evento e' attivo, i multiplier si applicano a tutti i guadagni XP/coins",
-        "Banner evento nella dashboard con countdown e tema",
-        "npx next build compila senza errori"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-031",
-      "title": "Gamification: animazioni celebrative e effetti visivi",
-      "description": "Effetti particellari e animazioni su level-up, achievement, loot, streak.",
-      "acceptanceCriteria": [
-        "Animazione fuoco/particelle su level-up della Fenice",
-        "Confetti su achievement sbloccato",
-        "Glow dorato su loot leggendario, viola su epico",
-        "Animazione shake su streak persa",
-        "Transizione fluida evoluzione Fenice tra stadi",
-        "Le animazioni devono essere CSS/JS puro (no librerie pesanti)",
-        "Toggle on/off nelle impostazioni utente",
-        "npx next build compila senza errori"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-032",
-      "title": "Gamification: profilo RPG reinventato e leaderboard evoluto",
-      "description": "Redesign completo del profilo RPG e del leaderboard con multi-metrica.",
-      "acceptanceCriteria": [
-        "Profilo: avatar Fenice grande, showcase badge, titolo attivo, streak counter con fiamma, quest attive, statistiche lifetime",
-        "Leaderboard: tabs per metrica (appuntamenti, chiamate, XP, streak), effetti top 3 (oro/argento/bronzo)",
-        "Animazione ranking change nel leaderboard",
-        "Player of the Week highlight automatico",
-        "Seguire design system premium e tema Fenice",
-        "npx next build compila senza errori"
-      ],
-      "priority": 12,
-      "passes": true,
-      "notes": "Usare skill ui-design-system per pattern componenti."
-    },
-    {
-      "id": "F2-033",
-      "title": "Debug: build verification e TypeScript errors",
-      "description": "Passata completa di verifica build, fix tutti gli errori TypeScript e warning.",
-      "acceptanceCriteria": [
-        "npx next build deve completare con ZERO errori",
-        "Fix tutti i TypeScript errors trovati",
-        "Fix tutti i warning React significativi",
-        "Verificare che TUTTE le pagine siano renderizzate nella build output",
-        "npx next build compila senza errori"
-      ],
-      "priority": 13,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-034",
-      "title": "Debug: audit hydration su tutte le pagine",
-      "description": "Verificare che nessuna pagina abbia errori di hydration React.",
-      "acceptanceCriteria": [
-        "Controllare TUTTI i componenti per bottoni/link dentro span o p",
-        "Verificare che nessun componente usi Date/random senza useEffect",
-        "Verificare che i Server Components non importino hook client",
-        "Fix tutti i problemi di hydration trovati",
-        "npx next build compila senza errori"
-      ],
-      "priority": 14,
-      "passes": true,
-      "notes": "Causa principale WSOD su Vercel. Critico."
-    },
-    {
-      "id": "F2-035",
-      "title": "Debug: verifica integrita' dati reali",
-      "description": "Verificare che NESSUN dato reale sia stato alterato durante lo sviluppo.",
-      "acceptanceCriteria": [
-        "Usare Supabase MCP per verificare che i lead del GDO 114 siano intatti",
-        "Verificare che gli appuntamenti delle Conferme siano intatti",
-        "Verificare che gli account utente esistenti non siano stati modificati",
-        "Verificare che i coinTransactions e gamification data siano intatti",
-        "Se trova anomalie, reportare in progress.txt senza fixare (richiede intervento umano)",
-        "npx next build compila senza errori"
-      ],
-      "priority": 15,
-      "passes": true,
-      "notes": "Solo VERIFICA. Non modificare nulla nel database."
-    },
-    {
-      "id": "F2-036",
-      "title": "Debug: test funzionale regressione completo",
-      "description": "Verificare che tutte le feature delle Fasi 0, 1 e 2a funzionino ancora.",
-      "acceptanceCriteria": [
-        "Verificare che le notifiche realtime non abbiano regressioni",
-        "Verificare che il Google Calendar flow sia intatto (audit codice)",
-        "Verificare che l'optimistic locking sia presente su tutti gli update lead",
-        "Verificare che l'import CSV funzioni con le nuove opzioni",
-        "Verificare che il monitor pause funzioni senza limite giornaliero",
-        "Verificare che le note GDO, obiettivi giornalieri, lead editabile funzionino",
-        "Verificare che i KPI venditori con target bonus funzionino",
-        "npx next build compila senza errori"
-      ],
-      "priority": 16,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-037",
-      "title": "Debug: test responsive tutte le pagine",
-      "description": "Verificare che tutte le pagine funzionino su mobile e tablet.",
-      "acceptanceCriteria": [
-        "Usare Playwright per fare screenshot a 375px (mobile), 768px (tablet), 1440px (desktop)",
-        "Verificare che sidebar si nasconda/collassi su mobile",
-        "Verificare che tabelle e board siano scrollabili su mobile",
-        "Verificare che modali e drawer funzionino su mobile",
-        "Fix problemi di overflow, testo troncato, bottoni troppo piccoli",
-        "npx next build compila senza errori"
-      ],
-      "priority": 17,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-038",
-      "title": "Debug: performance audit e ottimizzazione",
-      "description": "Audit performance e ottimizzazioni critiche.",
-      "acceptanceCriteria": [
-        "Verificare che non ci siano N+1 query nei server actions",
-        "Verificare lazy loading su componenti pesanti",
-        "Verificare che le immagini usino next/image dove possibile",
-        "Verificare che le animazioni usino CSS transform (GPU) e non layout properties",
-        "Usare skill react-performance per pattern ottimizzazione",
-        "npx next build compila senza errori"
-      ],
-      "priority": 18,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-039",
-      "title": "Debug: verifica coerenza visiva post-redesign",
-      "description": "Controllare che il redesign sia coerente su tutte le pagine.",
-      "acceptanceCriteria": [
-        "Navigare TUTTE le pagine con Playwright e verificare coerenza visiva",
-        "Verificare che i colori del design system siano applicati ovunque",
-        "Verificare che non ci siano mix di vecchio e nuovo stile",
-        "Verificare che le transizioni e animazioni funzionino",
-        "Fix eventuali inconsistenze trovate",
-        "npx next build compila senza errori"
-      ],
-      "priority": 19,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F2-040",
-      "title": "Deploy finale e smoke test produzione",
-      "description": "Push, merge in main, deploy su Vercel, verifica produzione.",
+      "id": "F3-008",
+      "title": "Deploy finale e verifica produzione",
+      "description": "Push, merge in main, deploy su Vercel, verifica che tutto funzioni.",
       "acceptanceCriteria": [
         "Git push del branch su GitHub",
         "Merge in main senza conflitti",
         "Push main su GitHub",
-        "Attendi 2 minuti per il deploy Vercel",
-        "Verificare con Vercel MCP che il deploy sia in stato READY",
-        "Se deploy fallisce, leggere build logs e fixare",
-        "Verificare URL produzione accessibile"
+        "Attendere 120 secondi per il deploy Vercel",
+        "Verificare con curl che https://crm-sales-fenice.vercel.app ritorni 200",
+        "Se non ritorna 200, attendere e riprovare"
       ],
-      "priority": 20,
-      "passes": true,
+      "priority": 8,
+      "passes": false,
       "notes": "Ultimo step prima di COMPLETE."
     }
   ]
