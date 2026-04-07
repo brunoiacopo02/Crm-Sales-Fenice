@@ -9,7 +9,8 @@ Started: 2026-04-07
 - DATI REALI: NON toccare lead GDO 114, appuntamenti Conferme, account esistenti
 - MIGRAZIONI: SEMPRE eseguire le migrazioni sul DB di produzione dopo averle create, mai solo creare i file
 - Sidebar Manager ha molte voci non raggruppate — questa fase le riorganizza
-- Store items vanno ribilanciati per la nuova economia coins (quest 10-50, achievement 20-200, streak 50)
+- Store items ribilanciati: base 50-200, raro 300-999, epico 1000-2999, leggendario 3000+
+- Rarity thresholds in ShopClient.tsx: Comune <300, Raro >=300, Epico >=1000, Leggendario >=3000
 - REST API Supabase: apikey e Authorization header dal file .env (SUPABASE_SERVICE_ROLE_KEY)
 - Middleware blocca API routes senza auth: se serve eseguire migrate-*, aggiungere bypass temporaneo in middleware.ts per `/api/migrate-`
 
@@ -41,4 +42,16 @@ Started: 2026-04-07
   - KPI pages use consistent auth pattern: supabase getUser → role check → marketing redirect
   - Design system colors: ash-400 for muted text, brand-orange for hover accents
   - Card pattern with gradient backgrounds + border color matching works well for navigation hubs
+---
+
+## 2026-04-07 - F3-003
+- Rebalanced all 10 store item prices via Supabase REST API PATCH
+- Price mapping: Baby Fenice 1→75, Phoenix Spark 1→100, Midnight Executive 1→150, Ivory Prestige 1→150, Deep Sapphire 250→500, Executive Gold 300→600, Guerriero Accademico 350→750, L'Eterea 500→2000, Crimson Horizon 600→2500, Fenice Executive 800→5000
+- Updated rarity thresholds in ShopClient.tsx: Comune <300, Raro >=300, Epico >=1000, Leggendario >=3000
+- Verified 4 existing purchases (1 test user) are unaffected — purchases don't store price
+- Files modified: `src/components/ShopClient.tsx` (rarity thresholds), DB prices via REST API
+- **Learnings per iterazioni future:**
+  - Supabase REST API PATCH returns 204 on success, ideal for direct DB updates without deploying code
+  - Table name in Supabase REST is camelCase `shopItems`, not snake_case `shop_items`
+  - Price rebalancing is safe for existing owners since `userPurchases` tracks ownership, not price paid
 ---
