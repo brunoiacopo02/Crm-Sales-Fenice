@@ -278,7 +278,7 @@ export function Topbar() {
                         {session?.user?.name || "GDO"}
                     </div>
                     <div className="relative">
-                        <div className={`h-9 w-9 rounded-full bg-gradient-to-br from-brand-orange to-brand-orange-500 flex items-center justify-center text-white font-bold text-sm shadow-soft ring-2 ring-brand-orange/20 ${skinCss?.includes('skin-avatar') ? skinCss : ''}`}>
+                        <div className={`h-9 w-9 rounded-full bg-gradient-to-br from-brand-orange to-brand-orange-500 flex items-center justify-center text-white font-bold text-sm shadow-soft ring-2 ring-brand-orange/20 ${skinCss?.includes('skin-avatar') || skinCss?.includes('skin-effect') ? skinCss : ''}`}>
                             {session?.user?.name?.charAt(0) || "U"}
                         </div>
                         <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 ring-2 ring-white" />

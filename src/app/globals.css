@@ -717,3 +717,61 @@ body .skin-theme-crimson {
   background-attachment: fixed;
   color: white;
 }
+
+body .skin-theme-aurora {
+  background: linear-gradient(135deg, #0f2027 0%, #203a43 30%, #2c5364 60%, #0f766e 100%);
+  background-attachment: fixed;
+  color: white;
+}
+
+body .skin-theme-sunset {
+  background: linear-gradient(135deg, #f9d423 0%, #f5af19 25%, #e65c00 60%, #f12711 100%);
+  background-attachment: fixed;
+  color: white;
+}
+
+body .skin-theme-nebula {
+  background: linear-gradient(135deg, #0f0c29 0%, #302b63 35%, #24243e 65%, #4a00e0 100%);
+  background-attachment: fixed;
+  color: white;
+}
+
+/* --- EFFECT SKINS (AVATAR EFFECTS) --- */
+
+.skin-effect-mystic {
+  background: radial-gradient(circle, #7c3aed, #4c1d95) !important;
+  box-shadow: 0 0 15px rgba(124, 58, 237, 0.5);
+}
+
+.skin-effect-dragon {
+  background: radial-gradient(circle, #f97316 0%, #ef4444 50%, #dc2626 100%) !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
+.skin-effect-ice {
+  background: radial-gradient(circle, #93c5fd 0%, #60a5fa 50%, #3b82f6 100%) !important;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+}
+
+.skin-effect-astral {
+  background: radial-gradient(circle, #eab308 0%, #a855f7 50%, #8b5cf6 100%) !important;
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.6);
+}
+
+.skin-effect-neon {
+  background: radial-gradient(circle, #dcfce7, #bbf7d0) !important;
+  box-shadow: 0 0 15px #22c55e, 0 0 30px rgba(34, 197, 94, 0.3);
+  border: 2px solid #22c55e !important;
+}
+
+.skin-effect-diamond {
+  background: linear-gradient(135deg, #e2e8f0 0%, #f8fafc 30%, #cbd5e1 60%, #f1f5f9 100%) !important;
+  box-shadow: 0 0 20px rgba(148, 163, 184, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.8);
+  border: 2px solid #94a3b8 !important;
+}
+
+.skin-effect-inferno {
+  background: radial-gradient(circle, #dc2626 0%, #b91c1c 50%, #7f1d1d 100%) !important;
+  box-shadow: 0 0 25px rgba(185, 28, 28, 0.7), 0 0 50px rgba(185, 28, 28, 0.3);
+  border: 2px solid #ef4444 !important;
+}
