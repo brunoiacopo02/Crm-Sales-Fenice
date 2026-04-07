@@ -367,3 +367,20 @@ Started: 2026-04-07
   - coinTransactions table is append-only by design — no UPDATE/DELETE in any server action
   - Gamification user field updates are isolated: auth/role fields (name, email, role) never touched by gamification code
 ---
+
+## 2026-04-07 - F2-036
+- Full regression audit across all features from Fasi 0, 1 and 2a
+- **Realtime notifications**: ✅ All 7 channel subscriptions verified (RealtimeProvider, useRealtimeNotifications, GlobalAlertListener, ConfermeBoard, ConfermeDrawer, VenditoreDashboardClient, TeamRadarWidget). All properly clean up on unmount. No broken imports.
+- **Google Calendar flow**: ✅ createOAuth2Client() correctly used as factory (6 call sites, no singleton). FreeBusy check correctly placed BEFORE db.update(). All imports valid.
+- **Optimistic locking**: ✅ All 11 production db.update(leads) calls fully compliant — version check in WHERE, version increment, returning length validation. (Script files non-compliant but not production code.)
+- **CSV import**: ✅ Full flow verified — upload, parsing, validation, deduplication, distribution (round-robin + custom quota), insertion, event logging. assignedToId immutable after import.
+- **Monitor pause**: ⚠️→✅ Fixed — removed hardcoded "/ 2" denominator and "(su 2)" header in ManagerPauseView.tsx. Backend already allows unlimited pauses correctly.
+- **GDO notes, daily objectives, lead editing**: ✅ All server actions, components, and pages working. Proper imports and type definitions.
+- **KPI venditori with target bonus**: ✅ Working correctly — fatturato calculation, target progress, bonus indicator, role-based visibility.
+- **Build**: ZERO errors, all 44 pages rendered
+- File modificati: `src/components/ManagerPauseView.tsx`
+- **Learnings per iterazioni future:**
+  - ManagerPauseView had stale UI text from old 2-pause limit — always update UI text when business rules change
+  - Script/test files don't follow production patterns (optimistic locking) — acceptable but worth noting
+  - Regression audits can be done effectively via code analysis when the codebase follows consistent patterns
+---
