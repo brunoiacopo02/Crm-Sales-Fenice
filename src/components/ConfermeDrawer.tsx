@@ -45,21 +45,20 @@ function ConfermeDrawerSkeleton() {
 }
 
 export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }: any) {
-    if (!isOpen || !item) return null;
+    const lead = item?.lead;
+    const gdo = item?.gdo;
 
-    const lead = item.lead;
-    const gdo = item.gdo;
+    const appointmentDateObj = lead?.appointmentDate ? new Date(lead.appointmentDate) : new Date();
 
     const [activeTab, setActiveTab] = useState("dati")
-    const [localVersion, setLocalVersion] = useState(lead.version)
+    const [localVersion, setLocalVersion] = useState(lead?.version ?? 0)
 
     // Form states
-    const [editName, setEditName] = useState(lead.name || "")
-    const [editEmail, setEditEmail] = useState(lead.email || "")
-    const appointmentDateObj = lead.appointmentDate ? new Date(lead.appointmentDate) : new Date();
+    const [editName, setEditName] = useState(lead?.name || "")
+    const [editEmail, setEditEmail] = useState(lead?.email || "")
     const [editDate, setEditDate] = useState(format(appointmentDateObj, 'yyyy-MM-dd'))
     const [editTime, setEditTime] = useState(format(appointmentDateObj, 'HH:mm'))
-    const [editNoteGdo, setEditNoteGdo] = useState(lead.appointmentNote || "")
+    const [editNoteGdo, setEditNoteGdo] = useState(lead?.appointmentNote || "")
     const [savingData, setSavingData] = useState(false)
 
     // Notes states
@@ -68,14 +67,14 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const [loadingNotes, setLoadingNotes] = useState(false)
 
     // Outcome states
-    const [outcome, setOutcome] = useState(lead.confirmationsOutcome || "")
-    const [discardReason, setDiscardReason] = useState(lead.confirmationsDiscardReason || "")
-    const [salesperson, setSalesperson] = useState(lead.salespersonUserId || "")
+    const [outcome, setOutcome] = useState(lead?.confirmationsOutcome || "")
+    const [discardReason, setDiscardReason] = useState(lead?.confirmationsDiscardReason || "")
+    const [salesperson, setSalesperson] = useState(lead?.salespersonUserId || "")
     const [savingOutcome, setSavingOutcome] = useState(false)
 
     // Salesperson outcome states
-    const [spOutcome, setSpOutcome] = useState(lead.salespersonOutcome || "")
-    const [spNotes, setSpNotes] = useState(lead.salespersonOutcomeNotes || "")
+    const [spOutcome, setSpOutcome] = useState(lead?.salespersonOutcome || "")
+    const [spNotes, setSpNotes] = useState(lead?.salespersonOutcomeNotes || "")
     const [savingSpOutcome, setSavingSpOutcome] = useState(false)
 
     // Presence states
@@ -96,7 +95,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     }, [])
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && lead) {
             setLocalVersion(lead.version)
             setEditName(lead.name || "")
             setEditEmail(lead.email || "")
@@ -157,7 +156,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 supabase.removeChannel(channel);
             }
         }
-    }, [isOpen, lead.id, lead.version]) // update when version changes too
+    }, [isOpen, lead?.id, lead?.version]) // update when version changes too
+
+    if (!isOpen || !item) return null;
 
     const handleSaveData = async () => {
         setSavingData(true)
