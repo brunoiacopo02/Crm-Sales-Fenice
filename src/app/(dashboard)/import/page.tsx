@@ -11,9 +11,10 @@ import {
     saveAssignmentSettings
 } from "@/app/actions/importLeads"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, FileUp, XCircle, ChevronRight, Settings, Users } from "lucide-react"
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, FileUp, XCircle, ChevronRight, Settings, Users, UserPlus } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Papa from "papaparse"
+import { AddLeadModal } from "@/components/AddLeadModal"
 
 export default function ImportPage() {
     const router = useRouter()
@@ -37,6 +38,7 @@ export default function ImportPage() {
     const [allowDuplicates, setAllowDuplicates] = useState(false)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const [isAddLeadOpen, setIsAddLeadOpen] = useState(false)
 
     // Setup initial data
     useEffect(() => {
@@ -163,14 +165,25 @@ export default function ImportPage() {
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto pb-10">
-            <div>
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                    Importa Lead tramite CSV
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Carica l'export con le colonne richieste per popolare il CRM.
-                </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                        Importa Lead tramite CSV
+                    </h1>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Carica l'export con le colonne richieste per popolare il CRM.
+                    </p>
+                </div>
+                <button
+                    onClick={() => setIsAddLeadOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-lg shadow-sm transition-all hover:shadow-md"
+                >
+                    <UserPlus className="h-4 w-4" />
+                    Aggiungi Lead Singolo
+                </button>
             </div>
+
+            <AddLeadModal isOpen={isAddLeadOpen} onClose={() => setIsAddLeadOpen(false)} />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 

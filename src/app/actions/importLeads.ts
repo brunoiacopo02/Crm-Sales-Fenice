@@ -256,3 +256,83 @@ export async function processCsvImport(
 
     return report
 }
+
+// --- Manual single lead creation ---
+
+export type ManualLeadInput = {
+    nome: string
+    telefono: string
+    email?: string
+    funnel: string
+}
+
+export async function createManualLead(input: ManualLeadInput): Promise<{ success: boolean; error?: string; leadId?: string }> {
+    const supabase = await createClient()
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+    if (!supabaseUser) return { success: false, error: "Non autenticato" }
+    const adminId = supabaseUser.id
+
+    // Validate funnel (required)
+    const funnel = input.funnel?.trim()
+    if (!funnel) return { success: false, error: "Il campo Funnel è obbligatorio." }
+
+    // Validate phone (required, min 5 digits)
+    let phone = input.telefono?.trim()
+    if (!phone) return { success: false, error: "Il campo Telefono è obbligatorio." }
+    phone = phone.replace(/[^\d+]/g, '')
+    if (phone.length < 5) return { success: false, error: "Telefono non valido (minimo 5 cifre)." }
+
+    // Validate email (optional)
+    let email: string | null = null
+    const rawEmail = input.email?.trim()
+    if (rawEmail && rawEmail.includes('@') && rawEmail.includes('.')) {
+        email = rawEmail
+    }
+
+    const name = input.nome?.trim() || 'Lead senza nome'
+
+    // Deduplication check
+    const logicConditions = [eq(leads.phone, phone)]
+    if (email) logicConditions.push(eq(leads.email, email))
+    const existingLead = (await db.select({ id: leads.id }).from(leads).where(or(...logicConditions)))[0]
+    if (existingLead) return { success: false, error: "Lead duplicato: telefono o email già presenti nel CRM." }
+
+    // Get active GDOs and assign using stored settings
+    const activeGdos = (await db.select().from(users).where(eq(users.role, 'GDO')))
+        .filter((u: any) => u.isActive === true)
+    if (activeGdos.length === 0) return { success: false, error: "Nessun GDO attivo per l'assegnazione." }
+
+    const stored = await getAssignmentSettings()
+    const distribution = previewLeadDistribution(1, activeGdos, stored.mode, stored.settings)
+    const assignedGdoId = Object.entries(distribution).find(([, v]) => v.count > 0)?.[0] || activeGdos[0].id
+
+    const newLeadId = crypto.randomUUID()
+    await db.insert(leads).values({
+        id: newLeadId,
+        name,
+        phone,
+        email,
+        funnel,
+        status: 'NEW',
+        callCount: 0,
+        assignedToId: assignedGdoId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    })
+
+    await logLeadEvent({
+        leadId: newLeadId,
+        eventType: 'IMPORTED',
+        toSection: 'Prima Chiamata',
+        metadata: { source: 'manual' }
+    })
+
+    await logLeadEvent({
+        leadId: newLeadId,
+        eventType: 'ASSIGNED',
+        userId: adminId,
+        metadata: { assignedToUser: assignedGdoId, source: 'manual' }
+    })
+
+    return { success: true, leadId: newLeadId }
+}
