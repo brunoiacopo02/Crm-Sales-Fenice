@@ -42,3 +42,19 @@ Started: 2026-04-07
   - `leadAssegnati` nel drill-down GDO conta TUTTI i lead assegnati a quel GDO in quel funnel (non solo quelli con appointmentDate), perche' rappresenta il bacino totale di lavoro
   - La tabella funnel e il drill-down GDO condividono lo stesso dataset (`allLeads` filtrati per `createdAt` nel mese)
 ---
+
+## 2026-04-07 - F1-003
+- **Implementato**: Spostato ManagerOperativaBoard nella pagina KPI Team GDO, rimossa Classifica GDO
+- **KpiTeamDashboard.tsx**:
+  - Rimossa intera sezione "Classifica GDO (Ranking)" (tabella + modal Quick Analytics)
+  - Rimosso stato `selectedGdoId` e variabile `selectedGdoDetails`/`ranking`
+  - Puliti import non piu' usati (Trophy, Search, Phone, ChevronRight)
+- **kpi-team/page.tsx**:
+  - Aggiunto import e rendering di `ManagerOperativaBoard` sotto `KpiTeamDashboard`
+  - ManagerOperativaBoard ha il suo filtro periodo (OGGI/MESE/TRIMESTRE) indipendente
+- **Verifica**: ManagerOperativaBoard resta anche in `manager-targets/page.tsx` (non rimosso da li')
+- File modificati: `src/components/KpiTeamDashboard.tsx`, `src/app/(dashboard)/kpi-team/page.tsx`
+- **Learnings per iterazioni future:**
+  - ManagerOperativaBoard e' esportato come named export (`export function`), non default
+  - Il componente e' self-contained: fetcha i suoi dati via `getManagerOperativaData()` e gestisce il suo stato di periodo
+---
