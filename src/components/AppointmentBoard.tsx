@@ -25,7 +25,7 @@ export function AppointmentBoard({
     const currentList = activeTab === 'upcoming' ? sortedUpcoming : sortedPast
 
     const renderCard = (lead: any, isUpcoming: boolean) => (
-        <div key={lead.id} className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all flex flex-wrap items-center justify-between gap-x-4 gap-y-2 group relative overflow-hidden ${isUpcoming ? 'border-green-200 hover:border-green-400' : 'border-gray-200 hover:border-gray-300'}`}>
+        <div key={lead.id} className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-x-4 sm:gap-y-2 group relative overflow-hidden ${isUpcoming ? 'border-green-200 hover:border-green-400' : 'border-gray-200 hover:border-gray-300'}`}>
             {/* Visual Highlight indicator left */}
             {isUpcoming && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>}
             
@@ -41,7 +41,7 @@ export function AppointmentBoard({
             )}
 
             {/* 1. Nome & Contatti */}
-            <div className="flex-1 min-w-[220px] pl-2 flex flex-col justify-center">
+            <div className="flex-1 min-w-0 sm:min-w-[220px] pl-2 flex flex-col justify-center">
                 <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
                     {lead.name}
                     {isUpcoming ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <CalendarCheck className="h-4 w-4 text-gray-400" />}
@@ -79,7 +79,7 @@ export function AppointmentBoard({
             </div>
 
             {/* 4. Dates & Action */}
-            <div className="flex flex-col items-end gap-1.5 shrink-0 w-48 text-right">
+            <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0 w-full sm:w-48 text-left sm:text-right">
                 <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center justify-end gap-1 w-full ${isUpcoming ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                     <CalendarCheck className="h-3 w-3" />
                     {lead.appointmentDate ? new Date(lead.appointmentDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' }) : 'N/D'}

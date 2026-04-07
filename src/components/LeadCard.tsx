@@ -68,7 +68,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
             <div className={`relative bg-white border border-ash-200/80 rounded-xl px-4 py-3 shadow-soft hover:shadow-card hover:border-brand-orange/30 transition-all duration-200 flex items-center justify-between gap-4 group cursor-pointer ${leftAccent}`}>
 
                 {/* 1. Nome & Contatti */}
-                <div className="flex-1 min-w-[220px] flex flex-col justify-center">
+                <div className="flex-1 min-w-0 sm:min-w-[220px] flex flex-col justify-center">
                     <div className="font-bold text-ash-900 text-sm flex items-center gap-2">
                         <div className="flex items-center gap-2">
                             {lead.name}

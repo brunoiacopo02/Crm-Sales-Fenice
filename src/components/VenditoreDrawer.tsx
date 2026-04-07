@@ -82,7 +82,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
     return (
         <div className="flex flex-col h-full bg-white">
             {/* Header - sticky with glass effect */}
-            <div className="px-6 py-4 drawer-header flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-4 drawer-header flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                     <User className="h-5 w-5 text-gray-400" />
                     Scheda Appuntamento
@@ -96,7 +96,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-8">
 
                 {/* Lead Recap */}
                 <div className="bg-gray-50 p-5 rounded-xl border border-gray-100 space-y-4">
@@ -153,7 +153,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Seleziona l'esito dell'appuntamento *
                         </label>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             {["Chiuso", "Non chiuso", "Sparito"].map(o => (
                                 <button
                                     key={o}

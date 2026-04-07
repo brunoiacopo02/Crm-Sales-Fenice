@@ -140,17 +140,17 @@ export function LootDropModal({ userId }: { userId: string }) {
         <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={phase === 'revealed' ? handleClose : undefined}>
             <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 61 }}>
                 <div
-                    className="relative max-w-sm w-full mx-4"
+                    className="relative max-w-sm w-full mx-2 sm:mx-4"
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Pre-reveal: Box to open */}
                     {phase !== 'revealed' && (
                         <div className="modal-content p-8 text-center bg-gradient-to-b from-brand-charcoal via-ash-800 to-ash-900">
                             {/* Loot crate icon */}
-                            <div className={`relative mx-auto mb-6 w-32 h-32 flex items-center justify-center ${
+                            <div className={`relative mx-auto mb-6 w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center ${
                                 phase === 'shaking' ? 'animate-loot-shake' : ''
                             } ${phase === 'opening' ? 'animate-loot-burst' : ''}`}>
-                                <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br from-brand-orange-600 via-brand-orange to-gold-400 flex items-center justify-center border-2 border-brand-orange-300 shadow-glow-orange transition-all duration-300 ${
+                                <div className={`w-20 h-20 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-brand-orange-600 via-brand-orange to-gold-400 flex items-center justify-center border-2 border-brand-orange-300 shadow-glow-orange transition-all duration-300 ${
                                     phase === 'shaking' ? 'scale-110' : ''
                                 }`}>
                                     <Package className={`w-14 h-14 text-brand-charcoal ${

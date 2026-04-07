@@ -10,7 +10,7 @@ export default async function MarketingAnalyticsPage() {
     const initialStatsByGdo = await getMarketingStatsByGdo(currentMonthStr);
 
     return (
-        <div className="flex flex-col h-screen overflow-hidden bg-gray-50/50">
+        <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden bg-gray-50/50">
             <MarketingAnalyticsClient
                 initialStats={initialStats}
                 initialStatsByGdo={initialStatsByGdo}

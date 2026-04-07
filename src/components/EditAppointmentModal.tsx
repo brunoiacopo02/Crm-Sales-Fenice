@@ -83,7 +83,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
                 </div>
 
                 <div className="p-5 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <Calendar className="h-4 w-4 text-brand-orange" /> Data

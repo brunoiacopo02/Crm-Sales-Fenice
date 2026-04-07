@@ -43,7 +43,7 @@ export function KpiTeamDashboard() {
                     <select
                         value={period}
                         onChange={(e) => setPeriod(e.target.value as KpiPeriod)}
-                        className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-brand-orange focus:border-brand-orange block w-40 p-2"
+                        className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-brand-orange focus:border-brand-orange block w-full sm:w-40 p-2"
                     >
                         <option value="oggi">Oggi</option>
                         <option value="ieri">Ieri</option>
@@ -57,7 +57,7 @@ export function KpiTeamDashboard() {
                     <select
                         value={funnelFilter}
                         onChange={(e) => setFunnelFilter(e.target.value)}
-                        className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-brand-orange focus:border-brand-orange block w-40 p-2"
+                        className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-brand-orange focus:border-brand-orange block w-full sm:w-40 p-2"
                     >
                         <option value="ALL">Tutti i Funnel</option>
                         <option value="Inbound">Inbound</option>
@@ -110,7 +110,7 @@ export function KpiTeamDashboard() {
 
 function KpiCard({ title, value, icon: Icon, color, bg }: { title: string, value: string | number, icon: any, color: string, bg: string }) {
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex justify-between items-center hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 flex justify-between items-center hover:shadow-md transition-shadow">
             <div>
                 <h3 className="text-sm font-medium text-gray-500 mb-1">{title}</h3>
                 <p className="text-3xl font-bold text-gray-900">{value}</p>

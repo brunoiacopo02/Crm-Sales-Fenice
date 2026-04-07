@@ -164,7 +164,7 @@ export default function ImportPage() {
     const totalCalculatedAssigned = Object.values(distributionPreview).reduce((acc, val) => acc + val.count, 0)
 
     return (
-        <div className="space-y-6 max-w-5xl mx-auto pb-10">
+        <div className="space-y-6 max-w-5xl mx-auto pb-10 px-4 sm:px-6 lg:px-0">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-gray-900">
@@ -185,7 +185,7 @@ export default function ImportPage() {
 
             <AddLeadModal isOpen={isAddLeadOpen} onClose={() => setIsAddLeadOpen(false)} />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
 
                 {/* Step 1: Upload */}
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 col-span-1 md:col-span-1 space-y-4 h-fit">
@@ -261,7 +261,7 @@ export default function ImportPage() {
                             {/* Column Mapping Dropdowns */}
                             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Mapping Colonne CSV → CRM</h4>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                     {[
                                         { field: 'nome' as const, label: 'Nome', required: false },
                                         { field: 'telefono' as const, label: 'Telefono', required: true },
@@ -291,8 +291,8 @@ export default function ImportPage() {
                             </div>
 
                             {/* Preview Table (first 5 rows based on mapping) */}
-                            <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                <table className="w-full text-left text-xs text-gray-600">
+                            <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                                <table className="w-full text-left text-xs text-gray-600 min-w-[500px]">
                                     <thead className="bg-gray-100 text-gray-800 border-b">
                                         <tr>
                                             <th className="px-3 py-2">Row</th>

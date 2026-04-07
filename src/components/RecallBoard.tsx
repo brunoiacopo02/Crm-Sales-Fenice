@@ -78,7 +78,7 @@ export function RecallBoard({
             </div>
 
             {/* LIST AREA */}
-            <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 pb-48">
+            <div className="flex-1 overflow-y-auto bg-gray-50/30 p-2 sm:p-4 pb-48">
                 <div className="flex flex-col gap-3 max-w-5xl mx-auto">
                     {currentList.map((lead) => (
                         <div key={lead.id} className="relative">
@@ -86,7 +86,7 @@ export function RecallBoard({
                                 <div className="absolute -left-1 top-4 h-3 w-3 rounded-full bg-red-500 animate-pulse border-2 border-white shadow-sm z-20" />
                             )}
                             {activeTab === 'upcoming' && (
-                                <div className="absolute top-3 right-48 z-10 bg-white/90 backdrop-blur px-2 py-0.5 rounded text-xs font-mono font-medium text-brand-orange border border-orange-100 shadow-sm">
+                                <div className="absolute top-3 right-2 sm:right-48 z-10 bg-white/90 backdrop-blur px-2 py-0.5 rounded text-xs font-mono font-medium text-brand-orange border border-orange-100 shadow-sm">
                                     {new Date(lead.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
                                 </div>
                             )}

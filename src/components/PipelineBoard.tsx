@@ -103,7 +103,7 @@ export function PipelineBoard({
         <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl border border-ash-200 shadow-card overflow-hidden">
 
             {/* STICKY HEADER & TAB BAR */}
-            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-sm border-b border-ash-200/60 px-4 pt-4 pb-3">
+            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-sm border-b border-ash-200/60 px-2 sm:px-4 pt-4 pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-4">
 
                     {/* TABS */}
@@ -161,7 +161,7 @@ export function PipelineBoard({
                                     </div>
                                 </button>
                                 {/* Tooltip */}
-                                <div className="absolute hidden group-hover:block w-64 p-2.5 bg-ash-800 text-white text-xs rounded-lg shadow-elevated -bottom-12 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none">
+                                <div className="absolute hidden group-hover:block w-56 sm:w-64 p-2.5 bg-ash-800 text-white text-xs rounded-lg shadow-elevated -bottom-12 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none max-w-[calc(100vw-2rem)]">
                                     Attiva perché il tuo tasso di fissaggio è sotto 14% (ultimi 7 giorni).
                                     <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-ash-800" />
                                 </div>
@@ -172,7 +172,7 @@ export function PipelineBoard({
             </div>
 
             {/* LIST AREA */}
-            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-ash-50/50 to-white p-4 pb-48">
+            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-ash-50/50 to-white p-2 sm:p-4 pb-48">
                 <div className={`flex flex-col gap-2.5 max-w-7xl mx-auto transition-opacity duration-150 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
                     {currentList.map((lead, index) => (
                         <div

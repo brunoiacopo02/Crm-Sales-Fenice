@@ -86,7 +86,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
             <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-elevated sm:max-w-md drawer-panel">
 
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-ash-200 drawer-header flex justify-between items-center">
+                <div className="px-4 sm:px-6 py-5 border-b border-ash-200 drawer-header flex justify-between items-center">
                     <div>
                         <h2 className="text-lg font-bold text-gray-900">Aggiorna Esito</h2>
                         <div className="text-sm text-ash-500 mt-0.5">Registra l'attività per questo contatto</div>
@@ -97,7 +97,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                 </div>
 
                 {/* Body / Scrollable Content */}
-                <div className="p-6 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
+                <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
 
                     {/* Outcome Grid */}
                     <div>

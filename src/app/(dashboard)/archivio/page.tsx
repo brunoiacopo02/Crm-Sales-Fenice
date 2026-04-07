@@ -24,7 +24,7 @@ export default async function ArchivePage() {
     const salesUsers = allUsers.filter(u => u.role === 'VENDITORE');
 
     return (
-        <div className="flex-1 bg-[#111111] min-h-screen text-gray-100 p-8 pt-10 overflow-y-auto">
+        <div className="flex-1 bg-[#111111] min-h-screen text-gray-100 p-4 sm:p-6 md:p-8 pt-6 sm:pt-8 md:pt-10 overflow-y-auto">
             <ArchiveClient gdoUsers={gdoUsers} salesUsers={salesUsers} />
         </div>
     );

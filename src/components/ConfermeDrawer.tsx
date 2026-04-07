@@ -269,9 +269,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     return (
         <div className="fixed inset-0 z-50 flex justify-end">
             <div className="drawer-overlay" onClick={onClose} />
-            <div className="w-[500px] h-full bg-white shadow-elevated flex flex-col drawer-panel z-50">
+            <div className="w-full sm:w-[500px] h-full bg-white shadow-elevated flex flex-col drawer-panel z-50">
                 {/* Header - sticky */}
-                <div className="flex items-center justify-between p-6 drawer-header shrink-0">
+                <div className="flex items-center justify-between p-4 sm:p-6 drawer-header shrink-0">
                     <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                             {lead.confNeedsReschedule ? (
@@ -284,7 +284,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">SCARTATO</span>
                             )}
                         </div>
-                        <h2 className="text-2xl font-bold tracking-tight text-gray-900 leading-tight">{lead.name}</h2>
+                        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 leading-tight">{lead.name}</h2>
                         <div className="flex items-center gap-3 mt-1.5 text-sm text-gray-500 font-medium">
                             <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-brand-orange" /> {lead.phone}</span>
                             {lead.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-brand-blue" /> {lead.email}</span>}
@@ -358,7 +358,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                 {/* Content */}
                 <fieldset disabled={isLocked} className="contents border-0 p-0 m-0">
-                    <div className={`flex-1 overflow-y-auto p-6 bg-slate-50/30 custom-scrollbar ${isLocked ? "opacity-60 grayscale-[30%]" : ""}`}>
+                    <div className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/30 custom-scrollbar ${isLocked ? "opacity-60 grayscale-[30%]" : ""}`}>
 
                         {activeTab === "dati" && (
                             <div className="space-y-5 animate-in fade-in duration-200">
@@ -383,7 +383,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 </div>
 
                                 {/* Data e Ora Appuntamento (sempre visibili, anche per i Richiami) */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
                                             {lead.confNeedsReschedule ? "Data App. (Originaria)" : "Data Appuntamento"}

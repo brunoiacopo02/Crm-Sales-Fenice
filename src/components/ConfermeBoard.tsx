@@ -249,7 +249,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
         return (
             <div className="w-full border-b border-ash-200/40 sticky top-0 bg-white/90 backdrop-blur-sm z-10 pt-3 pb-3 mb-4 shadow-soft">
-                <div className="flex flex-wrap items-center gap-2 w-full max-w-[1400px] mx-auto px-3">
+                <div className="flex flex-nowrap items-center gap-2 w-full max-w-[1400px] mx-auto px-3 overflow-x-auto pb-1 scrollbar-thin">
                     {activeHours.map((hourParam) => {
                     const hNum = parseInt(hourParam.split(':')[0], 10);
                     const leadsForHour = activeLeads.filter(l => {
@@ -330,8 +330,8 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         const normalTargetLeads = targetLeads.filter(l => !l.lead.confSnoozeAt);
 
         return (
-            <div className="grid grid-cols-1 xl:grid-cols-3 w-full max-w-[1400px] mx-auto pb-12 gap-6 items-start px-2">
-                <div className="xl:col-span-2 flex flex-col w-full min-w-0">
+            <div className="grid grid-cols-1 lg:grid-cols-3 w-full max-w-[1400px] mx-auto pb-12 gap-4 sm:gap-6 items-start px-2">
+                <div className="lg:col-span-2 flex flex-col w-full min-w-0">
                     {filtersJSX}
                     <div className="flex flex-col w-full bg-white border border-ash-200/60 rounded-xl p-2 shadow-soft">
                         {normalTargetLeads.length === 0 ? (
@@ -349,7 +349,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     </div>
                 </div>
 
-                <div className="xl:col-span-1 flex flex-col w-full min-w-0 mt-4 xl:mt-0 pt-0 xl:pt-[72px]">
+                <div className="lg:col-span-1 flex flex-col w-full min-w-0 mt-4 lg:mt-0 pt-0 lg:pt-[72px]">
                     <div className="bg-gradient-to-br from-brand-orange-50 to-gold-50 border border-brand-orange-200/60 rounded-xl p-3.5 shadow-soft mb-4">
                         <h3 className="text-brand-orange-700 font-bold mb-1 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Richiamati In Giornata</h3>
                         <div className="text-[12px] text-brand-orange-600/80 leading-tight">Lead spostati temporaneamente (&quot;Snooze&quot;). Suonerà una sveglia all&apos;orario stabilito.</div>

@@ -29,7 +29,7 @@ export default async function ClassificaPage({
     return (
         <div className="flex-1 bg-gradient-to-b from-ash-50/50 to-white flex flex-col min-h-screen">
             {/* Header / Hero Section */}
-            <div className="bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/50 text-white pt-8 pb-20 px-8 relative overflow-hidden">
+            <div className="bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/50 text-white pt-6 sm:pt-8 pb-16 sm:pb-20 px-4 sm:px-8 relative overflow-hidden">
                 {/* Decorative fire elements */}
                 <div className="absolute top-0 right-0 w-96 h-96 bg-ember-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
                 <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand-orange/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4 pointer-events-none"></div>
@@ -40,7 +40,7 @@ export default async function ClassificaPage({
                         <Trophy className="h-6 w-6 text-gold-400 drop-shadow-sm" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Classifica GDO</h1>
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Classifica GDO</h1>
                         <div className="text-ash-400 mt-1 flex items-center gap-2">
                             <div>Sfida i tuoi colleghi e raggiungi la vetta</div>
                             <Star className="h-3 w-3 text-gold-400" />
@@ -50,7 +50,7 @@ export default async function ClassificaPage({
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 px-8 -mt-10 pb-12 max-w-5xl mx-auto w-full z-10 relative space-y-6">
+            <div className="flex-1 px-4 sm:px-8 -mt-10 pb-12 max-w-5xl mx-auto w-full z-10 relative space-y-6">
                 <TeamGoalBanner />
                 <LeaderboardClient
                     initialData={leaderboardData}

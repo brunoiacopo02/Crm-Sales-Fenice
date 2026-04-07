@@ -68,7 +68,7 @@ export function ManagerOperativaBoard() {
 
     return (
         <div className="bg-white rounded-xl shadow-soft border border-ash-200/60 overflow-hidden mt-8">
-            <div className="px-6 py-5 border-b border-ash-200/60 bg-gradient-to-r from-ash-50 to-ash-100/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="px-3 sm:px-6 py-4 sm:py-5 border-b border-ash-200/60 bg-gradient-to-r from-ash-50 to-ash-100/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
                 <div>
                     <h2 className="text-xl font-bold flex items-center gap-2 text-ash-800">
                         <Activity className="h-6 w-6 text-brand-orange" />
@@ -100,7 +100,7 @@ export function ManagerOperativaBoard() {
                         <div className="text-sm text-ash-400">Caricamento dati...</div>
                     </div>
                 ) : (
-                    <table className="w-full text-left text-sm text-ash-700 whitespace-nowrap">
+                    <table className="w-full text-left text-xs sm:text-sm text-ash-700 whitespace-nowrap">
                         <thead className="bg-gradient-to-r from-ash-50 to-ash-100/50 text-xs uppercase text-ash-500 font-semibold border-b border-ash-200/60">
                             {period === 'OGGI' ? (
                                 <tr>

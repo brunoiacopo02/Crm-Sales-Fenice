@@ -191,7 +191,7 @@ export function ContactDrawer({
 
             <div className="relative w-full max-w-md flex flex-col bg-white shadow-elevated z-50 drawer-panel">
                 {/* Header - sticky */}
-                <div className="px-6 py-5 drawer-header flex flex-col gap-2">
+                <div className="px-4 sm:px-6 py-5 drawer-header flex flex-col gap-2">
                     <div className="flex items-start justify-between">
                         <div>
                             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -230,7 +230,7 @@ export function ContactDrawer({
                     {isLoading ? (
                         <DrawerSkeleton />
                     ) : activeTab === 'details' && lead ? (
-                        <div className="space-y-6 p-6 animate-fade-in">
+                        <div className="space-y-6 p-4 sm:p-6 animate-fade-in">
                             {/* Save feedback message */}
                             {saveMessage && (
                                 <div className={`px-4 py-2.5 rounded-lg text-sm font-medium animate-slide-up ${saveMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
@@ -349,7 +349,7 @@ export function ContactDrawer({
 
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Stato CRM</h3>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
                                         <div className="text-xs text-ash-500 mb-1">Stato DB</div>
                                         <div className="text-sm font-bold text-gray-900">{lead.status}</div>

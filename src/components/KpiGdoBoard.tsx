@@ -161,7 +161,7 @@ export function KpiGdoBoard() {
         <div className="space-y-6 animate-fade-in">
 
             {/* Toolbar Filtri Core */}
-            <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl border border-ash-200/60 shadow-soft flex flex-wrap gap-4 items-end">
+            <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl border border-ash-200/60 shadow-soft flex flex-col sm:flex-row flex-wrap gap-4 items-start sm:items-end">
                 <div className="flex items-center gap-2 w-full text-brand-charcoal font-semibold mb-2">
                     <Filter className="h-4 w-4 text-brand-orange" />
                     Filtri Operativi
@@ -182,9 +182,9 @@ export function KpiGdoBoard() {
                 </div>
 
                 {dateRange === "CUSTOM" && (
-                    <div className="flex gap-2">
-                        <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="px-3 py-1.5 text-sm border border-ash-200/60 rounded-lg bg-ash-50/50 focus:ring-2 focus:ring-brand-orange/30" />
-                        <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="px-3 py-1.5 text-sm border border-ash-200/60 rounded-lg bg-ash-50/50 focus:ring-2 focus:ring-brand-orange/30" />
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="px-3 py-1.5 text-sm border border-ash-200/60 rounded-lg bg-ash-50/50 focus:ring-2 focus:ring-brand-orange/30 w-full sm:w-auto" />
+                        <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="px-3 py-1.5 text-sm border border-ash-200/60 rounded-lg bg-ash-50/50 focus:ring-2 focus:ring-brand-orange/30 w-full sm:w-auto" />
                     </div>
                 )}
 
@@ -270,7 +270,7 @@ export function KpiGdoBoard() {
             )}
 
             {/* BIG CARDS ROW */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="bg-white p-5 rounded-xl border border-ash-200/60 shadow-soft flex flex-col items-center justify-center text-center group hover:shadow-card transition-all duration-200">
                     <div className="w-10 h-10 rounded-xl bg-ash-100 flex items-center justify-center mb-2 group-hover:bg-ash-200 transition-colors">
                         <PhoneCall className="h-5 w-5 text-ash-500" />
@@ -396,8 +396,8 @@ export function KpiGdoBoard() {
                     <div className="text-xs text-ash-400 mb-3">
                         Formula: (Chiamate / 6.5h) × (% Fissaggio / 100) — Ore lavorate fisse: 6.5h (13:30-20:00)
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                    <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                        <table className="w-full text-xs sm:text-sm">
                             <thead>
                                 <tr className="border-b border-ash-200/60 text-left">
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold">#</th>
