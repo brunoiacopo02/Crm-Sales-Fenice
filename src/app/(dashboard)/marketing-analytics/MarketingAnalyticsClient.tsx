@@ -7,6 +7,7 @@ import { Loader2, TrendingUp, Save, Filter, Users } from "lucide-react";
 type Stat = {
     funnel: string;
     leads: number;
+    leadAssegnati: number;
     apps: number;
     conferme: number;
     trattative: number;
@@ -16,12 +17,15 @@ type Stat = {
     confermePerc: number;
     trattativePerc: number;
     closePerc: number;
+    fissaggioPerc: number;
     spentAmountEur: number;
     roas: number;
 };
 
 type GdoStatTableRow = {
     gdoName: string;
+    leadAssegnati: number;
+    fissaggioPerc: number;
     appsFissati: number;
     appsConfermati: number;
     confermePerc: number;
@@ -190,7 +194,9 @@ export default function MarketingAnalyticsClient({
                                     <tr>
                                         <th className="px-4 py-4 font-semibold">Funnel Globali</th>
                                         <th className="px-4 py-4 font-semibold text-right">Lead</th>
+                                        <th className="px-4 py-4 font-semibold text-right">Lead Assegn.</th>
                                         <th className="px-4 py-4 font-semibold text-right">App</th>
+                                        <th className="px-4 py-4 font-semibold text-right text-orange-600">% Fiss.</th>
                                         <th className="px-4 py-4 font-semibold text-right text-gray-500">App %</th>
                                         <th className="px-4 py-4 font-semibold text-right">Conferme</th>
                                         <th className="px-4 py-4 font-semibold text-right text-gray-500">Conf %</th>
@@ -208,7 +214,9 @@ export default function MarketingAnalyticsClient({
                                         <tr key={row.funnel} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3 font-medium text-gray-900">{row.funnel}</td>
                                             <td className="px-4 py-3 text-right">{row.leads}</td>
+                                            <td className="px-4 py-3 text-right font-medium">{row.leadAssegnati}</td>
                                             <td className="px-4 py-3 text-right">{row.apps}</td>
+                                            <td className="px-4 py-3 text-right font-semibold text-orange-600 bg-orange-50/30">{formatPercent(row.fissaggioPerc)}</td>
                                             <td className="px-4 py-3 text-right text-gray-500 bg-gray-50/50">{formatPercent(row.appsPerc)}</td>
                                             <td className="px-4 py-3 text-right font-medium">{row.conferme}</td>
                                             <td className="px-4 py-3 text-right text-gray-500 bg-gray-50/50">{formatPercent(row.confermePerc)}</td>
@@ -248,11 +256,13 @@ export default function MarketingAnalyticsClient({
                         <div className="grid grid-cols-1 gap-8">
                             {statsByGdo.map((funnelItem) => {
                                 // Calculate Totals for the bottom row
+                                const tLeadAssegnati = funnelItem.gdoStats.reduce((acc, row) => acc + row.leadAssegnati, 0);
                                 const tAppsFissati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsFissati, 0);
                                 const tAppsConfermati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsConfermati, 0);
                                 const tAppsPresenziati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsPresenziati, 0);
                                 const tClosed = funnelItem.gdoStats.reduce((acc, row) => acc + row.closed, 0);
 
+                                const tFissPerc = tLeadAssegnati > 0 ? (tAppsFissati / tLeadAssegnati) * 100 : 0;
                                 const tConfPerc = tAppsFissati > 0 ? (tAppsConfermati / tAppsFissati) * 100 : 0;
                                 const tPresPerc = tAppsConfermati > 0 ? (tAppsPresenziati / tAppsConfermati) * 100 : 0;
                                 const tClosePerc = tAppsPresenziati > 0 ? (tClosed / tAppsPresenziati) * 100 : 0;
@@ -270,7 +280,9 @@ export default function MarketingAnalyticsClient({
                                                 <thead className="bg-white text-gray-500 border-b border-gray-200 text-xs uppercase">
                                                     <tr>
                                                         <th className="px-6 py-3 font-semibold">GDO</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">Lead Assegn.</th>
                                                         <th className="px-4 py-3 font-semibold text-right">App Fissati</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">% Fiss.</th>
                                                         <th className="px-4 py-3 font-semibold text-right">App Confermati</th>
                                                         <th className="px-4 py-3 font-semibold text-right">% Conferma</th>
                                                         <th className="px-4 py-3 font-semibold text-right">App Presenziati</th>
@@ -283,7 +295,9 @@ export default function MarketingAnalyticsClient({
                                                     {funnelItem.gdoStats.map((row, idx) => (
                                                         <tr key={idx} className="hover:bg-gray-50">
                                                             <td className="px-6 py-3 font-medium text-gray-900">{row.gdoName}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-600 font-medium">{row.leadAssegnati}</td>
                                                             <td className="px-4 py-3 text-right text-gray-600 font-medium">{row.appsFissati}</td>
+                                                            <td className="px-4 py-3 text-right font-semibold text-orange-600">{formatPercent(row.fissaggioPerc)}</td>
                                                             <td className="px-4 py-3 text-right text-gray-600 font-medium">{row.appsConfermati}</td>
                                                             <td className="px-4 py-3 text-right text-gray-500">{formatPercent(row.confermePerc)}</td>
                                                             <td className="px-4 py-3 text-right text-gray-600 font-medium">{row.appsPresenziati}</td>
@@ -295,7 +309,9 @@ export default function MarketingAnalyticsClient({
                                                     {/* TOTALE ROW */}
                                                     <tr className="bg-gray-50 border-t-2 border-gray-200">
                                                         <td className="px-6 py-4 font-bold text-gray-900 uppercase">Totale</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-gray-900">{tLeadAssegnati}</td>
                                                         <td className="px-4 py-4 text-right font-bold text-gray-900">{tAppsFissati}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-orange-600">{formatPercent(tFissPerc)}</td>
                                                         <td className="px-4 py-4 text-right font-bold text-gray-900">{tAppsConfermati}</td>
                                                         <td className="px-4 py-4 text-right font-bold text-gray-700">{formatPercent(tConfPerc)}</td>
                                                         <td className="px-4 py-4 text-right font-bold text-gray-900">{tAppsPresenziati}</td>

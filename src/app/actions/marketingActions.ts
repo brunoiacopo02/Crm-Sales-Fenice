@@ -45,6 +45,7 @@ export async function getMarketingStats(monthString: string) {
         grouped[f] = {
             funnel: f,
             leads: 0,
+            leadAssegnati: 0,
             apps: 0,
             conferme: 0,
             trattative: 0,
@@ -59,6 +60,9 @@ export async function getMarketingStats(monthString: string) {
         // Count only if the funnel is in the official list
         if (grouped[rawFunnel]) {
             grouped[rawFunnel].leads++;
+            if (l.assignedToId) {
+                grouped[rawFunnel].leadAssegnati++;
+            }
 
             if (l.appointmentDate) {
                 grouped[rawFunnel].apps++;
@@ -95,6 +99,7 @@ export async function getMarketingStats(monthString: string) {
         const confermePercLead = stat.leads > 0 ? (stat.conferme / stat.leads) * 100 : 0;
         const trattativePercLead = stat.leads > 0 ? (stat.trattative / stat.leads) * 100 : 0;
         const closePercLead = stat.leads > 0 ? (stat.close / stat.leads) * 100 : 0;
+        const fissaggioPerc = stat.leadAssegnati > 0 ? (stat.apps / stat.leadAssegnati) * 100 : 0;
 
         let roas = 0;
         if (spentAmountEur > 0) {
@@ -107,6 +112,7 @@ export async function getMarketingStats(monthString: string) {
             confermePerc: confermePercLead,
             trattativePerc: trattativePercLead,
             closePerc: closePercLead,
+            fissaggioPerc,
             spentAmountEur,
             roas
         };
@@ -161,6 +167,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
 
     const result: Record<string, Record<string, {
         gdoName: string;
+        leadAssegnati: number;
         appsFissati: number;
         appsConfermati: number;
         appsPresenziati: number;
@@ -187,6 +194,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
             if (!result[rawFunnel][assignedId]) {
                 result[rawFunnel][assignedId] = {
                     gdoName,
+                    leadAssegnati: 0,
                     appsFissati: 0,
                     appsConfermati: 0,
                     appsPresenziati: 0,
@@ -195,6 +203,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
             }
 
             const gdoStat = result[rawFunnel][assignedId];
+            gdoStat.leadAssegnati++;
 
             if (l.appointmentDate) {
                 gdoStat.appsFissati++;
@@ -225,6 +234,8 @@ export async function getMarketingStatsByGdo(monthString: string) {
         funnel: string;
         gdoStats: {
             gdoName: string;
+            leadAssegnati: number;
+            fissaggioPerc: number;
             appsFissati: number;
             appsConfermati: number;
             confermePerc: number;
@@ -240,12 +251,15 @@ export async function getMarketingStatsByGdo(monthString: string) {
         const gdoStatsArr = gdoKeys.map(key => {
             const stat = result[f][key];
 
+            const fissaggioPerc = stat.leadAssegnati > 0 ? (stat.appsFissati / stat.leadAssegnati) * 100 : 0;
             const confermePerc = stat.appsFissati > 0 ? (stat.appsConfermati / stat.appsFissati) * 100 : 0;
             const presenziatiPerc = stat.appsConfermati > 0 ? (stat.appsPresenziati / stat.appsConfermati) * 100 : 0;
             const closedPerc = stat.appsPresenziati > 0 ? (stat.closed / stat.appsPresenziati) * 100 : 0;
 
             return {
                 gdoName: stat.gdoName,
+                leadAssegnati: stat.leadAssegnati,
+                fissaggioPerc,
                 appsFissati: stat.appsFissati,
                 appsConfermati: stat.appsConfermati,
                 confermePerc,
