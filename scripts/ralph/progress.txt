@@ -49,3 +49,21 @@ Started: 2026-04-07
   - `getVenditoriWithTargets` filters active venditori only — consistent with GDO patterns
   - Always use `IF NOT EXISTS` in DDL migrations for idempotency
 ---
+
+## 2026-04-07 - F2-003
+- **Feature**: KPI Venditori — classifica con obiettivo bonus
+- **What was done:**
+  - Added `salesTargetEur` to venditori query in `getVenditoriKpi` server action
+  - Added "Target" column showing the target amount (or dash if not set)
+  - Added "Progresso" column with colored progress bar (green >=100%, yellow >=70%, red otherwise)
+  - Added "BONUS RAGGIUNTO" badge with Award icon when fatturato >= salesTargetEur
+  - Updated colspan for empty state row
+  - Sorting remains by fatturato descending (unchanged)
+- **Files modified:**
+  - `src/app/actions/kpiVenditoriActions.ts` — added salesTargetEur to select and return
+  - `src/components/KpiVenditoriClient.tsx` — added Target + Progresso columns with progress bar and bonus badge
+- **Learnings per iterazioni future:**
+  - `salesTargetEur` can be null (no target set) — handle gracefully with dash placeholder
+  - Progress percentage uses IIFE pattern inside JSX for complex inline logic with multiple variables
+  - Bar width capped at 100% visually even if percentage exceeds 100%
+---
