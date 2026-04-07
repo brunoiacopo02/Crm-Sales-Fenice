@@ -187,11 +187,23 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
                 }
             }
 
-            await db.update(users).set({
+            const updateFields: Record<string, any> = {
                 coins: newCoins,
                 experience: newXp,
                 level: newLevel,
-            }).where(eq(users.id, userId));
+            };
+
+            // Auto-equip legendary title if user has no active title
+            if (drop.bonusTitle) {
+                const userFull = (await db.select({ activeTitle: users.activeTitle })
+                    .from(users)
+                    .where(eq(users.id, userId)))[0];
+                if (!userFull?.activeTitle) {
+                    updateFields.activeTitle = drop.bonusTitle;
+                }
+            }
+
+            await db.update(users).set(updateFields).where(eq(users.id, userId));
 
             // Log coin transaction
             const rarityLabel = drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1);

@@ -5,8 +5,14 @@ import {
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
+import TitleSelector from "@/components/TitleSelector"
+import type { UnlockedTitle } from "@/app/actions/titleActions"
 
-export default function ProfileClient({ profileData, achievements = [] }: { profileData: any; achievements?: any[] }) {
+export default function ProfileClient({ profileData, achievements = [], titleData }: {
+    profileData: any;
+    achievements?: any[];
+    titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
+}) {
 
     const {
         displayName, gdoCode,
@@ -29,7 +35,15 @@ export default function ProfileClient({ profileData, achievements = [] }: { prof
                             {stage.name}
                         </div>
                     </h1>
-                    <div className="text-ash-500 mt-1">GDO {gdoCode} - {displayName}</div>
+                    <div className="text-ash-500 mt-1 flex items-center gap-2">
+                        GDO {gdoCode} - {displayName}
+                        {titleData?.activeTitle && (
+                            <div className="inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
+                                <Crown className="w-3 h-3" />
+                                {titleData.activeTitle}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -171,6 +185,15 @@ export default function ProfileClient({ profileData, achievements = [] }: { prof
                     )}
                 </div>
             </div>
+
+            {/* TITLE SELECTOR */}
+            {titleData && (
+                <TitleSelector
+                    titles={titleData.titles}
+                    activeTitle={titleData.activeTitle}
+                    userId={profileData.id}
+                />
+            )}
 
             {/* BADGE & ACHIEVEMENT SHOWCASE */}
             {achievements.length > 0 && (

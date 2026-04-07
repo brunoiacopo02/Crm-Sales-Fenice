@@ -13,6 +13,7 @@ type LeaderboardItem = {
     appointmentCount: number
     rank: number
     equippedSkinCss?: string | null
+    activeTitle?: string | null
 }
 
 type LeaderboardPeriod = 'today' | 'week' | 'month'
@@ -163,6 +164,9 @@ export function LeaderboardClient({
                                     </div>
                                 </div>
                                 <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-ash-700'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                {user.activeTitle && (
+                                    <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
+                                )}
                                 <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
                                 <div className="text-lg font-black text-ash-700 mt-1">{user.appointmentCount}</div>
                                 {/* Pedestal */}
@@ -188,6 +192,9 @@ export function LeaderboardClient({
                                     </div>
                                 </div>
                                 <div className={`text-base font-bold ${isMe ? 'text-brand-orange' : 'text-ash-800'} text-center max-w-[120px] truncate`}>{user.displayName}</div>
+                                {user.activeTitle && (
+                                    <div className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
+                                )}
                                 <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
                                 <div className="text-2xl font-black text-gold-600 mt-1">{user.appointmentCount}</div>
                                 {isMe && <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-brand-orange-200">TU</div>}
@@ -214,6 +221,9 @@ export function LeaderboardClient({
                                     </div>
                                 </div>
                                 <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-ash-700'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                {user.activeTitle && (
+                                    <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
+                                )}
                                 <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
                                 <div className="text-lg font-black text-ash-700 mt-1">{user.appointmentCount}</div>
                                 {/* Pedestal */}
@@ -280,6 +290,9 @@ export function LeaderboardClient({
                                                 </div>
                                                 <div className="text-ash-500 text-xs flex items-center gap-1.5 mt-0.5">
                                                     <User className="h-3 w-3" /> GDO {user.gdoCode || 'N/A'}
+                                                    {user.activeTitle && (
+                                                        <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200">{user.activeTitle}</div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

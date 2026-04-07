@@ -1,5 +1,6 @@
 import { getGdoRpgProfile } from '@/app/actions/rpgProfileActions';
 import { getUserAchievements } from '@/app/actions/achievementActions';
+import { getUnlockedTitles } from '@/app/actions/titleActions';
 import ProfileClient from './ProfileClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
@@ -13,13 +14,18 @@ export default async function ProfiloPage() {
     }
 
     try {
-        const [profileData, achievementData] = await Promise.all([
+        const [profileData, achievementData, titleData] = await Promise.all([
             getGdoRpgProfile(supabaseUser.id),
             getUserAchievements(supabaseUser.id),
+            getUnlockedTitles(supabaseUser.id),
         ]);
 
         return (
-            <ProfileClient profileData={profileData} achievements={achievementData.achievements} />
+            <ProfileClient
+                profileData={profileData}
+                achievements={achievementData.achievements}
+                titleData={titleData}
+            />
         );
     } catch (e) {
         console.error(e);

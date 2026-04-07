@@ -9,7 +9,7 @@ import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
  * Measure a lifetime metric for a user.
  * Returns the current value for a given achievement metric.
  */
-async function measureAchievementMetric(userId: string, metric: string): Promise<number> {
+export async function measureAchievementMetric(userId: string, metric: string): Promise<number> {
     switch (metric) {
         case 'total_calls': {
             const result = await db.select({ value: count() })

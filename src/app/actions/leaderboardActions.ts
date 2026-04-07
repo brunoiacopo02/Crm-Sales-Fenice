@@ -73,7 +73,8 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
         avatarUrl: gdo.avatarUrl,
         appointmentCount: counts.get(gdo.id) || 0,
         firstApptTime: recentAppts.get(gdo.id) || Infinity,
-        equippedSkinCss: gdo.equippedItemId ? (skinMap.get(gdo.equippedItemId) || null) : null
+        equippedSkinCss: gdo.equippedItemId ? (skinMap.get(gdo.equippedItemId) || null) : null,
+        activeTitle: gdo.activeTitle || null,
     }))
 
     // Sort: highest count first. If tie, whoever got it first (lower firstApptTime) is ranked higher.

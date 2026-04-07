@@ -46,6 +46,45 @@ export const GAME_CONSTANTS = {
     },
 };
 
+/**
+ * Unlockable titles based on lifetime stats.
+ * Each title has a metric requirement that maps to measureAchievementMetric() in achievementActions.
+ * Legendary titles from loot drops are tracked separately (stored directly on lootDrops.bonusTitle).
+ */
+export const UNLOCKABLE_TITLES: Array<{
+    id: string;
+    name: string;
+    description: string;
+    metric: string;
+    requiredValue: number;
+    icon: string;
+    category: 'calls' | 'appointments' | 'streak' | 'level' | 'quests' | 'legendary';
+}> = [
+    // Call-based
+    { id: 'shark', name: 'Lo Squalo', description: '500 chiamate effettuate', metric: 'total_calls', requiredValue: 500, icon: 'Fish', category: 'calls' },
+    { id: 'switchboard', name: 'Centralino Vivente', description: '2000 chiamate effettuate', metric: 'total_calls', requiredValue: 2000, icon: 'Phone', category: 'calls' },
+    { id: 'the_voice', name: 'La Voce', description: '5000 chiamate effettuate', metric: 'total_calls', requiredValue: 5000, icon: 'Mic', category: 'calls' },
+
+    // Appointment-based
+    { id: 'fixer', name: 'Il Fissatore', description: '50 appuntamenti fissati', metric: 'total_appointments', requiredValue: 50, icon: 'CalendarCheck', category: 'appointments' },
+    { id: 'king_appts', name: 'Re degli Appuntamenti', description: '200 appuntamenti fissati', metric: 'total_appointments', requiredValue: 200, icon: 'Crown', category: 'appointments' },
+    { id: 'ace', name: "L'Asso", description: '500 appuntamenti fissati', metric: 'total_appointments', requiredValue: 500, icon: 'Star', category: 'appointments' },
+
+    // Streak-based
+    { id: 'steady', name: 'Il Costante', description: '14 giorni di streak', metric: 'current_streak', requiredValue: 14, icon: 'Flame', category: 'streak' },
+    { id: 'marathoner', name: 'Il Maratoneta', description: '45 giorni di streak', metric: 'current_streak', requiredValue: 45, icon: 'Timer', category: 'streak' },
+    { id: 'veteran', name: 'Il Veterano', description: '90 giorni di streak', metric: 'current_streak', requiredValue: 90, icon: 'Shield', category: 'streak' },
+
+    // Level-based
+    { id: 'golden_phoenix', name: "La Fenice d'Oro", description: 'Raggiungi il livello 30', metric: 'current_level', requiredValue: 30, icon: 'Sparkles', category: 'level' },
+    { id: 'divinity', name: 'La Divinità', description: 'Raggiungi il livello 40', metric: 'current_level', requiredValue: 40, icon: 'Zap', category: 'level' },
+    { id: 'legend', name: 'La Leggenda', description: 'Raggiungi il livello 50', metric: 'current_level', requiredValue: 50, icon: 'Award', category: 'level' },
+
+    // Quest-based
+    { id: 'adventurer', name: "L'Avventuriero", description: '100 quest completate', metric: 'total_quests_completed', requiredValue: 100, icon: 'Compass', category: 'quests' },
+    { id: 'quest_hunter', name: 'Il Cacciatore di Quest', description: '500 quest completate', metric: 'total_quests_completed', requiredValue: 500, icon: 'Crosshair', category: 'quests' },
+];
+
 export const EVOLUTION_STAGES = [
     { minLevel: 1, maxLevel: 7, name: 'Uovo', imageUrl: '/avatars/evo-1-uovo.png', color: 'text-slate-400', badgeClass: 'bg-slate-100 text-slate-600 border-slate-300' },
     { minLevel: 8, maxLevel: 17, name: 'Pulcino', imageUrl: '/avatars/evo-2-pulcino.png', color: 'text-yellow-600', badgeClass: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
