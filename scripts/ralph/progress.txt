@@ -100,3 +100,21 @@ Started: 2026-04-07
   - Notification metadata includes icon/tier/tierLabel for rich UI display in notification center
   - Migration uses `ON CONFLICT (id) DO NOTHING` for idempotent seeding (safe to re-run)
 ---
+
+## 2026-04-07 - F2-025
+- Created `AchievementShowcase` client component with collapsible badge grid grouped by category
+- Each badge card shows: Lucide icon (mapped from DB), name, description, tier dots (bronze/silver/gold), progress bar to next tier
+- Tier-specific styling: bronze = amber border/glow, silver = gray border/glow, gold = gold border/glow with shadow
+- Locked badges: grayed out with Lock icon, 60% opacity
+- Maxed badges (tier 3): gold star "Completato" indicator, no progress bar
+- Updated `profilo/page.tsx` to fetch achievements via `getUserAchievements()` in parallel with `getGdoRpgProfile()`
+- Updated `ProfileClient.tsx` to accept achievements prop and render AchievementShowcase below roadmap
+- Toast/notification for badge unlock already handled by existing `useRealtimeNotifications` + live toast system (notifications table subscription)
+- File modificati: `src/components/AchievementShowcase.tsx` (new), `src/app/(dashboard)/profilo/page.tsx`, `src/app/(dashboard)/profilo/ProfileClient.tsx`
+- **Learnings per iterazioni future:**
+  - Lucide icons can be dynamically mapped via `Record<string, LucideIcon>` — the ICON_MAP pattern is reusable
+  - Achievement data is fetched server-side via Promise.all for parallel loading with profile data
+  - Badge unlock toast works through the existing notification → Supabase realtime → liveToast pipeline
+  - Tier progress calculation: `(currentValue - prevTierTarget) / (nextTierTarget - prevTierTarget)` handles all tiers correctly
+  - Category grouping uses reduce pattern for clean visual separation in the grid
+---
