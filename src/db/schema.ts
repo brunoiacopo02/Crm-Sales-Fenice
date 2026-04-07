@@ -276,6 +276,15 @@ export const dailyKpiSnapshots = pgTable('dailyKpiSnapshots', {
     fissaggioVariazionePerc: real('fissaggioVariazionePerc').default(0).notNull(),
 });
 
+export const gdoNotes = pgTable('gdoNotes', {
+    id: text('id').primaryKey(),
+    gdoUserId: text('gdoUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    authorUserId: text('authorUserId').notNull().references(() => users.id),
+    content: text('content').notNull(),
+    category: text('category').notNull(), // 'formazione' | 'positivo' | 'negativo' | 'disciplinare'
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     id: text('id').primaryKey(),
     month: text('month').notNull().unique(), // e.g. '2026-03'
