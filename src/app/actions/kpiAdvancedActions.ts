@@ -118,9 +118,15 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         if (log.outcome === 'APPUNTAMENTO') st.appointments++
     })
 
+    const WORKING_HOURS_PER_DAY = 6.5
+
     const gdoStats = Object.values(gdoStatsMap).map(st => {
         const responseRate = st.calls > 0 ? Math.round((st.answers / st.calls) * 100) : 0
-        const apptRate = st.totalContacted.size > 0 ? Math.round((st.appointments / st.totalContacted.size) * 100) : 0
+        const contactedLeads = st.totalContacted.size
+        const apptRate = contactedLeads > 0 ? Math.round((st.appointments / contactedLeads) * 100) : 0
+        const callsPerHour = st.calls / WORKING_HOURS_PER_DAY
+        // Coefficiente produttività: (chiamate/ora) * (% fissaggio / 100)
+        const productivityCoeff = callsPerHour * (apptRate / 100)
 
         return {
             name: st.name,
@@ -128,7 +134,10 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             answers: st.answers,
             responseRate,
             appointments: st.appointments,
-            apptRate
+            apptRate,
+            contactedLeads,
+            callsPerHour: Math.round(callsPerHour * 10) / 10,
+            productivityCoeff: Math.round(productivityCoeff * 100) / 100
         }
     }).sort((a, b) => b.appointments - a.appointments)
 

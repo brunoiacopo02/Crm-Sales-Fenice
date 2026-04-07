@@ -4,7 +4,7 @@ import { useAuth } from "@/components/AuthProvider"
 import { useState, useEffect } from "react"
 import { getAdvancedKpi, KpiFilters, getGdoTargetsProgress } from "@/app/actions/kpiAdvancedActions"
 import dynamic from "next/dynamic"
-import { Filter, PhoneCall, Headphones, CalendarCheck, Clock, Percent, Target } from "lucide-react"
+import { Filter, PhoneCall, Headphones, CalendarCheck, Clock, Percent, Target, TrendingUp, ArrowUpDown } from "lucide-react"
 // Lazy load Recharts heavy components
 const LineChart = dynamic(() => import("recharts").then((mod) => mod.LineChart), { ssr: false })
 const Line = dynamic(() => import("recharts").then((mod) => mod.Line), { ssr: false })
@@ -35,6 +35,7 @@ export function KpiGdoBoard() {
     const [data, setData] = useState<any>(null)
     const [targetsData, setTargetsData] = useState<any>(null)
     const [loading, setLoading] = useState(true)
+    const [sortBy, setSortBy] = useState<'productivityCoeff' | 'calls' | 'appointments' | 'apptRate'>('productivityCoeff')
 
     useEffect(() => {
         // If session not ready or gdoFilter still not set on mount
@@ -316,13 +317,11 @@ export function KpiGdoBoard() {
                     <p className="text-3xl font-black text-green-700 mt-1">{totalAppointments}</p>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center text-center relative group">
-                    <Clock className="h-6 w-6 text-gray-400 mb-2" />
+                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center text-center">
+                    <Clock className="h-6 w-6 text-purple-500 mb-2" />
                     <p className="text-sm text-gray-500 font-medium">Chiamate/Ora</p>
-                    <p className="text-3xl font-black text-gray-300 mt-1">N/D</p>
-                    <div className="absolute inset-0 bg-white/90 backdrop-blur-[1px] rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2 text-center border-dashed border-2 border-gray-300">
-                        <span className="text-xs text-gray-500">Tracking sessione oraria disattivato. Attivalo dalle imp.</span>
-                    </div>
+                    <p className="text-3xl font-black text-purple-600 mt-1">{(totalCalls / 6.5).toFixed(1)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">su 6.5h</p>
                 </div>
 
                 <div className="bg-brand-charcoal p-5 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center">
@@ -380,6 +379,89 @@ export function KpiGdoBoard() {
                 </div>
 
             </div>
+
+            {/* CLASSIFICA PRODUTTIVITÀ GDO */}
+            {data.gdoStats.length > 0 && (
+                <div className="bg-white p-5 border border-gray-200 rounded-xl shadow-sm">
+                    <div className="flex items-center justify-between mb-4 border-b pb-2">
+                        <div className="flex items-center gap-2">
+                            <TrendingUp className="h-5 w-5 text-brand-orange" />
+                            <h3 className="font-bold text-gray-800">Classifica Produttività GDO</h3>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <ArrowUpDown className="h-3 w-3" />
+                            <span>Ordina per:</span>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                                className="px-2 py-1 text-xs border border-gray-300 rounded-md bg-gray-50 text-gray-700"
+                            >
+                                <option value="productivityCoeff">Coefficiente</option>
+                                <option value="calls">Chiamate</option>
+                                <option value="appointments">Appuntamenti</option>
+                                <option value="apptRate">% Fissaggio</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="text-xs text-gray-400 mb-3">
+                        Formula: (Chiamate / 6.5h) × (% Fissaggio / 100) — Ore lavorate fisse: 6.5h (13:30-20:00)
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-200 text-left">
+                                    <th className="pb-2 pr-3 text-gray-500 font-semibold">#</th>
+                                    <th className="pb-2 pr-3 text-gray-500 font-semibold">GDO</th>
+                                    <th className="pb-2 pr-3 text-gray-500 font-semibold text-right">Chiamate</th>
+                                    <th className="pb-2 pr-3 text-gray-500 font-semibold text-right">Lead Contattati</th>
+                                    <th className="pb-2 pr-3 text-gray-500 font-semibold text-right">Appuntamenti</th>
+                                    <th className="pb-2 pr-3 text-gray-500 font-semibold text-right">% Fissaggio</th>
+                                    <th className="pb-2 pr-3 text-gray-500 font-semibold text-right">Chiamate/Ora</th>
+                                    <th className="pb-2 text-gray-500 font-semibold text-right">Coefficiente</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {[...data.gdoStats]
+                                    .sort((a: any, b: any) => b[sortBy] - a[sortBy])
+                                    .map((gdo: any, idx: number) => {
+                                        const isTop = idx === 0 && data.gdoStats.length > 1
+                                        return (
+                                            <tr key={gdo.name} className={`border-b border-gray-100 ${isTop ? 'bg-orange-50/50' : ''}`}>
+                                                <td className="py-2.5 pr-3 font-bold text-gray-400">
+                                                    {idx === 0 && data.gdoStats.length > 1 ? (
+                                                        <span className="text-brand-orange">1</span>
+                                                    ) : idx + 1}
+                                                </td>
+                                                <td className="py-2.5 pr-3 font-semibold text-brand-charcoal">
+                                                    {gdo.name}
+                                                </td>
+                                                <td className="py-2.5 pr-3 text-right text-gray-700">{gdo.calls}</td>
+                                                <td className="py-2.5 pr-3 text-right text-gray-700">{gdo.contactedLeads}</td>
+                                                <td className="py-2.5 pr-3 text-right text-green-700 font-semibold">{gdo.appointments}</td>
+                                                <td className="py-2.5 pr-3 text-right text-gray-700">{gdo.apptRate}%</td>
+                                                <td className="py-2.5 pr-3 text-right text-gray-700">{gdo.callsPerHour}</td>
+                                                <td className="py-2.5 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full ${gdo.productivityCoeff >= 2 ? 'bg-green-500' : gdo.productivityCoeff >= 1 ? 'bg-yellow-500' : 'bg-red-400'}`}
+                                                                style={{ width: `${Math.min((gdo.productivityCoeff / (Math.max(...data.gdoStats.map((s: any) => s.productivityCoeff), 1))) * 100, 100)}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <span className={`font-black ${gdo.productivityCoeff >= 2 ? 'text-green-600' : gdo.productivityCoeff >= 1 ? 'text-yellow-600' : 'text-red-500'}`}>
+                                                            {gdo.productivityCoeff.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
         </div>
     )
