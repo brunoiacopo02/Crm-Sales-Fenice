@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents } from "@/db/schema"
-import { eq, asc, desc, and, or, like, between, isNull } from "drizzle-orm"
+import { eq, asc, desc, and, or, like, between, isNull, isNotNull } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent, checkFreeBusy } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
@@ -14,7 +14,7 @@ export async function getConfermeAppointments(filters: {
     endDate?: Date;
     timeSlot?: "mattina" | "pomeriggio" | "tutto";
     searchQuery?: string;
-    confermeStatus?: "da_lavorare" | "confermati" | "scartati" | "tutti";
+    confermeStatus?: "da_lavorare" | "confermati" | "scartati" | "storico" | "tutti";
     fetchMode?: "strict_kanban" | "all";
 }) {
     const supabase = await createClient();
@@ -46,6 +46,8 @@ export async function getConfermeAppointments(filters: {
             conditions.push(eq(leads.confirmationsOutcome, "confermato"))
         } else if (filters.confermeStatus === "scartati") {
             conditions.push(eq(leads.confirmationsOutcome, "scartato"))
+        } else if (filters.confermeStatus === "storico") {
+            conditions.push(isNotNull(leads.confirmationsOutcome))
         }
     } else {
         // default "da_lavorare" se non passano status

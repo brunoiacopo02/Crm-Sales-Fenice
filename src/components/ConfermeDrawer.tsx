@@ -517,6 +517,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                                     <option value="solo informazioni">Solo informazioni</option>
                                                     <option value="non vuole prendere l'appuntamento">Non vuole prendere l'appuntamento</option>
                                                     <option value="numero inesistente">Numero inesistente</option>
+                                                    <option value="attaccato in faccia">Attaccato in faccia</option>
                                                 </select>
                                             </div>
                                         )}
