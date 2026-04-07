@@ -32,6 +32,8 @@ Started: 2026-04-07
 - CONFERME metrics in measureMetric: conferme_fatte (confirmationsOutcome='confermato'), conferme_chiamate (leadEvents conferme_*), conferme_scartate (confirmationsOutcome='scartato')
 - VENDITORE metrics in measureMetric: deals_chiusi (salespersonOutcome='Chiuso'), fatturato_eur (SUM closeAmountEur), esiti_registrati (any salespersonOutcomeAt), trattative_presentate (salespersonAssignedAt)
 - VENDITORE quest IDs: vend-d-* (daily), vend-w-* (weekly). Migration route: /api/migrate-quests-venditori
+- Leaderboard multi-role: getRoleLeaderboard(period, role) dispatcher, getConfermeLeaderboard/getVenditoriLeaderboard per ruolo
+- Gamification triggers: CONFERMATO (Conferme confirms appt), DEAL_CHIUSO (Venditore closes deal) — fire-and-forget in server actions
 
 ---
 
@@ -121,4 +123,23 @@ Started: 2026-04-07
   - Store/Profilo/Classifica non hanno auth check specifici per ruolo — accesso aperto a tutti gli utenti autenticati
   - Pattern: StreakCounter import statico, QuestPanel dynamic import — stesso pattern per GDO, Conferme, Venditori
   - Le metriche achievement Venditori usano salespersonUserId (non assignedToId) per il tracking
+---
+
+## 2026-04-07 - F3-015
+- Aggiunto 2 nuovi action types in gamificationEngine.ts: CONFERMATO (+15 XP, +5 coins), DEAL_CHIUSO (+100 XP, +30 coins)
+- In confermeActions.ts setConfermeOutcome: awardXpAndCoins al Conferme worker su outcome 'confermato'
+- In venditoreActions.ts saveVenditoreOutcome: awardXpAndCoins al Venditore su outcome 'Chiuso' (solo primo esito)
+- Aggiunto 3 funzioni leaderboard in leaderboardActions.ts: getConfermeLeaderboard (ranked by conferme count), getVenditoriLeaderboard (ranked by fatturato EUR), getRoleLeaderboard (dispatcher)
+- In LeaderboardClient.tsx: aggiunto role tabs (GDO/Conferme/Venditori) con polling per ruolo
+  - GDO mantiene 4 metric tabs (appuntamenti, chiamate, xp, streak)
+  - Conferme mostra classifica per conferme effettuate nel periodo
+  - Venditori mostra classifica per fatturato EUR nel periodo
+- In page.tsx: passato userRole al LeaderboardClient, title generico "Classifica"
+- I trigger GDO esistenti (CHIUSO/PRESENZIATO in setSalespersonOutcome) NON modificati
+- File modificati: src/lib/gamificationEngine.ts, src/app/actions/confermeActions.ts, src/app/actions/venditoreActions.ts, src/app/actions/leaderboardActions.ts, src/app/(dashboard)/classifica/LeaderboardClient.tsx, src/app/(dashboard)/classifica/page.tsx
+- **Learnings per iterazioni future:**
+  - Il leaderboard Conferme usa confirmationsUserId + confirmationsTimestamp per filtrare per periodo
+  - Il leaderboard Venditori usa salespersonUserId + salespersonOutcomeAt + closeAmountEur per fatturato
+  - Le role tabs sono al livello superiore, le metric tabs GDO restano visibili solo quando GDO è selezionato
+  - I trigger XP/coins per Conferme e Venditori sono fire-and-forget con .catch() per non bloccare il flusso principale
 ---
