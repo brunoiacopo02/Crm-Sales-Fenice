@@ -171,6 +171,57 @@ export async function getGdoPauseStatus(gdoId: string): Promise<PauseSummary> {
     }
 }
 
+export type PauseHistoryEntry = {
+    id: string
+    dateLocal: string
+    startTime: string // ISO string
+    endTime: string | null
+    durationSeconds: number
+    status: string
+    exceededSeconds: number
+}
+
+export async function getGdoPauseHistory(gdoId: string): Promise<PauseHistoryEntry[]> {
+    const now = new Date()
+    const yearMonth = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }).slice(0, 7) // "YYYY-MM"
+
+    const sessions = await db.select()
+        .from(breakSessions)
+        .where(
+            and(
+                eq(breakSessions.gdoUserId, gdoId),
+                sql`${breakSessions.dateLocal} LIKE ${yearMonth + '%'}`
+            )
+        )
+        .orderBy(desc(breakSessions.startTime))
+
+    return sessions.map(s => {
+        let finalDuration = s.durationSeconds || 0
+        let finalStatus = s.status
+        let finalExceeded = s.exceededSeconds || 0
+
+        // Sync live in_corso sessions
+        if (s.status === 'in_corso') {
+            const diffSeconds = Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
+            finalDuration = diffSeconds
+            if (diffSeconds > BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60) {
+                finalStatus = 'sforata'
+                finalExceeded = diffSeconds - BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60
+            }
+        }
+
+        return {
+            id: s.id,
+            dateLocal: s.dateLocal,
+            startTime: s.startTime.toISOString(),
+            endTime: s.endTime?.toISOString() ?? null,
+            durationSeconds: finalDuration,
+            status: finalStatus,
+            exceededSeconds: finalExceeded,
+        }
+    })
+}
+
 export async function startPause(gdoId: string) {
     const status = await getGdoPauseStatus(gdoId)
 

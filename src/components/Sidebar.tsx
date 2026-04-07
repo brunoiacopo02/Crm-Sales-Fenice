@@ -53,6 +53,7 @@ export function Sidebar() {
             { name: "Classifica", href: "/classifica", icon: Trophy },
             { name: "Fenice Store", href: "/store", icon: Store },
             { name: "Le mie Performance", href: "/kpi-gdo", icon: LayoutDashboard },
+            { name: "Storico Pause", href: "/storico-pause", icon: Clock },
         ]
     } else if (role === "CONFERME") {
         navItems = [
