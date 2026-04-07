@@ -188,3 +188,18 @@ Started: 2026-04-07
   - La vista Storico non ha date filter — mostra tutti i lead esitati senza limiti temporali (fino a 500 per limit query)
   - Il tab Storico non ha conteggio badge perché i dati sono fetchati solo quando la vista è attiva
 ---
+
+## 2026-04-07 - F3-019
+- Implementato auto-discard al 4° NR consecutivo in recordConfermeNoAnswer
+- Quando confCall1At, confCall2At, confCall3At sono tutti compilati, il prossimo NR setta automaticamente confirmationsOutcome='scartato' con reason='4 NR consecutivi'
+- Il lead scompare dalla dashboard principale (filtrato da isNull(confirmationsOutcome)) e appare nello Storico/Scartati (F3-018)
+- Refactored recordConfermeNoAnswer con try/catch pattern (return error instead of throw) per type safety
+- Evento audit specifico: conferme_auto_discarded_4nr con metadata { reason, autoDiscard: true }
+- UI: bottone NR ora abilitato anche con 3 NR, mostra "4° NR (Scarta)" in rosso per avvertire l'operatore
+- ConfermeDrawer: bottone NR diventa rosso "4° NR (Scarta Auto)" quando confCall3At è compilato
+- File modificati: src/app/actions/confermeActions.ts, src/components/ConfermeBoardRow.tsx, src/components/ConfermeDrawer.tsx
+- **Learnings per iterazioni future:**
+  - No schema change needed — 4th NR reuses existing 3 confCall fields + sets confirmationsOutcome
+  - recordConfermeNoAnswer now uses try/catch pattern with { success, error } returns (consistent with setConfermeOutcome)
+  - Il bottone NR mostra stato visivo diverso (rosso) quando è al 4° tentativo per prevenire click accidentali
+---

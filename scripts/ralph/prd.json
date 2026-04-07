@@ -156,7 +156,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Verificare come sono tracciati i NR attualmente (confCall1At/2/3 o callLogs)."
     },
     {
