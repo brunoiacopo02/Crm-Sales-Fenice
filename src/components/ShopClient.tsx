@@ -90,11 +90,11 @@ export function ShopClient({ userId }: { userId: string }) {
         setProcessingId(null)
     }
 
-    // Rarity helper based on cost
+    // Rarity helper based on cost (rebalanced for new economy: base 50-200, rare 500-1000, premium 2000-5000)
     const getRarity = (cost: number) => {
-        if (cost >= 500) return { label: 'Leggendario', border: 'border-gold-400', glow: 'shadow-glow-gold', bg: 'from-gold-50 to-gold-100/50', text: 'text-gold-600', badge: 'bg-gradient-to-r from-gold-400 to-gold-500 text-white' }
-        if (cost >= 200) return { label: 'Epico', border: 'border-ember-400', glow: 'shadow-glow-ember', bg: 'from-ember-50 to-ember-100/50', text: 'text-ember-600', badge: 'bg-gradient-to-r from-ember-400 to-ember-500 text-white' }
-        if (cost >= 50) return { label: 'Raro', border: 'border-brand-orange-400', glow: 'shadow-glow-orange', bg: 'from-brand-orange-50 to-brand-orange-100/50', text: 'text-brand-orange-600', badge: 'bg-gradient-to-r from-brand-orange to-brand-orange-500 text-brand-charcoal' }
+        if (cost >= 3000) return { label: 'Leggendario', border: 'border-gold-400', glow: 'shadow-glow-gold', bg: 'from-gold-50 to-gold-100/50', text: 'text-gold-600', badge: 'bg-gradient-to-r from-gold-400 to-gold-500 text-white' }
+        if (cost >= 1000) return { label: 'Epico', border: 'border-ember-400', glow: 'shadow-glow-ember', bg: 'from-ember-50 to-ember-100/50', text: 'text-ember-600', badge: 'bg-gradient-to-r from-ember-400 to-ember-500 text-white' }
+        if (cost >= 300) return { label: 'Raro', border: 'border-brand-orange-400', glow: 'shadow-glow-orange', bg: 'from-brand-orange-50 to-brand-orange-100/50', text: 'text-brand-orange-600', badge: 'bg-gradient-to-r from-brand-orange to-brand-orange-500 text-brand-charcoal' }
         return { label: 'Comune', border: 'border-ash-300', glow: 'shadow-soft', bg: 'from-ash-50 to-ash-100/50', text: 'text-ash-500', badge: 'bg-ash-200 text-ash-700' }
     }
 
