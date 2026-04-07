@@ -285,6 +285,31 @@ export const gdoNotes = pgTable('gdoNotes', {
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- QUEST SYSTEM ---
+export const quests = pgTable('quests', {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    type: text('type').notNull(), // 'daily' | 'weekly'
+    targetMetric: text('targetMetric').notNull(), // 'appointments_set' | 'calls_made' | 'leads_contacted'
+    targetValue: integer('targetValue').notNull(),
+    rewardXp: integer('rewardXp').notNull(),
+    rewardCoins: integer('rewardCoins').notNull(),
+    isActive: boolean('isActive').default(true).notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const questProgress = pgTable('questProgress', {
+    id: text('id').primaryKey(),
+    questId: text('questId').notNull().references(() => quests.id),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    currentValue: integer('currentValue').default(0).notNull(),
+    completed: boolean('completed').default(false).notNull(),
+    completedAt: timestamp('completedAt', { withTimezone: true, mode: 'date' }),
+    dateScope: text('dateScope').notNull(), // 'YYYY-MM-DD' for daily, 'YYYY-Wnn' for weekly
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     id: text('id').primaryKey(),
     month: text('month').notNull().unique(), // e.g. '2026-03'
