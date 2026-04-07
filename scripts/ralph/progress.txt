@@ -230,4 +230,23 @@ Started: 2026-04-07
   - Per named exports con next/dynamic: `.then(mod => mod.NamedExport)` — non serve wrappare in `{ default: ... }`
   - Componenti conditionally rendered sono i migliori candidati per lazy loading — zero impatto UX
   - `ssr: false` è obbligatorio per componenti client-only che usano browser APIs o DOM events
+  - In server components, `ssr: false` is NOT allowed with `next/dynamic` — omit it, use only `loading` callback
+---
+
+## 2026-04-07 - F3-022
+- Audited all 38 server action files for N+1 query patterns
+- Fixed N+1 in achievementActions.ts: moved getActiveEventMultipliers() outside loops, replaced per-achievement user fetch with SQL increment (`coins + N`), combined tasso_conferma_percent and tasso_chiusura_percent from 2 queries each to 1 using CASE WHEN
+- Fixed N+1 in sprintActions.ts: replaced per-winner fetch+update+insert loop with single batch UPDATE (inArray) + batch INSERT for coinTransactions
+- Fixed N+1 in bossBattleActions.ts: replaced per-contributor update+insert+insert loop with single batch UPDATE (inArray) + batch INSERT coinTransactions + batch INSERT notifications
+- Fixed N+1 in questActions.ts: added metricCache to deduplicate measureMetric calls — quests sharing same metric+type only measure once
+- Code splitting: converted 4 heavy recharts/chart components to next/dynamic in server pages (KpiTeamDashboard, KpiGdoBoard, KpiBoardAdvanced, ManagerOperativaBoard) + SprintBanner in layout
+- Verified all 62 lucide-react imports are specific named imports (no barrel/wildcard)
+- Verified all 18 date-fns imports are specific named imports (no optimization needed)
+- File modificati: src/app/actions/achievementActions.ts, src/app/actions/sprintActions.ts, src/app/actions/bossBattleActions.ts, src/app/actions/questActions.ts, src/app/(dashboard)/kpi-team/page.tsx, src/app/(dashboard)/kpi-gdo/page.tsx, src/app/(dashboard)/analisi-qualita/page.tsx, src/app/(dashboard)/layout.tsx
+- **Learnings per iterazioni future:**
+  - SQL `coins + N` increment avoids read-before-write race conditions AND eliminates N+1 fetch
+  - inArray(users.id, arrayOfIds) + batch db.insert().values([...]) eliminates loop-based DB operations
+  - In Server Components, `next/dynamic` works for code splitting BUT `ssr: false` is NOT allowed — remove it
+  - metricCache pattern: `Map<cacheKey, Promise<number>>` can further optimize by parallelizing metric fetches
+  - importLeads.ts has N+1 (per-lead insert) but is admin-only rare operation — not worth batching
 ---
