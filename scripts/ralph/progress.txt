@@ -163,3 +163,22 @@ Started: 2026-04-07
   - Reuse same validation logic (phone cleaning, email format check) as processCsvImport for consistency
   - Modal pattern: fixed inset-0 z-50, backdrop with onClick close, form with onSubmit
 ---
+
+## 2026-04-07 - F2-009
+- **Feature**: Note GDO: sistema HR/formazione (schema e backend)
+- **What was done:**
+  - Created `gdoNotes` table in schema.ts: id, gdoUserId, authorUserId, content, category, createdAt
+  - Applied ADDITIVE migration via Supabase MCP (`CREATE TABLE IF NOT EXISTS`)
+  - Created `gdoNotesActions.ts` with three server actions:
+    - `createGdoNote`: validates content + category, inserts with randomUUID
+    - `getGdoNotes(gdoUserId)`: returns notes with author name via LEFT JOIN on users, ordered by createdAt desc
+    - `deleteGdoNote(noteId, authorUserId)`: deletes only if author matches (authorization check)
+  - Exported `GdoNote` interface and `GdoNoteCategory` type for F2-010 UI consumption
+- **Files modified:**
+  - `src/db/schema.ts` — added gdoNotes table
+  - `src/app/actions/gdoNotesActions.ts` — new file with 3 server actions
+- **Learnings per iterazioni future:**
+  - `gdoNotes` is separate from `confirmationsNotes` (lead notes) — different purpose and foreign keys
+  - Delete uses AND condition (noteId + authorUserId) for authorization — only the author can delete their own notes
+  - Category is a text field with app-level validation, not a DB constraint — allows flexibility
+---
