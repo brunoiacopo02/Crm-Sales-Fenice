@@ -21,6 +21,8 @@ export default function ImportPage() {
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
     const [previewData, setPreviewData] = useState<any[]>([])
+    const [csvRawData, setCsvRawData] = useState<any[]>([])
+    const [csvFields, setCsvFields] = useState<string[]>([])
     const [payload, setPayload] = useState<CsvRowPayload[] | null>(null)
     const [mapping, setMapping] = useState<{ nome: string, email: string, telefono: string, cognome: string } | null>(null)
 
@@ -67,6 +69,8 @@ export default function ImportPage() {
     const resetState = () => {
         setErrorMsg(null)
         setPreviewData([])
+        setCsvRawData([])
+        setCsvFields([])
         setPayload(null)
         setMapping(null)
         setReport(null)
@@ -76,8 +80,6 @@ export default function ImportPage() {
         Papa.parse(file, {
             header: true,
             skipEmptyLines: "greedy",
-            // auto-detect delimiter between comma, semicolon, tab, pipe
-            // PapaParse autodetects when delimiter is not set.
             complete: (results) => {
                 if (results.errors.length > 0 && results.data.length === 0) {
                     setErrorMsg(`Errore nella lettura del file: ${results.errors[0].message}`)
@@ -85,49 +87,55 @@ export default function ImportPage() {
                 }
 
                 const fields = results.meta.fields || []
+                setCsvFields(fields)
+                setCsvRawData(results.data as any[])
+                setPreviewData((results.data as any[]).slice(0, 5))
 
-                // Find matching columns case-insensitive
-                const colNome = fields.find(f => /nome/i.test(f.trim()))
-                const colTelefono = fields.find(f => /telefono/i.test(f.trim()))
-                const colEmail = fields.find(f => /email/i.test(f.trim()))
-                const colCognome = fields.find(f => /(cognome|funnel)/i.test(f.trim()))
+                // Auto-detect mapping with broader patterns
+                const colNome = fields.find(f => /nome|name/i.test(f.trim()))
+                const colTelefono = fields.find(f => /telefono|phone|cellulare|cell|tel\b/i.test(f.trim()))
+                const colEmail = fields.find(f => /email|e-mail|mail/i.test(f.trim()))
+                const colCognome = fields.find(f => /cognome|funnel|fonte|source|campagna/i.test(f.trim()))
 
-                if (!colTelefono || !colCognome) {
-                    const missing = []
-                    if (!colTelefono) missing.push("Telefono1")
-                    if (!colCognome) missing.push("Cognome (per Funnel)")
-
-                    setErrorMsg(`Colonne mancanti! Non trovo nel CSV le colonne richieste: ${missing.join(", ")}`)
-                    return
+                const autoMapping = {
+                    nome: colNome || "",
+                    email: colEmail || "",
+                    telefono: colTelefono || "",
+                    cognome: colCognome || ""
                 }
 
-                const mapCols = {
-                    nome: colNome || "NON TROVATA",
-                    email: colEmail || "NON TROVATA",
-                    telefono: colTelefono,
-                    cognome: colCognome
+                setMapping(autoMapping)
+
+                // If required mappings are auto-detected, build payload immediately
+                if (autoMapping.telefono && autoMapping.cognome) {
+                    buildPayloadFromMapping(autoMapping, results.data as any[])
                 }
-
-                setMapping(mapCols)
-
-                // Build Payload
-                const rows: CsvRowPayload[] = results.data.map((row: any, i: number) => {
-                    return {
-                        rowIndex: i + 2, // Header is row 1, 0-index is row 2
-                        nome: colNome ? (row[mapCols.nome] || "") : "",
-                        email: colEmail ? row[mapCols.email] : "",
-                        telefono: row[mapCols.telefono] || "",
-                        cognome: row[mapCols.cognome] || "",
-                    }
-                })
-
-                setPayload(rows)
-                setPreviewData(results.data.slice(0, 10))
             },
             error: (err) => {
                 setErrorMsg(`Fallimento lettura CSV: ${err.message}`)
             }
         })
+    }
+
+    const buildPayloadFromMapping = (map: { nome: string, email: string, telefono: string, cognome: string }, data: any[]) => {
+        const rows: CsvRowPayload[] = data.map((row: any, i: number) => ({
+            rowIndex: i + 2,
+            nome: map.nome ? (row[map.nome] || "") : "",
+            email: map.email ? (row[map.email] || "") : "",
+            telefono: map.telefono ? (row[map.telefono] || "") : "",
+            cognome: map.cognome ? (row[map.cognome] || "") : "",
+        }))
+        setPayload(rows)
+    }
+
+    const handleMappingChange = (field: 'nome' | 'email' | 'telefono' | 'cognome', csvCol: string) => {
+        const newMapping = { ...mapping!, [field]: csvCol }
+        setMapping(newMapping)
+        if (newMapping.telefono && newMapping.cognome) {
+            buildPayloadFromMapping(newMapping, csvRawData)
+        } else {
+            setPayload(null)
+        }
     }
 
     const confirmImport = async () => {
@@ -234,17 +242,42 @@ export default function ImportPage() {
                         </div>
                     )}
 
-                    {mapping && payload && !errorMsg && !report && (
+                    {mapping && csvFields.length > 0 && !errorMsg && !report && (
                         <div className="space-y-4 animate-in fade-in duration-300">
 
-                            {/* ... CSV Prime 10 Righe ... */}
-                            <div className="grid grid-cols-4 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs shadow-inner">
-                                <div><span className="text-gray-500 block mb-1">Nome</span><strong className="text-gray-800 px-2 py-0.5 bg-white border rounded">{mapping.nome}</strong></div>
-                                <div><span className="text-gray-500 block mb-1">Vuoto/Tel</span><strong className="text-gray-800 px-2 py-0.5 bg-white border rounded">{mapping.telefono}</strong></div>
-                                <div><span className="text-gray-500 block mb-1">Email Option</span><strong className="text-gray-800 px-2 py-0.5 bg-white border rounded">{mapping.email}</strong></div>
-                                <div><span className="text-gray-500 block mb-1">Funnel Mappato</span><strong className="text-gray-800 px-2 py-0.5 bg-orange-100 border-orange-200 rounded">{mapping.cognome}</strong></div>
+                            {/* Column Mapping Dropdowns */}
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-3">Mapping Colonne CSV → CRM</h4>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                    {[
+                                        { field: 'nome' as const, label: 'Nome', required: false },
+                                        { field: 'telefono' as const, label: 'Telefono', required: true },
+                                        { field: 'email' as const, label: 'Email', required: false },
+                                        { field: 'cognome' as const, label: 'Funnel', required: true },
+                                    ].map(({ field, label, required }) => (
+                                        <div key={field}>
+                                            <label className="text-xs font-medium text-gray-600 mb-1 block">
+                                                {label} {required && <span className="text-red-500">*</span>}
+                                            </label>
+                                            <select
+                                                value={mapping[field]}
+                                                onChange={(e) => handleMappingChange(field, e.target.value)}
+                                                className={`w-full h-9 px-2 text-sm border rounded-md focus:ring-brand-orange focus:border-brand-orange ${!mapping[field] && required ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'}`}
+                                            >
+                                                <option value="">- Non mappato -</option>
+                                                {csvFields.map(col => (
+                                                    <option key={col} value={col}>{col}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </div>
+                                {(!mapping.telefono || !mapping.cognome) && (
+                                    <p className="text-xs text-red-600 mt-2">Mappa almeno Telefono e Funnel per procedere.</p>
+                                )}
                             </div>
 
+                            {/* Preview Table (first 5 rows based on mapping) */}
                             <div className="border border-gray-200 rounded-lg overflow-hidden">
                                 <table className="w-full text-left text-xs text-gray-600">
                                     <thead className="bg-gray-100 text-gray-800 border-b">
@@ -260,20 +293,18 @@ export default function ImportPage() {
                                         {previewData.map((row, i) => (
                                             <tr key={i} className="hover:bg-gray-50 border-b last:border-0 border-gray-50">
                                                 <td className="px-3 py-2 text-gray-400 font-mono">{i + 2}</td>
-                                                <td className="px-3 py-2 font-medium">{row[mapping.nome]}</td>
-                                                <td className="px-3 py-2 font-mono">{row[mapping.telefono]}</td>
-                                                <td className="px-3 py-2 truncate max-w-[120px]" title={mapping.email !== "NON TROVATA" ? row[mapping.email] : ''}>
-                                                    {mapping.email !== "NON TROVATA" ? row[mapping.email] : '-'}
-                                                </td>
-                                                <td className="px-3 py-2">{row[mapping.cognome]}</td>
+                                                <td className="px-3 py-2 font-medium">{mapping.nome ? (row[mapping.nome] || '-') : '-'}</td>
+                                                <td className="px-3 py-2 font-mono">{mapping.telefono ? (row[mapping.telefono] || '-') : '-'}</td>
+                                                <td className="px-3 py-2 truncate max-w-[120px]">{mapping.email ? (row[mapping.email] || '-') : '-'}</td>
+                                                <td className="px-3 py-2">{mapping.cognome ? (row[mapping.cognome] || '-') : '-'}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                             </div>
 
-                            {/* --- NUOVO: SEZIONE REGOLE ASSEGNAZIONE --- */}
-                            <div className="mt-8 border-t pt-6 bg-white rounded-xl">
+                            {/* --- SEZIONE REGOLE ASSEGNAZIONE (solo se mapping valido) --- */}
+                            {payload && <div className="mt-8 border-t pt-6 bg-white rounded-xl">
                                 <div className="flex items-center gap-2 mb-4">
                                     <div className="h-6 w-6 rounded-full bg-brand-orange text-white flex items-center justify-center font-bold text-xs">3</div>
                                     <h3 className="font-semibold text-gray-800 flex items-center gap-2">
@@ -363,8 +394,9 @@ export default function ImportPage() {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </div>}
 
+                            {payload && <>
                             <div className="pt-6 border-t border-gray-100">
                                 <label className="flex items-center gap-3 cursor-pointer group">
                                     <input
@@ -390,6 +422,7 @@ export default function ImportPage() {
                                     <ChevronRight className="h-4 w-4" />
                                 </button>
                             </div>
+                            </>}
                         </div>
                     )}
 
