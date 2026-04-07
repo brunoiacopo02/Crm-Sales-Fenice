@@ -224,7 +224,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "Causa principale WSOD su Vercel. Critico."
     },
     {

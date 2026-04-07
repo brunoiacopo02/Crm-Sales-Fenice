@@ -27,6 +27,7 @@ Started: 2026-04-07
 - `GAME_CONSTANTS.LOOT_DROP` in gamificationEngine.ts: single source of truth for rarity weights, trigger interval, legendary titles
 - Title system: `UNLOCKABLE_TITLES` in gamificationEngine.ts (stat-based) + `lootDrops.bonusTitle` (legendary). `activeTitle` on users table. `measureAchievementMetric` exported from achievementActions for reuse
 - Boss Battle: `contributeToBoss(userId)` in `bossBattleActions.ts` — call after appointment set; lazy expiration via `getActiveBossBattle()`; `GAME_CONSTANTS.BOSS_BATTLE` for economy values
+- Hydration-safe time: `const [clientNow, setClientNow] = useState(0)` + useEffect to set `Date.now()`. Use `clientNow > 0 && ...` for time comparisons. Server renders with 0 (safe default false)
 
 ---
 
@@ -331,4 +332,22 @@ Started: 2026-04-07
   - Optional chaining (`lead?.X || ""`) in useState initializers is safe — React only uses initial value on first render
   - ConfermeDrawer receives `item` prop which wraps `lead` and `gdo` — always access via `item?.lead`
   - The middleware deprecation warning (middleware → proxy) is a Next.js 16 migration notice, not an error
+---
+
+## 2026-04-07 - F2-034
+- Full hydration audit across 92+ component files in src/
+- **Buttons/links inside span/p**: CLEAN — zero violations found across all components
+- **Server Components importing client hooks**: CLEAN — all 27 server components properly structured, all 63 hook-using components have "use client"
+- **Date/random in render path**: Fixed 2 components:
+  - `ConfermeBoardRow.tsx`: `new Date()` on lines 114 and 159 used in render body for overdue checks → replaced with `clientNow` state (useState + useEffect with 60s refresh interval)
+  - `LeadCard.tsx`: `new Date()` on line 45 used in render body for expiry check → replaced with `clientNow` state (useState + useEffect)
+- Other `new Date()` usages verified safe: SeasonalEventBanner (behind useEffect data fetch), ConfermeKpiBoard (behind isLoading guard), BossBattleBanner/RecallBoard/PipelineBoard (inside useEffect/setInterval), DiscardedBoard (inside useMemo with stable day-granularity results), GdoPauseHistory (month name computation, stable)
+- `Math.random()` only in CelebrationOverlay (inside useCallback triggered by events, not during render)
+- Build: ZERO errors, all 44 pages rendered
+- File modificati: `src/components/ConfermeBoardRow.tsx`, `src/components/LeadCard.tsx`
+- **Learnings per iterazioni future:**
+  - Pattern for safe client-side time: `const [clientNow, setClientNow] = useState(0)` + `useEffect(() => { setClientNow(Date.now()) }, [])` — when `clientNow === 0` (server render), time-dependent booleans default to false
+  - `new Date()` in useState initializers for date-picker defaults is safe when formatted output is stable (e.g. month string)
+  - `new Date()` inside useMemo is safe when results are day-granularity (won't differ between server/client)
+  - `new Date()` behind loading guards (isLoading=true on initial render) never executes during SSR hydration
 ---
