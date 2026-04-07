@@ -92,7 +92,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "Le discard reasons attuali: non interessato, disoccupato, straniero, solo informazioni, non vuole prendere l'appuntamento."
     },
     {
