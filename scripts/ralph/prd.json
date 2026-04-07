@@ -77,8 +77,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Categories derived from cssValue prefix. Filter tabs hide empty categories."
     },
     {
       "id": "F3-006",

@@ -75,3 +75,19 @@ Started: 2026-04-07
   - Leaderboard/SprintBanner apply equippedSkinCss unconditionally — any class works there
   - Total active store items now: 17 (7 original + 10 new)
 ---
+
+## 2026-04-07 - F3-005
+- Added category filter tabs to Store: Tutti, Skin Avatar, Temi, Effetti, Titoli
+- Categories derived from cssValue prefix: `skin-avatar-*` → Avatar, `skin-theme-*` → Temi, `skin-effect-*` → Effetti, else → Titoli
+- Each category has colored badge on item card (bottom-left of preview area) with matching icon
+- Category filter tabs show item count badge, empty categories auto-hidden
+- Added price sort toggle (cycles: none → ascending → descending) with visual state indicator
+- Used useMemo for filteredItems and categoryCounts for performance
+- Premium design maintained: filter pills with rounded-xl, shadow-soft, transition animations
+- Files modified: `src/components/ShopClient.tsx`
+- **Learnings per iterazioni future:**
+  - Category system is purely CSS-class-based, no DB column needed — getItemCategory() reads cssValue prefix
+  - CATEGORIES constant array defines all categories with icon, label, color — easy to extend
+  - Empty categories hidden from filter bar to avoid confusing users
+  - Sort order cycles through 3 states (none/asc/desc) with visual feedback icons
+---
