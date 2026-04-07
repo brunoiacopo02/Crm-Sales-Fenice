@@ -222,6 +222,54 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
                 ));
             return result[0]?.value ?? 0;
         }
+        // --- VENDITORE metrics ---
+        case 'deals_chiusi': {
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    eq(leads.salespersonOutcome, 'Chiuso'),
+                    isNotNull(leads.salespersonOutcomeAt),
+                    gte(leads.salespersonOutcomeAt, start),
+                    lte(leads.salespersonOutcomeAt, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'fatturato_eur': {
+            const result = await db.select({ value: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)` })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    eq(leads.salespersonOutcome, 'Chiuso'),
+                    isNotNull(leads.salespersonOutcomeAt),
+                    gte(leads.salespersonOutcomeAt, start),
+                    lte(leads.salespersonOutcomeAt, end)
+                ));
+            return Number(result[0]?.value) || 0;
+        }
+        case 'esiti_registrati': {
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    isNotNull(leads.salespersonOutcome),
+                    isNotNull(leads.salespersonOutcomeAt),
+                    gte(leads.salespersonOutcomeAt, start),
+                    lte(leads.salespersonOutcomeAt, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'trattative_presentate': {
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.salespersonUserId, userId),
+                    isNotNull(leads.salespersonAssignedAt),
+                    gte(leads.salespersonAssignedAt, start),
+                    lte(leads.salespersonAssignedAt, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
         default:
             return 0;
     }
