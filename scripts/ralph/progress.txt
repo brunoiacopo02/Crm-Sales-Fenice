@@ -205,3 +205,19 @@ Started: 2026-04-07
   - Manager pages follow consistent auth pattern: createClient → getUser → check role → redirect marketing → render
   - Category filter with "all" default is a clean pattern for nullable filter state
 ---
+
+## 2026-04-07 - F2-011
+- **Feature**: Dashboard GDO: aggiungere chiusure, presenze e conferme
+- **What was done:**
+  - Added `getGdoLeadOutcomeMetrics(gdoUserId)` server action in `gdoPerformanceActions.ts` — fetches current month leads assigned to GDO and counts fissati, confermati, presenziati, chiusi using same logic as `getManagerGdoTables`
+  - Created `GdoLeadMetrics.tsx` client component with 4 metric cards (Appuntamenti Fissati, Confermati, Presenze, Chiusure) — color-coded with icons, loading skeleton, and realtime_update listener
+  - Integrated component at the top of the GDO dashboard page (above PipelineBoard)
+- **Files modified:**
+  - `src/app/actions/gdoPerformanceActions.ts` — added getGdoLeadOutcomeMetrics action
+  - `src/components/GdoLeadMetrics.tsx` — new client component
+  - `src/app/(dashboard)/page.tsx` — added GdoLeadMetrics import and placement
+- **Learnings per iterazioni future:**
+  - Reuse `isPresenziato()` helper from same file for consistent outcome classification
+  - GDO dashboard page (`/`) reaches GDO users only — managers/conferme/venditori are redirected
+  - `session!.user.id` is safe in the dashboard page because auth is checked before rendering
+---
