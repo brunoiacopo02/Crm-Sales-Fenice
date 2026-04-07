@@ -1,168 +1,130 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fase-0-stabilita",
-  "description": "Fase 0 — Verifica & Stabilità Critica: audit feature esistenti, fix Google Calendar, verifica account GDO, hardening concurrency",
+  "branchName": "ralph/fase-1-bugfix",
+  "description": "Fase 1 — Correzioni & Bug Fix: dati mancanti in Performance GDO e Marketing, riorganizzazione dashboard, fix orari, pause, esiti, import lead",
   "userStories": [
     {
-      "id": "F0-001",
-      "title": "Audit e fix sistema notifiche live e Realtime DB",
-      "description": "Verificare che il sistema di notifiche live (useRealtimeNotifications, RealtimeProvider) funzioni correttamente: subscriptions Supabase corrette, toast notifications, unread count, e che il RealtimeProvider triggeri router.refresh() su cambiamenti lead.",
+      "id": "F1-001",
+      "title": "Performance GDO: aggiungere lead assegnati e percentuale fissaggio",
+      "description": "Nella sezione Performance GDO (manager-gdo-performance) mancano due metriche chiave: il numero di lead assegnati a ciascun GDO e la percentuale di fissaggio (appuntamenti / lead lavorati).",
       "acceptanceCriteria": [
-        "Leggere e auditare src/hooks/useRealtimeNotifications.ts per bug o pattern obsoleti",
-        "Leggere e auditare src/components/providers/RealtimeProvider.tsx per subscriptions corrette",
-        "Verificare che i filtri per recipientUserId siano applicati correttamente",
-        "Verificare che gli eventi custom realtime_update siano dispatchati e ascoltati dove servono",
-        "Fixare qualsiasi bug o inconsistenza trovata",
+        "Aggiungere colonna 'Lead Assegnati' nella tabella GDO in src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx",
+        "Aggiungere colonna '% Fissaggio' calcolata come (appuntamenti fissati / lead assegnati * 100)",
+        "Aggiornare il server action in managerAdvancedActions o simile per fornire i dati necessari",
+        "Le nuove colonne devono essere visibili nel periodo selezionato (oggi/mese/trimestre)",
         "npx next build compila senza errori"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Focus su correttezza del codice. Il test live con Supabase reale richiede verifica manuale."
+      "notes": "ManagerOperativaBoard ha gia' leadAssegnati e fissaggioTotale — riusare la stessa logica di query."
     },
     {
-      "id": "F0-002",
-      "title": "Audit e fix KPI Conferme e Dashboard Conferme",
-      "description": "Verificare che la dashboard Conferme e i KPI Conferme funzionino: calcoli corretti, target Tier1/Tier2, calendario giornaliero, comparazione mensile, deviation tracking.",
+      "id": "F1-002",
+      "title": "Marketing Analytics: aggiungere lead assegnati e percentuale fissaggio",
+      "description": "Nella sezione Marketing Analytics mancano le metriche 'lead assegnati' e 'percentuale di fissaggio' per ogni funnel e per ogni GDO nel drill-down.",
       "acceptanceCriteria": [
-        "Leggere e auditare src/components/ConfermeKpiBoard.tsx per calcoli KPI corretti",
-        "Leggere e auditare src/app/(dashboard)/kpi-conferme/page.tsx per data fetching corretto",
-        "Verificare che i progress bar settimanali calcolino correttamente ACT vs Target",
-        "Verificare che il calendario giornaliero mostri correttamente appuntamenti fissati/confermati/scartati",
-        "Fixare qualsiasi bug trovato nei calcoli o nel rendering",
+        "Aggiungere 'Lead Assegnati' nella tabella funnel di MarketingAnalyticsClient.tsx",
+        "Aggiungere '% Fissaggio' (appuntamenti / lead assegnati * 100) nella tabella funnel",
+        "Aggiungere le stesse metriche nel drill-down GDO per funnel",
+        "Aggiornare il server action marketingActions.ts per calcolare e ritornare questi dati",
+        "Protezione divisione per zero sui calcoli percentuali",
         "npx next build compila senza errori"
       ],
       "priority": 2,
       "passes": true,
-      "notes": ""
+      "notes": "Il tipo GdoStatTableRow va esteso con i nuovi campi."
     },
     {
-      "id": "F0-003",
-      "title": "Audit e fix Archivio Manager e filtri",
-      "description": "Verificare che l'archivio lead del manager funzioni: filtri multi-criterio, paginazione, export CSV, ricerca.",
+      "id": "F1-003",
+      "title": "Riorganizzare Dashboard Operativa in KPI Team GDO",
+      "description": "Spostare la tabella 'Dashboard Operativa Aziendale' (ManagerOperativaBoard) dentro la sezione KPI Team GDO. Rimuovere la tabella 'Classifica GDO' dalla sezione KPI Team GDO.",
       "acceptanceCriteria": [
-        "Leggere e auditare src/app/(dashboard)/archivio/ArchiveClient.tsx",
-        "Verificare che tutti i filtri (date, GDO, venditore, esito) funzionino correttamente nelle query",
-        "Verificare che la paginazione (50 righe/pagina) sia implementata correttamente",
-        "Verificare che l'export CSV generi output valido con encoding UTF-8 BOM",
-        "Fixare qualsiasi bug trovato",
+        "Integrare il componente ManagerOperativaBoard (o i suoi dati) dentro la pagina kpi-team",
+        "Rimuovere la 'Classifica GDO' dalla pagina kpi-team se presente",
+        "La tabella operativa deve mantenere tutte le sue colonne e il filtro periodo (oggi/mese/trimestre)",
+        "Il layout deve essere coerente con il resto della pagina KPI Team",
+        "Se ManagerOperativaBoard era usato altrove, verificare che non si rompa nulla",
         "npx next build compila senza errori"
       ],
       "priority": 3,
       "passes": true,
-      "notes": ""
+      "notes": "ManagerOperativaBoard e' in src/components/ManagerOperativaBoard.tsx, KPI Team e' in src/app/(dashboard)/kpi-team/"
     },
     {
-      "id": "F0-004",
-      "title": "Audit e fix Marketing Analytics Dashboard",
-      "description": "Verificare che la dashboard Marketing Analytics funzioni: metriche funnel, ROAS, budget management, breakdown GDO.",
+      "id": "F1-004",
+      "title": "Fix orario andamento chiamate KPI Team GDO a 13:30-20:00",
+      "description": "Nella tabella 'Andamento Chiamate e Appuntamenti' in KPI Team GDO, l'orario lavorativo deve essere 13:30-20:00, non calcolato da primo all'ultimo log.",
       "acceptanceCriteria": [
-        "Leggere e auditare src/app/(dashboard)/marketing-analytics/ (page.tsx e MarketingAnalyticsClient.tsx)",
-        "Verificare che i calcoli di ROAS siano corretti (revenue / ad spend)",
-        "Verificare che il breakdown GDO mostri percentuali appuntamenti e chiusure corrette",
-        "Verificare che il form budget salvi correttamente per funnel/mese",
-        "Fixare qualsiasi bug trovato",
+        "Modificare il calcolo in kpiTeamActions.ts per usare range fisso 13:30-20:00 Europe/Rome",
+        "Il calcolo chiamate/ora deve basarsi sulle ore lavorate nel range 13:30-20:00 (6.5 ore)",
+        "Se il GDO ha loggato chiamate fuori orario, quelle chiamate contano ma le ore restano 6.5",
+        "Il grafico/tabella andamento deve mostrare solo le fasce orarie 13:30-20:00",
         "npx next build compila senza errori"
       ],
       "priority": 4,
       "passes": true,
-      "notes": ""
+      "notes": "Attualmente teamHoursWorked e' calcolato da timestamp primo-ultimo log."
     },
     {
-      "id": "F0-005",
-      "title": "Audit e fix sistema Richiami GDO",
-      "description": "Verificare che il sistema notifica richiami funzioni: polling 30s, separazione scaduti vs in arrivo, alert browser con nome/telefono lead.",
+      "id": "F1-005",
+      "title": "Fix Monitor Pause: calcolo tempo e rimozione limite 2 pause",
+      "description": "Il conteggio del tempo in pausa non e' corretto. Inoltre il limite di 2 pause al giorno va rimosso per permettere pause illimitate (mantenendo il limite di 15 min per pausa).",
       "acceptanceCriteria": [
-        "Leggere e auditare src/components/RecallBoard.tsx per logica di polling e filtraggio",
-        "Leggere e auditare src/app/actions/recallActions.ts per query corrette",
-        "Verificare che il filtro scaduti (recallDate <= now) funzioni con timezone Europe/Rome",
-        "Verificare che l'alert browser si triggeri correttamente",
-        "Fixare qualsiasi bug trovato",
+        "Auditare e fixare il calcolo durationSeconds e exceededSeconds in pauseUtils.ts e pauseActions.ts",
+        "Rimuovere o alzare significativamente MAX_PAUSES_PER_DAY in pauseUtils.ts (attualmente 2)",
+        "Mantenere MAX_MINUTES_PER_PAUSE a 15 minuti",
+        "Rimuovere la logica isBlocked basata su usedPauses >= MAX_PAUSES_PER_DAY in pauseActions.ts",
+        "Verificare che il monitor pause del manager mostri i dati corretti",
         "npx next build compila senza errori"
       ],
       "priority": 5,
       "passes": true,
-      "notes": ""
+      "notes": "BREAK_RULES in pauseUtils.ts: MAX_PAUSES_PER_DAY: 2, MAX_MINUTES_PER_PAUSE: 15. Il blocking e' su riga ~174 di pauseActions.ts."
     },
     {
-      "id": "F0-006",
-      "title": "Verifica favicon e metadata app",
-      "description": "Verificare che favicon, metadata Open Graph, e titolo app siano configurati correttamente per la produzione.",
+      "id": "F1-006",
+      "title": "Aggiungere esito 'Numero inesistente' tra le cause scarto",
+      "description": "Tra le cause di scarto lead chiamato manca l'opzione 'Numero inesistente'. Va aggiunta come nuova opzione nel modale esiti.",
       "acceptanceCriteria": [
-        "Verificare che src/app/favicon.ico esista e sia un'icona valida",
-        "Verificare che il layout root (src/app/layout.tsx) abbia metadata corretti: title, description, icons",
-        "Aggiungere metadata mancanti se necessario (og:title, og:description)",
+        "Aggiungere 'numero inesistente' alla lista discardReasons in OutcomeModal.tsx",
+        "Verificare che il nuovo esito venga salvato correttamente nel database (campo rejectReason o simile)",
+        "Verificare che il nuovo esito appaia correttamente nell'archivio e nei report",
         "npx next build compila senza errori"
       ],
       "priority": 6,
       "passes": true,
-      "notes": ""
+      "notes": "Le discard reasons attuali: non interessato, disoccupato, straniero, solo informazioni, non vuole prendere l'appuntamento."
     },
     {
-      "id": "F0-007",
-      "title": "Debug e fix integrazione Google Calendar - OAuth e token refresh",
-      "description": "Il Google Calendar non manda piu' inviti email e non crea eventi. Debuggare il flusso OAuth, il token refresh, e la creazione eventi.",
+      "id": "F1-007",
+      "title": "Fix Import Lead: permettere duplicati e lead senza nome",
+      "description": "L'import CSV attualmente rifiuta lead con telefono/email duplicati e lead senza nome. Bisogna rendere entrambi opzionali.",
       "acceptanceCriteria": [
-        "Leggere e auditare src/lib/googleCalendar.ts completamente",
-        "Verificare che il flusso OAuth2 usi gli scope corretti (calendar.events, calendar.readonly)",
-        "Verificare che il token refresh funzioni correttamente (controllo expiry, refresh automatico)",
-        "Verificare che createEvent usi sendUpdates: 'all' per inviare inviti email",
-        "Verificare che gli attendee siano aggiunti correttamente all'evento",
-        "Verificare la connessione con la tabella calendarEvents e calendarConnections nel DB",
-        "Controllare che le route API per OAuth callback gestiscano correttamente i token",
-        "Fixare qualsiasi bug trovato nel flusso",
+        "Aggiungere checkbox/opzione 'Consenti duplicati' nel form di import che bypassa il check duplicati",
+        "Permettere il caricamento di lead senza nome (campo nome vuoto o placeholder)",
+        "Se il nome manca, usare un placeholder tipo 'Lead senza nome' o lasciare vuoto",
+        "Rimuovere il requisito di email obbligatoria (renderla opzionale)",
+        "Mantenere la validazione telefono (minimo 5 cifre)",
         "npx next build compila senza errori"
       ],
       "priority": 7,
       "passes": true,
-      "notes": "Bug critico segnalato: il calendar non funziona piu'. Probabile problema di token scaduti o scope mancanti."
+      "notes": "importLeads.ts riga 131-135 rifiuta lead senza nome. Il check duplicati usa processedPhones/processedEmails Sets + query DB."
     },
     {
-      "id": "F0-008",
-      "title": "Script verifica e creazione account GDO",
-      "description": "Creare uno script che verifichi quali account GDO (105-119) esistono e funzionano, e che crei quelli mancanti per arrivare a 16 account attivi.",
+      "id": "F1-008",
+      "title": "Import Lead: migliorare mapping colonne CSV",
+      "description": "Il mapping colonne CSV e' rigido (Nome, Telefono1, Cognome/Funnel, Email). Aggiungere piu' opzioni di mapping per supportare CSV con header diversi.",
       "acceptanceCriteria": [
-        "Creare script scripts/verifyGdoAccounts.ts che si connetta a Supabase",
-        "Lo script deve listare tutti gli utenti con ruolo GDO e verificare che siano attivi",
-        "Lo script deve identificare account mancanti nella sequenza 105-119",
-        "Lo script deve poter creare gli account mancanti (con flag --create)",
-        "Lo script deve generare un report di stato di tutti gli account",
+        "Mostrare un'anteprima delle prime 3-5 righe del CSV prima dell'import",
+        "Permettere all'utente di mappare manualmente le colonne CSV ai campi del CRM (nome, telefono, email, funnel)",
+        "Supportare header alternativi comuni (es. 'Nome e Cognome', 'Phone', 'Cellulare', 'Fonte')",
+        "Se una colonna non viene mappata, il campo resta vuoto (tranne telefono che e' obbligatorio)",
         "npx next build compila senza errori"
       ],
       "priority": 8,
       "passes": true,
-      "notes": "Attualmente solo l'account 114 e' testato. Servono 16 account funzionanti totali."
-    },
-    {
-      "id": "F0-009",
-      "title": "Audit e hardening optimistic locking su tutti i flussi lead",
-      "description": "Verificare che l'optimistic locking (campo version) sia implementato in TUTTI i server action che modificano lead, non solo in confermeActions.",
-      "acceptanceCriteria": [
-        "Auditare src/app/actions/ per tutti i server action che fanno UPDATE su leads",
-        "Verificare che OGNI update su leads includa il check version e l'incremento version",
-        "Aggiungere optimistic locking dove manca (specialmente in gdo actions, venditore actions)",
-        "Verificare che il client passi la version corrente al server action",
-        "Gestire CONCURRENCY_ERROR con messaggio utente chiaro in tutti i flussi",
-        "npx next build compila senza errori"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": "Implementato in tutti i server action: pipelineActions, venditoreActions, appointmentActions. Client components aggiornati per passare version e gestire CONCURRENCY_ERROR."
-    },
-    {
-      "id": "F0-010",
-      "title": "Audit concurrency su pipeline GDO e assegnazioni",
-      "description": "Verificare che la pipeline GDO gestisca correttamente accessi concorrenti: drag-and-drop, esiti, assegnazioni lead non devono creare conflitti.",
-      "acceptanceCriteria": [
-        "Auditare src/app/actions/ per le azioni di pipeline GDO (move, assign, esito)",
-        "Verificare che le assegnazioni lead non possano assegnare lo stesso lead a due GDO",
-        "Verificare che il drag-and-drop nella pipeline usi optimistic locking",
-        "Verificare che gli esiti lead (APPOINTMENT, REJECTED, etc.) non possano essere settati in concorrenza",
-        "Fixare race condition trovate",
-        "npx next build compila senza errori"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": "TOCTOU race condition fixata in tutti i server action: version check atomico nel WHERE clause dell'UPDATE + .returning() per detect 0 affected rows. Assegnazioni lead safe (solo INSERT, nessun UPDATE su assignedToId). Nessun drag-and-drop nel PipelineBoard (tab-based)."
+      "notes": "Attualmente il mapping e' case-insensitive e hardcoded in importLeads.ts."
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { KpiTeamDashboard } from "@/components/KpiTeamDashboard"
+import { ManagerOperativaBoard } from "@/components/ManagerOperativaBoard"
 
 export default async function KpiTeamPage() {
     const supabase = await createClient();
@@ -29,6 +30,10 @@ export default async function KpiTeamPage() {
 
             <div className="max-w-7xl mx-auto">
                 <KpiTeamDashboard />
+            </div>
+
+            <div className="max-w-7xl mx-auto">
+                <ManagerOperativaBoard />
             </div>
         </div >
     )

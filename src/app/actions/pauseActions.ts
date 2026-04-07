@@ -8,7 +8,6 @@ import { BREAK_RULES, getLocalDateRome } from "@/lib/pauseUtils"
 
 export type PauseSummary = {
     usedPauses: number
-    maxPauses: number
     totalSecondsToday: number
     currentPause: {
         id: string
@@ -16,7 +15,6 @@ export type PauseSummary = {
         durationSeconds: number
         isExceeded: boolean
     } | null
-    isBlocked: boolean
 }
 
 export async function getManagerPauseReport(dateLocal?: string) {
@@ -168,10 +166,8 @@ export async function getGdoPauseStatus(gdoId: string): Promise<PauseSummary> {
 
     return {
         usedPauses,
-        maxPauses: BREAK_RULES.MAX_PAUSES_PER_DAY,
         totalSecondsToday,
         currentPause,
-        isBlocked: usedPauses >= BREAK_RULES.MAX_PAUSES_PER_DAY && !currentPause // Bloccato se ha consumato 2 pause e non ne ha una in corso (override manuale escluso)
     }
 }
 
@@ -180,10 +176,6 @@ export async function startPause(gdoId: string) {
 
     if (status.currentPause) {
         throw new Error("Hai già una pausa in corso.")
-    }
-
-    if (status.isBlocked) {
-        throw new Error("Hai raggiunto il limite giornaliero di pause.")
     }
 
     const todayLocal = getLocalDateRome()

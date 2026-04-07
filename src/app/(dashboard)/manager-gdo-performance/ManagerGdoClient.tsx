@@ -130,6 +130,16 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role }: P
                                 {gdoData.gdoName.charAt(0)}
                             </div>
                             <h3 className="text-xl font-bold tracking-tight">{gdoData.gdoName}</h3>
+                            <div className="ml-auto flex items-center gap-4 text-sm">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-slate-400">Lead Assegn.</span>
+                                    <span className="font-bold text-white">{gdoData.leadAssegnati ?? 0}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-slate-400">% Fissaggio</span>
+                                    <span className="font-bold text-orange-400">{gdoData.percFissaggio ?? '-'}</span>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="p-0 lg:p-6 grid grid-cols-1 xl:grid-cols-2 gap-8">

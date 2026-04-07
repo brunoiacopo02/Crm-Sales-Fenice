@@ -1,186 +1,136 @@
-# Ralph Progress Log — CRM Fenice
-Started: 2026-04-06
+# Ralph Progress Log — CRM Fenice (Fase 1)
+Started: 2026-04-07
 ---
 
 ## Codebase Patterns
-- `createClient()` da `@supabase/ssr` (`createBrowserClient`) è un singleton — restituisce la stessa istanza ogni volta. Safe come dependency in useEffect.
-- **Optimistic locking pattern (ATOMIC)**: Ogni `db.update(leads)` DEVE: (1) includere `version: lead.version + 1` nel set, (2) includere `eq(leads.version, lead.version)` nel WHERE clause per atomic check, (3) usare `.returning({ id: leads.id })` e controllare `updated.length === 0` per CONCURRENCY_ERROR. Il fast-fail `if (currentVersion !== undefined && lead.version !== currentVersion)` è un'ottimizzazione aggiuntiva ma NON sufficiente da sola (TOCTOU race). Client deve mostrare alert e refreshare la pagina su CONCURRENCY_ERROR.
-- **assignedToId immutabile**: `assignedToId` è settato solo via INSERT durante import CSV. Nessun server action lo modifica — niente race condition su riassegnazioni.
-- Supabase Realtime `payload.old` contiene solo PK senza `REPLICA IDENTITY FULL` — non fidarsi mai di `payload.old.<campo>` per logica business. Ricomputare dallo stato aggiornato.
-- Il custom event `realtime_update` viene dispatchato da `useRealtimeNotifications` su INSERT notifiche e consumato da `KpiGdoBoard` per re-fetch KPI.
-- I Server Action in `notificationActions.ts` ritornano `true` su successo.
-- `RealtimeProvider` wrappa il dashboard layout e triggera `router.refresh()` su qualsiasi cambiamento leads.
-- **Timezone pattern**: Per ottenere data `yyyy-MM-dd` in Europe/Rome usare `date.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })` — pattern già usato in `pauseUtils.ts`. Mai usare `toISOString().split('T')[0]` o `format(new Date(), 'yyyy-MM-dd')` su Vercel (UTC).
-- **Google Calendar OAuth2 client**: Mai usare un `oauth2Client` singleton a livello di modulo — su Vercel warm instances condividono stato e richieste concorrenti si sovrascrivono i credentials. Usare factory `createOAuth2Client()` per creare istanza nuova per ogni operazione.
-- **Google Calendar refresh_token rotation**: Google ruota periodicamente i refresh_token. Quando si fa refresh, SEMPRE salvare `credentials.refresh_token` se presente, altrimenti il vecchio diventa invalido → `invalid_grant` permanente.
-- `confermeKpiActions.ts`: i target settimanali sono su `users.confermeTargetTier1/Tier2`, quelli mensili = weekly * 4.
-- **Timezone pattern (month range filter)**: Per filtrare lead per mese "YYYY-MM", usare `getMonthBounds(monthString)` per ottenere prima/ultima data del mese come stringhe, poi `toRomeStartOfDay()`/`toRomeEndOfDay()` per convertirle in Date UTC Rome-aware. Vedi `marketingActions.ts`.
-- **Timezone pattern (date range filter)**: Per convertire una data "YYYY-MM-DD" (Rome) in Date UTC per filtri `gte`/`lte`, usare `Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', timeZoneName: 'longOffset' })` per ricavare l'offset e costruire `new Date(\`${dateStr}T00:00:00${offset}\`)`. Vedi `toRomeStartOfDay()`/`toRomeEndOfDay()` in `archiveActions.ts`.
-- **Timezone pattern (client-side display)**: Per mostrare date nel client usare `toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })`. Mai usare `toLocaleString([], ...)` senza `timeZone` — funziona solo se il browser è in Italy.
+- `getManagerGdoTables()` in `gdoPerformanceActions.ts` queries leads by `appointmentDate` in month and groups by `assignedToId` + `funnel`
+- Per-GDO metrics (leadAssegnati, percFissaggio) are displayed in the GDO card header, not as table columns, since the table is funnel-level
+- Lead assignment count uses `createdAt` in month period + `isNotNull(assignedToId)` (all statuses, not just NEW)
 
 ---
 
-## 2026-04-07 - F0-001
-- **Audit completo** di `useRealtimeNotifications.ts` e `RealtimeProvider.tsx`
-- **Bug fixato**: UPDATE handler in `useRealtimeNotifications.ts` usava `payload.old.status` (unreliable senza REPLICA IDENTITY FULL) per decrementare `unreadCount`. Fixato ricomputando `unreadCount` dalla lista aggiornata completa.
-- **Miglioramento**: Aggiunto error logging su fetch iniziale notifiche fallito.
-- **Verificato OK**: filtro `recipientUserId` corretto, flow `realtime_update` custom event corretto (dispatch su INSERT → KpiGdoBoard consume), `RealtimeProvider` subscriptions corrette con cleanup.
-- File modificati: `src/hooks/useRealtimeNotifications.ts`
+## 2026-04-07 - F1-001
+- **Implementato**: Aggiunto "Lead Assegnati" e "% Fissaggio" nella pagina Performance GDO
+- **Server action** (`gdoPerformanceActions.ts`):
+  - Aggiunta query parallela per contare lead assegnati a ciascun GDO nel mese (filtro su `createdAt` nel periodo, `assignedToId` non null)
+  - Aggiunto campo `leadAssegnati` nello stats map di ogni GDO
+  - Calcolato `percFissaggio` = (fissati / leadAssegnati * 100) con protezione divisione per zero
+  - Nuovi campi `leadAssegnati` e `percFissaggio` aggiunti al return object
+- **Client component** (`ManagerGdoClient.tsx`):
+  - Aggiunto display "Lead Assegn." e "% Fissaggio" nell'header di ogni card GDO (accanto al nome)
+  - Posizionamento: `ml-auto` nel flex header, colore arancione per la percentuale
+- File modificati: `src/app/actions/gdoPerformanceActions.ts`, `src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx`
 - **Learnings per iterazioni future:**
-  - Il Topbar non usa `unreadCount` dal hook — computa unread direttamente da `notifications.filter(n => n.status === 'unread').length`
-  - `getUnreadNotifications` in `notificationActions.ts` è naming misleading: fetcha TUTTE le notifiche (non solo unread)
-  - Il channel name in RealtimeProvider è `'public:leads-changes'` — non toccare per regola CLAUDE.md
+  - La query `leadAssegnati` NON filtra per `status: NEW` (diversamente da `managerAdvancedActions.ts`) per contare tutti i lead assegnati nel periodo indipendentemente dallo stato attuale
+  - `percFissaggio` usa `toFixed(1)` per un decimale di precisione (es. "42.3%")
+  - Le metriche per-GDO sono mostrate nell'header card perche' la tabella e' a livello funnel (ogni riga = un funnel)
 ---
 
-## 2026-04-07 - F0-002
-- **Audit completo** di `ConfermeKpiBoard.tsx` e `confermeKpiActions.ts`
-- **Bug fixato (timezone)**: `confermeKpiActions.ts` usava `format(new Date(), 'yyyy-MM-dd')` che su Vercel (UTC) produce data sbagliata intorno a mezzanotte IT. Fixato con helper `toRomeDateStr()` che usa `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })`.
-- **Bug fixato (isToday client)**: `ConfermeKpiBoard.tsx` usava `toISOString().split('T')[0]` per isToday — sempre UTC. Fixato con `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })`.
-- **Bug fixato (calendario)**: Il calendario giornaliero chunkava i giorni in gruppi di 7 dal giorno 1, senza rispettare le settimane Lun-Dom. Fixato con padding corretto per allineare a settimane calendario + header giorni settimana (Lun, Mar, ..., Dom).
-- **Ottimizzazione**: Rimossa query duplicata su tabella `users` per target Tier1/Tier2 (era fetchata 2 volte per calcolare weekly e monthly targets separatamente). Consolidata in singola query.
-- **Dead code rimosso**: Variabili `pctT1`/`pctT2` calcolate ma mai usate in `renderProgressBar()`.
-- **Verificato OK**: Progress bar settimanale calcola correttamente ACT vs Target, storico settimanale corretto, tabella mensile ACT vs TARGET con scostamento funzionante.
-- **Nota**: Le righe "Trattative Presenziate" e "Closed (Contratti)" nella tabella mensile usano dati mockati (percentuali fisse degli appuntamenti confermati). Non è un bug — è esplicitamente marcato come "MOCKS" nel codice. Da sostituire con dati reali quando disponibili.
-- File modificati: `src/app/actions/confermeKpiActions.ts`, `src/components/ConfermeKpiBoard.tsx`
+## 2026-04-07 - F1-002
+- **Implementato**: Aggiunto "Lead Assegnati" e "% Fissaggio" in Marketing Analytics (tabella funnel + drill-down GDO)
+- **Server action** (`marketingActions.ts`):
+  - `getMarketingStats`: Aggiunto conteggio `leadAssegnati` per funnel (lead con `assignedToId` non null), calcolato `fissaggioPerc` = apps / leadAssegnati * 100
+  - `getMarketingStatsByGdo`: Aggiunto `leadAssegnati` per GDO per funnel (tutti i lead assegnati, non solo quelli con appuntamento), calcolato `fissaggioPerc`
+  - Protezione divisione per zero su tutti i calcoli percentuali
+- **Client component** (`MarketingAnalyticsClient.tsx`):
+  - Aggiornati tipi `Stat` e `GdoStatTableRow` con nuovi campi
+  - Tabella funnel: aggiunte colonne "Lead Assegn." e "% Fiss." dopo "Lead" e prima di "App %"
+  - Drill-down GDO: aggiunte colonne "Lead Assegn.", "App Fissati", "% Fiss." per ogni GDO
+  - Riga TOTALE drill-down: aggiunti totali e percentuali calcolate
+- File modificati: `src/app/actions/marketingActions.ts`, `src/app/(dashboard)/marketing-analytics/MarketingAnalyticsClient.tsx`
 - **Learnings per iterazioni future:**
-  - Il dropdown filtro per singolo operatore Conferme è placeholder WIP (solo "Tutto il Team" funziona)
-  - `getConfermeSalesList` fetcha venditori e conta lead confermati assegnati a ciascuno — usata per sidebar "Bilanciamento Venditori"
-  - Il `dataPrimo` nella tabella scostamento è mockato (3 giorni fa hardcoded) — da computare se necessario
+  - `leadAssegnati` nel drill-down GDO conta TUTTI i lead assegnati a quel GDO in quel funnel (non solo quelli con appointmentDate), perche' rappresenta il bacino totale di lavoro
+  - La tabella funnel e il drill-down GDO condividono lo stesso dataset (`allLeads` filtrati per `createdAt` nel mese)
 ---
 
-## 2026-04-07 - F0-003
-- **Audit completo** di `ArchiveClient.tsx`, `archiveActions.ts`, e `page.tsx`
-- **Bug fixato (timezone)**: `fromDate`/`toDate` erano parsati come UTC midnight (`new Date("YYYY-MM-DD")` → UTC). Su Vercel (UTC) i lead creati tra 00:00-02:00 Rome time venivano esclusi/inclusi erroneamente. Fixato con helper `toRomeStartOfDay()`/`toRomeEndOfDay()` che calcolano l'offset Europe/Rome via `Intl.DateTimeFormat` e costruiscono la Date UTC corretta.
-- **Bug fixato (outcome filter dead code)**: Le condizioni `outcome === 'Confermato'` e `outcome === 'Scartato'` nel server action non matchavano mai i valori client `"CONFERMATO"`/`"SCARTATO"`. Funzionava solo per il fallback generico. Rimossi i branch morti, lasciato solo il check esplicito per `'Chiuso'`/`'Non chiuso'` (salespersonOutcome) e il fallback per status DB.
-- **Verificato OK**: Paginazione (50 righe/pagina, offset corretto), export CSV (UTF-8 BOM, separatore `;`, escape `""`), filtri GDO/venditore, flow `handleSearch` con reset page, rendering tabella client-side con timezone browser corretta.
-- File modificati: `src/app/actions/archiveActions.ts`
+## 2026-04-07 - F1-003
+- **Implementato**: Spostato ManagerOperativaBoard nella pagina KPI Team GDO, rimossa Classifica GDO
+- **KpiTeamDashboard.tsx**:
+  - Rimossa intera sezione "Classifica GDO (Ranking)" (tabella + modal Quick Analytics)
+  - Rimosso stato `selectedGdoId` e variabile `selectedGdoDetails`/`ranking`
+  - Puliti import non piu' usati (Trophy, Search, Phone, ChevronRight)
+- **kpi-team/page.tsx**:
+  - Aggiunto import e rendering di `ManagerOperativaBoard` sotto `KpiTeamDashboard`
+  - ManagerOperativaBoard ha il suo filtro periodo (OGGI/MESE/TRIMESTRE) indipendente
+- **Verifica**: ManagerOperativaBoard resta anche in `manager-targets/page.tsx` (non rimosso da li')
+- File modificati: `src/components/KpiTeamDashboard.tsx`, `src/app/(dashboard)/kpi-team/page.tsx`
 - **Learnings per iterazioni future:**
-  - La page `/archivio` è gated a MANAGER/ADMIN nel server component `page.tsx`
-  - `ArchiveClient` usa `fetchData()` via `useEffect` solo su `[filters.page, filters.limit]` — il bottone "Applica Filtri" chiama `handleSearch()` che o resetta page a 1 (triggering useEffect) o chiama `fetchData()` direttamente se già su page 1
-  - CSV export usa `exportAll: true` che bypassa pagination e ritorna tutti i risultati
-  - Le date nella tabella client sono renderizzate con `format()` di date-fns sul browser — timezone del browser (Italy) si applica automaticamente
-  - `confUser` (conferme user) è joinato nella query ma non usato nella tabella — disponibile per future colonne
+  - ManagerOperativaBoard e' esportato come named export (`export function`), non default
+  - Il componente e' self-contained: fetcha i suoi dati via `getManagerOperativaData()` e gestisce il suo stato di periodo
 ---
 
-## 2026-04-07 - F0-004
-- **Audit completo** di `marketingActions.ts`, `page.tsx`, e `MarketingAnalyticsClient.tsx`
-- **Bug fixato (ROAS formula)**: `marketingActions.ts` calcolava ROI `((revenue - cost) / cost) * 100` invece di ROAS `(revenue / cost) * 100`. Fixato con formula ROAS corretta.
-- **Bug fixato (timezone page.tsx)**: `new Date()` su Vercel (UTC) poteva dare mese sbagliato intorno a mezzanotte IT. Fixato con `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })`.
-- **Bug fixato (timezone server actions)**: `startOfMonth(parseISO(...))` e `endOfMonth(parseISO(...))` producevano boundaries UTC. Lead creati tra 00:00-02:00 Rome time potevano essere esclusi/inclusi erroneamente. Fixato con helper `toRomeStartOfDay()`/`toRomeEndOfDay()` e `getMonthBounds()` per calcolare inizio/fine mese in timezone Europe/Rome.
-- **Rimossa dipendenza**: Rimosso import `date-fns` (`startOfMonth`, `endOfMonth`, `parseISO`) non più necessario.
-- **Verificato OK**: Calcoli percentuali funnel (apps%, conferme%, trattative%, close%) corretti con protezione divisione per zero, form budget salva correttamente per funnel/mese (upsert), breakdown GDO con percentuali conferma/presenziati/closed corrette, totali row nel drill-down GDO, `formatPercent` gestisce NaN/Infinity.
-- **Verificato OK (client)**: Nessun problema di hydration React, nessun bottone in `<span>` o `<p>`, componenti interattivi safe.
-- File modificati: `src/app/actions/marketingActions.ts`, `src/app/(dashboard)/marketing-analytics/page.tsx`
+## 2026-04-07 - F1-004
+- **Implementato**: Fixato orario lavorativo in KPI Team GDO a 13:30-20:00
+- **kpiTeamActions.ts**:
+  - `teamCallsPerHour`: rimosso calcolo dinamico first-to-last log, usato costante `FIXED_HOURS_WORKED = 6.5`
+  - Per-GDO `callsPerHour`: rimosso calcolo first/lastCallTime, usato stessa costante 6.5h
+  - Grafico trend (oggi/ieri): cambiato range da 08:00-20:00 a 13:30-20:00
+  - Aggiunto timezone Europe/Rome per parsing ore (`toLocaleString('en-GB', { timeZone: 'Europe/Rome' })`)
+  - Bucket `13:30` cattura chiamate dalle 13:30 alle 13:59, bucket `14:00`-`20:00` catturano chiamate nell'ora intera
+  - Chiamate fuori orario (prima delle 13:30 o dopo le 20:59) contano nei totali ma non nel grafico
+- File modificati: `src/app/actions/kpiTeamActions.ts`
 - **Learnings per iterazioni future:**
-  - `marketingBudgets` table non ha unique constraint su (funnel, month) — l'upsert si basa su query SELECT + conditional INSERT/UPDATE. Non è un bug attivo ma un'area di miglioramento DB.
-  - Le righe del drill-down GDO sono ordinate per `appsFissati` decrescente (chi ha fissato di più in cima)
-  - ROAS in marketing = Revenue / Ad Spend (non profitto/costo). Es. spesa 1000€, fatturato 5000€ → ROAS = 500%
-  - Il pattern `getMonthBounds()` + `toRomeStartOfDay()`/`toRomeEndOfDay()` è riusabile per qualsiasi filtro per mese
+  - `log.createdAt.getHours()` su Vercel restituisce ore UTC, NON Rome. Usare `toLocaleString` con timeZone per ottenere l'ora corretta
+  - Il grafico trend usa `trendMap` con chiavi stringa come labels — l'ordine di inserzione della Map definisce l'ordine nel grafico
 ---
 
-## 2026-04-07 - F0-005
-- **Audit completo** di `RecallBoard.tsx`, `recallActions.ts`, e `richiami/page.tsx`
-- **Verificato anche** `PipelineBoard.tsx` (recall watcher duplicato) e `LeadCard.tsx` (date display)
-- **Bug fixato (timezone display)**: `RecallBoard.tsx` e `LeadCard.tsx` usavano `toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })` senza `timeZone: 'Europe/Rome'`. Se l'utente accede da fuso orario diverso, le date richiamo/appuntamento/ultima chiamata venivano mostrate nel fuso del browser. Fixato con `toLocaleString('it-IT', { ..., timeZone: 'Europe/Rome' })`.
-- **Stesso fix applicato a** `AppointmentBoard.tsx` (stessa classe di bug per appointmentDate display).
-- **Verificato OK (server-side filtering)**: `recallActions.ts` usa `new Date()` per split expired/upcoming — confronto tra Date objects è timezone-safe (UTC ms internamente). Nessun bug.
-- **Verificato OK (polling 30s)**: `RecallBoard.tsx` useEffect con setInterval 30s controlla `recallTime <= nowTime` su tutti i lead (expired + upcoming). `alertedRecalls` Set previene alert duplicati. Cleanup corretto su unmount.
-- **Verificato OK (query Drizzle)**: Filtri `ne(status, 'REJECTED')`, `ne(status, 'APPOINTMENT')`, `isNotNull(recallDate)` corretti. GDO vede solo i propri lead, Manager vede tutti.
-- **Verificato OK (nessun hydration issue)**: Nessun bottone interattivo in `<span>` o `<p>`.
-- File modificati: `src/components/RecallBoard.tsx`, `src/components/LeadCard.tsx`, `src/components/AppointmentBoard.tsx`
-- **Learnings per iterazioni future:**
-  - Il recall watcher esiste in DUE posti: `RecallBoard.tsx` (pagina /richiami) e `PipelineBoard.tsx` (pagina / dashboard). Non sono mai montati contemporaneamente, nessun conflitto.
-  - `recallActions.ts` è usato solo dalla pagina /richiami. La pipeline usa `pipelineActions.ts` che ha la sua logica recall identica.
-  - I lead con `recallDate` non-null ma status `REJECTED` o `APPOINTMENT` sono esclusi dai richiami — quando un lead passa a APPUNTAMENTO, il `recallDate` viene settato a `null` dal server action `updateLeadOutcome`.
-  - L'alert `window.alert()` è bloccante — se 5 richiami scadono insieme, l'utente deve chiudere 5 alert sequenziali. Da considerare in futuro un sistema toast non-bloccante.
+## 2026-04-07 - F1-005
+- **Implementato**: Rimosso limite 2 pause/giorno, auditato calcolo tempi
+- **pauseUtils.ts**: Rimosso `MAX_PAUSES_PER_DAY` da `BREAK_RULES`, mantenuto `MAX_MINUTES_PER_PAUSE: 15`
+- **pauseActions.ts**:
+  - Rimosso `maxPauses` e `isBlocked` da `PauseSummary` type
+  - Rimosso calcolo `isBlocked` basato su `usedPauses >= MAX_PAUSES_PER_DAY`
+  - Rimosso check `status.isBlocked` in `startPause()` che bloccava la creazione di nuove pause
+  - **Audit durationSeconds**: calcolo `Math.floor((now - startTime) / 1000)` e' corretto sia in `getGdoPauseStatus` che in `stopPause`
+  - **Audit exceededSeconds**: calcolo `diffSeconds - (MAX_MINUTES_PER_PAUSE * 60)` e' corretto in tutti i punti
+- **PauseTimer.tsx**: Rimosso check `!status.isBlocked` da `canStart`, cambiato display da "X/2" a solo "X" pause usate
+- File modificati: `src/lib/pauseUtils.ts`, `src/app/actions/pauseActions.ts`, `src/components/PauseTimer.tsx`
 ---
 
-## 2026-04-07 - F0-006
-- **Audit completo** di `layout.tsx`, `favicon.ico`, e `icon.png`
-- **Verificato OK**: `favicon.ico` (1063 bytes) e `icon.png` (47011 bytes) esistono e sono file validi. Next.js li serve automaticamente da `src/app/`.
-- **Fix (lang)**: `<html lang="en">` cambiato a `<html lang="it">` — il CRM è in italiano.
-- **Aggiunto**: `metadataBase` con fallback `VERCEL_URL` → `localhost:3000` per URL assoluti corretti.
-- **Aggiunto**: Open Graph metadata (`og:title`, `og:description`, `og:site_name`, `og:type`).
-- **Verificato OK**: Build compila senza errori. `/icon.png` appare correttamente come route statica prerendered.
-- File modificati: `src/app/layout.tsx`
-- **Learnings per iterazioni future:**
-  - Next.js App Router auto-detects `favicon.ico` e `icon.png` in `src/app/` — non serve dichiararli in metadata.icons
-  - `VERCEL_URL` è disponibile automaticamente su Vercel deployments (senza `https://` prefix — va aggiunto)
-  - `metadataBase` è necessario per OG images e canonical URLs assoluti in produzione
+## 2026-04-07 - F1-006
+- **Implementato**: Aggiunto "numero inesistente" come causa scarto in 3 componenti
+- `OutcomeModal.tsx`: aggiunto a `DISCARD_REASONS` array
+- `GdoQuickActions.tsx`: aggiunto a `DISCARD_REASONS` array
+- `ConfermeDrawer.tsx`: aggiunto `<option>` nel select scarto
+- **Nessuna modifica server-side**: il valore viene salvato nel campo `rejectReason` (text) del callLog — accetta qualsiasi stringa
+- **Report/archivio**: `kpiAdvancedActions.ts` conta motivi scarto dinamicamente da `discardReason`, nessuna lista hardcoded server-side
+- File modificati: `src/components/OutcomeModal.tsx`, `src/components/GdoQuickActions.tsx`, `src/components/ConfermeDrawer.tsx`
 ---
 
-## 2026-04-07 - F0-007
-- **Audit completo** di `src/lib/googleCalendar.ts`, `src/app/api/google/callback/route.ts`, `src/app/actions/calendarActions.ts`, e consumer in `confermeActions.ts` e `VenditoreDashboardClient.tsx`
-- **Bug fixato (CRITICO - singleton race condition)**: `oauth2Client` era un singleton a livello di modulo. Su Vercel warm instances, richieste concorrenti sovrascrivevano i credentials dell'oauth2Client, potenzialmente creando eventi nel calendario dell'utente sbagliato. Fixato con factory `createOAuth2Client()` che crea un'istanza nuova per ogni operazione.
-- **Bug fixato (CRITICO - refresh_token rotation)**: `refreshAccessToken()` salvava solo il nuovo `access_token` ma scartava il nuovo `refresh_token` se Google lo ruotava. Google ruota periodicamente i refresh token → il vecchio diventa invalido → `invalid_grant` permanente → calendario smette di funzionare. Fixato salvando `credentials.refresh_token` quando presente.
-- **Bug fixato (null safety)**: Aggiunto check esplicito su `credentials.access_token` dopo refresh — prima usava `!` assertion che poteva salvare `undefined` in DB.
-- **Bug fixato (updatedAt mancante)**: `refreshAccessToken()` e OAuth callback update non aggiornavano il campo `updatedAt` su `calendarConnections`.
-- **Verificato OK**: Scopes corretti (`calendar` + `calendar.events`), `sendUpdates: 'all'` presente su insert e delete, attendees aggiunti correttamente, FreeBusy check con fallback su errore, OAuth callback gestisce re-auth preservando vecchio refresh_token.
-- **Verificato OK**: `calendarActions.ts` — `getGoogleAuthUrl`, `checkGoogleCalendarConnection`, `disconnectGoogleCalendar` sono corretti e semplici wrapper.
-- **Verificato OK**: `VenditoreDashboardClient.tsx` — Connect/disconnect UI corretta, no hydration issues.
-- File modificati: `src/lib/googleCalendar.ts`, `src/app/api/google/callback/route.ts`
+## 2026-04-07 - F1-007
+- **Implementato**: Import lead ora permette duplicati e lead senza nome/email
+- **importLeads.ts**:
+  - Aggiunto parametro `importOptions?: { allowDuplicates?: boolean }` a `processCsvImport`
+  - Nome: se vuoto, usa placeholder "Lead senza nome" (non piu' rifiutato)
+  - Email: resa opzionale — se presente e valida viene salvata, altrimenti null (non rifiuta piu')
+  - Deduplication: wrappata in `if (!allowDuplicates)` — quando allowDuplicates=true, skip completo del check
+  - Mantenuta validazione telefono (minimo 5 cifre) e funnel (obbligatorio)
+- **import/page.tsx**:
+  - Aggiunto stato `allowDuplicates` (checkbox)
+  - Checkbox "Consenti duplicati" visibile prima del bottone di conferma
+  - Passato `{ allowDuplicates }` come terzo parametro a `processCsvImport`
+  - Colonna "Nome" non piu' obbligatoria nel CSV (rimossa dal check colonne mancanti)
+  - Aggiornato testo requisiti CSV
+- File modificati: `src/app/actions/importLeads.ts`, `src/app/(dashboard)/import/page.tsx`
 - **Learnings per iterazioni future:**
-  - Il calendar è usato solo dal flusso Conferme → Venditore (setConfermeOutcome, scheduleConfermeRecall)
-  - `checkFreeBusy` è chiamato prima di creare l'evento per verificare slot libero — ritorna `true` (libero) su qualsiasi errore per non bloccare il flusso
-  - La connessione calendar è per-venditore (userId nella calendarConnections)
-  - `scheduleConfermeRecall` cancella e ricrea l'evento calendar quando l'appuntamento viene riprogrammato
-  - Il redirect post-OAuth va a `/venditore?success=calendar_connected` — solo venditori possono connettere il calendario
-  - Per testare il fix serve un re-connect OAuth (disconnect + reconnect) per ottenere un refresh_token fresco
+  - Il campo `leads.name` nello schema Drizzle e' text NOT NULL — "Lead senza nome" come fallback evita errori DB
+  - `processedPhones`/`processedEmails` Set restano populati anche con allowDuplicates (non causa problemi, ma il check e' dentro l'if)
 ---
 
-## 2026-04-07 - F0-008
-- **Creato script** `scripts/verifyGdoAccounts.ts` per verifica e creazione account GDO
-- **Funzionalita'**:
-  - Connessione a Supabase Auth (admin API) e public.users (Drizzle ORM)
-  - Lista tutti gli utenti con ruolo GDO, verifica stato attivo
-  - Report tabellare con: gdoCode, esistenza, attivita', presenza in Auth, email, displayName
-  - Identifica account mancanti nel range 105-120 (16 account)
-  - Segnala account GDO con gdoCode fuori range o NULL
-  - Flag `--create` per creare account mancanti (Auth + DB sync)
-  - Verifica post-creazione automatica
-- **Pattern creazione**: Supabase Auth admin.createUser (email_confirm: true) + Drizzle insert con stesso UUID, bcrypt password hash (10 rounds)
-- **Esecuzione**: `npx tsx scripts/verifyGdoAccounts.ts` (report) oppure `npx tsx scripts/verifyGdoAccounts.ts --create` (crea mancanti)
-- File creati: `scripts/verifyGdoAccounts.ts`
+## 2026-04-07 - F1-008
+- **Implementato**: Mapping colonne CSV manuale con anteprima e auto-detect esteso
+- **import/page.tsx**:
+  - Aggiunto stato `csvFields` (header CSV) e `csvRawData` (tutti i dati raw)
+  - Dopo il parse, mostra 4 dropdown per mappare colonne CSV → campi CRM (Nome, Telefono*, Email, Funnel*)
+  - Auto-detect esteso con regex piu' ampi: `nome|name`, `telefono|phone|cellulare|cell|tel`, `email|e-mail|mail`, `cognome|funnel|fonte|source|campagna`
+  - Anteprima live delle prime 5 righe del CSV basata sul mapping corrente
+  - Payload ricostruito dinamicamente quando l'utente cambia mapping (`handleMappingChange`)
+  - Sezione assegnazione + bottone import visibili solo quando il mapping e' valido (telefono + funnel mappati)
+  - Se una colonna non e' mappata, il campo resta vuoto (server-side: nome -> "Lead senza nome", email -> null)
+- File modificati: `src/app/(dashboard)/import/page.tsx`
 - **Learnings per iterazioni future:**
-  - Pattern email GDO: `gdo{code}@fenice.local`, password default: `Gdo2026!`
-  - Supabase Auth admin.listUsers ha paginazione (perPage: 1000 per fetchare tutti)
-  - Se un utente Auth esiste gia' ma manca in public.users, lo script recupera l'ID Auth e inserisce solo in DB
-  - Lo script e' standalone (non parte della build Next.js) — non impatta `npx next build`
----
-
-## 2026-04-07 - F0-009
-- **Audit completo** di tutti i server action che fanno `db.update(leads)`: `pipelineActions.ts`, `venditoreActions.ts`, `appointmentActions.ts`, `confermeActions.ts`
-- **Optimistic locking aggiunto** a `pipelineActions.ts` (`updateLeadOutcome`): parametro `currentVersion`, check version prima di update, `version: lead.version + 1` nel set, return `{ success: false, error: 'CONCURRENCY_ERROR' }` su mismatch. Return type cambiato da `true` a `{ success: true }`.
-- **Optimistic locking aggiunto** a `venditoreActions.ts` (`saveVenditoreOutcome`): parametro `currentVersion`, check version, increment version.
-- **Optimistic locking aggiunto** a `appointmentActions.ts` (`updateGdoAppointment`): parametro `currentVersion`, check version, increment version.
-- **Client components aggiornati**:
-  - `GdoQuickActions.tsx`: aggiunto prop `leadVersion`, passato a `updateLeadOutcome`, gestione CONCURRENCY_ERROR con alert + refresh
-  - `OutcomeModal.tsx`: aggiunto prop `leadVersion`, passato a `updateLeadOutcome`, gestione CONCURRENCY_ERROR
-  - `VenditoreDrawer.tsx`: passa `lead.version` a `saveVenditoreOutcome`, gestione CONCURRENCY_ERROR
-  - `AppointmentBoard.tsx`: passa `editingLead.version` a `updateGdoAppointment`, gestione CONCURRENCY_ERROR
-  - `LeadCard.tsx`: aggiunto `version` al tipo `LeadProps`, passa `lead.version` a `GdoQuickActions`
-  - `ContactDrawer.tsx`: passa `lead.version` a `GdoQuickActions`
-  - `PipelineBoard.tsx`: cerca version dal lead selezionato tra le liste, passa a `OutcomeModal`
-  - `RecallBoard.tsx`: cerca version dal lead selezionato tra le liste, passa a `OutcomeModal`
-- **Verificato**: `confermeActions.ts` aveva già optimistic locking completo su tutti i suoi update (5 check points) — nessuna modifica necessaria.
-- File modificati: `src/app/actions/pipelineActions.ts`, `src/app/actions/venditoreActions.ts`, `src/app/actions/appointmentActions.ts`, `src/components/GdoQuickActions.tsx`, `src/components/OutcomeModal.tsx`, `src/components/VenditoreDrawer.tsx`, `src/components/AppointmentBoard.tsx`, `src/components/LeadCard.tsx`, `src/components/ContactDrawer.tsx`, `src/components/PipelineBoard.tsx`, `src/components/RecallBoard.tsx`
-- **Learnings per iterazioni future:**
-  - Il parametro `currentVersion` è opzionale (`?`) nei server action per backward compatibility — se non passato, il check viene saltato. Questo permette di aggiungere locking gradualmente senza rompere chiamate esistenti.
-  - `updateLeadOutcome` ha cambiato return type da `true` a `{ success: true }` — i client non usavano il return value prima, quindi nessun breaking change.
-  - In PipelineBoard/RecallBoard, la version del lead selezionato viene cercata concatenando tutte le liste lead disponibili nel componente (firstCall + secondCall + thirdCall + fourthCall, oppure expired + upcoming).
-  - `VenditoreDashboardClient.tsx` importa `saveVenditoreOutcome` ma non lo chiama direttamente — l'import è residuo o usato solo da `VenditoreDrawer`.
----
-
-## 2026-04-07 - F0-010
-- **Audit completo** di tutti i server action che fanno `db.update(leads)` per race condition TOCTOU
-- **Bug fixato (CRITICO - TOCTOU race condition)**: Tutti i server action avevano un pattern vulnerabile: SELECT per leggere il lead → check version in JS → UPDATE con WHERE solo su `id`. Tra il check e l'update, un'altra richiesta poteva modificare il lead e l'update sovrascriveva silenziosamente. Fixato aggiungendo `eq(leads.version, lead.version)` nel WHERE clause dell'UPDATE e usando `.returning({ id: leads.id })` per verificare che almeno 1 riga sia stata aggiornata. Se 0 righe → CONCURRENCY_ERROR.
-- **File fixati**: `pipelineActions.ts` (updateLeadOutcome), `venditoreActions.ts` (saveVenditoreOutcome), `appointmentActions.ts` (updateGdoAppointment), `confermeActions.ts` (updateLeadDataConferme, setConfermeOutcome, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze — 6 funzioni)
-- **Verificato OK (assegnazioni)**: `assignedToId` è settato solo via INSERT durante import CSV (`importLeads.ts`). Nessun server action lo modifica. Impossibile assegnare lo stesso lead a due GDO via race condition.
-- **Verificato OK (pipeline)**: PipelineBoard è tab-based (non drag-and-drop). L'OutcomeModal usa optimistic locking con version passata dal client. Nessuna race condition aggiuntiva.
-- File modificati: `src/app/actions/pipelineActions.ts`, `src/app/actions/venditoreActions.ts`, `src/app/actions/appointmentActions.ts`, `src/app/actions/confermeActions.ts`
-- **Learnings per iterazioni future:**
-  - Il pattern TOCTOU è insidioso: il fast-fail `if (version !== currentVersion)` dà falsa sicurezza. L'unico modo sicuro è avere il version check DENTRO il WHERE dell'UPDATE SQL (atomic).
-  - Drizzle ORM supporta `.returning()` su `.update()` per PostgreSQL — ritorna le righe aggiornate. Se 0 righe, l'update non ha matchato il WHERE.
-  - Il fast-fail resta utile come ottimizzazione (evita di eseguire logica inutile e inserire call logs orfani) ma non è sufficiente da solo.
-  - `confermeActions.ts` usa mix di pattern: alcune funzioni `throw new Error("CONCURRENCY_ERROR")` (updateLeadDataConferme, recordConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze), altre `return { success: false, error: 'CONCURRENCY_ERROR' }` (setConfermeOutcome, setSalespersonOutcome). Il nuovo TOCTOU check segue lo stesso pattern della funzione in cui si trova.
+  - PapaParse auto-detect delimiter funziona bene con virgola, punto e virgola, tab
+  - `results.meta.fields` contiene gli header originali del CSV — usare come opzioni nei dropdown
+  - Il mapping viene ricostruito ad ogni cambio dropdown, triggering `buildPayloadFromMapping` che ricalcola il payload
+  - Codebase pattern: `csvFields` e `csvRawData` sono set una volta sola al parse, `mapping` e `payload` vengono ricalcolati interattivamente
 ---

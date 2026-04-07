@@ -67,16 +67,9 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     const totalAppointments = logs.filter(l => l.outcome === 'APPUNTAMENTO').length
     const totalRecalls = logs.filter(l => l.outcome === 'RICHIAMO').length // Solo a fini statistici se serve
 
-    // Chiamate / Ora stimate (Team)
-    let teamHoursWorked = 0
-    // Simplified hour calculation: just max - min across the entire team logs. Not perfectly accurate but gives a baseline.
-    if (logs.length > 2) {
-        logs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-        const firstLog = logs[0].createdAt.getTime()
-        const lastLog = logs[logs.length - 1].createdAt.getTime()
-        teamHoursWorked = (lastLog - firstLog) / (1000 * 60 * 60)
-    }
-    const teamCallsPerHour = teamHoursWorked > 0 ? Math.round(totalCalls / teamHoursWorked) : totalCalls
+    // Chiamate / Ora: range fisso 13:30-20:00 = 6.5 ore lavorative
+    const FIXED_HOURS_WORKED = 6.5
+    const teamCallsPerHour = totalCalls > 0 ? Math.round(totalCalls / FIXED_HOURS_WORKED) : 0
 
     const teamAnswerRate = totalCalls > 0 ? Math.round((totalAnswers / totalCalls) * 100) : 0
     const teamConversionRate = totalCalls > 0 ? parseFloat(((totalAppointments / totalCalls) * 100).toFixed(1)) : 0
@@ -113,15 +106,11 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
 
     // Trasformazione e calcoli percentuali per Ranking
     const ranking = Array.from(rankingMap.values()).map(r => {
-        let hrs = 0
-        if (r.firstCallTime !== Infinity && r.lastCallTime !== 0 && r.lastCallTime > r.firstCallTime) {
-            hrs = (r.lastCallTime - r.firstCallTime) / (1000 * 60 * 60)
-        }
         return {
             ...r,
             answerRate: r.calls > 0 ? Math.round((r.answers / r.calls) * 100) : 0,
             conversionRate: r.calls > 0 ? parseFloat(((r.appointments / r.calls) * 100).toFixed(1)) : 0,
-            callsPerHour: hrs > 0 ? Math.round(r.calls / hrs) : r.calls
+            callsPerHour: r.calls > 0 ? Math.round(r.calls / FIXED_HOURS_WORKED) : 0
         }
     })
 
@@ -137,17 +126,28 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
 
     // Inizializza asse X in base al periodo
     if (period === 'oggi' || period === 'ieri') {
-        // Grafico orario dalle 08:00 alle 20:00
-        for (let i = 8; i <= 20; i++) {
+        // Grafico orario 13:30-20:00 (orario lavorativo Europe/Rome)
+        trendMap.set('13:30', { chiamate: 0, appuntamenti: 0 })
+        for (let i = 14; i <= 20; i++) {
             trendMap.set(`${i}:00`, { chiamate: 0, appuntamenti: 0 })
         }
         for (const log of logs) {
-            const h = log.createdAt.getHours()
-            if (h >= 8 && h <= 20) {
-                const label = `${h}:00`
-                const entry = trendMap.get(label)!
+            const romeTime = log.createdAt.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
+            const [hStr, mStr] = romeTime.split(':')
+            const h = parseInt(hStr)
+            const m = parseInt(mStr)
+
+            if (h === 13 && m >= 30) {
+                const entry = trendMap.get('13:30')!
                 entry.chiamate += 1
                 if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+            } else if (h >= 14 && h <= 20) {
+                const label = `${h}:00`
+                const entry = trendMap.get(label)
+                if (entry) {
+                    entry.chiamate += 1
+                    if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+                }
             }
         }
     } else {

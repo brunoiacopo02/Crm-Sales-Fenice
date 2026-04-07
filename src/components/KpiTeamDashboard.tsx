@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { getTeamKpiDashboard, KpiPeriod } from "@/app/actions/kpiTeamActions"
-import { Phone, PhoneIncoming, PhoneOutgoing, UserPlus, Target, Clock, Trophy, BarChart3, Search, Calendar, ChevronRight } from "lucide-react"
+import { PhoneIncoming, PhoneOutgoing, UserPlus, Target, Clock, BarChart3, Calendar } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts'
 
 export function KpiTeamDashboard() {
@@ -10,7 +10,6 @@ export function KpiTeamDashboard() {
     const [funnelFilter, setFunnelFilter] = useState('ALL')
     const [loading, setLoading] = useState(true)
     const [data, setData] = useState<any>(null)
-    const [selectedGdoId, setSelectedGdoId] = useState<string | null>(null) // Per eventuale Drawer
 
     useEffect(() => {
         let isMounted = true
@@ -33,9 +32,6 @@ export function KpiTeamDashboard() {
 
     const agg = data?.aggregate || {}
     const chartData = data?.chartData || []
-    const ranking = data?.ranking || []
-
-    const selectedGdoDetails = ranking.find((r: any) => r.userId === selectedGdoId)
 
     return (
         <div className="space-y-8 pb-12">
@@ -108,109 +104,6 @@ export function KpiTeamDashboard() {
                 </div>
             </div>
 
-            {/* Ranking GDO */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                        <Trophy className="h-5 w-5 text-amber-500" />
-                        Classifica GDO (Ranking)
-                    </h3>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operatore GDO</th>
-                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Chiamate</th>
-                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tasso Risp.</th>
-                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Appuntamenti</th>
-                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% Fissaggio</th>
-                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Azione</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
-                            {ranking.length > 0 ? (
-                                ranking.map((r: any, idx: number) => (
-                                    <tr key={r.userId} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setSelectedGdoId(r.userId)}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-400">
-                                            {idx + 1}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center">
-                                                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-xs ring-1 ring-brand-orange/20">
-                                                    {r.displayName.substring(0, 2).toUpperCase()}
-                                                </div>
-                                                <div className="ml-3">
-                                                    <div className="text-sm font-bold text-gray-900">{r.displayName}</div>
-                                                    <div className="text-xs text-gray-500">Codice: {r.gdoCode || '??'}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">{r.calls}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">{r.answerRate}%</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-green-600">{r.appointments}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-pink-600 font-medium">{r.conversionRate}%</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button className="text-brand-orange hover:text-orange-700 bg-orange-50 p-2 rounded-lg" title="Esamina Analitiche">
-                                                <Search className="h-4 w-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr><td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">Nessun dato disponibile nel periodo selezionato.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* Quick Analytics Modal overlay (Lightweight) */}
-            {selectedGdoDetails && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm" onClick={() => setSelectedGdoId(null)}>
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="absolute top-0 right-0 p-4">
-                            <button onClick={() => setSelectedGdoId(null)} className="text-gray-400 hover:text-gray-600">
-                                <span className="sr-only">Close</span>
-                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="h-16 w-16 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange text-xl font-bold ring-2 ring-brand-orange/20">
-                                {selectedGdoDetails.displayName.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-gray-900">{selectedGdoDetails.displayName}</h3>
-                                <p className="text-sm text-gray-500">Account GDO {selectedGdoDetails.gdoCode || ''}</p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Volumi</div>
-                                <div className="font-bold text-2xl text-gray-900">{selectedGdoDetails.calls} <span className="text-sm font-normal text-gray-500">chiamate</span></div>
-                            </div>
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Conversioni</div>
-                                <div className="font-bold text-2xl text-green-600">{selectedGdoDetails.appointments} <span className="text-sm font-normal text-gray-500">fissati</span></div>
-                            </div>
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Qualità</div>
-                                <div className="font-bold text-2xl text-brand-orange">{selectedGdoDetails.conversionRate}% <span className="text-sm font-normal text-gray-500">fissaggio</span></div>
-                            </div>
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Ritmo</div>
-                                <div className="font-bold text-2xl text-blue-600">{selectedGdoDetails.callsPerHour} <span className="text-sm font-normal text-gray-500">all'ora</span></div>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 pt-6 border-t border-gray-100 text-center">
-                            <p className="text-xs text-gray-400">Questa è una vista aggregata isolata. Per analizzare i lead specifici, utilizza <br />il pannello di "Analisi Qualità" incrociando i filtri.</p>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }

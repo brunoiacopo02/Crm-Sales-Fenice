@@ -102,13 +102,23 @@ export async function getManagerGdoTables(monthString: string) {
     const startObj = parseISO(`${monthString}-01T00:00:00`);
     const endObj = new Date(endOfMonth(startObj).getFullYear(), endOfMonth(startObj).getMonth(), endOfMonth(startObj).getDate(), 23, 59, 59, 999);
 
-    const monthLeads = await db.select().from(leads).where(
-        and(
-            isNotNull(leads.appointmentDate),
-            gte(leads.appointmentDate, startObj),
-            lte(leads.appointmentDate, endObj)
-        )
-    );
+    const [monthLeads, assignedLeadsRaw] = await Promise.all([
+        db.select().from(leads).where(
+            and(
+                isNotNull(leads.appointmentDate),
+                gte(leads.appointmentDate, startObj),
+                lte(leads.appointmentDate, endObj)
+            )
+        ),
+        db.select({
+            assignedToId: leads.assignedToId,
+        }).from(leads)
+            .where(and(
+                isNotNull(leads.assignedToId),
+                gte(leads.createdAt, startObj),
+                lte(leads.createdAt, endObj)
+            ))
+    ]);
 
     const weeks = getMonthWeeks(monthString);
 
@@ -125,7 +135,8 @@ export async function getManagerGdoTables(monthString: string) {
             },
             totalStats: {
                 fissati: 0, confermati: 0, presenziati: 0, chiusi: 0
-            }
+            },
+            leadAssegnati: 0
         };
     }
 
@@ -172,6 +183,12 @@ export async function getManagerGdoTables(monthString: string) {
         }
     });
 
+    // Count leads assigned to each GDO in the month
+    for (const lead of assignedLeadsRaw) {
+        if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId]) continue;
+        gdoStatsMap[lead.assignedToId].leadAssegnati++;
+    }
+
     // Formatting for Frontend
     const result = Object.values(gdoStatsMap).map(gdo => {
         const funnelRows = Object.keys(gdo.funnelStats).map(k => {
@@ -196,6 +213,8 @@ export async function getManagerGdoTables(monthString: string) {
 
         return {
             gdoName: gdo.gdoName,
+            leadAssegnati: gdo.leadAssegnati,
+            percFissaggio: gdo.leadAssegnati > 0 ? (gdo.totalStats.fissati / gdo.leadAssegnati * 100).toFixed(1) + '%' : '-',
             funnelRows,
             totalRows: {
                 fissati: gdo.totalStats.fissati,
