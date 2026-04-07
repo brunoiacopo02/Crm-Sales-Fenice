@@ -22,6 +22,7 @@ Started: 2026-04-07
 - Loot drops: `triggerLootDrop(userId)` in `lootDropActions.ts` — call after appointment set; weighted random via cumulative subtraction
 - `GAME_CONSTANTS.LOOT_DROP` in gamificationEngine.ts: single source of truth for rarity weights, trigger interval, legendary titles
 - Title system: `UNLOCKABLE_TITLES` in gamificationEngine.ts (stat-based) + `lootDrops.bonusTitle` (legendary). `activeTitle` on users table. `measureAchievementMetric` exported from achievementActions for reuse
+- Boss Battle: `contributeToBoss(userId)` in `bossBattleActions.ts` — call after appointment set; lazy expiration via `getActiveBossBattle()`; `GAME_CONSTANTS.BOSS_BATTLE` for economy values
 
 ---
 
@@ -194,4 +195,36 @@ Started: 2026-04-07
   - `setActiveTitle` validates against `getUnlockedTitles` to prevent equipping locked titles
   - Title display uses consistent purple theming across profile header, TitleSelector, and leaderboard
   - Auto-equip on legendary loot only triggers if user has no active title (non-invasive)
+---
+
+## 2026-04-07 - F2-029
+- Created `bossBattles` table in schema: id, title, description, totalHp, currentHp, rewardCoins, rewardXp, startTime, endTime, status, createdBy, defeatedAt
+- Created `bossContributions` table in schema: id, battleId, userId, damage, action, createdAt
+- Created ADDITIVE migration at `src/app/api/migrate-boss-battles/route.ts` with indexes on status, battleId, userId
+- Added `BOSS_BATTLE` constants to `GAME_CONSTANTS`: 10 damage per appointment, 500 default HP, 100 default reward coins, 200 default reward XP
+- Created server actions in `src/app/actions/bossBattleActions.ts`:
+  - `createBossBattle(params)` — manager creates a new boss with title, HP, rewards, time window
+  - `getActiveBossBattle()` — fetches active boss with top 5 contributors and total contributor count; auto-expires if past endTime
+  - `contributeToBoss(userId)` — called after each appointment, deals damage and checks for defeat
+  - `getUserBossContribution(userId, battleId)` — returns user's total damage and hit count
+  - `defeatBoss()` (private) — awards coins + XP to ALL distinct contributors, creates notifications
+- Hooked `contributeToBoss()` into `pipelineActions.ts` after APPUNTAMENTO outcome (fire-and-forget with .catch)
+- Created `BossBattleBanner` client component:
+  - Dark gradient theme matching QuestPanel/StreakCounter style
+  - HP bar with color transitions (red → orange → green as boss weakens)
+  - Shimmer animation on HP bar
+  - Countdown timer to boss expiry
+  - Collapsible expanded section with: user contribution (damage + hits) and top 3 contributors
+  - Reward preview (coins + XP) and total warrior count
+  - Auto-refresh every 30 seconds
+  - "SCONFITTO!" badge when boss HP reaches 0
+- Integrated BossBattleBanner into GDO dashboard above GdoDailyObjectives (visible when boss active, hidden when not)
+- File modificati: `src/db/schema.ts`, `src/lib/gamificationEngine.ts`, `src/app/api/migrate-boss-battles/route.ts`, `src/app/actions/bossBattleActions.ts`, `src/app/actions/pipelineActions.ts`, `src/components/BossBattleBanner.tsx`, `src/app/(dashboard)/page.tsx`
+- **Learnings per iterazioni future:**
+  - Boss HP reduction is atomic per contribution but not using optimistic locking (acceptable: HP can go slightly negative, clamped to 0)
+  - `defeatBoss()` awards ALL contributors, not just the one who dealt the killing blow — team reward model
+  - Boss auto-expires via `getActiveBossBattle()` check (lazy expiration — no cron needed)
+  - `contributeToBoss` is fire-and-forget from pipelineActions to avoid blocking the appointment flow
+  - `GAME_CONSTANTS.BOSS_BATTLE` is the single source of truth for boss economy values
+  - Banner uses same dark gradient theme (from-brand-charcoal via-ash-900 to-ember-900) as other gamification widgets
 ---

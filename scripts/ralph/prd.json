@@ -145,7 +145,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
