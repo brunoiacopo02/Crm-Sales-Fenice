@@ -311,7 +311,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "Usare Stitch per generare design, skill ui-design-system."
     }
   ]

@@ -501,3 +501,74 @@ Started: 2026-04-07
   - ESC key handler pattern: `useCallback` + `useEffect` with cleanup, guarded by `isOpen`
   - `!important` overrides (e.g. `!border-green-200`) are needed when extending `input-fenice` with contextual border colors
 ---
+
+## 2026-04-07 - F2-020
+- **Feature**: UI: Redesign gamification visivo (Store, Profilo, Leaderboard)
+- **What was done:**
+  - **ShopClient.tsx redesign:**
+    - Rarity system based on item cost: Comune (ash), Raro (brand-orange), Epico (ember), Leggendario (gold) with matching border, glow, and badge
+    - Card hover: shadow-elevated + translateY(-1px) lift effect, preview area scale on hover
+    - Coin balance: gold gradient (gold-50 to brand-orange-50) with glow-pulse animation
+    - Rarity badge: gradient pill in top-left of preview area
+    - Purchase feedback: ring-2 ring-gold-400 flash on just-bought items
+    - Skeleton shimmer loading replacing simple animate-pulse
+    - Buy button: gradient from-brand-charcoal to-ash-800 with hover inversion
+    - Inventory: same rarity system, Equipaggia button with brand-orange gradient + glow-orange
+    - All gray-* replaced with ash-* warm palette
+  - **LeaderboardClient.tsx redesign:**
+    - **Podium top 3**: Gold (1st, h-28), Silver (2nd, h-20), Bronze (3rd, h-16) pedestals with gradient backgrounds
+    - 1st place: Crown icon above avatar, gold-400 border + ring-4, shadow-elevated, gold glow
+    - 2nd place: ash gradient pedestal, Medal icon
+    - 3rd place: brand-orange gradient pedestal, smaller scale
+    - Staggered slide-up animation for podium entries (0/100/200ms delay)
+    - Rest of list (rank 4+): ash warm palette, brand-orange hover accent, gradient left accent for current user
+    - Period filter: glass-like pills, gradient active state
+    - Gamification banner: gradient bg (gold for #1, brand-orange for others), glow effect for leader
+    - Replaced all gray-* with ash-*, <p> with <div> for hydration safety
+  - **ProfileClient.tsx redesign:**
+    - Avatar column: dark fire theme (from-brand-charcoal via-ash-900 to-ember-900/80)
+    - Multiple fire decorative blurs (ember, brand-orange, gold) for flame background effect
+    - Avatar: ember border + shadow-glow-ember, animate-glow-pulse ring
+    - Level badge: gradient from-brand-orange to-brand-orange-500 with glow-orange
+    - XP bar: gradient from-ember-500 via-brand-orange to-gold-400 with orange glow shadow
+    - Mini stat cards (Level, XP) with glass-like white/5 bg
+    - Finance section: emerald theme (consistent with existing)
+    - Roadmap cards: gold gradient bg, gold border, shadow-glow-gold on level circles
+    - Staggered fade-in animations throughout
+    - All slate-* replaced with ash-* warm palette, <span> with <div>
+  - **SprintBanner.tsx redesign:**
+    - Normal state: gradient from-brand-charcoal via-ash-900 to-brand-charcoal
+    - **Urgent state** (< 5min): gradient from-ember-700 via-ember-600, pulse countdown, Flame icon
+    - Animated accent line at top (shimmer effect when urgent)
+    - Mini-classifica: rank indicator circles (gold/ash/brand-orange for top 3), staggered fade-in
+    - Current user highlight: shadow-glow-orange
+    - Countdown: rounded-lg with border accent, urgency pulse
+  - **WeeklyBonusWidget.tsx redesign:**
+    - Dark fire theme: from-brand-charcoal via-ash-900 to-ember-900/60
+    - Tier MAX reached state: gold gradient (from-gold-700 via-gold-600 to-ember-600) with radial gold overlay
+    - Fire decorative blurs (ember, brand-orange)
+    - Progress bar: gradient from-ember-600 via-brand-orange to-gold-400 with orange glow
+    - Tier markers: shadow-glow-orange (tier 1) and shadow-glow-gold (tier MAX)
+    - Flame icon replacing CalendarDays, Star replacing generic icons
+    - Skeleton shimmer loading state
+    - All slate-* replaced with ash-*
+  - **Page headers updated:**
+    - Store: gold/brand-orange gradient icon container, ash palette
+    - Classifica: fire gradient hero (brand-charcoal via-ash-900 to-ember-900/50), gold trophy glow, triple decorative blurs
+- **Files modified:**
+  - `src/components/ShopClient.tsx` — full redesign with rarity system
+  - `src/app/(dashboard)/classifica/LeaderboardClient.tsx` — full redesign with podium
+  - `src/app/(dashboard)/profilo/ProfileClient.tsx` — full redesign with fire theme
+  - `src/components/SprintBanner.tsx` — full redesign with urgency effects
+  - `src/components/WeeklyBonusWidget.tsx` — full redesign with fire theme
+  - `src/app/(dashboard)/store/page.tsx` — header styling
+  - `src/app/(dashboard)/classifica/page.tsx` — hero section styling
+- **Learnings per iterazioni future:**
+  - Rarity system (cost-based tiers) provides visual hierarchy without needing a DB field — derive from data
+  - Podium pattern: flex items-end with 3 columns, center (1st) tallest, left (2nd) medium, right (3rd) shortest
+  - Fire theme: layered blurs (ember/orange/gold at different positions) creates convincing flame backdrop
+  - `animate-glow-pulse` on avatar ring creates a "living" profile effect
+  - Sprint urgency (< 5min threshold) detected purely client-side from countdown distance
+  - WeeklyBonusWidget tier-reached state swap (dark → gold gradient) provides strong visual reward feedback
+  - `skeleton-card` class from F2-014 design system works perfectly for loading states
+---
