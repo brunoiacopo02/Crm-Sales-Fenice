@@ -67,3 +67,20 @@ Started: 2026-04-07
   - Progress percentage uses IIFE pattern inside JSX for complex inline logic with multiple variables
   - Bar width capped at 100% visually even if percentage exceeds 100%
 ---
+
+## 2026-04-07 - F2-004
+- **Feature**: Setup 5 account venditori funzionanti
+- **What was done:**
+  - Rewrote `scripts/seedVenditori.ts` to follow the established dual-creation pattern (Supabase Auth + public.users)
+  - Creates 5 venditori: sales001-005@fenice.local with password Venditore2026!
+  - Each account created in Supabase Auth first (with email_confirm: true), then in public.users with matching UUID
+  - Idempotent: checks if DB record exists before creating; handles "already registered" Auth errors
+  - Generates formatted report table with email, name, status, and user ID
+- **Files modified:**
+  - `scripts/seedVenditori.ts` — full rewrite following verifyGdoAccounts.ts pattern
+- **Learnings per iterazioni future:**
+  - Users must exist in BOTH Supabase Auth and public.users with the same UUID to log in
+  - The `verifyGdoAccounts.ts` pattern is the canonical way to create accounts: Auth first → get UUID → insert DB
+  - Old seedVenditori.ts used random UUIDs without Auth creation — those accounts could never log in
+  - Always use `email_confirm: true` in auth.admin.createUser to skip email verification
+---

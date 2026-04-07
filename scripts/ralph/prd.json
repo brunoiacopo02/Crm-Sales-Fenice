@@ -60,7 +60,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "NON toccare account esistenti. Solo creare nuovi o verificare esistenti."
     },
     {
