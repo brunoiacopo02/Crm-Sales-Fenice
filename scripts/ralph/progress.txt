@@ -455,3 +455,17 @@ Started: 2026-04-07
   - Green/red kept for semantic success/error states (emerald for confirmations, rose for discards)
   - Purple kept for player titles/badges — consistent usage within that domain
 ---
+
+## 2026-04-07 - F2-040
+- Deploy finale e smoke test produzione completato con successo
+- Branch `ralph/fase-2b-gamification-debug` pushato su GitHub
+- Merge fast-forward in `main` senza conflitti (82 files changed, +5756/-1372 lines)
+- Push main su GitHub completato
+- Vercel deploy verificato: `https://crm-sales-fenice.vercel.app` risponde 200 (307 redirect to login → 200 OK)
+- Build locale passata con 0 errori prima del deploy
+- Tutte le 20 user stories (F2-021 → F2-040) completate con `passes: true`
+- **Learnings per iterazioni future:**
+  - 307 redirect è il comportamento atteso per CRM con auth middleware — testare con `-L` (follow redirects) per ottenere il vero status code
+  - Fast-forward merge è il caso ideale — nessun conflitto quando si lavora su un branch dedicato
+  - Sempre verificare build locale prima di pushare per evitare deploy falliti su Vercel
+---

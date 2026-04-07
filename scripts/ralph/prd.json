@@ -323,7 +323,7 @@
         "Verificare URL produzione accessibile"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "Ultimo step prima di COMPLETE."
     }
   ]
