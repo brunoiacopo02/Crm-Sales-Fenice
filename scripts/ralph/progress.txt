@@ -351,3 +351,19 @@ Started: 2026-04-07
   - `new Date()` inside useMemo is safe when results are day-granularity (won't differ between server/client)
   - `new Date()` behind loading guards (isLoading=true on initial render) never executes during SSR hydration
 ---
+
+## 2026-04-07 - F2-035
+- Full data integrity audit via comprehensive code analysis (3 independent audits)
+- **Audit 1 — Destructive DB operations**: No DELETE/TRUNCATE on leads in production code. All UPDATE on leads uses optimistic locking (version check). assignedToId never modified via UPDATE. No DROP operations. No raw SQL outside controlled migrations.
+- **Audit 2 — Migration safety**: All 8 migrations are ADDITIVE only (CREATE TABLE IF NOT EXISTS, ADD COLUMN IF NOT EXISTS, INSERT ON CONFLICT DO NOTHING). No modifications to existing leads, users, or events data.
+- **Audit 3 — Gamification data safety**: All user UPDATE operations restricted to gamification fields only (walletCoins, coins, experience, level, streakCount, lastStreakDate, activeTitle). coinTransactions are INSERT-only (never updated/deleted). No DELETE on gamification tables (userAchievements, questProgress, lootDrops, bossContributions).
+- **Build**: ZERO errors, all 44 pages rendered
+- **Anomalies found**: NONE — no human intervention required
+- **Note**: Standalone test scripts (cleanAllLeads.ts, cleanTestLeads.ts, etc.) exist in src/db/ with DELETE capability but are NOT integrated into application routes or server actions — risk is low but recommend future cleanup
+- File modificati: nessuno (audit-only story)
+- **Learnings per iterazioni future:**
+  - Code-level audit is sufficient for data integrity verification when: (a) all migrations use IF NOT EXISTS/ON CONFLICT, (b) all UPDATEs use optimistic locking, (c) no DELETE in production code paths
+  - Standalone test scripts in src/db/ should be moved to a protected directory or deleted after use
+  - coinTransactions table is append-only by design — no UPDATE/DELETE in any server action
+  - Gamification user field updates are isolated: auth/role fields (name, email, role) never touched by gamification code
+---

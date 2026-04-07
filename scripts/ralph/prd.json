@@ -240,7 +240,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "Solo VERIFICA. Non modificare nulla nel database."
     },
     {
