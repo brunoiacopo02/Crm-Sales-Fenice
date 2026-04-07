@@ -11,7 +11,8 @@ import {
     Target,
     Gamepad2,
     FileText,
-    X
+    X,
+    Compass
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
@@ -98,6 +99,7 @@ export function Sidebar() {
                 {
                     label: "KPI & Analytics",
                     items: [
+                        { name: "Centro KPI", href: "/kpi-hub", icon: Compass },
                         { name: "KPI Team", href: "/kpi-team", icon: LayoutDashboard },
                         { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
                         { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
