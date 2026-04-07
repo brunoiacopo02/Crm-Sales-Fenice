@@ -264,6 +264,7 @@ export type ManualLeadInput = {
     telefono: string
     email?: string
     funnel: string
+    assignToGdoId?: string
 }
 
 export async function createManualLead(input: ManualLeadInput): Promise<{ success: boolean; error?: string; leadId?: string }> {
@@ -297,14 +298,22 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
     const existingLead = (await db.select({ id: leads.id }).from(leads).where(or(...logicConditions)))[0]
     if (existingLead) return { success: false, error: "Lead duplicato: telefono o email già presenti nel CRM." }
 
-    // Get active GDOs and assign using stored settings
+    // Get active GDOs and assign using stored settings (or manual override)
     const activeGdos = (await db.select().from(users).where(eq(users.role, 'GDO')))
         .filter((u: any) => u.isActive === true)
     if (activeGdos.length === 0) return { success: false, error: "Nessun GDO attivo per l'assegnazione." }
 
-    const stored = await getAssignmentSettings()
-    const distribution = previewLeadDistribution(1, activeGdos, stored.mode, stored.settings)
-    const assignedGdoId = Object.entries(distribution).find(([, v]) => v.count > 0)?.[0] || activeGdos[0].id
+    let assignedGdoId: string
+    if (input.assignToGdoId) {
+        // Validate the selected GDO is active
+        const selectedGdo = activeGdos.find((g: any) => g.id === input.assignToGdoId)
+        if (!selectedGdo) return { success: false, error: "Il GDO selezionato non è attivo o non esiste." }
+        assignedGdoId = input.assignToGdoId
+    } else {
+        const stored = await getAssignmentSettings()
+        const distribution = previewLeadDistribution(1, activeGdos, stored.mode, stored.settings)
+        assignedGdoId = Object.entries(distribution).find(([, v]) => v.count > 0)?.[0] || activeGdos[0].id
+    }
 
     const newLeadId = crypto.randomUUID()
     await db.insert(leads).values({

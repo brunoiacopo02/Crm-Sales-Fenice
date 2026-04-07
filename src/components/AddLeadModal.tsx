@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { X, UserPlus, CheckCircle2, AlertCircle } from "lucide-react"
-import { createManualLead } from "@/app/actions/importLeads"
+import { createManualLead, getActiveGdosForImport } from "@/app/actions/importLeads"
 import { useRouter } from "next/navigation"
 
 type AddLeadModalProps = {
@@ -16,14 +16,23 @@ export function AddLeadModal({ isOpen, onClose }: AddLeadModalProps) {
     const [telefono, setTelefono] = useState("")
     const [email, setEmail] = useState("")
     const [funnel, setFunnel] = useState("")
+    const [selectedGdoId, setSelectedGdoId] = useState("")
+    const [gdoList, setGdoList] = useState<{ id: string; name: string | null; displayName: string | null; gdoCode: number | null }[]>([])
     const [loading, setLoading] = useState(false)
     const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
+
+    // Fetch active GDOs on open
+    useEffect(() => {
+        if (!isOpen) return
+        getActiveGdosForImport().then(setGdoList).catch(() => setGdoList([]))
+    }, [isOpen])
 
     const resetForm = useCallback(() => {
         setNome("")
         setTelefono("")
         setEmail("")
         setFunnel("")
+        setSelectedGdoId("")
         setFeedback(null)
     }, [])
 
@@ -66,6 +75,7 @@ export function AddLeadModal({ isOpen, onClose }: AddLeadModalProps) {
                 telefono: telefono.trim(),
                 email: email.trim() || undefined,
                 funnel: funnel.trim(),
+                assignToGdoId: selectedGdoId || undefined,
             })
 
             if (result.success) {
@@ -154,6 +164,24 @@ export function AddLeadModal({ isOpen, onClose }: AddLeadModalProps) {
                             required
                             className="input-fenice text-sm"
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            Assegna a GDO
+                        </label>
+                        <select
+                            value={selectedGdoId}
+                            onChange={(e) => setSelectedGdoId(e.target.value)}
+                            className="input-fenice text-sm"
+                        >
+                            <option value="">Automatico (distribuzione)</option>
+                            {gdoList.map((gdo) => (
+                                <option key={gdo.id} value={gdo.id}>
+                                    {gdo.displayName || gdo.name || 'GDO'}{gdo.gdoCode != null ? ` (${gdo.gdoCode})` : ''}
+                                </option>
+                            ))}
+                        </select>
                     </div>
 
                     {/* Feedback */}
