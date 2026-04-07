@@ -124,3 +124,14 @@ Started: 2026-04-07
   - Supabase REST API returns empty array `[]` for tables with no data but valid columns — distinguishes from 404 for missing tables
   - All 30 tables confirmed: original (14 core tables) + gamification (16 newer tables) all present
 ---
+
+## 2026-04-07 - F3-008
+- Pushed branch `ralph/fase-3a-manager-store` to GitHub
+- Fast-forward merged into `main` (no conflicts)
+- Pushed `main` to GitHub
+- Waited 120 seconds for Vercel deploy
+- Verified: `curl -s -o /dev/null -w "%{http_code}" -L https://crm-sales-fenice.vercel.app` → 200
+- (Initial 307 is expected — middleware redirects to /login for unauthenticated requests)
+- **All 8 stories (F3-001 through F3-008) are now `passes: true`**
+- **Deploy verified and live**
+---

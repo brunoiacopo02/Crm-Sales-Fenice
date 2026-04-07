@@ -122,7 +122,7 @@
         "Se non ritorna 200, attendere e riprovare"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Ultimo step prima di COMPLETE."
     }
   ]
