@@ -2,7 +2,11 @@ import { createClient } from "@/utils/supabase/server"
 import { ConfermeBoard } from "@/components/ConfermeBoard"
 import { TeamRadarWidget } from "@/components/TeamRadarWidget"
 import { ConfermeDailyObjectives } from "@/components/ConfermeDailyObjectives"
+import { StreakCounter } from "@/components/StreakCounter"
 import { redirect } from "next/navigation"
+import dynamic from "next/dynamic"
+
+const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 
 export default async function ConfermePage() {
     const supabase = await createClient();
@@ -29,7 +33,11 @@ export default async function ConfermePage() {
             </div>
 
             {session.user.role === 'CONFERME' && (
-                <ConfermeDailyObjectives confermeUserId={session.user.id} />
+                <>
+                    <ConfermeDailyObjectives confermeUserId={session.user.id} />
+                    <StreakCounter userId={session.user.id} />
+                    <QuestPanel userId={session.user.id} />
+                </>
             )}
 
             <ConfermeBoard currentUser={session.user} />
