@@ -12,6 +12,8 @@ export const GAME_CONSTANTS = {
         PRESENZIATO: { xp: 50, coins: 0 },
         CHIUSO: { xp: 200, coins: 50 },
         BONUS_SETTIMANALE: { xp: 500, coins: 100 },
+        CONFERMATO: { xp: 15, coins: 5 },
+        DEAL_CHIUSO: { xp: 100, coins: 30 },
     },
 
     // Economy rebalancing (F2-026)

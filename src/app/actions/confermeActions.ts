@@ -364,6 +364,11 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             metadata: { outcome, reason, salespersonAssigned }
         })
 
+        // Gamification: award XP/coins to Conferme worker on confirmation
+        if (outcome === "confermato") {
+            await awardXpAndCoins(session.user.id, "CONFERMATO", leadId).catch(e => console.error("GameEngine CONFERMATO err:", e));
+        }
+
         // Notifiche Live (Pilota E2E)
         if (outcome === "confermato" && salespersonAssigned) {
             const spName = await getSalespersonName(salespersonAssigned) || salespersonAssigned

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Trophy, Medal, User, Crown, Flame, Phone, Zap, ArrowUp, ArrowDown, Star, Sparkles } from "lucide-react"
-import { getMultiMetricLeaderboard } from "@/app/actions/leaderboardActions"
-import type { LeaderboardPeriod, LeaderboardMetric } from "@/app/actions/leaderboardActions"
+import { Trophy, Medal, User, Crown, Flame, Phone, Zap, ArrowUp, ArrowDown, Star, Sparkles, CheckCircle, DollarSign, Users } from "lucide-react"
+import { getMultiMetricLeaderboard, getRoleLeaderboard } from "@/app/actions/leaderboardActions"
+import type { LeaderboardPeriod, LeaderboardMetric, LeaderboardRole } from "@/app/actions/leaderboardActions"
 
 type LeaderboardItem = {
     userId: string
@@ -30,6 +30,12 @@ type PlayerOfWeek = {
     activeTitle?: string | null
 } | null
 
+const ROLE_TABS: { id: LeaderboardRole; label: string; icon: typeof Trophy; unit: string; sublabel: string }[] = [
+    { id: 'GDO', label: 'GDO', icon: Phone, unit: 'Appuntamenti', sublabel: 'Appuntamenti fissati' },
+    { id: 'CONFERME', label: 'Conferme', icon: CheckCircle, unit: 'Conferme', sublabel: 'Appuntamenti confermati' },
+    { id: 'VENDITORE', label: 'Venditori', icon: DollarSign, unit: '€ Fatturato', sublabel: 'Fatturato generato' },
+]
+
 const METRIC_TABS: { id: LeaderboardMetric; label: string; icon: typeof Trophy; unit: string }[] = [
     { id: 'appointments', label: 'Appuntamenti', icon: Trophy, unit: 'Appuntamenti' },
     { id: 'calls', label: 'Chiamate', icon: Phone, unit: 'Chiamate' },
@@ -42,11 +48,13 @@ export function LeaderboardClient({
     initialPeriod,
     loggedUserId,
     playerOfWeek,
+    userRole,
 }: {
     initialData: LeaderboardItem[],
     initialPeriod: LeaderboardPeriod,
     loggedUserId?: string,
     playerOfWeek?: PlayerOfWeek,
+    userRole?: string,
 }) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -54,6 +62,8 @@ export function LeaderboardClient({
     const [currentData, setCurrentData] = useState<LeaderboardItem[]>(initialData)
     const [isPending, setIsPending] = useState(false)
     const [currentMetric, setCurrentMetric] = useState<LeaderboardMetric>('appointments')
+    const defaultRole: LeaderboardRole = (userRole === 'CONFERME' || userRole === 'VENDITORE') ? userRole : 'GDO'
+    const [currentRole, setCurrentRole] = useState<LeaderboardRole>(defaultRole)
     const previousRanksRef = useRef<Map<string, number>>(new Map())
     const [rankChanges, setRankChanges] = useState<Map<string, number>>(new Map())
     const currentPeriod = (searchParams.get('period') as LeaderboardPeriod) || initialPeriod
@@ -91,7 +101,12 @@ export function LeaderboardClient({
         let mounted = true
         const pollLeaderboard = async () => {
             try {
-                const data = await getMultiMetricLeaderboard(currentPeriod, currentMetric)
+                let data
+                if (currentRole === 'GDO') {
+                    data = await getMultiMetricLeaderboard(currentPeriod, currentMetric)
+                } else {
+                    data = await getRoleLeaderboard(currentPeriod, currentRole)
+                }
                 if (mounted) setCurrentData(data)
             } catch (err) {
                 // Silently fails to not break UX
@@ -102,7 +117,7 @@ export function LeaderboardClient({
             mounted = false
             clearInterval(intervalId)
         }
-    }, [currentPeriod, currentMetric])
+    }, [currentPeriod, currentMetric, currentRole])
 
     const handlePeriodChange = (period: LeaderboardPeriod) => {
         setIsPending(true)
@@ -121,6 +136,24 @@ export function LeaderboardClient({
         setIsPending(false)
     }
 
+    const handleRoleChange = async (role: LeaderboardRole) => {
+        setIsPending(true)
+        setCurrentRole(role)
+        try {
+            let data
+            if (role === 'GDO') {
+                data = await getMultiMetricLeaderboard(currentPeriod, 'appointments')
+                setCurrentMetric('appointments')
+            } else {
+                data = await getRoleLeaderboard(currentPeriod, role)
+            }
+            setCurrentData(data)
+        } catch (err) {
+            // ignore
+        }
+        setIsPending(false)
+    }
+
     const periods = [
         { id: 'today', label: 'Oggi' },
         { id: 'week', label: 'Settimana' },
@@ -128,8 +161,9 @@ export function LeaderboardClient({
     ]
 
     const activeMetricTab = METRIC_TABS.find(t => t.id === currentMetric)!
+    const activeRoleTab = ROLE_TABS.find(t => t.id === currentRole)!
     const getScore = (item: LeaderboardItem) => item.metricValue ?? item.appointmentCount
-    const getUnit = () => activeMetricTab.unit
+    const getUnit = () => currentRole !== 'GDO' ? activeRoleTab.unit : activeMetricTab.unit
 
     // Find the logged-in user to show their specific message
     const loggedUserIndex = currentData.findIndex(u => u.userId === loggedUserId)
@@ -151,6 +185,18 @@ export function LeaderboardClient({
         gapMessage = `Sei al 1° posto! Hai ${gap} ${getUnit().toLowerCase()} di vantaggio su ${userBelow.displayName}.`
     } else if (loggedUserItem && loggedUserIndex === 0) {
         gapMessage = "Sei solo in classifica! Ottimo lavoro."
+    }
+
+    const getRoleLabel = (user: LeaderboardItem) => {
+        if (currentRole === 'GDO') return `GDO ${user.gdoCode || 'N/A'}`
+        if (currentRole === 'CONFERME') return 'Conferme'
+        if (currentRole === 'VENDITORE') return 'Venditore'
+        return `GDO ${user.gdoCode || 'N/A'}`
+    }
+
+    const formatScore = (score: number) => {
+        if (currentRole === 'VENDITORE') return `€${score.toLocaleString('it-IT')}`
+        return String(score)
     }
 
     // Top 3 for podium
@@ -215,7 +261,29 @@ export function LeaderboardClient({
                 </div>
             )}
 
-            {/* Metric Tabs */}
+            {/* Role Tabs */}
+            <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-xl border border-ash-200/60 shadow-soft flex flex-wrap gap-1.5">
+                {ROLE_TABS.map(tab => {
+                    const Icon = tab.icon
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => handleRoleChange(tab.id)}
+                            disabled={isPending}
+                            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${currentRole === tab.id
+                                ? 'bg-gradient-to-r from-ember-500 to-brand-orange text-white shadow-card'
+                                : 'text-ash-500 hover:bg-ash-50 hover:text-ash-800'
+                                }`}
+                        >
+                            <Icon className="h-3.5 w-3.5" />
+                            <span>{tab.label}</span>
+                        </button>
+                    )
+                })}
+            </div>
+
+            {/* Metric Tabs (GDO only) */}
+            {currentRole === 'GDO' && (
             <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-xl border border-ash-200/60 shadow-soft flex flex-wrap gap-1.5">
                 {METRIC_TABS.map(tab => {
                     const Icon = tab.icon
@@ -235,6 +303,7 @@ export function LeaderboardClient({
                     )
                 })}
             </div>
+            )}
 
             {/* Period Filters */}
             <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-xl border border-ash-200/60 shadow-soft flex gap-1.5 max-w-fit">
@@ -309,7 +378,7 @@ export function LeaderboardClient({
                                 {user.activeTitle && (
                                     <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
                                 )}
-                                <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
+                                <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
                                 <div className="text-lg font-black text-ash-700 mt-1">{score}</div>
                                 <div className="text-[9px] uppercase font-bold tracking-wider text-ash-400">{getUnit()}</div>
                                 {/* Pedestal — Silver */}
@@ -340,7 +409,7 @@ export function LeaderboardClient({
                                 {user.activeTitle && (
                                     <div className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
                                 )}
-                                <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
+                                <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
                                 <div className="text-2xl font-black text-gold-600 mt-1">{score}</div>
                                 <div className="text-[10px] uppercase font-bold tracking-wider text-gold-500">{getUnit()}</div>
                                 {isMe && <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-brand-orange-200">TU</div>}
@@ -372,7 +441,7 @@ export function LeaderboardClient({
                                 {user.activeTitle && (
                                     <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
                                 )}
-                                <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
+                                <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
                                 <div className="text-lg font-black text-ash-700 mt-1">{score}</div>
                                 <div className="text-[9px] uppercase font-bold tracking-wider text-ash-400">{getUnit()}</div>
                                 {/* Pedestal — Bronze */}
@@ -441,7 +510,7 @@ export function LeaderboardClient({
                                                     )}
                                                 </div>
                                                 <div className="text-ash-500 text-xs flex items-center gap-1.5 mt-0.5">
-                                                    <User className="h-3 w-3" /> GDO {user.gdoCode || 'N/A'}
+                                                    <User className="h-3 w-3" /> {getRoleLabel(user)}
                                                     {user.activeTitle && (
                                                         <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200">{user.activeTitle}</div>
                                                     )}

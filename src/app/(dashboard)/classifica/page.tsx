@@ -19,6 +19,7 @@ export default async function ClassificaPage({
     }
 
     const loggedUserId = session?.user?.id
+    const userRole = session?.user?.role as string | undefined
 
     const period = (searchParams.period as LeaderboardPeriod) || 'today'
     const [leaderboardData, playerOfWeek] = await Promise.all([
@@ -40,7 +41,7 @@ export default async function ClassificaPage({
                         <Trophy className="h-6 w-6 text-gold-400 drop-shadow-sm" />
                     </div>
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Classifica GDO</h1>
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Classifica</h1>
                         <div className="text-ash-400 mt-1 flex items-center gap-2">
                             <div>Sfida i tuoi colleghi e raggiungi la vetta</div>
                             <Star className="h-3 w-3 text-gold-400" />
@@ -57,6 +58,7 @@ export default async function ClassificaPage({
                     initialPeriod={period}
                     loggedUserId={loggedUserId}
                     playerOfWeek={playerOfWeek}
+                    userRole={userRole}
                 />
             </div>
         </div>

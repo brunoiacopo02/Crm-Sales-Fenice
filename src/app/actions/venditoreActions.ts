@@ -5,6 +5,7 @@ import { db } from "@/db"
 import { leads, users, callLogs, notifications, leadEvents } from "@/db/schema"
 import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
+import { awardXpAndCoins } from "@/lib/gamificationEngine"
 
 export async function getVenditoreAppointments(sellerId: string) {
     // Ritorna i lead assegnati a questo venditore che hanno un appuntamento
@@ -84,6 +85,11 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         return { success: false, error: 'CONCURRENCY_ERROR' }
     }
         
+
+    // Gamification: award XP/coins to Venditore on deal close (first outcome only)
+    if (!oldLead.salespersonOutcome && payload.outcome === 'Chiuso') {
+        await awardXpAndCoins(session.user.id, "DEAL_CHIUSO", leadId).catch(e => console.error("GameEngine DEAL_CHIUSO err:", e));
+    }
 
     // 1. Audit Log per la cronologia completa (Timeline)
     await db.insert(leadEvents).values({

@@ -2,12 +2,13 @@
 
 import { db } from "@/db"
 import { users, leads, notifications, shopItems, callLogs } from "@/db/schema"
-import { eq, and, ne, gte, lte, desc, desc as drizzleDesc, count, isNotNull } from "drizzle-orm"
+import { eq, and, ne, gte, lte, desc, desc as drizzleDesc, count, isNotNull, sql } from "drizzle-orm"
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
 import crypto from "crypto"
 
 export type LeaderboardPeriod = 'today' | 'week' | 'month'
 export type LeaderboardMetric = 'appointments' | 'calls' | 'xp' | 'streak'
+export type LeaderboardRole = 'GDO' | 'CONFERME' | 'VENDITORE'
 
 export async function getLeaderboard(period: LeaderboardPeriod) {
     const now = new Date()
@@ -300,6 +301,125 @@ export async function getPlayerOfTheWeek() {
         equippedSkinCss: top.equippedSkinCss,
         activeTitle: top.activeTitle,
     }
+}
+
+// Conferme leaderboard: ranked by confirmed appointments count
+export async function getConfermeLeaderboard(period: LeaderboardPeriod) {
+    const now = new Date()
+    let startDate: Date
+    let endDate: Date
+
+    if (period === 'today') {
+        startDate = startOfDay(now)
+        endDate = endOfDay(now)
+    } else if (period === 'week') {
+        startDate = startOfWeek(now, { weekStartsOn: 1 })
+        endDate = endOfWeek(now, { weekStartsOn: 1 })
+    } else {
+        startDate = startOfMonth(now)
+        endDate = endOfMonth(now)
+    }
+
+    const allConferme = await db.select().from(users).where(eq(users.role, 'CONFERME'))
+    const allSkins = await db.select().from(shopItems)
+    const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
+
+    // Count confirmed appointments per conferme user in the period
+    const confirmedLeads = await db.select()
+        .from(leads)
+        .where(
+            and(
+                eq(leads.confirmationsOutcome, 'confermato'),
+                gte(leads.confirmationsTimestamp, startDate),
+                lte(leads.confirmationsTimestamp, endDate)
+            )
+        )
+
+    const counts = new Map<string, number>()
+    for (const lead of confirmedLeads) {
+        if (lead.confirmationsUserId) {
+            counts.set(lead.confirmationsUserId, (counts.get(lead.confirmationsUserId) || 0) + 1)
+        }
+    }
+
+    const leaderboard = allConferme.map(user => ({
+        userId: user.id,
+        gdoCode: user.gdoCode,
+        displayName: user.displayName || user.name || 'Conferme',
+        avatarUrl: user.avatarUrl,
+        appointmentCount: counts.get(user.id) || 0,
+        metricValue: counts.get(user.id) || 0,
+        metricLabel: 'Conferme',
+        firstApptTime: Infinity,
+        equippedSkinCss: user.equippedItemId ? (skinMap.get(user.equippedItemId) || null) : null,
+        activeTitle: user.activeTitle || null,
+    }))
+
+    leaderboard.sort((a, b) => b.metricValue - a.metricValue)
+    return leaderboard.map((item, index) => ({ ...item, rank: index + 1 }))
+}
+
+// Venditori leaderboard: ranked by fatturato (revenue)
+export async function getVenditoriLeaderboard(period: LeaderboardPeriod) {
+    const now = new Date()
+    let startDate: Date
+    let endDate: Date
+
+    if (period === 'today') {
+        startDate = startOfDay(now)
+        endDate = endOfDay(now)
+    } else if (period === 'week') {
+        startDate = startOfWeek(now, { weekStartsOn: 1 })
+        endDate = endOfWeek(now, { weekStartsOn: 1 })
+    } else {
+        startDate = startOfMonth(now)
+        endDate = endOfMonth(now)
+    }
+
+    const allVenditori = await db.select().from(users).where(eq(users.role, 'VENDITORE'))
+    const allSkins = await db.select().from(shopItems)
+    const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
+
+    // Get closed deals in the period
+    const closedDeals = await db.select()
+        .from(leads)
+        .where(
+            and(
+                eq(leads.salespersonOutcome, 'Chiuso'),
+                gte(leads.salespersonOutcomeAt, startDate),
+                lte(leads.salespersonOutcomeAt, endDate)
+            )
+        )
+
+    const fatturato = new Map<string, number>()
+    for (const deal of closedDeals) {
+        if (deal.salespersonUserId) {
+            fatturato.set(deal.salespersonUserId, (fatturato.get(deal.salespersonUserId) || 0) + Number(deal.closeAmountEur || 0))
+        }
+    }
+
+    const leaderboard = allVenditori.map(user => ({
+        userId: user.id,
+        gdoCode: user.gdoCode,
+        displayName: user.displayName || user.name || 'Venditore',
+        avatarUrl: user.avatarUrl,
+        appointmentCount: fatturato.get(user.id) || 0,
+        metricValue: fatturato.get(user.id) || 0,
+        metricLabel: 'Fatturato €',
+        firstApptTime: Infinity,
+        equippedSkinCss: user.equippedItemId ? (skinMap.get(user.equippedItemId) || null) : null,
+        activeTitle: user.activeTitle || null,
+    }))
+
+    leaderboard.sort((a, b) => b.metricValue - a.metricValue)
+    return leaderboard.map((item, index) => ({ ...item, rank: index + 1 }))
+}
+
+// Role-based leaderboard dispatcher
+export async function getRoleLeaderboard(period: LeaderboardPeriod, role: LeaderboardRole) {
+    if (role === 'CONFERME') return getConfermeLeaderboard(period)
+    if (role === 'VENDITORE') return getVenditoriLeaderboard(period)
+    return getLeaderboard(period) // GDO default
 }
 
 // Get lifetime stats for a user (profile page)
