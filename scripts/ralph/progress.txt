@@ -21,6 +21,7 @@ Started: 2026-04-07
 - gdoNotes tabella gia' creata in Run 1 per note HR/formazione
 - Loot drops: `triggerLootDrop(userId)` in `lootDropActions.ts` — call after appointment set; weighted random via cumulative subtraction
 - `GAME_CONSTANTS.LOOT_DROP` in gamificationEngine.ts: single source of truth for rarity weights, trigger interval, legendary titles
+- Title system: `UNLOCKABLE_TITLES` in gamificationEngine.ts (stat-based) + `lootDrops.bonusTitle` (legendary). `activeTitle` on users table. `measureAchievementMetric` exported from achievementActions for reuse
 
 ---
 
@@ -165,4 +166,32 @@ Started: 2026-04-07
   - Animation phases use `setTimeout` promises for staged reveal: shake (1.5s) → burst (0.8s) → server call → reveal
   - Rarity config maps define per-rarity colors/glows/icons for consistent theming across modal states
   - `GAME_CONSTANTS.LOOT_DROP` is the single source of truth for all loot economy values
+---
+
+## 2026-04-07 - F2-028
+- Added `activeTitle` (text, nullable) to users table in schema
+- Created ADDITIVE migration at `src/app/api/migrate-titles/route.ts` (ADD COLUMN IF NOT EXISTS)
+- Added `UNLOCKABLE_TITLES` array to `src/lib/gamificationEngine.ts` with 14 stat-based titles across 5 categories:
+  - Calls: Lo Squalo (500), Centralino Vivente (2000), La Voce (5000)
+  - Appointments: Il Fissatore (50), Re degli Appuntamenti (200), L'Asso (500)
+  - Streak: Il Costante (14), Il Maratoneta (45), Il Veterano (90)
+  - Level: La Fenice d'Oro (30), La Divinità (40), La Leggenda (50)
+  - Quests: L'Avventuriero (100), Il Cacciatore di Quest (500)
+- Created server actions in `src/app/actions/titleActions.ts`:
+  - `getUnlockedTitles(userId)` — checks stat-based titles via `measureAchievementMetric` + legendary loot titles from `lootDrops`
+  - `setActiveTitle(userId, titleName)` — validates unlock status before setting, supports null to unequip
+- Exported `measureAchievementMetric` from `achievementActions.ts` for reuse
+- Updated `openLootDrop` in `lootDropActions.ts` to auto-equip legendary title if user has none
+- Created `TitleSelector` client component with collapsible panel, category grouping, active/locked states
+- Integrated into profile page: title fetch in `Promise.all`, display next to username + TitleSelector between roadmap and achievements
+- Updated `leaderboardActions.ts` to include `activeTitle` field
+- Updated `LeaderboardClient.tsx` to show purple title badge in podium (top 3) and ranked list (4+)
+- File modificati: `src/db/schema.ts`, `src/app/api/migrate-titles/route.ts`, `src/lib/gamificationEngine.ts`, `src/app/actions/titleActions.ts`, `src/app/actions/achievementActions.ts`, `src/app/actions/lootDropActions.ts`, `src/app/actions/leaderboardActions.ts`, `src/components/TitleSelector.tsx`, `src/app/(dashboard)/profilo/page.tsx`, `src/app/(dashboard)/profilo/ProfileClient.tsx`, `src/app/(dashboard)/classifica/LeaderboardClient.tsx`
+- **Learnings per iterazioni future:**
+  - `measureAchievementMetric` is now exported and reusable for any system needing metric checks (titles, achievements, future features)
+  - Title unlock checks reuse exact same metric system as achievements — no duplication of DB queries
+  - Legendary loot titles are tracked via `lootDrops.bonusTitle` (opened drops), stat-based via `UNLOCKABLE_TITLES` array
+  - `setActiveTitle` validates against `getUnlockedTitles` to prevent equipping locked titles
+  - Title display uses consistent purple theming across profile header, TitleSelector, and leaderboard
+  - Auto-equip on legendary loot only triggers if user has no active title (non-invasive)
 ---
