@@ -502,6 +502,64 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
     return { success: true };
 }
 
+export async function undoConfermeNoAnswer(leadId: string, currentVersion: number) {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+    if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
+        throw new Error("Unauthorized")
+    }
+
+    const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+    if (!oldLead) throw new Error("Lead not found");
+    if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
+
+    let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date() };
+    let fieldCleared: string | null = null;
+
+    if (oldLead.confCall3At) {
+        toUpdate.confCall3At = null;
+        fieldCleared = "confCall3At";
+    } else if (oldLead.confCall2At) {
+        toUpdate.confCall2At = null;
+        fieldCleared = "confCall2At";
+    } else if (oldLead.confCall1At) {
+        toUpdate.confCall1At = null;
+        fieldCleared = "confCall1At";
+    } else {
+        return { success: false, error: "Nessun NR da annullare." };
+    }
+
+    const updated = await db.update(leads).set(toUpdate)
+    .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+    .returning({ id: leads.id });
+
+    if (updated.length === 0) {
+        throw new Error("CONCURRENCY_ERROR");
+    }
+
+    // Remove the last conferme_no_answer event for this lead
+    const lastEvent = await db.select().from(leadEvents)
+        .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.eventType, "conferme_no_answer")))
+        .orderBy(desc(leadEvents.timestamp))
+        .limit(1);
+
+    if (lastEvent.length > 0) {
+        await db.delete(leadEvents).where(eq(leadEvents.id, lastEvent[0].id));
+    }
+
+    await db.insert(leadEvents).values({
+        id: crypto.randomUUID(),
+        leadId,
+        eventType: "conferme_nr_undone",
+        userId: session.user.id,
+        timestamp: new Date(),
+        metadata: { fieldCleared }
+    });
+
+    return { success: true };
+}
+
 import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar";
 
 export async function scheduleConfermeRecall(leadId: string, currentVersion: number, payload: {

@@ -327,7 +327,8 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             .filter(l => l.lead.confSnoozeAt && !l.lead.confirmationsOutcome)
             .sort((a,b) => new Date(a.lead.confSnoozeAt).getTime() - new Date(b.lead.confSnoozeAt).getTime());
             
-        const normalTargetLeads = targetLeads.filter(l => !l.lead.confSnoozeAt);
+        // Snoozed leads now stay in the main view too (F3-017)
+        const normalTargetLeads = targetLeads;
 
         return (
             <div className="grid grid-cols-1 lg:grid-cols-3 w-full max-w-[1400px] mx-auto pb-12 gap-4 sm:gap-6 items-start px-2">

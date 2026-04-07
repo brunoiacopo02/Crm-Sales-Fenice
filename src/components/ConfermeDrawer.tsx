@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users } from "lucide-react"
-import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze } from "@/app/actions/confermeActions"
+import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze } from "@/app/actions/confermeActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { createClient } from "@/utils/supabase/client"
 import { format, formatDistanceToNow } from "date-fns"
@@ -256,6 +256,23 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         }
     }
 
+    const handleUndoNR = async () => {
+        setIsSavingNR(true);
+        try {
+            const res = await undoConfermeNoAnswer(lead.id, localVersion);
+            if (res.success) {
+                setLocalVersion((v: number) => v + 1);
+                onRefresh();
+            } else {
+                alert(res.error);
+            }
+        } catch (e: any) {
+            alert(e.message);
+        } finally {
+            setIsSavingNR(false);
+        }
+    }
+
     const getLastNRDate = () => {
         if (lead.confCall3At) return new Date(lead.confCall3At);
         if (lead.confCall2At) return new Date(lead.confCall2At);
@@ -318,6 +335,16 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         <Clock className="w-3.5 h-3.5 text-brand-orange" />
                                         {formatDistanceToNow(lastNR, { locale: it })} fa
                                     </span>
+                                )}
+
+                                {lastNR && !lead.confirmationsOutcome && (
+                                    <button
+                                        onClick={handleUndoNR}
+                                        disabled={isSavingNR}
+                                        className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50"
+                                    >
+                                        Annulla NR
+                                    </button>
                                 )}
                             </div>
                         </div>

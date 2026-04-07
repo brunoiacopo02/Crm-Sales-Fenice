@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff } from "lucide-react"
-import { recordConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall } from "@/app/actions/confermeActions"
+import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2 } from "lucide-react"
+import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall } from "@/app/actions/confermeActions"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRowClick, layoutMode = 'default' }: any) {
     const lead = item.lead
@@ -51,6 +51,20 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
         e.stopPropagation()
         try {
             const res = await recordConfermeNoAnswer(lead.id, lead.version);
+            if (res.success) {
+                onRefresh();
+            } else {
+                alert(res.error);
+            }
+        } catch (e: any) {
+            alert(e.message);
+        }
+    }
+
+    const handleUndoNR = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        try {
+            const res = await undoConfermeNoAnswer(lead.id, lead.version);
             if (res.success) {
                 onRefresh();
             } else {
@@ -206,6 +220,18 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                             >
                                 NR
                             </button>
+
+                            {/* BOTTONE ANNULLA NR */}
+                            {callsMade > 0 && (
+                                <button
+                                    onClick={handleUndoNR}
+                                    disabled={isLocked}
+                                    title="Annulla ultimo NR"
+                                    className="bg-white hover:bg-amber-50 border border-ash-200 hover:border-amber-300 text-ash-500 hover:text-amber-600 px-2 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card flex items-center gap-1"
+                                >
+                                    <Undo2 className="w-3 h-3" /> Annulla NR
+                                </button>
+                            )}
 
                             {/* BOTTONE SNOOZE */}
                             <div className="relative">
