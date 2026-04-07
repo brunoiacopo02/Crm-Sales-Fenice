@@ -1,7 +1,7 @@
 "use client"
 import { useAuth } from "@/components/AuthProvider"
 import { useSidebar } from "@/components/providers/SidebarProvider"
-
+import Image from "next/image"
 import { Search, Bell, X, Phone, User, Trophy, Menu } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { searchLeads, SearchResult } from "@/app/actions/searchActions"
@@ -269,7 +269,7 @@ export function Topbar() {
                 <div className="flex items-center gap-3 pl-3 lg:pl-4 border-l border-ash-200">
                     {session?.user?.role === "GDO" && (
                         <div className="flex items-center gap-1.5 bg-gradient-to-r from-gold-50 to-brand-orange-50 text-gold-700 font-bold px-2.5 py-1 rounded-full text-xs shadow-soft border border-gold-200" title="I tuoi Fenice Coin vinti nello Sprint">
-                            <img src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" className="w-4 h-4 object-contain drop-shadow-sm" />
+                            <Image src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" width={16} height={16} className="object-contain drop-shadow-sm" />
                             {walletCoins}
                         </div>
                     )}

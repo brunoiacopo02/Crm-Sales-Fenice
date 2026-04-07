@@ -87,7 +87,7 @@ export function TeamGoalBanner() {
 
                                 <div className="h-3 w-full bg-gray-200/80 rounded-full overflow-hidden shadow-inner">
                                     <div
-                                        className={`h-full transition-all duration-1000 cubic-bezier(0.16, 1, 0.3, 1) ${isCompleted ? 'bg-gradient-to-r from-green-400 to-green-500' : 'bg-gradient-to-r from-indigo-500 to-brand-orange'}`}
+                                        className={`h-full transition-[width] duration-1000 cubic-bezier(0.16, 1, 0.3, 1) ${isCompleted ? 'bg-gradient-to-r from-green-400 to-green-500' : 'bg-gradient-to-r from-indigo-500 to-brand-orange'}`}
                                         style={{ width: `${progress}%` }}
                                     >
                                         {/* Sparkles effect over progress bar */}

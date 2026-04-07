@@ -147,7 +147,7 @@ export function SeasonalEventBanner() {
             {/* Progress bar (event timeline) */}
             <div className="mt-3 h-1.5 rounded-full bg-ash-800 overflow-hidden">
                 <div
-                    className={`h-full rounded-full bg-gradient-to-r ${colors.bar} transition-all duration-500`}
+                    className={`h-full rounded-full bg-gradient-to-r ${colors.bar} transition-[width] duration-500`}
                     style={{ width: `${progressPercent}%` }}
                 />
             </div>

@@ -82,7 +82,7 @@ export function WeeklyBonusWidget({ userId }: { userId: string }) {
 
                         {/* Progress Fill */}
                         <div
-                            className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-out ${isTier2Reached
+                            className={`absolute top-0 left-0 h-full rounded-full transition-[width] duration-1000 ease-out ${isTier2Reached
                                 ? 'bg-gradient-to-r from-gold-500 via-gold-400 to-gold-300 shadow-[0_0_20px_rgba(201,161,60,0.5)]'
                                 : 'bg-gradient-to-r from-ember-600 via-brand-orange to-gold-400 shadow-[0_0_15px_rgba(255,190,130,0.3)]'
                                 }`}

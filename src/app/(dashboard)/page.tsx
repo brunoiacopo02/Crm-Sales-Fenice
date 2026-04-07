@@ -3,13 +3,15 @@ import { getPipelineLeads } from "@/app/actions/pipelineActions"
 import { PipelineBoard } from "@/components/PipelineBoard"
 import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
-import { QuestPanel } from "@/components/QuestPanel"
 import { StreakCounter } from "@/components/StreakCounter"
-import { LootDropModal } from "@/components/LootDropModal"
-import { BossBattleBanner } from "@/components/BossBattleBanner"
-import { SeasonalEventBanner } from "@/components/SeasonalEventBanner"
-import { CelebrationOverlay } from "@/components/CelebrationOverlay"
 import { redirect } from "next/navigation"
+import dynamic from "next/dynamic"
+
+const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
+const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
+const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").then(m => ({ default: m.BossBattleBanner })))
+const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
+const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();

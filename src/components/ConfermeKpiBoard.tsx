@@ -66,14 +66,14 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                 <div className="relative h-6 bg-gray-100 rounded-full overflow-hidden shadow-inner flex">
                     {/* TIER 1 BAR */}
                     <div
-                        className="h-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-1000 ease-out relative"
+                        className="h-full bg-gradient-to-r from-blue-400 to-blue-600 transition-[width] duration-1000 ease-out relative"
                         style={{ width: `${(Math.min(wT1, act) / wT2) * 100}%` }}
                     >
                         {act >= wT1 && <div className="absolute inset-0 bg-white/20 animate-pulse"></div>}
                     </div>
                     {/* TIER 2 SUPPLEMENTARY BAR */}
                     <div
-                        className="h-full bg-gradient-to-r from-brand-orange to-orange-400 transition-all duration-1000 ease-out relative"
+                        className="h-full bg-gradient-to-r from-brand-orange to-orange-400 transition-[width] duration-1000 ease-out relative"
                         style={{ width: `${(Math.max(0, act - wT1) / wT2) * 100}%` }}
                     ></div>
 

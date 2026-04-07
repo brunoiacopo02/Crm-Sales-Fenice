@@ -174,7 +174,7 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                                                     <div className="flex items-center gap-2">
                                                                         <div className="w-24 h-2.5 bg-ash-100 rounded-full overflow-hidden">
                                                                             <div
-                                                                                className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+                                                                                className={`h-full rounded-full transition-[width] duration-700 ${barColor}`}
                                                                                 style={{ width: `${Math.min(pct, 100)}%` }}
                                                                             />
                                                                         </div>

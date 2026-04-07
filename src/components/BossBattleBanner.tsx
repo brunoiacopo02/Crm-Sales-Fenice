@@ -131,7 +131,7 @@ export function BossBattleBanner({ userId }: { userId: string }) {
                 </div>
                 <div className="h-3 rounded-full bg-ash-800 overflow-hidden relative">
                     <div
-                        className={`h-full rounded-full bg-gradient-to-r ${hpColor} transition-all duration-1000 ease-out relative`}
+                        className={`h-full rounded-full bg-gradient-to-r ${hpColor} transition-[width] duration-1000 ease-out relative`}
                         style={{ width: `${hpPercent}%` }}
                     >
                         {hpPercent > 5 && (

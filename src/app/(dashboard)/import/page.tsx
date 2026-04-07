@@ -393,7 +393,7 @@ export default function ImportPage() {
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-24 bg-gray-800 h-2 rounded-full overflow-hidden">
                                                             <div
-                                                                className="bg-brand-orange h-full rounded-full transition-all duration-500"
+                                                                className="bg-brand-orange h-full rounded-full transition-[width] duration-500"
                                                                 style={{ width: `${payload.length > 0 ? (info.count / payload.length) * 100 : 0}%` }}
                                                             />
                                                         </div>

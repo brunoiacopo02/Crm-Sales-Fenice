@@ -200,7 +200,7 @@ function BadgeCard({ achievement }: { achievement: AchievementData }) {
                     </div>
                     <div className="w-full h-1.5 bg-ash-100 rounded-full overflow-hidden">
                         <div
-                            className={`h-full rounded-full transition-all duration-700 ease-out ${
+                            className={`h-full rounded-full transition-[width] duration-700 ease-out ${
                                 currentTier === 0 ? 'bg-ash-300' :
                                 currentTier === 1 ? 'bg-amber-500' :
                                 'bg-gray-400'

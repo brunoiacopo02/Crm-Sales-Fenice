@@ -235,7 +235,7 @@ export function KpiGdoBoard() {
                             </div>
                             <div className="w-24 h-2.5 bg-ash-100 rounded-full mt-2 overflow-hidden">
                                 <div
-                                    className={`h-full rounded-full transition-all duration-700 ${targetsData.todayAppointments >= targetsData.dailyApptTarget ? 'bg-emerald-500' : 'bg-brand-orange'}`}
+                                    className={`h-full rounded-full transition-[width] duration-700 ${targetsData.todayAppointments >= targetsData.dailyApptTarget ? 'bg-emerald-500' : 'bg-brand-orange'}`}
                                     style={{ width: `${Math.min((targetsData.todayAppointments / (targetsData.dailyApptTarget || 1)) * 100, 100)}%` }}
                                 ></div>
                             </div>
@@ -260,7 +260,7 @@ export function KpiGdoBoard() {
                             </div>
                             <div className="w-24 h-2.5 bg-ash-100 rounded-full mt-2 overflow-hidden">
                                 <div
-                                    className="h-full bg-emerald-500 rounded-full transition-all duration-700"
+                                    className="h-full bg-emerald-500 rounded-full transition-[width] duration-700"
                                     style={{ width: `${Math.min((targetsData.weeklyConfirmed / (targetsData.weeklyConfirmedTarget || 1)) * 100, 100)}%` }}
                                 ></div>
                             </div>

@@ -60,7 +60,7 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
                 <div className="flex items-center gap-2.5">
                     <div className="flex-1 h-2 bg-ash-800/80 rounded-full overflow-hidden border border-ash-700/40">
                         <div
-                            className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                            className={`h-full rounded-full transition-[width] duration-1000 ease-out ${
                                 isComplete
                                     ? 'bg-gradient-to-r from-gold-500 to-gold-300 shadow-[0_0_8px_rgba(201,161,60,0.5)]'
                                     : 'bg-gradient-to-r from-ember-500 via-brand-orange to-gold-400'

@@ -105,7 +105,7 @@ export default function ManagerRpgClient({ initialProfiles }: Props) {
                                             <div className="flex flex-col gap-1 items-center">
                                                 <div className="text-xs font-bold text-ash-600">{p.experience} / {p.targetXpForNext}</div>
                                                 <div className="w-24 h-2.5 bg-ash-100 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-gradient-to-r from-brand-orange to-brand-orange-600 rounded-full transition-all duration-700" style={{ width: `${xpPerc}%` }}></div>
+                                                    <div className="h-full bg-gradient-to-r from-brand-orange to-brand-orange-600 rounded-full transition-[width] duration-700" style={{ width: `${xpPerc}%` }}></div>
                                                 </div>
                                             </div>
                                         </td>

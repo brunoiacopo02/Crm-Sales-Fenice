@@ -178,7 +178,7 @@ export function TeamGoalAdminClient() {
                                         <div className="min-w-[150px] w-full md:w-auto mt-2 md:mt-0">
                                             <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden mb-1">
                                                 <div
-                                                    className="h-full bg-brand-orange transition-all duration-500"
+                                                    className="h-full bg-brand-orange transition-[width] duration-500"
                                                     style={{ width: `${Math.min(100, (goal.currentCount / goal.targetCount) * 100)}%` }}
                                                 />
                                             </div>

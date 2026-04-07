@@ -68,15 +68,15 @@ export function PipelineBoard({
         }, 150)
     }
 
-    // Sliding indicator position
+    // Sliding indicator position (GPU-accelerated via transform)
     useEffect(() => {
         if (!tabIndicatorRef.current || !tabContainerRef.current) return
-        const tabs = tabContainerRef.current.querySelectorAll<HTMLButtonElement>('[data-tab]')
         const activeBtn = tabContainerRef.current.querySelector<HTMLButtonElement>(`[data-tab="${activeTab}"]`)
         if (activeBtn) {
             const containerRect = tabContainerRef.current.getBoundingClientRect()
             const btnRect = activeBtn.getBoundingClientRect()
-            tabIndicatorRef.current.style.left = `${btnRect.left - containerRect.left}px`
+            const offsetX = btnRect.left - containerRect.left
+            tabIndicatorRef.current.style.transform = `translateX(${offsetX}px)`
             tabIndicatorRef.current.style.width = `${btnRect.width}px`
         }
     }, [activeTab, isFourthCallActive])
@@ -111,8 +111,8 @@ export function PipelineBoard({
                         {/* Sliding active indicator */}
                         <div
                             ref={tabIndicatorRef}
-                            className="absolute top-1 bottom-1 bg-white rounded-lg shadow-card transition-all duration-300 ease-out"
-                            style={{ zIndex: 0 }}
+                            className="absolute top-1 bottom-1 left-0 bg-white rounded-lg shadow-card ease-out"
+                            style={{ zIndex: 0, transition: 'transform 300ms ease-out, width 300ms ease-out' }}
                         />
 
                         {tabConfig.map(tab => (

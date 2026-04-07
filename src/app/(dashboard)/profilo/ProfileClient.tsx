@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from "next/image"
 import {
     Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award
 } from 'lucide-react';
@@ -8,8 +9,9 @@ import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
 import TitleSelector from "@/components/TitleSelector"
 import { AnimationToggle } from "@/components/AnimationToggle"
-import { CelebrationOverlay } from "@/components/CelebrationOverlay"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
+import dynamic from "next/dynamic"
+const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
 import type { UnlockedTitle } from "@/app/actions/titleActions"
 
 type LifetimeStats = {
@@ -114,7 +116,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     {/* Avatar */}
                     <div className={`relative w-36 h-36 rounded-full border-4 border-ember-400/60 shadow-glow-ember bg-gradient-to-br from-ember-800 to-brand-charcoal flex items-center justify-center mb-6 mt-4 z-10 transition-transform duration-500 ${showEvolutionPulse ? 'animate-evolution-pulse' : ''}`}>
                         {stage.imageUrl ? (
-                            <img src={stage.imageUrl} alt={stage.name} className="w-full h-full rounded-full object-cover transition-opacity duration-700" />
+                            <Image src={stage.imageUrl} alt={stage.name} width={144} height={144} className="w-full h-full rounded-full object-cover transition-opacity duration-700" />
                         ) : (
                             <ArrowUpCircle className="w-16 h-16 text-ember-400" />
                         )}
@@ -163,7 +165,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         </div>
                         <div className="relative w-full h-3.5 bg-ash-800 rounded-full overflow-hidden shadow-inner border border-ash-700">
                             <div
-                                className="absolute top-0 left-0 h-full bg-gradient-to-r from-ember-500 via-brand-orange to-gold-400 rounded-full transition-all duration-1000 ease-out shadow-[0_0_12px_rgba(255,190,130,0.4)]"
+                                className="absolute top-0 left-0 h-full bg-gradient-to-r from-ember-500 via-brand-orange to-gold-400 rounded-full transition-[width] duration-1000 ease-out shadow-[0_0_12px_rgba(255,190,130,0.4)]"
                                 style={{ width: `${progressPerc}%` }}
                             ></div>
                         </div>

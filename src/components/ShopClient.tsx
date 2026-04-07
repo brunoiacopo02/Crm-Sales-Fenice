@@ -1,6 +1,6 @@
 "use client"
 import { useAuth } from "@/components/AuthProvider"
-
+import Image from "next/image"
 import { useState, useEffect } from "react"
 import { getActiveShopItems, getUserInventory, buyShopItem, equipShopItem, unequipShopItem } from "@/app/actions/shopActions"
 import { getUserWalletCoins } from "@/app/actions/sprintActions"
@@ -130,7 +130,7 @@ export function ShopClient({ userId }: { userId: string }) {
                 {/* Coin Balance Badge */}
                 <div className="flex items-center gap-2.5 bg-gradient-to-r from-gold-50 to-brand-orange-50 border border-gold-200 px-5 py-2 rounded-full shadow-soft">
                     <div className="relative">
-                        <img src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" className="w-5 h-5 object-contain drop-shadow-sm" />
+                        <Image src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" width={20} height={20} className="object-contain drop-shadow-sm" />
                         <div className="absolute inset-0 animate-glow-pulse rounded-full" />
                     </div>
                     <div className="text-sm font-bold text-gold-700">{wallet} <span className="text-gold-500">Coin</span></div>
@@ -191,7 +191,7 @@ export function ShopClient({ userId }: { userId: string }) {
 
                                             {/* Price */}
                                             <div className="mt-4 flex items-center gap-2 mb-4">
-                                                <img src="/assets/store/icon_fenice_coin.png" alt="coin" className="w-4 h-4" />
+                                                <Image src="/assets/store/icon_fenice_coin.png" alt="coin" width={16} height={16} />
                                                 <div className="text-sm font-bold text-gold-700">{item.cost} Coin</div>
                                             </div>
 

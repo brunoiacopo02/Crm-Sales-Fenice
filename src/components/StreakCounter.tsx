@@ -130,7 +130,7 @@ export function StreakCounter({ userId }: { userId: string }) {
                     {nextMilestone && (
                         <div className="h-1.5 bg-ash-800/80 rounded-full overflow-hidden border border-ash-700/40">
                             <div
-                                className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                                className={`h-full rounded-full transition-[width] duration-1000 ease-out ${
                                     multiplier >= 2
                                         ? 'bg-gradient-to-r from-ember-500 to-purple-500'
                                         : multiplier >= 1.5

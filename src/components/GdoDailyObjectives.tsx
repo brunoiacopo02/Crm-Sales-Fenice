@@ -22,7 +22,7 @@ function ProgressBar({ current, target }: { current: number; target: number }) {
     return (
         <div className="w-full bg-gray-200 rounded-full h-2 mt-1.5">
             <div
-                className={`${color} h-2 rounded-full transition-all duration-500`}
+                className={`${color} h-2 rounded-full transition-[width] duration-500`}
                 style={{ width: `${pct}%` }}
             />
         </div>

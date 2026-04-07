@@ -63,7 +63,7 @@ export function ConfermeDailyObjectives({ confermeUserId }: ConfermeDailyObjecti
                     <div className="flex-1">
                         <div className="w-full bg-white/10 rounded-full h-2">
                             <div
-                                className={`${barColor} h-2 rounded-full transition-all duration-500`}
+                                className={`${barColor} h-2 rounded-full transition-[width] duration-500`}
                                 style={{ width: `${pct}%` }}
                             />
                         </div>
