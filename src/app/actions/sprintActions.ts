@@ -3,8 +3,9 @@
 import { db } from "@/db"
 import { sprints, users, leads, coinTransactions, shopItems } from "@/db/schema"
 import { eq, and, desc, gte, lte } from "drizzle-orm"
-import { addMinutes, isAfter } from "date-fns"
+import { addMinutes, isAfter, differenceInMinutes } from "date-fns"
 import crypto from "crypto"
+import { GAME_CONSTANTS } from "@/lib/gamificationEngine"
 
 export async function getActiveSprint() {
     return (await db.select()
@@ -40,22 +41,29 @@ export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: bool
             }
         }
 
-        // Add 1 coin to all winners
+        // Calculate proportional sprint reward (1-25 coins based on duration)
+        const sprintDurationMin = differenceInMinutes(
+            activeSprint.actualEndTime || activeSprint.endTime,
+            activeSprint.startTime
+        );
+        const { MAX_COINS, BASE_DURATION_MINUTES } = GAME_CONSTANTS.SPRINT_WIN;
+        const sprintRewardCoins = Math.max(1, Math.min(MAX_COINS, Math.round(sprintDurationMin * MAX_COINS / BASE_DURATION_MINUTES)));
+
+        // Award proportional coins to all winners
         for (const winnerId of winners) {
             const user = (await db.select().from(users).where(eq(users.id, winnerId)))[0]
             if (user) {
                 await db.update(users)
-                                    .set({ walletCoins: (user.walletCoins || 0) + 1 })
-                                    .where(eq(users.id, winnerId))
-                    
+                    .set({ walletCoins: (user.walletCoins || 0) + sprintRewardCoins })
+                    .where(eq(users.id, winnerId))
 
                 await db.insert(coinTransactions).values({
-                                    id: crypto.randomUUID(),
-                                    userId: winnerId,
-                                    amount: 1,
-                                    reason: 'SPRINT_WON',
-                                    createdAt: now
-                                })
+                    id: crypto.randomUUID(),
+                    userId: winnerId,
+                    amount: sprintRewardCoins,
+                    reason: `SPRINT_WON (${sprintDurationMin}min)`,
+                    createdAt: now
+                })
             }
         }
 

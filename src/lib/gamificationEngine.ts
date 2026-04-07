@@ -12,7 +12,22 @@ export const GAME_CONSTANTS = {
         PRESENZIATO: { xp: 50, coins: 0 },
         CHIUSO: { xp: 200, coins: 50 },
         BONUS_SETTIMANALE: { xp: 500, coins: 100 },
-    }
+    },
+
+    // Economy rebalancing (F2-026)
+    SPRINT_WIN: {
+        MAX_COINS: 25, // 1-25 proportional to sprint duration
+        BASE_DURATION_MINUTES: 120, // duration that yields max reward
+    },
+    ACHIEVEMENT_COINS: {
+        BRONZE: 20,
+        SILVER: 75,
+        GOLD: 200,
+    } as Record<string, number>,
+    STREAK_MILESTONE: {
+        COINS: 50, // awarded every INTERVAL days
+        INTERVAL: 7,
+    },
 };
 
 export const EVOLUTION_STAGES = [

@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications } from "@/db/schema";
 import { eq, and, gte, isNotNull, sql, count, countDistinct } from "drizzle-orm";
+import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 
 /**
  * Measure a lifetime metric for a user.
@@ -139,19 +140,37 @@ export async function checkAchievements(userId: string): Promise<{
                             tier: tierNumber,
                         });
 
+                        // Award coins based on tier (F2-026 economy rebalance)
+                        const tierCoinKey = tierLabels[tierNumber].toUpperCase(); // 'BRONZO' -> 'BRONZE' etc
+                        const tierCoinMap: Record<string, string> = { 'BRONZO': 'BRONZE', 'ARGENTO': 'SILVER', 'ORO': 'GOLD' };
+                        const coinReward = GAME_CONSTANTS.ACHIEVEMENT_COINS[tierCoinMap[tierCoinKey] || 'BRONZE'] || 0;
+                        if (coinReward > 0) {
+                            const userRow = (await db.select({ coins: users.coins }).from(users).where(eq(users.id, userId)))[0];
+                            if (userRow) {
+                                await db.update(users).set({ coins: userRow.coins + coinReward }).where(eq(users.id, userId));
+                                await db.insert(coinTransactions).values({
+                                    id: crypto.randomUUID(),
+                                    userId,
+                                    amount: coinReward,
+                                    reason: `Achievement ${tierLabels[tierNumber]}: ${ach.name}`,
+                                });
+                            }
+                        }
+
                         // Create notification
                         await db.insert(notifications).values({
                             id: crypto.randomUUID(),
                             recipientUserId: userId,
                             type: 'achievement_unlocked',
                             title: `Badge sbloccato: ${ach.name}`,
-                            body: `Hai sbloccato il badge ${tierLabels[tierNumber]} "${ach.name}"! ${ach.description}`,
+                            body: `Hai sbloccato il badge ${tierLabels[tierNumber]} "${ach.name}"! +${coinReward} coins. ${ach.description}`,
                             metadata: {
                                 achievementId: ach.id,
                                 achievementName: ach.name,
                                 achievementIcon: ach.icon,
                                 tier: tierNumber,
                                 tierLabel: tierLabels[tierNumber],
+                                coinsAwarded: coinReward,
                             },
                         });
 

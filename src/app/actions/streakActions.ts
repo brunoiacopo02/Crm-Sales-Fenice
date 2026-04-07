@@ -1,9 +1,10 @@
 'use server';
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, coinTransactions, notifications } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getStreakMultiplier, getStreakTierLabel, getNextStreakMilestone } from "@/lib/streakUtils";
+import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 
 // --- Helpers ---
 
@@ -123,6 +124,29 @@ export async function updateStreak(userId: string): Promise<{ streakCount: numbe
             streakCount: newStreak,
             lastStreakDate: today,
         }).where(eq(users.id, userId));
+
+        // Streak milestone reward: 50 coins every 7 days (F2-026)
+        const { COINS: milestoneCoinReward, INTERVAL: milestoneInterval } = GAME_CONSTANTS.STREAK_MILESTONE;
+        if (newStreak > 0 && newStreak % milestoneInterval === 0) {
+            const userRow = (await db.select({ coins: users.coins }).from(users).where(eq(users.id, userId)))[0];
+            if (userRow) {
+                await db.update(users).set({ coins: userRow.coins + milestoneCoinReward }).where(eq(users.id, userId));
+                await db.insert(coinTransactions).values({
+                    id: crypto.randomUUID(),
+                    userId,
+                    amount: milestoneCoinReward,
+                    reason: `Streak milestone: ${newStreak} giorni!`,
+                });
+                await db.insert(notifications).values({
+                    id: crypto.randomUUID(),
+                    recipientUserId: userId,
+                    type: 'streak_milestone',
+                    title: `Streak ${newStreak} giorni!`,
+                    body: `Hai raggiunto ${newStreak} giorni di streak consecutivi! +${milestoneCoinReward} coins bonus.`,
+                    metadata: { streakCount: newStreak, coinsAwarded: milestoneCoinReward },
+                });
+            }
+        }
 
         return { streakCount: newStreak, multiplier: getStreakMultiplier(newStreak) };
     } catch (error) {
