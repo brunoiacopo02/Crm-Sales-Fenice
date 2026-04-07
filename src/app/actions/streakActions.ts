@@ -5,6 +5,7 @@ import { users, coinTransactions, notifications } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getStreakMultiplier, getStreakTierLabel, getNextStreakMilestone } from "@/lib/streakUtils";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
+import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 
 // --- Helpers ---
 
@@ -125,25 +126,30 @@ export async function updateStreak(userId: string): Promise<{ streakCount: numbe
             lastStreakDate: today,
         }).where(eq(users.id, userId));
 
-        // Streak milestone reward: 50 coins every 7 days (F2-026)
+        // Streak milestone reward: 50 coins every 7 days (F2-026) + seasonal event multiplier
         const { COINS: milestoneCoinReward, INTERVAL: milestoneInterval } = GAME_CONSTANTS.STREAK_MILESTONE;
         if (newStreak > 0 && newStreak % milestoneInterval === 0) {
             const userRow = (await db.select({ coins: users.coins }).from(users).where(eq(users.id, userId)))[0];
             if (userRow) {
-                await db.update(users).set({ coins: userRow.coins + milestoneCoinReward }).where(eq(users.id, userId));
+                const eventMult = await getActiveEventMultipliers();
+                const effectiveMilestoneCoins = Math.floor(milestoneCoinReward * eventMult.coins);
+                await db.update(users).set({ coins: userRow.coins + effectiveMilestoneCoins }).where(eq(users.id, userId));
+                const milestoneReason = eventMult.coins > 1
+                    ? `Streak milestone: ${newStreak} giorni! (x${eventMult.coins} evento)`
+                    : `Streak milestone: ${newStreak} giorni!`;
                 await db.insert(coinTransactions).values({
                     id: crypto.randomUUID(),
                     userId,
-                    amount: milestoneCoinReward,
-                    reason: `Streak milestone: ${newStreak} giorni!`,
+                    amount: effectiveMilestoneCoins,
+                    reason: milestoneReason,
                 });
                 await db.insert(notifications).values({
                     id: crypto.randomUUID(),
                     recipientUserId: userId,
                     type: 'streak_milestone',
                     title: `Streak ${newStreak} giorni!`,
-                    body: `Hai raggiunto ${newStreak} giorni di streak consecutivi! +${milestoneCoinReward} coins bonus.`,
-                    metadata: { streakCount: newStreak, coinsAwarded: milestoneCoinReward },
+                    body: `Hai raggiunto ${newStreak} giorni di streak consecutivi! +${effectiveMilestoneCoins} coins bonus.`,
+                    metadata: { streakCount: newStreak, coinsAwarded: effectiveMilestoneCoins },
                 });
             }
         }

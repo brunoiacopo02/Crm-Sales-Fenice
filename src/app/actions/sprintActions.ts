@@ -6,6 +6,7 @@ import { eq, and, desc, gte, lte } from "drizzle-orm"
 import { addMinutes, isAfter, differenceInMinutes } from "date-fns"
 import crypto from "crypto"
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine"
+import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils"
 
 export async function getActiveSprint() {
     return (await db.select()
@@ -47,7 +48,11 @@ export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: bool
             activeSprint.startTime
         );
         const { MAX_COINS, BASE_DURATION_MINUTES } = GAME_CONSTANTS.SPRINT_WIN;
-        const sprintRewardCoins = Math.max(1, Math.min(MAX_COINS, Math.round(sprintDurationMin * MAX_COINS / BASE_DURATION_MINUTES)));
+        const baseRewardCoins = Math.max(1, Math.min(MAX_COINS, Math.round(sprintDurationMin * MAX_COINS / BASE_DURATION_MINUTES)));
+
+        // Apply seasonal event multiplier
+        const eventMult = await getActiveEventMultipliers();
+        const sprintRewardCoins = Math.floor(baseRewardCoins * eventMult.coins);
 
         // Award proportional coins to all winners
         for (const winnerId of winners) {
@@ -57,11 +62,14 @@ export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: bool
                     .set({ walletCoins: (user.walletCoins || 0) + sprintRewardCoins })
                     .where(eq(users.id, winnerId))
 
+                const sprintReason = eventMult.coins > 1
+                    ? `SPRINT_WON (${sprintDurationMin}min, x${eventMult.coins} evento)`
+                    : `SPRINT_WON (${sprintDurationMin}min)`;
                 await db.insert(coinTransactions).values({
                     id: crypto.randomUUID(),
                     userId: winnerId,
                     amount: sprintRewardCoins,
-                    reason: `SPRINT_WON (${sprintDurationMin}min)`,
+                    reason: sprintReason,
                     createdAt: now
                 })
             }

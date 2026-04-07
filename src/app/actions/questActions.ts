@@ -5,6 +5,7 @@ import { quests, questProgress, callLogs, leads, users, coinTransactions } from 
 import { eq, and, gte, lte, isNotNull, sql, count, countDistinct } from "drizzle-orm";
 import { updateStreak } from "@/app/actions/streakActions";
 import { getStreakMultiplier } from "@/lib/streakUtils";
+import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 
 // --- Helpers ---
 
@@ -285,11 +286,16 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
 
         // Update streak (idempotent for same day) and get multiplier
         const streakResult = await updateStreak(userId);
-        const multiplier = getStreakMultiplier(streakResult.streakCount);
+        const streakMult = getStreakMultiplier(streakResult.streakCount);
 
-        // Apply streak multiplier to rewards
-        const effectiveXp = Math.floor(qp.rewardXp * multiplier);
-        const effectiveCoins = Math.floor(qp.rewardCoins * multiplier);
+        // Get seasonal event multipliers (stacks with streak)
+        const eventMult = await getActiveEventMultipliers();
+        const totalXpMult = streakMult * eventMult.xp;
+        const totalCoinsMult = streakMult * eventMult.coins;
+
+        // Apply combined multipliers to rewards
+        const effectiveXp = Math.floor(qp.rewardXp * totalXpMult);
+        const effectiveCoins = Math.floor(qp.rewardCoins * totalCoinsMult);
 
         // Award XP and coins
         const userRows = await db.select().from(users).where(eq(users.id, userId));
@@ -315,9 +321,12 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             coins: newCoins,
         }).where(eq(users.id, userId));
 
-        // Log coin transaction (show multiplier in reason if > 1)
-        const coinReason = multiplier > 1
-            ? `Quest completata: ${qp.questTitle} (x${multiplier} streak)`
+        // Log coin transaction (show multipliers in reason if > 1)
+        const multParts: string[] = [];
+        if (streakMult > 1) multParts.push(`x${streakMult} streak`);
+        if (eventMult.coins > 1) multParts.push(`x${eventMult.coins} evento`);
+        const coinReason = multParts.length > 0
+            ? `Quest completata: ${qp.questTitle} (${multParts.join(', ')})`
             : `Quest completata: ${qp.questTitle}`;
         await db.insert(coinTransactions).values({
             id: crypto.randomUUID(),

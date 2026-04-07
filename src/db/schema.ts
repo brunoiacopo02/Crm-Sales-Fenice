@@ -379,6 +379,21 @@ export const bossContributions = pgTable('bossContributions', {
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- SEASONAL EVENTS ---
+export const seasonalEvents = pgTable('seasonalEvents', {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    theme: text('theme').notNull(), // 'spring' | 'summer' | 'halloween' | 'christmas' | 'custom'
+    startDate: timestamp('startDate', { withTimezone: true, mode: 'date' }).notNull(),
+    endDate: timestamp('endDate', { withTimezone: true, mode: 'date' }).notNull(),
+    xpMultiplier: real('xpMultiplier').default(1).notNull(),
+    coinsMultiplier: real('coinsMultiplier').default(1).notNull(),
+    isActive: boolean('isActive').default(true).notNull(),
+    createdBy: text('createdBy').references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     id: text('id').primaryKey(),
     month: text('month').notNull().unique(), // e.g. '2026-03'

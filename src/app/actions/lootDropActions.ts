@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { lootDrops, leads, users, coinTransactions, notifications } from "@/db/schema";
 import { eq, and, isNotNull, count } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
+import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 
 /**
  * Roll a weighted random rarity for loot drop.
@@ -165,19 +166,24 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
             openedAt: new Date(),
         }).where(eq(lootDrops.id, lootDropId));
 
+        // Apply seasonal event multiplier
+        const eventMult = await getActiveEventMultipliers();
+        const effectiveLootCoins = Math.floor(drop.rewardValue * eventMult.coins);
+        const effectiveLootXp = Math.floor(drop.bonusXp * eventMult.xp);
+
         // Award coins
         const userRow = (await db.select({ coins: users.coins, experience: users.experience, level: users.level })
             .from(users)
             .where(eq(users.id, userId)))[0];
 
         if (userRow) {
-            const newCoins = userRow.coins + drop.rewardValue;
+            const newCoins = userRow.coins + effectiveLootCoins;
             let newXp = userRow.experience;
             let newLevel = userRow.level;
 
-            // Apply bonus XP for epic drops
-            if (drop.bonusXp > 0) {
-                newXp += drop.bonusXp;
+            // Apply bonus XP for epic drops (with event multiplier)
+            if (effectiveLootXp > 0) {
+                newXp += effectiveLootXp;
                 // Handle level-up
                 let targetXp = GAME_CONSTANTS.calculateTargetXp(newLevel);
                 while (newXp >= targetXp) {
@@ -207,11 +213,14 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
 
             // Log coin transaction
             const rarityLabel = drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1);
+            const lootReason = eventMult.coins > 1
+                ? `Loot Drop ${rarityLabel}${effectiveLootXp > 0 ? ` (+${effectiveLootXp} XP)` : ''} (x${eventMult.coins} evento)`
+                : `Loot Drop ${rarityLabel}${effectiveLootXp > 0 ? ` (+${effectiveLootXp} XP)` : ''}`;
             await db.insert(coinTransactions).values({
                 id: crypto.randomUUID(),
                 userId,
-                amount: drop.rewardValue,
-                reason: `Loot Drop ${rarityLabel}${drop.bonusXp > 0 ? ` (+${drop.bonusXp} XP)` : ''}`,
+                amount: effectiveLootCoins,
+                reason: lootReason,
             });
         }
 
@@ -219,8 +228,8 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
             success: true,
             reward: {
                 rarity: drop.rarity,
-                coins: drop.rewardValue,
-                bonusXp: drop.bonusXp,
+                coins: effectiveLootCoins,
+                bonusXp: effectiveLootXp,
                 bonusTitle: drop.bonusTitle,
                 rewardType: drop.rewardType,
             },

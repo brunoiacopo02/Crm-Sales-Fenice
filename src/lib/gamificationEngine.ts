@@ -34,6 +34,18 @@ export const GAME_CONSTANTS = {
         DEFAULT_REWARD_COINS: 100,
         DEFAULT_REWARD_XP: 200,
     },
+    SEASONAL_EVENT: {
+        THEMES: ['spring', 'summer', 'halloween', 'christmas', 'custom'] as const,
+        DEFAULT_XP_MULTIPLIER: 1.5,
+        DEFAULT_COINS_MULTIPLIER: 2,
+        THEME_CONFIG: {
+            spring: { icon: 'Flower2', color: 'emerald', label: 'Primavera' },
+            summer: { icon: 'Sun', color: 'amber', label: 'Estate' },
+            halloween: { icon: 'Ghost', color: 'purple', label: 'Halloween' },
+            christmas: { icon: 'Gift', color: 'red', label: 'Natale' },
+            custom: { icon: 'Sparkles', color: 'brand-orange', label: 'Evento Speciale' },
+        } as Record<string, { icon: string; color: string; label: string }>,
+    },
     LOOT_DROP: {
         TRIGGER_EVERY: 10, // every N appointments
         RARITY_WEIGHTS: [
@@ -125,8 +137,14 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
         const reward = GAME_CONSTANTS.ACTIONS[actionType];
         if (!reward) return;
 
-        let newXp = user.experience + reward.xp;
-        let newCoins = user.coins + reward.coins;
+        // Apply seasonal event multipliers (dynamic import to avoid client bundling)
+        const { getActiveEventMultipliers } = await import('@/lib/seasonalEventUtils');
+        const eventMult = await getActiveEventMultipliers();
+        const effectiveXp = Math.floor(reward.xp * eventMult.xp);
+        const effectiveCoins = Math.floor(reward.coins * eventMult.coins);
+
+        let newXp = user.experience + effectiveXp;
+        let newCoins = user.coins + effectiveCoins;
         let newLevel = user.level;
         let targetXp = GAME_CONSTANTS.calculateTargetXp(newLevel);
 
@@ -160,7 +178,7 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
                 leadId: leadIdContext,
                 eventType: `RPG_AWARD_${actionType}`,
                 userId: userId,
-                metadata: { xpGained: reward.xp, coinsGained: reward.coins, levelUp: didLevelUp }
+                metadata: { xpGained: effectiveXp, coinsGained: effectiveCoins, levelUp: didLevelUp, eventMultiplier: eventMult.xp > 1 || eventMult.coins > 1 ? eventMult : undefined }
             });
         }
 

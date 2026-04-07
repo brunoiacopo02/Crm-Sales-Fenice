@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications } from "@/db/schema";
 import { eq, and, gte, isNotNull, sql, count, countDistinct } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
+import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 
 /**
  * Measure a lifetime metric for a user.
@@ -140,19 +141,24 @@ export async function checkAchievements(userId: string): Promise<{
                             tier: tierNumber,
                         });
 
-                        // Award coins based on tier (F2-026 economy rebalance)
-                        const tierCoinKey = tierLabels[tierNumber].toUpperCase(); // 'BRONZO' -> 'BRONZE' etc
+                        // Award coins based on tier (F2-026 economy rebalance) + seasonal event multiplier
+                        const tierCoinKey = tierLabels[tierNumber].toUpperCase();
                         const tierCoinMap: Record<string, string> = { 'BRONZO': 'BRONZE', 'ARGENTO': 'SILVER', 'ORO': 'GOLD' };
-                        const coinReward = GAME_CONSTANTS.ACHIEVEMENT_COINS[tierCoinMap[tierCoinKey] || 'BRONZE'] || 0;
+                        const baseCoinReward = GAME_CONSTANTS.ACHIEVEMENT_COINS[tierCoinMap[tierCoinKey] || 'BRONZE'] || 0;
+                        const eventMult = await getActiveEventMultipliers();
+                        const coinReward = Math.floor(baseCoinReward * eventMult.coins);
                         if (coinReward > 0) {
                             const userRow = (await db.select({ coins: users.coins }).from(users).where(eq(users.id, userId)))[0];
                             if (userRow) {
                                 await db.update(users).set({ coins: userRow.coins + coinReward }).where(eq(users.id, userId));
+                                const achReason = eventMult.coins > 1
+                                    ? `Achievement ${tierLabels[tierNumber]}: ${ach.name} (x${eventMult.coins} evento)`
+                                    : `Achievement ${tierLabels[tierNumber]}: ${ach.name}`;
                                 await db.insert(coinTransactions).values({
                                     id: crypto.randomUUID(),
                                     userId,
                                     amount: coinReward,
-                                    reason: `Achievement ${tierLabels[tierNumber]}: ${ach.name}`,
+                                    reason: achReason,
                                 });
                             }
                         }

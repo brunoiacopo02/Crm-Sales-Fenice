@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { bossBattles, bossContributions, users, coinTransactions, notifications } from '@/db/schema';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import { GAME_CONSTANTS } from '@/lib/gamificationEngine';
+import { getActiveEventMultipliers } from '@/lib/seasonalEventUtils';
 
 /**
  * Create a new boss battle (Manager only).
@@ -174,22 +175,29 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
 
         const battle = (await db.select().from(bossBattles).where(eq(bossBattles.id, battleId)))[0];
 
+        // Apply seasonal event multipliers to boss rewards
+        const eventMult = await getActiveEventMultipliers();
+        const effectiveCoins = Math.floor(rewardCoins * eventMult.coins);
+        const effectiveXp = Math.floor(rewardXp * eventMult.xp);
+
         // Award coins and XP to each contributor
         for (const contributor of contributors) {
-            // Award coins
             await db.update(users)
                 .set({
-                    coins: sql`${users.coins} + ${rewardCoins}`,
-                    experience: sql`${users.experience} + ${rewardXp}`,
+                    coins: sql`${users.coins} + ${effectiveCoins}`,
+                    experience: sql`${users.experience} + ${effectiveXp}`,
                 })
                 .where(eq(users.id, contributor.userId));
 
             // Log coin transaction
+            const bossReason = eventMult.coins > 1
+                ? `Boss sconfitto: ${battle?.title || 'Boss Battle'} (x${eventMult.coins} evento)`
+                : `Boss sconfitto: ${battle?.title || 'Boss Battle'}`;
             await db.insert(coinTransactions).values({
                 id: crypto.randomUUID(),
                 userId: contributor.userId,
-                amount: rewardCoins,
-                reason: `Boss sconfitto: ${battle?.title || 'Boss Battle'}`,
+                amount: effectiveCoins,
+                reason: bossReason,
             });
 
             // Notify
@@ -198,8 +206,8 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
                 recipientUserId: contributor.userId,
                 type: 'boss_defeated',
                 title: 'Boss Sconfitto! 🎉',
-                body: `Il team ha sconfitto "${battle?.title}"! Hai guadagnato ${rewardCoins} coins e ${rewardXp} XP!`,
-                metadata: { battleId, rewardCoins, rewardXp, bossTitle: battle?.title },
+                body: `Il team ha sconfitto "${battle?.title}"! Hai guadagnato ${effectiveCoins} coins e ${effectiveXp} XP!`,
+                metadata: { battleId, rewardCoins: effectiveCoins, rewardXp: effectiveXp, bossTitle: battle?.title },
             });
         }
     } catch (error) {
