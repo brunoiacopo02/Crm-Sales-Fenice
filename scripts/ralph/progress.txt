@@ -128,3 +128,21 @@ Started: 2026-04-07
   - `giorniLavorativiTrascorsiOggi` must be capped at override value to avoid elapsed > total
   - Use `placeholder="Auto"` for nullable numeric inputs to signal the default behavior
 ---
+
+## 2026-04-07 - F2-007
+- **Feature**: Storico pause mensile visibile ai GDO
+- **What was done:**
+  - Created `getGdoPauseHistory` server action in `pauseActions.ts` — fetches all breakSessions for current month filtered by gdoUserId, with live sync for in_corso sessions
+  - Created `GdoPauseHistory` client component with monthly summary cards (total pauses, total duration, exceeded count, exceeded time) and detailed table (date, start time, duration, status, exceeded time)
+  - Created `/storico-pause` page restricted to GDO role only
+  - Added "Storico Pause" link with Clock icon in GDO sidebar navigation
+- **Files modified:**
+  - `src/app/actions/pauseActions.ts` — added PauseHistoryEntry type + getGdoPauseHistory action
+  - `src/components/GdoPauseHistory.tsx` — new client component
+  - `src/app/(dashboard)/storico-pause/page.tsx` — new page
+  - `src/components/Sidebar.tsx` — added GDO sidebar link
+- **Learnings per iterazioni future:**
+  - `breakSessions.dateLocal` is stored as "YYYY-MM-DD" string — use SQL LIKE for month filtering
+  - Follow `getManagerPauseReport` pattern for live in_corso sync in read-only queries
+  - GDO pages use same auth pattern: createClient → getUser → check role → redirect if unauthorized
+---
