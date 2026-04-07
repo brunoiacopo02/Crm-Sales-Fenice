@@ -13,6 +13,9 @@ Started: 2026-04-07
 - DATI REALI: NON toccare lead GDO 114, appuntamenti Conferme, account esistenti
 - Streak multiplier: getStreakMultiplier() in `src/lib/streakUtils.ts` — pure function, importable ovunque
 - `'use server'` files: TUTTE le export devono essere async. Utility pure functions vanno in `src/lib/`
+- Seasonal event multipliers: `getActiveEventMultipliers()` in `src/lib/seasonalEventUtils.ts` — returns {xp, coins} multipliers, stacks with streak
+- gamificationEngine.ts imports db at top level — client components MUST NOT import from it; use dynamic import(`await import()`) inside async functions or inline constants
+- `GAME_CONSTANTS.SEASONAL_EVENT.THEME_CONFIG` for theme metadata (icon, color, label per theme)
 - Design system premium gia' implementato in Run 1 (F2-014): usare i nuovi token/colori per coerenza
 - ConfermeDrawer: usare `salespersonUserId` (UUID) per init, mai `salespersonAssigned` (display name)
 - FreeBusy check: SEMPRE prima di db.update(), mai dopo
@@ -227,4 +230,39 @@ Started: 2026-04-07
   - `contributeToBoss` is fire-and-forget from pipelineActions to avoid blocking the appointment flow
   - `GAME_CONSTANTS.BOSS_BATTLE` is the single source of truth for boss economy values
   - Banner uses same dark gradient theme (from-brand-charcoal via-ash-900 to-ember-900) as other gamification widgets
+---
+
+## 2026-04-07 - F2-030
+- Created `seasonalEvents` table in schema: id, title, description, theme, startDate, endDate, xpMultiplier, coinsMultiplier, isActive, createdBy
+- Created ADDITIVE migration at `src/app/api/migrate-seasonal-events/route.ts` with index on isActive
+- Added `SEASONAL_EVENT` constants to `GAME_CONSTANTS` in gamificationEngine.ts: 5 themes (spring/summer/halloween/christmas/custom) with THEME_CONFIG (icon, color, label)
+- Created server actions in `src/app/actions/seasonalEventActions.ts`:
+  - `getActiveEvent()` — fetches active event within current date range
+  - `createSeasonalEvent(params)` — manager creates event with title, theme, dates, multipliers
+  - `deactivateSeasonalEvent(eventId)` — manager deactivates event
+- Created `getActiveEventMultipliers()` utility in `src/lib/seasonalEventUtils.ts` — returns {xp, coins} multipliers (1 if no event)
+- Applied seasonal event multipliers to ALL XP/coins earning points:
+  - `awardXpAndCoins()` in gamificationEngine.ts (dynamic import to avoid client bundling)
+  - `completeQuest()` in questActions.ts (stacks with streak multiplier)
+  - `updateStreak()` in streakActions.ts (streak milestone coins)
+  - `defeatBoss()` in bossBattleActions.ts (boss defeat rewards)
+  - Sprint rewards in sprintActions.ts
+  - `openLootDrop()` in lootDropActions.ts (loot coins + XP)
+  - `checkAchievements()` in achievementActions.ts (achievement coins)
+- All coin transaction reasons show "(x{multiplier} evento)" suffix when event is active
+- Created `SeasonalEventBanner` client component:
+  - Theme-specific colors and icons (emerald/amber/purple/red/brand-orange)
+  - Countdown timer to event end (auto-updates every minute)
+  - Progress bar showing event timeline progress
+  - XP and Coins multiplier badges
+  - Dark gradient theme matching other gamification widgets
+  - Hidden when no event is active
+- Integrated SeasonalEventBanner into GDO dashboard above BossBattleBanner
+- File modificati: `src/db/schema.ts`, `src/app/api/migrate-seasonal-events/route.ts`, `src/lib/gamificationEngine.ts`, `src/lib/seasonalEventUtils.ts`, `src/app/actions/seasonalEventActions.ts`, `src/app/actions/questActions.ts`, `src/app/actions/streakActions.ts`, `src/app/actions/bossBattleActions.ts`, `src/app/actions/sprintActions.ts`, `src/app/actions/lootDropActions.ts`, `src/app/actions/achievementActions.ts`, `src/components/SeasonalEventBanner.tsx`, `src/app/(dashboard)/page.tsx`
+- **Learnings per iterazioni future:**
+  - `gamificationEngine.ts` has top-level `import { db }` — client components CANNOT import from it. Use dynamic `await import()` for DB-dependent code inside async functions
+  - Event multipliers stack multiplicatively with streak multipliers: `totalMult = streakMult * eventMult`
+  - `getActiveEventMultipliers()` is a pure async function (not server action) in `src/lib/` — importable from server actions and lib files
+  - SeasonalEventBanner uses inline THEME_LABELS constant instead of importing GAME_CONSTANTS to avoid pulling pg into client bundle
+  - Event banner is self-hiding (renders null) when no event is active — no conditional rendering needed in parent
 ---
