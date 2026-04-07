@@ -27,11 +27,6 @@ export async function middleware(request: NextRequest) {
         }
     );
 
-    // Temporary bypass for migration routes
-    if (request.nextUrl.pathname.startsWith('/api/migrate-')) {
-        return supabaseResponse;
-    }
-
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user && !request.nextUrl.pathname.startsWith('/login')) {

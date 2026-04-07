@@ -22,6 +22,8 @@ Started: 2026-04-07
 - ConfermeDrawer: motivi scarto in un array/select. Aggiungere 'ATTACCATO IN FACCIA'
 - Lead singolo form creato in F2-008 nella pagina /import. Aggiungere dropdown GDO
 - Bottone copia in LeadCard.tsx o componente simile — verificare che usi lead.phone
+- Achievement Conferme: 4 metriche lifetime (total_conferme, total_conferme_chiamate, total_conferme_richiami_ok, tasso_conferma_percent) in measureAchievementMetric
+- Achievement seeding: usare ON CONFLICT (id) DO NOTHING per idempotenza, ID pattern: ach-conf-*
 - Account test: GDO 114 (gdo114@fenice.local / 1234), Conferme (andrea@fenice.local / 1234), Venditori (sales001@fenice.com / 1234), Manager (marketing@fenice.local / Marketing2026!)
 - REST API Supabase: usare SUPABASE_SERVICE_ROLE_KEY dal .env per apikey e Authorization
 - Quest role filtering: quests table has `role` column ('GDO'|'CONFERME'|'VENDITORE'), generateDailyQuests fetches user role and filters
@@ -41,4 +43,37 @@ Started: 2026-04-07
   - Le interazioni CONFERME sono tracciate in leadEvents (non callLogs) con eventType conferme_*
   - confirmationsUserId è il campo che lega il lead all'operatore Conferme
   - Migrazione da eseguire su prod dopo push: /api/migrate-quests-conferme
+---
+
+## 2026-04-07 - F3-011
+- Aggiunto QuestPanel (dynamic import) e StreakCounter alla dashboard Conferme per ruolo CONFERME
+- In Sidebar.tsx aggiunto 3 link gamification per CONFERME: Profilo RPG, Classifica, Fenice Store
+- Store/Profilo/Classifica pages non hanno restrizioni di ruolo, già accessibili da CONFERME
+- QuestPanel filtra quest per ruolo automaticamente (logica implementata in F3-010)
+- File modificati: src/app/(dashboard)/conferme/page.tsx, src/components/Sidebar.tsx
+- **Learnings per iterazioni future:**
+  - Le pagine /store, /profilo, /classifica non hanno auth check specifici per ruolo — accesso aperto a tutti gli utenti autenticati
+  - Pattern GDO: StreakCounter import statico, QuestPanel dynamic import — stesso pattern usato per Conferme
+  - Il QuestPanel mostra solo quest del ruolo corretto perchè generateDailyQuests filtra per ruolo utente (implementato in F3-010)
+---
+
+## 2026-04-07 - F3-012
+- Creato 8 achievement specifici per ruolo CONFERME in 4 categorie:
+  - Confermatore + Maratoneta delle Conferme (metric: total_conferme, tiers: 50/200/500 e 750/1000/2000)
+  - Sentinella + Centralino Conferme (metric: total_conferme_chiamate, tiers: 100/500/1000 e 2000/5000/10000)
+  - Recuperatore + Salvatore (metric: total_conferme_richiami_ok, tiers: 10/50/100 e 150/300/500)
+  - Precisione Chirurgica + Cecchino (metric: tasso_conferma_percent, tiers: 80/90/95 e 85/92/98)
+- In achievementActions.ts: aggiunto 4 nuove metriche a measureAchievementMetric:
+  - total_conferme: COUNT leads con confirmationsOutcome='confermato' per user
+  - total_conferme_chiamate: COUNT leadEvents conferme_* per user
+  - total_conferme_richiami_ok: COUNT leads con confSnoozeAt + confermato (richiami andati a buon fine)
+  - tasso_conferma_percent: (conferme / (conferme + scartate)) * 100
+- Creato migration route: src/app/api/migrate-achievements-conferme/route.ts
+- Migrazione ESEGUITA su DB produzione e verificata via REST API
+- File modificati: src/app/actions/achievementActions.ts, src/app/api/migrate-achievements-conferme/route.ts (new)
+- **Learnings per iterazioni future:**
+  - Gli achievement Conferme usano metriche lifetime (senza time range), diversamente dalle quest che usano daily/weekly bounds
+  - Il metric `tasso_conferma_percent` è basato su percentuale intera (0-100), non decimale
+  - checkAchievements funziona automaticamente per i nuovi achievement perché itera tutti i record della tabella achievements
+  - I badge appaiono nel profilo RPG automaticamente perché getUserAchievements carica tutti gli achievement dal DB
 ---

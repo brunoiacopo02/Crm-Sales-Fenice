@@ -31,7 +31,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "QuestPanel gia' creato per GDO — riusarlo con filtro ruolo."
     },
     {
@@ -46,7 +46,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "INSERT nuovi record nella tabella achievements."
     },
     {
