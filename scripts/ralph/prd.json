@@ -108,7 +108,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "importLeads.ts riga 131-135 rifiuta lead senza nome. Il check duplicati usa processedPhones/processedEmails Sets + query DB."
     },
     {

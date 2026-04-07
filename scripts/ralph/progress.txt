@@ -96,3 +96,23 @@ Started: 2026-04-07
 - **Report/archivio**: `kpiAdvancedActions.ts` conta motivi scarto dinamicamente da `discardReason`, nessuna lista hardcoded server-side
 - File modificati: `src/components/OutcomeModal.tsx`, `src/components/GdoQuickActions.tsx`, `src/components/ConfermeDrawer.tsx`
 ---
+
+## 2026-04-07 - F1-007
+- **Implementato**: Import lead ora permette duplicati e lead senza nome/email
+- **importLeads.ts**:
+  - Aggiunto parametro `importOptions?: { allowDuplicates?: boolean }` a `processCsvImport`
+  - Nome: se vuoto, usa placeholder "Lead senza nome" (non piu' rifiutato)
+  - Email: resa opzionale — se presente e valida viene salvata, altrimenti null (non rifiuta piu')
+  - Deduplication: wrappata in `if (!allowDuplicates)` — quando allowDuplicates=true, skip completo del check
+  - Mantenuta validazione telefono (minimo 5 cifre) e funnel (obbligatorio)
+- **import/page.tsx**:
+  - Aggiunto stato `allowDuplicates` (checkbox)
+  - Checkbox "Consenti duplicati" visibile prima del bottone di conferma
+  - Passato `{ allowDuplicates }` come terzo parametro a `processCsvImport`
+  - Colonna "Nome" non piu' obbligatoria nel CSV (rimossa dal check colonne mancanti)
+  - Aggiornato testo requisiti CSV
+- File modificati: `src/app/actions/importLeads.ts`, `src/app/(dashboard)/import/page.tsx`
+- **Learnings per iterazioni future:**
+  - Il campo `leads.name` nello schema Drizzle e' text NOT NULL — "Lead senza nome" come fallback evita errori DB
+  - `processedPhones`/`processedEmails` Set restano populati anche con allowDuplicates (non causa problemi, ma il check e' dentro l'if)
+---
