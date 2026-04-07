@@ -87,7 +87,6 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
         setIsSavingRecall(true);
         try {
             const rDate = new Date(`${recallDate}T${recallTime || '00:00'}:00`);
-            // Add UTC Offset manually if needed, but modern browsers pass correctly via Server Actions assuming standard timezone config.
 
             const res = await scheduleConfermeRecall(lead.id, lead.version, {
                 recallDate: rDate,
@@ -111,39 +110,47 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
         }
     }
 
+    // Determine card accent based on state
+    const isSnoozeOverdue = lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() <= new Date().getTime() && !lead.confirmationsOutcome;
+    const cardClasses = isLocked
+        ? 'bg-gradient-to-r from-amber-50/80 to-amber-50/40 border-amber-200/60'
+        : isSnoozeOverdue
+            ? 'bg-gradient-to-r from-ember-50/60 to-rose-50/40 border-ember-200/60 hover:border-ember-300'
+            : 'bg-white border-ash-200/60 hover:border-brand-orange/30 hover:shadow-card';
+
     return (
         <div
             ref={rowRef}
             onClick={onRowClick}
-            className={`flex flex-col py-2 px-3 mb-2 text-[13px] border rounded-lg cursor-pointer transition-colors group relative ${isLocked ? 'bg-amber-50 border-amber-200' : (lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() <= new Date().getTime() && !lead.confirmationsOutcome) ? 'bg-rose-50 border-rose-300 hover:bg-rose-100' : 'bg-white border-gray-200 hover:border-brand-blue-light hover:bg-slate-50 shadow-sm'}`}
+            className={`flex flex-col py-2.5 px-3.5 mb-2 text-[13px] border rounded-xl cursor-pointer transition-all duration-200 group relative shadow-soft ${cardClasses}`}
         >
             {/* Top Row: Info & Actions */}
             <div className={`flex items-start md:items-center justify-between gap-y-3 gap-x-2 ${layoutMode === 'snooze' ? 'flex-col w-full' : 'flex-row flex-wrap'}`}>
 
                 {/* Left side: Info */}
                 <div className={`flex items-center gap-2 md:gap-4 flex-1 min-w-0 pointer-events-none flex-wrap ${layoutMode === 'snooze' ? 'w-full' : ''}`}>
-                    <span className={`font-bold text-slate-800 leading-tight flex items-center gap-2 ${layoutMode === 'snooze' ? 'w-full text-sm' : 'truncate max-w-[150px] md:max-w-[200px]'}`}>
+                    <div className={`font-bold text-ash-800 leading-tight flex items-center gap-2 ${layoutMode === 'snooze' ? 'w-full text-sm' : 'truncate max-w-[150px] md:max-w-[200px]'}`}>
                         {lead.name}
-                        {lead.confVslSeen && <span title="VSL Vista" className="flex items-center justify-center bg-blue-100 text-blue-600 rounded-full p-1"><MonitorPlay className="w-3.5 h-3.5" /></span>}
-                    </span>
-                    <span className={`text-slate-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-slate-400" />{lead.phone}</span>
+                        {lead.confVslSeen && <div title="VSL Vista" className="flex items-center justify-center bg-blue-100 text-blue-600 rounded-lg p-1"><MonitorPlay className="w-3.5 h-3.5" /></div>}
+                    </div>
+                    <div className={`text-ash-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-ash-400" />{lead.phone}</div>
 
                     {/* Hide GDO name in Snooze mode on small columns to save space */}
                     {layoutMode !== 'snooze' && (
-                        <span className="text-brand-orange font-bold truncate max-w-[150px] shrink-0 hidden sm:inline-block">{item.gdo?.displayName || item.gdo?.name || "N/A"}</span>
+                        <div className="text-brand-orange-600 font-bold truncate max-w-[150px] shrink-0 hidden sm:inline-block">{item.gdo?.displayName || item.gdo?.name || "N/A"}</div>
                     )}
 
                     {/* Badge NR or Recall Date */}
                     {layoutMode === 'richiami' && lead.recallDate ? (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 uppercase border border-blue-200 shadow-sm ml-1 flex items-center shrink-0">
+                        <div className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 uppercase border border-blue-200/60 shadow-soft ml-1 flex items-center shrink-0">
                             <Calendar className="w-3 h-3 mr-1" />
                             {new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(lead.recallDate))}
-                        </span>
+                        </div>
                     ) : (
                         !lead.confirmationsOutcome && callsMade > 0 && layoutMode !== 'richiami' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase border border-amber-200 shadow-sm ml-1 flex items-center shrink-0">
+                            <div className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-gradient-to-r from-brand-orange-50 to-gold-50 text-brand-orange-800 uppercase border border-brand-orange-200/60 shadow-soft ml-1 flex items-center shrink-0">
                                 {callsMade}° Chiamata a vuoto
-                            </span>
+                            </div>
                         )
                     )}
 
@@ -151,31 +158,31 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                     {!lead.confirmationsOutcome && lead.confSnoozeAt && (() => {
                         const isOverdue = new Date(lead.confSnoozeAt).getTime() <= new Date().getTime();
                         return (
-                            <span className={`px-2 py-0.5 rounded text-[11px] font-bold border shadow-sm ml-1 flex items-center gap-1 shrink-0 ${isOverdue ? 'bg-red-100 text-red-800 border-red-300 animate-pulse' : 'bg-purple-100 text-purple-800 border-purple-200'}`}>
+                            <div className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border shadow-soft ml-1 flex items-center gap-1 shrink-0 transition-all ${isOverdue ? 'bg-gradient-to-r from-ember-50 to-ember-100 text-ember-700 border-ember-300 animate-pulse' : 'bg-gradient-to-r from-brand-orange-50 to-gold-50 text-brand-orange-700 border-brand-orange-200/60'}`}>
                                 <Clock className="w-3.5 h-3.5" />
                                 {new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(lead.confSnoozeAt))}
-                                {isOverdue && <span className="uppercase ml-0.5">Scaduto</span>}
-                            </span>
+                                {isOverdue && <div className="uppercase ml-0.5 text-ember-600 font-black">Scaduto</div>}
+                            </div>
                         );
                     })()}
 
                     {isLocked && (
-                        <span className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse border border-amber-200 ml-1 shrink-0">
+                        <div className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase animate-pulse border border-amber-200 ml-1 shrink-0">
                             <Users className="w-3 h-3" /> In Lavorazione
-                        </span>
+                        </div>
                     )}
                 </div>
 
                 {/* Right side: Actions */}
-                <div className={`flex items-center gap-2 shrink-0 relative ${layoutMode === 'snooze' ? 'w-full mt-2 pt-2 border-t border-gray-100 flex-wrap justify-start' : 'justify-end'}`}>
+                <div className={`flex items-center gap-2 shrink-0 relative ${layoutMode === 'snooze' ? 'w-full mt-2 pt-2 border-t border-ash-100 flex-wrap justify-start' : 'justify-end'}`}>
                     {lead.confirmationsOutcome === "confermato" ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <div className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border border-emerald-200/60 shadow-soft animate-fade-in">
                             <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
-                        </span>
+                        </div>
                     ) : lead.confirmationsOutcome === "scartato" ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                        <div className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-gradient-to-r from-ember-50 to-rose-50 text-ember-600 border border-ember-200/60 shadow-soft animate-fade-in">
                             <XCircle className="w-3.5 h-3.5 mr-1" /> Scartato
-                        </span>
+                        </div>
                     ) : null}
 
                     {!lead.confirmationsOutcome && (
@@ -184,7 +191,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                             <button
                                 onClick={handleQuickNR}
                                 disabled={callsMade >= 3 || isLocked}
-                                className="bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-300 text-slate-500 hover:text-rose-600 px-2 py-1 rounded-md text-[11px] font-bold transition-colors z-10 disabled:opacity-50"
+                                className="bg-white hover:bg-ember-50 border border-ash-200 hover:border-ember-300 text-ash-500 hover:text-ember-600 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card"
                             >
                                 NR
                             </button>
@@ -194,28 +201,28 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setShowSnoozePopover(!showSnoozePopover); setShowRecallPopover(false); }}
                                     disabled={isLocked}
-                                    className="bg-white hover:bg-purple-50 border border-gray-200 hover:border-purple-300 text-slate-500 hover:text-purple-600 px-2 py-1 rounded-md text-[11px] font-bold transition-colors z-10 disabled:opacity-50 flex items-center gap-1"
+                                    className="bg-white hover:bg-brand-orange-50 border border-ash-200 hover:border-brand-orange/40 text-ash-500 hover:text-brand-orange-700 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 flex items-center gap-1 shadow-soft hover:shadow-card"
                                 >
                                     <Clock className="w-3 h-3" /> Risentire Dopo
                                 </button>
 
                                 {/* SNOOZE POPOVER */}
                                 {showSnoozePopover && !isLocked && (
-                                    <div onClick={e => e.stopPropagation()} className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-3 animate-in fade-in slide-in-from-top-2">
-                                        <h4 className="text-[12px] font-bold text-gray-800 mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-600" /> Orario di Richiamo (Oggi)</h4>
+                                    <div onClick={e => e.stopPropagation()} className="absolute right-0 top-full mt-2 w-52 bg-white border border-ash-200/60 rounded-xl shadow-elevated z-50 p-3.5 animate-fade-in">
+                                        <h4 className="text-[12px] font-bold text-ash-800 mb-2.5 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-brand-orange-600" /> Orario di Richiamo (Oggi)</h4>
                                         <input
                                             type="time"
                                             value={snoozeTime}
                                             onChange={e => setSnoozeTime(e.target.value)}
-                                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-3 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                                            className="w-full px-2.5 py-1.5 border border-ash-200 rounded-lg text-sm mb-3 outline-none focus:border-brand-orange/40 focus:ring-2 focus:ring-brand-orange/20 transition-all"
                                         />
 
-                                        <label className="flex items-center gap-2 mb-3 text-[11px] font-semibold text-gray-700 cursor-pointer">
+                                        <label className="flex items-center gap-2 mb-3 text-[11px] font-semibold text-ash-700 cursor-pointer">
                                             <input
                                                 type="checkbox"
                                                 checked={snoozeVslSeen}
                                                 onChange={e => setSnoozeVslSeen(e.target.checked)}
-                                                className="w-3.5 h-3.5 text-purple-600 rounded border-gray-300"
+                                                className="w-3.5 h-3.5 text-brand-orange rounded border-ash-300"
                                             />
                                             VSL Vista
                                         </label>
@@ -224,13 +231,13 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                             value={snoozeNotes}
                                             onChange={e => setSnoozeNotes(e.target.value)}
                                             placeholder="Note snooze brevi..."
-                                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px] outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 bg-white resize-none shadow-sm text-purple-900 placeholder:text-gray-400 mb-2"
+                                            className="w-full px-2.5 py-1.5 border border-ash-200 rounded-lg text-[11px] outline-none focus:border-brand-orange/40 focus:ring-2 focus:ring-brand-orange/20 bg-white resize-none text-ash-800 placeholder:text-ash-400 mb-2.5 transition-all"
                                             rows={2}
                                         />
 
                                         <div className="flex justify-end gap-2">
-                                            <button onClick={() => setShowSnoozePopover(false)} className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 font-semibold">Annulla</button>
-                                            <button onClick={handleSaveSnooze} disabled={isSavingSnooze} className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded font-bold disabled:opacity-50">
+                                            <button onClick={() => setShowSnoozePopover(false)} className="px-2.5 py-1 text-xs text-ash-500 hover:text-ash-700 font-semibold transition-colors">Annulla</button>
+                                            <button onClick={handleSaveSnooze} disabled={isSavingSnooze} className="px-3 py-1 text-xs bg-gradient-to-b from-brand-orange to-brand-orange-500 hover:from-brand-orange-500 hover:to-brand-orange-600 text-white rounded-lg font-bold disabled:opacity-50 shadow-soft transition-all">
                                                 {isSavingSnooze ? "..." : "Salva"}
                                             </button>
                                         </div>
@@ -243,37 +250,37 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setShowRecallPopover(!showRecallPopover); setShowSnoozePopover(false); }}
                                     disabled={isLocked}
-                                    className="bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 text-slate-500 hover:text-blue-600 px-2 py-1 rounded-md text-[11px] font-bold transition-colors z-10 disabled:opacity-50 flex items-center gap-1"
+                                    className="bg-white hover:bg-blue-50 border border-ash-200 hover:border-blue-300 text-ash-500 hover:text-blue-600 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 flex items-center gap-1 shadow-soft hover:shadow-card"
                                 >
                                     <Calendar className="w-3 h-3" /> Programma Richiamo
                                 </button>
 
                                 {/* RECALL POPOVER */}
                                 {showRecallPopover && !isLocked && (
-                                    <div onClick={e => e.stopPropagation()} className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
-                                        <h4 className="text-[12px] font-bold text-gray-800 mb-3 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-blue-600" /> Parcheggia Lead</h4>
+                                    <div onClick={e => e.stopPropagation()} className="absolute right-0 top-full mt-2 w-64 bg-white border border-ash-200/60 rounded-xl shadow-elevated z-50 p-4 animate-fade-in">
+                                        <h4 className="text-[12px] font-bold text-ash-800 mb-3 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-blue-600" /> Parcheggia Lead</h4>
 
                                         <div className="flex gap-2 mb-3">
                                             <input
                                                 type="date"
                                                 value={recallDate}
                                                 onChange={e => setRecallDate(e.target.value)}
-                                                className="w-3/5 px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"
+                                                className="w-3/5 px-2.5 py-1.5 border border-ash-200 rounded-lg text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                                             />
                                             <input
                                                 type="time"
                                                 value={recallTime}
                                                 onChange={e => setRecallTime(e.target.value)}
-                                                className="w-2/5 px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"
+                                                className="w-2/5 px-2.5 py-1.5 border border-ash-200 rounded-lg text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                                             />
                                         </div>
 
-                                        <label className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-700 cursor-pointer">
+                                        <label className="flex items-center gap-2 mb-3 text-xs font-semibold text-ash-700 cursor-pointer">
                                             <input
                                                 type="checkbox"
                                                 checked={vslSeen}
                                                 onChange={e => setVslSeen(e.target.checked)}
-                                                className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300"
+                                                className="w-3.5 h-3.5 text-blue-600 rounded border-ash-300"
                                             />
                                             VSL Vista
                                         </label>
@@ -282,13 +289,13 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                                             value={recallNotes}
                                             onChange={e => setRecallNotes(e.target.value)}
                                             placeholder="Note di parcheggio opzionali..."
-                                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white resize-none shadow-sm text-blue-900 placeholder:text-gray-400 mb-3"
+                                            className="w-full px-2.5 py-1.5 border border-ash-200 rounded-lg text-[11px] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-white resize-none text-ash-800 placeholder:text-ash-400 mb-3 transition-all"
                                             rows={2}
                                         />
 
                                         <div className="flex justify-end gap-2">
-                                            <button onClick={() => setShowRecallPopover(false)} className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-semibold">Annulla</button>
-                                            <button onClick={handleSaveRecall} disabled={isSavingRecall || !recallDate} className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded font-bold disabled:opacity-50">
+                                            <button onClick={() => setShowRecallPopover(false)} className="px-2.5 py-1.5 text-xs text-ash-500 hover:text-ash-700 font-semibold transition-colors">Annulla</button>
+                                            <button onClick={handleSaveRecall} disabled={isSavingRecall || !recallDate} className="px-3.5 py-1.5 text-xs bg-gradient-to-b from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg font-bold disabled:opacity-50 shadow-soft transition-all">
                                                 {isSavingRecall ? "..." : "Parcheggia"}
                                             </button>
                                         </div>
@@ -302,11 +309,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
 
             {/* In-Line Expanded Note (if present) appended to bottom of the flex column */}
             {lead.confRecallNotes && !lead.confirmationsOutcome && (
-                <div className="w-full mt-2 lg:mt-1 pt-2 border-t border-dashed border-gray-200 pointer-events-none">
-                    <p className="text-[12px] text-amber-700 bg-gradient-to-r from-amber-50 to-transparent py-1 px-2 rounded-md italic w-full flex items-start gap-1.5">
-                        <span className="font-bold text-amber-800 shrink-0 mt-0.5">Nota:</span>
-                        <span className="break-words whitespace-pre-wrap flex-1">{lead.confRecallNotes}</span>
-                    </p>
+                <div className="w-full mt-2 lg:mt-1 pt-2 border-t border-dashed border-ash-200/60 pointer-events-none">
+                    <div className="text-[12px] text-brand-orange-700 bg-gradient-to-r from-brand-orange-50/60 to-transparent py-1.5 px-2.5 rounded-lg italic w-full flex items-start gap-1.5">
+                        <div className="font-bold text-brand-orange-800 shrink-0 mt-0.5">Nota:</div>
+                        <div className="break-words whitespace-pre-wrap flex-1">{lead.confRecallNotes}</div>
+                    </div>
                 </div>
             )}
 

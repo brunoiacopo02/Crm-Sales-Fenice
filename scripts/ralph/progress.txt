@@ -356,3 +356,42 @@ Started: 2026-04-07
   - `before:` pseudo-element for left accent avoids extra DOM and works with `relative` parent
   - Status dot (`w-1.5 h-1.5 rounded-full`) inside badge gives at-a-glance color signal
 ---
+
+## 2026-04-07 - F2-017
+- **Feature**: UI: Redesign Dashboard Conferme
+- **What was done:**
+  - **ConfermeBoard.tsx redesign:**
+    - Premium segmented control tabs with icons (Sun/Sunrise/Clock), backdrop-blur glass header, brand-orange active badges
+    - Timeline hour buttons: gradient active state (brand-orange-50), warm ash palette replacing gray-*
+    - NR filter pills: ash gradient active state, brand-orange hover accent
+    - Lead list container: ash borders, staggered fade-in animation per card row
+    - Snooze sidebar: warm gradient header (brand-orange-50 to gold-50) replacing purple
+    - Table view: gradient table header, premium date presets with gradient buttons, ember-accented status badges
+    - Table rows: brand-orange hover accent, gradient status badges (emerald/ember/blue), rounded-lg chevron button
+    - Empty states: gradient background, rounded-2xl icon container, ash palette
+    - Loading state: added text label under spinner
+    - Content area: gradient background from-ash-50/50 to-white
+  - **ConfermeBoardRow.tsx redesign:**
+    - Premium card: rounded-xl, shadow-soft, hover:shadow-card with brand-orange border accent
+    - State-dependent card backgrounds: amber gradient (locked), ember gradient (overdue snooze), white (default)
+    - Status badges: gradient backgrounds (emerald for confermato, ember for scartato), animate-fade-in
+    - NR attempt dots: brand-orange-500 + ember-400 for 3rd call
+    - Action buttons: ash borders, shadow-soft, hover:shadow-card with brand-orange/blue/ember accents
+    - Popovers: shadow-elevated, animate-fade-in, gradient CTA buttons, brand-orange/blue focus rings
+    - Call badge: gradient from-brand-orange-50 to-gold-50
+    - Snooze badge: gradient with brand-orange (normal) or ember (overdue) palette
+    - Notes section: brand-orange gradient background, rounded-lg
+    - All `<span>` replaced with `<div>` for hydration safety
+  - **conferme/page.tsx:** Updated header to use ash-800 text and ash-500 subtitle with `<div>` for hydration safety
+  - ALL existing functionality preserved: drawer, quick actions, NR tracking, snooze, recall, presence, realtime, table view
+- **Files modified:**
+  - `src/components/ConfermeBoard.tsx` — full redesign with premium warm palette
+  - `src/components/ConfermeBoardRow.tsx` — full redesign with premium cards and micro-animations
+  - `src/app/(dashboard)/conferme/page.tsx` — header styling update
+- **Learnings per iterazioni future:**
+  - Conferme board uses tab-based navigation (pomeriggio/mattina/richiami/table) not traditional kanban columns
+  - `backdrop-blur-md` on sticky nav creates glass effect consistent with F2-015 Topbar
+  - Staggered card animations (animationDelay + backwards fill) work well for list rendering
+  - Snooze sidebar was previously purple — changed to warm brand-orange/gold for design system consistency
+  - Table row hover uses `brand-orange-50/30` for subtle warm accent matching overall theme
+---

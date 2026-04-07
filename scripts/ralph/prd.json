@@ -263,7 +263,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Solo restyling. Logica intatta."
     },
     {

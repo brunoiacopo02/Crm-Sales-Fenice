@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone } from "lucide-react"
+import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme } from "@/app/actions/confermeActions"
 
 import { ConfermeDrawer } from "@/components/ConfermeDrawer"
@@ -232,12 +232,12 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     }
 
     const renderEmptyState = (message: string) => (
-        <div className="flex flex-col items-center justify-center p-8 text-center bg-white rounded-2xl border border-gray-100 shadow-sm mb-6">
-            <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-3">
+        <div className="flex flex-col items-center justify-center p-10 text-center bg-gradient-to-br from-white to-ash-50 rounded-2xl border border-ash-200/60 shadow-soft mb-6 animate-fade-in">
+            <div className="w-16 h-16 bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-500 rounded-2xl flex items-center justify-center mb-4 shadow-soft">
                 <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-1">Tutto Pulito!</h3>
-            <p className="text-gray-500 text-sm font-medium">{message}</p>
+            <h3 className="text-xl font-bold text-ash-800 mb-1">Tutto Pulito!</h3>
+            <p className="text-ash-500 text-sm font-medium">{message}</p>
         </div>
     )
 
@@ -248,8 +248,8 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         if (activeHours.length === 0) return null;
 
         return (
-            <div className="w-full border-b border-gray-200/60 sticky top-0 bg-gray-50 z-10 pt-2 pb-3 mb-4">
-                <div className="flex flex-wrap items-center gap-3 w-full max-w-[1400px] mx-auto px-2">
+            <div className="w-full border-b border-ash-200/40 sticky top-0 bg-white/90 backdrop-blur-sm z-10 pt-3 pb-3 mb-4 shadow-soft">
+                <div className="flex flex-wrap items-center gap-2 w-full max-w-[1400px] mx-auto px-3">
                     {activeHours.map((hourParam) => {
                     const hNum = parseInt(hourParam.split(':')[0], 10);
                     const leadsForHour = activeLeads.filter(l => {
@@ -259,13 +259,13 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     });
 
                     const allDone = leadsForHour.length > 0 && leadsForHour.every(l => !!l.lead.confirmationsOutcome);
-                    const trafficColor = leadsForHour.length === 0 ? "bg-gray-300" : allDone ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-rose-500 shadow-[0_0_5px_rgba(244,63,94,0.5)]";
+                    const trafficColor = leadsForHour.length === 0 ? "bg-ash-300" : allDone ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" : "bg-ember-400 shadow-[0_0_6px_rgba(232,82,63,0.4)]";
 
                     return (
                         <button
                             key={hourParam}
                             onClick={() => { setSelectedHour(hourParam); setNrFilter('tutti'); }}
-                            className={`flex items-center gap-2 shrink-0 px-4 py-2 rounded-xl text-sm font-bold border transition-all duration-200 ${selectedHour === hourParam ? 'bg-white border-brand-blue ring-1 ring-brand-blue text-brand-blue-dark shadow-md scale-105' : 'bg-gray-100 border-gray-200 hover:bg-gray-200 text-gray-600'}`}
+                            className={`flex items-center gap-2 shrink-0 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all duration-200 ${selectedHour === hourParam ? 'bg-gradient-to-b from-brand-orange-50 to-white border-brand-orange/40 text-brand-orange-700 shadow-card ring-1 ring-brand-orange/20 scale-[1.03]' : 'bg-white border-ash-200 hover:bg-ash-50 hover:border-ash-300 text-ash-600'}`}
                         >
                             {hourParam}
                             <div className={`w-2.5 h-2.5 rounded-full ${trafficColor} border border-white/50`} />
@@ -287,9 +287,9 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
 
         const filterButton = (key: NrFilterMode, label: string) => (
-            <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[13px] font-bold cursor-pointer transition-all ${nrFilter === key ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 border-gray-200 hover:border-gray-300 hover:bg-slate-50'}`}>
+            <label className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-[13px] font-bold cursor-pointer transition-all duration-200 ${nrFilter === key ? 'bg-gradient-to-b from-ash-700 to-ash-800 text-white border-ash-900 shadow-card' : 'bg-white text-ash-600 border-ash-200 hover:border-brand-orange/30 hover:bg-brand-orange-50/40'}`}>
                 <input type="radio" value={key} checked={nrFilter === key} onChange={() => setNrFilter(key)} className="hidden" />
-                {label} <span className={`ml-1 px-1.5 rounded-full text-[11px] ${nrFilter === key ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'}`}>{counts[key]}</span>
+                {label} <span className={`ml-1 px-1.5 rounded-md text-[11px] ${nrFilter === key ? 'bg-ash-600 text-white' : 'bg-ash-100 text-ash-500'}`}>{counts[key]}</span>
             </label>
         );
 
@@ -333,23 +333,30 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             <div className="grid grid-cols-1 xl:grid-cols-3 w-full max-w-[1400px] mx-auto pb-12 gap-6 items-start px-2">
                 <div className="xl:col-span-2 flex flex-col w-full min-w-0">
                     {filtersJSX}
-                    <div className="flex flex-col w-full bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
+                    <div className="flex flex-col w-full bg-white border border-ash-200/60 rounded-xl p-2 shadow-soft">
                         {normalTargetLeads.length === 0 ? (
-                            <div className="text-center py-6 text-slate-500 text-sm font-medium">Nessun lead corrispondente ai filtri in questa fascia oraria.</div>
+                            <div className="text-center py-8 text-ash-400 text-sm font-medium flex flex-col items-center gap-2">
+                                <Inbox className="w-8 h-8 text-ash-300" />
+                                Nessun lead corrispondente ai filtri in questa fascia oraria.
+                            </div>
                         ) : (
-                            normalTargetLeads.map(l => renderRowComponent(l, 'default'))
+                            normalTargetLeads.map((l, idx) => (
+                                <div key={l.lead.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(idx * 30, 300)}ms`, animationFillMode: 'backwards' }}>
+                                    {renderRowComponent(l, 'default')}
+                                </div>
+                            ))
                         )}
                     </div>
                 </div>
 
                 <div className="xl:col-span-1 flex flex-col w-full min-w-0 mt-4 xl:mt-0 pt-0 xl:pt-[72px]">
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 shadow-sm mb-4">
-                        <h3 className="text-purple-800 font-bold mb-1 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Richiamati In Giornata</h3>
-                        <p className="text-[12px] text-purple-700/80 leading-tight">Lead spostati temporaneamente ("Snooze"). Suonerà una sveglia all'orario stabilito.</p>
+                    <div className="bg-gradient-to-br from-brand-orange-50 to-gold-50 border border-brand-orange-200/60 rounded-xl p-3.5 shadow-soft mb-4">
+                        <h3 className="text-brand-orange-700 font-bold mb-1 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Richiamati In Giornata</h3>
+                        <div className="text-[12px] text-brand-orange-600/80 leading-tight">Lead spostati temporaneamente (&quot;Snooze&quot;). Suonerà una sveglia all&apos;orario stabilito.</div>
                     </div>
-                    <div className="flex flex-col bg-white border border-gray-200 rounded-xl p-2 shadow-sm min-h-[150px]">
+                    <div className="flex flex-col bg-white border border-ash-200/60 rounded-xl p-2 shadow-soft min-h-[150px]">
                         {snoozedLeads.length === 0 ? (
-                            <div className="text-center my-auto py-6 text-slate-400 text-xs font-semibold">Nessun richiamo attivo.</div>
+                            <div className="text-center my-auto py-6 text-ash-400 text-xs font-semibold">Nessun richiamo attivo.</div>
                         ) : (
                             snoozedLeads.map(l => renderRowComponent(l, 'snooze'))
                         )}
@@ -363,37 +370,37 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         <div className="flex flex-col h-[calc(100vh-140px)] relative">
             <GlobalAlertListener currentUser={currentUser} />
 
-            {/* MEGA TOGGLES NAVIGATION - Plancia Desktop Segmented Control */}
-            <div className="flex items-center justify-between gap-4 mb-2 sticky top-0 z-20 bg-gray-50 pt-3 pb-3">
-                <div className="flex p-1 bg-gray-200/60 rounded-xl max-w-2xl border border-gray-200 shadow-inner">
+            {/* MEGA TOGGLES NAVIGATION - Premium Segmented Control */}
+            <div className="flex items-center justify-between gap-4 mb-2 sticky top-0 z-20 bg-white/80 backdrop-blur-md pt-3 pb-3 border-b border-ash-200/40">
+                <div className="flex p-1 bg-ash-100/80 rounded-xl max-w-2xl border border-ash-200/60 shadow-soft">
                     <button
                         onClick={() => setViewMode('pomeriggio')}
-                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'pomeriggio' ? 'bg-white text-slate-800 shadow-sm border border-gray-300' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/30'}`}
+                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'pomeriggio' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
                     >
-                        App Pomeriggio <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'pomeriggio' ? 'bg-slate-800 text-white' : 'bg-gray-300 text-gray-700'}`}>{oggiLeads.length}</span>
+                        <Sun className="w-4 h-4" /> Pomeriggio <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'pomeriggio' ? 'bg-brand-orange text-white' : 'bg-ash-300/60 text-ash-600'}`}>{oggiLeads.length}</span>
                     </button>
                     <button
                         onClick={() => setViewMode('mattina')}
-                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'mattina' ? 'bg-white text-slate-800 shadow-sm border border-gray-300' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-300/30'}`}
+                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'mattina' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
                     >
-                        App Mattina <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'mattina' ? 'bg-slate-800 text-white' : 'bg-gray-300 text-gray-700'}`}>{domaniLeads.length}</span>
+                        <Sunrise className="w-4 h-4" /> Mattina <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'mattina' ? 'bg-gold-400 text-white' : 'bg-ash-300/60 text-ash-600'}`}>{domaniLeads.length}</span>
                     </button>
                     <button
                         onClick={() => setViewMode('da_definire')}
-                        className={`py-2 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'da_definire' ? 'bg-white text-blue-700 shadow-sm border border-blue-200' : 'text-blue-600/70 hover:text-blue-700 hover:bg-blue-50/50'}`}
+                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'da_definire' ? 'bg-white text-blue-700 shadow-card border border-blue-200/60' : 'text-blue-500/70 hover:text-blue-700 hover:bg-blue-50/40'}`}
                     >
-                        Richiami <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-none ${viewMode === 'da_definire' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800'}`}>{kanbanData.daDefinire.length}</span>
+                        <Clock className="w-4 h-4" /> Richiami <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'da_definire' ? 'bg-blue-600 text-white' : 'bg-blue-100/80 text-blue-700'}`}>{kanbanData.daDefinire.length}</span>
                     </button>
                 </div>
 
                 <div className="flex w-full lg:w-auto items-center gap-3">
                     {/* GLOBAL SEARCH INPUT */}
-                    <div className="flex items-center bg-white border border-gray-300 rounded-lg px-3 py-2 w-full lg:w-64 xl:w-80 shadow-sm transition-all focus-within:ring-2 focus-within:ring-brand-blue/30 focus-within:border-brand-blue">
-                        <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                    <div className="flex items-center bg-ash-50/50 border border-ash-200 rounded-lg px-3 py-2 w-full lg:w-64 xl:w-80 shadow-soft transition-all focus-within:ring-2 focus-within:ring-brand-orange/30 focus-within:border-brand-orange/40">
+                        <Search className="w-4 h-4 text-ash-400 mr-2 shrink-0" />
                         <input
                             type="text"
                             placeholder="Cerca per nome, email o telefono..."
-                            className="bg-transparent border-none outline-none text-[13px] w-full placeholder:text-gray-400"
+                            className="bg-transparent border-none outline-none text-[13px] w-full placeholder:text-ash-400"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -401,7 +408,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
                     <button
                         onClick={() => setViewMode('table')}
-                        className={`px-5 py-2 rounded-lg font-bold transition-all text-xs uppercase tracking-wider flex items-center justify-center border shrink-0 ${viewMode === 'table' ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 border-gray-300 shadow-sm'}`}
+                        className={`px-5 py-2.5 rounded-lg font-bold transition-all duration-200 text-xs uppercase tracking-wider flex items-center justify-center border shrink-0 ${viewMode === 'table' ? 'bg-gradient-to-b from-ash-700 to-ash-800 text-white border-ash-900 shadow-card' : 'bg-white text-ash-600 hover:bg-ash-50 border-ash-200 shadow-soft'}`}
                     >
                         Vista Globale DB
                     </button>
@@ -409,10 +416,11 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             </div>
 
             {/* MAIN CONTENT AREA */}
-            <div className="flex-1 overflow-auto bg-gray-50 px-2 sm:px-4 pb-48">
+            <div className="flex-1 overflow-auto bg-gradient-to-b from-ash-50/50 to-white px-2 sm:px-4 pb-48">
                 {loading ? (
-                    <div className="flex items-center justify-center h-full text-brand-blue">
-                        <div className="animate-spin w-10 h-10 border-4 border-brand-orange border-t-transparent rounded-full mb-4 mx-auto"></div>
+                    <div className="flex flex-col items-center justify-center h-full gap-3">
+                        <div className="animate-spin w-10 h-10 border-4 border-brand-orange border-t-transparent rounded-full"></div>
+                        <div className="text-ash-400 text-sm font-medium">Caricamento...</div>
                     </div>
                 ) : (
                     <>
@@ -438,16 +446,20 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                             });
 
                             return (
-                                <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-12">
-                                    <div className="w-full mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
+                                <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-12 animate-fade-in">
+                                    <div className="w-full mb-4 p-4 bg-gradient-to-r from-blue-50 to-brand-orange-50/30 border border-blue-200/60 rounded-xl shadow-soft">
                                         <h2 className="text-lg font-black text-blue-800 uppercase tracking-wide mb-1 flex items-center gap-2"><Clock className="w-5 h-5" /> Richiami Programmati</h2>
-                                        <p className="text-blue-700/80 font-medium text-sm">Lead parcheggiati in attesa della data prestabilita.</p>
+                                        <div className="text-blue-700/80 font-medium text-sm">Lead parcheggiati in attesa della data prestabilita.</div>
                                     </div>
-                                    <div className="w-full flex flex-col bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
+                                    <div className="w-full flex flex-col bg-white border border-ash-200/60 rounded-xl p-2 shadow-soft">
                                         {sortedDaDefinire.length === 0 ? (
                                             renderEmptyState("La coda dei parcheggiati è vuota.")
                                         ) : (
-                                            sortedDaDefinire.map(l => renderRowComponent(l, 'richiami'))
+                                            sortedDaDefinire.map((l, idx) => (
+                                                <div key={l.lead.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(idx * 30, 300)}ms`, animationFillMode: 'backwards' }}>
+                                                    {renderRowComponent(l, 'richiami')}
+                                                </div>
+                                            ))
                                         )}
                                     </div>
                                 </div>
@@ -455,30 +467,30 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         })()}
 
                         {viewMode === 'table' && (
-                            <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8 max-w-[1400px] mx-auto w-full">
-                                <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
+                            <div className="flex flex-col h-full bg-white rounded-2xl border border-ash-200/60 shadow-card overflow-hidden mb-8 max-w-[1400px] mx-auto w-full animate-fade-in">
+                                <div className="p-4 border-b border-ash-200/40 bg-gradient-to-r from-ash-50 to-white flex flex-wrap gap-4 items-center justify-between">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <div className="flex bg-white border border-gray-300 rounded-xl p-1 shrink-0 shadow-sm">
-                                            <button onClick={() => handleDatePreset("today")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "today" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Oggi</button>
-                                            <button onClick={() => handleDatePreset("tomorrow")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "tomorrow" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Domani</button>
-                                            <button onClick={() => handleDatePreset("7days")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "7days" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Ultimi 7 gg</button>
-                                            <button onClick={() => handleDatePreset("all")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${datePreset === "all" ? "bg-brand-orange text-white" : "text-gray-600 hover:bg-gray-100"}`}>Tutti</button>
+                                        <div className="flex bg-white border border-ash-200 rounded-xl p-1 shrink-0 shadow-soft">
+                                            <button onClick={() => handleDatePreset("today")} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${datePreset === "today" ? "bg-gradient-to-b from-brand-orange to-brand-orange-500 text-white shadow-sm" : "text-ash-600 hover:bg-ash-50"}`}>Oggi</button>
+                                            <button onClick={() => handleDatePreset("tomorrow")} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${datePreset === "tomorrow" ? "bg-gradient-to-b from-brand-orange to-brand-orange-500 text-white shadow-sm" : "text-ash-600 hover:bg-ash-50"}`}>Domani</button>
+                                            <button onClick={() => handleDatePreset("7days")} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${datePreset === "7days" ? "bg-gradient-to-b from-brand-orange to-brand-orange-500 text-white shadow-sm" : "text-ash-600 hover:bg-ash-50"}`}>Ultimi 7 gg</button>
+                                            <button onClick={() => handleDatePreset("all")} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${datePreset === "all" ? "bg-gradient-to-b from-brand-orange to-brand-orange-500 text-white shadow-sm" : "text-ash-600 hover:bg-ash-50"}`}>Tutti</button>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="flex-1 overflow-auto bg-white p-0">
                                     {tableData.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 py-10">
-                                            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
-                                                <Filter className="w-8 h-8 text-slate-300" />
+                                        <div className="flex flex-col items-center justify-center h-full text-ash-400 gap-3 py-10">
+                                            <div className="w-16 h-16 rounded-2xl bg-ash-50 flex items-center justify-center shadow-soft">
+                                                <Filter className="w-8 h-8 text-ash-300" />
                                             </div>
-                                            <p className="text-sm font-medium">Nessun appuntamento trovato</p>
+                                            <div className="text-sm font-medium">Nessun appuntamento trovato</div>
                                         </div>
                                     ) : (
                                         <table className="w-full text-left border-collapse min-w-max">
                                             <thead>
-                                                <tr className="bg-slate-50 sticky top-0 border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-slate-500 z-10 shadow-sm">
+                                                <tr className="bg-gradient-to-r from-ash-50 to-ash-100/50 sticky top-0 border-b border-ash-200/60 text-xs font-bold uppercase tracking-wider text-ash-500 z-10">
                                                     <th className="p-4 pl-6">Data / Ora</th>
                                                     <th className="p-4">Lead</th>
                                                     <th className="p-4">GDO</th>
@@ -486,11 +498,11 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                     <th className="p-4"></th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-gray-100">
+                                            <tbody className="divide-y divide-ash-100/60">
                                                 {tableData.map((item) => (
                                                     <tr
                                                         key={item.lead.id}
-                                                        className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
+                                                        className="hover:bg-brand-orange-50/30 transition-all duration-200 cursor-pointer group"
                                                         onClick={() => {
                                                             setSelectedLead(item)
                                                             setIsDrawerOpen(true)
@@ -498,16 +510,16 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                     >
                                                         <td className="p-4 pl-6 align-top pt-5">
                                                             {item.lead.confNeedsReschedule ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold bg-amber-100 text-amber-800 uppercase tracking-widest">Da Definire</span>
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 uppercase tracking-widest border border-amber-200/60">Da Definire</span>
                                                             ) : (
                                                                 <>
                                                                     <div className="flex items-center gap-2">
-                                                                        <Calendar className="w-4 h-4 text-slate-400" />
-                                                                        <span className="font-semibold text-slate-900">
+                                                                        <Calendar className="w-4 h-4 text-ash-400" />
+                                                                        <span className="font-semibold text-ash-800">
                                                                             {item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "dd MMM yyyy", { locale: it }) : "N/D"}
                                                                         </span>
                                                                     </div>
-                                                                    <div className="flex items-center gap-2 mt-1.5 text-sm font-medium text-brand-orange">
+                                                                    <div className="flex items-center gap-2 mt-1.5 text-sm font-bold text-brand-orange-600">
                                                                         <Clock className="w-4 h-4" />
                                                                         <span>
                                                                             {item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "HH:mm") : "N/D"}
@@ -517,47 +529,47 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                             )}
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
-                                                            <p className="font-bold text-slate-900 text-[15px]">{item.lead.name}</p>
-                                                            <p className="text-sm text-slate-500 mt-0.5">{item.lead.phone}</p>
+                                                            <div className="font-bold text-ash-800 text-[15px]">{item.lead.name}</div>
+                                                            <div className="text-sm text-ash-500 mt-0.5">{item.lead.phone}</div>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
-                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">
+                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-ash-100 text-ash-700 border border-ash-200/60">
                                                                 {item.gdo?.displayName || item.gdo?.name || "Sconosciuto"}
                                                             </span>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <div className="flex flex-col gap-2 items-start">
                                                                 {globalPresence.find(p => p.leadId === item.lead.id) && (
-                                                                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] uppercase tracking-widest font-bold bg-amber-100 text-amber-800 animate-pulse border border-amber-200 shadow-sm">
+                                                                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] uppercase tracking-widest font-bold bg-amber-100 text-amber-800 animate-pulse border border-amber-200 shadow-soft">
                                                                         <Users className="w-3 h-3" /> In Uso
                                                                     </span>
                                                                 )}
                                                                 {item.lead.confirmationsOutcome === "confermato" ? (
-                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 shadow-sm">
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border border-emerald-200/60 shadow-soft">
                                                                         <CheckCircle2 className="w-4 h-4 mr-1.5" /> Confermato
                                                                     </span>
                                                                 ) : item.lead.confirmationsOutcome === "scartato" ? (
-                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/10 shadow-sm">
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-ember-50 to-rose-50 text-ember-600 border border-ember-200/60 shadow-soft">
                                                                         <XCircle className="w-4 h-4 mr-1.5" /> Scartato
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-600/20 shadow-sm">
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-50 to-brand-orange-50/30 text-blue-700 border border-blue-200/60 shadow-soft">
                                                                         Da lavorare
                                                                     </span>
                                                                 )}
 
                                                                 {(!item.lead.confirmationsOutcome) && (
                                                                     <div className="flex gap-1.5 mt-1" title="Tentativi NR">
-                                                                        <div className={`w-2.5 h-2.5 rounded-full shadow-inner ${item.lead.confCall1At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                                                                        <div className={`w-2.5 h-2.5 rounded-full shadow-inner ${item.lead.confCall2At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
-                                                                        <div className={`w-2.5 h-2.5 rounded-full shadow-inner ${item.lead.confCall3At ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-200'}`} />
+                                                                        <div className={`w-2.5 h-2.5 rounded-full ${item.lead.confCall1At ? 'bg-brand-orange-500 ring-2 ring-brand-orange-200' : 'bg-ash-200'}`} />
+                                                                        <div className={`w-2.5 h-2.5 rounded-full ${item.lead.confCall2At ? 'bg-brand-orange-500 ring-2 ring-brand-orange-200' : 'bg-ash-200'}`} />
+                                                                        <div className={`w-2.5 h-2.5 rounded-full ${item.lead.confCall3At ? 'bg-ember-400 ring-2 ring-ember-200' : 'bg-ash-200'}`} />
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         </td>
                                                         <td className="p-4 text-right align-middle">
-                                                            <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center ml-auto group-hover:bg-brand-blue group-hover:border-brand-blue group-hover:text-white transition-all duration-200 shadow-sm">
-                                                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                                                            <div className="w-8 h-8 rounded-lg bg-ash-50 border border-ash-200 flex items-center justify-center ml-auto group-hover:bg-brand-orange group-hover:border-brand-orange group-hover:text-white transition-all duration-200 shadow-soft">
+                                                                <ChevronRight className="w-4 h-4 text-ash-400 group-hover:text-white transition-colors" />
                                                             </div>
                                                         </td>
                                                     </tr>

@@ -20,12 +20,12 @@ export default async function ConfermePage() {
             </div>
 
             <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold tracking-tight text-brand-blue-dark">
+                <h1 className="text-2xl font-bold tracking-tight text-ash-800">
                     Dashboard Conferme
                 </h1>
-                <p className="text-sm text-gray-500">
+                <div className="text-sm text-ash-500 font-medium">
                     Gestione appuntamenti centralizzata
-                </p>
+                </div>
             </div>
 
             {session.user.role === 'CONFERME' && (
