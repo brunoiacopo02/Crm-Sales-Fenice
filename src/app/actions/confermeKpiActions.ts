@@ -222,3 +222,42 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
 
     return salesList
 }
+
+/**
+ * F2-012: Obiettivi giornalieri Conferme — confermati oggi vs target
+ */
+export async function getConfermeDailyObjectives(confermeUserId: string) {
+    const now = new Date()
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
+    const [yearStr, monthStr, dayStr] = todayStr.split('-')
+    const year = parseInt(yearStr, 10)
+    const month = parseInt(monthStr, 10)
+    const day = parseInt(dayStr, 10)
+
+    const todayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
+    const todayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
+
+    // Get user's weekly conferme target (Tier 1 = base target)
+    const userRow = await db.select({
+        confermeTargetTier1: users.confermeTargetTier1
+    }).from(users).where(eq(users.id, confermeUserId)).limit(1)
+    const weeklyTarget = userRow[0]?.confermeTargetTier1 || 19
+    // Mon-Fri = 5 working days per week
+    const dailyTarget = Math.ceil(weeklyTarget / 5)
+
+    // Count today's confirmations by this operator
+    const confResult = await db.select({ count: sql<number>`count(*)::integer` })
+        .from(leads)
+        .where(and(
+            eq(leads.confirmationsUserId, confermeUserId),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            gte(leads.confirmationsTimestamp, todayStart),
+            lte(leads.confirmationsTimestamp, todayEnd)
+        ))
+    const confirmationsDone = confResult[0]?.count || 0
+
+    return {
+        confirmationsDone,
+        confirmationsTarget: dailyTarget,
+    }
+}

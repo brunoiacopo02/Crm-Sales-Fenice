@@ -221,3 +221,27 @@ Started: 2026-04-07
   - GDO dashboard page (`/`) reaches GDO users only — managers/conferme/venditori are redirected
   - `session!.user.id` is safe in the dashboard page because auth is checked before rendering
 ---
+
+## 2026-04-07 - F2-012
+- **Feature**: Obiettivi giornalieri sempre visibili
+- **What was done:**
+  - Created `getGdoDailyObjectives(gdoUserId)` server action in `gdoPerformanceActions.ts` — counts today's calls (from callLogs), today's appointments (from leads.appointmentCreatedAt), pipeline size, and reads dailyApptTarget
+  - Created `getConfermeDailyObjectives(confermeUserId)` server action in `confermeKpiActions.ts` — counts today's confirmations and derives daily target from confermeTargetTier1 / 5 (Mon-Fri working days)
+  - Created `GdoDailyObjectives.tsx` — dark gradient banner with 2 progress cards: "Chiamate oggi" (X/pipeline) and "Fissaggi oggi" (X/dailyApptTarget) with colored progress bars and completion indicator
+  - Created `ConfermeDailyObjectives.tsx` — blue gradient banner with 1 progress card: "Confermati oggi" (X/dailyTarget) with progress bar and percentage
+  - Integrated GdoDailyObjectives at top of GDO dashboard (above GdoLeadMetrics)
+  - Integrated ConfermeDailyObjectives in Conferme dashboard (only for CONFERME role, not MANAGER/ADMIN)
+- **Files modified:**
+  - `src/app/actions/gdoPerformanceActions.ts` — added getGdoDailyObjectives + imported callLogs, or
+  - `src/app/actions/confermeKpiActions.ts` — added getConfermeDailyObjectives
+  - `src/components/GdoDailyObjectives.tsx` — new client component
+  - `src/components/ConfermeDailyObjectives.tsx` — new client component
+  - `src/app/(dashboard)/page.tsx` — added GdoDailyObjectives import and placement
+  - `src/app/(dashboard)/conferme/page.tsx` — added ConfermeDailyObjectives import and conditional placement
+- **Learnings per iterazioni future:**
+  - `callLogs.userId` tracks who made the call — use for counting today's calls per GDO
+  - `leads.appointmentCreatedAt` timestamp marks when an appointment was set — use gte/lte for today range
+  - Conferme daily target: `Math.ceil(confermeTargetTier1 / 5)` — tier1 is weekly, 5 working days Mon-Fri
+  - Conferme objectives only visible to CONFERME role, not to MANAGER/ADMIN who also access /conferme
+  - Both components listen to `realtime_update` event for live refresh, following GdoLeadMetrics pattern
+---

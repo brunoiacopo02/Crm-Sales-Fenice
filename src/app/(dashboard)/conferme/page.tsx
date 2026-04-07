@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { ConfermeBoard } from "@/components/ConfermeBoard"
 import { TeamRadarWidget } from "@/components/TeamRadarWidget"
+import { ConfermeDailyObjectives } from "@/components/ConfermeDailyObjectives"
 import { redirect } from "next/navigation"
 
 export default async function ConfermePage() {
@@ -26,6 +27,10 @@ export default async function ConfermePage() {
                     Gestione appuntamenti centralizzata
                 </p>
             </div>
+
+            {session.user.role === 'CONFERME' && (
+                <ConfermeDailyObjectives confermeUserId={session.user.id} />
+            )}
 
             <ConfermeBoard currentUser={session.user} />
         </div>

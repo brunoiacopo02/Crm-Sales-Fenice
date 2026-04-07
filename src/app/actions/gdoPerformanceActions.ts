@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { leads, users, weeklyGamificationRules } from "@/db/schema";
-import { eq, and, gte, lte, isNotNull, sql } from "drizzle-orm";
+import { leads, users, weeklyGamificationRules, callLogs } from "@/db/schema";
+import { eq, and, gte, lte, isNotNull, sql, or } from "drizzle-orm";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
 
 export interface GamificationTargetInput {
@@ -332,4 +332,61 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
     }
 
     return { fissati, confermati, presenziati, chiusi, month: monthStr };
+}
+
+/**
+ * F2-012: Obiettivi giornalieri GDO — chiamate e fissaggi di oggi
+ */
+export async function getGdoDailyObjectives(gdoUserId: string) {
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
+    const [yearStr, monthStr, dayStr] = todayStr.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    const day = parseInt(dayStr, 10);
+
+    const todayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const todayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+    // Get user's dailyApptTarget
+    const userRow = await db.select({ dailyApptTarget: users.dailyApptTarget })
+        .from(users).where(eq(users.id, gdoUserId)).limit(1);
+    const dailyApptTarget = userRow[0]?.dailyApptTarget || 2;
+
+    // Count today's calls from callLogs
+    const callResult = await db.select({ count: sql<number>`count(*)::integer` })
+        .from(callLogs)
+        .where(and(
+            eq(callLogs.userId, gdoUserId),
+            gte(callLogs.createdAt, todayStart),
+            lte(callLogs.createdAt, todayEnd)
+        ));
+    const callsDone = callResult[0]?.count || 0;
+
+    // Count today's appointments set by this GDO
+    const apptResult = await db.select({ count: sql<number>`count(*)::integer` })
+        .from(leads)
+        .where(and(
+            eq(leads.assignedToId, gdoUserId),
+            isNotNull(leads.appointmentCreatedAt),
+            gte(leads.appointmentCreatedAt, todayStart),
+            lte(leads.appointmentCreatedAt, todayEnd)
+        ));
+    const appointmentsDone = apptResult[0]?.count || 0;
+
+    // Count leads in pipeline (assigned, not yet with appointment, active statuses)
+    const pipelineResult = await db.select({ count: sql<number>`count(*)::integer` })
+        .from(leads)
+        .where(and(
+            eq(leads.assignedToId, gdoUserId),
+            or(eq(leads.status, 'NEW'), eq(leads.status, 'IN_PROGRESS'))
+        ));
+    const pipelineSize = pipelineResult[0]?.count || 0;
+
+    return {
+        callsDone,
+        pipelineSize,
+        appointmentsDone,
+        appointmentsTarget: dailyApptTarget,
+    };
 }
