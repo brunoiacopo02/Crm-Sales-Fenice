@@ -384,3 +384,40 @@ Started: 2026-04-07
   - Script/test files don't follow production patterns (optimistic locking) — acceptable but worth noting
   - Regression audits can be done effectively via code analysis when the codebase follows consistent patterns
 ---
+
+## 2026-04-07 - F2-037
+- Comprehensive responsive audit across all 19 key files: drawers, boards, modals, pages, layout
+- **Drawers fixed:**
+  - ConfermeDrawer: `w-[500px]` → `w-full sm:w-[500px]`, responsive padding `p-4 sm:p-6`, heading text `text-xl sm:text-2xl`, date/time grid `grid-cols-1 sm:grid-cols-2`
+  - ContactDrawer: padding `px-4 sm:px-6`, content `p-4 sm:p-6`, CRM status grid `grid-cols-1 sm:grid-cols-2`
+  - VenditoreDrawer: padding `px-4 sm:px-6`, outcome grid `grid-cols-1 sm:grid-cols-3`
+- **Boards fixed:**
+  - PipelineBoard: padding `px-2 sm:px-4`, `p-2 sm:p-4`, tooltip `max-w-[calc(100vw-2rem)]`
+  - ConfermeBoard: timeline `flex-nowrap overflow-x-auto`, kanban grid `lg:grid-cols-3` (was xl), gap `gap-4 sm:gap-6`
+  - AppointmentBoard: cards `flex-col sm:flex-row`, `min-w-0 sm:min-w-[220px]`, dates `w-full sm:w-48`
+  - RecallBoard: recall date `right-2 sm:right-48`, padding `p-2 sm:p-4`
+  - KpiGdoBoard: filters `flex-col sm:flex-row`, date inputs `w-full sm:w-auto`, grid `grid-cols-1 sm:grid-cols-2`, table text `text-xs sm:text-sm`
+  - ManagerOperativaBoard: header padding `px-3 sm:px-6`, table `text-xs sm:text-sm`
+  - LeadCard: `min-w-0 sm:min-w-[220px]`
+- **Pages fixed:**
+  - Dashboard layout: main padding `p-3 sm:p-6`
+  - Classifica: hero padding `px-4 sm:px-8`, heading `text-2xl sm:text-3xl`
+  - Archivio: padding `p-4 sm:p-6 md:p-8`
+  - Marketing Analytics: `min-h-screen md:h-screen md:overflow-hidden` (was `h-screen overflow-hidden`)
+  - Import: horizontal padding, mapping grid `grid-cols-1 sm:grid-cols-2`, table `overflow-x-auto min-w-[500px]`
+- **Modals fixed:**
+  - LootDropModal: margins `mx-2 sm:mx-4`, crate size `w-24 h-24 sm:w-32 sm:h-32`
+  - EditAppointmentModal: date/time grid `grid-cols-1 sm:grid-cols-2`
+  - OutcomeModal: padding `px-4 sm:px-6`, `p-4 sm:p-6`
+  - KpiTeamDashboard: selects `w-full sm:w-40`, card padding `p-4 sm:p-6`
+- File modificati: 19 files (see commit d510150)
+- **Build**: ZERO errors, all 44 pages rendered
+- **Learnings per iterazioni future:**
+  - Key responsive pattern: `p-2 sm:p-4` or `p-3 sm:p-6` for padding reduction on mobile
+  - Key responsive pattern: `grid-cols-1 sm:grid-cols-2` for form fields that are side-by-side on desktop
+  - Key responsive pattern: `min-w-0 sm:min-w-[N]` to prevent overflow on mobile but keep min-width on desktop
+  - Key responsive pattern: `flex-col sm:flex-row` for items that should stack on mobile
+  - ConfermeBoard timeline was `flex-wrap` causing awkward wraps — changed to `flex-nowrap overflow-x-auto` for horizontal scroll
+  - Sidebar already had good responsive handling (fixed + slide on mobile, relative on desktop)
+  - Dashboard layout `p-6` main padding reduced to `p-3 sm:p-6` for all pages at once
+---
