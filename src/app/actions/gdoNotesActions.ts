@@ -17,6 +17,31 @@ export interface GdoNote {
     createdAt: Date;
 }
 
+export interface GdoUserForNotes {
+    id: string;
+    name: string | null;
+    displayName: string | null;
+    gdoCode: number | null;
+    level: number;
+}
+
+export async function getGdoUsersForNotes(): Promise<GdoUserForNotes[]> {
+    const allGdos = await db.select({
+        id: users.id,
+        name: users.name,
+        displayName: users.displayName,
+        gdoCode: users.gdoCode,
+        level: users.level,
+        isActive: users.isActive,
+    })
+        .from(users)
+        .where(eq(users.role, 'GDO'));
+
+    return allGdos
+        .filter(u => u.isActive === true)
+        .map(({ isActive, ...rest }) => rest);
+}
+
 export async function createGdoNote(
     gdoUserId: string,
     authorUserId: string,

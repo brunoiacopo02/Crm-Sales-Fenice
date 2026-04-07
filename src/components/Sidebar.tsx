@@ -9,7 +9,8 @@ import {
     Trophy,
     Store,
     Target,
-    Gamepad2
+    Gamepad2,
+    FileText
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
@@ -80,6 +81,7 @@ export function Sidebar() {
                 { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                 { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
                 { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
+                { name: "Note GDO", href: "/note-gdo", icon: FileText },
                 { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
                 { name: "Importa Lead", href: "/import", icon: Upload },
                 { name: "Archivio Storico", href: "/archivio", icon: Database },
