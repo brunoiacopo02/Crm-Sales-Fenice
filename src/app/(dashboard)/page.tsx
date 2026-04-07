@@ -4,6 +4,7 @@ import { PipelineBoard } from "@/components/PipelineBoard"
 import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
 import { QuestPanel } from "@/components/QuestPanel"
+import { StreakCounter } from "@/components/StreakCounter"
 import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
@@ -41,6 +42,8 @@ export default async function DashboardPage() {
             </div>
 
             <GdoDailyObjectives gdoUserId={session!.user.id} />
+
+            <StreakCounter userId={session!.user.id} />
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />
 

@@ -31,6 +31,10 @@ export const users = pgTable('users', {
     totalBonusesEur: real('totalBonusesEur').default(0).notNull(),
     coins: integer('coins').default(0).notNull(),
 
+    // Streak system
+    streakCount: integer('streakCount').default(0).notNull(),
+    lastStreakDate: text('lastStreakDate'), // 'YYYY-MM-DD' format, nullable
+
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 

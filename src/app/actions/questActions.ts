@@ -3,6 +3,8 @@
 import { db } from "@/db";
 import { quests, questProgress, callLogs, leads, users, coinTransactions } from "@/db/schema";
 import { eq, and, gte, lte, isNotNull, sql, count, countDistinct } from "drizzle-orm";
+import { updateStreak } from "@/app/actions/streakActions";
+import { getStreakMultiplier } from "@/lib/streakUtils";
 
 // --- Helpers ---
 
@@ -281,13 +283,21 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             return { success: false, error: "Quest non ancora completata" };
         }
 
+        // Update streak (idempotent for same day) and get multiplier
+        const streakResult = await updateStreak(userId);
+        const multiplier = getStreakMultiplier(streakResult.streakCount);
+
+        // Apply streak multiplier to rewards
+        const effectiveXp = Math.floor(qp.rewardXp * multiplier);
+        const effectiveCoins = Math.floor(qp.rewardCoins * multiplier);
+
         // Award XP and coins
         const userRows = await db.select().from(users).where(eq(users.id, userId));
         if (userRows.length === 0) return { success: false, error: "Utente non trovato" };
 
         const user = userRows[0];
-        const newCoins = user.coins + qp.rewardCoins;
-        let newXp = user.experience + qp.rewardXp;
+        const newCoins = user.coins + effectiveCoins;
+        let newXp = user.experience + effectiveXp;
         let newLevel = user.level;
 
         // Level-up logic (same as gamificationEngine)
@@ -305,12 +315,15 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             coins: newCoins,
         }).where(eq(users.id, userId));
 
-        // Log coin transaction
+        // Log coin transaction (show multiplier in reason if > 1)
+        const coinReason = multiplier > 1
+            ? `Quest completata: ${qp.questTitle} (x${multiplier} streak)`
+            : `Quest completata: ${qp.questTitle}`;
         await db.insert(coinTransactions).values({
             id: crypto.randomUUID(),
             userId,
-            amount: qp.rewardCoins,
-            reason: `Quest completata: ${qp.questTitle}`,
+            amount: effectiveCoins,
+            reason: coinReason,
         });
 
         return { success: true };
