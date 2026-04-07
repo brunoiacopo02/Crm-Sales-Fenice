@@ -245,3 +245,24 @@ Started: 2026-04-07
   - Conferme objectives only visible to CONFERME role, not to MANAGER/ADMIN who also access /conferme
   - Both components listen to `realtime_update` event for live refresh, following GdoLeadMetrics pattern
 ---
+
+## 2026-04-07 - F2-013
+- **Feature**: Coefficiente produttivita' GDO nei KPI
+- **What was done:**
+  - Added `productivityCoeff`, `contactedLeads`, and `callsPerHour` to `gdoStats` return in `getAdvancedKpi`
+  - Formula: (calls / 6.5h) * (apptRate / 100) — measures effective appointments per hour worked
+  - Added "Classifica Produttività GDO" ranking table in KpiGdoBoard with all GDO operators
+  - Table shows: rank, name, calls, contacted leads, appointments, % fissaggio, calls/hour, coefficient
+  - Sortable by coefficient (default), calls, appointments, or % fissaggio
+  - Color-coded coefficient: green >=2, yellow >=1, red <1 with relative progress bar
+  - Top-ranked GDO highlighted with orange accent
+  - Updated "Chiamate/Ora" card from N/D to actual calculated value (totalCalls / 6.5)
+- **Files modified:**
+  - `src/app/actions/kpiAdvancedActions.ts` — added productivityCoeff, contactedLeads, callsPerHour to gdoStats
+  - `src/components/KpiGdoBoard.tsx` — added ranking table + updated calls/hour card
+- **Learnings per iterazioni future:**
+  - `gdoStatsMap` already tracks `totalContacted` as a Set — just expose `.size` for the coefficient calculation
+  - 6.5h is the fixed working hours constant (13:30-20:00) — defined as `WORKING_HOURS_PER_DAY` in server action
+  - Coefficient is best understood as "effective appointments per hour" — combines volume and quality
+  - For multi-day filters, the coefficient scales linearly with days but ranking remains valid for comparison
+---
