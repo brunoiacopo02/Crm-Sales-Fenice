@@ -36,3 +36,18 @@ Started: 2026-04-07
   - `measureMetric()` helper is reusable for future achievement/streak systems
   - Migration uses `ON CONFLICT (id) DO NOTHING` for idempotent seeding
 ---
+
+## 2026-04-07 - F2-022
+- Created `QuestPanel` client component with collapsible daily/weekly quest sections
+- Each quest shows: title, description, progress bar (animated), XP + coins rewards, completion state
+- Completed quests have gold glow effect and "Riscuoti" button to claim rewards
+- Collapsible header shows completion counts (e.g. "2/3 giornaliere · 1/2 settimanali")
+- Integrated into GDO dashboard between GdoLeadMetrics and PipelineBoard
+- Data flow: generateDailyQuests → checkQuestProgress → getUserQuests on mount, completeQuest on claim
+- File modificati: `src/components/QuestPanel.tsx` (new), `src/app/(dashboard)/page.tsx`
+- **Learnings per iterazioni future:**
+  - QuestPanel follows WeeklyBonusWidget pattern: dark gradient, ember/gold accents, glow shadows
+  - Collapsible pattern keeps dashboard clean — quest panel is visible but not intrusive
+  - `animate-fade-in` class from globals.css for smooth content reveal
+  - Quest cards use `line-clamp-1` for description truncation on mobile
+---
