@@ -30,7 +30,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Migrazione ADDITIVA. Mai droppare colonne."
     },
     {

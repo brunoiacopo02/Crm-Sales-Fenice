@@ -31,3 +31,21 @@ Started: 2026-04-07
   - `salespersonUserId` is only set for confirmed leads, so it's sufficient as the sole filter
   - Never perform side-effect checks (calendar, external APIs) after DB commits
 ---
+
+## 2026-04-07 - F2-002
+- **Feature**: Target bonus venditori per fatturato
+- **What was done:**
+  - Added `salesTargetEur` (real, nullable) to `users` table in schema.ts
+  - Applied ADDITIVE migration via Supabase MCP (`ALTER TABLE users ADD COLUMN IF NOT EXISTS`)
+  - Created `updateVenditoreSalesTarget` and `getVenditoriWithTargets` server actions in managerRpgActions.ts
+  - Added "Target Fatturato Venditori" section in manager-targets page with inline editing per venditore
+- **Files modified:**
+  - `src/db/schema.ts` — added salesTargetEur field
+  - `src/app/actions/managerRpgActions.ts` — added updateVenditoreSalesTarget + getVenditoriWithTargets
+  - `src/app/(dashboard)/manager-targets/page.tsx` — fetch venditori data in server component
+  - `src/app/(dashboard)/manager-targets/ManagerTargetsClient.tsx` — venditori target table with inline edit UI
+- **Learnings per iterazioni future:**
+  - Follow `updateGdoBaseSalary` pattern for simple user field updates (no optimistic locking needed for user config fields)
+  - `getVenditoriWithTargets` filters active venditori only — consistent with GDO patterns
+  - Always use `IF NOT EXISTS` in DDL migrations for idempotency
+---
