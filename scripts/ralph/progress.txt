@@ -28,3 +28,17 @@ Started: 2026-04-07
   - Section headers use `text-[10px] font-semibold uppercase tracking-wider text-ash-500` for subtle label style
   - Gradient separators between groups: `bg-gradient-to-r from-transparent via-white/10 to-transparent`
 ---
+
+## 2026-04-07 - F3-002
+- Created `/kpi-hub` landing page with 7 navigation cards for all KPI sections
+- Each card has: title, icon, description, color-coded gradient background, hover animation with arrow
+- Cards link to: KPI Team, KPI GDO, KPI Venditori, KPI Conferme, Marketing Analytics, Analisi Qualità, Performance GDO
+- Added "Centro KPI" as first item in sidebar "KPI & Analytics" group with Compass icon
+- Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop
+- Auth checks follow existing pattern (Manager/Admin only, Marketing redirect)
+- Files modified: `src/app/(dashboard)/kpi-hub/page.tsx` (new), `src/components/Sidebar.tsx`
+- **Learnings per iterazioni future:**
+  - KPI pages use consistent auth pattern: supabase getUser → role check → marketing redirect
+  - Design system colors: ash-400 for muted text, brand-orange for hover accents
+  - Card pattern with gradient backgrounds + border color matching works well for navigation hubs
+---
