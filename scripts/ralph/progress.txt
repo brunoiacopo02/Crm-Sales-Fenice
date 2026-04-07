@@ -421,3 +421,18 @@ Started: 2026-04-07
   - Sidebar already had good responsive handling (fixed + slide on mobile, relative on desktop)
   - Dashboard layout `p-6` main padding reduced to `p-3 sm:p-6` for all pages at once
 ---
+
+## 2026-04-07 - F2-038
+- Performance audit and optimization across the entire CRM Fenice codebase
+- **N+1 Query Audit**: Found 8 N+1 patterns in server actions (bossBattleActions defeatBoss, sprintActions checkAndCompleteExpiredSprint, achievementActions checkAchievements, questActions checkQuestProgress, leaderboardActions checkLeaderboardOvertake, importLeads processCsvImport, venditoreActions saveVenditoreOutcome, gdoPerformanceActions getManagerGdoTables). Most are in low-frequency gamification paths (boss defeat, sprint end). importLeads is the most critical but carries data risk — documented for future batch optimization.
+- **Dynamic Imports**: Added `next/dynamic` lazy loading for 5 heavy components on the dashboard: QuestPanel, LootDropModal, BossBattleBanner, SeasonalEventBanner, CelebrationOverlay. Also lazy-loaded CelebrationOverlay in ProfileClient.
+- **next/image**: Converted all 4 `<img>` tags to `next/image` in Topbar.tsx (1), ShopClient.tsx (2), ProfileClient.tsx (1)
+- **PipelineBoard transform fix**: Replaced `left` property animation with `transform: translateX()` for GPU-accelerated tab indicator sliding. Added specific `transition: 'transform 300ms, width 300ms'` instead of `transition-all`.
+- **Progress bar transitions**: Replaced `transition-all` with `transition-[width]` on 17 progress bar elements across 15 files to avoid layout thrashing (BossBattleBanner, StreakCounter, QuestPanel, GdoDailyObjectives, WeeklyBonusWidget, SeasonalEventBanner, TeamGoalBanner, ConfermeKpiBoard, ConfermeDailyObjectives, KpiGdoBoard, KpiVenditoriClient, AchievementShowcase, TeamGoalAdminClient, ProfileClient, ManagerRpgClient, import page)
+- File modificati: `src/app/(dashboard)/page.tsx`, `src/app/(dashboard)/profilo/ProfileClient.tsx`, `src/app/(dashboard)/manager-rpg-monitor/ManagerRpgClient.tsx`, `src/app/(dashboard)/import/page.tsx`, `src/components/PipelineBoard.tsx`, `src/components/Topbar.tsx`, `src/components/ShopClient.tsx`, `src/components/BossBattleBanner.tsx`, `src/components/StreakCounter.tsx`, `src/components/QuestPanel.tsx`, `src/components/GdoDailyObjectives.tsx`, `src/components/SeasonalEventBanner.tsx`, `src/components/TeamGoalBanner.tsx`, `src/components/ConfermeKpiBoard.tsx`, `src/components/ConfermeDailyObjectives.tsx`, `src/components/WeeklyBonusWidget.tsx`, `src/components/KpiGdoBoard.tsx`, `src/components/KpiVenditoriClient.tsx`, `src/components/AchievementShowcase.tsx`, `src/components/TeamGoalAdminClient.tsx`
+- **Learnings per iterazioni future:**
+  - `ssr: false` is NOT allowed in Server Components with `next/dynamic` in Next.js 16 — only use it in Client Components
+  - `transition-[width]` is the Tailwind v4 way to specify single-property transitions (arbitrary value syntax)
+  - PipelineBoard tab indicator: use `transform: translateX()` + `left: 0` base for GPU-accelerated sliding
+  - N+1 queries in gamification paths are tolerable since they run infrequently (boss defeat, sprint end), but importLeads bulk processing should be batched in a future optimization pass
+---
