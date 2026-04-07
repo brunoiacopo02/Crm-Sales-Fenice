@@ -436,3 +436,22 @@ Started: 2026-04-07
   - PipelineBoard tab indicator: use `transform: translateX()` + `left: 0` base for GPU-accelerated sliding
   - N+1 queries in gamification paths are tolerable since they run infrequently (boss defeat, sprint end), but importLeads bulk processing should be batched in a future optimization pass
 ---
+
+## 2026-04-07 - F2-039
+- Comprehensive visual coherence audit across ALL 30 pages and components
+- Replaced ALL slate/zinc/neutral colors → ash-* design system tokens (5 files)
+- Replaced ALL hardcoded hex colors in archive page (#111111, #1C1C1E, #2A2A2D, #3A3A3D) → ash-* tokens
+- Replaced yellow-* → gold-* across 8 components (ConfermeKpiBoard, NoteGdoClient, GdoPauseHistory, KpiBoardAdvanced, ShopAdminClient, TeamGoalAdminClient, TeamGoalBanner, LootDropModal)
+- Replaced indigo-* → brand-orange/orange-* across 6 components (AppointmentBoard, ContactDrawer, MarketingAnalyticsClient, TeamGoalAdminClient, TeamGoalBanner, TeamRadarWidget)
+- Replaced hardcoded chart hex colors → design system equivalents in KpiBoardAdvanced, KpiGdoBoard, KpiTeamDashboard
+- Migrated gray-* → ash-* across 20+ key files (557 line changes total)
+- All 25 files modified, npx next build compiles with 0 errors
+- File modificati: 25 files across src/app/(dashboard)/ and src/components/
+- **Learnings per iterazioni future:**
+  - The ash-* scale (warm brown tones) vs Tailwind default gray-* (cool blue tones) creates visible inconsistency — always use ash-* for CRM Fenice
+  - Archive page had its own dark theme with custom hex codes — now uses ash-800/900 tokens
+  - Chart libraries (Recharts) need hex colors directly — use design system hex values from globals.css @theme
+  - Blue is still used semantically for "richiami" (recalls) and "info" states — acceptable as no custom blue in design system
+  - Green/red kept for semantic success/error states (emerald for confirmations, rose for discards)
+  - Purple kept for player titles/badges — consistent usage within that domain
+---
