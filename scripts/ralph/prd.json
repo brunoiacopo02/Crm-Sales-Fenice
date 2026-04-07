@@ -62,7 +62,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Solo INSERT nuovi record. Mai modificare item esistenti degli utenti."
     },
     {

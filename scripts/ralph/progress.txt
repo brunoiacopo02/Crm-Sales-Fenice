@@ -55,3 +55,23 @@ Started: 2026-04-07
   - Table name in Supabase REST is camelCase `shopItems`, not snake_case `shop_items`
   - Price rebalancing is safe for existing owners since `userPurchases` tracks ownership, not price paid
 ---
+
+## 2026-04-07 - F3-004
+- Added 10 new store items via Supabase REST API INSERT (no existing items modified)
+- Categories breakdown:
+  - **Avatar Effects (4)**: Ombra Mistica (150), Drago di Fuoco (400), Spirito del Ghiaccio (600), Fenice Astrale (1500)
+  - **Special Effects (3)**: Bagliore Neon (350), Corona di Diamanti (1200), Vortice Infernale (4000)
+  - **Dashboard Themes (3)**: Aurora Boreale (2000), Tramonto Dorato (3500), Nebula Cosmica (3000)
+- CSS definitions added to globals.css for all 10 items:
+  - `skin-effect-*` classes use radial gradients + box-shadow for avatar circle effects
+  - `skin-theme-*` classes use linear-gradient backgrounds (no image files needed)
+- Updated Topbar.tsx to also apply `skin-effect-*` classes to user avatar (was only applying `skin-avatar-*`)
+- Leaderboard and SprintBanner already supported any equippedSkinCss — no changes needed
+- Files modified: `src/app/globals.css`, `src/components/Topbar.tsx`
+- **Learnings per iterazioni future:**
+  - New CSS-only item pattern: `skin-effect-*` for avatar effects using gradients/shadows (no PNG needed)
+  - New CSS-only theme pattern: `skin-theme-*` with `background: linear-gradient(...)` (no image needed)
+  - Topbar avatar renders skins only if cssValue includes `skin-avatar` or `skin-effect` — future item types need this check
+  - Leaderboard/SprintBanner apply equippedSkinCss unconditionally — any class works there
+  - Total active store items now: 17 (7 original + 10 new)
+---
