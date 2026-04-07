@@ -106,3 +106,25 @@ Started: 2026-04-07
   - Phone field has UNIQUE constraint — handle postgres error code 23505 for duplicate phone
   - `lastCallNote` is the best "general note" field on leads for ContactDrawer context
 ---
+
+## 2026-04-07 - F2-006
+- **Feature**: Giorni lavorativi mensili manuali
+- **What was done:**
+  - Added `workingDaysOverride` (integer, nullable) to `monthlyTargets` table in schema.ts
+  - Applied ADDITIVE migration via Supabase MCP (`ALTER TABLE ADD COLUMN IF NOT EXISTS`)
+  - Updated `MonthlyTargetInput` and `TargetStatsResponse` interfaces with the new field
+  - In `getManagerTargetsData`: if `workingDaysOverride` is set and > 0, it replaces auto-calculated `giorniLavorativiTotaliMese`; elapsed days capped at `min(calculated, override)`
+  - In `confermeKpiActions.ts`: fetches `monthlyTargets` for current month and applies override to `totalWorkingDays` and `workingDaysPassed`
+  - UI: added "Giorni Lav." input in "Imposta Target" dialog with "Reset Auto" button to clear override
+  - Stat card "Giorni Lavorativi Mese" shows "Override manuale" label in orange when override is active
+- **Files modified:**
+  - `src/db/schema.ts` — added workingDaysOverride field
+  - `src/app/actions/targetActions.ts` — interfaces + override logic in getManagerTargetsData
+  - `src/app/actions/confermeKpiActions.ts` — import monthlyTargets, fetch override, apply to working days
+  - `src/app/(dashboard)/manager-targets/ManagerTargetsClient.tsx` — form field + stat card indicator
+- **Learnings per iterazioni future:**
+  - `saveMonthlyTarget` uses `...target` spread — new fields in `MonthlyTargetInput` are automatically persisted
+  - targetActions (Mon-Sat) and confermeKpiActions (Mon-Fri) have different working day definitions — override replaces both uniformly
+  - `giorniLavorativiTrascorsiOggi` must be capped at override value to avoid elapsed > total
+  - Use `placeholder="Auto"` for nullable numeric inputs to signal the default behavior
+---
