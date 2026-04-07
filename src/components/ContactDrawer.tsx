@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getLeadProfile } from "@/app/actions/eventActions"
-import { X, CalendarCheck, Phone, Mail, User, Clock, AlertCircle, History, FileText, CheckCircle2 } from "lucide-react"
+import { getLeadProfile, updateLeadContactInfo } from "@/app/actions/eventActions"
+import { X, CalendarCheck, Phone, Mail, User, Clock, AlertCircle, History, FileText, CheckCircle2, Pencil, Save, Loader2 } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { useAuth } from "./AuthProvider"
+import { useRouter } from "next/navigation"
 
 export function ContactDrawer({
     isOpen,
@@ -19,6 +20,16 @@ export function ContactDrawer({
     const [isLoading, setIsLoading] = useState(false)
     const [activeTab, setActiveTab] = useState<'details' | 'timeline'>('details')
     const { user: authUser } = useAuth()
+    const router = useRouter()
+
+    // Edit mode state
+    const [isEditing, setIsEditing] = useState(false)
+    const [editName, setEditName] = useState("")
+    const [editPhone, setEditPhone] = useState("")
+    const [editEmail, setEditEmail] = useState("")
+    const [editNote, setEditNote] = useState("")
+    const [isSaving, setIsSaving] = useState(false)
+    const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     const refreshProfile = () => {
         if (!leadId) return
@@ -36,6 +47,8 @@ export function ContactDrawer({
         if (!isOpen || !leadId) {
             setProfile(null)
             setActiveTab('details')
+            setIsEditing(false)
+            setSaveMessage(null)
             return
         }
 
@@ -43,6 +56,49 @@ export function ContactDrawer({
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, leadId])
+
+    // Sync edit fields when entering edit mode or when profile changes
+    const enterEditMode = () => {
+        if (!lead) return
+        setEditName(lead.name || "")
+        setEditPhone(lead.phone || "")
+        setEditEmail(lead.email || "")
+        setEditNote(lead.lastCallNote || "")
+        setSaveMessage(null)
+        setIsEditing(true)
+    }
+
+    const cancelEdit = () => {
+        setIsEditing(false)
+        setSaveMessage(null)
+    }
+
+    const handleSave = async () => {
+        if (!lead) return
+        setIsSaving(true)
+        setSaveMessage(null)
+
+        const result = await updateLeadContactInfo(lead.id, lead.version, {
+            name: editName,
+            phone: editPhone,
+            email: editEmail,
+            lastCallNote: editNote,
+        })
+
+        setIsSaving(false)
+
+        if (result.success) {
+            setSaveMessage({ type: 'success', text: 'Salvato con successo!' })
+            setIsEditing(false)
+            refreshProfile()
+            router.refresh()
+        } else if (result.error === 'CONCURRENCY_ERROR') {
+            setSaveMessage({ type: 'error', text: 'Il lead è stato modificato da un altro utente. Ricaricamento...' })
+            refreshProfile()
+        } else {
+            setSaveMessage({ type: 'error', text: result.error || 'Errore durante il salvataggio.' })
+        }
+    }
 
     if (!isOpen) return null
 
@@ -79,6 +135,7 @@ export function ContactDrawer({
             case 'DISCARDED': return 'Lead Scartato'
             case 'RECALL_SET': return 'Richiamo Programmato'
             case 'APPOINTMENT_SET': return 'Appuntamento Fissato'
+            case 'contact_info_edited': return 'Dati Contatto Modificati'
             default: return 'Evento Sconosciuto'
         }
     }
@@ -105,7 +162,7 @@ export function ContactDrawer({
                             <X className="h-5 w-5" />
                         </button>
                     </div>
-                    
+
                 </div>
 
                 {/* Tabs */}
@@ -132,22 +189,118 @@ export function ContactDrawer({
                         </div>
                     ) : activeTab === 'details' && lead ? (
                         <div className="space-y-6">
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Anagrafica</h3>
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-3 text-sm">
-                                        <User className="h-4 w-4 text-gray-400" />
-                                        <span className="text-gray-700">{lead.name}</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-sm">
-                                        <Phone className="h-4 w-4 text-gray-400" />
-                                        <span className="text-gray-900 font-medium cursor-copy hover:text-brand-orange transition-colors">{lead.phone}</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-sm">
-                                        <Mail className="h-4 w-4 text-gray-400" />
-                                        <span className="text-gray-700">{lead.email || '-'}</span>
-                                    </div>
+                            {/* Save feedback message */}
+                            {saveMessage && (
+                                <div className={`px-4 py-2.5 rounded-lg text-sm font-medium ${saveMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                    {saveMessage.text}
                                 </div>
+                            )}
+
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Anagrafica</h3>
+                                    {!isEditing ? (
+                                        <button
+                                            onClick={enterEditMode}
+                                            className="flex items-center gap-1.5 text-xs font-medium text-brand-orange hover:text-brand-orange/80 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-brand-orange/10"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                            Modifica
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={cancelEdit}
+                                                disabled={isSaving}
+                                                className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-gray-100"
+                                            >
+                                                Annulla
+                                            </button>
+                                            <button
+                                                onClick={handleSave}
+                                                disabled={isSaving}
+                                                className="flex items-center gap-1.5 text-xs font-medium text-white bg-brand-orange hover:bg-brand-orange/90 transition-colors px-3 py-1.5 rounded-lg disabled:opacity-50"
+                                            >
+                                                {isSaving ? (
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                    <Save className="h-3.5 w-3.5" />
+                                                )}
+                                                Salva
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {isEditing ? (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                                <User className="h-3.5 w-3.5" /> Nome
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                                <Phone className="h-3.5 w-3.5" /> Telefono
+                                            </label>
+                                            <input
+                                                type="tel"
+                                                value={editPhone}
+                                                onChange={(e) => setEditPhone(e.target.value)}
+                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                                <Mail className="h-3.5 w-3.5" /> Email
+                                            </label>
+                                            <input
+                                                type="email"
+                                                value={editEmail}
+                                                onChange={(e) => setEditEmail(e.target.value)}
+                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                                <FileText className="h-3.5 w-3.5" /> Note
+                                            </label>
+                                            <textarea
+                                                value={editNote}
+                                                onChange={(e) => setEditNote(e.target.value)}
+                                                rows={3}
+                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-colors resize-none"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3 text-sm">
+                                            <User className="h-4 w-4 text-gray-400" />
+                                            <div className="text-gray-700">{lead.name}</div>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-sm">
+                                            <Phone className="h-4 w-4 text-gray-400" />
+                                            <div className="text-gray-900 font-medium cursor-copy hover:text-brand-orange transition-colors">{lead.phone}</div>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-sm">
+                                            <Mail className="h-4 w-4 text-gray-400" />
+                                            <div className="text-gray-700">{lead.email || '-'}</div>
+                                        </div>
+                                        {lead.lastCallNote && (
+                                            <div className="flex items-start gap-3 text-sm">
+                                                <FileText className="h-4 w-4 text-gray-400 mt-0.5" />
+                                                <div className="text-gray-600 italic">{lead.lastCallNote}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <hr className="border-gray-100" />
@@ -179,9 +332,9 @@ export function ContactDrawer({
                                 <div className="pt-2">
                                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} />
                                 </div>
-                                <p className="text-xs text-brand-orange/70 mt-2">
+                                <div className="text-xs text-brand-orange/70 mt-2">
                                     Clicca un pulsante per esitare il lead e fisserà automaticamente lo storico o l'appuntamento.
-                                </p>
+                                </div>
                             </div>
                         </div>
                     ) : activeTab === 'timeline' && events ? (
@@ -213,9 +366,9 @@ export function ContactDrawer({
                                                 <div className="text-sm text-gray-700 space-y-1.5">
                                                     {ev.eventType === 'SECTION_MOVED' && (
                                                         <div className="flex items-center gap-2 text-xs">
-                                                            <span className="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">{ev.fromSection || '?'}</span>
-                                                            <span className="text-gray-400">→</span>
-                                                            <span className="bg-brand-orange/10 text-brand-orange px-1.5 py-0.5 rounded">{ev.toSection}</span>
+                                                            <div className="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">{ev.fromSection || '?'}</div>
+                                                            <div className="text-gray-400">→</div>
+                                                            <div className="bg-brand-orange/10 text-brand-orange px-1.5 py-0.5 rounded">{ev.toSection}</div>
                                                         </div>
                                                     )}
 
@@ -225,7 +378,7 @@ export function ContactDrawer({
 
                                                     {ev.metadata?.note && (
                                                         <div className="text-xs italic text-gray-600 pt-1">
-                                                            "{ev.metadata.note}"
+                                                            &quot;{ev.metadata.note}&quot;
                                                         </div>
                                                     )}
                                                 </div>
