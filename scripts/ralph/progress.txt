@@ -14,6 +14,10 @@ Started: 2026-04-07
 
 - ConfermeDrawer salesperson init: use `salespersonUserId` (UUID) NOT `salespersonAssigned` (display name) to prevent re-save corruption
 - FreeBusy check: always run BEFORE db.update(), never after — returning success:false after commit causes phantom state
+- UI modals: use `modal-backdrop` + `modal-content` classes, add ESC handler via `useCallback` + `useEffect`
+- UI drawers: use `drawer-overlay` + `drawer-panel` + `drawer-header` (sticky glass blur) classes
+- Form inputs: use `input-fenice` class (brand-orange focus ring), extend with `!border-[color]` for contextual borders
+- Loading states: use `skeleton-line` / `skeleton-circle` / `skeleton-card` shimmer classes, not `animate-spin` spinners
 
 ---
 
@@ -466,4 +470,34 @@ Started: 2026-04-07
   - `hover:shadow-card` paired with `shadow-soft` base creates subtle depth on hover without being heavy
   - Table row `hover:bg-brand-orange-50/20` is the standard warm hover across all manager/KPI tables
   - Crown/Medal lucide icons work well for podium — Trophy for rankings
+---
+
+## 2026-04-07 - F2-019
+- **Feature**: UI: Redesign componenti comuni (modali, drawer, form)
+- **What was done:**
+  - Added new CSS animations to globals.css: `modal-enter` (scale+fade spring curve), `modal-exit`, `drawer-slide` (spring easing), `backdrop-in` (fade)
+  - Added reusable CSS component classes: `modal-backdrop`, `modal-content`, `drawer-overlay`, `drawer-panel`, `drawer-header`, `input-fenice` (unified form input with brand-orange focus ring)
+  - Added skeleton shimmer helper classes: `skeleton-line`, `skeleton-circle`, `skeleton-card`
+  - **AddLeadModal**: backdrop blur, spring modal animation, ESC key close, `input-fenice` inputs, `btn-primary`/`btn-ghost` buttons
+  - **EditAppointmentModal**: backdrop blur, spring modal animation, ESC key close, `input-fenice` inputs, `btn-primary`/`btn-secondary` buttons
+  - **OutcomeModal**: `drawer-overlay` + `drawer-panel` for consistent drawer animation, ESC key close, `input-fenice` inputs
+  - **ContactDrawer**: `drawer-overlay` + `drawer-panel` animation, `drawer-header` sticky header with glass blur, skeleton shimmer loading (DrawerSkeleton component), ESC key close, `input-fenice` inputs
+  - **ConfermeDrawer**: `drawer-overlay` + `drawer-panel` animation, `drawer-header` sticky header, skeleton shimmer for notes loading (ConfermeDrawerSkeleton), `input-fenice` inputs
+  - **VenditoreDrawer**: `drawer-header` sticky header with glass blur, consistent close button, `input-fenice` inputs, `btn-primary`/`btn-secondary` footer buttons
+  - **GdoQuickActions**: `input-fenice` for select/datetime/textarea inputs (consistent focus ring)
+- **Files modified:**
+  - `src/app/globals.css` — 4 new keyframes, 4 new animation tokens, 9 new component classes
+  - `src/components/AddLeadModal.tsx` — full restyle
+  - `src/components/EditAppointmentModal.tsx` — full restyle
+  - `src/components/OutcomeModal.tsx` — full restyle
+  - `src/components/ContactDrawer.tsx` — skeleton loading + restyle
+  - `src/components/ConfermeDrawer.tsx` — skeleton loading + restyle
+  - `src/components/VenditoreDrawer.tsx` — restyle
+  - `src/components/GdoQuickActions.tsx` — input-fenice consistency
+- **Learnings per iterazioni future:**
+  - `modal-backdrop` / `drawer-overlay` / `drawer-panel` / `drawer-header` / `input-fenice` are the canonical reusable classes — use these for ALL new modals/drawers/forms
+  - `skeleton-line`, `skeleton-circle`, `skeleton-card` provide shimmer loading — always prefer over `animate-spin` spinners
+  - Spring easing `cubic-bezier(0.32, 0.72, 0, 1)` for drawers and `cubic-bezier(0.16, 1, 0.3, 1)` for modals give the best "snappy" feel
+  - ESC key handler pattern: `useCallback` + `useEffect` with cleanup, guarded by `isOpen`
+  - `!important` overrides (e.g. `!border-green-200`) are needed when extending `input-fenice` with contextual border colors
 ---
