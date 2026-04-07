@@ -25,3 +25,20 @@ Started: 2026-04-07
   - `percFissaggio` usa `toFixed(1)` per un decimale di precisione (es. "42.3%")
   - Le metriche per-GDO sono mostrate nell'header card perche' la tabella e' a livello funnel (ogni riga = un funnel)
 ---
+
+## 2026-04-07 - F1-002
+- **Implementato**: Aggiunto "Lead Assegnati" e "% Fissaggio" in Marketing Analytics (tabella funnel + drill-down GDO)
+- **Server action** (`marketingActions.ts`):
+  - `getMarketingStats`: Aggiunto conteggio `leadAssegnati` per funnel (lead con `assignedToId` non null), calcolato `fissaggioPerc` = apps / leadAssegnati * 100
+  - `getMarketingStatsByGdo`: Aggiunto `leadAssegnati` per GDO per funnel (tutti i lead assegnati, non solo quelli con appuntamento), calcolato `fissaggioPerc`
+  - Protezione divisione per zero su tutti i calcoli percentuali
+- **Client component** (`MarketingAnalyticsClient.tsx`):
+  - Aggiornati tipi `Stat` e `GdoStatTableRow` con nuovi campi
+  - Tabella funnel: aggiunte colonne "Lead Assegn." e "% Fiss." dopo "Lead" e prima di "App %"
+  - Drill-down GDO: aggiunte colonne "Lead Assegn.", "App Fissati", "% Fiss." per ogni GDO
+  - Riga TOTALE drill-down: aggiunti totali e percentuali calcolate
+- File modificati: `src/app/actions/marketingActions.ts`, `src/app/(dashboard)/marketing-analytics/MarketingAnalyticsClient.tsx`
+- **Learnings per iterazioni future:**
+  - `leadAssegnati` nel drill-down GDO conta TUTTI i lead assegnati a quel GDO in quel funnel (non solo quelli con appointmentDate), perche' rappresenta il bacino totale di lavoro
+  - La tabella funnel e il drill-down GDO condividono lo stesso dataset (`allLeads` filtrati per `createdAt` nel mese)
+---

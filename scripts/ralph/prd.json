@@ -31,7 +31,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Il tipo GdoStatTableRow va esteso con i nuovi campi."
     },
     {
