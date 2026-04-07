@@ -172,7 +172,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "NON modificare lead esistenti. Solo fix logica copia e aggiunta campo al form."
     },
     {

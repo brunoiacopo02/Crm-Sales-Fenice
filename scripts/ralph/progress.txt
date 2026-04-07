@@ -203,3 +203,17 @@ Started: 2026-04-07
   - recordConfermeNoAnswer now uses try/catch pattern with { success, error } returns (consistent with setConfermeOutcome)
   - Il bottone NR mostra stato visivo diverso (rosso) quando è al 4° tentativo per prevenire click accidentali
 ---
+
+## 2026-04-07 - F3-020
+- Verificato che il bottone copia in LeadCard.tsx usa correttamente `lead.phone` (nessun bug nel codice — il campo era già corretto)
+- Aggiunto dropdown GDO al form di creazione lead manuale (AddLeadModal.tsx)
+- Il dropdown mostra tutti i GDO attivi con displayName/name e gdoCode
+- Opzione "Automatico (distribuzione)" come default — usa l'algoritmo di distribuzione esistente
+- Se un GDO specifico è selezionato, il lead viene assegnato direttamente a quel GDO
+- In createManualLead (importLeads.ts): aggiunto campo opzionale `assignToGdoId` con validazione che il GDO sia attivo
+- File modificati: src/components/AddLeadModal.tsx, src/app/actions/importLeads.ts
+- **Learnings per iterazioni future:**
+  - getActiveGdosForImport restituisce { id, name: string|null, displayName: string|null, gdoCode: number|null, isActive: boolean }
+  - gdoCode è di tipo `number`, non `string` — attenzione ai tipi quando si usa in template literals
+  - Il copy button in LeadCard.tsx usa `lead.phone` direttamente — il campo è passato da getPipelineLeads che fa db.select() completo dalla tabella leads
+---
