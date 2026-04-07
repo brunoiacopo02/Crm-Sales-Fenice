@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { quests, questProgress, callLogs, leads, users, coinTransactions } from "@/db/schema";
-import { eq, and, gte, lte, isNotNull, sql, count, countDistinct } from "drizzle-orm";
+import { quests, questProgress, callLogs, leads, users, coinTransactions, leadEvents } from "@/db/schema";
+import { eq, and, gte, lte, isNotNull, sql, count, countDistinct, inArray } from "drizzle-orm";
 import { updateStreak } from "@/app/actions/streakActions";
 import { getStreakMultiplier } from "@/lib/streakUtils";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
@@ -54,8 +54,8 @@ const DAILY_QUEST_COUNT = 3;
 const WEEKLY_QUEST_COUNT = 2;
 
 /**
- * Generate daily quests for a GDO user.
- * Picks a random selection from active quest templates, creating progress entries.
+ * Generate daily quests for a user based on their role.
+ * Picks a random selection from active quest templates filtered by role.
  * Idempotent: won't re-generate if quests already exist for today.
  */
 export async function generateDailyQuests(userId: string): Promise<{ success: boolean; error?: string }> {
@@ -78,12 +78,17 @@ export async function generateDailyQuests(userId: string): Promise<{ success: bo
             return { success: true }; // Already generated
         }
 
-        // Fetch all active quest templates
+        // Determine user role to filter quests
+        const userRows = await db.select({ role: users.role }).from(users).where(eq(users.id, userId));
+        const userRole = userRows[0]?.role || 'GDO';
+        const questRole = userRole === 'CONFERME' ? 'CONFERME' : userRole === 'VENDITORE' ? 'VENDITORE' : 'GDO';
+
+        // Fetch all active quest templates for this role
         const dailyTemplates = await db.select().from(quests)
-            .where(and(eq(quests.type, 'daily'), eq(quests.isActive, true)));
+            .where(and(eq(quests.type, 'daily'), eq(quests.isActive, true), eq(quests.role, questRole)));
 
         const weeklyTemplates = await db.select().from(quests)
-            .where(and(eq(quests.type, 'weekly'), eq(quests.isActive, true)));
+            .where(and(eq(quests.type, 'weekly'), eq(quests.isActive, true), eq(quests.role, questRole)));
 
         // Shuffle and pick random daily quests (variable reward pattern)
         const shuffledDaily = dailyTemplates.sort(() => Math.random() - 0.5);
@@ -172,6 +177,48 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
                     eq(callLogs.userId, userId),
                     gte(callLogs.createdAt, start),
                     lte(callLogs.createdAt, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        // --- CONFERME metrics ---
+        case 'conferme_fatte': {
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato'),
+                    isNotNull(leads.confirmationsTimestamp),
+                    gte(leads.confirmationsTimestamp, start),
+                    lte(leads.confirmationsTimestamp, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'conferme_chiamate': {
+            const confermeEventTypes = [
+                'conferme_no_answer',
+                'conferme_recall_scheduled',
+                'conferme_outcome_set',
+                'conferme_snooze_set',
+            ];
+            const result = await db.select({ value: count() })
+                .from(leadEvents)
+                .where(and(
+                    eq(leadEvents.userId, userId),
+                    inArray(leadEvents.eventType, confermeEventTypes),
+                    gte(leadEvents.timestamp, start),
+                    lte(leadEvents.timestamp, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
+        case 'conferme_scartate': {
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'scartato'),
+                    isNotNull(leads.confirmationsTimestamp),
+                    gte(leads.confirmationsTimestamp, start),
+                    lte(leads.confirmationsTimestamp, end)
                 ));
             return result[0]?.value ?? 0;
         }

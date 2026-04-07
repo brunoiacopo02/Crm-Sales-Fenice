@@ -1,137 +1,44 @@
-# Ralph Progress Log — CRM Fenice (Fase 3A — Manager Reorg + Store)
+# Ralph Progress Log — CRM Fenice (Fase 3B — Gamification + Bug Fix + Performance + Debug E2E)
 Started: 2026-04-07
 
 ## Codebase Patterns
 - Optimistic locking: ogni UPDATE su leads DEVE includere `eq(leads.version, lead.version)` nel WHERE
 - Timezone: usare `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })` per date stringa
 - Server Actions ritornano `{ success: boolean, error?: string }`
-- Tailwind v4: custom theme via @theme in globals.css con design system premium (ash-*, ember-*, gold-*)
+- Tailwind v4: custom theme in globals.css con design system premium (ash-*, ember-*, gold-*)
 - DATI REALI: NON toccare lead GDO 114, appuntamenti Conferme, account esistenti
-- MIGRAZIONI: SEMPRE eseguire le migrazioni sul DB di produzione dopo averle create, mai solo creare i file
-- Sidebar Manager ha molte voci non raggruppate — questa fase le riorganizza
-- Store items ribilanciati: base 50-200, raro 300-999, epico 1000-2999, leggendario 3000+
-- Rarity thresholds in ShopClient.tsx: Comune <300, Raro >=300, Epico >=1000, Leggendario >=3000
-- REST API Supabase: apikey e Authorization header dal file .env (SUPABASE_SERVICE_ROLE_KEY)
-- Middleware blocca API routes senza auth: se serve eseguire migrate-*, aggiungere bypass temporaneo in middleware.ts per `/api/migrate-`
+- MIGRAZIONI: SEMPRE eseguire sul DB di produzione dopo averle create. Middleware blocca /api/migrate-* senza auth — aggiungere bypass temporaneo in middleware.ts, eseguire, poi rimuovere il bypass
+- Gamification engine: awardXpAndCoins(userId, actionType, leadIdContext) in src/lib/gamificationEngine.ts
+- Quest system: tabelle quests + questProgress, server actions in questActions.ts
+- Achievement system: tabelle achievements + userAchievements
+- Store: 17 item attivi, categorie da cssValue prefix (skin-avatar-*, skin-theme-*, skin-effect-*)
+- Sidebar: riorganizzata in gruppi per Manager. Per Conferme e Venditori aggiungere voci gamification
+- QuestPanel componente gia' creato per GDO — riusabile per altri ruoli con filtro
+- Streak system gia' implementato su tabella users (streakCount, lastStreakDate)
+- Leaderboard: getLeaderboard in leaderboardActions.ts, attualmente solo per GDO (appuntamenti)
+- ConfermeBoard: usa getConfermeAppointments con fetchMode strict_kanban, filtra per status=APPOINTMENT + confirmationsOutcome IS NULL
+- ConfermeBoardRow: lead.confVslSeen = true mostra icona MonitorPlay blu. Aggiungere icona per NOT visto
+- NR Conferme: tracciati in confCall1At, confCall2At, confCall3At. recordConfermeNoAnswer gestisce il conteggio
+- ConfermeDrawer: motivi scarto in un array/select. Aggiungere 'ATTACCATO IN FACCIA'
+- Lead singolo form creato in F2-008 nella pagina /import. Aggiungere dropdown GDO
+- Bottone copia in LeadCard.tsx o componente simile — verificare che usi lead.phone
+- Account test: GDO 114 (gdo114@fenice.local / 1234), Conferme (andrea@fenice.local / 1234), Venditori (sales001@fenice.com / 1234), Manager (marketing@fenice.local / Marketing2026!)
+- REST API Supabase: usare SUPABASE_SERVICE_ROLE_KEY dal .env per apikey e Authorization
+- Quest role filtering: quests table has `role` column ('GDO'|'CONFERME'|'VENDITORE'), generateDailyQuests fetches user role and filters
+- CONFERME metrics in measureMetric: conferme_fatte (confirmationsOutcome='confermato'), conferme_chiamate (leadEvents conferme_*), conferme_scartate (confirmationsOutcome='scartato')
 
 ---
 
-## 2026-04-07 - F3-001
-- Reorganized Manager sidebar into 4 logical groups with section headers and gradient separators
-- Groups: Operativo (6 items), KPI & Analytics (7 items), Team & HR (2 items), Gamification (2 items)
-- Added `/kpi-gdo` link for Manager (page existed but wasn't linked)
-- Renamed "Gestione Team" to "Dashboard Operativa" for clarity
-- Used NavGroup type pattern: `{ label: string, items: NavItem[] }` with conditional rendering (navGroups vs navItems)
-- File modified: `src/components/Sidebar.tsx`
-- Note: "Team Goals" page doesn't exist yet — skipped from Gamification group, can be added when route is created
+## 2026-04-07 - F3-010
+- Esteso il sistema quest ai ruoli CONFERME con metriche specifiche
+- Aggiunto colonna `role` alla tabella quests in schema.ts (default 'GDO')
+- Creato 9 quest template CONFERME: 6 daily (conferme_fatte x3, conferme_chiamate x2, conferme_scartate x1) + 3 weekly (conferme_fatte x2, conferme_chiamate x1)
+- In questActions.ts: generateDailyQuests ora fetcha il ruolo utente e filtra le quest per ruolo
+- In questActions.ts: measureMetric supporta 3 nuove metriche CONFERME (conferme_fatte, conferme_chiamate, conferme_scartate)
+- Creato migration route: src/app/api/migrate-quests-conferme/route.ts (ADD COLUMN + seed quests)
+- File modificati: src/db/schema.ts, src/app/actions/questActions.ts, src/app/api/migrate-quests-conferme/route.ts (new)
 - **Learnings per iterazioni future:**
-  - Sidebar supports both flat (navItems) and grouped (navGroups) rendering — other roles can be grouped later
-  - Section headers use `text-[10px] font-semibold uppercase tracking-wider text-ash-500` for subtle label style
-  - Gradient separators between groups: `bg-gradient-to-r from-transparent via-white/10 to-transparent`
----
-
-## 2026-04-07 - F3-002
-- Created `/kpi-hub` landing page with 7 navigation cards for all KPI sections
-- Each card has: title, icon, description, color-coded gradient background, hover animation with arrow
-- Cards link to: KPI Team, KPI GDO, KPI Venditori, KPI Conferme, Marketing Analytics, Analisi Qualità, Performance GDO
-- Added "Centro KPI" as first item in sidebar "KPI & Analytics" group with Compass icon
-- Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop
-- Auth checks follow existing pattern (Manager/Admin only, Marketing redirect)
-- Files modified: `src/app/(dashboard)/kpi-hub/page.tsx` (new), `src/components/Sidebar.tsx`
-- **Learnings per iterazioni future:**
-  - KPI pages use consistent auth pattern: supabase getUser → role check → marketing redirect
-  - Design system colors: ash-400 for muted text, brand-orange for hover accents
-  - Card pattern with gradient backgrounds + border color matching works well for navigation hubs
----
-
-## 2026-04-07 - F3-003
-- Rebalanced all 10 store item prices via Supabase REST API PATCH
-- Price mapping: Baby Fenice 1→75, Phoenix Spark 1→100, Midnight Executive 1→150, Ivory Prestige 1→150, Deep Sapphire 250→500, Executive Gold 300→600, Guerriero Accademico 350→750, L'Eterea 500→2000, Crimson Horizon 600→2500, Fenice Executive 800→5000
-- Updated rarity thresholds in ShopClient.tsx: Comune <300, Raro >=300, Epico >=1000, Leggendario >=3000
-- Verified 4 existing purchases (1 test user) are unaffected — purchases don't store price
-- Files modified: `src/components/ShopClient.tsx` (rarity thresholds), DB prices via REST API
-- **Learnings per iterazioni future:**
-  - Supabase REST API PATCH returns 204 on success, ideal for direct DB updates without deploying code
-  - Table name in Supabase REST is camelCase `shopItems`, not snake_case `shop_items`
-  - Price rebalancing is safe for existing owners since `userPurchases` tracks ownership, not price paid
----
-
-## 2026-04-07 - F3-004
-- Added 10 new store items via Supabase REST API INSERT (no existing items modified)
-- Categories breakdown:
-  - **Avatar Effects (4)**: Ombra Mistica (150), Drago di Fuoco (400), Spirito del Ghiaccio (600), Fenice Astrale (1500)
-  - **Special Effects (3)**: Bagliore Neon (350), Corona di Diamanti (1200), Vortice Infernale (4000)
-  - **Dashboard Themes (3)**: Aurora Boreale (2000), Tramonto Dorato (3500), Nebula Cosmica (3000)
-- CSS definitions added to globals.css for all 10 items:
-  - `skin-effect-*` classes use radial gradients + box-shadow for avatar circle effects
-  - `skin-theme-*` classes use linear-gradient backgrounds (no image files needed)
-- Updated Topbar.tsx to also apply `skin-effect-*` classes to user avatar (was only applying `skin-avatar-*`)
-- Leaderboard and SprintBanner already supported any equippedSkinCss — no changes needed
-- Files modified: `src/app/globals.css`, `src/components/Topbar.tsx`
-- **Learnings per iterazioni future:**
-  - New CSS-only item pattern: `skin-effect-*` for avatar effects using gradients/shadows (no PNG needed)
-  - New CSS-only theme pattern: `skin-theme-*` with `background: linear-gradient(...)` (no image needed)
-  - Topbar avatar renders skins only if cssValue includes `skin-avatar` or `skin-effect` — future item types need this check
-  - Leaderboard/SprintBanner apply equippedSkinCss unconditionally — any class works there
-  - Total active store items now: 17 (7 original + 10 new)
----
-
-## 2026-04-07 - F3-005
-- Added category filter tabs to Store: Tutti, Skin Avatar, Temi, Effetti, Titoli
-- Categories derived from cssValue prefix: `skin-avatar-*` → Avatar, `skin-theme-*` → Temi, `skin-effect-*` → Effetti, else → Titoli
-- Each category has colored badge on item card (bottom-left of preview area) with matching icon
-- Category filter tabs show item count badge, empty categories auto-hidden
-- Added price sort toggle (cycles: none → ascending → descending) with visual state indicator
-- Used useMemo for filteredItems and categoryCounts for performance
-- Premium design maintained: filter pills with rounded-xl, shadow-soft, transition animations
-- Files modified: `src/components/ShopClient.tsx`
-- **Learnings per iterazioni future:**
-  - Category system is purely CSS-class-based, no DB column needed — getItemCategory() reads cssValue prefix
-  - CATEGORIES constant array defines all categories with icon, label, color — easy to extend
-  - Empty categories hidden from filter bar to avoid confusing users
-  - Sort order cycles through 3 states (none/asc/desc) with visual feedback icons
----
-
-## 2026-04-07 - F3-006
-- Reorganized Manager Target page into 5 tabbed sections with clear headers and icons
-- Tabs: Target GDO (Target icon), Target Conferme (CheckCircle2), Target Venditori (UserCheck), Giorni Lavorativi (Calendar), Regole Gamification (Trophy)
-- Tab navigation uses gradient active state (brand-charcoal to ash-800) with brand-orange icon accent
-- Responsive: tab labels hidden on mobile (icons only), full labels on sm+
-- **Target GDO tab**: Calendar Stats (4 cards) + Critical Alert + Table A (Numeri Mensili) + Table B (Dato Operativo & Forecast)
-- **Target Conferme tab**: Extracted conferme-specific metrics into 3 summary cards + dedicated conferme table
-- **Target Venditori tab**: 3 summary cards (Contratti Chiusi, Valore Contratti, Venditori Attivi) + full venditori fatturato table with inline editing
-- **Giorni Lavorativi tab**: 3 cards (Totali, Trascorsi, Rimanenti) + configuration info + daily breakdown table
-- **Regole Gamification tab**: Economy overview (Coins per action), Level system info, Store tiers (Comune/Raro/Epico/Leggendario), link to RPG Monitor
-- Header + month picker + "Imposta Target" button remain always visible above tabs
-- ManagerOperativaBoard stays below tabs in page.tsx (not reorganized — separate component)
-- Files modified: `src/app/(dashboard)/manager-targets/ManagerTargetsClient.tsx`
-- **Learnings per iterazioni future:**
-  - Tab pattern: TABS const array with id/label/icon, activeTab state, conditional rendering with &&
-  - Tab active style: `bg-gradient-to-r from-brand-charcoal to-ash-800 text-white shadow-soft` with `text-brand-orange` icon
-  - Responsive tab labels: `<div className="hidden sm:block">{tab.label}</div>` for icon-only on mobile
-  - Content can be reorganized from flat sections into tabs without touching server component or data flow
----
-
-## 2026-04-07 - F3-007
-- Full audit of all 30 tables in schema.ts vs production DB via Supabase REST API
-- **All tables exist** (HTTP 200): users, leads, callLogs, leadEvents, breakSessions, notifications, assignmentSettings, importLogs, sprints, shopItems, userPurchases, coinTransactions, confirmationsNotes, internalAlerts, calendarConnections, calendarEvents, teamGoals, marketingBudgets, monthlyTargets, dailyKpiSnapshots, gdoNotes, quests, questProgress, achievements, userAchievements, lootDrops, bossBattles, bossContributions, seasonalEvents, weeklyGamificationRules
-- **All columns verified** via SELECT with explicit column lists — no missing columns detected
-- Key verified columns: users (streakCount, lastStreakDate, activeTitle, coins, level, experience), leads (all conferme + salesperson fields, version), quests (all 10 cols), achievements (all 10 cols), lootDrops (all 10 cols), bossBattles (all 13 cols), seasonalEvents (all 11 cols)
-- **No migrations needed** — schema.ts is fully aligned with production DB
-- npx next build passes
-- No files modified (verification-only task)
-- **Learnings per iterazioni future:**
-  - Supabase REST API returns empty array `[]` for tables with no data but valid columns — distinguishes from 404 for missing tables
-  - All 30 tables confirmed: original (14 core tables) + gamification (16 newer tables) all present
----
-
-## 2026-04-07 - F3-008
-- Pushed branch `ralph/fase-3a-manager-store` to GitHub
-- Fast-forward merged into `main` (no conflicts)
-- Pushed `main` to GitHub
-- Waited 120 seconds for Vercel deploy
-- Verified: `curl -s -o /dev/null -w "%{http_code}" -L https://crm-sales-fenice.vercel.app` → 200
-- (Initial 307 is expected — middleware redirects to /login for unauthenticated requests)
-- **All 8 stories (F3-001 through F3-008) are now `passes: true`**
-- **Deploy verified and live**
+  - Le interazioni CONFERME sono tracciate in leadEvents (non callLogs) con eventType conferme_*
+  - confirmationsUserId è il campo che lega il lead all'operatore Conferme
+  - Migrazione da eseguire su prod dopo push: /api/migrate-quests-conferme
 ---

@@ -303,6 +303,7 @@ export const quests = pgTable('quests', {
     rewardXp: integer('rewardXp').notNull(),
     rewardCoins: integer('rewardCoins').notNull(),
     isActive: boolean('isActive').default(true).notNull(),
+    role: text('role').default('GDO').notNull(), // 'GDO' | 'CONFERME' | 'VENDITORE'
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 

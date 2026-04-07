@@ -1,129 +1,334 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fase-3a-manager-store",
-  "description": "Fase 3A — Riorganizzazione sezioni Manager + Ribilanciamento Store Gamification",
+  "branchName": "ralph/fase-3b-gamification-bugfix-performance",
+  "description": "Fase 3B — Gamification Conferme/Venditori + Bug Fix Conferme/GDO + Performance + Debug E2E Completo",
   "userStories": [
     {
-      "id": "F3-001",
-      "title": "Riorganizzare sidebar Manager: raggruppamento logico",
-      "description": "Le voci del menu Manager sono confuse. Raggruppare logicamente con separatori e sezioni chiare.",
+      "id": "F3-010",
+      "title": "Gamification Conferme: quest giornaliere e settimanali",
+      "description": "Estendere il sistema quest ai ruoli CONFERME con metriche specifiche.",
       "acceptanceCriteria": [
-        "In Sidebar.tsx raggruppare le voci Manager in sezioni con header: 'Operativo', 'KPI & Analytics', 'Team & HR', 'Gamification'",
-        "Operativo: Dashboard Operativa, Monitor Pause, Import Lead, Archivio",
-        "KPI & Analytics: KPI Team, KPI GDO, KPI Venditori, KPI Conferme, Marketing Analytics, Analisi Qualita, Performance GDO",
-        "Team & HR: Target, Note GDO",
-        "Gamification: RPG Monitor, Team Goals, Store Admin",
-        "Aggiungere separatori visivi tra i gruppi",
+        "Aggiungere quest template per Conferme nella tabella quests: 'Conferma X appuntamenti', 'Chiama X lead da confermare', 'Scarta X non in target'",
+        "Almeno 5 quest giornaliere e 3 settimanali specifiche per Conferme",
+        "In generateDailyQuests, filtrare le quest per ruolo utente (GDO vs CONFERME)",
+        "In checkQuestProgress, implementare metriche Conferme: conferme fatte, chiamate conferme",
         "npx next build compila senza errori"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Solo riordinamento sidebar. Non spostare pagine o route."
+      "notes": "Riusare lo stesso schema quests/questProgress. Solo nuovi template + logica metriche."
     },
     {
-      "id": "F3-002",
-      "title": "Unificare pagina KPI in hub centrale Manager",
-      "description": "Creare una landing page /kpi che faccia da hub per tutti i KPI con card di navigazione rapida.",
+      "id": "F3-011",
+      "title": "Gamification Conferme: UI quest, streak, accesso Store/Profilo/Classifica",
+      "description": "Mostrare pannello quest e streak nella dashboard Conferme e dare accesso alle pagine gamification.",
       "acceptanceCriteria": [
-        "Creare pagina /kpi-hub con card per ogni sezione KPI (Team, GDO, Venditori, Conferme, Marketing)",
-        "Ogni card mostra: titolo, icona, breve descrizione, link alla pagina specifica",
-        "Accessibile da Sidebar sotto 'KPI & Analytics'",
-        "Layout pulito con grid responsive",
+        "Aggiungere QuestPanel nella pagina /conferme",
+        "Mostrare solo quest pertinenti al ruolo CONFERME",
+        "Aggiungere streak counter con icona fiamma nella dashboard Conferme",
+        "In Sidebar.tsx aggiungere per ruolo CONFERME: link a Store, Profilo RPG, Classifica",
+        "Verificare che /store, /profilo, /classifica funzionino per ruolo CONFERME (aggiungere ruolo agli auth check)",
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "NON rimuovere le pagine KPI esistenti. Questa e' una pagina di navigazione aggiuntiva."
+      "passes": false,
+      "notes": "QuestPanel gia' creato per GDO — riusarlo con filtro ruolo."
     },
     {
-      "id": "F3-003",
-      "title": "Audit e ribilanciamento prezzi Store esistenti",
-      "description": "Con la nuova economia coins (quest, streak, achievement), i prezzi store vanno ribilanciati.",
+      "id": "F3-012",
+      "title": "Gamification Conferme: achievement specifici",
+      "description": "Creare achievement/badge specifici per il ruolo Conferme.",
       "acceptanceCriteria": [
-        "Leggere tutti gli item esistenti nello store dal DB",
-        "Ribilanciare i prezzi in base alla nuova economia: item base 50-200 coins, item rari 500-1000, item premium 2000-5000",
-        "Aggiornare i prezzi nel DB tramite server action o script",
-        "NON eliminare item esistenti, solo aggiornare i prezzi",
+        "Seedare almeno 8 achievement per Conferme: Confermatore (50/200/500 conferme), Sentinella (100/500/1000 chiamate), Recuperatore (10/50/100 richiami ok), Precisione Chirurgica (80/90/95% tasso conferma)",
+        "checkAchievements deve funzionare anche per metriche Conferme",
+        "I badge appaiono nel profilo RPG accanto a quelli generici",
+        "ESEGUIRE la migrazione seed sul DB di produzione (non solo creare il file)",
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Usare la REST API Supabase per verificare gli item attuali."
+      "passes": false,
+      "notes": "INSERT nuovi record nella tabella achievements."
     },
     {
-      "id": "F3-004",
-      "title": "Creare nuovi item Store: skin avatar e temi",
-      "description": "Aggiungere 8-10 nuovi item stimolanti nel negozio: skin avatar, temi, effetti.",
+      "id": "F3-013",
+      "title": "Gamification Venditori: quest giornaliere e settimanali",
+      "description": "Estendere il sistema quest ai ruoli VENDITORE con metriche specifiche.",
       "acceptanceCriteria": [
-        "Aggiungere almeno 8 nuovi item nello store tramite seed/script",
-        "Categorie: skin avatar (3-4 nuove), temi dashboard (2-3 nuovi), effetti speciali (2-3)",
-        "Ogni item ha: nome creativo, descrizione accattivante, prezzo bilanciato, cssValue funzionante",
-        "I nuovi item devono apparire nel negozio come attivi",
+        "Aggiungere quest template per Venditori: 'Chiudi X deal', 'Fattura X EUR', 'Presenta X trattative', 'Registra esito per X lead'",
+        "Almeno 5 quest giornaliere e 3 settimanali specifiche per Venditori",
+        "In generateDailyQuests, filtrare per ruolo VENDITORE",
+        "In checkQuestProgress, implementare metriche Venditori: closeAmountEur, salespersonOutcome, conteggio trattative",
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Solo INSERT nuovi record. Mai modificare item esistenti degli utenti."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "F3-005",
-      "title": "Aggiungere categorie e filtri allo Store",
-      "description": "Lo store mostra tutti gli item in lista piatta. Aggiungere categorie e filtro per tipo.",
+      "id": "F3-014",
+      "title": "Gamification Venditori: UI quest, streak, accesso Store/Profilo/Classifica + achievement",
+      "description": "UI gamification per venditori: quest panel, streak, accesso pagine, achievement specifici.",
       "acceptanceCriteria": [
-        "Aggiungere tabs o filtri per categoria: Tutti, Skin Avatar, Temi, Effetti, Titoli",
-        "Ogni item mostra la categoria con badge colorato",
-        "Ordinamento per prezzo (crescente/decrescente) opzionale",
-        "Mantenere il design premium del redesign Fase 2",
+        "Aggiungere QuestPanel nella pagina /venditore",
+        "Aggiungere streak counter nella dashboard Venditori",
+        "In Sidebar.tsx aggiungere per ruolo VENDITORE: link a Store, Profilo RPG, Classifica",
+        "Verificare che le pagine funzionino per ruolo VENDITORE",
+        "Seedare almeno 8 achievement Venditori: Closer (10/50/100 chiusure), Fatturatore (10K/50K/100K EUR), Persuasore (70/80/90% chiusura)",
+        "ESEGUIRE la migrazione seed sul DB di produzione",
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "Categories derived from cssValue prefix. Filter tabs hide empty categories."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "F3-006",
-      "title": "Migliorare la pagina Target Manager",
-      "description": "La pagina target ha troppi elementi sparsi. Organizzare meglio con tab o accordion.",
+      "id": "F3-015",
+      "title": "Leaderboard multi-ruolo + trigger XP/coins per Conferme e Venditori",
+      "description": "Estendere leaderboard a tutti i ruoli e attivare i trigger XP/coins per le nuove azioni.",
       "acceptanceCriteria": [
-        "Raggruppare in tabs o sezioni collassabili: Target GDO, Target Conferme, Target Venditori, Giorni Lavorativi, Regole Gamification",
-        "Ogni sezione ha header chiaro con icona",
-        "Il contenuto di ogni sezione resta identico (solo riorganizzazione layout)",
+        "Aggiungere tabs nel leaderboard: GDO (appuntamenti), Conferme (confermati), Venditori (fatturato)",
+        "Ogni tab mostra la classifica con metriche appropriate per il ruolo",
+        "In gamificationEngine.ts aggiungere action types: CONFERMATO (+15 XP, +5 coins), DEAL_CHIUSO (+100 XP, +30 coins)",
+        "In confermeActions.ts: chiamare awardXpAndCoins su conferma appuntamento",
+        "In venditoreActions.ts: chiamare awardXpAndCoins su chiusura deal",
+        "NON modificare i trigger GDO esistenti",
         "npx next build compila senza errori"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Solo layout, non toccare la logica."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "F3-007",
-      "title": "Quick fix: verificare tutte le migrazioni applicate",
-      "description": "Controllare che TUTTE le colonne e tabelle nello schema.ts esistano nel DB di produzione.",
+      "id": "F3-016",
+      "title": "Conferme: icona VSL non vista + provenienza contatti",
+      "description": "Aggiungere icona per lead che NON hanno visto la VSL e mostrare provenienza (GDO fissatore + funnel).",
       "acceptanceCriteria": [
-        "Confrontare src/db/schema.ts con le colonne reali nel DB via REST API",
-        "Se mancano colonne o tabelle, creare e ESEGUIRE la migrazione",
-        "Verificare: users (tutti i campi gamification), leads (tutti i campi), tutte le nuove tabelle",
-        "Reportare in progress.txt le migrazioni eseguite",
+        "In ConfermeBoardRow.tsx: se confVslSeen e' false/null, mostrare icona diversa (es. EyeOff in rosso/grigio) per indicare VSL non vista",
+        "L'icona VSL vista (MonitorPlay blu) resta invariata",
+        "Mostrare nella riga del lead: nome GDO che ha fissato l'appuntamento (campo gdo.displayName o gdo.name dal JOIN)",
+        "Mostrare il funnel di provenienza del lead (campo lead.funnel)",
+        "Se queste info sono gia' visibili, verificare che siano sempre mostrate e non nascoste",
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "CRITICO: verificare PRIMA di qualsiasi altro lavoro che il DB sia allineato allo schema."
+      "passes": false,
+      "notes": "Il JOIN con users (GDO) e' gia' fatto in getConfermeAppointments."
     },
     {
-      "id": "F3-008",
-      "title": "Deploy finale e verifica produzione",
-      "description": "Push, merge in main, deploy su Vercel, verifica che tutto funzioni.",
+      "id": "F3-017",
+      "title": "Conferme: snooze visibile nella dashboard principale + annullare NR",
+      "description": "I lead in 'chiamare dopo' (snooze) devono restare visibili nella dashboard principale con indicazione specifica. L'operatore deve poter annullare un NR se si e' sbagliato.",
+      "acceptanceCriteria": [
+        "I lead con confSnoozeAt devono apparire anche nella vista principale (Pomeriggio/Mattina), non solo nel pannello laterale Snooze",
+        "Nella vista principale, i lead snoozed devono avere un badge/indicatore visivo specifico (es. icona orologio + orario snooze)",
+        "Aggiungere bottone 'Annulla NR' o 'Reset NR' che rimuove l'ultima chiamata NR registrata",
+        "Il bottone Annulla NR deve decrementare il conteggio NR del lead e rimuovere l'ultimo callLog di tipo NR",
+        "npx next build compila senza errori"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Le chiamate NR sono tracciate in callLogs e nel campo confCall1At/confCall2At/confCall3At."
+    },
+    {
+      "id": "F3-018",
+      "title": "Conferme: sezione scartati e confermati + motivo scarto 'ATTACCATO IN FACCIA'",
+      "description": "Creare sezione per vedere gli app scartati e confermati. Aggiungere nuovo motivo scarto.",
+      "acceptanceCriteria": [
+        "Nella dashboard Conferme aggiungere un tab o vista 'Storico' che mostra lead scartati e confermati",
+        "Storico mostra: nome, telefono, GDO fissatore, esito (confermato/scartato), motivo scarto se presente, data esito",
+        "Aggiungere 'ATTACCATO IN FACCIA' alla lista motivi scarto in ConfermeDrawer.tsx",
+        "Il motivo viene salvato nel campo confirmationsDiscardReason",
+        "npx next build compila senza errori"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "I lead scartati hanno confirmationsOutcome='scartato', i confermati hanno 'confermato'."
+    },
+    {
+      "id": "F3-019",
+      "title": "Conferme: 4° NR scarta automaticamente il lead",
+      "description": "Dopo 3 chiamate NR il lead resta. Al 4° NR il lead deve sparire dalla dashboard e andare in sezione scartati.",
+      "acceptanceCriteria": [
+        "In recordConfermeNoAnswer (confermeActions.ts): dopo il 4° NR, settare automaticamente confirmationsOutcome='scartato' con reason='4 NR consecutivi'",
+        "Il lead con 4 NR sparisce dalla dashboard principale (gia' filtrato da isNull(confirmationsOutcome))",
+        "Il lead appare nella sezione Storico/Scartati creata in F3-018",
+        "Il conteggio NR si basa sui campi confCall1At, confCall2At, confCall3At + un eventuale 4° campo o conteggio",
+        "npx next build compila senza errori"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Verificare come sono tracciati i NR attualmente (confCall1At/2/3 o callLogs)."
+    },
+    {
+      "id": "F3-020",
+      "title": "GDO: fix copia numero nella pipeline + assegnazione GDO su lead singolo",
+      "description": "Il bottone copia nella pipeline prende il numero sbagliato. Quando si crea un lead singolo, poter selezionare il GDO.",
+      "acceptanceCriteria": [
+        "In LeadCard.tsx o PipelineBoard.tsx: verificare che il bottone copia usi lead.phone e non un altro campo",
+        "Testare che il numero copiato sia effettivamente quello del lead corretto",
+        "Nel form di aggiunta lead singolo (creato in F2-008): aggiungere dropdown per selezionare il GDO a cui assegnare il lead",
+        "Il dropdown mostra tutti i GDO attivi con nome e codice",
+        "Il campo assignedToId del lead viene settato al GDO selezionato",
+        "npx next build compila senza errori"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "NON modificare lead esistenti. Solo fix logica copia e aggiunta campo al form."
+    },
+    {
+      "id": "F3-021",
+      "title": "Performance: lazy loading componenti pesanti",
+      "description": "Implementare lazy loading per componenti che non servono al primo render.",
+      "acceptanceCriteria": [
+        "Wrappare con React.lazy/dynamic: ConfermeDrawer, VenditoreDrawer, ContactDrawer, OutcomeModal, EditAppointmentModal",
+        "I drawer e modali devono caricarsi solo quando vengono aperti",
+        "Fallback con skeleton/spinner durante il caricamento",
+        "npx next build compila senza errori"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "Usare next/dynamic con ssr: false per componenti client-only."
+    },
+    {
+      "id": "F3-022",
+      "title": "Performance: ottimizzazione query N+1 e code splitting",
+      "description": "Audit e fix query inefficienti + riduzione bundle size.",
+      "acceptanceCriteria": [
+        "Auditare tutti i server actions per query N+1 (loop con query dentro) e convertire in JOIN/batch",
+        "Verificare import specifici lucide-react (non import * )",
+        "Verificare import specifici date-fns (non import * )",
+        "Se trova import pesanti, splittar con next/dynamic",
+        "npx next build compila senza errori"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F3-023",
+      "title": "Debug E2E: verifica completa flusso GDO",
+      "description": "Test end-to-end meticoloso del flusso GDO: login, pipeline, chiamate, esiti, appuntamenti, richiami.",
+      "acceptanceCriteria": [
+        "Usare Playwright per navigare come GDO: login con gdo114@fenice.local / 1234",
+        "Verificare che la pipeline carichi con i lead corretti",
+        "Verificare che le tab (1a, 2a, 3a, 4a chiamata) funzionino",
+        "Verificare che il bottone copia numero copi il numero corretto",
+        "Verificare che le azioni rapide (esiti) funzionino senza errori console",
+        "Verificare che il QuestPanel e streak counter siano visibili",
+        "Verificare che Store, Profilo, Classifica siano accessibili dalla sidebar",
+        "Screenshot di ogni pagina visitata per documentazione",
+        "npx next build compila senza errori"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "NON modificare dati reali del GDO 114. Solo navigazione e verifica visiva."
+    },
+    {
+      "id": "F3-024",
+      "title": "Debug E2E: verifica completa flusso Conferme",
+      "description": "Test end-to-end meticoloso del flusso Conferme: login, dashboard, tab, snooze, NR, scarto, conferma, storico.",
+      "acceptanceCriteria": [
+        "Usare Playwright per navigare come Conferme: login con andrea@fenice.local / 1234",
+        "Verificare che la dashboard carichi con gli appuntamenti corretti (non 0)",
+        "Verificare le tab Pomeriggio/Mattina/Richiami con conteggi corretti",
+        "Verificare che l'icona VSL vista e VSL non vista appaiano correttamente",
+        "Verificare che la provenienza contatti (GDO + funnel) sia visibile",
+        "Verificare che lo storico scartati/confermati sia accessibile",
+        "Verificare che il motivo 'ATTACCATO IN FACCIA' sia presente tra le opzioni scarto",
+        "Verificare che QuestPanel, streak, Store, Profilo, Classifica funzionino per Conferme",
+        "Verificare assenza errori console su tutte le pagine visitate",
+        "Screenshot di ogni pagina",
+        "npx next build compila senza errori"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "NON modificare appuntamenti reali. Solo navigazione e verifica."
+    },
+    {
+      "id": "F3-025",
+      "title": "Debug E2E: verifica completa flusso Venditori",
+      "description": "Test end-to-end del flusso Venditori: login, dashboard, KPI, classifica con target bonus.",
+      "acceptanceCriteria": [
+        "Usare Playwright per navigare come Venditore: login con sales001@fenice.com / 1234",
+        "Verificare che la dashboard venditori carichi (appuntamenti assegnati visibili)",
+        "Verificare le viste LISTA/AGENDA/CLASSIFICA",
+        "Verificare che i KPI Venditori mostrino classifica per fatturato con target bonus",
+        "Verificare che QuestPanel, streak, Store, Profilo, Classifica funzionino per Venditori",
+        "Verificare assenza errori console",
+        "Screenshot di ogni pagina",
+        "npx next build compila senza errori"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F3-026",
+      "title": "Debug E2E: verifica completa flusso Manager",
+      "description": "Test end-to-end del flusso Manager: login, tutte le sezioni, KPI hub, target, note GDO, store admin.",
+      "acceptanceCriteria": [
+        "Usare Playwright per navigare come Manager: login con marketing@fenice.local / Marketing2026!",
+        "Verificare che la sidebar mostri i gruppi organizzati (Operativo, KPI, Team, Gamification)",
+        "Verificare il KPI Hub con tutte le card di navigazione",
+        "Verificare la pagina Target con sezioni collassabili",
+        "Verificare Note GDO, Monitor Pause, Import Lead, Archivio",
+        "Verificare RPG Monitor, Store Admin",
+        "Verificare assenza errori console su TUTTE le pagine manager",
+        "Screenshot di ogni pagina",
+        "npx next build compila senza errori"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F3-027",
+      "title": "Debug: hydration audit + migrazioni DB + responsive",
+      "description": "Audit hydration su tutti i componenti, verifica migrazioni DB, test responsive.",
+      "acceptanceCriteria": [
+        "Controllare TUTTI i componenti per bottoni/link dentro span o p (causa WSOD)",
+        "Verificare che nessun componente renderizzi Date lato server senza useEffect",
+        "Confrontare TUTTE le tabelle/colonne in schema.ts con il DB di produzione via REST API",
+        "Se mancano colonne o tabelle, ESEGUIRE la migrazione immediatamente",
+        "Usare Playwright per screenshot responsive a 375px e 1440px sulle pagine principali",
+        "Fix problemi di overflow, testo troncato su mobile",
+        "npx next build compila senza errori"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "CRITICO: eseguire migrazioni, non solo crearle."
+    },
+    {
+      "id": "F3-028",
+      "title": "Debug: console errors, warning, TypeScript strict",
+      "description": "Eliminare tutti gli errori e warning dalla console e dal compilatore TypeScript.",
+      "acceptanceCriteria": [
+        "Auditare tutti i componenti per warning React: missing key, useEffect deps, unused vars",
+        "Rimuovere tutti i console.log/console.error rimasti dal debug",
+        "Fix tutti i TypeScript strict warnings nel build output",
+        "Verificare che npx next build mostri ZERO warning significativi",
+        "npx next build compila senza errori"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F3-029",
+      "title": "Deploy finale e smoke test produzione completo",
+      "description": "Push, merge, deploy, verifica completa su tutte le pagine in produzione.",
       "acceptanceCriteria": [
         "Git push del branch su GitHub",
         "Merge in main senza conflitti",
         "Push main su GitHub",
         "Attendere 120 secondi per il deploy Vercel",
         "Verificare con curl che https://crm-sales-fenice.vercel.app ritorni 200",
-        "Se non ritorna 200, attendere e riprovare"
+        "Usare Playwright per login e verificare che almeno la pagina conferme carichi con dati",
+        "Se il deploy fallisce o da WSOD, leggere i log e fixare prima di COMPLETE"
       ],
-      "priority": 8,
-      "passes": true,
-      "notes": "Ultimo step prima di COMPLETE."
+      "priority": 20,
+      "passes": false,
+      "notes": "NON rispondere COMPLETE se il sito non funziona."
     }
   ]
 }
