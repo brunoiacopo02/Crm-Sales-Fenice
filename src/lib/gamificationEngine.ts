@@ -28,6 +28,22 @@ export const GAME_CONSTANTS = {
         COINS: 50, // awarded every INTERVAL days
         INTERVAL: 7,
     },
+    LOOT_DROP: {
+        TRIGGER_EVERY: 10, // every N appointments
+        RARITY_WEIGHTS: [
+            { rarity: 'common', weight: 60, minCoins: 10, maxCoins: 30, rewardType: 'coins' },
+            { rarity: 'rare', weight: 25, minCoins: 50, maxCoins: 100, rewardType: 'coins' },
+            { rarity: 'epic', weight: 12, minCoins: 200, maxCoins: 200, rewardType: 'coins_xp', bonusXp: 500 },
+            { rarity: 'legendary', weight: 3, minCoins: 500, maxCoins: 500, rewardType: 'coins_title' },
+        ] as const,
+        LEGENDARY_TITLES: [
+            'Il Drago d\'Oro',
+            'La Fenice Immortale',
+            'Il Conquistatore',
+            'L\'Inarrestabile',
+            'Il Mito Vivente',
+        ],
+    },
 };
 
 export const EVOLUTION_STAGES = [

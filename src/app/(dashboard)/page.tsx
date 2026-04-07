@@ -5,6 +5,7 @@ import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
 import { QuestPanel } from "@/components/QuestPanel"
 import { StreakCounter } from "@/components/StreakCounter"
+import { LootDropModal } from "@/components/LootDropModal"
 import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
@@ -32,6 +33,7 @@ export default async function DashboardPage() {
 
     return (
         <div className="space-y-6">
+            <LootDropModal userId={session!.user.id} />
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                     Pipeline Chiamate

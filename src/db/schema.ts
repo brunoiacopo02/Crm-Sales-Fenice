@@ -336,6 +336,20 @@ export const userAchievements = pgTable('userAchievements', {
     unlockedAt: timestamp('unlockedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- LOOT DROP SYSTEM ---
+export const lootDrops = pgTable('lootDrops', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    rarity: text('rarity').notNull(), // 'common' | 'rare' | 'epic' | 'legendary'
+    rewardType: text('rewardType').notNull(), // 'coins' | 'coins_xp' | 'coins_title'
+    rewardValue: integer('rewardValue').notNull(), // coins amount
+    bonusXp: integer('bonusXp').default(0).notNull(), // extra XP for epic
+    bonusTitle: text('bonusTitle'), // title string for legendary drops
+    opened: boolean('opened').default(false).notNull(),
+    openedAt: timestamp('openedAt', { withTimezone: true, mode: 'date' }),
+    droppedAt: timestamp('droppedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     id: text('id').primaryKey(),
     month: text('month').notNull().unique(), // e.g. '2026-03'

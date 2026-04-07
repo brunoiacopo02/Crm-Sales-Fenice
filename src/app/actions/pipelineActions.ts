@@ -11,6 +11,7 @@ import { checkAndCompleteExpiredSprint } from "@/app/actions/sprintActions"
 import { subDays } from "date-fns"
 import { evaluateTeamGoals } from "@/app/actions/teamGoalActions"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
+import { triggerLootDrop } from "@/app/actions/lootDropActions"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
 async function checkFourthCallEligibility(gdoId: string): Promise<boolean> {
@@ -230,6 +231,12 @@ export async function updateLeadOutcome(
         await evaluateTeamGoals(leadId).catch((e: any) => {
             console.error("Team goal evaluation failed:", e)
         })
+        // Loot drop milestone check (every 10 appointments)
+        if (effectiveUserId) {
+            await triggerLootDrop(effectiveUserId).catch((e: any) => {
+                console.error("Loot drop trigger failed:", e)
+            })
+        }
     }
 
     return { success: true }

@@ -19,6 +19,8 @@ Started: 2026-04-07
 - Sidebar e Topbar gia' redesignate in Run 1: seguire stesso stile per nuovi componenti
 - Achievement system: `checkAchievements(userId)` in `achievementActions.ts` — call after any action that changes metrics (quest complete, call logged, appointment set, level up)
 - gdoNotes tabella gia' creata in Run 1 per note HR/formazione
+- Loot drops: `triggerLootDrop(userId)` in `lootDropActions.ts` — call after appointment set; weighted random via cumulative subtraction
+- `GAME_CONSTANTS.LOOT_DROP` in gamificationEngine.ts: single source of truth for rarity weights, trigger interval, legendary titles
 
 ---
 
@@ -134,4 +136,33 @@ Started: 2026-04-07
   - Sprint proportional formula: `Math.round(durationMin * MAX / BASE_DURATION)` clamped to [1, MAX]
   - Streak milestone check: `newStreak % INTERVAL === 0` — only triggers on exact multiples (7, 14, 21...)
   - Achievement coin rewards use `users.coins` (game economy), not `walletCoins` (shop wallet)
+---
+
+## 2026-04-07 - F2-027
+- Created `lootDrops` table in schema: id, userId, rarity, rewardType, rewardValue, bonusXp, bonusTitle, opened, openedAt, droppedAt
+- Created ADDITIVE migration at `src/app/api/migrate-loot-drops/route.ts` with indexes on userId and unopened drops
+- Added `LOOT_DROP` constants to `GAME_CONSTANTS` in gamificationEngine.ts:
+  - TRIGGER_EVERY: 10 appointments, weighted rarity: 60% common (10-30 coins), 25% rare (50-100), 12% epic (200 + 500XP), 3% legendary (500 + title)
+  - LEGENDARY_TITLES: 5 Italian title options for legendary drops
+- Created server actions in `src/app/actions/lootDropActions.ts`:
+  - `triggerLootDrop(userId)` — counts total appointments, triggers drop on multiples of 10, rolls weighted rarity
+  - `getUserPendingLootDrops(userId)` — fetches unopened drops for modal
+  - `openLootDrop(userId, lootDropId)` — marks opened, awards coins/XP/title, logs transaction
+- Hooked `triggerLootDrop()` into `pipelineActions.ts` after APPUNTAMENTO outcome (fire-and-forget with .catch)
+- Created `LootDropModal` client component with 3-phase UX: idle → shaking → opening → revealed
+  - Shake animation with sparkle particles during suspense
+  - Burst animation on open transition
+  - Rarity-specific styling: common (gray), rare (blue glow), epic (purple glow), legendary (gold glow)
+  - Shows coins/XP/title rewards with animated reveal
+  - Handles multiple pending drops sequentially
+- Added 8 loot-specific CSS keyframes to globals.css: shake, burst, reveal, glow, 3 particle animations
+- Integrated LootDropModal into GDO dashboard page (auto-shows on mount if pending drops exist)
+- File modificati: `src/db/schema.ts`, `src/app/api/migrate-loot-drops/route.ts`, `src/lib/gamificationEngine.ts`, `src/app/actions/lootDropActions.ts`, `src/app/actions/pipelineActions.ts`, `src/components/LootDropModal.tsx`, `src/app/(dashboard)/page.tsx`, `src/app/globals.css`
+- **Learnings per iterazioni future:**
+  - Weighted random: cumulative weight approach — iterate weights, subtract from roll, first to go negative wins
+  - `userId` in `updateLeadOutcome` is optional — use `effectiveUserId` (resolved from param or session) for downstream calls
+  - Loot drop is "created unopened, opened via modal" — separation allows drops to persist if user navigates away
+  - Animation phases use `setTimeout` promises for staged reveal: shake (1.5s) → burst (0.8s) → server call → reveal
+  - Rarity config maps define per-rarity colors/glows/icons for consistent theming across modal states
+  - `GAME_CONSTANTS.LOOT_DROP` is the single source of truth for all loot economy values
 ---
