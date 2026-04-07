@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Trophy, Medal, User, Calendar, Award } from "lucide-react"
+import { Trophy, Medal, User, Calendar, Award, Crown, Flame } from "lucide-react"
 import { getLeaderboard } from "@/app/actions/leaderboardActions"
 
 type LeaderboardItem = {
@@ -73,7 +73,6 @@ export function LeaderboardClient({
     let gapMessage = ""
 
     if (loggedUserItem && loggedUserIndex > 0) {
-        // Someone is above them
         const userAbove = currentData[loggedUserIndex - 1]
         const gap = userAbove.appointmentCount - loggedUserItem.appointmentCount
 
@@ -90,18 +89,22 @@ export function LeaderboardClient({
         gapMessage = "Sei solo in classifica! Ottimo lavoro."
     }
 
+    // Top 3 for podium
+    const top3 = currentData.slice(0, 3)
+    const rest = currentData.slice(3)
+
     return (
         <div className="space-y-6">
             {/* Filters */}
-            <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-sm flex gap-2 max-w-fit pointer-events-auto">
+            <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-xl border border-ash-200/60 shadow-soft flex gap-1.5 max-w-fit">
                 {periods.map(p => (
                     <button
                         key={p.id}
                         onClick={() => handlePeriodChange(p.id as LeaderboardPeriod)}
                         disabled={isPending}
-                        className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${currentPeriod === p.id
-                            ? 'bg-brand-charcoal text-white shadow-md scale-100'
-                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 scale-95 hover:scale-100'
+                        className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${currentPeriod === p.id
+                            ? 'bg-gradient-to-r from-brand-charcoal to-ash-800 text-white shadow-card'
+                            : 'text-ash-500 hover:bg-ash-50 hover:text-ash-800'
                             }`}
                     >
                         {p.label}
@@ -111,25 +114,30 @@ export function LeaderboardClient({
 
             {/* Gamification Banner for Logged User */}
             {loggedUserItem && (
-                <div className={`p-4 rounded-xl border ${loggedUserIndex === 0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200/50' : 'bg-white border-brand-orange/20'} shadow-sm flex items-center justify-between`}>
+                <div className={`p-4 rounded-2xl border animate-fade-in ${loggedUserIndex === 0
+                    ? 'bg-gradient-to-r from-gold-50 via-brand-orange-50 to-gold-50 border-gold-200/60 shadow-glow-gold'
+                    : 'bg-gradient-to-r from-brand-orange-50 to-ash-50 border-brand-orange-200/40 shadow-soft'
+                    } flex items-center justify-between`}>
                     <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-full ${loggedUserIndex === 0 ? 'bg-yellow-100 text-yellow-600' : 'bg-brand-orange/10 text-brand-orange'}`}>
-                            {loggedUserIndex === 0 ? <Award className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
+                        <div className={`p-3 rounded-xl ${loggedUserIndex === 0
+                            ? 'bg-gradient-to-br from-gold-100 to-gold-200 text-gold-600 shadow-glow-gold'
+                            : 'bg-brand-orange-100 text-brand-orange-600'
+                            }`}>
+                            {loggedUserIndex === 0 ? <Crown className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
                         </div>
                         <div>
-                            <p className="font-semibold text-gray-800">
+                            <div className="font-bold text-ash-800">
                                 {loggedUserIndex === 0 ? 'Leader attuale!' : 'Continua così!'}
-                            </p>
-                            <p className="text-sm text-gray-600 mt-0.5">
+                            </div>
+                            <div className="text-sm text-ash-600 mt-0.5">
                                 {gapMessage || "Aggiungi appuntamenti per scalare la classifica."}
-                            </p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Visual Progress relative to the person above (only if not #1) */}
                     {loggedUserItem && loggedUserIndex > 0 && (
                         <div className="hidden md:flex flex-col items-end gap-2">
-                            <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                            <div className="text-xs font-bold text-ash-500 bg-ash-100 px-3 py-1.5 rounded-full border border-ash-200">
                                 Target: {currentData[loggedUserIndex - 1].appointmentCount} appt
                             </div>
                         </div>
@@ -137,92 +145,162 @@ export function LeaderboardClient({
                 </div>
             )}
 
-            {/* The List */}
-            <div className={`bg-white rounded-2xl shadow-xl shadow-brand-charcoal/5 border border-gray-100 overflow-hidden transition-opacity duration-300 ${isPending ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+            {/* Podium Top 3 */}
+            {top3.length > 0 && currentData[0]?.appointmentCount > 0 && (
+                <div className="flex items-end justify-center gap-4 pt-6 pb-2 animate-slide-up">
+                    {/* 2nd Place */}
+                    {top3.length > 1 && (() => {
+                        const user = top3[1]
+                        const isMe = user.userId === loggedUserId
+                        return (
+                            <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}>
+                                <div className="relative mb-2">
+                                    <div className={`h-16 w-16 rounded-full flex items-center justify-center font-bold text-xl shadow-card border-2 border-ash-300 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-ash-100 text-ash-600'}`}>
+                                        {user.displayName?.charAt(0) || 'U'}
+                                    </div>
+                                    <div className="absolute -top-2 -right-1 w-7 h-7 rounded-full bg-gradient-to-br from-ash-300 to-ash-400 flex items-center justify-center text-white text-xs font-bold shadow-soft border-2 border-white">
+                                        2
+                                    </div>
+                                </div>
+                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-ash-700'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
+                                <div className="text-lg font-black text-ash-700 mt-1">{user.appointmentCount}</div>
+                                {/* Pedestal */}
+                                <div className="w-24 h-20 mt-2 bg-gradient-to-t from-ash-200 to-ash-100 rounded-t-xl border border-ash-200 flex items-center justify-center">
+                                    <Medal className="h-6 w-6 text-ash-400" />
+                                </div>
+                            </div>
+                        )
+                    })()}
+
+                    {/* 1st Place */}
+                    {(() => {
+                        const user = top3[0]
+                        const isMe = user.userId === loggedUserId
+                        return (
+                            <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}>
+                                <div className="relative mb-2">
+                                    <div className={`h-20 w-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-elevated border-3 border-gold-400 ring-4 ring-gold-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-gold-100 to-gold-200 text-gold-700'}`}>
+                                        {user.displayName?.charAt(0) || 'U'}
+                                    </div>
+                                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                                        <Crown className="h-7 w-7 text-gold-500 drop-shadow-md" />
+                                    </div>
+                                </div>
+                                <div className={`text-base font-bold ${isMe ? 'text-brand-orange' : 'text-ash-800'} text-center max-w-[120px] truncate`}>{user.displayName}</div>
+                                <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
+                                <div className="text-2xl font-black text-gold-600 mt-1">{user.appointmentCount}</div>
+                                {isMe && <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-brand-orange-200">TU</div>}
+                                {/* Pedestal */}
+                                <div className="w-28 h-28 mt-2 bg-gradient-to-t from-gold-200 via-gold-100 to-gold-50 rounded-t-xl border border-gold-200 flex items-center justify-center shadow-glow-gold">
+                                    <Trophy className="h-8 w-8 text-gold-500" />
+                                </div>
+                            </div>
+                        )
+                    })()}
+
+                    {/* 3rd Place */}
+                    {top3.length > 2 && (() => {
+                        const user = top3[2]
+                        const isMe = user.userId === loggedUserId
+                        return (
+                            <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}>
+                                <div className="relative mb-2">
+                                    <div className={`h-14 w-14 rounded-full flex items-center justify-center font-bold text-lg shadow-card border-2 border-brand-orange-300 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-brand-orange-50 text-brand-orange-600'}`}>
+                                        {user.displayName?.charAt(0) || 'U'}
+                                    </div>
+                                    <div className="absolute -top-2 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-brand-orange-300 to-brand-orange-500 flex items-center justify-center text-white text-xs font-bold shadow-soft border-2 border-white">
+                                        3
+                                    </div>
+                                </div>
+                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-ash-700'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                <div className="text-xs text-ash-500 mt-0.5">GDO {user.gdoCode || 'N/A'}</div>
+                                <div className="text-lg font-black text-ash-700 mt-1">{user.appointmentCount}</div>
+                                {/* Pedestal */}
+                                <div className="w-20 h-16 mt-2 bg-gradient-to-t from-brand-orange-100 to-brand-orange-50 rounded-t-xl border border-brand-orange-200 flex items-center justify-center">
+                                    <Medal className="h-5 w-5 text-brand-orange-400" />
+                                </div>
+                            </div>
+                        )
+                    })()}
+                </div>
+            )}
+
+            {/* The Rest of the List (rank 4+) */}
+            <div className={`bg-white rounded-2xl shadow-card border border-ash-200/60 overflow-hidden transition-opacity duration-300 ${isPending ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                 {currentData.length === 0 ? (
-                    <div className="p-16 text-center text-gray-400">
-                        <Trophy className="h-12 w-12 mx-auto opacity-20 mb-4" />
-                        <p>Nessun appuntamento in questo periodo.</p>
+                    <div className="p-16 text-center text-ash-400 animate-fade-in">
+                        <div className="w-16 h-16 rounded-2xl bg-ash-100 flex items-center justify-center mx-auto mb-4">
+                            <Trophy className="h-8 w-8 text-ash-300" />
+                        </div>
+                        <div>Nessun appuntamento in questo periodo.</div>
                     </div>
                 ) : (
-                    <ul className="divide-y divide-gray-50">
-                        {currentData.map((user, index) => {
+                    <ul className="divide-y divide-ash-100">
+                        {rest.map((user, index) => {
                             const isMe = user.userId === loggedUserId
-
-                            // Medals for top 3
-                            let rankIcon = null
-                            if (index === 0) rankIcon = <Medal className="h-6 w-6 text-yellow-500 drop-shadow-sm" />
-                            else if (index === 1) rankIcon = <Medal className="h-6 w-6 text-gray-400 drop-shadow-sm" />
-                            else if (index === 2) rankIcon = <Medal className="h-6 w-6 text-amber-600 drop-shadow-sm" />
-                            else rankIcon = <span className="text-lg font-bold text-gray-300 w-6 text-center">#{user.rank}</span>
+                            const globalIdx = index + 3
 
                             return (
                                 <li
                                     key={user.userId}
-                                    className={`relative transition-all duration-300 hover:bg-gray-50 ${isMe ? 'bg-orange-50/30' : ''}`}
+                                    className={`relative transition-all duration-300 hover:bg-brand-orange-50/20 animate-fade-in ${isMe ? 'bg-brand-orange-50/30' : ''}`}
+                                    style={{ animationDelay: `${(index + 3) * 50}ms`, animationFillMode: 'backwards' }}
                                 >
                                     {isMe && (
-                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-orange shadow-[0_0_10px_rgba(255,107,0,0.5)] z-10" />
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-brand-orange to-ember-400 shadow-glow-orange z-10" />
                                     )}
 
-                                    <div className="px-6 py-5 flex items-center justify-between">
-                                        <div className="flex items-center gap-5">
+                                    <div className="px-6 py-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
                                             {/* Rank */}
-                                            <div className="w-10 flex justify-center items-center">
-                                                {rankIcon}
+                                            <div className="w-8 flex justify-center items-center">
+                                                <div className="text-sm font-bold text-ash-400">#{user.rank}</div>
                                             </div>
 
                                             {/* Avatar */}
                                             <div className="relative">
-                                                <div className={`h-12 w-12 rounded-full flex items-center justify-center font-bold text-lg shadow-sm ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm shadow-soft ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-ash-100 text-ash-600 border border-ash-200'
                                                     }`}>
                                                     {user.displayName?.charAt(0) || 'U'}
                                                 </div>
-                                                {/* Mini rank badge on avatar if #1 */}
-                                                {index === 0 && (
-                                                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                                                        <div className="bg-yellow-500 h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white">
-                                                            1
-                                                        </div>
-                                                    </div>
-                                                )}
                                             </div>
 
                                             {/* INFO */}
                                             <div>
                                                 <div className="flex items-center gap-2">
-                                                    <p className={`font-semibold text-lg ${isMe ? 'text-brand-orange' : 'text-gray-800'}`}>
+                                                    <div className={`font-semibold ${isMe ? 'text-brand-orange-700' : 'text-ash-800'}`}>
                                                         {user.displayName}
-                                                    </p>
+                                                    </div>
                                                     {isMe && (
-                                                        <span className="bg-brand-orange/10 text-brand-orange text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                                        <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-brand-orange-200">
                                                             TU
-                                                        </span>
+                                                        </div>
                                                     )}
                                                 </div>
-                                                <p className="text-gray-500 text-sm flex items-center gap-1.5 mt-0.5">
-                                                    <User className="h-3.5 w-3.5" /> GDO {user.gdoCode || 'N/A'}
-                                                </p>
+                                                <div className="text-ash-500 text-xs flex items-center gap-1.5 mt-0.5">
+                                                    <User className="h-3 w-3" /> GDO {user.gdoCode || 'N/A'}
+                                                </div>
                                             </div>
                                         </div>
 
                                         {/* SCORE */}
-                                        <div className="flex items-center gap-6">
+                                        <div className="flex items-center gap-4">
                                             <div className="text-right">
-                                                <div className="text-3xl font-bold tracking-tighter text-gray-800 flex items-center justify-end gap-1">
+                                                <div className="text-2xl font-black tracking-tighter text-ash-800">
                                                     {user.appointmentCount}
                                                 </div>
-                                                <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mt-1">
+                                                <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-0.5">
                                                     Appuntamenti
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* The mini progress bar line at the bottom of each item relative to the top score */}
-                                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gray-50">
+                                    {/* Progress bar relative to top score */}
+                                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-ash-50">
                                         <div
-                                            className={`h-full ${index === 0 ? 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]' : isMe ? 'bg-brand-orange/50' : 'bg-gray-200'}`}
+                                            className={`h-full ${isMe ? 'bg-gradient-to-r from-brand-orange to-ember-400' : 'bg-ash-200'}`}
                                             style={{
                                                 width: `${currentData[0].appointmentCount > 0 ? Math.max(5, (user.appointmentCount / currentData[0].appointmentCount) * 100) : 0}%`,
                                                 transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)'

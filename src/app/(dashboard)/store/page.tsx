@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { ShopClient } from "@/components/ShopClient"
+import { ShoppingBag } from "lucide-react"
 
 export default async function StorePage() {
     const supabase = await createClient();
@@ -14,13 +15,18 @@ export default async function StorePage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">
-                        Fenice Store & Inventario
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Sblocca personalizzazioni per il tuo profilo usando i Fenice Coin guadagnati.
-                    </p>
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-gold-100 to-brand-orange-100 border border-gold-200 shadow-soft">
+                        <ShoppingBag className="h-5 w-5 text-gold-600" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight text-ash-800">
+                            Fenice Store & Inventario
+                        </h1>
+                        <div className="text-sm text-ash-500 mt-0.5">
+                            Sblocca personalizzazioni per il tuo profilo usando i Fenice Coin guadagnati.
+                        </div>
+                    </div>
                 </div>
             </div>
 

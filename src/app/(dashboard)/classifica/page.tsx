@@ -24,23 +24,24 @@ export default async function ClassificaPage({
     const leaderboardData = await getLeaderboard(period)
 
     return (
-        <div className="flex-1 bg-gray-50 flex flex-col min-h-screen">
+        <div className="flex-1 bg-gradient-to-b from-ash-50/50 to-white flex flex-col min-h-screen">
             {/* Header / Hero Section */}
-            <div className="bg-brand-charcoal text-white pt-8 pb-20 px-8 relative overflow-hidden">
-                {/* Decorative background element */}
-                <div className="absolute top-0 right-0 w-96 h-96 bg-brand-orange/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4"></div>
+            <div className="bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/50 text-white pt-8 pb-20 px-8 relative overflow-hidden">
+                {/* Decorative fire elements */}
+                <div className="absolute top-0 right-0 w-96 h-96 bg-ember-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand-orange/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4 pointer-events-none"></div>
+                <div className="absolute top-0 left-1/2 w-80 h-40 bg-gold-500/5 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
 
                 <div className="flex items-center gap-3 relative z-10">
-                    <div className="p-3 bg-gradient-to-br from-brand-orange/20 to-brand-orange/5 rounded-xl border border-brand-orange/20 shadow-lg">
-                        <Trophy className="h-6 w-6 text-brand-orange drop-shadow-sm" />
+                    <div className="p-3 bg-gradient-to-br from-gold-400/20 to-brand-orange/10 rounded-xl border border-gold-400/20 shadow-glow-gold">
+                        <Trophy className="h-6 w-6 text-gold-400 drop-shadow-sm" />
                     </div>
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">Classifica GDO</h1>
-                        <p className="text-gray-400 mt-1 flex items-center gap-2">
-                            <span>Sfida i tuoi colleghi e raggiungi la vetta</span>
-                            <Star className="h-3 w-3 text-yellow-500" />
-                        </p>
+                        <div className="text-ash-400 mt-1 flex items-center gap-2">
+                            <div>Sfida i tuoi colleghi e raggiungi la vetta</div>
+                            <Star className="h-3 w-3 text-gold-400" />
+                        </div>
                     </div>
                 </div>
             </div>
