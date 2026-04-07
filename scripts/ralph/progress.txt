@@ -155,3 +155,21 @@ Started: 2026-04-07
   - lead.funnel è text, può essere null — sempre wrappare con condizionale
   - La vista card (ConfermeBoardRow) e la vista tabella (ConfermeBoard) sono due rendering separati da aggiornare entrambi
 ---
+
+## 2026-04-07 - F3-017
+- Snoozed leads ora visibili anche nella vista principale (Pomeriggio/Mattina), non solo nel pannello laterale Snooze
+- Rimossa la filter `!confSnoozeAt` da normalTargetLeads in ConfermeBoard.tsx renderSelectedHourLeads()
+- Badge snooze (icona orologio + orario) già presente in ConfermeBoardRow — ora visibile nella vista principale
+- Creato server action `undoConfermeNoAnswer` in confermeActions.ts:
+  - Trova l'ultimo campo NR compilato (confCall3At → confCall2At → confCall1At) e lo annulla
+  - Elimina l'ultimo evento `conferme_no_answer` dal leadEvents
+  - Crea un evento `conferme_nr_undone` per audit trail
+  - Usa optimistic locking (version check)
+- Aggiunto bottone "Annulla NR" (con icona Undo2) in ConfermeBoardRow.tsx, visibile quando callsMade > 0
+- Aggiunto bottone "Annulla NR" in ConfermeDrawer.tsx nella barra azioni rapide, accanto al tempo ultimo NR
+- File modificati: src/app/actions/confermeActions.ts, src/components/ConfermeBoard.tsx, src/components/ConfermeBoardRow.tsx, src/components/ConfermeDrawer.tsx
+- **Learnings per iterazioni future:**
+  - I snoozed leads erano separati dalla vista principale tramite `filter(l => !l.lead.confSnoozeAt)` in renderSelectedHourLeads() — ora rimosso
+  - undoConfermeNoAnswer segue il pattern inverso di recordConfermeNoAnswer: confCall3At → 2At → 1At
+  - Il badge snooze in ConfermeBoardRow si attiva automaticamente se confSnoozeAt esiste — non serve logica aggiuntiva per mostrarlo nella vista principale
+---

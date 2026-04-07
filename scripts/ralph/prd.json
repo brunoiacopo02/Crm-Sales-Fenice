@@ -126,7 +126,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Le chiamate NR sono tracciate in callLogs e nel campo confCall1At/confCall2At/confCall3At."
     },
     {
