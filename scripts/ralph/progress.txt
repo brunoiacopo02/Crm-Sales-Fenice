@@ -288,3 +288,40 @@ Started: 2026-04-07
   - font-display registered as `"Sora", var(--font-geist-sans)` for graceful fallback
   - Existing components don't need migration — new tokens are opt-in for F2-015 through F2-020
 ---
+
+## 2026-04-07 - F2-015
+- **Feature**: UI: Redesign Sidebar e Topbar
+- **What was done:**
+  - Created `SidebarProvider` context for mobile sidebar toggle state sharing between Sidebar and Topbar
+  - **Sidebar redesign:**
+    - Dark gradient background: `bg-gradient-to-b from-ash-800 via-brand-charcoal to-ash-900`
+    - Logo with gradient orange icon and `shadow-glow-orange` effect
+    - Nav items: `group` hover with icon color transition to `brand-orange-300`, active state with inset left border (`shadow-[inset_3px_0_0_var(--color-brand-orange)]`) and `bg-brand-orange/15`
+    - Gradient dividers between sections (`via-white/10`)
+    - Sign out button with `hover:text-ember-300` danger hint
+    - Badge uses `ember-500` with `shadow-glow-ember`
+    - Mobile: fixed overlay with backdrop blur, slide-in/out with `transition-transform duration-300`, close on route change
+  - **Topbar redesign:**
+    - Glass-like header: `bg-white/80 backdrop-blur-md border-ash-200/60 shadow-soft`
+    - Mobile hamburger button (`Menu` icon) toggles sidebar via context
+    - Search input: `rounded-lg`, `focus:ring-2 focus:ring-brand-orange/30`, `bg-ash-50/50`
+    - Search dropdown: `rounded-xl shadow-elevated animate-fade-in`, replaced `<span>` with `<div>` in results for hydration safety
+    - Notification bell: `hover:bg-ash-100 rounded-lg` with `ember-500` badge, dropdown uses `rounded-xl shadow-elevated animate-fade-in`
+    - Wallet coins: gold gradient (`from-gold-50 to-brand-orange-50`), `text-gold-700`, `border-gold-200`
+    - Avatar: gradient (`from-brand-orange to-brand-orange-500`), `ring-2 ring-brand-orange/20`, green online status dot
+    - Live toast: `border-gold-400`, `shadow-elevated`, `animate-slide-in-right`
+    - Notification items use `<div>` instead of `<p>` for hydration safety
+    - User name hidden on small screens (`hidden sm:block`)
+  - Updated dashboard layout to wrap with `SidebarProvider`
+- **Files modified:**
+  - `src/components/providers/SidebarProvider.tsx` — new context provider
+  - `src/components/Sidebar.tsx` — full redesign
+  - `src/components/Topbar.tsx` — full redesign
+  - `src/app/(dashboard)/layout.tsx` — added SidebarProvider wrapper
+- **Learnings per iterazioni future:**
+  - `fixed` + `lg:relative` pattern works for mobile overlay / desktop in-flow sidebar — fixed elements don't participate in flex layout
+  - `shadow-[inset_3px_0_0_var(--color-brand-orange)]` creates a left accent bar without extra DOM elements
+  - Sidebar close on `pathname` change prevents stale mobile overlay after navigation
+  - All `<p>` and `<span>` containing interactive elements replaced with `<div>` to prevent hydration WSOD
+  - `backdrop-blur-md` on header creates a glass effect that works with theme backgrounds
+---

@@ -231,7 +231,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "Usare Stitch per prototipare, poi implementare in Tailwind."
     },
     {
