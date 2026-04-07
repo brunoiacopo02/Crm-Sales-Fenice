@@ -17,6 +17,7 @@ Started: 2026-04-07
 - gamificationEngine.ts imports db at top level — client components MUST NOT import from it; use dynamic import(`await import()`) inside async functions or inline constants
 - `GAME_CONSTANTS.SEASONAL_EVENT.THEME_CONFIG` for theme metadata (icon, color, label per theme)
 - Design system premium gia' implementato in Run 1 (F2-014): usare i nuovi token/colori per coerenza
+- Celebration system: `triggerCelebration('fire' | 'confetti')` from `src/lib/animationUtils.ts` — dispatches custom event, CelebrationOverlay renders particles. Toggle via localStorage `crm-fenice-animations`
 - ConfermeDrawer: usare `salespersonUserId` (UUID) per init, mai `salespersonAssigned` (display name)
 - FreeBusy check: SEMPRE prima di db.update(), mai dopo
 - Sidebar e Topbar gia' redesignate in Run 1: seguire stesso stile per nuovi componenti
@@ -265,4 +266,29 @@ Started: 2026-04-07
   - `getActiveEventMultipliers()` is a pure async function (not server action) in `src/lib/` — importable from server actions and lib files
   - SeasonalEventBanner uses inline THEME_LABELS constant instead of importing GAME_CONSTANTS to avoid pulling pg into client bundle
   - Event banner is self-hiding (renders null) when no event is active — no conditional rendering needed in parent
+---
+
+## 2026-04-07 - F2-031
+- Created pure CSS/JS celebration animation system with no external libraries
+- Added 7 new CSS keyframes to globals.css: confetti-fall, fire-rise, streak-shake, evolution-pulse, evolution-ring, loot-glow-gold, loot-glow-purple
+- Created `src/lib/animationUtils.ts` with utility functions: getAnimationsEnabled(), setAnimationsEnabled(), triggerCelebration()
+- Created `CelebrationOverlay` component: global particle system for fire (level-up/quest) and confetti (achievement/loot) effects
+  - Listens for custom `celebration` events dispatched by components
+  - Listens for `realtime_update` events to auto-trigger confetti on achievement_unlocked notifications
+  - Respects animation toggle preference and OS prefers-reduced-motion
+- Created `AnimationToggle` component: toggle switch in profile settings (persisted in localStorage)
+- Integrated fire particles trigger in QuestPanel on quest claim
+- Integrated confetti trigger in LootDropModal on epic/legendary loot reveal
+- Enhanced loot glow: epic now uses pulsing purple glow (loot-glow-purple), legendary uses pulsing gold glow (loot-glow-gold)
+- Added streak shake animation to StreakCounter when streak is at risk (!isActiveToday && streakCount > 0)
+- Added Fenice evolution transition in ProfileClient: detects stage change via localStorage, triggers evolution-pulse and evolution-ring animations + fire celebration
+- Added animation settings section at bottom of profile page with AnimationToggle
+- File modificati: `src/app/globals.css`, `src/lib/animationUtils.ts` (new), `src/components/CelebrationOverlay.tsx` (new), `src/components/AnimationToggle.tsx` (new), `src/app/(dashboard)/page.tsx`, `src/components/QuestPanel.tsx`, `src/components/LootDropModal.tsx`, `src/components/StreakCounter.tsx`, `src/app/(dashboard)/profilo/ProfileClient.tsx`
+- **Learnings per iterazioni future:**
+  - `window.dispatchEvent(new CustomEvent('celebration', { detail: { type } }))` is the cleanest cross-component trigger pattern — no context provider needed
+  - localStorage animation toggle (`crm-fenice-animations`) + OS `prefers-reduced-motion` check gives full accessibility support
+  - CSS keyframes with inline `animation` style (duration/delay via template literal) is more flexible than Tailwind arbitrary values for generated particles
+  - `useRealtimeNotifications` already dispatches `realtime_update` events (line 65) — CelebrationOverlay hooks into these for automatic achievement celebration
+  - Fenice evolution detection: compare `localStorage('crm-fenice-last-stage')` with current `stage.name` on mount — simple and reliable
+  - `activeRef` in CelebrationOverlay prevents overlapping celebrations
 ---
