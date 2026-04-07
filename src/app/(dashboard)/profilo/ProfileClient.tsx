@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings
+    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
@@ -12,10 +12,42 @@ import { CelebrationOverlay } from "@/components/CelebrationOverlay"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import type { UnlockedTitle } from "@/app/actions/titleActions"
 
-export default function ProfileClient({ profileData, achievements = [], titleData }: {
+type LifetimeStats = {
+    totalCalls: number;
+    totalAppointments: number;
+    level: number;
+    totalXp: number;
+    currentStreak: number;
+    totalCoins: number;
+}
+
+type StreakInfo = {
+    streakCount: number;
+    lastStreakDate: string | null;
+    isActiveToday: boolean;
+    multiplier: number;
+    tierLabel: string;
+}
+
+type QuestItem = {
+    progressId: string;
+    title: string;
+    description: string;
+    type: string;
+    currentValue: number;
+    targetValue: number;
+    completed: boolean;
+    rewardXp: number;
+    rewardCoins: number;
+}
+
+export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests }: {
     profileData: any;
     achievements?: any[];
     titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
+    lifetimeStats?: LifetimeStats;
+    streakInfo?: StreakInfo;
+    activeQuests?: { daily: QuestItem[]; weekly: QuestItem[] };
 }) {
 
     const {
@@ -102,7 +134,26 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     </div>
 
                     <h2 className="text-2xl font-bold text-white tracking-tight z-10">{stage.name}</h2>
-                    <div className="text-sm font-medium text-ember-300/80 mb-6 z-10">Stadio Evolutivo</div>
+                    <div className="text-sm font-medium text-ember-300/80 mb-4 z-10">Stadio Evolutivo</div>
+
+                    {/* Streak Counter in Profile */}
+                    {streakInfo && (
+                        <div className="w-full bg-white/5 border border-white/10 rounded-xl p-3 mb-4 z-10">
+                            <div className="flex items-center justify-center gap-2 mb-1">
+                                <Flame className={`h-5 w-5 ${streakInfo.streakCount >= 7 ? 'text-ember-400 animate-glow-pulse' : streakInfo.streakCount > 0 ? 'text-brand-orange-400' : 'text-ash-500'}`} />
+                                <span className="text-2xl font-black text-white">{streakInfo.streakCount}</span>
+                                <span className="text-xs font-bold text-ash-400 uppercase">giorni streak</span>
+                            </div>
+                            {streakInfo.multiplier > 1 && (
+                                <div className="text-center">
+                                    <span className="text-[10px] font-bold bg-gradient-to-r from-ember-500 to-brand-orange px-2 py-0.5 rounded-full text-white">
+                                        x{streakInfo.multiplier} MULTIPLIER
+                                    </span>
+                                </div>
+                            )}
+                            <div className="text-[10px] text-ash-500 text-center mt-1">{streakInfo.tierLabel}</div>
+                        </div>
+                    )}
 
                     {/* XP Bar */}
                     <div className="w-full space-y-2 z-10">
@@ -179,6 +230,111 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 </div>
 
             </div>
+
+            {/* LIFETIME STATS */}
+            {lifetimeStats && (
+                <div className="border border-ash-200/60 bg-white rounded-2xl shadow-card p-6 animate-fade-in" style={{ animationDelay: '120ms', animationFillMode: 'backwards' }}>
+                    <h3 className="text-lg font-bold text-ash-800 tracking-tight flex items-center gap-2 mb-6">
+                        <div className="p-2 rounded-xl bg-brand-orange-100 border border-brand-orange-200">
+                            <TrendingUp className="w-5 h-5 text-brand-orange-500" />
+                        </div>
+                        Statistiche Lifetime
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div className="bg-gradient-to-br from-ash-50 to-white border border-ash-200/60 rounded-xl p-4 text-center">
+                            <Phone className="h-5 w-5 text-blue-500 mx-auto mb-2" />
+                            <div className="text-2xl font-black text-ash-800">{lifetimeStats.totalCalls.toLocaleString()}</div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-1">Chiamate</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-ash-50 to-white border border-ash-200/60 rounded-xl p-4 text-center">
+                            <CalendarDays className="h-5 w-5 text-emerald-500 mx-auto mb-2" />
+                            <div className="text-2xl font-black text-ash-800">{lifetimeStats.totalAppointments.toLocaleString()}</div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-1">Appuntamenti</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-ash-50 to-white border border-ash-200/60 rounded-xl p-4 text-center">
+                            <Zap className="h-5 w-5 text-gold-500 mx-auto mb-2" />
+                            <div className="text-2xl font-black text-ash-800">{lifetimeStats.totalXp.toLocaleString()}</div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-1">XP Totale</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-ash-50 to-white border border-ash-200/60 rounded-xl p-4 text-center">
+                            <Flame className="h-5 w-5 text-ember-500 mx-auto mb-2" />
+                            <div className="text-2xl font-black text-ash-800">{lifetimeStats.level}</div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-1">Livello</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-ash-50 to-white border border-ash-200/60 rounded-xl p-4 text-center">
+                            <Flame className="h-5 w-5 text-brand-orange-500 mx-auto mb-2" />
+                            <div className="text-2xl font-black text-ash-800">{lifetimeStats.currentStreak}</div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-1">Streak</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-ash-50 to-white border border-ash-200/60 rounded-xl p-4 text-center">
+                            <Coins className="h-5 w-5 text-gold-500 mx-auto mb-2" />
+                            <div className="text-2xl font-black text-ash-800">{lifetimeStats.totalCoins.toLocaleString()}</div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-1">Coins</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ACTIVE QUESTS SUMMARY */}
+            {activeQuests && (activeQuests.daily.length > 0 || activeQuests.weekly.length > 0) && (
+                <div className="border border-ash-200/60 bg-white rounded-2xl shadow-card p-6 animate-fade-in" style={{ animationDelay: '150ms', animationFillMode: 'backwards' }}>
+                    <h3 className="text-lg font-bold text-ash-800 tracking-tight flex items-center gap-2 mb-6">
+                        <div className="p-2 rounded-xl bg-ember-100 border border-ember-200">
+                            <Award className="w-5 h-5 text-ember-500" />
+                        </div>
+                        Quest Attive
+                        <span className="text-xs font-bold text-ash-400 ml-auto">
+                            {activeQuests.daily.filter(q => q.completed).length}/{activeQuests.daily.length} giornaliere · {activeQuests.weekly.filter(q => q.completed).length}/{activeQuests.weekly.length} settimanali
+                        </span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {[...activeQuests.daily, ...activeQuests.weekly].map((quest) => {
+                            const progress = quest.targetValue > 0 ? Math.min((quest.currentValue / quest.targetValue) * 100, 100) : 0;
+                            return (
+                                <div
+                                    key={quest.progressId}
+                                    className={`border rounded-xl p-3 flex items-center gap-3 ${quest.completed
+                                        ? 'border-gold-200/60 bg-gold-50/50'
+                                        : 'border-ash-200/60 bg-ash-50/30'
+                                        }`}
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`text-sm font-semibold truncate ${quest.completed ? 'text-gold-700' : 'text-ash-800'}`}>
+                                                {quest.title}
+                                            </div>
+                                            <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${quest.type === 'daily'
+                                                ? 'bg-blue-100 text-blue-600 border border-blue-200'
+                                                : 'bg-purple-100 text-purple-600 border border-purple-200'
+                                                }`}>
+                                                {quest.type === 'daily' ? 'D' : 'S'}
+                                            </div>
+                                        </div>
+                                        <div className="mt-1.5 flex items-center gap-2">
+                                            <div className="flex-1 h-1.5 bg-ash-200 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full transition-all duration-700 ${quest.completed
+                                                        ? 'bg-gradient-to-r from-gold-400 to-gold-500'
+                                                        : 'bg-gradient-to-r from-ember-400 to-brand-orange'
+                                                        }`}
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-[10px] font-bold text-ash-500 whitespace-nowrap">
+                                                {quest.currentValue}/{quest.targetValue}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                        <div className="text-[10px] font-bold text-ember-500">{quest.rewardXp} XP</div>
+                                        <div className="text-[10px] font-bold text-gold-500">{quest.rewardCoins} <Coins className="inline h-2.5 w-2.5" /></div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* ROADMAP / BATTLE PASS */}
             <div className="border border-ash-200/60 bg-white rounded-2xl shadow-card p-6 overflow-hidden animate-fade-in" style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}>

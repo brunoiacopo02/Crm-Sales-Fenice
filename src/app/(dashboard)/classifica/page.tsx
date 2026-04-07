@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { Trophy, Medal, MapPin, Calendar, Clock, Star } from "lucide-react"
 import { LeaderboardClient } from "./LeaderboardClient"
-import { getLeaderboard, LeaderboardPeriod } from "@/app/actions/leaderboardActions"
+import { getLeaderboard, getPlayerOfTheWeek, LeaderboardPeriod } from "@/app/actions/leaderboardActions"
 import { TeamGoalBanner } from "@/components/TeamGoalBanner"
 
 export default async function ClassificaPage({
@@ -21,7 +21,10 @@ export default async function ClassificaPage({
     const loggedUserId = session?.user?.id
 
     const period = (searchParams.period as LeaderboardPeriod) || 'today'
-    const leaderboardData = await getLeaderboard(period)
+    const [leaderboardData, playerOfWeek] = await Promise.all([
+        getLeaderboard(period),
+        getPlayerOfTheWeek(),
+    ])
 
     return (
         <div className="flex-1 bg-gradient-to-b from-ash-50/50 to-white flex flex-col min-h-screen">
@@ -49,7 +52,12 @@ export default async function ClassificaPage({
             {/* Main Content Area */}
             <div className="flex-1 px-8 -mt-10 pb-12 max-w-5xl mx-auto w-full z-10 relative space-y-6">
                 <TeamGoalBanner />
-                <LeaderboardClient initialData={leaderboardData} initialPeriod={period} loggedUserId={loggedUserId} />
+                <LeaderboardClient
+                    initialData={leaderboardData}
+                    initialPeriod={period}
+                    loggedUserId={loggedUserId}
+                    playerOfWeek={playerOfWeek}
+                />
             </div>
         </div>
     )

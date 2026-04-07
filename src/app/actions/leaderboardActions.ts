@@ -1,12 +1,13 @@
 "use server"
 
 import { db } from "@/db"
-import { users, leads, notifications, shopItems } from "@/db/schema"
-import { eq, and, ne, gte, lte, desc, desc as drizzleDesc } from "drizzle-orm"
+import { users, leads, notifications, shopItems, callLogs } from "@/db/schema"
+import { eq, and, ne, gte, lte, desc, desc as drizzleDesc, count, isNotNull } from "drizzle-orm"
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
 import crypto from "crypto"
 
 export type LeaderboardPeriod = 'today' | 'week' | 'month'
+export type LeaderboardMetric = 'appointments' | 'calls' | 'xp' | 'streak'
 
 export async function getLeaderboard(period: LeaderboardPeriod) {
     const now = new Date()
@@ -178,5 +179,156 @@ export async function checkLeaderboardOvertake(userId: string) {
                 })
             }
         }
+    }
+}
+
+// Multi-metric leaderboard: supports appointments, calls, xp, streak
+export async function getMultiMetricLeaderboard(period: LeaderboardPeriod, metric: LeaderboardMetric) {
+    if (metric === 'appointments') {
+        return getLeaderboard(period);
+    }
+
+    const now = new Date()
+    let startDate: Date
+    let endDate: Date
+
+    if (period === 'today') {
+        startDate = startOfDay(now)
+        endDate = endOfDay(now)
+    } else if (period === 'week') {
+        startDate = startOfWeek(now, { weekStartsOn: 1 })
+        endDate = endOfWeek(now, { weekStartsOn: 1 })
+    } else {
+        startDate = startOfMonth(now)
+        endDate = endOfMonth(now)
+    }
+
+    const allGdos = await db.select().from(users).where(eq(users.role, 'GDO'))
+    const allSkins = await db.select().from(shopItems)
+    const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
+
+    if (metric === 'calls') {
+        // Count calls in the period per user
+        const periodCalls = await db.select()
+            .from(callLogs)
+            .where(
+                and(
+                    gte(callLogs.createdAt, startDate),
+                    lte(callLogs.createdAt, endDate)
+                )
+            )
+
+        const callCounts = new Map<string, number>()
+        for (const call of periodCalls) {
+            if (call.userId) {
+                callCounts.set(call.userId, (callCounts.get(call.userId) || 0) + 1)
+            }
+        }
+
+        const leaderboard = allGdos.map(gdo => ({
+            userId: gdo.id,
+            gdoCode: gdo.gdoCode,
+            displayName: gdo.displayName || gdo.name || `GDO ${gdo.gdoCode || '?'}`,
+            avatarUrl: gdo.avatarUrl,
+            metricValue: callCounts.get(gdo.id) || 0,
+            metricLabel: 'Chiamate',
+            equippedSkinCss: gdo.equippedItemId ? (skinMap.get(gdo.equippedItemId) || null) : null,
+            activeTitle: gdo.activeTitle || null,
+            appointmentCount: callCounts.get(gdo.id) || 0,
+            firstApptTime: Infinity,
+        }))
+
+        leaderboard.sort((a, b) => b.metricValue - a.metricValue)
+        return leaderboard.map((item, index) => ({ ...item, rank: index + 1 }))
+    }
+
+    if (metric === 'xp') {
+        // XP is a lifetime stat from users.experience — no date filter
+        const leaderboard = allGdos.map(gdo => ({
+            userId: gdo.id,
+            gdoCode: gdo.gdoCode,
+            displayName: gdo.displayName || gdo.name || `GDO ${gdo.gdoCode || '?'}`,
+            avatarUrl: gdo.avatarUrl,
+            metricValue: gdo.experience || 0,
+            metricLabel: 'XP',
+            equippedSkinCss: gdo.equippedItemId ? (skinMap.get(gdo.equippedItemId) || null) : null,
+            activeTitle: gdo.activeTitle || null,
+            appointmentCount: gdo.experience || 0,
+            firstApptTime: Infinity,
+        }))
+
+        leaderboard.sort((a, b) => b.metricValue - a.metricValue)
+        return leaderboard.map((item, index) => ({ ...item, rank: index + 1 }))
+    }
+
+    if (metric === 'streak') {
+        // Streak is a current-state stat from users.streakCount — no date filter
+        const leaderboard = allGdos.map(gdo => ({
+            userId: gdo.id,
+            gdoCode: gdo.gdoCode,
+            displayName: gdo.displayName || gdo.name || `GDO ${gdo.gdoCode || '?'}`,
+            avatarUrl: gdo.avatarUrl,
+            metricValue: gdo.streakCount || 0,
+            metricLabel: 'Giorni Streak',
+            equippedSkinCss: gdo.equippedItemId ? (skinMap.get(gdo.equippedItemId) || null) : null,
+            activeTitle: gdo.activeTitle || null,
+            appointmentCount: gdo.streakCount || 0,
+            firstApptTime: Infinity,
+        }))
+
+        leaderboard.sort((a, b) => b.metricValue - a.metricValue)
+        return leaderboard.map((item, index) => ({ ...item, rank: index + 1 }))
+    }
+
+    return []
+}
+
+// Player of the Week: auto-selects the top GDO for this week by appointments
+export async function getPlayerOfTheWeek() {
+    const leaderboard = await getLeaderboard('week')
+    if (leaderboard.length === 0 || leaderboard[0].appointmentCount === 0) {
+        return null
+    }
+
+    const top = leaderboard[0]
+    return {
+        userId: top.userId,
+        displayName: top.displayName,
+        gdoCode: top.gdoCode,
+        avatarUrl: top.avatarUrl,
+        appointmentCount: top.appointmentCount,
+        equippedSkinCss: top.equippedSkinCss,
+        activeTitle: top.activeTitle,
+    }
+}
+
+// Get lifetime stats for a user (profile page)
+export async function getUserLifetimeStats(userId: string) {
+    const [callResult, apptResult, userRow] = await Promise.all([
+        db.select({ value: count() })
+            .from(callLogs)
+            .where(eq(callLogs.userId, userId)),
+        db.select({ value: count() })
+            .from(leads)
+            .where(and(
+                eq(leads.assignedToId, userId),
+                isNotNull(leads.appointmentCreatedAt)
+            )),
+        db.select({
+            level: users.level,
+            experience: users.experience,
+            streakCount: users.streakCount,
+            coins: users.coins,
+            walletCoins: users.walletCoins,
+        }).from(users).where(eq(users.id, userId)),
+    ])
+
+    return {
+        totalCalls: callResult[0]?.value ?? 0,
+        totalAppointments: apptResult[0]?.value ?? 0,
+        level: userRow[0]?.level ?? 1,
+        totalXp: userRow[0]?.experience ?? 0,
+        currentStreak: userRow[0]?.streakCount ?? 0,
+        totalCoins: (userRow[0]?.coins ?? 0) + (userRow[0]?.walletCoins ?? 0),
     }
 }
