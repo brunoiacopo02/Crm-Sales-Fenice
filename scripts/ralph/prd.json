@@ -194,7 +194,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "Usare skill ui-design-system per pattern componenti."
     },
     {

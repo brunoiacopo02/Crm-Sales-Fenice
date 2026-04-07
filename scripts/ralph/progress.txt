@@ -292,3 +292,26 @@ Started: 2026-04-07
   - Fenice evolution detection: compare `localStorage('crm-fenice-last-stage')` with current `stage.name` on mount — simple and reliable
   - `activeRef` in CelebrationOverlay prevents overlapping celebrations
 ---
+
+## 2026-04-07 - F2-032
+- Redesigned profile RPG page with new sections: streak counter with flame inside avatar card, lifetime statistics (6-metric grid), active quests summary with progress bars
+- Redesigned leaderboard with multi-metric tabs: appointments (existing), calls, XP, streak
+- Added `getMultiMetricLeaderboard(period, metric)` server action supporting 4 metrics
+- Added `getPlayerOfTheWeek()` server action — auto-selects top weekly GDO by appointments
+- Added `getUserLifetimeStats(userId)` server action — aggregates total calls, appointments, XP, level, streak, coins
+- Player of the Week golden banner displays at top of leaderboard when viewing weekly period
+- Ranking change animation: tracks previous ranks via useRef, shows green up/red down arrows on rank changes with 3s auto-clear
+- Metric tabs show icon + label on desktop, icon-only on mobile for responsive design
+- Profile page now fetches streak info, active quests, and lifetime stats in parallel via Promise.all (6 concurrent fetches)
+- Enhanced podium effects: gold/silver/bronze pedestals with ring effects and gradient borders
+- All metric values show dynamic unit labels (Appuntamenti/Chiamate/XP/Giorni)
+- File modificati: `src/app/actions/leaderboardActions.ts`, `src/app/(dashboard)/classifica/LeaderboardClient.tsx`, `src/app/(dashboard)/classifica/page.tsx`, `src/app/(dashboard)/profilo/ProfileClient.tsx`, `src/app/(dashboard)/profilo/page.tsx`
+- **Learnings per iterazioni future:**
+  - `getMultiMetricLeaderboard` reuses `getLeaderboard` for appointments metric, avoids code duplication
+  - XP and streak are lifetime/current-state metrics, not period-scoped — they ignore the period filter
+  - Calls metric uses `callLogs` table filtered by `createdAt` within period range
+  - `previousRanksRef` (useRef) persists across re-renders without triggering updates — ideal for rank tracking
+  - Player of the Week is server-computed at page load time, not polled — avoids unnecessary DB queries
+  - Profile data fetching uses 6 parallel Promise.all calls: rpgProfile, achievements, titles, streak, quests, lifetimeStats
+  - LeaderboardMetric type is exported from leaderboardActions for use in client components
+---
