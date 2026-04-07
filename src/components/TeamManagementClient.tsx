@@ -138,21 +138,21 @@ export function TeamManagementClient() {
         }
     }
 
-    if (isLoading) return <div className="p-8 text-center text-gray-500">Caricamento anagrafica team...</div>
+    if (isLoading) return <div className="p-8 text-center text-ash-500">Caricamento anagrafica team...</div>
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-7xl mx-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-ash-200 overflow-hidden max-w-7xl mx-auto">
 
             {/* Header / Actions */}
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                <div className="text-sm font-medium text-gray-700">
+            <div className="p-4 border-b border-ash-200 flex items-center justify-between bg-ash-50">
+                <div className="text-sm font-medium text-ash-700">
                     Totale Account GDO: {team.length}
                 </div>
 
                 <button
                     onClick={handleSeed}
                     disabled={isSeeding}
-                    className="flex items-center gap-2 px-4 py-2 bg-brand-charcoal text-white rounded-md text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-brand-charcoal text-white rounded-md text-sm font-medium hover:bg-ash-800 disabled:opacity-50 transition-colors"
                 >
                     <KeyRound className="h-4 w-4" />
                     {isSeeding ? "Generazione in corso..." : "Auto-Genera Account (Seed)"}
@@ -160,62 +160,62 @@ export function TeamManagementClient() {
             </div>
 
             {/* Tabs for Roles */}
-            <div className="flex border-b border-gray-200">
+            <div className="flex border-b border-ash-200">
                 <button
                     onClick={() => setActiveTab('GDO')}
-                    className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${activeTab === 'GDO' ? 'border-b-2 border-brand-orange text-brand-orange bg-orange-50/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${activeTab === 'GDO' ? 'border-b-2 border-brand-orange text-brand-orange bg-orange-50/50' : 'text-ash-500 hover:text-ash-700 hover:bg-ash-50'}`}
                 >
                     Operatori GDO
                 </button>
                 <button
                     onClick={() => setActiveTab('VENDITORE')}
-                    className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${activeTab === 'VENDITORE' ? 'border-b-2 border-brand-orange text-brand-orange bg-orange-50/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${activeTab === 'VENDITORE' ? 'border-b-2 border-brand-orange text-brand-orange bg-orange-50/50' : 'text-ash-500 hover:text-ash-700 hover:bg-ash-50'}`}
                 >
                     Venditori (Closer)
                 </button>
                 <button
                     onClick={() => setActiveTab('CONFERME')}
-                    className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${activeTab === 'CONFERME' ? 'border-b-2 border-brand-orange text-brand-orange bg-orange-50/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${activeTab === 'CONFERME' ? 'border-b-2 border-brand-orange text-brand-orange bg-orange-50/50' : 'text-ash-500 hover:text-ash-700 hover:bg-ash-50'}`}
                 >
                     Operatori Conferme
                 </button>
             </div>
 
             {/* Mass Target Settings */}
-            <div className="p-4 bg-white border-b border-gray-200 flex flex-wrap gap-6 items-end">
+            <div className="p-4 bg-white border-b border-ash-200 flex flex-wrap gap-6 items-end">
                 <div>
-                    <h3 className="text-sm font-bold text-gray-800 mb-1">Target Aziendali (Multiplo)</h3>
-                    <p className="text-xs text-gray-500 max-w-sm">Imposta o sovrascrivi gli obiettivi per tutti i membri del team contemporaneamente.</p>
+                    <h3 className="text-sm font-bold text-ash-800 mb-1">Target Aziendali (Multiplo)</h3>
+                    <p className="text-xs text-ash-500 max-w-sm">Imposta o sovrascrivi gli obiettivi per tutti i membri del team contemporaneamente.</p>
                 </div>
                 <div className="flex items-end gap-3 ml-auto">
                     {activeTab === 'CONFERME' ? (
                         <>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Base (T1)</label>
-                                <input type="number" min="0" value={massConfermeTier1} onChange={e => setMassConfermeTier1(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                                <label className="block text-xs text-ash-500 mb-1 font-medium">Target Base (T1)</label>
+                                <input type="number" min="0" value={massConfermeTier1} onChange={e => setMassConfermeTier1(Number(e.target.value))} className="w-full px-3 py-1.5 border border-ash-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1 font-medium">Extra per T1 (€)</label>
-                                <input type="number" min="0" step="50" value={massConfermeExtra1} onChange={e => setMassConfermeExtra1(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                                <label className="block text-xs text-ash-500 mb-1 font-medium">Extra per T1 (€)</label>
+                                <input type="number" min="0" step="50" value={massConfermeExtra1} onChange={e => setMassConfermeExtra1(Number(e.target.value))} className="w-full px-3 py-1.5 border border-ash-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Plus (T2)</label>
-                                <input type="number" min="0" value={massConfermeTier2} onChange={e => setMassConfermeTier2(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                                <label className="block text-xs text-ash-500 mb-1 font-medium">Target Plus (T2)</label>
+                                <input type="number" min="0" value={massConfermeTier2} onChange={e => setMassConfermeTier2(Number(e.target.value))} className="w-full px-3 py-1.5 border border-ash-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1 font-medium">Extra per T2 (€)</label>
-                                <input type="number" min="0" step="50" value={massConfermeExtra2} onChange={e => setMassConfermeExtra2(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                                <label className="block text-xs text-ash-500 mb-1 font-medium">Extra per T2 (€)</label>
+                                <input type="number" min="0" step="50" value={massConfermeExtra2} onChange={e => setMassConfermeExtra2(Number(e.target.value))} className="w-full px-3 py-1.5 border border-ash-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                         </>
                     ) : (
                         <>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Appuntamenti/Giorno</label>
-                                <input type="number" min="0" value={massDailyTarget} onChange={e => setMassDailyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                                <label className="block text-xs text-ash-500 mb-1 font-medium">Target Appuntamenti/Giorno</label>
+                                <input type="number" min="0" value={massDailyTarget} onChange={e => setMassDailyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-ash-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1 font-medium">Target Conferme/Settimana</label>
-                                <input type="number" min="0" value={massWeeklyTarget} onChange={e => setMassWeeklyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-brand-orange" />
+                                <label className="block text-xs text-ash-500 mb-1 font-medium">Target Conferme/Settimana</label>
+                                <input type="number" min="0" value={massWeeklyTarget} onChange={e => setMassWeeklyTarget(Number(e.target.value))} className="w-full px-3 py-1.5 border border-ash-300 rounded text-sm focus:outline-brand-orange" />
                             </div>
                         </>
                     )}
@@ -244,8 +244,8 @@ export function TeamManagementClient() {
 
             {/* Team Table */}
             <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-white text-gray-500 font-medium">
+                <table className="min-w-full divide-y divide-ash-200 text-sm">
+                    <thead className="bg-white text-ash-500 font-medium">
                         <tr>
                             {activeTab === 'GDO' && <th scope="col" className="px-6 py-3 text-left uppercase tracking-wider w-16">Codice</th>}
                             <th scope="col" className="px-6 py-3 text-left uppercase tracking-wider">Username Login</th>
@@ -260,10 +260,10 @@ export function TeamManagementClient() {
                             <th scope="col" className="px-6 py-3 text-right uppercase tracking-wider">Azioni</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
+                    <tbody className="bg-white divide-y divide-ash-100">
                         {team.filter(u => u.role === activeTab).length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                                <td colSpan={7} className="px-6 py-12 text-center text-ash-500">
                                     Nessun account {activeTab} presente.
                                 </td>
                             </tr>
@@ -272,13 +272,13 @@ export function TeamManagementClient() {
                                 const isEditing = editingId === user.id
 
                                 return (
-                                    <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                                    <tr key={user.id} className="hover:bg-ash-50 transition-colors">
                                         {activeTab === 'GDO' && (
-                                            <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">
+                                            <td className="px-6 py-4 whitespace-nowrap font-bold text-ash-900">
                                                 {user.gdoCode || '-'}
                                             </td>
                                         )}
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                                        <td className="px-6 py-4 whitespace-nowrap text-ash-600">
                                             {user.email}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -290,7 +290,7 @@ export function TeamManagementClient() {
                                                     className="px-2 py-1 border border-brand-orange rounded w-full focus:outline-none"
                                                 />
                                             ) : (
-                                                <div className="flex items-center gap-2 font-medium text-gray-900">
+                                                <div className="flex items-center gap-2 font-medium text-ash-900">
                                                     <div className="h-6 w-6 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs font-bold">
                                                         {user.displayName?.charAt(0) || 'U'}
                                                     </div>
@@ -300,7 +300,7 @@ export function TeamManagementClient() {
                                         </td>
                                         {activeTab === 'GDO' && (
                                             <>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-ash-700">
                                                     {isEditing ? (
                                                         <input
                                                             type="number"
@@ -313,7 +313,7 @@ export function TeamManagementClient() {
                                                         <span className="font-bold">{user.dailyApptTarget ?? 2}</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-ash-700">
                                                     {isEditing ? (
                                                         <input
                                                             type="number"
@@ -330,7 +330,7 @@ export function TeamManagementClient() {
                                         )}
                                         {activeTab === 'CONFERME' && (
                                             <>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-ash-700">
                                                     {isEditing ? (
                                                         <input
                                                             type="number"
@@ -343,7 +343,7 @@ export function TeamManagementClient() {
                                                         <span className="font-bold">{user.confermeTargetTier1 ?? 19}</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-ash-700">
                                                     {isEditing ? (
                                                         <input
                                                             type="number"
@@ -356,7 +356,7 @@ export function TeamManagementClient() {
                                                         <span className="font-medium text-brand-blue">€{user.confermeExtraTier1 ?? 0}</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-ash-700">
                                                     {isEditing ? (
                                                         <input
                                                             type="number"
@@ -369,7 +369,7 @@ export function TeamManagementClient() {
                                                         <span className="font-bold text-green-700">{user.confermeTargetTier2 ?? 24}</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-ash-700">
                                                     {isEditing ? (
                                                         <input
                                                             type="number"
@@ -393,7 +393,7 @@ export function TeamManagementClient() {
                                                         checked={editData.isActive}
                                                         onChange={e => setEditData({ ...editData, isActive: e.target.checked })}
                                                     />
-                                                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                                                    <div className="w-9 h-5 bg-ash-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ash-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
                                                 </label>
                                             ) : (
                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -407,7 +407,7 @@ export function TeamManagementClient() {
                                                     <button onClick={() => saveEdit(user.id)} className="text-green-600 hover:text-green-900 p-1">
                                                         <Check className="h-4 w-4" />
                                                     </button>
-                                                    <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 p-1">
+                                                    <button onClick={cancelEdit} className="text-ash-400 hover:text-ash-600 p-1">
                                                         <X className="h-4 w-4" />
                                                     </button>
                                                 </div>

@@ -12,10 +12,10 @@ export default async function AppointmentsPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-5xl mx-auto">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                <h1 className="text-2xl font-bold tracking-tight text-ash-900">
                     Appuntamenti
                 </h1>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-ash-500">
                     Totale generati: <span className="font-semibold text-green-600">{upcoming.length + past.length}</span>
                 </div>
             </div>

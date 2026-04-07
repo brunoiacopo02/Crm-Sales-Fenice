@@ -155,7 +155,7 @@ export function KpiGdoBoard() {
         { name: 'Risposte (Richiami/Scarti)', value: totalAnswers - totalAppointments },
         { name: 'Appuntamenti', value: totalAppointments },
     ]
-    const PIE_COLORS = ['#E8523F', '#C9A13C', '#22c55e']
+    const PIE_COLORS = ['#E8523F', '#C9A13C', '#4A9D5B']
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -335,7 +335,7 @@ export function KpiGdoBoard() {
                                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: '#8A7F76' }} />
                                 <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #E8E4E0', boxShadow: '0 4px 12px rgb(0 0 0 / 0.08)' }} />
                                 <Line yAxisId="left" type="monotone" dataKey="chiamate" stroke="#B09E92" strokeWidth={2} name="Totale Chiamate" dot={false} />
-                                <Line yAxisId="right" type="monotone" dataKey="appuntamenti" stroke="#22c55e" strokeWidth={3} name="Appuntamenti Fissati" activeDot={{ r: 6, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }} />
+                                <Line yAxisId="right" type="monotone" dataKey="appuntamenti" stroke="#4A9D5B" strokeWidth={3} name="Appuntamenti Fissati" activeDot={{ r: 6, fill: '#4A9D5B', stroke: '#fff', strokeWidth: 2 }} />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>

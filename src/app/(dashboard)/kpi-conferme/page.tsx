@@ -17,7 +17,7 @@ export default async function ConfermeKpiPage() {
     }
 
     return (
-        <main className="min-h-screen bg-gray-50 flex flex-col p-4 md:p-8 overflow-y-auto">
+        <main className="min-h-screen bg-ash-50 flex flex-col p-4 md:p-8 overflow-y-auto">
             <ConfermeKpiBoard currentUser={{ id: user.id, role, name: user.user_metadata?.name }} />
         </main>
     )

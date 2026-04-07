@@ -116,7 +116,7 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                         <Search className="w-8 h-8 text-brand-orange" />
                         Archivio Globale
                     </h1>
-                    <p className="text-gray-400 mt-2">Consulta e scarica l'anagrafica storica dei lead</p>
+                    <p className="text-ash-400 mt-2">Consulta e scarica l'anagrafica storica dei lead</p>
                 </div>
                 <button
                     onClick={handleExport}
@@ -129,13 +129,13 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
             </div>
 
             {/* Filters */}
-            <div className="bg-[#1C1C1E] p-6 rounded-xl border border-gray-800 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-end">
+            <div className="bg-ash-900 p-6 rounded-xl border border-ash-800 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-end">
                 <div className="col-span-1 lg:col-span-2">
-                    <label className="block text-xs text-gray-400 mb-1">Tipo Data</label>
+                    <label className="block text-xs text-ash-400 mb-1">Tipo Data</label>
                     <select
                         value={filters.dateFilterType}
                         onChange={e => setFilters({ ...filters, dateFilterType: e.target.value as any })}
-                        className="w-full bg-[#2A2A2D] border border-gray-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
+                        className="w-full bg-ash-800 border border-ash-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
                     >
                         <option value="createdAt">Data Inserimento (GDO)</option>
                         <option value="appointmentDate">Data Appuntamento</option>
@@ -143,31 +143,31 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                 </div>
 
                 <div>
-                    <label className="block text-xs text-gray-400 mb-1">Da (Opzionale)</label>
+                    <label className="block text-xs text-ash-400 mb-1">Da (Opzionale)</label>
                     <input
                         type="date"
                         value={filters.fromDate || ''}
                         onChange={e => setFilters({ ...filters, fromDate: e.target.value })}
-                        className="w-full bg-[#2A2A2D] border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-brand-orange"
+                        className="w-full bg-ash-800 border border-ash-700 rounded-lg p-2 text-white focus:outline-none focus:border-brand-orange"
                     />
                 </div>
 
                 <div>
-                    <label className="block text-xs text-gray-400 mb-1">A (Opzionale)</label>
+                    <label className="block text-xs text-ash-400 mb-1">A (Opzionale)</label>
                     <input
                         type="date"
                         value={filters.toDate || ''}
                         onChange={e => setFilters({ ...filters, toDate: e.target.value })}
-                        className="w-full bg-[#2A2A2D] border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-brand-orange"
+                        className="w-full bg-ash-800 border border-ash-700 rounded-lg p-2 text-white focus:outline-none focus:border-brand-orange"
                     />
                 </div>
 
                 <div>
-                    <label className="block text-xs text-gray-400 mb-1">Filtro GDO</label>
+                    <label className="block text-xs text-ash-400 mb-1">Filtro GDO</label>
                     <select
                         value={filters.gdoId}
                         onChange={e => setFilters({ ...filters, gdoId: e.target.value })}
-                        className="w-full bg-[#2A2A2D] border border-gray-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
+                        className="w-full bg-ash-800 border border-ash-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
                     >
                         <option value="all">Tutti</option>
                         {gdoUsers.map(u => (
@@ -177,11 +177,11 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                 </div>
 
                 <div>
-                    <label className="block text-xs text-gray-400 mb-1">Filtro Venditore</label>
+                    <label className="block text-xs text-ash-400 mb-1">Filtro Venditore</label>
                     <select
                         value={filters.salespersonId}
                         onChange={e => setFilters({ ...filters, salespersonId: e.target.value })}
-                        className="w-full bg-[#2A2A2D] border border-gray-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
+                        className="w-full bg-ash-800 border border-ash-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
                     >
                         <option value="all">Tutti</option>
                         {salesUsers.map(u => (
@@ -191,11 +191,11 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                 </div>
 
                 <div>
-                    <label className="block text-xs text-gray-400 mb-1">Esito</label>
+                    <label className="block text-xs text-ash-400 mb-1">Esito</label>
                     <select
                         value={filters.outcome || 'all'}
                         onChange={e => setFilters({ ...filters, outcome: e.target.value })}
-                        className="w-full bg-[#2A2A2D] border border-gray-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
+                        className="w-full bg-ash-800 border border-ash-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-brand-orange"
                     >
                         <option value="all">Qualsiasi</option>
                         <option value="CONFERMATO">Confermato DB</option>
@@ -208,7 +208,7 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                 <div>
                     <button
                         onClick={handleSearch}
-                        className="w-full bg-brand-orange hover:bg-orange-500 text-white font-bold py-2.5 rounded-lg transition"
+                        className="w-full bg-brand-orange hover:bg-brand-orange-hover text-white font-bold py-2.5 rounded-lg transition"
                     >
                         Applica Filtri
                     </button>
@@ -216,10 +216,10 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
             </div>
 
             {/* Table */}
-            <div className="bg-[#1C1C1E] rounded-xl border border-gray-800 overflow-hidden shadow-xl">
+            <div className="bg-ash-900 rounded-xl border border-ash-800 overflow-hidden shadow-xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
-                        <thead className="bg-[#2A2A2D] text-gray-400 font-medium uppercase text-xs border-b border-gray-700">
+                        <thead className="bg-ash-800 text-ash-400 font-medium uppercase text-xs border-b border-ash-700">
                             <tr>
                                 <th className="px-5 py-4">Data Add</th>
                                 <th className="px-5 py-4">Nome Lead</th>
@@ -230,28 +230,28 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                                 <th className="px-5 py-4">Venditore</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-800 text-gray-200">
+                        <tbody className="divide-y divide-gray-800 text-ash-200">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
+                                    <td colSpan={7} className="px-5 py-12 text-center text-ash-500">
                                         <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
                                         Caricamento dati in corso...
                                     </td>
                                 </tr>
                             ) : data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
+                                    <td colSpan={7} className="px-5 py-12 text-center text-ash-500">
                                         Nessun risultato trovato con i filtri attuali.
                                     </td>
                                 </tr>
                             ) : (
                                 data.map((item, idx) => (
-                                    <tr key={item.id} className="hover:bg-[#2A2A2D] transition-colors">
+                                    <tr key={item.id} className="hover:bg-ash-800 transition-colors">
                                         <td className="px-5 py-3">
                                             {item.createdAt ? format(new Date(item.createdAt), "dd/MM") : "-"}
                                         </td>
                                         <td className="px-5 py-3 font-medium text-white">{item.name}</td>
-                                        <td className="px-5 py-3 text-gray-400">{item.phone}</td>
+                                        <td className="px-5 py-3 text-ash-400">{item.phone}</td>
                                         <td className="px-5 py-3 text-brand-orange/90">{item.gdoName || "-"}</td>
                                         <td className="px-5 py-3">
                                             {item.appointmentDate ? format(new Date(item.appointmentDate), "dd/MM/yyyy") : "-"}
@@ -260,7 +260,7 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                                             <div className="flex flex-col">
                                                 <span>{item.status}</span>
                                                 {item.salespersonOutcome && (
-                                                    <span className="text-[10px] text-gray-400">{item.salespersonOutcome}</span>
+                                                    <span className="text-[10px] text-ash-400">{item.salespersonOutcome}</span>
                                                 )}
                                             </div>
                                         </td>
@@ -273,8 +273,8 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                 </div>
 
                 {/* Pagination */}
-                <div className="bg-[#2A2A2D] px-6 py-4 flex items-center justify-between border-t border-gray-800">
-                    <div className="text-gray-400 text-sm">
+                <div className="bg-ash-800 px-6 py-4 flex items-center justify-between border-t border-ash-800">
+                    <div className="text-ash-400 text-sm">
                         Totale righe: <span className="text-white font-medium">{totalCount}</span>
                     </div>
                     
@@ -282,19 +282,19 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                         <button
                             disabled={filters.page === 1}
                             onClick={() => setFilters({ ...filters, page: filters.page! - 1 })}
-                            className="bg-[#3A3A3D] hover:bg-gray-600 disabled:opacity-50 text-white p-2 rounded-lg transition"
+                            className="bg-ash-700 hover:bg-ash-600 disabled:opacity-50 text-white p-2 rounded-lg transition"
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </button>
                         
-                        <span className="text-sm font-medium text-gray-300">
+                        <span className="text-sm font-medium text-ash-300">
                             Pagina {filters.page} di {totalPages > 0 ? totalPages : 1}
                         </span>
                         
                         <button
                             disabled={filters.page === totalPages || totalPages === 0}
                             onClick={() => setFilters({ ...filters, page: filters.page! + 1 })}
-                            className="bg-[#3A3A3D] hover:bg-gray-600 disabled:opacity-50 text-white p-2 rounded-lg transition"
+                            className="bg-ash-700 hover:bg-ash-600 disabled:opacity-50 text-white p-2 rounded-lg transition"
                         >
                             <ChevronRight className="w-5 h-5" />
                         </button>

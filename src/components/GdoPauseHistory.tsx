@@ -128,7 +128,7 @@ export default function GdoPauseHistory() {
                                             </div>
                                         )}
                                         {p.status === "in_corso" && (
-                                            <div className="flex items-center gap-1.5 text-yellow-400">
+                                            <div className="flex items-center gap-1.5 text-gold-400">
                                                 <Clock className="h-4 w-4 animate-pulse" />
                                                 In Corso
                                             </div>

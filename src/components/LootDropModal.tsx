@@ -58,12 +58,12 @@ const RARITY_CONFIG: Record<string, {
     },
     legendary: {
         label: 'Leggendario',
-        gradient: 'from-yellow-700 via-amber-400 to-yellow-700',
-        border: 'border-yellow-400',
+        gradient: 'from-gold-700 via-gold-400 to-gold-700',
+        border: 'border-gold-400',
         glow: 'animate-loot-glow-gold',
         icon: '👑',
-        textColor: 'text-yellow-300',
-        bgColor: 'bg-yellow-900',
+        textColor: 'text-gold-300',
+        bgColor: 'bg-gold-900',
     },
 };
 
@@ -232,9 +232,9 @@ export function LootDropModal({ userId }: { userId: string }) {
 
                             {/* Bonus title for legendary */}
                             {reward.bonusTitle && (
-                                <div className="mt-3 p-3 rounded-xl bg-white/10 border border-yellow-400/30">
-                                    <div className="text-xs text-yellow-400/70 uppercase tracking-wider mb-1">Titolo Sbloccato</div>
-                                    <div className="text-lg font-bold text-yellow-300">{reward.bonusTitle}</div>
+                                <div className="mt-3 p-3 rounded-xl bg-white/10 border border-gold-400/30">
+                                    <div className="text-xs text-gold-400/70 uppercase tracking-wider mb-1">Titolo Sbloccato</div>
+                                    <div className="text-lg font-bold text-gold-300">{reward.bonusTitle}</div>
                                 </div>
                             )}
 

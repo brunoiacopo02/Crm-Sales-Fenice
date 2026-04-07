@@ -46,25 +46,25 @@ export function TeamGoalBanner() {
                             {/* Titolo e Info */}
                             <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-2">
-                                    <div className={`p-2 rounded-xl shadow-sm border ${isCompleted ? 'bg-green-100 text-green-600 border-green-200' : 'bg-white text-indigo-600 border-indigo-100'}`}>
+                                    <div className={`p-2 rounded-xl shadow-sm border ${isCompleted ? 'bg-green-100 text-green-600 border-green-200' : 'bg-white text-brand-orange border-orange-100'}`}>
                                         {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : <Target className="h-5 w-5" />}
                                     </div>
                                     <div>
-                                        <h3 className={`font-bold text-lg tracking-tight ${isCompleted ? 'text-green-900' : 'text-gray-900'}`}>
+                                        <h3 className={`font-bold text-lg tracking-tight ${isCompleted ? 'text-green-900' : 'text-ash-900'}`}>
                                             {goal.title}
                                         </h3>
                                         <div className="flex items-center gap-3 text-xs font-semibold mt-0.5">
                                             {isCompleted ? (
                                                 <span className="text-green-600">Obiettivo Raggiunto!</span>
                                             ) : (
-                                                <span className="text-gray-500 uppercase flex items-center gap-1">
+                                                <span className="text-ash-500 uppercase flex items-center gap-1">
                                                     <Timer className="h-3 w-3" /> Scade il: {new Date(goal.deadline).toLocaleDateString()}
                                                 </span>
                                             )}
                                         </div>
                                     </div>
                                 </div>
-                                <p className={`text-sm ${isCompleted ? 'text-green-700/80' : 'text-gray-600'} leading-relaxed max-w-2xl`}>
+                                <p className={`text-sm ${isCompleted ? 'text-green-700/80' : 'text-ash-600'} leading-relaxed max-w-2xl`}>
                                     {goal.goalType === 'database'
                                         ? "Fissa appuntamenti sui lead storici (provenienza: Database) per incrementare il contatore globale. Aiuta la squadra a raggiungere il premio in palio!"
                                         : "Fissa appuntamenti su qualsiasi lead per incrementare il contatore globale. Aiuta la squadra a raggiungere il premio in palio!"}
@@ -74,20 +74,20 @@ export function TeamGoalBanner() {
                             {/* Progresso e Ricompensa */}
                             <div className="w-full md:w-96 flex-shrink-0 bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white max-w-sm">
                                 <div className="flex items-center justify-between mb-2">
-                                    <div className="font-bold text-gray-800 tracking-tight flex items-baseline gap-1">
+                                    <div className="font-bold text-ash-800 tracking-tight flex items-baseline gap-1">
                                         <span className="text-2xl">{goal.currentCount}</span>
-                                        <span className="text-gray-400 text-sm">/ {goal.targetCount}</span>
+                                        <span className="text-ash-400 text-sm">/ {goal.targetCount}</span>
                                     </div>
 
-                                    <div className="flex items-center gap-1.5 bg-yellow-100/80 border border-yellow-200 text-yellow-800 px-3 py-1.5 rounded-lg ml-auto shadow-sm">
-                                        <Coins className="h-4 w-4 text-yellow-500" />
+                                    <div className="flex items-center gap-1.5 bg-gold-100/80 border border-gold-200 text-gold-800 px-3 py-1.5 rounded-lg ml-auto shadow-sm">
+                                        <Coins className="h-4 w-4 text-gold-500" />
                                         <span className="text-sm font-bold">+{goal.rewardCoins} Coin</span>
                                     </div>
                                 </div>
 
-                                <div className="h-3 w-full bg-gray-200/80 rounded-full overflow-hidden shadow-inner">
+                                <div className="h-3 w-full bg-ash-200/80 rounded-full overflow-hidden shadow-inner">
                                     <div
-                                        className={`h-full transition-[width] duration-1000 cubic-bezier(0.16, 1, 0.3, 1) ${isCompleted ? 'bg-gradient-to-r from-green-400 to-green-500' : 'bg-gradient-to-r from-indigo-500 to-brand-orange'}`}
+                                        className={`h-full transition-[width] duration-1000 cubic-bezier(0.16, 1, 0.3, 1) ${isCompleted ? 'bg-gradient-to-r from-green-400 to-green-500' : 'bg-gradient-to-r from-orange-500 to-brand-orange'}`}
                                         style={{ width: `${progress}%` }}
                                     >
                                         {/* Sparkles effect over progress bar */}
@@ -96,10 +96,10 @@ export function TeamGoalBanner() {
                                 </div>
 
                                 <div className="flex justify-between items-center mt-2 px-1">
-                                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                                    <p className="text-[10px] uppercase font-bold text-ash-400 tracking-wider">
                                         Progresso della squadra
                                     </p>
-                                    <p className="text-[10px] font-bold text-indigo-600">
+                                    <p className="text-[10px] font-bold text-brand-orange">
                                         {Math.round(progress)}%
                                     </p>
                                 </div>

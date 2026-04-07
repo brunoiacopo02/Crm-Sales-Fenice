@@ -284,8 +284,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">SCARTATO</span>
                             )}
                         </div>
-                        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 leading-tight">{lead.name}</h2>
-                        <div className="flex items-center gap-3 mt-1.5 text-sm text-gray-500 font-medium">
+                        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-ash-900 leading-tight">{lead.name}</h2>
+                        <div className="flex items-center gap-3 mt-1.5 text-sm text-ash-500 font-medium">
                             <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-brand-orange" /> {lead.phone}</span>
                             {lead.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-brand-blue" /> {lead.email}</span>}
                         </div>
@@ -297,24 +297,24 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                 {/* Quick Actions Bar */}
                 <fieldset disabled={isLocked} className="contents border-0 p-0 m-0">
-                    <div className="bg-white border-b border-gray-200 p-4 shrink-0 flex flex-col gap-3 z-10 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)]">
+                    <div className="bg-white border-b border-ash-200 p-4 shrink-0 flex flex-col gap-3 z-10 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)]">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={handleQuickNR}
                                     disabled={isSavingNR || !!lead.confCall3At || !!lead.confirmationsOutcome}
-                                    className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    className="bg-ash-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                 >
                                     {isSavingNR ? "..." : "NR (Non Risponde)"}
                                     <div className="flex gap-1 ml-1" title="Tentativi NR">
-                                        <div className={`w-2 h-2 rounded-full ${lead.confCall1At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
-                                        <div className={`w-2 h-2 rounded-full ${lead.confCall2At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
-                                        <div className={`w-2 h-2 rounded-full ${lead.confCall3At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-gray-500'}`} />
+                                        <div className={`w-2 h-2 rounded-full ${lead.confCall1At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-ash-500'}`} />
+                                        <div className={`w-2 h-2 rounded-full ${lead.confCall2At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-ash-500'}`} />
+                                        <div className={`w-2 h-2 rounded-full ${lead.confCall3At ? 'bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.5)]' : 'bg-ash-500'}`} />
                                     </div>
                                 </button>
 
                                 {lastNR && !lead.confirmationsOutcome && (
-                                    <span className="text-xs text-gray-600 flex items-center gap-1 font-semibold bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
+                                    <span className="text-xs text-ash-600 flex items-center gap-1 font-semibold bg-ash-100 px-3 py-1.5 rounded-full border border-ash-200">
                                         <Clock className="w-3.5 h-3.5 text-brand-orange" />
                                         {formatDistanceToNow(lastNR, { locale: it })} fa
                                     </span>
@@ -335,21 +335,21 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 )}
 
                 {/* Tabs */}
-                <div className="flex border-b border-gray-200 shrink-0 bg-white">
+                <div className="flex border-b border-ash-200 shrink-0 bg-white">
                     <button
-                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "dati" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
+                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "dati" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-ash-500 hover:text-ash-800 hover:bg-ash-50"}`}
                         onClick={() => setActiveTab("dati")}
                     >
                         Dati Lead
                     </button>
                     <button
-                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === "note" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
+                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === "note" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-ash-500 hover:text-ash-800 hover:bg-ash-50"}`}
                         onClick={() => setActiveTab("note")}
                     >
-                        Note {notes.length > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === "note" ? "bg-brand-orange text-white" : "bg-gray-200 text-gray-600"}`}>{notes.length}</span>}
+                        Note {notes.length > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === "note" ? "bg-brand-orange text-white" : "bg-ash-200 text-ash-600"}`}>{notes.length}</span>}
                     </button>
                     <button
-                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "esito" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
+                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "esito" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-ash-500 hover:text-ash-800 hover:bg-ash-50"}`}
                         onClick={() => setActiveTab("esito")}
                     >
                         Gestione Esiti
@@ -358,7 +358,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                 {/* Content */}
                 <fieldset disabled={isLocked} className="contents border-0 p-0 m-0">
-                    <div className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/30 custom-scrollbar ${isLocked ? "opacity-60 grayscale-[30%]" : ""}`}>
+                    <div className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-ash-50/30 custom-scrollbar ${isLocked ? "opacity-60 grayscale-[30%]" : ""}`}>
 
                         {activeTab === "dati" && (
                             <div className="space-y-5 animate-in fade-in duration-200">
@@ -373,25 +373,25 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nome Completo</label>
-                                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="input-fenice font-medium text-slate-900" />
+                                    <label className="text-xs font-bold text-ash-500 uppercase tracking-wider ml-1">Nome Completo</label>
+                                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="input-fenice font-medium text-ash-900" />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Indirizzo Email</label>
-                                    <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="input-fenice font-medium text-slate-900" placeholder="Nessuna email fornita" />
+                                    <label className="text-xs font-bold text-ash-500 uppercase tracking-wider ml-1">Indirizzo Email</label>
+                                    <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="input-fenice font-medium text-ash-900" placeholder="Nessuna email fornita" />
                                 </div>
 
                                 {/* Data e Ora Appuntamento (sempre visibili, anche per i Richiami) */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                                        <label className="text-xs font-bold text-ash-500 uppercase tracking-wider ml-1">
                                             {lead.confNeedsReschedule ? "Data App. (Originaria)" : "Data Appuntamento"}
                                         </label>
                                         <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="input-fenice text-sm font-medium" />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                                        <label className="text-xs font-bold text-ash-500 uppercase tracking-wider ml-1">
                                             {lead.confNeedsReschedule ? "Ora App. (Originaria)" : "Ora Appuntamento"}
                                         </label>
                                         <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="input-fenice text-sm font-medium" />
@@ -404,15 +404,15 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 )}
 
                                 <div className="space-y-1.5 pt-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Note del Fissatore (GDO)</label>
-                                    <textarea rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className="input-fenice text-sm resize-none text-slate-700 leading-relaxed" placeholder="Aggiungi una nota..."></textarea>
+                                    <label className="text-xs font-bold text-ash-500 uppercase tracking-wider ml-1">Note del Fissatore (GDO)</label>
+                                    <textarea rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className="input-fenice text-sm resize-none text-ash-700 leading-relaxed" placeholder="Aggiungi una nota..."></textarea>
                                 </div>
 
-                                <div className="pt-4 border-t border-slate-200">
-                                    <button onClick={handleSaveData} disabled={savingData} className="w-full flex justify-center items-center gap-2 py-3 bg-slate-900 hover:bg-black text-white rounded-xl transition-all font-bold shadow-md hover:shadow-lg disabled:opacity-50">
+                                <div className="pt-4 border-t border-ash-200">
+                                    <button onClick={handleSaveData} disabled={savingData} className="w-full flex justify-center items-center gap-2 py-3 bg-ash-900 hover:bg-black text-white rounded-xl transition-all font-bold shadow-md hover:shadow-lg disabled:opacity-50">
                                         <Save className="w-4 h-4" /> {savingData ? "Salvataggio in corso..." : "Salva Tutti i Dati"}
                                     </button>
-                                    <p className="text-[11px] text-center text-slate-400 mt-3 font-medium">Le modifiche sono tracciate nell'Audit Log.</p>
+                                    <p className="text-[11px] text-center text-ash-400 mt-3 font-medium">Le modifiche sono tracciate nell'Audit Log.</p>
                                 </div>
                             </div>
                         )}
@@ -434,23 +434,23 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                             ))}
                                         </div>
                                     ) : notes.length === 0 ? (
-                                        <div className="text-center text-gray-400 py-16 flex flex-col items-center">
-                                            <FileText className="w-12 h-12 text-gray-200 mb-3" />
+                                        <div className="text-center text-ash-400 py-16 flex flex-col items-center">
+                                            <FileText className="w-12 h-12 text-ash-200 mb-3" />
                                             Nessuna nota presente per questo lead.
                                         </div>
                                     ) : (
                                         notes.map((n, idx) => (
-                                            <div key={n.note.id || idx} className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm transition-shadow hover:shadow-md">
+                                            <div key={n.note.id || idx} className="p-4 bg-white rounded-xl border border-ash-200 shadow-sm transition-shadow hover:shadow-md">
                                                 <div className="flex justify-between items-start mb-3">
-                                                    <span className="text-xs font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{n.author?.name || "Utente"}</span>
-                                                    <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">{format(new Date(n.note.createdAt), "dd/MM/yy HH:mm")}</span>
+                                                    <span className="text-xs font-bold text-ash-900 bg-ash-100 px-2 py-1 rounded-md">{n.author?.name || "Utente"}</span>
+                                                    <span className="text-[11px] font-medium text-ash-400 uppercase tracking-wider">{format(new Date(n.note.createdAt), "dd/MM/yy HH:mm")}</span>
                                                 </div>
-                                                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{n.note.text}</p>
+                                                <p className="text-sm text-ash-700 whitespace-pre-wrap leading-relaxed">{n.note.text}</p>
                                             </div>
                                         ))
                                     )}
                                 </div>
-                                <div className="mt-auto pt-4 border-t border-gray-200 bg-slate-50/50 -bottom-6 -mx-6 px-6 pb-6 pt-4 sticky">
+                                <div className="mt-auto pt-4 border-t border-ash-200 bg-ash-50/50 -bottom-6 -mx-6 px-6 pb-6 pt-4 sticky">
                                     <textarea
                                         value={newNote}
                                         onChange={e => setNewNote(e.target.value)}
@@ -468,16 +468,16 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                         {activeTab === "esito" && (
                             <div className="space-y-6 animate-in fade-in duration-200 pb-8">
                                 {/* Conferme Outcome */}
-                                <div className="bg-white border text-slate-800 border-gray-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+                                <div className="bg-white border text-ash-800 border-ash-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-brand-orange"></div>
-                                    <h3 className="text-base font-extrabold text-gray-900 mb-5 flex items-center gap-2">
+                                    <h3 className="text-base font-extrabold text-ash-900 mb-5 flex items-center gap-2">
                                         Esito Pre-Trattativa (Team Conferme)
                                     </h3>
 
                                     <div className="space-y-3.5 mb-6">
-                                        <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "scartato" ? "border-rose-400 bg-rose-50 shadow-sm" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50 bg-white"}`}>
+                                        <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "scartato" ? "border-rose-400 bg-rose-50 shadow-sm" : "border-ash-100 hover:border-ash-200 hover:bg-ash-50 bg-white"}`}>
                                             <input type="radio" name="outcome" value="scartato" checked={outcome === "scartato"} onChange={() => setOutcome("scartato")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
-                                            <span className={`font-bold ${outcome === "scartato" ? "text-rose-800" : "text-gray-700"}`}>Scartato Direttamente</span>
+                                            <span className={`font-bold ${outcome === "scartato" ? "text-rose-800" : "text-ash-700"}`}>Scartato Direttamente</span>
                                         </label>
 
                                         {outcome === "scartato" && (
@@ -494,9 +494,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                             </div>
                                         )}
 
-                                        <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "confermato" ? "border-emerald-400 bg-emerald-50 shadow-sm" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50 bg-white"}`}>
+                                        <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "confermato" ? "border-emerald-400 bg-emerald-50 shadow-sm" : "border-ash-100 hover:border-ash-200 hover:bg-ash-50 bg-white"}`}>
                                             <input type="radio" name="outcome" value="confermato" checked={outcome === "confermato"} onChange={() => setOutcome("confermato")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
-                                            <span className={`font-bold ${outcome === "confermato" ? "text-emerald-800" : "text-gray-700"}`}>Confermato ed Assegnato</span>
+                                            <span className={`font-bold ${outcome === "confermato" ? "text-emerald-800" : "text-ash-700"}`}>Confermato ed Assegnato</span>
                                         </label>
 
                                         {outcome === "confermato" && (
@@ -519,14 +519,14 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                                 {/* Salesperson Outcome (only if confirmed & assigned) */}
                                 {lead.confirmationsOutcome === "confermato" && lead.salespersonAssigned && (
-                                    <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 border-dashed animate-in fade-in">
-                                        <h3 className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-2">
-                                            <User className="w-4 h-4 text-slate-500" />
+                                    <div className="bg-ash-50 border-2 border-ash-200 rounded-2xl p-6 border-dashed animate-in fade-in">
+                                        <h3 className="text-sm font-bold text-ash-800 mb-5 flex items-center gap-2">
+                                            <User className="w-4 h-4 text-ash-500" />
                                             Esito Post Appuntamento ({lead.salespersonAssigned})
                                         </h3>
 
                                         <div className="space-y-4">
-                                            <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} className="w-full px-4 py-3 border-2 border-slate-300 rounded-xl font-bold text-slate-700 outline-none focus:border-slate-500 bg-white shadow-sm transition-colors">
+                                            <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} className="w-full px-4 py-3 border-2 border-ash-300 rounded-xl font-bold text-ash-700 outline-none focus:border-ash-500 bg-white shadow-sm transition-colors">
                                                 <option value="">Seleziona esito finale...</option>
                                                 <option value="Chiuso">✅ Vendita Chiusa</option>
                                                 <option value="Non chiuso">❌ Non Chiuso</option>
@@ -537,11 +537,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                                 value={spNotes}
                                                 onChange={e => setSpNotes(e.target.value)}
                                                 placeholder="Note opzionali per l'esito finale..."
-                                                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-400 bg-white resize-none shadow-sm font-medium text-slate-700"
+                                                className="w-full px-4 py-3 border border-ash-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-ash-400 bg-white resize-none shadow-sm font-medium text-ash-700"
                                                 rows={2}
                                             />
 
-                                            <button onClick={handleSaveSpOutcome} disabled={savingSpOutcome || !spOutcome} className="w-full mt-2 py-3 bg-slate-800 hover:bg-black text-white rounded-xl transition-colors font-bold disabled:opacity-50 shadow-md">
+                                            <button onClick={handleSaveSpOutcome} disabled={savingSpOutcome || !spOutcome} className="w-full mt-2 py-3 bg-ash-800 hover:bg-black text-white rounded-xl transition-colors font-bold disabled:opacity-50 shadow-md">
                                                 {savingSpOutcome ? "Salvataggio..." : "Registra Esito Finale"}
                                             </button>
                                         </div>

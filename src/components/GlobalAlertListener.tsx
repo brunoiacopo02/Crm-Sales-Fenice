@@ -95,20 +95,20 @@ export function GlobalAlertListener({ currentUser }: { currentUser: any }) {
                 </div>
 
                 <div className="p-8 pb-10 flex flex-col items-center">
-                    <p className="text-xl text-gray-800 font-medium text-center leading-relaxed">
+                    <p className="text-xl text-ash-800 font-medium text-center leading-relaxed">
                         {visibleAlert.message}
                     </p>
 
                     <button
                         onClick={handleAcknowledge}
                         disabled={isMarking}
-                        className="mt-8 px-8 py-4 bg-gray-900 hover:bg-black text-white rounded-xl font-bold uppercase tracking-wider transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 flex items-center gap-3 disabled:opacity-50"
+                        className="mt-8 px-8 py-4 bg-ash-900 hover:bg-black text-white rounded-xl font-bold uppercase tracking-wider transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 flex items-center gap-3 disabled:opacity-50"
                     >
                         <CheckCircle2 className="w-6 h-6" />
                         {isMarking ? "Registrazione in corso..." : "OK, Ho Letto. Chiudi."}
                     </button>
                     {alerts.length > 1 && (
-                        <p className="mt-4 text-xs font-bold text-gray-400 uppercase">
+                        <p className="mt-4 text-xs font-bold text-ash-400 uppercase">
                             Ci {alerts.length - 1 === 1 ? "è" : "sono"} altri {alerts.length - 1} {alerts.length - 1 === 1 ? "avviso in coda" : "avvisi in coda"}
                         </p>
                     )}

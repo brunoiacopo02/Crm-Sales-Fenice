@@ -162,10 +162,10 @@ export function ContactDrawer({
         switch (type) {
             case 'IMPORTED': return <FileText className="h-4 w-4 text-blue-500" />
             case 'ASSIGNED': return <User className="h-4 w-4 text-purple-500" />
-            case 'CALL_LOGGED': return <Phone className="h-4 w-4 text-indigo-500" />
+            case 'CALL_LOGGED': return <Phone className="h-4 w-4 text-orange-500" />
             case 'SECTION_MOVED': return <History className="h-4 w-4 text-brand-orange" />
             case 'DISCARDED': return <AlertCircle className="h-4 w-4 text-red-500" />
-            case 'RECALL_SET': return <Clock className="h-4 w-4 text-yellow-600" />
+            case 'RECALL_SET': return <Clock className="h-4 w-4 text-gold-600" />
             case 'APPOINTMENT_SET': return <CalendarCheck className="h-4 w-4 text-green-500" />
             default: return <CheckCircle2 className="h-4 w-4 text-ash-400" />
         }
@@ -194,7 +194,7 @@ export function ContactDrawer({
                 <div className="px-4 sm:px-6 py-5 drawer-header flex flex-col gap-2">
                     <div className="flex items-start justify-between">
                         <div>
-                            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                            <h2 className="text-xl font-bold text-ash-900 flex items-center gap-2">
                                 {lead?.name || 'Caricamento...'}
                             </h2>
                             {lead?.funnel && (
@@ -240,7 +240,7 @@ export function ContactDrawer({
 
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Anagrafica</h3>
+                                    <h3 className="text-sm font-bold text-ash-900 uppercase tracking-wider">Anagrafica</h3>
                                     {!isEditing ? (
                                         <button
                                             onClick={enterEditMode}
@@ -325,20 +325,20 @@ export function ContactDrawer({
                                     <div className="space-y-3">
                                         <div className="flex items-center gap-3 text-sm">
                                             <User className="h-4 w-4 text-ash-400" />
-                                            <div className="text-gray-700">{lead.name}</div>
+                                            <div className="text-ash-700">{lead.name}</div>
                                         </div>
                                         <div className="flex items-center gap-3 text-sm">
                                             <Phone className="h-4 w-4 text-ash-400" />
-                                            <div className="text-gray-900 font-medium cursor-copy hover:text-brand-orange transition-colors">{lead.phone}</div>
+                                            <div className="text-ash-900 font-medium cursor-copy hover:text-brand-orange transition-colors">{lead.phone}</div>
                                         </div>
                                         <div className="flex items-center gap-3 text-sm">
                                             <Mail className="h-4 w-4 text-ash-400" />
-                                            <div className="text-gray-700">{lead.email || '-'}</div>
+                                            <div className="text-ash-700">{lead.email || '-'}</div>
                                         </div>
                                         {lead.lastCallNote && (
                                             <div className="flex items-start gap-3 text-sm">
                                                 <FileText className="h-4 w-4 text-ash-400 mt-0.5" />
-                                                <div className="text-gray-600 italic">{lead.lastCallNote}</div>
+                                                <div className="text-ash-600 italic">{lead.lastCallNote}</div>
                                             </div>
                                         )}
                                     </div>
@@ -348,19 +348,19 @@ export function ContactDrawer({
                             <hr className="border-ash-100" />
 
                             <div className="space-y-4">
-                                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Stato CRM</h3>
+                                <h3 className="text-sm font-bold text-ash-900 uppercase tracking-wider">Stato CRM</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
                                         <div className="text-xs text-ash-500 mb-1">Stato DB</div>
-                                        <div className="text-sm font-bold text-gray-900">{lead.status}</div>
+                                        <div className="text-sm font-bold text-ash-900">{lead.status}</div>
                                     </div>
                                     <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
                                         <div className="text-xs text-ash-500 mb-1">Assegnazione</div>
-                                        <div className="text-sm font-bold text-gray-900">{lead.assignedToName || 'Nessuno'}</div>
+                                        <div className="text-sm font-bold text-ash-900">{lead.assignedToName || 'Nessuno'}</div>
                                     </div>
                                     <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
                                         <div className="text-xs text-ash-500 mb-1">Tentativi Chiamate</div>
-                                        <div className="text-sm font-bold text-gray-900">{lead.callCount} / 3</div>
+                                        <div className="text-sm font-bold text-ash-900">{lead.callCount} / 3</div>
                                     </div>
                                 </div>
                             </div>
@@ -397,7 +397,7 @@ export function ContactDrawer({
 
                                             <div className="bg-ash-50 border border-ash-100 rounded-lg p-3 hover:shadow-sm transition-shadow">
                                                 <div className="flex flex-col gap-1 mb-2 border-b border-ash-100 pb-2">
-                                                    <h4 className="text-sm font-bold text-gray-900">{getEventLabel(ev.eventType)}</h4>
+                                                    <h4 className="text-sm font-bold text-ash-900">{getEventLabel(ev.eventType)}</h4>
                                                     <time className="text-xs text-ash-500 font-mono flex items-center gap-1">
                                                         <Clock className="h-3 w-3" />
                                                         {formatTimestamp(ev.timestamp)}
@@ -405,7 +405,7 @@ export function ContactDrawer({
                                                 </div>
 
                                                 {/* Dettagli condizionali */}
-                                                <div className="text-sm text-gray-700 space-y-1.5">
+                                                <div className="text-sm text-ash-700 space-y-1.5">
                                                     {ev.eventType === 'SECTION_MOVED' && (
                                                         <div className="flex items-center gap-2 text-xs">
                                                             <div className="bg-ash-200 text-ash-700 px-1.5 py-0.5 rounded">{ev.fromSection || '?'}</div>
@@ -415,11 +415,11 @@ export function ContactDrawer({
                                                     )}
 
                                                     {ev.userName && (
-                                                        <div className="text-xs text-ash-500">Operatore: <span className="font-medium text-gray-700">{ev.userName}</span></div>
+                                                        <div className="text-xs text-ash-500">Operatore: <span className="font-medium text-ash-700">{ev.userName}</span></div>
                                                     )}
 
                                                     {ev.metadata?.note && (
-                                                        <div className="text-xs italic text-gray-600 pt-1">
+                                                        <div className="text-xs italic text-ash-600 pt-1">
                                                             &quot;{ev.metadata.note}&quot;
                                                         </div>
                                                     )}

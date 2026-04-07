@@ -93,7 +93,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
             <button
                 onClick={(e) => { e.stopPropagation(); handleAction('NON_RISPOSTO'); }}
                 disabled={loading}
-                className="bg-white border border-gray-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-md text-[11px] font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                className="bg-white border border-ash-200 hover:bg-ash-50 text-ash-600 hover:text-ash-900 px-2.5 py-1.5 rounded-md text-[11px] font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 title="Non Risposto"
             >
                 <PhoneOff className="w-3.5 h-3.5" /> NR
@@ -102,7 +102,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
             <button
                 onClick={(e) => openPopover(e, 'scartato')}
                 disabled={loading}
-                className={`bg-white border  hover:bg-rose-50 text-rose-600 hover:border-rose-300 px-2.5 py-1.5 rounded-md text-[11px] font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 ${activePopover === 'scartato' ? 'border-rose-400 bg-rose-50' : 'border-gray-200'}`}
+                className={`bg-white border  hover:bg-rose-50 text-rose-600 hover:border-rose-300 px-2.5 py-1.5 rounded-md text-[11px] font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 ${activePopover === 'scartato' ? 'border-rose-400 bg-rose-50' : 'border-ash-200'}`}
             >
                 <Ban className="w-3.5 h-3.5" /> Scartato
             </button>
@@ -110,7 +110,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
             <button
                 onClick={(e) => openPopover(e, 'richiamo')}
                 disabled={loading}
-                className={`bg-white border hover:bg-blue-50 text-blue-600 hover:border-blue-300 px-2.5 py-1.5 rounded-md text-[11px] font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 ${activePopover === 'richiamo' ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}
+                className={`bg-white border hover:bg-blue-50 text-blue-600 hover:border-blue-300 px-2.5 py-1.5 rounded-md text-[11px] font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 ${activePopover === 'richiamo' ? 'border-blue-400 bg-blue-50' : 'border-ash-200'}`}
             >
                 <CalendarClock className="w-3.5 h-3.5" /> Richiamo
             </button>
@@ -125,7 +125,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
 
             {/* POPOVER SCARTATO */}
             {activePopover === 'scartato' && (
-                <div onClick={e => e.stopPropagation()} className="absolute right-0 top-[110%] w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
+                <div onClick={e => e.stopPropagation()} className="absolute right-0 top-[110%] w-64 bg-white border border-ash-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
                     <h4 className="text-[12px] font-bold text-rose-700 mb-3 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5" /> Scarta Lead</h4>
                     
                     <select
@@ -140,7 +140,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                     </select>
 
                     <div className="flex justify-end gap-2 mt-3">
-                        <button onClick={() => setActivePopover(null)} className="px-2 py-1 text-xs text-gray-500 font-semibold">Annulla</button>
+                        <button onClick={() => setActivePopover(null)} className="px-2 py-1 text-xs text-ash-500 font-semibold">Annulla</button>
                         <button onClick={() => handleAction('DA_SCARTARE')} disabled={isSubmitDisabled} className="px-3 py-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold disabled:opacity-50">
                             Conferma Scarto
                         </button>
@@ -150,12 +150,12 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
 
             {/* POPOVER RICHIAMO O APPUNTAMENTO */}
             {(activePopover === 'richiamo' || activePopover === 'appuntamento') && (
-                <div onClick={e => e.stopPropagation()} className="absolute right-0 top-[110%] w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
+                <div onClick={e => e.stopPropagation()} className="absolute right-0 top-[110%] w-72 bg-white border border-ash-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
                     <h4 className={`text-[12px] font-bold mb-3 flex items-center gap-1.5 ${activePopover === 'appuntamento' ? 'text-brand-orange' : 'text-blue-600'}`}>
                         {activePopover === 'appuntamento' ? <><Handshake className="w-3.5 h-3.5" /> Fissa Appuntamento</> : <><CalendarClock className="w-3.5 h-3.5" /> Programma Richiamo</>}
                     </h4>
                     
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Data e Ora *</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Data e Ora *</label>
                     <input
                         type="datetime-local"
                         value={dateStr}
@@ -164,7 +164,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                         required
                     />
 
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Note (Opzionale)</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Note (Opzionale)</label>
                     <textarea
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
@@ -173,7 +173,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                     />
 
                     <div className="flex justify-end gap-2">
-                        <button onClick={() => setActivePopover(null)} className="px-2 py-1 text-xs text-gray-500 font-semibold">Annulla</button>
+                        <button onClick={() => setActivePopover(null)} className="px-2 py-1 text-xs text-ash-500 font-semibold">Annulla</button>
                         <button 
                             onClick={() => handleAction(activePopover === 'appuntamento' ? 'APPUNTAMENTO' : 'RICHIAMO')} 
                             disabled={isSubmitDisabled} 
