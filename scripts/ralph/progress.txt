@@ -28,6 +28,8 @@ Started: 2026-04-07
 - REST API Supabase: usare SUPABASE_SERVICE_ROLE_KEY dal .env per apikey e Authorization
 - Quest role filtering: quests table has `role` column ('GDO'|'CONFERME'|'VENDITORE'), generateDailyQuests fetches user role and filters
 - CONFERME metrics in measureMetric: conferme_fatte (confirmationsOutcome='confermato'), conferme_chiamate (leadEvents conferme_*), conferme_scartate (confirmationsOutcome='scartato')
+- VENDITORE metrics in measureMetric: deals_chiusi (salespersonOutcome='Chiuso'), fatturato_eur (SUM closeAmountEur), esiti_registrati (any salespersonOutcomeAt), trattative_presentate (salespersonAssignedAt)
+- VENDITORE quest IDs: vend-d-* (daily), vend-w-* (weekly). Migration route: /api/migrate-quests-venditori
 
 ---
 
@@ -76,4 +78,24 @@ Started: 2026-04-07
   - Il metric `tasso_conferma_percent` è basato su percentuale intera (0-100), non decimale
   - checkAchievements funziona automaticamente per i nuovi achievement perché itera tutti i record della tabella achievements
   - I badge appaiono nel profilo RPG automaticamente perché getUserAchievements carica tutti gli achievement dal DB
+---
+
+## 2026-04-07 - F3-013
+- Esteso il sistema quest ai ruoli VENDITORE con 4 nuove metriche specifiche
+- In questActions.ts measureMetric: aggiunto `deals_chiusi`, `fatturato_eur`, `esiti_registrati`, `trattative_presentate`
+  - deals_chiusi: COUNT leads con salespersonOutcome='Chiuso' per venditore nel periodo
+  - fatturato_eur: SUM closeAmountEur per lead chiusi dal venditore nel periodo
+  - esiti_registrati: COUNT leads con salespersonOutcomeAt nel periodo (qualsiasi esito)
+  - trattative_presentate: COUNT leads assegnati (salespersonAssignedAt) nel periodo
+- Creato 9 quest template VENDITORE: 6 daily + 3 weekly
+  - Daily: Primo Deal (1), Closer Seriale (3), Registra 3/5 Esiti, Fattura 3K, Presenta 2 Trattative
+  - Weekly: Settimana da Closer (5 deal), Fattura 15K EUR, Maratoneta Vendite (15 esiti)
+- generateDailyQuests già gestisce ruolo VENDITORE (riga 84 questActions.ts)
+- Creato migration route: src/app/api/migrate-quests-venditori/route.ts con ON CONFLICT DO NOTHING
+- File modificati: src/app/actions/questActions.ts, src/app/api/migrate-quests-venditori/route.ts (new)
+- **Learnings per iterazioni future:**
+  - I campi venditore chiave: salespersonUserId, salespersonOutcome ('Chiuso'|'Non chiuso'|'Sparito'), salespersonOutcomeAt, closeAmountEur, salespersonAssignedAt
+  - fatturato_eur usa SUM con COALESCE per evitare NULL, ritorna Number() per type safety
+  - Quest VENDITORE ID pattern: vend-d-* (daily), vend-w-* (weekly) — consistente con conf-d/w per CONFERME
+  - Migrazione da eseguire su prod dopo deploy: /api/migrate-quests-venditori
 ---
