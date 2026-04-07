@@ -4,8 +4,9 @@ import {
     Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
+import AchievementShowcase from "@/components/AchievementShowcase"
 
-export default function ProfileClient({ profileData }: { profileData: any }) {
+export default function ProfileClient({ profileData, achievements = [] }: { profileData: any; achievements?: any[] }) {
 
     const {
         displayName, gdoCode,
@@ -170,6 +171,11 @@ export default function ProfileClient({ profileData }: { profileData: any }) {
                     )}
                 </div>
             </div>
+
+            {/* BADGE & ACHIEVEMENT SHOWCASE */}
+            {achievements.length > 0 && (
+                <AchievementShowcase achievements={achievements} />
+            )}
 
         </div>
     );
