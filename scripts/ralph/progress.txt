@@ -182,3 +182,26 @@ Started: 2026-04-07
   - Delete uses AND condition (noteId + authorUserId) for authorization — only the author can delete their own notes
   - Category is a text field with app-level validation, not a DB constraint — allows flexibility
 ---
+
+## 2026-04-07 - F2-010
+- **Feature**: Note GDO: pagina UI dashboard Team Leader
+- **What was done:**
+  - Added `getGdoUsersForNotes` server action in `gdoNotesActions.ts` — fetches active GDO users with id, name, displayName, gdoCode, level
+  - Created `NoteGdoClient.tsx` client component with:
+    - Left panel: list of active GDO operators with name, code, and level
+    - Right panel: notes for selected GDO with category badges, date, author, and delete button (author-only)
+    - Add note form with category pill selector (formazione/positivo/negativo/disciplinare) and textarea
+    - Category filter dropdown
+    - Success/error feedback banners
+  - Created `/note-gdo` page restricted to MANAGER and ADMIN roles (marketing excluded)
+  - Added "Note GDO" link with FileText icon in Sidebar for MANAGER/ADMIN
+- **Files modified:**
+  - `src/app/actions/gdoNotesActions.ts` — added GdoUserForNotes interface + getGdoUsersForNotes action
+  - `src/components/NoteGdoClient.tsx` — new client component
+  - `src/app/(dashboard)/note-gdo/page.tsx` — new page
+  - `src/components/Sidebar.tsx` — added sidebar link + FileText import
+- **Learnings per iterazioni future:**
+  - Reuse `getGdoNotes`/`createGdoNote`/`deleteGdoNote` from F2-009 — no new server actions needed for CRUD
+  - Manager pages follow consistent auth pattern: createClient → getUser → check role → redirect marketing → render
+  - Category filter with "all" default is a clean pattern for nullable filter state
+---
