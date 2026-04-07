@@ -91,3 +91,23 @@ Started: 2026-04-07
   - Empty categories hidden from filter bar to avoid confusing users
   - Sort order cycles through 3 states (none/asc/desc) with visual feedback icons
 ---
+
+## 2026-04-07 - F3-006
+- Reorganized Manager Target page into 5 tabbed sections with clear headers and icons
+- Tabs: Target GDO (Target icon), Target Conferme (CheckCircle2), Target Venditori (UserCheck), Giorni Lavorativi (Calendar), Regole Gamification (Trophy)
+- Tab navigation uses gradient active state (brand-charcoal to ash-800) with brand-orange icon accent
+- Responsive: tab labels hidden on mobile (icons only), full labels on sm+
+- **Target GDO tab**: Calendar Stats (4 cards) + Critical Alert + Table A (Numeri Mensili) + Table B (Dato Operativo & Forecast)
+- **Target Conferme tab**: Extracted conferme-specific metrics into 3 summary cards + dedicated conferme table
+- **Target Venditori tab**: 3 summary cards (Contratti Chiusi, Valore Contratti, Venditori Attivi) + full venditori fatturato table with inline editing
+- **Giorni Lavorativi tab**: 3 cards (Totali, Trascorsi, Rimanenti) + configuration info + daily breakdown table
+- **Regole Gamification tab**: Economy overview (Coins per action), Level system info, Store tiers (Comune/Raro/Epico/Leggendario), link to RPG Monitor
+- Header + month picker + "Imposta Target" button remain always visible above tabs
+- ManagerOperativaBoard stays below tabs in page.tsx (not reorganized — separate component)
+- Files modified: `src/app/(dashboard)/manager-targets/ManagerTargetsClient.tsx`
+- **Learnings per iterazioni future:**
+  - Tab pattern: TABS const array with id/label/icon, activeTab state, conditional rendering with &&
+  - Tab active style: `bg-gradient-to-r from-brand-charcoal to-ash-800 text-white shadow-soft` with `text-brand-orange` icon
+  - Responsive tab labels: `<div className="hidden sm:block">{tab.label}</div>` for icon-only on mobile
+  - Content can be reorganized from flat sections into tabs without touching server component or data flow
+---
