@@ -250,3 +250,31 @@ Started: 2026-04-07
   - metricCache pattern: `Map<cacheKey, Promise<number>>` can further optimize by parallelizing metric fetches
   - importLeads.ts has N+1 (per-lead insert) but is admin-only rare operation — not worth batching
 ---
+
+## 2026-04-07 - F3-023
+- E2E verification of complete GDO flow using Playwright on production build (next start)
+- Login as GDO 114 (gdo114@fenice.local / 1234): SUCCESS
+- Pipeline loads with correct leads: 1ª Chiamata (12), 2ª Chiamata (31), 3ª Chiamata (15)
+- All 3 pipeline tabs switch correctly and show leads with proper data
+- Copy number buttons verified — each lead shows correct phone number from lead.phone
+- Quick actions (NR, Scartato, Richiamo, App Preso) visible on all lead cards, zero console errors
+- QuestPanel visible: "Quest Attive: 3/3 giornaliere, 0/2 settimanali, 3 completate"
+- Streak counter visible: 0 giorni, "Inizia la tua streak"
+- Profilo RPG: loads correctly with avatar (Uovo Liv. 1), XP bar, salary projection, weekly tracker
+- Fenice Store: loads with 17 items, categories (Skin Avatar 4, Temi 6, Effetti 7), 64 coins balance
+- Classifica: multi-role tabs (GDO, Conferme, Venditori), metric tabs (Appuntamenti, Chiamate, XP, Streak), podium
+- KPI GDO: targets, metrics (77 chiamate, 43% tasso, 8 appuntamenti), trend charts
+- Richiami: "Da Richiamare Ora 0", "In Arrivo 4"
+- Appuntamenti: 8 "In Programma", 9 "Archivio Storico", 17 totale
+- Sidebar: all 8 links present (Pipeline, Profilo RPG, Richiami, Appuntamenti, Classifica, Store, Performance, Storico Pause)
+- Console errors: 2 minor non-blocking (404 /api/user/profile on store, sprint banner fetch failure)
+- npx next build: compiles successfully with zero errors
+- Screenshots saved: e2e-gdo-pipeline-main.png, e2e-gdo-pipeline-2a-chiamata.png, e2e-gdo-pipeline-3a-chiamata.png, e2e-gdo-pipeline-fullpage.png, e2e-gdo-profilo-rpg.png, e2e-gdo-store.png, e2e-gdo-classifica.png, e2e-gdo-richiami.png, e2e-gdo-appuntamenti.png, e2e-gdo-kpi.png
+- No code changes needed — all verification passed
+- **Learnings per iterazioni future:**
+  - Dev mode (Turbopack) can hang on heavy pages like /profilo — use production build (next start) for E2E testing
+  - Pipeline has 3 tabs (1ª, 2ª, 3ª Chiamata) by design — no 4ª tab since F3-019 auto-discards at 4th NR
+  - /api/user/profile 404 is a pre-existing issue, not related to Fase 3B changes
+  - Sprint banner fetch error is intermittent, likely from missing sprint data in DB
+  - Production build is much faster for Playwright E2E than dev server
+---
