@@ -1,5 +1,4 @@
 export const BREAK_RULES = {
-    MAX_PAUSES_PER_DAY: 2,
     MAX_MINUTES_PER_PAUSE: 15,
 }
 

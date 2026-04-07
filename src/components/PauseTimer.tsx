@@ -92,14 +92,14 @@ export function PauseTimer() {
 
     const isOngoing = !!status?.currentPause
     const isExceeded = localSeconds > (15 * 60)
-    const canStart = !isOngoing && status && !status.isBlocked
+    const canStart = !isOngoing && !!status
 
     return (
         <div className="flex items-center gap-3">
             {!isOngoing && (
                 <div className="flex flex-col items-end mr-1">
                     <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Pause Oggi</span>
-                    <span className="text-xs font-medium text-gray-700">{status?.usedPauses ?? 0}/{status?.maxPauses ?? 2}</span>
+                    <span className="text-xs font-medium text-gray-700">{status?.usedPauses ?? 0}</span>
                 </div>
             )}
 
