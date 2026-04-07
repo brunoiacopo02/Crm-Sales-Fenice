@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { getVenditoriKpi } from "@/app/actions/kpiVenditoriActions"
-import { Trophy, TrendingUp, DollarSign, Target, CalendarDays } from "lucide-react"
+import { Trophy, TrendingUp, DollarSign, Target, CalendarDays, Award } from "lucide-react"
 
 interface KpiVenditoriClientProps {
     currentUserRole: string
@@ -65,6 +65,8 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                     <th scope="col" className="px-6 py-4">Posizione</th>
                                     <th scope="col" className="px-6 py-4">Venditore</th>
                                     <th scope="col" className="px-6 py-4 text-center">Fatturato</th>
+                                    <th scope="col" className="px-6 py-4 text-center">Target</th>
+                                    <th scope="col" className="px-6 py-4 text-center">Progresso</th>
                                     <th scope="col" className="px-6 py-4 text-center">Chiusi</th>
                                     <th scope="col" className="px-6 py-4 text-center">Non Chiusi</th>
                                     <th scope="col" className="px-6 py-4 text-center">Spariti</th>
@@ -74,7 +76,7 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                             <tbody className="bg-white divide-y divide-gray-100">
                                 {kpiData.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                                        <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                                             Nessun dato disponibile nel periodo.
                                         </td>
                                     </tr>
@@ -105,6 +107,42 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                                     <span className="inline-flex items-center gap-1 font-bold text-green-700 bg-green-50 px-3 py-1 rounded-full text-base">
                                                         € {row.fatturato.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                                                     </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-gray-500">
+                                                    {row.salesTargetEur != null
+                                                        ? `€ ${row.salesTargetEur.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`
+                                                        : <span className="text-gray-300">—</span>
+                                                    }
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                    {row.salesTargetEur != null && row.salesTargetEur > 0 ? (
+                                                        (() => {
+                                                            const pct = Math.round((row.fatturato / row.salesTargetEur) * 100)
+                                                            const barColor = pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                                                            const textColor = pct >= 100 ? 'text-green-700' : pct >= 70 ? 'text-yellow-700' : 'text-red-600'
+                                                            return (
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                                                                            <div
+                                                                                className={`h-full rounded-full transition-all ${barColor}`}
+                                                                                style={{ width: `${Math.min(pct, 100)}%` }}
+                                                                            />
+                                                                        </div>
+                                                                        <span className={`text-xs font-bold ${textColor}`}>{pct}%</span>
+                                                                    </div>
+                                                                    {pct >= 100 && (
+                                                                        <div className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                                                                            <Award className="w-3 h-3" />
+                                                                            BONUS RAGGIUNTO
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        })()
+                                                    ) : (
+                                                        <span className="text-gray-300">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-gray-900 font-bold">{row.chiusi}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-gray-600">{row.nonChiusi}</td>

@@ -34,6 +34,7 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         id: users.id,
         name: users.name,
         displayName: users.displayName,
+        salesTargetEur: users.salesTargetEur,
     }).from(users).where(eq(users.role, 'VENDITORE'))
 
     // Prendiamo tutti gli esiti dei venditori nel periodo (usando salespersonOutcomeAt)
@@ -72,7 +73,8 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
             sparito,
             totalEsitati,
             closingRate: Math.round(closingRate),
-            fatturato
+            fatturato,
+            salesTargetEur: v.salesTargetEur,
         }
     })
 
