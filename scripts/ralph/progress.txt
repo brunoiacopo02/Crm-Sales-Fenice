@@ -266,3 +266,25 @@ Started: 2026-04-07
   - Coefficient is best understood as "effective appointments per hour" — combines volume and quality
   - For multi-day filters, the coefficient scales linearly with days but ranking remains valid for comparison
 ---
+
+## 2026-04-07 - F2-014
+- **Feature**: UI: Design system premium con Stitch
+- **What was done:**
+  - Used Stitch MCP to generate "CRM Fenice Premium" design system with Fidelity color variant
+  - Extended @theme in globals.css with comprehensive design tokens while preserving all existing brand colors
+  - **Color scales added**: brand-orange (50-900), ember (50-900, fire red), gold (50-900, prestige), ash (50-900, warm neutrals)
+  - **Shadows**: soft, card, elevated, glow-orange, glow-ember, glow-gold
+  - **Border radius**: sm (6px), md (8px), lg (12px), xl (16px), 2xl (24px)
+  - **Animations**: fade-in, slide-up, slide-in-right, glow-pulse, shimmer
+  - **Typography utilities**: display-lg/md/sm, heading-lg/md, body-lg/md/sm, caption, mono — display uses Sora font
+  - **Component classes**: btn-primary/secondary/ghost/danger, input-default, badge/badge-orange/ember/gold/ash/success, card-default/elevated/warm, avatar sm/md/lg + orange/ember/gold, skeleton shimmer, glass effect, gradient backgrounds
+  - All 280 existing brand color usages across 51 files remain untouched — fully backward compatible
+- **Files modified:**
+  - `src/app/globals.css` — extended @theme + added @layer utilities/components (422 lines added)
+- **Learnings per iterazioni future:**
+  - Tailwind v4 @theme block supports custom --shadow-*, --radius-*, --animate-* tokens natively
+  - @layer components classes can be combined with Tailwind utilities freely
+  - Stitch FIDELITY variant stays close to provided override colors — best for brand consistency
+  - font-display registered as `"Sora", var(--font-geist-sans)` for graceful fallback
+  - Existing components don't need migration — new tokens are opt-in for F2-015 through F2-020
+---

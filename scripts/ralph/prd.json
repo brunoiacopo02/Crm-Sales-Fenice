@@ -215,7 +215,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "Usare Stitch in modalita Pro. Skill tailwindcss e ui-design-system."
     },
     {
