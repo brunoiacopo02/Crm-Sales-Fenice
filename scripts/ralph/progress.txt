@@ -17,6 +17,7 @@ Started: 2026-04-07
 - ConfermeDrawer: usare `salespersonUserId` (UUID) per init, mai `salespersonAssigned` (display name)
 - FreeBusy check: SEMPRE prima di db.update(), mai dopo
 - Sidebar e Topbar gia' redesignate in Run 1: seguire stesso stile per nuovi componenti
+- Achievement system: `checkAchievements(userId)` in `achievementActions.ts` — call after any action that changes metrics (quest complete, call logged, appointment set, level up)
 - gdoNotes tabella gia' creata in Run 1 per note HR/formazione
 
 ---
@@ -72,4 +73,30 @@ Started: 2026-04-07
   - Streak multiplier is applied at quest completion time, not at display time — coins transaction logs the actual earned amount
   - StreakCounter uses same dark gradient theme as QuestPanel: from-brand-charcoal via-ash-900 to-ember-900
   - `animate-glow-pulse` from globals.css used for streak >= 7 days visual emphasis
+---
+
+## 2026-04-07 - F2-024
+- Created `achievements` table in schema: id, name, description, icon, category, metric, tier1/2/3Target
+- Created `userAchievements` table in schema: id, userId, achievementId, tier (1=bronze/2=silver/3=gold), unlockedAt
+- Created ADDITIVE migration at `src/app/api/migrate-achievements/route.ts` with 15 seeded achievements across 7 categories:
+  - Calls: Telefonista (100/500/1000), Centralino Umano (2k/5k/10k)
+  - Appointments: Fissatore (10/50/200), Re degli Appuntamenti (300/500/1k)
+  - Streak: Costante (7/14/30), Maratoneta (45/60/90)
+  - Quests: Avventuriero (10/50/200), Cacciatore di Quest (300/500/1k)
+  - Level: Recluta (5/10/15), Veterano (20/25/30), Leggenda (35/40/50)
+  - Leads: Networker (50/200/500), Ragno della Rete (1k/2k/5k)
+  - Coins: Collezionista (500/2k/5k), Paperon de' Paperoni (10k/25k/50k)
+- Created server actions in `src/app/actions/achievementActions.ts`:
+  - `checkAchievements(userId)` — measures 7 lifetime metrics, checks all 15 achievements x 3 tiers, unlocks new ones
+  - `getUserAchievements(userId)` — returns all achievements with user's current tier and metric progress
+  - `measureAchievementMetric(userId, metric)` — private helper for 7 metric types (total_calls, total_appointments, current_streak, total_quests_completed, current_level, total_leads_contacted, total_coins_earned)
+- Badge unlock creates notification via `notifications` table (type: 'achievement_unlocked') with metadata
+- Metrics are grouped by type to minimize DB queries (measure once per distinct metric)
+- File modificati: `src/db/schema.ts`, `src/app/api/migrate-achievements/route.ts`, `src/app/actions/achievementActions.ts`
+- **Learnings per iterazioni future:**
+  - `measureAchievementMetric()` is reusable for any future system needing lifetime metric aggregation
+  - Achievement check groups by metric to avoid redundant DB queries (e.g. 2 call achievements share 1 query)
+  - Tier unlocking is sequential: must unlock tier 1 before 2 before 3 (break on first unmet target)
+  - Notification metadata includes icon/tier/tierLabel for rich UI display in notification center
+  - Migration uses `ON CONFLICT (id) DO NOTHING` for idempotent seeding (safe to re-run)
 ---
