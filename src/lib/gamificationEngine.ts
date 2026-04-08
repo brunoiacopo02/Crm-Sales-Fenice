@@ -3,16 +3,17 @@ import { users, leadEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export const GAME_CONSTANTS = {
-    // Math curve: TargetXP = floor(100 * (Level ^ 1.5))
-    calculateTargetXp: (level: number) => Math.floor(100 * Math.pow(level, 1.5)),
+    // Balanced XP curve: slow early (100-350), medium mid (350-800), high late (800-1500), very high endgame (1500+)
+    // Level 1→100, Level 10→352, Level 20→822, Level 30→1492, Level 40→2362
+    calculateTargetXp: (level: number) => Math.floor(82 + 17 * level + level * level),
 
-    // XP table for specific actions
+    // XP + Coins table for specific actions (rebalanced FA-002)
     ACTIONS: {
-        FISSATO: { xp: 10, coins: 0 },
-        PRESENZIATO: { xp: 50, coins: 0 },
-        CHIUSO: { xp: 200, coins: 50 },
+        FISSATO: { xp: 15, coins: 10 },
+        CONFERMATO: { xp: 20, coins: 8 },
+        PRESENZIATO: { xp: 30, coins: 15 },
+        CHIUSO: { xp: 50, coins: 25 },
         BONUS_SETTIMANALE: { xp: 500, coins: 100 },
-        CONFERMATO: { xp: 15, coins: 5 },
         DEAL_CHIUSO: { xp: 100, coins: 30 },
     },
 

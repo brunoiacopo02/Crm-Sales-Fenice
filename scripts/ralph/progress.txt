@@ -50,3 +50,25 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-002 — Ribilanciamento curva XP e reward per azione
+**Status:** PASSED ✓
+**Date:** 2026-04-08
+
+### Changes:
+1. **calculateTargetXp** — Old: `100 * level^1.5` (too steep: Level 10=3162 XP). New: `82 + 17*level + level^2`
+   - Level 1: 100 | Level 10: 352 | Level 20: 822 | Level 30: 1492 | Level 40: 2362
+   - Range 1-10: 100-352 XP (fast growth) ✓
+   - Range 10-20: 352-822 XP (medium) ✓
+   - Range 20-30: 822-1492 XP (slow) ✓
+   - Range 30+: 1492+ XP (very slow) ✓
+2. **ACTIONS rebalanced** — All actions now give both XP AND coins:
+   - FISSATO: 10xp/0c → 15xp/10c
+   - CONFERMATO: 15xp/5c → 20xp/8c
+   - PRESENZIATO: 50xp/0c → 30xp/15c
+   - CHIUSO: 200xp/50c → 50xp/25c
+   - BONUS_SETTIMANALE and DEAL_CHIUSO unchanged (still used by venditori/sprint)
+
+### Build: ✓ Zero errors
+
+---

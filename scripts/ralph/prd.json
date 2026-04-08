@@ -37,8 +37,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Formula: 82 + 17*level + level^2. Actions: FISSATO=15xp+10c, CONFERMATO=20xp+8c, PRESENZIATO=30xp+15c, CHIUSO=50xp+25c."
     },
     {
       "id": "FA-003",
