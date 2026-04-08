@@ -662,3 +662,36 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-019 — Sidebar e navigazione con stile gaming premium
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### CSS Changes (globals.css):
+
+#### Enhanced Sidebar Gradient:
+- `bg-gradient-gaming-sidebar` updated to 4-stop premium gradient: #0F0C11 → #12101A → #151220 → #0D0B0E
+- Deeper charcoal with subtle warm purple undertone
+
+#### New CSS Classes:
+1. **`sidebar-item-active`** — Active nav item: gradient bg (warm orange fade), 3px fire-400 left border, dual inset+outer glow shadow
+2. **`sidebar-item-hover`** — Hover: warm bg, inset left glow, icon gets brand-orange color + drop-shadow filter
+3. **`sidebar-logo-pulse`** — Logo: 3s cycling fire glow (8px→16px box-shadow)
+4. **`sidebar-gamification-separator`** — Decorative: fire→gold→fire gradient line, blur glow halo, centered 🔥 emoji
+
+#### New Keyframe:
+- `sidebar-logo-pulse` — 3s ease-in-out infinite fire glow cycling
+
+### Component Changes (Sidebar.tsx):
+- NavItem type extended with optional `gamification?: boolean`
+- GDO nav reordered: work items first, gamification (Profilo/Classifica/Store) after separator
+- CONFERME nav: same pattern, gamification grouped after separator
+- MANAGER: "Gamification" group gets fire/gold separator + gold-dim label
+- Active items: `sidebar-item-active` class with fire icon glow
+- Hover: `sidebar-item-hover` with orange icon illumination
+- Logo: animated `sidebar-logo-pulse` replacing static shadow
+
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---

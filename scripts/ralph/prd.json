@@ -330,8 +330,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Enhanced sidebar gradient (4-stop dark premium). Active items: sidebar-item-active class with fire-400 left border + inset glow shadow + gradient bg. Hover: sidebar-item-hover with orange glow on hover + icon filter drop-shadow. Gamification separator: fire→gold→fire gradient line with blurred glow and flame emoji center (shown before Profilo/Classifica/Store for GDO/CONFERME, before Gamification group for MANAGER). Logo pulse: sidebar-logo-pulse keyframe (3s cycling box-shadow glow). GDO/CONFERME nav reordered: work items first, gamification items grouped after separator. MANAGER Gamification group label in gold-dim. Build OK."
     },
     {
       "id": "FA-020",

@@ -1056,7 +1056,56 @@
     background: linear-gradient(145deg, var(--color-gaming-bg-card) 0%, var(--color-gaming-bg-surface) 100%);
   }
   .bg-gradient-gaming-sidebar {
-    background: linear-gradient(180deg, #0D0B0E 0%, #141118 40%, #1A1222 100%);
+    background: linear-gradient(180deg, #0F0C11 0%, #12101A 30%, #151220 60%, #0D0B0E 100%);
+  }
+
+  /* Sidebar active item glow */
+  .sidebar-item-active {
+    background: linear-gradient(90deg, rgba(255, 140, 66, 0.12) 0%, rgba(255, 140, 66, 0.04) 100%);
+    border-left: 3px solid var(--color-fire-400);
+    box-shadow: inset 4px 0 12px -4px rgba(255, 107, 26, 0.3), 0 0 12px -4px rgba(255, 107, 26, 0.1);
+  }
+
+  /* Sidebar hover glow */
+  .sidebar-item-hover:hover {
+    background: rgba(255, 190, 130, 0.06);
+    box-shadow: inset 3px 0 8px -4px rgba(255, 140, 66, 0.2);
+  }
+  .sidebar-item-hover:hover .sidebar-icon {
+    color: var(--color-brand-orange);
+    filter: drop-shadow(0 0 4px rgba(255, 140, 66, 0.4));
+  }
+
+  /* Sidebar logo pulse */
+  .sidebar-logo-pulse {
+    animation: sidebar-logo-pulse 3s ease-in-out infinite;
+  }
+
+  /* Gamification section separator */
+  .sidebar-gamification-separator {
+    position: relative;
+    height: 2px;
+    margin: 12px 12px 8px;
+    background: linear-gradient(90deg, transparent 0%, var(--color-fire-400) 20%, var(--color-gaming-gold) 50%, var(--color-fire-400) 80%, transparent 100%);
+    opacity: 0.5;
+    border-radius: 1px;
+  }
+  .sidebar-gamification-separator::before {
+    content: '';
+    position: absolute;
+    inset: -2px 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 215, 0, 0.15) 50%, transparent 100%);
+    filter: blur(4px);
+  }
+  .sidebar-gamification-separator::after {
+    content: '🔥';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    line-height: 1;
+    filter: drop-shadow(0 0 4px rgba(255, 107, 26, 0.6));
   }
 
   /* Gaming text glow */
@@ -1388,6 +1437,11 @@ body .skin-theme-nebula {
 @keyframes gaming-border-glow {
   0%, 100% { border-color: rgba(255, 190, 130, 0.12); }
   50% { border-color: rgba(255, 190, 130, 0.25); }
+}
+
+@keyframes sidebar-logo-pulse {
+  0%, 100% { box-shadow: 0 0 8px -2px rgba(255, 107, 26, 0.3), 0 0 4px -1px rgba(255, 140, 66, 0.2); }
+  50% { box-shadow: 0 0 16px -2px rgba(255, 107, 26, 0.5), 0 0 8px -1px rgba(255, 140, 66, 0.35); }
 }
 
 @keyframes gaming-fire-shimmer {

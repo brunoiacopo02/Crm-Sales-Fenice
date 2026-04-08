@@ -24,6 +24,7 @@ type NavItem = {
     href: string
     icon: any
     badge?: number
+    gamification?: boolean
 }
 
 type NavGroup = {
@@ -61,21 +62,21 @@ export function Sidebar() {
     if (role === "GDO") {
         navItems = [
             { name: "La mia Pipeline", href: "/", icon: Phone },
-            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2 },
             { name: "I miei Richiami", href: "/richiami", icon: Calendar, badge: expiredCount },
             { name: "I miei Appuntamenti", href: "/appuntamenti", icon: Users },
-            { name: "Classifica", href: "/classifica", icon: Trophy },
-            { name: "Fenice Store", href: "/store", icon: Store },
             { name: "Le mie Performance", href: "/kpi-gdo", icon: LayoutDashboard },
             { name: "Storico Pause", href: "/storico-pause", icon: Clock },
+            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
+            { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
+            { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
         ]
     } else if (role === "CONFERME") {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
             { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
-            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2 },
-            { name: "Classifica", href: "/classifica", icon: Trophy },
-            { name: "Fenice Store", href: "/store", icon: Store },
+            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
+            { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
+            { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
         ]
     } else if (role === "VENDITORE") {
         navItems = [
@@ -149,7 +150,7 @@ export function Sidebar() {
                 {/* Logo */}
                 <div className="p-5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-orange to-fire-500 flex items-center justify-center font-bold text-brand-charcoal shadow-gaming-glow-fire text-sm">
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-orange to-fire-500 flex items-center justify-center font-bold text-brand-charcoal sidebar-logo-pulse text-sm">
                             F
                         </div>
                         <span className="font-semibold text-base text-white tracking-wide">Fenice CRM</span>
@@ -168,13 +169,17 @@ export function Sidebar() {
                 {/* Navigation */}
                 <nav className="flex-1 px-3 mt-4 space-y-1 overflow-y-auto pb-4 custom-scrollbar">
                     {navGroups ? (
-                        navGroups.map((group, groupIdx) => (
+                        navGroups.map((group, groupIdx) => {
+                            const isGamificationGroup = group.label === "Gamification"
+                            return (
                             <div key={group.label}>
                                 {groupIdx > 0 && (
-                                    <div className="mx-1 my-2 h-px bg-gradient-to-r from-transparent via-[var(--color-gaming-border-hover)] to-transparent" />
+                                    isGamificationGroup
+                                        ? <div className="sidebar-gamification-separator" />
+                                        : <div className="mx-1 my-2 h-px bg-gradient-to-r from-transparent via-[var(--color-gaming-border-hover)] to-transparent" />
                                 )}
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-gaming-text-muted)]">
+                                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${isGamificationGroup ? "text-[var(--color-gaming-gold-dim)]" : "text-[var(--color-gaming-text-muted)]"}`}>
                                         {group.label}
                                     </span>
                                 </div>
@@ -185,12 +190,12 @@ export function Sidebar() {
                                             key={item.href}
                                             href={item.href}
                                             className={`group flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 ${isActive
-                                                ? "bg-brand-orange/10 text-white font-medium shadow-[inset_3px_0_0_var(--color-fire-400)] border border-[var(--color-gaming-border)]"
-                                                : "text-ash-400 hover:text-white hover:bg-[var(--color-gaming-bg-card)]"
+                                                ? "sidebar-item-active text-white font-medium border border-[var(--color-gaming-border)]"
+                                                : "sidebar-item-hover text-ash-400 hover:text-white"
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-fire-400" : "text-[var(--color-gaming-text-muted)] group-hover:text-brand-orange-300"}`} />
+                                                <item.icon className={`sidebar-icon h-[18px] w-[18px] transition-all duration-200 ${isActive ? "text-fire-400 drop-shadow-[0_0_6px_rgba(255,107,26,0.5)]" : "text-[var(--color-gaming-text-muted)]"}`} />
                                                 <span className="text-sm">{item.name}</span>
                                             </div>
                                             {item.badge !== undefined && item.badge > 0 && (
@@ -202,29 +207,34 @@ export function Sidebar() {
                                     )
                                 })}
                             </div>
-                        ))
+                        )})
                     ) : (
-                        navItems.map((item) => {
+                        navItems.map((item, idx) => {
                             const isActive = pathname === item.href
+                            const showGamificationSep = item.gamification && (idx === 0 || !navItems[idx - 1]?.gamification)
                             return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={`group flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
-                                        ? "bg-brand-orange/10 text-white font-medium shadow-[inset_3px_0_0_var(--color-fire-400)] border border-[var(--color-gaming-border)]"
-                                        : "text-ash-400 hover:text-white hover:bg-[var(--color-gaming-bg-card)]"
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-fire-400" : "text-[var(--color-gaming-text-muted)] group-hover:text-brand-orange-300"}`} />
-                                        <span className="text-sm">{item.name}</span>
-                                    </div>
-                                    {item.badge !== undefined && item.badge > 0 && (
-                                        <span className="bg-ember-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow-glow-ember">
-                                            {item.badge}
-                                        </span>
+                                <div key={item.href}>
+                                    {showGamificationSep && (
+                                        <div className="sidebar-gamification-separator" />
                                     )}
-                                </Link>
+                                    <Link
+                                        href={item.href}
+                                        className={`group flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
+                                            ? "sidebar-item-active text-white font-medium border border-[var(--color-gaming-border)]"
+                                            : "sidebar-item-hover text-ash-400 hover:text-white"
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <item.icon className={`sidebar-icon h-[18px] w-[18px] transition-all duration-200 ${isActive ? "text-fire-400 drop-shadow-[0_0_6px_rgba(255,107,26,0.5)]" : "text-[var(--color-gaming-text-muted)]"}`} />
+                                            <span className="text-sm">{item.name}</span>
+                                        </div>
+                                        {item.badge !== undefined && item.badge > 0 && (
+                                            <span className="bg-ember-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow-glow-ember">
+                                                {item.badge}
+                                            </span>
+                                        )}
+                                    </Link>
+                                </div>
                             )
                         })
                     )}
