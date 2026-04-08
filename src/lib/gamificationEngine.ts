@@ -130,14 +130,22 @@ export function getEvolutionStage(level: number) {
  * Funzione asincrona da richiamare tramite "fire and forget" o await dentro le Server Actions
  * per incrementare passivamente le stats del GDO in base all'azione compiuta.
  */
-export async function awardXpAndCoins(userId: string, actionType: keyof typeof GAME_CONSTANTS.ACTIONS, leadIdContext?: string) {
+export interface RewardData {
+    xpGained: number;
+    coinsGained: number;
+    actionType: string;
+    didLevelUp: boolean;
+    newLevel?: number;
+}
+
+export async function awardXpAndCoins(userId: string, actionType: keyof typeof GAME_CONSTANTS.ACTIONS, leadIdContext?: string): Promise<RewardData | null> {
     try {
         const userRows = await db.select().from(users).where(eq(users.id, userId));
-        if (userRows.length === 0) return;
+        if (userRows.length === 0) return null;
         const user = userRows[0];
 
         const reward = GAME_CONSTANTS.ACTIONS[actionType];
-        if (!reward) return;
+        if (!reward) return null;
 
         // Apply seasonal event multipliers (dynamic import to avoid client bundling)
         const { getActiveEventMultipliers } = await import('@/lib/seasonalEventUtils');
@@ -184,7 +192,10 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
             });
         }
 
+        return { xpGained: effectiveXp, coinsGained: effectiveCoins, actionType, didLevelUp, newLevel: didLevelUp ? newLevel : undefined };
+
     } catch (error) {
         console.error("Errore Gamification awardXpAndCoins:", error);
+        return null;
     }
 }

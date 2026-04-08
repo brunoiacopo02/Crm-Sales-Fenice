@@ -4,6 +4,7 @@ import { getUnlockedTitles } from '@/app/actions/titleActions';
 import { getStreakInfo } from '@/app/actions/streakActions';
 import { getUserQuests } from '@/app/actions/questActions';
 import { getUserLifetimeStats } from '@/app/actions/leaderboardActions';
+import { getUserInventory, getEquippedSkinCss } from '@/app/actions/shopActions';
 import ProfileClient from './ProfileClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
@@ -17,14 +18,21 @@ export default async function ProfiloPage() {
     }
 
     try {
-        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats] = await Promise.all([
+        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory] = await Promise.all([
             getGdoRpgProfile(supabaseUser.id),
             getUserAchievements(supabaseUser.id),
             getUnlockedTitles(supabaseUser.id),
             getStreakInfo(supabaseUser.id),
             getUserQuests(supabaseUser.id),
             getUserLifetimeStats(supabaseUser.id),
+            getUserInventory(supabaseUser.id),
         ]);
+
+        // Find equipped item from inventory
+        const equippedItemId = profileData.equippedItemId;
+        const equippedItemInfo = equippedItemId
+            ? inventory.find(item => item.id === equippedItemId) || null
+            : null;
 
         return (
             <ProfileClient
@@ -63,6 +71,18 @@ export default async function ProfiloPage() {
                     })),
                 }}
                 lifetimeStats={lifetimeStats}
+                equippedItems={inventory.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    description: item.description,
+                    cssValue: item.cssValue,
+                }))}
+                equippedItemInfo={equippedItemInfo ? {
+                    id: equippedItemInfo.id,
+                    name: equippedItemInfo.name,
+                    description: equippedItemInfo.description,
+                    cssValue: equippedItemInfo.cssValue,
+                } : null}
             />
         );
     } catch (e) {

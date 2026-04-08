@@ -68,6 +68,10 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                 alert("Questo lead è stato modificato da un altro utente. Ricarica la pagina e riprova.")
                 return
             }
+            if (result?.rewardData) {
+                const { emitRewardEarned } = await import('@/lib/animationUtils');
+                emitRewardEarned(result.rewardData);
+            }
 
             onSaved()
         } catch (error) {

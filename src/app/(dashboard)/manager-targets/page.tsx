@@ -9,7 +9,7 @@ import { ManualAdjustmentPanel } from "@/components/ManualAdjustmentPanel"
 export default async function ManagerTargetsPage({
     searchParams
 }: {
-    searchParams: { month?: string }
+    searchParams: Promise<{ month?: string }>
 }) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -22,7 +22,8 @@ export default async function ManagerTargetsPage({
 
     // Default al mese corrente 'YYYY-MM'
     const currentMonthStr = new Date().toISOString().slice(0, 7);
-    const selectedMonth = searchParams.month || currentMonthStr;
+    const params = await searchParams;
+    const selectedMonth = params.month || currentMonthStr;
 
     // Fetch in server component per la math geniale
     const [data, venditori] = await Promise.all([

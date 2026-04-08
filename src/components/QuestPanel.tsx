@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Scroll, Swords, Star, Coins, Zap, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { generateDailyQuests, getUserQuests, checkQuestProgress, completeQuest } from '@/app/actions/questActions';
-import { triggerCelebration } from '@/lib/animationUtils';
+import { QuestChainModal } from '@/components/QuestChainModal';
 
 interface QuestItem {
     progressId: string;
@@ -90,12 +90,18 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
     );
 }
 
+interface ChainModalData {
+    completedQuest: { title: string; rewardXp: number; rewardCoins: number };
+    nextQuest: { title: string; description: string; targetValue: number; rewardXp: number; rewardCoins: number } | null;
+}
+
 export function QuestPanel({ userId }: { userId: string }) {
     const [quests, setQuests] = useState<QuestData | null>(null);
     const [loading, setLoading] = useState(true);
     const [claiming, setClaiming] = useState<string | null>(null);
     const [collapsed, setCollapsed] = useState(false);
     const [justClaimed, setJustClaimed] = useState<Set<string>>(new Set());
+    const [chainModal, setChainModal] = useState<ChainModalData | null>(null);
 
     const loadQuests = useCallback(async () => {
         if (!userId) return;
@@ -121,10 +127,35 @@ export function QuestPanel({ userId }: { userId: string }) {
             const result = await completeQuest(userId, progressId);
             if (result.success) {
                 setJustClaimed(prev => new Set(prev).add(progressId));
-                triggerCelebration('fire');
+
+                // Find the claimed quest info for the chain modal
+                const allQuests = [...(quests?.daily || []), ...(quests?.weekly || [])];
+                const claimedQuest = allQuests.find(q => q.progressId === progressId);
+
                 // Reload quests to reflect updated state
                 const data = await getUserQuests(userId);
                 setQuests(data);
+
+                if (claimedQuest) {
+                    // Find next uncompleted quest as teaser
+                    const updatedAll = [...data.daily, ...data.weekly];
+                    const nextUncompleted = updatedAll.find(q => !q.completed && q.progressId !== progressId);
+
+                    setChainModal({
+                        completedQuest: {
+                            title: claimedQuest.title,
+                            rewardXp: claimedQuest.rewardXp,
+                            rewardCoins: claimedQuest.rewardCoins,
+                        },
+                        nextQuest: nextUncompleted ? {
+                            title: nextUncompleted.title,
+                            description: nextUncompleted.description,
+                            targetValue: nextUncompleted.targetValue,
+                            rewardXp: nextUncompleted.rewardXp,
+                            rewardCoins: nextUncompleted.rewardCoins,
+                        } : null,
+                    });
+                }
             }
         } catch (err) {
             console.error('Error claiming quest:', err);
@@ -221,6 +252,15 @@ export function QuestPanel({ userId }: { userId: string }) {
                     </div>
                 )}
             </div>
+
+            {/* Quest Chain Modal — shown after claiming a quest */}
+            {chainModal && (
+                <QuestChainModal
+                    completedQuest={chainModal.completedQuest}
+                    nextQuest={chainModal.nextQuest}
+                    onClose={() => setChainModal(null)}
+                />
+            )}
         </div>
     );
 }

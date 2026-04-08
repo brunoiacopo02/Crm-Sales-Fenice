@@ -366,8 +366,9 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         })
 
         // Gamification: award XP/coins to Conferme worker on confirmation
+        let rewardData = null;
         if (outcome === "confermato") {
-            await awardXpAndCoins(session.user.id, "CONFERMATO", leadId).catch(e => console.error("GameEngine CONFERMATO err:", e));
+            rewardData = await awardXpAndCoins(session.user.id, "CONFERMATO", leadId).catch(e => { console.error("GameEngine CONFERMATO err:", e); return null; });
         }
 
         // Notifiche Live (Pilota E2E)
@@ -401,7 +402,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             })
         }
 
-        return { success: true }
+        return { success: true, rewardData }
     } catch (error: any) {
         console.error("setConfermeOutcome error:", error);
         return { success: false, error: `INTERNAL_ERROR: ${error.message}` };
@@ -422,11 +423,12 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
         if (oldLead.version !== currentVersion) return { success: false, error: `CONCURRENCY_ERROR` }
 
         // Gamification RPC: Award only if it's the first time outcome is set
+        let rewardData = null;
         if (!oldLead.salespersonOutcome && oldLead.assignedToId) {
             if (outcome === 'Chiuso') {
-                await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId).catch(e => console.error("GameEngine CHIUSO err:", e));
+                rewardData = await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId).catch(e => { console.error("GameEngine CHIUSO err:", e); return null; });
             } else if (outcome === 'Non chiuso') {
-                await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId).catch(e => console.error("GameEngine PRESENZIATO err:", e));
+                rewardData = await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId).catch(e => { console.error("GameEngine PRESENZIATO err:", e); return null; });
             }
         }
 
@@ -452,7 +454,7 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
             metadata: { outcome, notes }
         })
 
-        return { success: true }
+        return { success: true, rewardData }
     } catch (error: any) {
         console.error("setSalespersonOutcome error:", error);
         return { success: false, error: error.message };
