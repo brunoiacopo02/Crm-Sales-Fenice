@@ -121,8 +121,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Metallic podium pedestals (gold/silver/bronze gradients with shimmer overlays). Floating crown animation for 1st place. Podium entrance animation with bounce. Enhanced rank change: bouncing ChevronUp (green glow) and ChevronDown (red). Row slide-up/slide-down animations on rank changes. Score pulse animation on rank improvement. Self-highlight: brand-orange left border with fire glow, orange rank number, orange score. SafeWrapper wraps entire component. Build OK."
     },
     {
       "id": "FA-008",

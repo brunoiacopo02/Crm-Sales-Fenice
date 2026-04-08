@@ -170,3 +170,38 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-007 — Redesign Classifica con podio animato e effetti ranking
+**Status:** PASSED ✓
+**Date:** 2026-04-08
+**Commit:** ee766ca
+
+### Changes:
+
+#### CSS Keyframes Added/Enhanced (globals.css):
+1. **lb-podium-gold/silver/bronze** — Enhanced with multi-layer glow and pulsating border-color
+2. **lb-pedestal-gold-shimmer / lb-pedestal-silver-shimmer** — Horizontal gradient sweep across pedestals (metallic shimmer)
+3. **lb-crown-float** — Floating crown animation (3px vertical oscillation) for 1st place
+4. **lb-arrow-bounce-up** — Elastic bounce-up for green rank change arrow (spring cubic-bezier)
+5. **lb-arrow-bounce-down** — Smooth bounce-down for red rank change arrow
+6. **lb-row-slide-up / lb-row-slide-down** — Row slides up/down 8px when rank changes
+7. **lb-score-pulse** — Score scales up 8% momentarily on rank improvement
+8. **lb-podium-entrance** — Podium items scale+translate into view with spring bounce (staggered delays)
+
+#### Component Updates (LeaderboardClient.tsx):
+1. **Metallic Pedestals** — True metallic gradients: Gold (#ffd700→#a07d08), Silver (#c0cedc→#788898), Bronze (#cd7f32→#8b5722) with shimmer overlay
+2. **Podium Background** — Subtle golden gradient glow behind podium area
+3. **Gold Avatar Glow** — Background blur ring behind 1st place avatar
+4. **Floating Crown** — Crown floats with lb-crown-float + gold drop-shadow
+5. **Enhanced Rank Arrows** — ChevronUp/ChevronDown (strokeWidth=3), podium vs row variants, green glow on podium
+6. **Row Slide Animations** — Rows slide up/down on rank change with highlight overlay
+7. **Score Pulse** — Score pulses on rank improvement
+8. **Self-Highlight** — brand-orange rank#, score, fire gradient left border with glow
+9. **SafeWrapper** — Entire LeaderboardClient wrapped in SafeWrapper
+10. **formatScore** — Used consistently for all score displays
+
+### Pipeline Logic: ✓ Not touched
+### Existing Tabs: ✓ GDO, Conferme, Venditori tabs maintained
+### Build: ✓ Zero errors
+
+---
