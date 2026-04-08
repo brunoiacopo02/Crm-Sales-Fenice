@@ -37,7 +37,7 @@ export function useRealtimeNotifications() {
                 setNotifications(data as Notification[])
                 setUnreadCount(data.filter((n) => n.status === 'unread').length)
             } else if (error) {
-                console.error('❌ Errore fetch notifiche iniziali:', error)
+                console.error('Errore fetch notifiche iniziali:', error)
             }
         }
 
@@ -55,7 +55,6 @@ export function useRealtimeNotifications() {
                 },
                 (payload) => {
                     const newNotif = payload.new as Notification
-                    console.log('🔔 Nuova notifica Live:', newNotif)
                     setNotifications((prev) => [newNotif, ...prev])
                     setUnreadCount((prev) => prev + 1)
                     setLiveToast(newNotif)

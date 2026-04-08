@@ -303,7 +303,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
         if (!oldLead) return { success: false, error: "Lead not found" }
         if (oldLead.version !== currentVersion) {
-            console.error(`@@@ VERSION MISMATCH @@@ DB version: ${oldLead.version}, Client version: ${currentVersion}`);
+            console.error(`Version mismatch - DB: ${oldLead.version}, client: ${currentVersion}`);
             return { success: false, error: `CONCURRENCY_ERROR: DB è alla versione ${oldLead.version} ma il client ha inviato la versione ${currentVersion}` }
         }
 
@@ -351,9 +351,8 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
                 },
                 leadId,
                 "appointment"
-            ).then(res => console.log("Google Event Result:", res)).catch(err => {
+            ).catch(err => {
                 console.error("Could not create calendar event:", err.message)
-                if (err.response) console.error("Google Auth Response:", err.response.data);
             })
         }
 
@@ -404,7 +403,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
 
         return { success: true }
     } catch (error: any) {
-        console.error("@@@ CRITICAL ERROR IN setConfermeOutcome @@@", error);
+        console.error("setConfermeOutcome error:", error);
         return { success: false, error: `INTERNAL_ERROR: ${error.message}` };
     }
 }
@@ -455,7 +454,7 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
 
         return { success: true }
     } catch (error: any) {
-        console.error("@@@ ERR IN setSalespersonOutcome @@@", error);
+        console.error("setSalespersonOutcome error:", error);
         return { success: false, error: error.message };
     }
 }

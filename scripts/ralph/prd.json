@@ -295,7 +295,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 18,
-      "passes": false,
+      "passes": true,
       "notes": "CRITICO: eseguire migrazioni, non solo crearle."
     },
     {
@@ -310,7 +310,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 19,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

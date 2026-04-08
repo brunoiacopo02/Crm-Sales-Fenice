@@ -73,8 +73,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                     table: 'leads',
                     filter: `salespersonUserId=eq.${sellerId}`
                 },
-                (payload) => {
-                    console.log('🔄 Update in arrivo da Supabase per Venditore:', payload)
+                () => {
                     fetchAppointments()
                 }
             )

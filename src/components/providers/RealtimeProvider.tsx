@@ -19,9 +19,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
                     schema: 'public',
                     table: 'leads'
                 },
-                (payload) => {
-                    console.log('🔄 Lead aggiornato in background via Realtime:', payload)
-                    // Il router.refresh() ricaricherà i dati dal server (Server Actions) mantenendo lo stato client
+                () => {
                     router.refresh()
                 }
             )

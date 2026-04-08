@@ -358,3 +358,57 @@ Started: 2026-04-07
   - 9 pages are accessible without redirect: marketing-analytics, kpi-gdo, kpi-conferme, manager-targets, import, archivio, manager-rpg-monitor, team/store, manager-gdo-performance
   - Sprint banner fetch error is pre-existing and intermittent across all roles
 ---
+
+## 2026-04-08 - F3-027
+- Hydration audit: scanned ALL .tsx components for buttons/links inside <span>/<p> — NONE FOUND (no WSOD risk)
+- Fixed 2 Date hydration issues in client components:
+  - ConfermeKpiBoard.tsx: moved `new Date().toLocaleDateString()` for isToday comparison into useState+useEffect
+  - GdoPauseHistory.tsx: moved `new Date().toLocaleDateString()` for currentMonth into useState+useEffect
+- Schema vs DB comparison: verified ALL 30 tables and their columns via Supabase REST API — 100% match, no missing migrations
+- Responsive testing with Playwright at 375px (mobile) and 1440px (desktop) on 10 pages:
+  - GDO Pipeline: ✅ both widths
+  - Conferme Dashboard: ✅ both widths
+  - Venditore Dashboard: ✅ both widths
+  - Store: ✅ mobile
+  - Classifica: ✅ mobile
+  - Manager Marketing Analytics: ✅ mobile
+  - Manager Targets: ✅ mobile
+  - KPI Conferme (calendar): ✅ both widths — today highlight works correctly after hydration fix
+  - KPI GDO (charts): ✅ desktop
+- No overflow or truncation issues found — all pages use proper responsive patterns (grid stacking, overflow-x-auto, hamburger sidebar)
+- Zero console errors across all tested pages (only pre-existing sprint banner warning)
+- File modificati: src/components/ConfermeKpiBoard.tsx, src/components/GdoPauseHistory.tsx
+- **Learnings per iterazioni future:**
+  - Only `new Date()` (current time) in client components causes hydration mismatch — `new Date(dataFromProps)` is safe since data loads after hydration
+  - Use useState("") + useEffect(() => setState(formatted)) pattern for client-side date formatting
+  - All 30 schema tables are in sync with production DB — Fase 3B migrations were all executed correctly
+  - Playwright login via Enter key is more reliable than button click for form submission
+  - Close browser session between role switches to avoid stale auth cookies
+---
+
+## 2026-04-08 - F3-028
+- Audited all components for React warnings: missing key, useEffect deps, unused vars — no issues found
+- Removed ALL debug console.log statements from production code:
+  - useRealtimeNotifications.ts: removed '🔔 Nuova notifica Live' debug log
+  - VenditoreDashboardClient.tsx: removed '🔄 Update in arrivo' debug log + unused payload param
+  - RealtimeProvider.tsx: removed '🔄 Lead aggiornato' debug log + unused payload param
+  - confermeActions.ts: removed Google Event Result debug log
+- Cleaned up debug markers in console.error statements:
+  - confermeActions.ts: cleaned @@@ VERSION MISMATCH @@@ → clean message
+  - confermeActions.ts: cleaned @@@ CRITICAL ERROR @@@ → clean message
+  - confermeActions.ts: cleaned @@@ ERR @@@ → clean message
+- Cleaned up emoji prefix in useRealtimeNotifications.ts error message
+- Kept legitimate console.error in catch blocks (server-side error logging)
+- Kept migration route console.log (operational logging for one-time routes)
+- TypeScript audit: build shows ZERO TypeScript errors/warnings
+- No @ts-ignore or @ts-expect-error comments found in codebase
+- No unused imports detected across all components
+- npx next build: compiles successfully with zero errors and zero significant warnings
+- File modificati: src/hooks/useRealtimeNotifications.ts, src/components/VenditoreDashboardClient.tsx, src/components/providers/RealtimeProvider.tsx, src/app/actions/confermeActions.ts
+- **Learnings per iterazioni future:**
+  - console.error in catch blocks is legitimate server-side logging — keep them
+  - Migration routes use console.log for operational tracking — keep them
+  - Test scripts (src/db/test*.ts, clean*.ts) use console.log for CLI output — keep them
+  - The only build warning is Next.js 16 middleware deprecation notice — not our code
+  - 108 `any` types exist but don't produce build warnings — TypeScript strict mode not enabled
+---
