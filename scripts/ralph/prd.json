@@ -36,7 +36,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Ispirazione: feed Twitter/Instagram stories. Crea FOMO e competizione sociale."
     },
     {

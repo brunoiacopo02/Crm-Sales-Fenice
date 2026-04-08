@@ -12,6 +12,7 @@ const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m 
 const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").then(m => ({ default: m.BossBattleBanner })))
 const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
+const ActivityFeed = dynamic(() => import("@/components/ActivityFeed").then(m => ({ default: m.ActivityFeed })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -60,6 +61,8 @@ export default async function DashboardPage() {
             <GdoLeadMetrics gdoUserId={session!.user.id} />
 
             <QuestPanel userId={session!.user.id} />
+
+            <ActivityFeed />
 
             <PipelineBoard
                 firstCall={firstCall}

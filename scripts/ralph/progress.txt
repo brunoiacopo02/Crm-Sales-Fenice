@@ -19,6 +19,8 @@ Started: 2026-04-08
 - emitRewardEarned() in src/lib/animationUtils.ts — dispatch reward_earned CustomEvent
 - awardXpAndCoins returns RewardData | null — server actions pass rewardData in response
 - Server actions return { success: true, rewardData } — client code calls emitRewardEarned after success
+- ActivityFeed pattern: aggregate multiple tables independently in server action, merge+sort in JS, return top N
+- Feed refresh: setInterval(30s) + window.addEventListener('reward_earned') for immediate updates
 
 ---
 
@@ -54,4 +56,27 @@ Started: 2026-04-08
   - Pattern di integrazione: server action returns rewardData, client emits CustomEvent — riusabile per tutte le future story
   - Popup queue con MAX_VISIBLE=3 previene overlap di troppi popup
   - CSS-only particles: usa animation con staggered delays per effetto naturale
+---
+
+## 2026-04-08 - SA-002
+- Implemented live activity feed in GDO dashboard showing recent team actions
+- Created server action getActivityFeed() aggregating from leadEvents, userAchievements, questProgress, lootDrops
+- Each source query limited to 10-20 results, merged and sorted desc, top 50 returned
+- Created ActivityFeed client component with scrollable card list, color-coded borders by event type
+- Features: user avatars/initials, relative timestamps (Italian), hover effects, slide-in animation for new items
+- Auto-refresh every 30 seconds via setInterval
+- Listens to 'reward_earned' custom event for immediate refresh on gamification actions
+- Skeleton loading state with pulse animation
+- Positioned in dashboard between QuestPanel and PipelineBoard
+- Dynamically imported to avoid SSR issues
+- File modificati:
+  - src/app/actions/activityFeedActions.ts (NEW - server action aggregating 4 tables)
+  - src/components/ActivityFeed.tsx (NEW - client component with feed UI)
+  - src/app/(dashboard)/page.tsx (added ActivityFeed dynamic import + render)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Pattern: aggregate multiple tables independently, merge in JS — avoids complex SQL unions
+  - Auto-refresh + event-driven refresh pattern: setInterval(30s) + window.addEventListener('reward_earned')
+  - Color system: orange (appointments), ember (quests), gold (achievements/legendary), ash (generic events)
+  - Scrollable feed with max-h-[400px] keeps dashboard compact
 ---
