@@ -1,0 +1,252 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "La mia Pipeline" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e14]: La mia Pipeline
+        - link "Il mio Profilo / RPG" [ref=e15] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - generic [ref=e19]: Il mio Profilo / RPG
+        - link "I miei Richiami" [ref=e20] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e21]:
+            - img [ref=e22]
+            - generic [ref=e24]: I miei Richiami
+        - link "I miei Appuntamenti" [ref=e25] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=e26]:
+            - img [ref=e27]
+            - generic [ref=e32]: I miei Appuntamenti
+        - link "Classifica" [ref=e33] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e41]: Classifica
+        - link "Fenice Store" [ref=e42] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e43]:
+            - img [ref=e44]
+            - generic [ref=e48]: Fenice Store
+        - link "Le mie Performance" [ref=e49] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e56]: Le mie Performance
+        - link "Storico Pause" [ref=e57] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e62]: Storico Pause
+      - button "Disconnetti" [ref=e65]:
+        - img [ref=e66]
+        - generic [ref=e69]: Disconnetti
+    - generic [ref=e70]:
+      - banner [ref=e71]:
+        - generic [ref=e74]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=e75]
+        - generic [ref=e76]:
+          - button [ref=e79]:
+            - img [ref=e80]
+          - generic [ref=e83]:
+            - generic "I tuoi Fenice Coin vinti nello Sprint" [ref=e84]:
+              - img "Fenice Coin" [ref=e85]
+              - text: "0"
+            - generic [ref=e86]: GDO 114
+            - generic [ref=e88]: G
+      - main [ref=e90]:
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - heading "Appuntamenti" [level=1] [ref=e93]
+            - generic [ref=e94]: "Totale generati: 17"
+          - generic [ref=e95]:
+            - generic [ref=e98]:
+              - button "In Programma 8" [ref=e99]:
+                - img [ref=e100]
+                - text: In Programma
+                - generic [ref=e103]: "8"
+              - button "Archivio Storico 9" [ref=e104]:
+                - img [ref=e105]
+                - text: Archivio Storico
+                - generic [ref=e108]: "9"
+            - generic [ref=e110]:
+              - generic [ref=e111]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e113]:
+                  - img [ref=e114]
+                - generic [ref=e117]:
+                  - heading "chiara Guadagnini" [level=3] [ref=e118]:
+                    - text: chiara Guadagnini
+                    - img [ref=e119]
+                  - generic [ref=e122]:
+                    - generic [ref=e123]:
+                      - img [ref=e124]
+                      - text: "3387517751"
+                    - generic "chaira05.g@gmail.com" [ref=e126]:
+                      - img [ref=e127]
+                      - text: chaira05.g@gmail.com
+                - generic [ref=e131]: JOB SIMULATOR
+                - generic [ref=e132]:
+                  - generic [ref=e133]:
+                    - img [ref=e134]
+                    - text: 08/04/26, 15:00
+                  - generic [ref=e137]:
+                    - img [ref=e138]
+                    - text: "Fissato il: 07/04/2026"
+              - generic [ref=e141]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e143]:
+                  - img [ref=e144]
+                - generic [ref=e147]:
+                  - heading "Maddalena D' amicis" [level=3] [ref=e148]:
+                    - text: Maddalena D' amicis
+                    - img [ref=e149]
+                  - generic [ref=e152]:
+                    - generic [ref=e153]:
+                      - img [ref=e154]
+                      - text: "3773463762"
+                    - generic "annadamicis71@gmail.com" [ref=e156]: annadamicis71@gmail.com
+                - generic [ref=e160]: TELEGRAM
+                - generic [ref=e161]:
+                  - generic [ref=e162]:
+                    - img [ref=e163]
+                    - text: 08/04/26, 15:30
+                  - generic [ref=e166]:
+                    - img [ref=e167]
+                    - text: "Fissato il: 07/04/2026"
+              - generic [ref=e170]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e172]:
+                  - img [ref=e173]
+                - generic [ref=e176]:
+                  - heading "Mario" [level=3] [ref=e177]:
+                    - text: Mario
+                    - img [ref=e178]
+                  - generic [ref=e181]:
+                    - generic [ref=e182]:
+                      - img [ref=e183]
+                      - text: "3501298694"
+                    - generic "marioaltamura61@gmail.com" [ref=e185]: marioaltamura61@gmail.com
+                - generic [ref=e189]: TELEGRAM-TK
+                - generic [ref=e190]:
+                  - generic [ref=e191]:
+                    - img [ref=e192]
+                    - text: 08/04/26, 18:00
+                  - generic [ref=e195]:
+                    - img [ref=e196]
+                    - text: "Fissato il: 07/04/2026"
+              - generic [ref=e199]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e201]:
+                  - img [ref=e202]
+                - generic [ref=e205]:
+                  - heading "Giuseppe" [level=3] [ref=e206]:
+                    - text: Giuseppe
+                    - img [ref=e207]
+                  - generic [ref=e210]:
+                    - generic [ref=e211]:
+                      - img [ref=e212]
+                      - text: "3406608168"
+                    - generic "peppe0770@gmail.com" [ref=e214]:
+                      - img [ref=e215]
+                      - text: peppe0770@gmail.com
+                - generic [ref=e219]: TELEGRAM-TK
+                - generic [ref=e220]:
+                  - generic [ref=e221]:
+                    - img [ref=e222]
+                    - text: 08/04/26, 18:00
+                  - generic [ref=e225]:
+                    - img [ref=e226]
+                    - text: "Fissato il: 07/04/2026"
+              - generic [ref=e229]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e231]:
+                  - img [ref=e232]
+                - generic [ref=e235]:
+                  - heading "Abdelhak" [level=3] [ref=e236]:
+                    - text: Abdelhak
+                    - img [ref=e237]
+                  - generic [ref=e240]:
+                    - generic [ref=e241]:
+                      - img [ref=e242]
+                      - text: "3780928118"
+                    - generic "deltatetto@hotmail.it" [ref=e244]:
+                      - img [ref=e245]
+                      - text: deltatetto@hotmail.it
+                - generic [ref=e249]: JOB SIMULATOR
+                - generic [ref=e250]:
+                  - generic [ref=e251]:
+                    - img [ref=e252]
+                    - text: 08/04/26, 19:00
+                  - generic [ref=e255]:
+                    - img [ref=e256]
+                    - text: "Fissato il: 07/04/2026"
+              - generic [ref=e259]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e261]:
+                  - img [ref=e262]
+                - generic [ref=e265]:
+                  - heading "Imma Manica" [level=3] [ref=e266]:
+                    - text: Imma Manica
+                    - img [ref=e267]
+                  - generic [ref=e270]:
+                    - generic [ref=e271]:
+                      - img [ref=e272]
+                      - text: "3289384849"
+                    - generic "imma.manica@hotmail.it" [ref=e274]:
+                      - img [ref=e275]
+                      - text: imma.manica@hotmail.it
+                - generic [ref=e279]: JOB SIMULATOR
+                - generic [ref=e280]:
+                  - generic [ref=e281]:
+                    - img [ref=e282]
+                    - text: 08/04/26, 20:00
+                  - generic [ref=e285]:
+                    - img [ref=e286]
+                    - text: "Fissato il: 07/04/2026"
+              - generic [ref=e289]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e291]:
+                  - img [ref=e292]
+                - generic [ref=e295]:
+                  - heading "Francesca" [level=3] [ref=e296]:
+                    - text: Francesca
+                    - img [ref=e297]
+                  - generic [ref=e300]:
+                    - generic [ref=e301]:
+                      - img [ref=e302]
+                      - text: "3517374109"
+                    - generic "kikkanordio@gmail.com" [ref=e304]:
+                      - img [ref=e305]
+                      - text: kikkanordio@gmail.com
+                - generic [ref=e309]: TELEGRAM-TK
+                - generic [ref=e310]:
+                  - generic [ref=e311]:
+                    - img [ref=e312]
+                    - text: 09/04/26, 17:00
+                  - generic [ref=e315]:
+                    - img [ref=e316]
+                    - text: "Fissato il: 07/04/2026"
+              - generic [ref=e319]:
+                - button "Modifica Orario/Note Appuntamento" [ref=e321]:
+                  - img [ref=e322]
+                - generic [ref=e325]:
+                  - heading "Giovanni" [level=3] [ref=e326]:
+                    - text: Giovanni
+                    - img [ref=e327]
+                  - generic [ref=e330]:
+                    - generic [ref=e331]:
+                      - img [ref=e332]
+                      - text: "3664884372"
+                    - generic "giovannisardo11@gmail.com" [ref=e334]: giovannisardo11@gmail.com
+                - generic [ref=e338]: CORSO 10 ORE
+                - generic [ref=e339]:
+                  - generic [ref=e340]:
+                    - img [ref=e341]
+                    - text: 09/04/26, 17:00
+                  - generic [ref=e344]:
+                    - img [ref=e345]
+                    - text: "Fissato il: 07/04/2026"
+  - alert [ref=e350]

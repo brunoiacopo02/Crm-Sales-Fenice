@@ -1,0 +1,71 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "Marketing Analytics" [ref=e10] [cursor=pointer]:
+          - /url: /marketing-analytics
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e16]: Marketing Analytics
+      - button "Disconnetti" [ref=e19]:
+        - img [ref=e20]
+        - generic [ref=e23]: Disconnetti
+    - generic [ref=e24]:
+      - banner [ref=e25]:
+        - generic [ref=e26]:
+          - button [ref=e28]:
+            - img [ref=e29]
+          - generic [ref=e32]:
+            - generic [ref=e33]: Marketing
+            - generic [ref=e35]: M
+      - main [ref=e37]:
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - generic [ref=e40]:
+              - heading "Importa Lead tramite CSV" [level=1] [ref=e41]
+              - paragraph [ref=e42]: Carica l'export con le colonne richieste per popolare il CRM.
+            - button "Aggiungi Lead Singolo" [ref=e43]:
+              - img [ref=e44]
+              - text: Aggiungi Lead Singolo
+          - generic [ref=e47]:
+            - generic [ref=e48]:
+              - generic [ref=e49]:
+                - generic [ref=e50]: "1"
+                - heading "Carica File" [level=3] [ref=e51]
+              - generic [ref=e52] [cursor=pointer]:
+                - img [ref=e53]
+                - paragraph [ref=e57]: Clicca qui per caricare
+                - paragraph [ref=e58]: Solo formati CSV, TXT supportati
+              - generic [ref=e59]:
+                - paragraph [ref=e60]:
+                  - img [ref=e61]
+                  - text: "Requisiti CSV:"
+                - list [ref=e63]:
+                  - listitem [ref=e64]: Separatore gestito in automatico ( Virgola o Punto e Virgola ).
+                  - listitem [ref=e65]:
+                    - text: "Le colonne indispensabili sono:"
+                    - strong [ref=e66]: Telefono1
+                    - text: e
+                    - strong [ref=e67]: Cognome
+                    - text: .
+                  - listitem [ref=e68]:
+                    - text: Il
+                    - strong [ref=e69]: Cognome
+                    - text: verrà mappato come Funnel di provenienza.
+                  - listitem [ref=e70]:
+                    - strong [ref=e71]: Nome
+                    - text: ed
+                    - strong [ref=e72]: Email
+                    - text: sono facoltativi.
+                  - listitem [ref=e73]: Le colonne superflue (es. Info, Unnamed) verranno ignorate.
+            - generic [ref=e74]:
+              - generic [ref=e76]:
+                - generic [ref=e77]: "2"
+                - heading "Preview & Validazione" [level=3] [ref=e78]
+              - generic [ref=e79]:
+                - img [ref=e80]
+                - paragraph [ref=e83]: In attesa del file CSV...
+  - alert [ref=e84]

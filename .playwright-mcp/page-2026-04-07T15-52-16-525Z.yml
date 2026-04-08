@@ -1,0 +1,71 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e19]
+  - generic [ref=e20]:
+    - complementary [ref=e21]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: F
+        - generic [ref=e25]: Fenice CRM
+      - navigation [ref=e27]:
+        - link "Dashboard Conferme" [ref=e28] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e29]:
+            - img [ref=e30]
+            - generic [ref=e32]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e33] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e40]: KPI Conferme
+      - button "Disconnetti" [ref=e43]:
+        - img [ref=e44]
+        - generic [ref=e47]: Disconnetti
+    - generic [ref=e48]:
+      - banner [ref=e49]:
+        - generic [ref=e50]:
+          - button [ref=e52]:
+            - img [ref=e53]
+          - generic [ref=e56]:
+            - generic [ref=e57]: Andrea
+            - generic [ref=e59]: A
+      - main [ref=e61]:
+        - generic [ref=e62]:
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - img [ref=e67]
+              - generic [ref=e72]: Radar
+            - generic [ref=e74]: Nessun altro collega online.
+          - generic [ref=e75]:
+            - heading "Dashboard Conferme" [level=1] [ref=e76]
+            - generic [ref=e77]: Gestione appuntamenti centralizzata
+          - generic [ref=e78]:
+            - generic [ref=e79]:
+              - img [ref=e80]
+              - generic [ref=e84]: Obiettivo di Oggi
+            - generic [ref=e85]:
+              - generic [ref=e86]:
+                - img [ref=e87]
+                - generic [ref=e90]: Confermati oggi
+              - generic [ref=e91]:
+                - generic [ref=e92]:
+                  - generic [ref=e93]: "0"
+                  - generic [ref=e94]: / 4
+                - generic [ref=e97]: 0%
+          - generic [ref=e99]:
+            - generic [ref=e100]:
+              - button "Pomeriggio 0" [ref=e101]:
+                - img [ref=e102]
+                - text: Pomeriggio
+                - generic [ref=e108]: "0"
+              - button "Mattina 0" [ref=e109]:
+                - img [ref=e110]
+                - text: Mattina
+                - generic [ref=e115]: "0"
+              - button "Richiami 0" [ref=e116]:
+                - img [ref=e117]
+                - text: Richiami
+                - generic [ref=e120]: "0"
+            - generic [ref=e121]:
+              - generic [ref=e122]:
+                - img [ref=e123]
+                - textbox "Cerca per nome, email o telefono..." [ref=e126]
+              - button "Vista Globale DB" [ref=e127]

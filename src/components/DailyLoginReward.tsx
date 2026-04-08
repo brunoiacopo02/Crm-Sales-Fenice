@@ -56,7 +56,10 @@ export function DailyLoginReward({ userId }: { userId: string }) {
             }
 
             // Check server
-            const status = await checkDailyLoginStatus(userId);
+            let status;
+            try {
+                status = await checkDailyLoginStatus(userId);
+            } catch { return; } // Fail silently
             if (status.alreadyClaimed) {
                 // Mark as shown so we don't check again
                 if (typeof window !== 'undefined') {

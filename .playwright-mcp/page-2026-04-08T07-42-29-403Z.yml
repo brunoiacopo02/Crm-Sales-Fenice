@@ -1,0 +1,28 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "Marketing Analytics" [ref=e10] [cursor=pointer]:
+          - /url: /marketing-analytics
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e16]: Marketing Analytics
+      - button "Disconnetti" [ref=e19]:
+        - img [ref=e20]
+        - generic [ref=e23]: Disconnetti
+    - generic [ref=e24]:
+      - banner [ref=e25]:
+        - generic [ref=e26]:
+          - button [ref=e28]:
+            - img [ref=e29]
+          - generic [ref=e32]:
+            - generic [ref=e33]: Marketing
+            - generic [ref=e35]: M
+      - main [ref=e37]:
+        - generic [ref=e40]:
+          - heading "Gestione Fenice Store" [level=1] [ref=e41]
+          - paragraph [ref=e42]: Crea e modifica personalizzazioni estetiche, badge o sfondi acquistabili dai GDO con i Fenice Coins.
+  - alert [ref=e44]

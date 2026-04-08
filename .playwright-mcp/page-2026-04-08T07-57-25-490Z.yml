@@ -1,0 +1,225 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e19]
+  - generic [ref=e20]:
+    - complementary [ref=e21]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: F
+        - generic [ref=e25]: Fenice CRM
+      - navigation [ref=e27]:
+        - link "Dashboard Vendite" [ref=e28] [cursor=pointer]:
+          - /url: /venditore
+          - generic [ref=e29]:
+            - img [ref=e30]
+            - generic [ref=e35]: Dashboard Vendite
+        - link "Il mio Profilo / RPG" [ref=e36] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e37]:
+            - img [ref=e38]
+            - generic [ref=e40]: Il mio Profilo / RPG
+        - link "Classifica" [ref=e41] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e42]:
+            - img [ref=e43]
+            - generic [ref=e49]: Classifica
+        - link "Fenice Store" [ref=e50] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e51]:
+            - img [ref=e52]
+            - generic [ref=e56]: Fenice Store
+      - button "Disconnetti" [ref=e59]:
+        - img [ref=e60]
+        - generic [ref=e63]: Disconnetti
+    - generic [ref=e64]:
+      - banner [ref=e65]:
+        - generic [ref=e66]:
+          - button "2" [ref=e68]:
+            - img [ref=e69]
+            - generic [ref=e72]: "2"
+          - generic [ref=e73]:
+            - generic [ref=e74]: Sales 001
+            - generic [ref=e76]: S
+      - main [ref=e78]:
+        - generic [ref=e79]:
+          - generic [ref=e81]:
+            - heading "Dashboard Vendite" [level=1] [ref=e82]
+            - generic [ref=e83]: Gestisci i tuoi appuntamenti, registra gli esiti e tieni traccia delle performance.
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - img [ref=e88]
+              - generic [ref=e90]:
+                - generic [ref=e91]:
+                  - generic [ref=e92]: "0"
+                  - generic [ref=e93]: giorni
+                - generic [ref=e94]: Inizia la tua streak
+            - generic [ref=e98]:
+              - img [ref=e99]
+              - generic [ref=e102]: 3g a x1.5
+          - generic [ref=e105]:
+            - generic [ref=e106] [cursor=pointer]:
+              - generic [ref=e107]:
+                - img [ref=e109]
+                - generic [ref=e112]:
+                  - heading "Quest Attive" [level=3] [ref=e113]
+                  - generic [ref=e114]: 0/3 giornaliere · 0/2 settimanali
+              - img [ref=e117]
+            - generic [ref=e119]:
+              - generic [ref=e120]:
+                - generic [ref=e121]:
+                  - img [ref=e122]
+                  - generic [ref=e131]: Giornaliere
+                - generic [ref=e132]:
+                  - generic [ref=e134]:
+                    - generic [ref=e135]:
+                      - generic [ref=e136]:
+                        - generic [ref=e137]: Registra 5 Esiti
+                        - generic [ref=e138]: Registra esito per almeno 5 lead oggi
+                      - generic [ref=e139]:
+                        - generic [ref=e140]:
+                          - img [ref=e141]
+                          - text: "40"
+                        - generic [ref=e143]:
+                          - img [ref=e144]
+                          - text: "25"
+                    - generic [ref=e151]: 0/5
+                  - generic [ref=e153]:
+                    - generic [ref=e154]:
+                      - generic [ref=e155]:
+                        - generic [ref=e156]: Closer Seriale
+                        - generic [ref=e157]: Chiudi 3 deal oggi
+                      - generic [ref=e158]:
+                        - generic [ref=e159]:
+                          - img [ref=e160]
+                          - text: "100"
+                        - generic [ref=e162]:
+                          - img [ref=e163]
+                          - text: "60"
+                    - generic [ref=e170]: 0/3
+                  - generic [ref=e172]:
+                    - generic [ref=e173]:
+                      - generic [ref=e174]:
+                        - generic [ref=e175]: Registra 3 Esiti
+                        - generic [ref=e176]: Registra esito per almeno 3 lead oggi
+                      - generic [ref=e177]:
+                        - generic [ref=e178]:
+                          - img [ref=e179]
+                          - text: "20"
+                        - generic [ref=e181]:
+                          - img [ref=e182]
+                          - text: "15"
+                    - generic [ref=e189]: 0/3
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - img [ref=e192]
+                  - generic [ref=e194]: Settimanali
+                - generic [ref=e195]:
+                  - generic [ref=e197]:
+                    - generic [ref=e198]:
+                      - generic [ref=e199]:
+                        - generic [ref=e200]: Settimana da Closer
+                        - generic [ref=e201]: Chiudi almeno 5 deal questa settimana
+                      - generic [ref=e202]:
+                        - generic [ref=e203]:
+                          - img [ref=e204]
+                          - text: "200"
+                        - generic [ref=e206]:
+                          - img [ref=e207]
+                          - text: "120"
+                    - generic [ref=e214]: 0/5
+                  - generic [ref=e216]:
+                    - generic [ref=e217]:
+                      - generic [ref=e218]:
+                        - generic [ref=e219]: Fattura 15.000 EUR
+                        - generic [ref=e220]: Fattura almeno 15.000 EUR questa settimana
+                      - generic [ref=e221]:
+                        - generic [ref=e222]:
+                          - img [ref=e223]
+                          - text: "300"
+                        - generic [ref=e225]:
+                          - img [ref=e226]
+                          - text: "200"
+                    - generic [ref=e233]: 0/15000
+          - generic [ref=e234]:
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - button "Lista" [ref=e237]:
+                  - img [ref=e238]
+                  - text: Lista
+                - button "Agenda" [ref=e239]:
+                  - img [ref=e240]
+                  - text: Agenda
+                - button "Team Classifica" [ref=e242]:
+                  - img [ref=e243]
+                  - text: Team Classifica
+              - generic [ref=e249]:
+                - generic [ref=e250]:
+                  - img [ref=e251]
+                  - textbox "Cerca nome, email, telefono..." [ref=e254]
+                - combobox [ref=e255]:
+                  - option "Tutti gli orari" [selected]
+                  - option "Mattina (8-14)"
+                  - option "Pomeriggio (14-22)"
+                - combobox [ref=e256]:
+                  - option "Tutti gli stati"
+                  - option "Da chiudere" [selected]
+                  - option "Chiusi/Esitati"
+                  - option "In Follow-up"
+              - button "Google Calendar Connesso" [ref=e258]:
+                - img [ref=e259]
+                - text: Google Calendar Connesso
+            - table [ref=e263]:
+              - rowgroup [ref=e264]:
+                - row "Giorno e Ora Lead Funnel GDO Fissatore Stato Vendita" [ref=e265]:
+                  - columnheader "Giorno e Ora" [ref=e266]
+                  - columnheader "Lead" [ref=e267]
+                  - columnheader "Funnel" [ref=e268]
+                  - columnheader "GDO Fissatore" [ref=e269]
+                  - columnheader "Stato Vendita" [ref=e270]
+              - rowgroup [ref=e271]:
+                - row "- - Target 114 0 (A) 333114000 TestLeaderboard Mario GDO il - Da Esitare" [ref=e272] [cursor=pointer]:
+                  - cell "- -" [ref=e273]:
+                    - generic [ref=e274]: "-"
+                    - generic [ref=e275]:
+                      - img [ref=e276]
+                      - text: "-"
+                  - cell "Target 114 0 (A) 333114000" [ref=e279]:
+                    - generic [ref=e280]: Target 114 0 (A)
+                    - generic [ref=e282]: "333114000"
+                  - cell "TestLeaderboard" [ref=e283]:
+                    - generic [ref=e284]: TestLeaderboard
+                  - cell "Mario GDO il -" [ref=e285]:
+                    - generic [ref=e286]: Mario GDO
+                    - generic [ref=e287]: il -
+                  - cell "Da Esitare" [ref=e288]:
+                    - generic [ref=e289]: Da Esitare
+                - row "- - Target 113 3 333113003 TestLeaderboard GDO 113 il - Da Esitare" [ref=e290] [cursor=pointer]:
+                  - cell "- -" [ref=e291]:
+                    - generic [ref=e292]: "-"
+                    - generic [ref=e293]:
+                      - img [ref=e294]
+                      - text: "-"
+                  - cell "Target 113 3 333113003" [ref=e297]:
+                    - generic [ref=e298]: Target 113 3
+                    - generic [ref=e300]: "333113003"
+                  - cell "TestLeaderboard" [ref=e301]:
+                    - generic [ref=e302]: TestLeaderboard
+                  - cell "GDO 113 il -" [ref=e303]:
+                    - generic [ref=e304]: GDO 113
+                    - generic [ref=e305]: il -
+                  - cell "Da Esitare" [ref=e306]:
+                    - generic [ref=e307]: Da Esitare
+                - row "- - Target 113 Sorpasso 5 333113005 TestLeaderboard GDO 113 il - Da Esitare" [ref=e308] [cursor=pointer]:
+                  - cell "- -" [ref=e309]:
+                    - generic [ref=e310]: "-"
+                    - generic [ref=e311]:
+                      - img [ref=e312]
+                      - text: "-"
+                  - cell "Target 113 Sorpasso 5 333113005" [ref=e315]:
+                    - generic [ref=e316]: Target 113 Sorpasso 5
+                    - generic [ref=e318]: "333113005"
+                  - cell "TestLeaderboard" [ref=e319]:
+                    - generic [ref=e320]: TestLeaderboard
+                  - cell "GDO 113 il -" [ref=e321]:
+                    - generic [ref=e322]: GDO 113
+                    - generic [ref=e323]: il -
+                  - cell "Da Esitare" [ref=e324]:
+                    - generic [ref=e325]: Da Esitare

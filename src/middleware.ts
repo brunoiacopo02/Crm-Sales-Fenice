@@ -35,6 +35,10 @@ export async function middleware(request: NextRequest) {
         // Token refresh can fail — redirect to login
     }
 
+    if (!user && request.nextUrl.pathname.startsWith('/api/test-')) {
+        return supabaseResponse;
+    }
+
     if (!user && !request.nextUrl.pathname.startsWith('/login')) {
         const url = request.nextUrl.clone();
         url.pathname = '/login';

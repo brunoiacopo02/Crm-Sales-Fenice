@@ -1,0 +1,72 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "La mia Pipeline" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e14]: La mia Pipeline
+        - link "Il mio Profilo / RPG" [ref=e15] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - generic [ref=e19]: Il mio Profilo / RPG
+        - link "I miei Richiami" [ref=e20] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e21]:
+            - img [ref=e22]
+            - generic [ref=e24]: I miei Richiami
+        - link "I miei Appuntamenti" [ref=e25] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=e26]:
+            - img [ref=e27]
+            - generic [ref=e32]: I miei Appuntamenti
+        - link "Classifica" [ref=e33] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e41]: Classifica
+        - link "Fenice Store" [ref=e42] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e43]:
+            - img [ref=e44]
+            - generic [ref=e48]: Fenice Store
+        - link "Le mie Performance" [ref=e49] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e56]: Le mie Performance
+        - link "Storico Pause" [ref=e57] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e62]: Storico Pause
+      - button "Disconnetti" [ref=e65]:
+        - img [ref=e66]
+        - generic [ref=e69]: Disconnetti
+    - generic [ref=e70]:
+      - banner [ref=e71]:
+        - generic [ref=e74]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=e75]
+        - generic [ref=e76]:
+          - button [ref=e79]:
+            - img [ref=e80]
+          - generic [ref=e83]:
+            - generic "I tuoi Fenice Coin vinti nello Sprint" [ref=e84]:
+              - img "Fenice Coin" [ref=e85]
+              - text: "0"
+            - generic [ref=e86]: GDO 114
+            - generic [ref=e88]: G
+      - main [ref=e90]:
+        - generic [ref=e93]:
+          - img [ref=e95]
+          - generic [ref=e98]:
+            - heading "Fenice Store & Inventario" [level=1] [ref=e99]
+            - generic [ref=e100]: Sblocca personalizzazioni per il tuo profilo usando i Fenice Coin guadagnati.
+  - alert [ref=e105]

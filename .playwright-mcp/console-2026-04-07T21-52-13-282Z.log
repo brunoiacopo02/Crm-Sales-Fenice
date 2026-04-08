@@ -1,0 +1,2 @@
+[     518ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3000/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3000/_next/static/chunks/f0c5a3f8cbd80068.js:2

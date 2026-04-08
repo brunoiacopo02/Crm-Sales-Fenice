@@ -1,0 +1,81 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e6]: F
+          - generic [ref=e7]: Fenice CRM
+        - button [ref=e8]:
+          - img [ref=e9]
+      - navigation [ref=e13]:
+        - link "Dashboard Conferme" [ref=e14] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e15]:
+            - img [ref=e16]
+            - generic [ref=e18]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e19] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: KPI Conferme
+        - link "Il mio Profilo / RPG" [ref=e27] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e28]:
+            - img [ref=e29]
+            - generic [ref=e31]: Il mio Profilo / RPG
+        - link "Classifica" [ref=e32] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e33]:
+            - img [ref=e34]
+            - generic [ref=e40]: Classifica
+        - link "Fenice Store" [ref=e41] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e42]:
+            - img [ref=e43]
+            - generic [ref=e47]: Fenice Store
+      - button "Disconnetti" [ref=e50]:
+        - img [ref=e51]
+        - generic [ref=e54]: Disconnetti
+    - generic [ref=e55]:
+      - banner [ref=e56]:
+        - button [ref=e58]:
+          - img [ref=e59]
+        - generic [ref=e60]:
+          - button [ref=e62]:
+            - img [ref=e63]
+          - generic [ref=e68]: A
+      - main [ref=e70]:
+        - generic [ref=e71]:
+          - generic [ref=e74]:
+            - generic [ref=e75]:
+              - img [ref=e76]
+              - generic [ref=e81]: Radar
+            - generic [ref=e83]: Nessun altro collega online.
+          - generic [ref=e84]:
+            - heading "Dashboard Conferme" [level=1] [ref=e85]
+            - generic [ref=e86]: Gestione appuntamenti centralizzata
+          - generic [ref=e92]:
+            - generic [ref=e93]:
+              - generic [ref=e94]:
+                - button "Pomeriggio 0" [ref=e95]:
+                  - img [ref=e96]
+                  - text: Pomeriggio
+                  - generic [ref=e102]: "0"
+                - button "Mattina 0" [ref=e103]:
+                  - img [ref=e104]
+                  - text: Mattina
+                  - generic [ref=e109]: "0"
+                - button "Richiami 0" [ref=e110]:
+                  - img [ref=e111]
+                  - text: Richiami
+                  - generic [ref=e114]: "0"
+                - button "Storico" [ref=e115]:
+                  - img [ref=e116]
+                  - text: Storico
+              - generic [ref=e119]:
+                - generic [ref=e120]:
+                  - img [ref=e121]
+                  - textbox "Cerca per nome, email o telefono..."
+                - button "Vista Globale DB" [ref=e124]
+            - generic [ref=e128]: Caricamento...
+  - alert [ref=e129]

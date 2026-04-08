@@ -1,0 +1,50 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "Dashboard Conferme" [ref=e10] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e14]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e15] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - generic [ref=e22]: KPI Conferme
+        - link "Il mio Profilo / RPG" [ref=e23] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e24]:
+            - img [ref=e25]
+            - generic [ref=e27]: Il mio Profilo / RPG
+        - link "Classifica" [ref=e28] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e29]:
+            - img [ref=e30]
+            - generic [ref=e36]: Classifica
+        - link "Fenice Store" [ref=e37] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e38]:
+            - img [ref=e39]
+            - generic [ref=e43]: Fenice Store
+      - button "Disconnetti" [ref=e46]:
+        - img [ref=e47]
+        - generic [ref=e50]: Disconnetti
+    - generic [ref=e51]:
+      - banner [ref=e52]:
+        - generic [ref=e53]:
+          - button [ref=e55]:
+            - img [ref=e56]
+          - generic [ref=e59]:
+            - generic [ref=e60]: Andrea
+            - generic [ref=e62]: A
+      - main [ref=e64]:
+        - generic [ref=e67]:
+          - img [ref=e69]
+          - generic [ref=e72]:
+            - heading "Fenice Store & Inventario" [level=1] [ref=e73]
+            - generic [ref=e74]: Sblocca personalizzazioni per il tuo profilo usando i Fenice Coin guadagnati.
+  - alert [ref=e79]

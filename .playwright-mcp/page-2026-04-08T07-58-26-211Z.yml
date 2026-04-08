@@ -1,0 +1,183 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e6]: F
+          - generic [ref=e7]: Fenice CRM
+        - button [ref=e8]:
+          - img [ref=e9]
+      - navigation [ref=e13]:
+        - link "Marketing Analytics" [ref=e14] [cursor=pointer]:
+          - /url: /marketing-analytics
+          - generic [ref=e15]:
+            - img [ref=e16]
+            - generic [ref=e20]: Marketing Analytics
+      - button "Disconnetti" [ref=e23]:
+        - img [ref=e24]
+        - generic [ref=e27]: Disconnetti
+    - generic [ref=e28]:
+      - banner [ref=e29]:
+        - button [ref=e31]:
+          - img [ref=e32]
+        - generic [ref=e33]:
+          - button [ref=e35]:
+            - img [ref=e36]
+          - generic [ref=e41]: M
+      - main [ref=e43]:
+        - generic [ref=e44]:
+          - generic [ref=e45]:
+            - generic [ref=e46]:
+              - generic [ref=e47]:
+                - heading "Target & Previsioni" [level=2] [ref=e48]:
+                  - img [ref=e49]
+                  - text: Target & Previsioni
+                - generic [ref=e53]: Confronto Performance Attuali vs Target previsionali GDO
+              - generic [ref=e54]:
+                - generic [ref=e55]:
+                  - img [ref=e56]
+                  - textbox [ref=e58]: 2026-04
+                - button "Imposta Target" [ref=e59] [cursor=pointer]
+            - generic [ref=e60]:
+              - button [ref=e61]:
+                - img [ref=e62]
+              - button [ref=e66]:
+                - img [ref=e67]
+              - button [ref=e70]:
+                - img [ref=e71]
+              - button [ref=e75]:
+                - img [ref=e76]
+              - button [ref=e78]:
+                - img [ref=e79]
+            - generic [ref=e86]:
+              - generic [ref=e87]:
+                - generic [ref=e88]:
+                  - generic [ref=e89]:
+                    - heading "Giorni Lavorativi Mese" [level=3] [ref=e90]
+                    - img [ref=e91]
+                  - generic [ref=e93]:
+                    - generic [ref=e94]: "26"
+                    - generic [ref=e95]: Domeniche Escluse
+                - generic [ref=e96]:
+                  - generic [ref=e97]:
+                    - heading "Giorni Trascorsi" [level=3] [ref=e98]
+                    - img [ref=e99]
+                  - generic [ref=e101]:
+                    - generic [ref=e102]: "7"
+                    - generic [ref=e103]: Fino a Oggi inclusa
+                - generic [ref=e104]:
+                  - generic [ref=e105]:
+                    - heading "Forza Vendita Attiva" [level=3] [ref=e106]
+                    - img [ref=e107]
+                  - generic [ref=e111]:
+                    - generic [ref=e112]: 18 GDO
+                    - generic [ref=e113]: Esclusi inattivi/sospesi
+                - generic [ref=e114]:
+                  - generic [ref=e115]:
+                    - heading "Lead Totali Mese" [level=3] [ref=e116]
+                    - img [ref=e117]
+                  - generic [ref=e119]:
+                    - generic [ref=e120]: "109"
+                    - generic [ref=e121]: Acquisiti nel CRM / Mese
+              - generic [ref=e122]:
+                - img [ref=e123]
+                - heading "ATTENZIONE CRITICA" [level=5] [ref=e125]
+                - generic [ref=e126]:
+                  - text: Fissaggio sotto il
+                  - strong [ref=e127]: "-20%"
+                  - text: da 7 o più giorni lavorativi consecutivi. Primo drop il 2026-04-01. Investigare le dinamiche dei lead e script al più presto.
+              - generic [ref=e128]:
+                - generic [ref=e129]:
+                  - heading "1. Numeri Mensili" [level=3] [ref=e131]:
+                    - img [ref=e132]
+                    - text: 1. Numeri Mensili
+                  - table [ref=e137]:
+                    - rowgroup [ref=e138]:
+                      - row "Metrica ACT ACT % TARGET/DAY TODAY TARGET PREV" [ref=e139]:
+                        - columnheader "Metrica" [ref=e140]
+                        - columnheader "ACT" [ref=e141]
+                        - columnheader "ACT %" [ref=e142]
+                        - columnheader "TARGET/DAY" [ref=e143]
+                        - columnheader "TODAY" [ref=e144]
+                        - columnheader "TARGET PREV" [ref=e145]
+                    - rowgroup [ref=e146]:
+                      - row "Appuntamenti fissati 17 15.60% 39.46 0 1026" [ref=e147]:
+                        - cell "Appuntamenti fissati" [ref=e148]
+                        - cell "17" [ref=e149]
+                        - cell "15.60%" [ref=e150]
+                        - cell "39.46" [ref=e151]
+                        - cell "0" [ref=e152]
+                        - cell "1026" [ref=e153]
+                      - row "Appuntamenti Confermati 1 0.92% 7.54 0 196" [ref=e154]:
+                        - cell "Appuntamenti Confermati" [ref=e155]
+                        - cell "1" [ref=e156]
+                        - cell "0.92%" [ref=e157]
+                        - cell "7.54" [ref=e158]
+                        - cell "0" [ref=e159]
+                        - cell "196" [ref=e160]
+                      - row "Trattative presenziati 0 0.00% 6.81 0 177" [ref=e161]:
+                        - cell "Trattative presenziati" [ref=e162]
+                        - cell "0" [ref=e163]
+                        - cell "0.00%" [ref=e164]
+                        - cell "6.81" [ref=e165]
+                        - cell "0" [ref=e166]
+                        - cell "177" [ref=e167]
+                      - row "Closed 0 0.00% 2.85 0 74" [ref=e168]:
+                        - cell "Closed" [ref=e169]
+                        - cell "0" [ref=e170]
+                        - cell "0.00%" [ref=e171]
+                        - cell "2.85" [ref=e172]
+                        - cell "0" [ref=e173]
+                        - cell "74" [ref=e174]
+                      - row "Valore Contratti firmati 0,00 € - 6461,54 € - 168.000,00 €" [ref=e175]:
+                        - cell "Valore Contratti firmati" [ref=e176]
+                        - cell "0,00 €" [ref=e177]
+                        - cell "-" [ref=e178]
+                        - cell "6461,54 €" [ref=e179]
+                        - cell "-" [ref=e180]
+                        - cell "168.000,00 €" [ref=e181]
+                      - row "[EXTRA] Trattative su lead 0.00%" [ref=e182]:
+                        - cell "[EXTRA] Trattative su lead" [ref=e183]
+                        - cell "0.00%" [ref=e184]
+                - generic [ref=e185]:
+                  - heading "2. Dato Operativo & Forecast" [level=3] [ref=e187]:
+                    - img [ref=e188]
+                    - text: 2. Dato Operativo & Forecast
+                  - table [ref=e192]:
+                    - rowgroup [ref=e193]:
+                      - row "Metriche d'Allarme / Forecast Valore Attuale" [ref=e194]:
+                        - columnheader "Metriche d'Allarme / Forecast" [ref=e195]
+                        - columnheader "Valore Attuale" [ref=e196]
+                    - rowgroup [ref=e197]:
+                      - 'row "Fissaggio (Variazione %) -98.34% (Delta: -925.69%)" [ref=e198]':
+                        - cell "Fissaggio (Variazione %)" [ref=e199]
+                        - 'cell "-98.34% (Delta: -925.69%)" [ref=e200]':
+                          - generic [ref=e201]:
+                            - img [ref=e202]
+                            - text: "-98.34%"
+                            - generic [ref=e205]: "(Delta: -925.69%)"
+                      - row "Data primo <= -20% 2026-04-01" [ref=e206]:
+                        - cell "Data primo <= -20%" [ref=e207]
+                        - cell "2026-04-01" [ref=e208]:
+                          - generic [ref=e209]:
+                            - img [ref=e210]
+                            - text: 2026-04-01
+                      - row "Media app/day/GDO 0.13 appuntamenti" [ref=e212]:
+                        - cell "Media app/day/GDO" [ref=e213]
+                        - cell "0.13 appuntamenti" [ref=e214]
+                      - row "Vendite/GDO (previste nel mese) 0.00 chiusure / GDO" [ref=e215]:
+                        - cell "Vendite/GDO (previste nel mese)" [ref=e216]
+                        - cell "0.00 chiusure / GDO" [ref=e217]
+          - generic [ref=e219]:
+            - generic [ref=e220]:
+              - generic [ref=e221]:
+                - heading "Dashboard Operativa Aziendale" [level=2] [ref=e222]:
+                  - img [ref=e223]
+                  - text: Dashboard Operativa Aziendale
+                - generic [ref=e225]: Monitoraggio volumi, tassi di risposta, appuntamenti e conversione oraria.
+              - generic [ref=e226]:
+                - button "Oggi" [ref=e227]
+                - button "Questo Mese" [ref=e228]
+                - button "Trimestre (90 gg)" [ref=e229]
+            - generic [ref=e233]: Caricamento dati...
+  - alert [ref=e234]

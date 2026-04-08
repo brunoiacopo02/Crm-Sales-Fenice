@@ -1,0 +1,23 @@
+[     622ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2
+[   13009ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3099/marketing-analytics:0
+[   13010ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2
+[   23027ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3099/marketing-analytics:0
+[   23028ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2
+[   33007ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3099/marketing-analytics:0
+[   33007ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2
+[   43049ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3099/marketing-analytics:0
+[   43049ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2
+[   53058ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3099/marketing-analytics:0
+[   53059ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2
+[   63052ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3099/marketing-analytics:0
+[   63052ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2
+[   73045ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3099/marketing-analytics:0
+[   73045ms] [ERROR] Sprint banner error: TypeError: Failed to fetch
+    at O (http://localhost:3099/_next/static/chunks/269dc890dd37ee5c.js:1:75742) @ http://localhost:3099/_next/static/chunks/f0c5a3f8cbd80068.js:2

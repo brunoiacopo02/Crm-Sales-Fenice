@@ -1,0 +1,285 @@
+- generic [ref=e1]:
+  - alert [ref=e19]
+  - generic [ref=e20]:
+    - complementary [ref=e21]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: F
+        - generic [ref=e25]: Fenice CRM
+      - navigation [ref=e27]:
+        - link "Dashboard Vendite" [ref=e28] [cursor=pointer]:
+          - /url: /venditore
+          - generic [ref=e29]:
+            - img [ref=e30]
+            - generic [ref=e35]: Dashboard Vendite
+        - link "Il mio Profilo / RPG" [ref=e36] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e37]:
+            - img [ref=e38]
+            - generic [ref=e40]: Il mio Profilo / RPG
+        - link "Classifica" [ref=e41] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e42]:
+            - img [ref=e43]
+            - generic [ref=e49]: Classifica
+        - link "Fenice Store" [ref=e50] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e51]:
+            - img [ref=e52]
+            - generic [ref=e56]: Fenice Store
+      - button "Disconnetti" [ref=e59]:
+        - img [ref=e60]
+        - generic [ref=e63]: Disconnetti
+    - generic [ref=e64]:
+      - banner [ref=e65]:
+        - generic [ref=e66]:
+          - button "2" [ref=e68]:
+            - img [ref=e69]
+            - generic [ref=e72]: "2"
+          - generic [ref=e73]:
+            - generic [ref=e74]: Sales 001
+            - generic [ref=e76]: S
+      - main [ref=e78]:
+        - generic [ref=e79]:
+          - generic [ref=e81]:
+            - heading "Dashboard Vendite" [level=1] [ref=e82]
+            - generic [ref=e83]: Gestisci i tuoi appuntamenti, registra gli esiti e tieni traccia delle performance.
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - img [ref=e88]
+              - generic [ref=e90]:
+                - generic [ref=e91]:
+                  - generic [ref=e92]: "0"
+                  - generic [ref=e93]: giorni
+                - generic [ref=e94]: Inizia la tua streak
+            - generic [ref=e98]:
+              - img [ref=e99]
+              - generic [ref=e102]: 3g a x1.5
+          - generic [ref=e105]:
+            - generic [ref=e106] [cursor=pointer]:
+              - generic [ref=e107]:
+                - img [ref=e109]
+                - generic [ref=e112]:
+                  - heading "Quest Attive" [level=3] [ref=e113]
+                  - generic [ref=e114]: 0/3 giornaliere · 0/2 settimanali
+              - img [ref=e117]
+            - generic [ref=e119]:
+              - generic [ref=e120]:
+                - generic [ref=e121]:
+                  - img [ref=e122]
+                  - generic [ref=e131]: Giornaliere
+                - generic [ref=e132]:
+                  - generic [ref=e134]:
+                    - generic [ref=e135]:
+                      - generic [ref=e136]:
+                        - generic [ref=e137]: Registra 3 Esiti
+                        - generic [ref=e138]: Registra esito per almeno 3 lead oggi
+                      - generic [ref=e139]:
+                        - generic [ref=e140]:
+                          - img [ref=e141]
+                          - text: "20"
+                        - generic [ref=e143]:
+                          - img [ref=e144]
+                          - text: "15"
+                    - generic [ref=e151]: 0/3
+                  - generic [ref=e153]:
+                    - generic [ref=e154]:
+                      - generic [ref=e155]:
+                        - generic [ref=e156]: Registra 5 Esiti
+                        - generic [ref=e157]: Registra esito per almeno 5 lead oggi
+                      - generic [ref=e158]:
+                        - generic [ref=e159]:
+                          - img [ref=e160]
+                          - text: "40"
+                        - generic [ref=e162]:
+                          - img [ref=e163]
+                          - text: "25"
+                    - generic [ref=e170]: 0/5
+                  - generic [ref=e172]:
+                    - generic [ref=e173]:
+                      - generic [ref=e174]:
+                        - generic [ref=e175]: Closer Seriale
+                        - generic [ref=e176]: Chiudi 3 deal oggi
+                      - generic [ref=e177]:
+                        - generic [ref=e178]:
+                          - img [ref=e179]
+                          - text: "100"
+                        - generic [ref=e181]:
+                          - img [ref=e182]
+                          - text: "60"
+                    - generic [ref=e189]: 0/3
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - img [ref=e192]
+                  - generic [ref=e194]: Settimanali
+                - generic [ref=e195]:
+                  - generic [ref=e197]:
+                    - generic [ref=e198]:
+                      - generic [ref=e199]:
+                        - generic [ref=e200]: Settimana da Closer
+                        - generic [ref=e201]: Chiudi almeno 5 deal questa settimana
+                      - generic [ref=e202]:
+                        - generic [ref=e203]:
+                          - img [ref=e204]
+                          - text: "200"
+                        - generic [ref=e206]:
+                          - img [ref=e207]
+                          - text: "120"
+                    - generic [ref=e214]: 0/5
+                  - generic [ref=e216]:
+                    - generic [ref=e217]:
+                      - generic [ref=e218]:
+                        - generic [ref=e219]: Fattura 15.000 EUR
+                        - generic [ref=e220]: Fattura almeno 15.000 EUR questa settimana
+                      - generic [ref=e221]:
+                        - generic [ref=e222]:
+                          - img [ref=e223]
+                          - text: "300"
+                        - generic [ref=e225]:
+                          - img [ref=e226]
+                          - text: "200"
+                    - generic [ref=e233]: 0/15000
+          - generic [ref=e234]:
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - button "Lista" [ref=e237]:
+                  - img [ref=e238]
+                  - text: Lista
+                - button "Agenda" [ref=e239]:
+                  - img [ref=e240]
+                  - text: Agenda
+                - button "Team Classifica" [active] [ref=e242]:
+                  - img [ref=e243]
+                  - text: Team Classifica
+              - button "Google Calendar Connesso" [ref=e258]:
+                - img [ref=e259]
+                - text: Google Calendar Connesso
+            - generic [ref=e326]:
+              - generic [ref=e327]:
+                - generic [ref=e328]:
+                  - img [ref=e329]
+                  - generic [ref=e331]: "Seleziona Periodo:"
+                - generic [ref=e332]:
+                  - button "oggi" [ref=e333]
+                  - button "settimana" [ref=e334]
+                  - button "mese" [ref=e335]
+              - generic [ref=e336]:
+                - generic [ref=e337]:
+                  - img [ref=e339]
+                  - generic [ref=e345]: Venditore
+                  - generic [ref=e346]: € 0
+                  - generic [ref=e348]: 2°
+                - generic [ref=e349]:
+                  - img [ref=e351]
+                  - generic [ref=e353]: Sales 001
+                  - generic [ref=e354]: € 0
+                  - generic [ref=e356]: 1°
+                - generic [ref=e357]:
+                  - img [ref=e359]
+                  - generic [ref=e365]: Venditore
+                  - generic [ref=e366]: € 0
+                  - generic [ref=e368]: 3°
+              - table [ref=e371]:
+                - rowgroup [ref=e372]:
+                  - row "Posizione Venditore Fatturato Target Progresso Chiusi Non Chiusi Spariti Closing Rate" [ref=e373]:
+                    - columnheader "Posizione" [ref=e374]
+                    - columnheader "Venditore" [ref=e375]
+                    - columnheader "Fatturato" [ref=e376]
+                    - columnheader "Target" [ref=e377]
+                    - columnheader "Progresso" [ref=e378]
+                    - columnheader "Chiusi" [ref=e379]
+                    - columnheader "Non Chiusi" [ref=e380]
+                    - columnheader "Spariti" [ref=e381]
+                    - columnheader "Closing Rate" [ref=e382]
+                - rowgroup [ref=e383]:
+                  - row "Sales 001 TU € 0,00 — — 0 0 0 0%" [ref=e384]:
+                    - cell [ref=e385]:
+                      - img [ref=e388]
+                    - cell "Sales 001 TU" [ref=e394]:
+                      - generic [ref=e396]:
+                        - text: Sales 001
+                        - generic [ref=e397]: TU
+                    - cell "€ 0,00" [ref=e398]:
+                      - generic [ref=e399]: € 0,00
+                    - cell "—" [ref=e400]:
+                      - generic [ref=e401]: —
+                    - cell "—" [ref=e402]:
+                      - generic [ref=e403]: —
+                    - cell "0" [ref=e404]
+                    - cell "0" [ref=e405]
+                    - cell "0" [ref=e406]
+                    - cell "0%" [ref=e407]:
+                      - generic [ref=e408]:
+                        - img [ref=e409]
+                        - text: 0%
+                  - row "Venditore Misterioso € 0,00 — — 0 0 0 0%" [ref=e413]:
+                    - cell [ref=e414]:
+                      - img [ref=e417]
+                    - cell "Venditore Misterioso" [ref=e423]:
+                      - generic [ref=e425]: Venditore Misterioso
+                    - cell "€ 0,00" [ref=e426]:
+                      - generic [ref=e427]: € 0,00
+                    - cell "—" [ref=e428]:
+                      - generic [ref=e429]: —
+                    - cell "—" [ref=e430]:
+                      - generic [ref=e431]: —
+                    - cell "0" [ref=e432]
+                    - cell "0" [ref=e433]
+                    - cell "0" [ref=e434]
+                    - cell "0%" [ref=e435]:
+                      - generic [ref=e436]:
+                        - img [ref=e437]
+                        - text: 0%
+                  - row "Venditore Misterioso € 0,00 — — 0 0 0 0%" [ref=e441]:
+                    - cell [ref=e442]:
+                      - img [ref=e445]
+                    - cell "Venditore Misterioso" [ref=e451]:
+                      - generic [ref=e453]: Venditore Misterioso
+                    - cell "€ 0,00" [ref=e454]:
+                      - generic [ref=e455]: € 0,00
+                    - cell "—" [ref=e456]:
+                      - generic [ref=e457]: —
+                    - cell "—" [ref=e458]:
+                      - generic [ref=e459]: —
+                    - cell "0" [ref=e460]
+                    - cell "0" [ref=e461]
+                    - cell "0" [ref=e462]
+                    - cell "0%" [ref=e463]:
+                      - generic [ref=e464]:
+                        - img [ref=e465]
+                        - text: 0%
+                  - row "4° Venditore Misterioso € 0,00 — — 0 0 0 0%" [ref=e469]:
+                    - cell "4°" [ref=e470]:
+                      - generic [ref=e472]: 4°
+                    - cell "Venditore Misterioso" [ref=e473]:
+                      - generic [ref=e475]: Venditore Misterioso
+                    - cell "€ 0,00" [ref=e476]:
+                      - generic [ref=e477]: € 0,00
+                    - cell "—" [ref=e478]:
+                      - generic [ref=e479]: —
+                    - cell "—" [ref=e480]:
+                      - generic [ref=e481]: —
+                    - cell "0" [ref=e482]
+                    - cell "0" [ref=e483]
+                    - cell "0" [ref=e484]
+                    - cell "0%" [ref=e485]:
+                      - generic [ref=e486]:
+                        - img [ref=e487]
+                        - text: 0%
+                  - row "5° Venditore Misterioso € 0,00 — — 0 0 0 0%" [ref=e491]:
+                    - cell "5°" [ref=e492]:
+                      - generic [ref=e494]: 5°
+                    - cell "Venditore Misterioso" [ref=e495]:
+                      - generic [ref=e497]: Venditore Misterioso
+                    - cell "€ 0,00" [ref=e498]:
+                      - generic [ref=e499]: € 0,00
+                    - cell "—" [ref=e500]:
+                      - generic [ref=e501]: —
+                    - cell "—" [ref=e502]:
+                      - generic [ref=e503]: —
+                    - cell "0" [ref=e504]
+                    - cell "0" [ref=e505]
+                    - cell "0" [ref=e506]
+                    - cell "0%" [ref=e507]:
+                      - generic [ref=e508]:
+                        - img [ref=e509]
+                        - text: 0%

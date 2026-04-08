@@ -1,0 +1,267 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e6]: F
+          - generic [ref=e7]: Fenice CRM
+        - button [ref=e8]:
+          - img [ref=e9]
+      - navigation [ref=e13]:
+        - link "Dashboard Conferme" [ref=e14] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e15]:
+            - img [ref=e16]
+            - generic [ref=e18]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e19] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: KPI Conferme
+        - link "Il mio Profilo / RPG" [ref=e27] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e28]:
+            - img [ref=e29]
+            - generic [ref=e31]: Il mio Profilo / RPG
+        - link "Classifica" [ref=e32] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e33]:
+            - img [ref=e34]
+            - generic [ref=e40]: Classifica
+        - link "Fenice Store" [ref=e41] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e42]:
+            - img [ref=e43]
+            - generic [ref=e47]: Fenice Store
+      - button "Disconnetti" [ref=e50]:
+        - img [ref=e51]
+        - generic [ref=e54]: Disconnetti
+    - generic [ref=e55]:
+      - banner [ref=e56]:
+        - button [ref=e58]:
+          - img [ref=e59]
+        - generic [ref=e60]:
+          - button [ref=e62]:
+            - img [ref=e63]
+          - generic [ref=e68]: A
+      - main [ref=e70]:
+        - generic [ref=e71]:
+          - generic [ref=e73]:
+            - img [ref=e75]
+            - generic [ref=e81]:
+              - heading "Classifica" [level=1] [ref=e82]
+              - generic [ref=e83]:
+                - generic [ref=e84]: Sfida i tuoi colleghi e raggiungi la vetta
+                - img [ref=e85]
+          - generic [ref=e88]:
+            - generic [ref=e89]:
+              - button "GDO" [ref=e90]:
+                - img [ref=e91]
+                - generic [ref=e93]: GDO
+              - button "Conferme" [ref=e94]:
+                - img [ref=e95]
+                - generic [ref=e98]: Conferme
+              - button "Venditori" [ref=e99]:
+                - img [ref=e100]
+                - generic [ref=e102]: Venditori
+            - generic [ref=e103]:
+              - button "Oggi" [ref=e104]
+              - button "Settimana" [ref=e105]
+              - button "Mese" [ref=e106]
+            - list [ref=e108]:
+              - listitem [ref=e109]:
+                - generic [ref=e110]:
+                  - generic [ref=e111]:
+                    - generic [ref=e113]: "#4"
+                    - generic [ref=e115]: G
+                    - generic [ref=e116]:
+                      - generic [ref=e118]: GDO 110
+                      - generic [ref=e119]:
+                        - img [ref=e120]
+                        - text: Conferme
+                  - generic [ref=e124]:
+                    - generic [ref=e125]: "0"
+                    - generic [ref=e126]: Conferme
+              - listitem [ref=e128]:
+                - generic [ref=e129]:
+                  - generic [ref=e130]:
+                    - generic [ref=e132]: "#5"
+                    - generic [ref=e134]: G
+                    - generic [ref=e135]:
+                      - generic [ref=e137]: GDO 113
+                      - generic [ref=e138]:
+                        - img [ref=e139]
+                        - text: Conferme
+                  - generic [ref=e143]:
+                    - generic [ref=e144]: "0"
+                    - generic [ref=e145]: Conferme
+              - listitem [ref=e147]:
+                - generic [ref=e148]:
+                  - generic [ref=e149]:
+                    - generic [ref=e151]: "#6"
+                    - generic [ref=e153]: G
+                    - generic [ref=e154]:
+                      - generic [ref=e156]: GDO 116
+                      - generic [ref=e157]:
+                        - img [ref=e158]
+                        - text: Conferme
+                  - generic [ref=e162]:
+                    - generic [ref=e163]: "0"
+                    - generic [ref=e164]: Conferme
+              - listitem [ref=e166]:
+                - generic [ref=e167]:
+                  - generic [ref=e168]:
+                    - generic [ref=e170]: "#7"
+                    - generic [ref=e172]: G
+                    - generic [ref=e173]:
+                      - generic [ref=e175]: GDO 118
+                      - generic [ref=e176]:
+                        - img [ref=e177]
+                        - text: Conferme
+                  - generic [ref=e181]:
+                    - generic [ref=e182]: "0"
+                    - generic [ref=e183]: Conferme
+              - listitem [ref=e185]:
+                - generic [ref=e186]:
+                  - generic [ref=e187]:
+                    - generic [ref=e189]: "#8"
+                    - generic [ref=e191]: G
+                    - generic [ref=e192]:
+                      - generic [ref=e194]: GDO ?
+                      - generic [ref=e195]:
+                        - img [ref=e196]
+                        - text: Conferme
+                  - generic [ref=e200]:
+                    - generic [ref=e201]: "0"
+                    - generic [ref=e202]: Conferme
+              - listitem [ref=e204]:
+                - generic [ref=e205]:
+                  - generic [ref=e206]:
+                    - generic [ref=e208]: "#9"
+                    - generic [ref=e210]: G
+                    - generic [ref=e211]:
+                      - generic [ref=e213]: GDO 120
+                      - generic [ref=e214]:
+                        - img [ref=e215]
+                        - text: Conferme
+                  - generic [ref=e219]:
+                    - generic [ref=e220]: "0"
+                    - generic [ref=e221]: Conferme
+              - listitem [ref=e223]:
+                - generic [ref=e224]:
+                  - generic [ref=e225]:
+                    - generic [ref=e227]: "#10"
+                    - generic [ref=e229]: G
+                    - generic [ref=e230]:
+                      - generic [ref=e232]: GDO 106
+                      - generic [ref=e233]:
+                        - img [ref=e234]
+                        - text: Conferme
+                  - generic [ref=e238]:
+                    - generic [ref=e239]: "0"
+                    - generic [ref=e240]: Conferme
+              - listitem [ref=e242]:
+                - generic [ref=e243]:
+                  - generic [ref=e244]:
+                    - generic [ref=e246]: "#11"
+                    - generic [ref=e248]: G
+                    - generic [ref=e249]:
+                      - generic [ref=e251]: GDO 107
+                      - generic [ref=e252]:
+                        - img [ref=e253]
+                        - text: Conferme
+                  - generic [ref=e257]:
+                    - generic [ref=e258]: "0"
+                    - generic [ref=e259]: Conferme
+              - listitem [ref=e261]:
+                - generic [ref=e262]:
+                  - generic [ref=e263]:
+                    - generic [ref=e265]: "#12"
+                    - generic [ref=e267]: M
+                    - generic [ref=e268]:
+                      - generic [ref=e270]: Mario GDO
+                      - generic [ref=e271]:
+                        - img [ref=e272]
+                        - text: Conferme
+                  - generic [ref=e276]:
+                    - generic [ref=e277]: "0"
+                    - generic [ref=e278]: Conferme
+              - listitem [ref=e280]:
+                - generic [ref=e281]:
+                  - generic [ref=e282]:
+                    - generic [ref=e284]: "#13"
+                    - generic [ref=e286]: G
+                    - generic [ref=e287]:
+                      - generic [ref=e289]: GDO 111
+                      - generic [ref=e290]:
+                        - img [ref=e291]
+                        - text: Conferme
+                  - generic [ref=e295]:
+                    - generic [ref=e296]: "0"
+                    - generic [ref=e297]: Conferme
+              - listitem [ref=e299]:
+                - generic [ref=e300]:
+                  - generic [ref=e301]:
+                    - generic [ref=e303]: "#14"
+                    - generic [ref=e305]: G
+                    - generic [ref=e306]:
+                      - generic [ref=e308]: GDO 112
+                      - generic [ref=e309]:
+                        - img [ref=e310]
+                        - text: Conferme
+                  - generic [ref=e314]:
+                    - generic [ref=e315]: "0"
+                    - generic [ref=e316]: Conferme
+              - listitem [ref=e318]:
+                - generic [ref=e319]:
+                  - generic [ref=e320]:
+                    - generic [ref=e322]: "#15"
+                    - generic [ref=e324]: G
+                    - generic [ref=e325]:
+                      - generic [ref=e327]: GDO 114
+                      - generic [ref=e328]:
+                        - img [ref=e329]
+                        - text: Conferme
+                  - generic [ref=e333]:
+                    - generic [ref=e334]: "0"
+                    - generic [ref=e335]: Conferme
+              - listitem [ref=e337]:
+                - generic [ref=e338]:
+                  - generic [ref=e339]:
+                    - generic [ref=e341]: "#16"
+                    - generic [ref=e343]: G
+                    - generic [ref=e344]:
+                      - generic [ref=e346]: GDO 115
+                      - generic [ref=e347]:
+                        - img [ref=e348]
+                        - text: Conferme
+                  - generic [ref=e352]:
+                    - generic [ref=e353]: "0"
+                    - generic [ref=e354]: Conferme
+              - listitem [ref=e356]:
+                - generic [ref=e357]:
+                  - generic [ref=e358]:
+                    - generic [ref=e360]: "#17"
+                    - generic [ref=e362]: G
+                    - generic [ref=e363]:
+                      - generic [ref=e365]: GDO 117
+                      - generic [ref=e366]:
+                        - img [ref=e367]
+                        - text: Conferme
+                  - generic [ref=e371]:
+                    - generic [ref=e372]: "0"
+                    - generic [ref=e373]: Conferme
+              - listitem [ref=e375]:
+                - generic [ref=e376]:
+                  - generic [ref=e377]:
+                    - generic [ref=e379]: "#18"
+                    - generic [ref=e381]: G
+                    - generic [ref=e382]:
+                      - generic [ref=e384]: GDO 119
+                      - generic [ref=e385]:
+                        - img [ref=e386]
+                        - text: Conferme
+                  - generic [ref=e390]:
+                    - generic [ref=e391]: "0"
+                    - generic [ref=e392]: Conferme
+  - alert [ref=e394]

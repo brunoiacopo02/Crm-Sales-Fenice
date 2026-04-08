@@ -1,0 +1,73 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "Dashboard Vendite" [ref=e10] [cursor=pointer]:
+          - /url: /venditore
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e17]: Dashboard Vendite
+        - link "Il mio Profilo / RPG" [ref=e18] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e19]:
+            - img [ref=e20]
+            - generic [ref=e22]: Il mio Profilo / RPG
+        - link "Classifica" [ref=e23] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e24]:
+            - img [ref=e25]
+            - generic [ref=e31]: Classifica
+        - link "Fenice Store" [ref=e32] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e33]:
+            - img [ref=e34]
+            - generic [ref=e38]: Fenice Store
+      - button "Disconnetti" [ref=e41]:
+        - img [ref=e42]
+        - generic [ref=e45]: Disconnetti
+    - generic [ref=e46]:
+      - banner [ref=e47]:
+        - generic [ref=e48]:
+          - button [ref=e50]:
+            - img [ref=e51]
+          - generic [ref=e54]:
+            - generic [ref=e55]: Sales 001
+            - generic [ref=e57]: S
+      - main [ref=e59]:
+        - generic [ref=e60]:
+          - generic [ref=e62]:
+            - heading "Dashboard Vendite" [level=1] [ref=e63]
+            - generic [ref=e64]: Gestisci i tuoi appuntamenti, registra gli esiti e tieni traccia delle performance.
+          - generic [ref=e67]:
+            - generic [ref=e68]:
+              - generic [ref=e69]:
+                - button "Lista" [ref=e70]:
+                  - img [ref=e71]
+                  - text: Lista
+                - button "Agenda" [ref=e72]:
+                  - img [ref=e73]
+                  - text: Agenda
+                - button "Team Classifica" [ref=e75]:
+                  - img [ref=e76]
+                  - text: Team Classifica
+              - generic [ref=e82]:
+                - generic [ref=e83]:
+                  - img [ref=e84]
+                  - textbox "Cerca nome, email, telefono..." [ref=e87]
+                - combobox [ref=e88]:
+                  - option "Tutti gli orari" [selected]
+                  - option "Mattina (8-14)"
+                  - option "Pomeriggio (14-22)"
+                - combobox [ref=e89]:
+                  - option "Tutti gli stati"
+                  - option "Da chiudere" [selected]
+                  - option "Chiusi/Esitati"
+                  - option "In Follow-up"
+              - button "Connetti Google Calendar" [ref=e91]:
+                - img [ref=e92]
+                - text: Connetti Google Calendar
+            - generic [ref=e97]: Caricamento appuntamenti...
+  - alert [ref=e98]

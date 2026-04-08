@@ -1,0 +1,78 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "Dashboard Conferme" [ref=e10] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e14]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e15] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - generic [ref=e22]: KPI Conferme
+        - link "Il mio Profilo / RPG" [ref=e23] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e24]:
+            - img [ref=e25]
+            - generic [ref=e27]: Il mio Profilo / RPG
+        - link "Classifica" [ref=e28] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e29]:
+            - img [ref=e30]
+            - generic [ref=e36]: Classifica
+        - link "Fenice Store" [ref=e37] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e38]:
+            - img [ref=e39]
+            - generic [ref=e43]: Fenice Store
+      - button "Disconnetti" [ref=e46]:
+        - img [ref=e47]
+        - generic [ref=e50]: Disconnetti
+    - generic [ref=e51]:
+      - banner [ref=e52]:
+        - generic [ref=e53]:
+          - button [ref=e55]:
+            - img [ref=e56]
+          - generic [ref=e59]:
+            - generic [ref=e60]: Andrea
+            - generic [ref=e62]: A
+      - main [ref=e64]:
+        - generic [ref=e65]:
+          - generic [ref=e68]:
+            - generic [ref=e69]:
+              - img [ref=e70]
+              - generic [ref=e75]: Radar
+            - generic [ref=e77]: Nessun altro collega online.
+          - generic [ref=e78]:
+            - heading "Dashboard Conferme" [level=1] [ref=e79]
+            - generic [ref=e80]: Gestione appuntamenti centralizzata
+          - generic [ref=e86]:
+            - generic [ref=e87]:
+              - generic [ref=e88]:
+                - button "Pomeriggio 0" [ref=e89]:
+                  - img [ref=e90]
+                  - text: Pomeriggio
+                  - generic [ref=e96]: "0"
+                - button "Mattina 0" [ref=e97]:
+                  - img [ref=e98]
+                  - text: Mattina
+                  - generic [ref=e103]: "0"
+                - button "Richiami 0" [ref=e104]:
+                  - img [ref=e105]
+                  - text: Richiami
+                  - generic [ref=e108]: "0"
+                - button "Storico" [ref=e109]:
+                  - img [ref=e110]
+                  - text: Storico
+              - generic [ref=e113]:
+                - generic [ref=e114]:
+                  - img [ref=e115]
+                  - textbox "Cerca per nome, email o telefono..." [ref=e118]
+                - button "Vista Globale DB" [ref=e119]
+            - generic [ref=e123]: Caricamento...
+  - alert [ref=e124]

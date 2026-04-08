@@ -9,8 +9,7 @@ const SprintBanner = dynamic(() => import("@/components/SprintBanner").then(mod 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
-import { RewardFeedProvider } from "@/components/providers/RewardFeedProvider"
-import { SocialNotificationProvider } from "@/components/providers/SocialNotificationProvider"
+// RewardFeedProvider and SocialNotificationProvider removed — caused WSOD crashes
 
 export default async function DashboardLayout({
     children,
@@ -36,8 +35,6 @@ export default async function DashboardLayout({
 
     return (
         <RealtimeProvider>
-            <RewardFeedProvider>
-            <SocialNotificationProvider>
             <SidebarProvider>
                 <div className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
                     <Sidebar />
@@ -50,8 +47,6 @@ export default async function DashboardLayout({
                     </div>
                 </div>
             </SidebarProvider>
-            </SocialNotificationProvider>
-            </RewardFeedProvider>
         </RealtimeProvider>
     )
 }

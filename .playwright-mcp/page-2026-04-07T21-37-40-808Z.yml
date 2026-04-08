@@ -1,0 +1,674 @@
+- generic [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e29] [cursor=pointer]:
+    - generic [ref=e829]:
+      - text: Rendering
+      - generic [ref=e830]:
+        - generic [ref=e831]: .
+        - generic [ref=e832]: .
+        - generic [ref=e833]: .
+  - alert [ref=e19]
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e40]:
+        - generic [ref=e41]: F
+        - generic [ref=e42]: Fenice CRM
+      - navigation [ref=e44]:
+        - link "La mia Pipeline" [ref=e45] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: La mia Pipeline
+        - link "Il mio Profilo / RPG" [active] [ref=e50] [cursor=pointer]:
+          - /url: /profilo
+          - generic [ref=e51]:
+            - img [ref=e52]
+            - generic [ref=e54]: Il mio Profilo / RPG
+        - link "I miei Richiami" [ref=e55] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e56]:
+            - img [ref=e57]
+            - generic [ref=e59]: I miei Richiami
+        - link "I miei Appuntamenti" [ref=e60] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=e61]:
+            - img [ref=e62]
+            - generic [ref=e67]: I miei Appuntamenti
+        - link "Classifica" [ref=e68] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e69]:
+            - img [ref=e70]
+            - generic [ref=e76]: Classifica
+        - link "Fenice Store" [ref=e77] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e78]:
+            - img [ref=e79]
+            - generic [ref=e83]: Fenice Store
+        - link "Le mie Performance" [ref=e84] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e85]:
+            - img [ref=e86]
+            - generic [ref=e91]: Le mie Performance
+        - link "Storico Pause" [ref=e92] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=e93]:
+            - img [ref=e94]
+            - generic [ref=e97]: Storico Pause
+      - button "Disconnetti" [ref=e100]:
+        - img [ref=e101]
+        - generic [ref=e104]: Disconnetti
+    - generic [ref=e105]:
+      - banner [ref=e106]:
+        - generic [ref=e109]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=e110]
+        - generic [ref=e111]:
+          - generic [ref=e112]:
+            - generic [ref=e113]:
+              - generic [ref=e114]: Pause Oggi
+              - generic [ref=e115]: "0"
+            - button "Inizia Pausa" [ref=e116]
+          - button "1" [ref=e118]:
+            - img [ref=e119]
+            - generic [ref=e122]: "1"
+          - generic [ref=e123]:
+            - generic "I tuoi Fenice Coin vinti nello Sprint" [ref=e124]:
+              - img "Fenice Coin" [ref=e125]
+              - text: "64"
+            - generic [ref=e126]: GDO 114
+            - generic [ref=e128]: G
+      - main [ref=e130]:
+        - generic [ref=e131]:
+          - generic [ref=e132]:
+            - heading "Pipeline Chiamate" [level=1] [ref=e133]
+            - generic [ref=e134]: Benvenuto, GDO 114
+          - generic [ref=e135]:
+            - generic [ref=e136]:
+              - img [ref=e834]
+              - generic [ref=e838]: Obiettivi di Oggi
+            - generic [ref=e137]:
+              - generic [ref=e138]:
+                - generic [ref=e839]:
+                  - img [ref=e840]
+                  - generic [ref=e842]: Chiamate oggi
+                - generic [ref=e843]:
+                  - generic [ref=e844]: "77"
+                  - generic [ref=e845]: / 62
+              - generic [ref=e139]:
+                - generic [ref=e848]:
+                  - img [ref=e849]
+                  - generic [ref=e851]: Fissaggi oggi
+                - generic [ref=e852]:
+                  - generic [ref=e853]: "8"
+                  - generic [ref=e854]: / 10
+          - generic [ref=e857]:
+            - generic [ref=e858]:
+              - img [ref=e860]
+              - generic [ref=e862]:
+                - generic [ref=e863]:
+                  - generic [ref=e864]: "0"
+                  - generic [ref=e865]: giorni
+                - generic [ref=e866]: Inizia la tua streak
+            - generic [ref=e870]:
+              - img [ref=e871]
+              - generic [ref=e874]: 3g a x1.5
+          - generic [ref=e141]:
+            - generic [ref=e877]: I tuoi lead — aprile 2026
+            - generic [ref=e878]:
+              - generic [ref=e879]:
+                - img [ref=e881]
+                - generic [ref=e884]:
+                  - generic [ref=e885]: "17"
+                  - generic [ref=e886]: Appuntamenti Fissati
+              - generic [ref=e887]:
+                - img [ref=e889]
+                - generic [ref=e893]:
+                  - generic [ref=e894]: "1"
+                  - generic [ref=e895]: Confermati
+              - generic [ref=e896]:
+                - img [ref=e898]
+                - generic [ref=e903]:
+                  - generic [ref=e904]: "0"
+                  - generic [ref=e905]: Presenze
+              - generic [ref=e906]:
+                - img [ref=e908]
+                - generic [ref=e911]:
+                  - generic [ref=e912]: "0"
+                  - generic [ref=e913]: Chiusure
+          - generic [ref=e155]:
+            - generic [ref=e158]:
+              - button "1ª Chiamata 12" [ref=e160]:
+                - text: 1ª Chiamata
+                - generic [ref=e161]: "12"
+              - button "2ª Chiamata 31" [ref=e162]:
+                - text: 2ª Chiamata
+                - generic [ref=e163]: "31"
+              - button "3ª Chiamata 15" [ref=e164]:
+                - text: 3ª Chiamata
+                - generic [ref=e165]: "15"
+            - generic [ref=e167]:
+              - generic [ref=e2713] [cursor=pointer]:
+                - generic [ref=e2714]:
+                  - generic [ref=e2716]: ed
+                  - generic [ref=e2717]:
+                    - generic [ref=e2718]:
+                      - img [ref=e2719]
+                      - generic [ref=e2721]: "3473444098"
+                      - button "Copia numero" [ref=e2722]:
+                        - img [ref=e2723]
+                    - generic [ref=e2726]:
+                      - img [ref=e2727]
+                      - generic "staff.studioluce@tin.it" [ref=e2730]
+                      - button "Copia email" [ref=e2731]:
+                        - img [ref=e2732]
+                - generic [ref=e2735]:
+                  - generic [ref=e2736]: CORSO 10 ORE
+                  - generic [ref=e2737]: 3ª Chiamata
+                - generic [ref=e2740]:
+                  - img [ref=e2742]
+                  - generic [ref=e2745]:
+                    - generic [ref=e2746]: Ultima chiamata
+                    - generic [ref=e2747]: 07/04/26, 13:56
+                - generic [ref=e2749]:
+                  - button "NR" [ref=e2750]:
+                    - img [ref=e2751]
+                    - text: NR
+                  - button "Scartato" [ref=e2755]:
+                    - img [ref=e2756]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e2759]:
+                    - img [ref=e2760]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e2764]:
+                    - img [ref=e2765]
+                    - text: App Preso
+              - generic [ref=e2771] [cursor=pointer]:
+                - generic [ref=e2772]:
+                  - generic [ref=e2774]: Victor Valeriote
+                  - generic [ref=e2775]:
+                    - generic [ref=e2776]:
+                      - img [ref=e2777]
+                      - generic [ref=e2779]: "3517961405"
+                      - button "Copia numero" [ref=e2780]:
+                        - img [ref=e2781]
+                    - generic [ref=e2784]:
+                      - img [ref=e2785]
+                      - generic "victorvaleriote2003@hotmail.com" [ref=e2788]
+                      - button "Copia email" [ref=e2789]:
+                        - img [ref=e2790]
+                - generic [ref=e2793]:
+                  - generic [ref=e2794]: TELEGRAM
+                  - generic [ref=e2795]: 3ª Chiamata
+                - generic [ref=e2798]:
+                  - img [ref=e2800]
+                  - generic [ref=e2803]:
+                    - generic [ref=e2804]: Ultima chiamata
+                    - generic [ref=e2805]: 07/04/26, 13:55
+                - generic [ref=e2807]:
+                  - button "NR" [ref=e2808]:
+                    - img [ref=e2809]
+                    - text: NR
+                  - button "Scartato" [ref=e2813]:
+                    - img [ref=e2814]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e2817]:
+                    - img [ref=e2818]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e2822]:
+                    - img [ref=e2823]
+                    - text: App Preso
+              - generic [ref=e2829] [cursor=pointer]:
+                - generic [ref=e2830]:
+                  - generic [ref=e2832]: Tedros
+                  - generic [ref=e2833]:
+                    - generic [ref=e2834]:
+                      - img [ref=e2835]
+                      - generic [ref=e2837]: "3460244059"
+                      - button "Copia numero" [ref=e2838]:
+                        - img [ref=e2839]
+                    - generic [ref=e2842]:
+                      - img [ref=e2843]
+                      - generic "tedros.gabriele@yahoo.it" [ref=e2846]
+                      - button "Copia email" [ref=e2847]:
+                        - img [ref=e2848]
+                - generic [ref=e2851]:
+                  - generic [ref=e2852]: CORSO 10 ORE
+                  - generic [ref=e2853]: 3ª Chiamata
+                - generic [ref=e2856]:
+                  - img [ref=e2858]
+                  - generic [ref=e2861]:
+                    - generic [ref=e2862]: Ultima chiamata
+                    - generic [ref=e2863]: 07/04/26, 13:54
+                - generic [ref=e2865]:
+                  - button "NR" [ref=e2866]:
+                    - img [ref=e2867]
+                    - text: NR
+                  - button "Scartato" [ref=e2871]:
+                    - img [ref=e2872]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e2875]:
+                    - img [ref=e2876]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e2880]:
+                    - img [ref=e2881]
+                    - text: App Preso
+              - generic [ref=e2887] [cursor=pointer]:
+                - generic [ref=e2888]:
+                  - generic [ref=e2890]: Manuela
+                  - generic [ref=e2891]:
+                    - generic [ref=e2892]:
+                      - img [ref=e2893]
+                      - generic [ref=e2895]: "3477289114"
+                      - button "Copia numero" [ref=e2896]:
+                        - img [ref=e2897]
+                    - generic [ref=e2900]:
+                      - img [ref=e2901]
+                      - generic "m.benassibayon@gmail.com" [ref=e2904]
+                      - button "Copia email" [ref=e2905]:
+                        - img [ref=e2906]
+                - generic [ref=e2909]:
+                  - generic [ref=e2910]: CORSO 10 ORE
+                  - generic [ref=e2911]: 3ª Chiamata
+                - generic [ref=e2914]:
+                  - img [ref=e2916]
+                  - generic [ref=e2919]:
+                    - generic [ref=e2920]: Ultima chiamata
+                    - generic [ref=e2921]: 07/04/26, 13:57
+                - generic [ref=e2923]:
+                  - button "NR" [ref=e2924]:
+                    - img [ref=e2925]
+                    - text: NR
+                  - button "Scartato" [ref=e2929]:
+                    - img [ref=e2930]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e2933]:
+                    - img [ref=e2934]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e2938]:
+                    - img [ref=e2939]
+                    - text: App Preso
+              - generic [ref=e2945] [cursor=pointer]:
+                - generic [ref=e2946]:
+                  - generic [ref=e2948]: Fabio
+                  - generic [ref=e2949]:
+                    - generic [ref=e2950]:
+                      - img [ref=e2951]
+                      - generic [ref=e2953]: "3289316405"
+                      - button "Copia numero" [ref=e2954]:
+                        - img [ref=e2955]
+                    - generic [ref=e2958]:
+                      - img [ref=e2959]
+                      - generic "fabiograsso300@gmail.com" [ref=e2962]
+                      - button "Copia email" [ref=e2963]:
+                        - img [ref=e2964]
+                - generic [ref=e2967]:
+                  - generic [ref=e2968]: CORSO 10 ORE
+                  - generic [ref=e2969]: 3ª Chiamata
+                - generic [ref=e2972]:
+                  - img [ref=e2974]
+                  - generic [ref=e2977]:
+                    - generic [ref=e2978]: Ultima chiamata
+                    - generic [ref=e2979]: 07/04/26, 13:57
+                - generic [ref=e2981]:
+                  - button "NR" [ref=e2982]:
+                    - img [ref=e2983]
+                    - text: NR
+                  - button "Scartato" [ref=e2987]:
+                    - img [ref=e2988]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e2991]:
+                    - img [ref=e2992]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e2996]:
+                    - img [ref=e2997]
+                    - text: App Preso
+              - generic [ref=e3003] [cursor=pointer]:
+                - generic [ref=e3004]:
+                  - generic [ref=e3006]: Giovanni
+                  - generic [ref=e3007]:
+                    - generic [ref=e3008]:
+                      - img [ref=e3009]
+                      - generic [ref=e3011]: "3319124676"
+                      - button "Copia numero" [ref=e3012]:
+                        - img [ref=e3013]
+                    - generic [ref=e3016]:
+                      - img [ref=e3017]
+                      - generic "giovannimelemoro76@gmail.com" [ref=e3020]
+                      - button "Copia email" [ref=e3021]:
+                        - img [ref=e3022]
+                - generic [ref=e3025]:
+                  - generic [ref=e3026]: CORSO 10 ORE
+                  - generic [ref=e3027]: 3ª Chiamata
+                - generic [ref=e3030]:
+                  - img [ref=e3032]
+                  - generic [ref=e3035]:
+                    - generic [ref=e3036]: Ultima chiamata
+                    - generic [ref=e3037]: 07/04/26, 14:00
+                - generic [ref=e3039]:
+                  - button "NR" [ref=e3040]:
+                    - img [ref=e3041]
+                    - text: NR
+                  - button "Scartato" [ref=e3045]:
+                    - img [ref=e3046]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3049]:
+                    - img [ref=e3050]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3054]:
+                    - img [ref=e3055]
+                    - text: App Preso
+              - generic [ref=e3061] [cursor=pointer]:
+                - generic [ref=e3062]:
+                  - generic [ref=e3064]: Samir
+                  - generic [ref=e3065]:
+                    - generic [ref=e3066]:
+                      - img [ref=e3067]
+                      - generic [ref=e3069]: "3511647752"
+                      - button "Copia numero" [ref=e3070]:
+                        - img [ref=e3071]
+                    - generic [ref=e3074]:
+                      - img [ref=e3075]
+                      - generic "sk5641202@gmail.com" [ref=e3078]
+                      - button "Copia email" [ref=e3079]:
+                        - img [ref=e3080]
+                - generic [ref=e3083]:
+                  - generic [ref=e3084]: TELEGRAM
+                  - generic [ref=e3085]: 3ª Chiamata
+                - generic [ref=e3088]:
+                  - img [ref=e3090]
+                  - generic [ref=e3093]:
+                    - generic [ref=e3094]: Ultima chiamata
+                    - generic [ref=e3095]: 07/04/26, 14:01
+                - generic [ref=e3097]:
+                  - button "NR" [ref=e3098]:
+                    - img [ref=e3099]
+                    - text: NR
+                  - button "Scartato" [ref=e3103]:
+                    - img [ref=e3104]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3107]:
+                    - img [ref=e3108]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3112]:
+                    - img [ref=e3113]
+                    - text: App Preso
+              - generic [ref=e3119] [cursor=pointer]:
+                - generic [ref=e3120]:
+                  - generic [ref=e3122]: Petra Schiavoni
+                  - generic [ref=e3123]:
+                    - generic [ref=e3124]:
+                      - img [ref=e3125]
+                      - generic [ref=e3127]: "3486030119"
+                      - button "Copia numero" [ref=e3128]:
+                        - img [ref=e3129]
+                    - generic [ref=e3132]:
+                      - img [ref=e3133]
+                      - generic "schiavonipetra@gmail.com" [ref=e3136]
+                      - button "Copia email" [ref=e3137]:
+                        - img [ref=e3138]
+                - generic [ref=e3141]:
+                  - generic [ref=e3142]: JOB SIMULATOR
+                  - generic [ref=e3143]: 3ª Chiamata
+                - generic [ref=e3146]:
+                  - img [ref=e3148]
+                  - generic [ref=e3151]:
+                    - generic [ref=e3152]: Ultima chiamata
+                    - generic [ref=e3153]: 07/04/26, 14:04
+                - generic [ref=e3155]:
+                  - button "NR" [ref=e3156]:
+                    - img [ref=e3157]
+                    - text: NR
+                  - button "Scartato" [ref=e3161]:
+                    - img [ref=e3162]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3165]:
+                    - img [ref=e3166]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3170]:
+                    - img [ref=e3171]
+                    - text: App Preso
+              - generic [ref=e3177] [cursor=pointer]:
+                - generic [ref=e3178]:
+                  - generic [ref=e3180]: Valerio
+                  - generic [ref=e3181]:
+                    - generic [ref=e3182]:
+                      - img [ref=e3183]
+                      - generic [ref=e3185]: "3926692327"
+                      - button "Copia numero" [ref=e3186]:
+                        - img [ref=e3187]
+                    - generic [ref=e3190]:
+                      - img [ref=e3191]
+                      - generic "val.sca87@gmail.com" [ref=e3194]
+                      - button "Copia email" [ref=e3195]:
+                        - img [ref=e3196]
+                - generic [ref=e3199]:
+                  - generic [ref=e3200]: TELEGRAM-TK
+                  - generic [ref=e3201]: 3ª Chiamata
+                - generic [ref=e3204]:
+                  - img [ref=e3206]
+                  - generic [ref=e3209]:
+                    - generic [ref=e3210]: Ultima chiamata
+                    - generic [ref=e3211]: 07/04/26, 14:05
+                - generic [ref=e3213]:
+                  - button "NR" [ref=e3214]:
+                    - img [ref=e3215]
+                    - text: NR
+                  - button "Scartato" [ref=e3219]:
+                    - img [ref=e3220]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3223]:
+                    - img [ref=e3224]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3228]:
+                    - img [ref=e3229]
+                    - text: App Preso
+              - generic [ref=e3235] [cursor=pointer]:
+                - generic [ref=e3236]:
+                  - generic [ref=e3238]: Stefania
+                  - generic [ref=e3239]:
+                    - generic [ref=e3240]:
+                      - img [ref=e3241]
+                      - generic [ref=e3243]: "339303165"
+                      - button "Copia numero" [ref=e3244]:
+                        - img [ref=e3245]
+                    - generic [ref=e3248]:
+                      - img [ref=e3249]
+                      - generic "stetosi73@gmail.com" [ref=e3252]
+                      - button "Copia email" [ref=e3253]:
+                        - img [ref=e3254]
+                - generic [ref=e3257]:
+                  - generic [ref=e3258]: CORSO 10 ORE
+                  - generic [ref=e3259]: 3ª Chiamata
+                - generic [ref=e3262]:
+                  - img [ref=e3264]
+                  - generic [ref=e3267]:
+                    - generic [ref=e3268]: Ultima chiamata
+                    - generic [ref=e3269]: 07/04/26, 15:51
+                - generic [ref=e3271]:
+                  - button "NR" [ref=e3272]:
+                    - img [ref=e3273]
+                    - text: NR
+                  - button "Scartato" [ref=e3277]:
+                    - img [ref=e3278]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3281]:
+                    - img [ref=e3282]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3286]:
+                    - img [ref=e3287]
+                    - text: App Preso
+              - generic [ref=e3293] [cursor=pointer]:
+                - generic [ref=e3294]:
+                  - generic [ref=e3296]: Siria
+                  - generic [ref=e3297]:
+                    - generic [ref=e3298]:
+                      - img [ref=e3299]
+                      - generic [ref=e3301]: "3276715959"
+                      - button "Copia numero" [ref=e3302]:
+                        - img [ref=e3303]
+                    - generic [ref=e3306]:
+                      - img [ref=e3307]
+                      - generic "sissi.16sanzone@gmail.com" [ref=e3310]
+                      - button "Copia email" [ref=e3311]:
+                        - img [ref=e3312]
+                - generic [ref=e3315]:
+                  - generic [ref=e3316]: CORSO 10 ORE
+                  - generic [ref=e3317]: 3ª Chiamata
+                - generic [ref=e3320]:
+                  - img [ref=e3322]
+                  - generic [ref=e3325]:
+                    - generic [ref=e3326]: Ultima chiamata
+                    - generic [ref=e3327]: 07/04/26, 15:53
+                - generic [ref=e3329]:
+                  - button "NR" [ref=e3330]:
+                    - img [ref=e3331]
+                    - text: NR
+                  - button "Scartato" [ref=e3335]:
+                    - img [ref=e3336]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3339]:
+                    - img [ref=e3340]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3344]:
+                    - img [ref=e3345]
+                    - text: App Preso
+              - generic [ref=e3351] [cursor=pointer]:
+                - generic [ref=e3352]:
+                  - generic [ref=e3354]: Giorgio
+                  - generic [ref=e3355]:
+                    - generic [ref=e3356]:
+                      - img [ref=e3357]
+                      - generic [ref=e3359]: "3534514613"
+                      - button "Copia numero" [ref=e3360]:
+                        - img [ref=e3361]
+                    - generic [ref=e3364]:
+                      - img [ref=e3365]
+                      - generic "ricompensaofferta70@gmail.com" [ref=e3368]
+                      - button "Copia email" [ref=e3369]:
+                        - img [ref=e3370]
+                - generic [ref=e3373]:
+                  - generic [ref=e3374]: TELEGRAM
+                  - generic [ref=e3375]: 3ª Chiamata
+                - generic [ref=e3378]:
+                  - img [ref=e3380]
+                  - generic [ref=e3383]:
+                    - generic [ref=e3384]: Ultima chiamata
+                    - generic [ref=e3385]: 07/04/26, 15:55
+                - generic [ref=e3387]:
+                  - button "NR" [ref=e3388]:
+                    - img [ref=e3389]
+                    - text: NR
+                  - button "Scartato" [ref=e3393]:
+                    - img [ref=e3394]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3397]:
+                    - img [ref=e3398]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3402]:
+                    - img [ref=e3403]
+                    - text: App Preso
+              - generic [ref=e3409] [cursor=pointer]:
+                - generic [ref=e3410]:
+                  - generic [ref=e3412]: Alexandra
+                  - generic [ref=e3413]:
+                    - generic [ref=e3414]:
+                      - img [ref=e3415]
+                      - generic [ref=e3417]: "3892624549"
+                      - button "Copia numero" [ref=e3418]:
+                        - img [ref=e3419]
+                    - generic [ref=e3422]:
+                      - img [ref=e3423]
+                      - generic "alexandra.henunina@gmail.com" [ref=e3426]
+                      - button "Copia email" [ref=e3427]:
+                        - img [ref=e3428]
+                - generic [ref=e3431]:
+                  - generic [ref=e3432]: JOB SIMULATOR
+                  - generic [ref=e3433]: 3ª Chiamata
+                - generic [ref=e3436]:
+                  - img [ref=e3438]
+                  - generic [ref=e3441]:
+                    - generic [ref=e3442]: Ultima chiamata
+                    - generic [ref=e3443]: 07/04/26, 15:56
+                - generic [ref=e3445]:
+                  - button "NR" [ref=e3446]:
+                    - img [ref=e3447]
+                    - text: NR
+                  - button "Scartato" [ref=e3451]:
+                    - img [ref=e3452]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3455]:
+                    - img [ref=e3456]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3460]:
+                    - img [ref=e3461]
+                    - text: App Preso
+              - generic [ref=e3467] [cursor=pointer]:
+                - generic [ref=e3468]:
+                  - generic [ref=e3470]: francesca
+                  - generic [ref=e3471]:
+                    - generic [ref=e3472]:
+                      - img [ref=e3473]
+                      - generic [ref=e3475]: "3277484272"
+                      - button "Copia numero" [ref=e3476]:
+                        - img [ref=e3477]
+                    - generic [ref=e3480]:
+                      - img [ref=e3481]
+                      - generic "francescasir91@libero.it" [ref=e3484]
+                      - button "Copia email" [ref=e3485]:
+                        - img [ref=e3486]
+                - generic [ref=e3489]:
+                  - generic [ref=e3490]: ORG
+                  - generic [ref=e3491]: 3ª Chiamata
+                - generic [ref=e3494]:
+                  - img [ref=e3496]
+                  - generic [ref=e3499]:
+                    - generic [ref=e3500]: Ultima chiamata
+                    - generic [ref=e3501]: 07/04/26, 15:57
+                - generic [ref=e3503]:
+                  - button "NR" [ref=e3504]:
+                    - img [ref=e3505]
+                    - text: NR
+                  - button "Scartato" [ref=e3509]:
+                    - img [ref=e3510]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3513]:
+                    - img [ref=e3514]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3518]:
+                    - img [ref=e3519]
+                    - text: App Preso
+              - generic [ref=e3525] [cursor=pointer]:
+                - generic [ref=e3526]:
+                  - generic [ref=e3528]: f
+                  - generic [ref=e3529]:
+                    - generic [ref=e3530]:
+                      - img [ref=e3531]
+                      - generic [ref=e3533]: "3473213191"
+                      - button "Copia numero" [ref=e3534]:
+                        - img [ref=e3535]
+                    - generic [ref=e3538]:
+                      - img [ref=e3539]
+                      - generic "fcosta.posta@gmail.com" [ref=e3542]
+                      - button "Copia email" [ref=e3543]:
+                        - img [ref=e3544]
+                - generic [ref=e3547]:
+                  - generic [ref=e3548]: ORG
+                  - generic [ref=e3549]: 3ª Chiamata
+                - generic [ref=e3552]:
+                  - img [ref=e3554]
+                  - generic [ref=e3557]:
+                    - generic [ref=e3558]: Ultima chiamata
+                    - generic [ref=e3559]: 07/04/26, 15:58
+                - generic [ref=e3561]:
+                  - button "NR" [ref=e3562]:
+                    - img [ref=e3563]
+                    - text: NR
+                  - button "Scartato" [ref=e3567]:
+                    - img [ref=e3568]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e3571]:
+                    - img [ref=e3572]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e3576]:
+                    - img [ref=e3577]
+                    - text: App Preso

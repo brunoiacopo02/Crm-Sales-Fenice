@@ -1,0 +1,29 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e6]: F
+          - generic [ref=e7]: Fenice CRM
+        - button [ref=e8]:
+          - img [ref=e9]
+      - navigation [ref=e13]:
+        - link "Marketing Analytics" [ref=e14] [cursor=pointer]:
+          - /url: /marketing-analytics
+          - generic [ref=e15]:
+            - img [ref=e16]
+            - generic [ref=e20]: Marketing Analytics
+      - button "Disconnetti" [ref=e23]:
+        - img [ref=e24]
+        - generic [ref=e27]: Disconnetti
+    - generic [ref=e28]:
+      - banner [ref=e29]:
+        - button [ref=e31]:
+          - img [ref=e32]
+        - generic [ref=e33]:
+          - button [ref=e35]:
+            - img [ref=e36]
+          - generic [ref=e41]: M
+      - main [ref=e43]:
+        - main [ref=e44]
+  - alert [ref=e47]

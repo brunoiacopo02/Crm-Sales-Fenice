@@ -1,0 +1,111 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "Marketing Analytics" [ref=e10] [cursor=pointer]:
+          - /url: /marketing-analytics
+          - generic [ref=e11]:
+            - img [ref=e12]
+            - generic [ref=e16]: Marketing Analytics
+      - button "Disconnetti" [ref=e19]:
+        - img [ref=e20]
+        - generic [ref=e23]: Disconnetti
+    - generic [ref=e24]:
+      - banner [ref=e25]:
+        - generic [ref=e26]:
+          - button [ref=e28]:
+            - img [ref=e29]
+          - generic [ref=e32]:
+            - generic [ref=e33]: Marketing
+            - generic [ref=e35]: M
+      - main [ref=e37]:
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - heading "Archivio Globale" [level=1] [ref=e42]:
+                - img [ref=e43]
+                - text: Archivio Globale
+              - paragraph [ref=e46]: Consulta e scarica l'anagrafica storica dei lead
+            - button "Esporta Dati (CSV)" [disabled] [ref=e47]:
+              - img [ref=e48]
+              - text: Esporta Dati (CSV)
+          - generic [ref=e51]:
+            - generic [ref=e52]:
+              - generic [ref=e53]: Tipo Data
+              - combobox [ref=e54]:
+                - option "Data Inserimento (GDO)" [selected]
+                - option "Data Appuntamento"
+            - generic [ref=e55]:
+              - generic [ref=e56]: Da (Opzionale)
+              - textbox [ref=e57]
+            - generic [ref=e58]:
+              - generic [ref=e59]: A (Opzionale)
+              - textbox [ref=e60]
+            - generic [ref=e61]:
+              - generic [ref=e62]: Filtro GDO
+              - combobox [ref=e63]:
+                - option "Tutti" [selected]
+                - option "GDO 105"
+                - option "GDO 108"
+                - option "GDO 109"
+                - option "GDO 110"
+                - option "GDO 113"
+                - option "GDO 116"
+                - option "GDO 118"
+                - option
+                - option "GDO 120"
+                - option "GDO 106"
+                - option "GDO 107"
+                - option "Mario GDO"
+                - option "GDO 111"
+                - option "GDO 112"
+                - option "GDO 114"
+                - option "GDO 115"
+                - option "GDO 117"
+                - option "GDO 119"
+            - generic [ref=e64]:
+              - generic [ref=e65]: Filtro Venditore
+              - combobox [ref=e66]:
+                - option "Tutti" [selected]
+                - option "Sales 001"
+                - option "Sales 003"
+                - option "Sales 004"
+                - option "Sales 008"
+                - option "Sales 010"
+            - generic [ref=e67]:
+              - generic [ref=e68]: Esito
+              - combobox [ref=e69]:
+                - option "Qualsiasi" [selected]
+                - option "Confermato DB"
+                - option "Scartato DB"
+                - option "Vendita Chiusa"
+                - option "Vendita Fallita"
+            - button "Applica Filtri" [ref=e71]
+          - generic [ref=e72]:
+            - table [ref=e74]:
+              - rowgroup [ref=e75]:
+                - row "Data Add Nome Lead Telefono GDO Data App. Esito / DB Venditore" [ref=e76]:
+                  - columnheader "Data Add" [ref=e77]
+                  - columnheader "Nome Lead" [ref=e78]
+                  - columnheader "Telefono" [ref=e79]
+                  - columnheader "GDO" [ref=e80]
+                  - columnheader "Data App." [ref=e81]
+                  - columnheader "Esito / DB" [ref=e82]
+                  - columnheader "Venditore" [ref=e83]
+              - rowgroup [ref=e84]:
+                - row "Caricamento dati in corso..." [ref=e85]:
+                  - cell "Caricamento dati in corso..." [ref=e86]:
+                    - img [ref=e87]
+                    - text: Caricamento dati in corso...
+            - generic [ref=e89]:
+              - generic [ref=e90]: "Totale righe: 0"
+              - generic [ref=e91]:
+                - button [disabled] [ref=e92]:
+                  - img [ref=e93]
+                - generic [ref=e95]: Pagina 1 di 1
+                - button [disabled] [ref=e96]:
+                  - img [ref=e97]
+  - alert [ref=e99]

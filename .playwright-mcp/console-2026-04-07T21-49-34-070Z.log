@@ -1,0 +1,2 @@
+[      42ms] [ERROR] TypeError: Failed to fetch
+    at fetchServerAction (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_17643121._.js:8817:23) @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_f3530cac._.js:3127
