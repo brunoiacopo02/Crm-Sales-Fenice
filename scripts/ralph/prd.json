@@ -69,8 +69,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "Solo restyling visivo. La logica resta intatta."
+      "passes": true,
+      "notes": "Funnel rarity system: CORSO 10 ORE/JOB SIMULATOR=gold, TELEGRAM/TELEGRAM-TK/GOOGLE=silver, ORG/DATABASE/SOCIAL=bronze. Colored left border, hover glow, colored funnel badge. Zero logic changes. Build OK."
     },
     {
       "id": "FA-005",

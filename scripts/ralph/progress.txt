@@ -98,3 +98,23 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-004 — Redesign LeadCard pipeline con rarità per funnel
+**Status:** PASSED ✓
+**Date:** 2026-04-08
+**Commit:** fd7d0e7
+
+### Changes:
+1. **Funnel Rarity System** — Added `FUNNEL_RARITY_MAP` and `RARITY_STYLES` config objects:
+   - Gold: CORSO 10 ORE, JOB SIMULATOR — amber left border, golden hover glow, amber funnel badge
+   - Silver: TELEGRAM, TELEGRAM-TK, GOOGLE — slate left border, silver hover glow, slate funnel badge
+   - Bronze: ORG, DATABASE, SOCIAL — orange left border, warm hover glow, orange funnel badge
+2. **Card Left Border** — 3px colored left border based on funnel rarity (both row and vertical layouts)
+3. **Hover Glow** — Rarity-colored shadow glow on hover
+4. **Funnel Badge** — Colored background, text, and border per rarity (replacing plain gray)
+5. **Name Prominence** — Bumped to text-[15px] font-bold leading-tight
+
+### Pipeline Logic: ✓ Zero changes to click handlers, outcomes, or quick actions
+### Build: ✓ Zero errors
+
+---
