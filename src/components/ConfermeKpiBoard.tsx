@@ -9,6 +9,11 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
     const [stats, setStats] = useState<any>(null)
     const [salesList, setSalesList] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [todayStr, setTodayStr] = useState("")
+
+    useEffect(() => {
+        setTodayStr(new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }))
+    }, [])
 
     // Option to view specific operator or 'ALL' if Admin/Manager
     const [selectedUser, setSelectedUser] = useState<string>(
@@ -159,7 +164,7 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                                 if (!day) {
                                     return <div key={`empty-${idx}-${colIdx}`} className="flex-1 bg-transparent border border-dashed border-ash-200 rounded-xl opacity-20"></div>
                                 }
-                                const isToday = day.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
+                                const isToday = day.date === todayStr
                                 const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6
 
                                 return (

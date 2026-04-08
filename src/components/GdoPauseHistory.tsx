@@ -28,6 +28,15 @@ export default function GdoPauseHistory() {
     const { user } = useAuth()
     const [history, setHistory] = useState<PauseHistoryEntry[]>([])
     const [loading, setLoading] = useState(true)
+    const [currentMonth, setCurrentMonth] = useState("")
+
+    useEffect(() => {
+        setCurrentMonth(new Date().toLocaleDateString("it-IT", {
+            timeZone: "Europe/Rome",
+            month: "long",
+            year: "numeric",
+        }))
+    }, [])
 
     useEffect(() => {
         if (!user?.id) return
@@ -50,12 +59,6 @@ export default function GdoPauseHistory() {
     const totalDuration = history.reduce((sum, p) => sum + p.durationSeconds, 0)
     const exceededCount = history.filter(p => p.status === "sforata").length
     const totalExceeded = history.reduce((sum, p) => sum + p.exceededSeconds, 0)
-
-    const currentMonth = new Date().toLocaleDateString("it-IT", {
-        timeZone: "Europe/Rome",
-        month: "long",
-        year: "numeric",
-    })
 
     return (
         <div className="space-y-6">
