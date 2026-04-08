@@ -157,8 +157,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": "Feedback visivo che il GDO sta andando forte. Incentiva a non fermarsi."
+      "passes": true,
+      "notes": "HotStreak component: listens to reward_earned events, tracks actions in 10-min window. 3+ actions → active mode (amber fire border + flame badge), 5+ → intense mode (red fire border + 'ON FIRE' badge with glow). Auto-deactivates after 5 min inactivity. CSS-only animations (hot-streak-fire-sweep, hot-streak-badge-pulse). Applied to PipelineBoard (GDO) and ConfermeBoard (Conferme). SafeWrapper. Respects getAnimationsEnabled(). Zero logic changes. Build OK."
     },
     {
       "id": "FA-010",

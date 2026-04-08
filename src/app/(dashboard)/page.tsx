@@ -16,6 +16,7 @@ const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBann
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
 const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
 const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
+const HotStreak = dynamic(() => import("@/components/HotStreak").then(m => ({ default: m.HotStreak })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -88,14 +89,18 @@ export default async function DashboardPage() {
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />
 
-            <PipelineBoard
-                firstCall={firstCall}
-                secondCall={secondCall}
-                thirdCall={thirdCall}
-                fourthCall={fourthCall}
-                isFourthCallActive={isFourthCallActive}
-                recalls={recalls}
-            />
+            <SafeWrapper>
+                <HotStreak>
+                    <PipelineBoard
+                        firstCall={firstCall}
+                        secondCall={secondCall}
+                        thirdCall={thirdCall}
+                        fourthCall={fourthCall}
+                        isFourthCallActive={isFourthCallActive}
+                        recalls={recalls}
+                    />
+                </HotStreak>
+            </SafeWrapper>
 
             <SafeWrapper><QuestPanel userId={session!.user.id} /></SafeWrapper>
         </div>

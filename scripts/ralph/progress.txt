@@ -242,3 +242,33 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-009 — Hot Streak visuale: la UI si infuoca dopo azioni consecutive
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### New File Created:
+1. **src/components/HotStreak.tsx** — Client component with full hot streak lifecycle:
+   - Listens to `reward_earned` custom events (same event system as TimedChest)
+   - Tracks action timestamps in a ref, filters to 10-minute window
+   - Three modes: `inactive` (no visual), `active` (3+ actions), `intense` (5+ actions)
+   - Active mode: amber/orange fire gradient border (top + sides), subtle glow shadow, pulsing flame badge
+   - Intense mode: red/amber fire gradient border (faster animation), stronger glow, larger badge with "ON FIRE" text
+   - Auto-deactivates after 5 minutes without any action (decay timer)
+   - Respects `getAnimationsEnabled()` toggle
+   - When inactive, renders children with zero overhead (no wrapper div)
+
+### CSS Keyframes Added (globals.css):
+- `hot-streak-fire-sweep` — gradient position sweep along borders (2s, normal mode)
+- `hot-streak-fire-sweep-intense` — faster sweep with brightness filter (1.2s, intense mode)
+- `hot-streak-badge-pulse` — flame badge scale pulse (1.5s)
+- `hot-streak-badge-pulse-intense` — bigger pulse with drop-shadow throb (0.8s)
+
+### Pages Updated:
+1. **src/app/(dashboard)/page.tsx** — PipelineBoard wrapped in `<SafeWrapper><HotStreak>...</HotStreak></SafeWrapper>`
+2. **src/app/(dashboard)/conferme/page.tsx** — ConfermeBoard wrapped in `<SafeWrapper><HotStreak>...</HotStreak></SafeWrapper>`
+
+### Pipeline Logic: ✓ Not touched — purely visual wrapper, zero changes to click/outcome/action logic
+### Build: ✓ Zero errors
+
+---

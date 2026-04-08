@@ -9,6 +9,7 @@ import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
+const HotStreak = dynamic(() => import("@/components/HotStreak").then(m => ({ default: m.HotStreak })))
 
 export default async function ConfermePage() {
     const supabase = await createClient();
@@ -42,7 +43,11 @@ export default async function ConfermePage() {
                 </>
             )}
 
-            <ConfermeBoard currentUser={session.user} />
+            <SafeWrapper>
+                <HotStreak>
+                    <ConfermeBoard currentUser={session.user} />
+                </HotStreak>
+            </SafeWrapper>
 
             {session.user.role === 'CONFERME' && (
                 <SafeWrapper><QuestPanel userId={session.user.id} /></SafeWrapper>
