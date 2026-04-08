@@ -6,7 +6,7 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import crypto from "crypto";
 
-export async function addManualAdjustment(targetUserId: string, type: 'presenze' | 'chiusure', count: number, note?: string) {
+export async function addManualAdjustment(targetUserId: string, type: 'presenze' | 'chiusure' | 'fatturato', count: number, note?: string) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     if (!supabaseUser) throw new Error("Unauthorized");
@@ -57,5 +57,5 @@ export async function getGdoAndConfermeUsers() {
         gdoCode: users.gdoCode,
     }).from(users).where(eq(users.isActive, true));
 
-    return result.filter(u => u.role === 'GDO' || u.role === 'CONFERME');
+    return result.filter(u => u.role === 'GDO' || u.role === 'CONFERME' || u.role === 'VENDITORE');
 }

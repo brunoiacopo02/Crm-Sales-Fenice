@@ -27,7 +27,7 @@ export function ManualAdjustmentPanel() {
     }, []);
 
     const selectedUser = users.find(u => u.id === selectedUserId);
-    const adjustmentType = selectedUser?.role === 'CONFERME' ? 'chiusure' : 'presenze';
+    const adjustmentType = selectedUser?.role === 'CONFERME' ? 'chiusure' : selectedUser?.role === 'VENDITORE' ? 'fatturato' : 'presenze';
 
     const handleSubmit = async () => {
         if (!selectedUserId || count < 1) return;
@@ -48,6 +48,7 @@ export function ManualAdjustmentPanel() {
 
     const gdoUsers = users.filter(u => u.role === 'GDO');
     const confermeUsers = users.filter(u => u.role === 'CONFERME');
+    const venditoreUsers = users.filter(u => u.role === 'VENDITORE');
 
     return (
         <div className="bg-white border border-ash-200/60 rounded-xl p-5 shadow-soft">
@@ -57,7 +58,7 @@ export function ManualAdjustmentPanel() {
                 </div>
                 <div>
                     <h3 className="font-bold text-ash-800">Aggiustamenti Manuali</h3>
-                    <div className="text-xs text-ash-500">Aggiungi presenze (GDO) o chiusure (Conferme) manualmente</div>
+                    <div className="text-xs text-ash-500">Aggiungi presenze (GDO), chiusure (Conferme) o fatturato (Venditori)</div>
                 </div>
             </div>
 
@@ -84,19 +85,27 @@ export function ManualAdjustmentPanel() {
                                 </option>
                             ))}
                         </optgroup>
+                        <optgroup label="Venditori (+ Fatturato €)">
+                            {venditoreUsers.map(u => (
+                                <option key={u.id} value={u.id}>
+                                    {u.displayName || u.name}
+                                </option>
+                            ))}
+                        </optgroup>
                     </select>
                 </div>
 
                 <div>
                     <label className="text-xs font-semibold text-ash-600 uppercase mb-1 block">
-                        Quantità {selectedUser ? `(${adjustmentType})` : ''}
+                        {adjustmentType === 'fatturato' ? 'Importo €' : 'Quantità'} {selectedUser ? `(${adjustmentType})` : ''}
                     </label>
                     <input
                         type="number"
                         min={1}
-                        max={50}
+                        max={adjustmentType === 'fatturato' ? 999999 : 50}
                         value={count}
                         onChange={e => setCount(parseInt(e.target.value) || 1)}
+                        placeholder={adjustmentType === 'fatturato' ? 'es. 5000' : '1'}
                         className="w-full border border-ash-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange"
                     />
                 </div>
