@@ -1874,3 +1874,37 @@ body .skin-theme-nebula {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(200%); }
 }
+
+/* === PIPELINE ACTION MICRO-ANIMATIONS (FA-015) === */
+
+/* Generic bounce for any outcome (NR) */
+@keyframes pa-bounce {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-4px); }
+  70% { transform: translateY(1px); }
+}
+
+/* Appointment set: slide out right with fade */
+@keyframes pa-slide-out {
+  0% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(50px); opacity: 0; }
+}
+
+/* Discard: fade out with slight slide down */
+@keyframes pa-fade-discard {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(12px); opacity: 0; }
+}
+
+/* Recall/Snooze: amber glow pulse */
+@keyframes pa-amber-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 191, 0, 0); }
+  30% { box-shadow: 0 0 16px 3px rgba(255, 191, 0, 0.35); }
+  60% { box-shadow: 0 0 8px 1px rgba(255, 191, 0, 0.2); }
+}
+
+/* Mini confetti particle burst for appointments */
+@keyframes pa-confetti-burst {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translate(var(--pa-x), var(--pa-y)) rotate(var(--pa-r)) scale(0.3); opacity: 0; }
+}

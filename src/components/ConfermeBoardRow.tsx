@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2 } from "lucide-react"
 import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall } from "@/app/actions/confermeActions"
+import { getAnimationsEnabled } from "@/lib/animationUtils"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRowClick, layoutMode = 'default' }: any) {
     const lead = item.lead
@@ -47,12 +48,22 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
     if (lead.confCall2At) callsMade = 2;
     if (lead.confCall3At) callsMade = 3;
 
+    /** Apply micro-animation to the row card, then call callback after delay */
+    const animateAndRefresh = async (anim: string, durationMs: number) => {
+        if (getAnimationsEnabled() && rowRef.current) {
+            rowRef.current.style.animation = `${anim} ${durationMs}ms ease-out`
+            await new Promise(r => setTimeout(r, durationMs + 50))
+            if (rowRef.current) rowRef.current.style.animation = ''
+        }
+        onRefresh()
+    }
+
     const handleQuickNR = async (e: React.MouseEvent) => {
         e.stopPropagation()
         try {
             const res = await recordConfermeNoAnswer(lead.id, lead.version);
             if (res.success) {
-                onRefresh();
+                await animateAndRefresh('pa-bounce', 200)
             } else {
                 alert(res.error);
             }
@@ -66,7 +77,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
         try {
             const res = await undoConfermeNoAnswer(lead.id, lead.version);
             if (res.success) {
-                onRefresh();
+                await animateAndRefresh('pa-bounce', 200)
             } else {
                 alert(res.error);
             }
@@ -92,7 +103,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                 setShowSnoozePopover(false);
                 setSnoozeNotes(""); // Resetting
                 setSnoozeVslSeen(false);
-                onRefresh();
+                await animateAndRefresh('pa-amber-pulse', 800);
             } else {
                 alert(res.error);
             }
@@ -123,7 +134,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
             } else {
                 setShowRecallPopover(false);
                 setRecallNotes(""); // Resetting
-                onRefresh();
+                await animateAndRefresh('pa-amber-pulse', 800);
             }
         } catch (e: any) {
             alert(e.message);

@@ -121,7 +121,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
 
     if (isRowLayout) {
         return (
-            <div className={`relative bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl px-4 py-3 shadow-soft ${rarityStyle.hoverGlow} hover:border-brand-orange/30 transition-all duration-200 flex items-center justify-between gap-4 group cursor-pointer ${leftAccent}`}>
+            <div data-lead-card={lead.id} className={`relative bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl px-4 py-3 shadow-soft ${rarityStyle.hoverGlow} hover:border-brand-orange/30 transition-all duration-200 flex items-center justify-between gap-4 group cursor-pointer ${leftAccent}`}>
 
                 {/* 1. Nome & Contatti */}
                 <div className="flex-1 min-w-0 sm:min-w-[220px] flex flex-col justify-center">
@@ -227,7 +227,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
 
     // Default Fallback (vertical layout for other contexts)
     return (
-        <div className={`bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl p-4 shadow-soft ${rarityStyle.hoverGlow} transition-all duration-200 mb-3 flex flex-col relative group`}>
+        <div data-lead-card={lead.id} className={`bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl p-4 shadow-soft ${rarityStyle.hoverGlow} transition-all duration-200 mb-3 flex flex-col relative group`}>
             <div className="flex justify-between items-start mb-2">
                 <div>
                     <div className="font-bold text-ash-900 text-[15px] leading-tight">{lead.name}</div>
