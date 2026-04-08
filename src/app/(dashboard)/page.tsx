@@ -61,40 +61,33 @@ export default async function DashboardPage() {
             <SeasonalEventBanner />
             <BossBattleBanner userId={session!.user.id} />
 
-            {/* Social-first 3-column layout: Feed | Pipeline | Quest/Streak */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[280px_1fr_300px] gap-5">
-
-                {/* Left: Activity Feed (social feed sidebar) */}
-                <div className="order-3 xl:order-1 lg:col-span-2 xl:col-span-1">
-                    <div className="xl:sticky xl:top-4">
-                        <ActivityFeed />
-                    </div>
-                </div>
-
-                {/* Center: Main pipeline workspace */}
-                <div className="order-1 xl:order-2 min-w-0 space-y-4">
+            {/* Gamification compatta: streak + obiettivi in riga */}
+            <div className="flex flex-wrap items-start gap-3">
+                <div className="flex-1 min-w-[250px]">
                     <GdoDailyObjectives gdoUserId={session!.user.id} />
-                    <GdoLeadMetrics gdoUserId={session!.user.id} />
-                    <PipelineBoard
-                        firstCall={firstCall}
-                        secondCall={secondCall}
-                        thirdCall={thirdCall}
-                        fourthCall={fourthCall}
-                        isFourthCallActive={isFourthCallActive}
-                        recalls={recalls}
-                    />
                 </div>
-
-                {/* Right: Gamification sidebar (streak + quests) */}
-                <div className="order-2 xl:order-3">
-                    <div className="lg:sticky lg:top-4 space-y-4">
-                        <SocialComparisonBadge userId={session!.user.id} role="GDO" />
-                        <StreakCounter userId={session!.user.id} />
-                        <StreakAnxietyBanner userId={session!.user.id} />
-                        <QuestPanel userId={session!.user.id} />
-                    </div>
+                <div className="flex-1 min-w-[250px]">
+                    <StreakCounter userId={session!.user.id} />
                 </div>
+                <SocialComparisonBadge userId={session!.user.id} role="GDO" />
             </div>
+
+            <StreakAnxietyBanner userId={session!.user.id} />
+
+            <GdoLeadMetrics gdoUserId={session!.user.id} />
+
+            {/* Pipeline — il focus principale */}
+            <PipelineBoard
+                firstCall={firstCall}
+                secondCall={secondCall}
+                thirdCall={thirdCall}
+                fourthCall={fourthCall}
+                isFourthCallActive={isFourthCallActive}
+                recalls={recalls}
+            />
+
+            {/* Quest in fondo, collassabile */}
+            <QuestPanel userId={session!.user.id} />
         </div>
     )
 }

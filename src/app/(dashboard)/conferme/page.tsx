@@ -36,15 +36,24 @@ export default async function ConfermePage() {
 
             {session.user.role === 'CONFERME' && (
                 <>
-                    <ConfermeDailyObjectives confermeUserId={session.user.id} />
-                    <SocialComparisonBadge userId={session.user.id} role="CONFERME" />
-                    <StreakCounter userId={session.user.id} />
+                    <div className="flex flex-wrap items-start gap-3">
+                        <div className="flex-1 min-w-[250px]">
+                            <ConfermeDailyObjectives confermeUserId={session.user.id} />
+                        </div>
+                        <div className="flex-1 min-w-[250px]">
+                            <StreakCounter userId={session.user.id} />
+                        </div>
+                        <SocialComparisonBadge userId={session.user.id} role="CONFERME" />
+                    </div>
                     <StreakAnxietyBanner userId={session.user.id} />
-                    <QuestPanel userId={session.user.id} />
                 </>
             )}
 
             <ConfermeBoard currentUser={session.user} />
+
+            {session.user.role === 'CONFERME' && (
+                <QuestPanel userId={session.user.id} />
+            )}
         </div>
     )
 }
