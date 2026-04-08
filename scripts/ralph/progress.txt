@@ -143,3 +143,30 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-006 — Redesign Profilo come Character Sheet RPG
+**Status:** PASSED ✓
+**Date:** 2026-04-08
+**Commit:** ce2e84b
+
+### Changes:
+1. **CSS Fire Particles in Hero Banner** — 12 fire particles + 8 ember particles with `rpg-fire-particle` and `rpg-ember-float` keyframes. Staggered delays, variable drift direction. Particles rise from bottom of hero banner.
+2. **AchievementShowcase → Dark Gaming Theme** — Full rewrite to dark gaming palette. Locked badges: grey silhouette with `badge-gaming-locked` class (opacity 0.45, grayscale 60%). Unlocked badges: luminous with `badge-gaming-unlocked` animation (pulsing glow). Tier-specific styling: bronze/amber, silver/grey, gold. Category headers with contextual icons.
+3. **Quest Log → Dark Gaming Theme** — Converted from light white/ash to `gaming-bg-card`/`gaming-bg-surface`. Progress bars use `fire-500`/`gaming-gold`. Type badges (D/S) in dark blue/purple variants.
+4. **Streak Section Enhanced** — Animated flame icon with `rpg-flame-flicker` + drop-shadow filter. Flame scales visually for 3/7/14 day tiers. Added milestone indicators (3g, 7g, 14g) with colored badges. Warm glow behind counter for active streaks.
+5. **TitleSelector → Dark Gaming Theme** — Full conversion from purple-light to purple-dark palette. Locked titles at 45% opacity. Active title with ring glow.
+6. **Settings Section → Dark Gaming Card** — Wrapped in gaming card with border and shadow.
+7. **Prossimi Traguardi → Dark Gaming Theme** — Gold accent on dark background. Level badges with golden glow shadow.
+8. **TL/Manager Profile View** — New dynamic route `/profilo/[userId]` with role-based access (MANAGER/ADMIN/TEAM_LEADER only). Back link to Monitor RPG. Eye icon button added to RPG Monitor table rows.
+9. **SafeWrapper** — Entire ProfileClient wrapped in SafeWrapper error boundary.
+
+### New CSS Keyframes:
+- `rpg-fire-particle`: rising particle with drift + fade
+- `rpg-ember-float`: smaller ember with drift
+- `rpg-badge-unlock-glow`: pulsing glow for unlocked badges
+- `rpg-quest-progress-shimmer`: progress bar shimmer
+
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---

@@ -105,8 +105,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "Il profilo deve far sentire il GDO come un personaggio di gioco."
+      "passes": true,
+      "notes": "Full RPG character sheet redesign: CSS fire particles in hero banner (12 fire + 8 ember particles with staggered animations), AchievementShowcase converted to dark gaming theme (luminous unlocked badges with glow, grey silhouette locked), Quest Log dark gaming theme, Streak section with animated flame + milestone indicators, TitleSelector dark gaming theme, Settings dark gaming theme, Prossimi Traguardi dark gaming theme. TL/Manager can view any GDO profile via /profilo/[userId] with role-based access. SafeWrapper wraps entire profile. Build OK."
     },
     {
       "id": "FA-007",
