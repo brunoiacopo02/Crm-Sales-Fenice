@@ -168,7 +168,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Usare Stitch in modalita Pro per massima qualita'. Skill ui-design-system per pattern."
     },
     {

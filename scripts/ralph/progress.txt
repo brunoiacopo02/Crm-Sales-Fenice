@@ -36,6 +36,7 @@ Started: 2026-04-08
 - Rank change row highlight: lb-rank-up-highlight (green glow 3s) and lb-rank-down-highlight (subtle red 2s) via inline style on <li>
 - XP milestones: compute server-side in rpgProfileActions (xpMilestones, totalThreeLevelXp, upcomingRewards), pass as props to ProfileClient
 - Upcoming rewards: aggregate ROADMAP_REWARDS + EVOLUTION_STAGES + UNLOCKABLE_TITLES, sort by level, slice(0,3)
+- GDO dashboard: 3-col grid layout (feed|pipeline|quest) — grid-cols-1 lg:[1fr_300px] xl:[280px_1fr_300px] with order utilities for responsive reflow
 
 ---
 
@@ -283,4 +284,23 @@ Started: 2026-04-08
   - Crescendo shake: define many keyframe steps (0-100% in 5% increments) with progressively larger displacement for tension build
   - triggerCelebration backward-compatible: CelebrationType includes 'fire'|'confetti', old callers unaffected
   - Level-up celebration delayed 500ms from RewardFeedProvider so reward popup shows first
+---
+
+## 2026-04-08 - SA-010
+- Redesigned GDO dashboard with social-first 3-column layout
+- Layout: ActivityFeed (left) | Pipeline+Metrics (center) | Quest/Streak (right)
+- Responsive breakpoints: xl (3-col), lg (2-col with feed below), mobile (single column)
+- Used CSS Grid with order utilities for responsive reflow without duplicate rendering
+- Sticky sidebars (feed + quest/streak) on desktop for scroll persistence
+- Full-width event banners (Seasonal, BossBattle) above the grid
+- All existing pipeline functionality preserved — no component changes, only layout restructure
+- File modificati:
+  - src/app/(dashboard)/page.tsx (3-column grid layout with responsive breakpoints)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Responsive 3→2→1 column: grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[280px_1fr_300px]
+  - Avoid duplicate component rendering: use CSS order + col-span to reflow single instance
+  - ActivityFeed gets order-3 on mobile (bottom), order-1 on xl (left sidebar), lg:col-span-2 to span full width when grid is 2-col
+  - min-w-0 on center column prevents flex/grid overflow from PipelineBoard
+  - Sticky sidebars: xl:sticky xl:top-4 for desktop only, prevents mobile sticky issues
 ---
