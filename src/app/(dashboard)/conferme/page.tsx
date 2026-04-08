@@ -18,7 +18,7 @@ export default async function ConfermePage() {
     }
 
     return (
-        <div className="space-y-6 h-full flex flex-col pt-0">
+        <div className="space-y-6 flex flex-col pt-0">
             <div className="-mx-8 -mt-8 mb-6 relative z-50">
                 <TeamRadarWidget currentUser={session.user} />
             </div>

@@ -381,7 +381,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] relative">
+        <div className="flex flex-col min-h-[500px] relative">
             <GlobalAlertListener currentUser={currentUser} />
 
             {/* MEGA TOGGLES NAVIGATION - Premium Segmented Control */}
