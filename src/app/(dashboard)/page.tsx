@@ -8,6 +8,7 @@ import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
+const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
 const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").then(m => ({ default: m.BossBattleBanner })))
 const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
@@ -59,6 +60,8 @@ export default async function DashboardPage() {
             <GdoDailyObjectives gdoUserId={session!.user.id} />
 
             <StreakCounter userId={session!.user.id} />
+
+            <StreakAnxietyBanner userId={session!.user.id} />
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />
 

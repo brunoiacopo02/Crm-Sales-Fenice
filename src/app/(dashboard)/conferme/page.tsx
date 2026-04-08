@@ -7,6 +7,7 @@ import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
+const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 
 export default async function ConfermePage() {
     const supabase = await createClient();
@@ -36,6 +37,7 @@ export default async function ConfermePage() {
                 <>
                     <ConfermeDailyObjectives confermeUserId={session.user.id} />
                     <StreakCounter userId={session.user.id} />
+                    <StreakAnxietyBanner userId={session.user.id} />
                     <QuestPanel userId={session.user.id} />
                 </>
             )}

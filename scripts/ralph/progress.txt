@@ -28,6 +28,9 @@ Started: 2026-04-08
 - Toast types config: per-type icon, borderColor, iconColor, glowColor in SocialNotificationToast.tsx
 - QuestChainModal in src/components/QuestChainModal.tsx — shows quest completion celebration + next quest teaser
 - Quest chain pattern: after completeQuest, reload getUserQuests(), find next uncompleted, show chain modal
+- StreakAnxietyBanner: time-based state (hidden/at-risk/critical/safe) using Intl.DateTimeFormat for Rome timezone
+- StreakCounter visual states: safe (emerald), at-risk (red), default (streak-tier colors) — driven by isActiveToday + getRomeHour()
+- Time-based UI: use setInterval(60000) for minute-by-minute state transitions, setInterval(1000) for countdown timers
 
 ---
 
@@ -168,4 +171,35 @@ Started: 2026-04-08
   - Confetti in modal: use inline styles with Math.random() for natural staggering, CSS keyframes for animation
   - XP count-up: simple setInterval with increment = value/30, clearing when target reached
   - Modal phases: 'celebrate' (1.5s) → 'teaser' (interactive) — progressive disclosure keeps attention
+---
+
+## 2026-04-08 - SA-006
+- Implemented streak anxiety system: visual warnings and countdown when streak is about to break
+- Created StreakAnxietyBanner component with 4 states: hidden, at-risk (18:00+), critical (20:00+), safe
+- At-risk state: red pulsing banner with trembling flame icon, warning message, countdown to midnight (HH:MM:SS)
+- Critical state (20:00+): intensified shake animation, more urgent red glow, stronger warning message
+- Safe state: green compact badge "Streak sicura per oggi" with shield icon
+- Live countdown timer updates every second using Intl.DateTimeFormat for Europe/Rome timezone
+- Enhanced StreakCounter with visual state-based styling: emerald (safe), red (at-risk), default (tier-based)
+- StreakCounter flame color, border, background gradient, glow animation all change based on visual state
+- Status text under streak count changes: "Streak sicura oggi" / "Streak a rischio!" / "Completa una quest!"
+- Banner listens to 'reward_earned' event to refresh streak data immediately when a quest is completed
+- State re-checks every 60 seconds to handle time transitions (17:59 → 18:00, 19:59 → 20:00)
+- All animations respect getAnimationsEnabled() toggle
+- CSS keyframes: streak-anxiety-pulse, streak-anxiety-critical, streak-safe-glow, streak-flame-shake, streak-flame-shake-intense
+- Integrated in all 3 dashboard pages: GDO, Conferme, Venditore
+- File modificati:
+  - src/components/StreakAnxietyBanner.tsx (NEW — time-based warning banner with countdown)
+  - src/components/StreakCounter.tsx (enhanced with visual state system: safe/at-risk/default)
+  - src/app/(dashboard)/page.tsx (added StreakAnxietyBanner dynamic import + render)
+  - src/app/(dashboard)/conferme/page.tsx (added StreakAnxietyBanner dynamic import + render)
+  - src/app/(dashboard)/venditore/page.tsx (added StreakAnxietyBanner dynamic import + render)
+  - src/app/globals.css (5 new streak anxiety animation keyframes + declarations)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Intl.DateTimeFormat with formatToParts() is the cleanest way to get individual time components in a specific timezone
+  - Time-based UI state: use setInterval(60000) for state transitions, setInterval(1000) only for visible countdowns
+  - StreakCounter visual state computed inline with IIFE for clean ternary logic
+  - Banner refreshes on reward_earned event — immediate feedback when user completes a quest (banner switches to safe)
+  - Multiple dashboard pages (GDO, Conferme, Venditore) all share StreakCounter and StreakAnxietyBanner
 ---

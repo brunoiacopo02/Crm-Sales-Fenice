@@ -1,9 +1,20 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Flame, TrendingUp, Zap } from 'lucide-react';
+import { Flame, TrendingUp, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { getStreakInfo } from '@/app/actions/streakActions';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
+
+type StreakVisualState = 'safe' | 'at-risk' | 'default';
+
+function getRomeHour(): number {
+    const rome = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Rome',
+        hour: 'numeric',
+        hour12: false,
+    }).format(new Date());
+    return parseInt(rome, 10);
+}
 
 interface StreakData {
     streakCount: number;
@@ -55,20 +66,57 @@ export function StreakCounter({ userId }: { userId: string }) {
 
     const { streakCount, multiplier, tierLabel, nextMilestone, isActiveToday } = streak;
 
-    // Flame animation intensity based on streak tier
-    const flameColorClass = streakCount >= 14
-        ? 'text-purple-400'
-        : streakCount >= 7
-            ? 'text-ember-400'
-            : streakCount >= 3
-                ? 'text-brand-orange'
-                : 'text-ash-400';
+    // Determine visual state based on time of day and streak status
+    const visualState: StreakVisualState = (() => {
+        if (isActiveToday) return 'safe';
+        if (streakCount > 0 && typeof window !== 'undefined' && getRomeHour() >= 18) return 'at-risk';
+        return 'default';
+    })();
 
-    const glowClass = streakCount >= 7 ? 'animate-glow-pulse' : '';
+    const animationsEnabled = typeof window !== 'undefined' ? getAnimationsEnabled() : true;
 
-    // Streak at risk: not active today and has an active streak — show shake warning
+    // Flame color: changes based on visual state
+    const flameColorClass = visualState === 'safe'
+        ? 'text-emerald-400'
+        : visualState === 'at-risk'
+            ? 'text-red-400'
+            : streakCount >= 14
+                ? 'text-purple-400'
+                : streakCount >= 7
+                    ? 'text-ember-400'
+                    : streakCount >= 3
+                        ? 'text-brand-orange'
+                        : 'text-ash-400';
+
+    // Border/glow based on state
+    const borderStateClass = visualState === 'safe'
+        ? 'border-emerald-500/30'
+        : visualState === 'at-risk'
+            ? 'border-red-500/30'
+            : 'border-ash-700';
+
+    const bgStateClass = visualState === 'safe'
+        ? 'from-brand-charcoal via-emerald-900/20 to-emerald-900/10'
+        : visualState === 'at-risk'
+            ? 'from-brand-charcoal via-red-900/20 to-red-900/10'
+            : 'from-brand-charcoal via-ash-900 to-ember-900/30';
+
+    const glowClass = visualState === 'safe'
+        ? (animationsEnabled ? 'animate-streak-safe-glow' : '')
+        : visualState === 'at-risk'
+            ? (animationsEnabled ? 'animate-streak-anxiety-pulse' : '')
+            : streakCount >= 7 ? 'animate-glow-pulse' : '';
+
+    // Flame icon container background
+    const flameContainerClass = visualState === 'safe'
+        ? 'bg-emerald-500/15'
+        : visualState === 'at-risk'
+            ? 'bg-red-500/15'
+            : streakCount >= 3 ? 'bg-ember-500/15' : 'bg-ash-800/50';
+
+    // Shake animation for at-risk streaks (original behavior, enhanced)
     const atRisk = !isActiveToday && streakCount > 0;
-    const shakeClass = atRisk && getAnimationsEnabled() ? 'animate-streak-shake' : '';
+    const shakeClass = atRisk && animationsEnabled ? 'animate-streak-shake' : '';
 
     // Progress toward next milestone
     const milestoneProgress = nextMilestone
@@ -83,16 +131,22 @@ export function StreakCounter({ userId }: { userId: string }) {
         : 100;
 
     return (
-        <div className={`w-full border shadow-elevated rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/30 border-ash-700 ${glowClass} ${shakeClass}`}>
-            {/* Background glow for active streaks */}
-            {streakCount >= 3 && (
+        <div className={`w-full border shadow-elevated rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br ${bgStateClass} ${borderStateClass} ${glowClass} ${shakeClass}`}>
+            {/* Background glow based on state */}
+            {visualState === 'safe' && (
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+            )}
+            {visualState === 'at-risk' && (
+                <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+            )}
+            {visualState === 'default' && streakCount >= 3 && (
                 <div className="absolute top-0 right-0 w-32 h-32 bg-ember-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
             )}
 
             <div className="relative z-10 flex items-center gap-4">
                 {/* Flame icon + count */}
                 <div className="flex items-center gap-2.5">
-                    <div className={`p-2 rounded-xl ${streakCount >= 3 ? 'bg-ember-500/15' : 'bg-ash-800/50'} transition-colors`}>
+                    <div className={`p-2 rounded-xl ${flameContainerClass} transition-colors`}>
                         <Flame className={`h-6 w-6 ${flameColorClass} transition-colors`} />
                     </div>
                     <div>
@@ -102,8 +156,12 @@ export function StreakCounter({ userId }: { userId: string }) {
                                 {streakCount === 1 ? 'giorno' : 'giorni'}
                             </span>
                         </div>
-                        <div className="text-xs text-ash-500 -mt-0.5">
-                            {isActiveToday ? 'Streak attiva oggi' : streakCount > 0 ? 'Completa una quest!' : 'Inizia la tua streak'}
+                        <div className={`text-xs -mt-0.5 ${visualState === 'safe' ? 'text-emerald-400' : visualState === 'at-risk' ? 'text-red-400' : 'text-ash-500'}`}>
+                            {visualState === 'safe'
+                                ? 'Streak sicura oggi'
+                                : visualState === 'at-risk'
+                                    ? 'Streak a rischio!'
+                                    : streakCount > 0 ? 'Completa una quest!' : 'Inizia la tua streak'}
                         </div>
                     </div>
                 </div>
