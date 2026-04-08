@@ -40,10 +40,13 @@ export default async function DashboardPage() {
     const { firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive, recalls } = await getPipelineLeads()
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
+            {/* Overlays */}
             <CelebrationOverlay />
             <LootDropModal userId={session!.user.id} />
             <DailyLoginReward userId={session!.user.id} />
+
+            {/* Full-width header */}
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                     Pipeline Chiamate
@@ -53,30 +56,43 @@ export default async function DashboardPage() {
                 </div>
             </div>
 
+            {/* Full-width event banners */}
             <SeasonalEventBanner />
-
             <BossBattleBanner userId={session!.user.id} />
 
-            <GdoDailyObjectives gdoUserId={session!.user.id} />
+            {/* Social-first 3-column layout: Feed | Pipeline | Quest/Streak */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[280px_1fr_300px] gap-5">
 
-            <StreakCounter userId={session!.user.id} />
+                {/* Left: Activity Feed (social feed sidebar) */}
+                <div className="order-3 xl:order-1 lg:col-span-2 xl:col-span-1">
+                    <div className="xl:sticky xl:top-4">
+                        <ActivityFeed />
+                    </div>
+                </div>
 
-            <StreakAnxietyBanner userId={session!.user.id} />
+                {/* Center: Main pipeline workspace */}
+                <div className="order-1 xl:order-2 min-w-0 space-y-4">
+                    <GdoDailyObjectives gdoUserId={session!.user.id} />
+                    <GdoLeadMetrics gdoUserId={session!.user.id} />
+                    <PipelineBoard
+                        firstCall={firstCall}
+                        secondCall={secondCall}
+                        thirdCall={thirdCall}
+                        fourthCall={fourthCall}
+                        isFourthCallActive={isFourthCallActive}
+                        recalls={recalls}
+                    />
+                </div>
 
-            <GdoLeadMetrics gdoUserId={session!.user.id} />
-
-            <QuestPanel userId={session!.user.id} />
-
-            <ActivityFeed />
-
-            <PipelineBoard
-                firstCall={firstCall}
-                secondCall={secondCall}
-                thirdCall={thirdCall}
-                fourthCall={fourthCall}
-                isFourthCallActive={isFourthCallActive}
-                recalls={recalls}
-            />
+                {/* Right: Gamification sidebar (streak + quests) */}
+                <div className="order-2 xl:order-3">
+                    <div className="lg:sticky lg:top-4 space-y-4">
+                        <StreakCounter userId={session!.user.id} />
+                        <StreakAnxietyBanner userId={session!.user.id} />
+                        <QuestPanel userId={session!.user.id} />
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }
