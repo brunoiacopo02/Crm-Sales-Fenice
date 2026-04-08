@@ -404,7 +404,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
         if (userRows.length === 0) return { success: false, error: "Utente non trovato" };
 
         const user = userRows[0];
-        const newCoins = user.coins + effectiveCoins;
+        const newWalletCoins = user.walletCoins + effectiveCoins;
         let newXp = user.experience + effectiveXp;
         let newLevel = user.level;
 
@@ -417,10 +417,11 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             targetXp = calculateTargetXp(newLevel);
         }
 
+        // Use walletCoins (the field displayed in UI and used by store)
         await db.update(users).set({
             experience: newXp,
             level: newLevel,
-            coins: newCoins,
+            walletCoins: newWalletCoins,
         }).where(eq(users.id, userId));
 
         // Log coin transaction (show multipliers in reason if > 1)

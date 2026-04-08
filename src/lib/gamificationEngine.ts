@@ -147,48 +147,64 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
         const reward = GAME_CONSTANTS.ACTIONS[actionType];
         if (!reward) return null;
 
-        // Apply seasonal event multipliers (dynamic import to avoid client bundling)
+        // Apply streak multiplier
+        const { getStreakMultiplier } = await import('@/lib/streakUtils');
+        const streakMult = getStreakMultiplier(user.streakCount || 0);
+
+        // Apply seasonal event multipliers
         const { getActiveEventMultipliers } = await import('@/lib/seasonalEventUtils');
         const eventMult = await getActiveEventMultipliers();
-        const effectiveXp = Math.floor(reward.xp * eventMult.xp);
-        const effectiveCoins = Math.floor(reward.coins * eventMult.coins);
+
+        // Combined multipliers: streak × event
+        const effectiveXp = Math.floor(reward.xp * streakMult * eventMult.xp);
+        const effectiveCoins = Math.floor(reward.coins * streakMult * eventMult.coins);
 
         let newXp = user.experience + effectiveXp;
-        let newCoins = user.coins + effectiveCoins;
+        let newWalletCoins = user.walletCoins + effectiveCoins;
         let newLevel = user.level;
         let targetXp = GAME_CONSTANTS.calculateTargetXp(newLevel);
 
-        // Handle Level up Loop (in case they gain enough XP to level up multiple times)
+        // Handle Level up Loop
         let didLevelUp = false;
         while (newXp >= targetXp) {
-            newXp -= targetXp; // Overflow XP
+            newXp -= targetXp;
             newLevel++;
             didLevelUp = true;
 
-            // Check roadmap rewards for the newly reached level
             const milestone = ROADMAP_REWARDS.find(r => r.level === newLevel);
             if (milestone) {
-                newCoins += milestone.rewardCoins;
+                newWalletCoins += milestone.rewardCoins;
             }
             targetXp = GAME_CONSTANTS.calculateTargetXp(newLevel);
         }
 
-        // DB Persist
+        // DB Persist — use walletCoins (the field displayed in UI and used by store)
         await db.update(users).set({
             experience: newXp,
             level: newLevel,
-            coins: newCoins
+            walletCoins: newWalletCoins
         }).where(eq(users.id, userId));
 
-        // Insert event logic for logging if desired, or let the caller do it.
-        // We log it quietly for analytics.
+        // Log coin transaction for audit trail
+        if (effectiveCoins > 0) {
+            const { coinTransactions } = await import('@/db/schema');
+            const multInfo = streakMult > 1 ? ` (x${streakMult} streak)` : '';
+            await db.insert(coinTransactions).values({
+                id: crypto.randomUUID(),
+                userId,
+                amount: effectiveCoins,
+                reason: `${actionType}${multInfo}`,
+            });
+        }
+
+        // Log lead event for analytics
         if (leadIdContext) {
             await db.insert(leadEvents).values({
                 id: crypto.randomUUID(),
                 leadId: leadIdContext,
                 eventType: `RPG_AWARD_${actionType}`,
                 userId: userId,
-                metadata: { xpGained: effectiveXp, coinsGained: effectiveCoins, levelUp: didLevelUp, eventMultiplier: eventMult.xp > 1 || eventMult.coins > 1 ? eventMult : undefined }
+                metadata: { xpGained: effectiveXp, coinsGained: effectiveCoins, levelUp: didLevelUp, streakMult, eventMultiplier: eventMult.xp > 1 || eventMult.coins > 1 ? eventMult : undefined }
             });
         }
 
