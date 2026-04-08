@@ -226,8 +226,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": "Ispirazione: giochi mobile daily calendar. Incentiva a tornare ogni giorno."
+      "passes": true,
+      "notes": "Weekly calendar visual: 7-day strip (Lun-Dom) with escalating rewards (5, 8, 12, 15, 20, 30, 50). Day statuses: claimed (green check), missed (red X), today (golden glow + Gift icon), future (dimmed + lock). Sunday is streak bonus day: 50c + 'Maratoneta Settimanale' title if all Mon-Sat claimed, otherwise 15c base. Coin cascade on claim. Mini calendar summary in claimed phase. Dark gaming card style. SafeWrapper. Build OK."
     },
     {
       "id": "FA-014",

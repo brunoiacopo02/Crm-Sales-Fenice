@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Flame, Coins, Sparkles, Zap, Star } from 'lucide-react';
+import { Flame, Coins, Sparkles, Check, X, Lock, Crown, Gift } from 'lucide-react';
 import { checkDailyLoginStatus, claimDailyLogin } from '@/app/actions/dailyLoginActions';
+import type { DayCalendarEntry } from '@/app/actions/dailyLoginActions';
 import { getAnimationsEnabled, triggerCelebration } from '@/lib/animationUtils';
 import { playSound } from '@/lib/soundEngine';
 import { useRouter } from 'next/navigation';
@@ -10,7 +11,7 @@ import { useRouter } from 'next/navigation';
 const STORAGE_KEY = 'crm-fenice-daily-login-last';
 
 const WELCOME_MESSAGES = [
-    'Pronto a spaccare? 🔥',
+    'Pronto a spaccare?',
     'Un altro giorno, un\'altra vittoria!',
     'La Fenice risorge ogni giorno!',
     'Il successo ti aspetta!',
@@ -37,6 +38,9 @@ export function DailyLoginReward({ userId }: { userId: string }) {
     const [userName, setUserName] = useState('');
     const [coinsAwarded, setCoinsAwarded] = useState(0);
     const [particles, setParticles] = useState<CoinParticle[]>([]);
+    const [calendar, setCalendar] = useState<DayCalendarEntry[]>([]);
+    const [allPriorDaysClaimed, setAllPriorDaysClaimed] = useState(false);
+    const [weeklyBonusTitle, setWeeklyBonusTitle] = useState(false);
 
     const welcomeMessage = useMemo(
         () => WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)],
@@ -48,20 +52,18 @@ export function DailyLoginReward({ userId }: { userId: string }) {
     // Check if we should show the daily login modal
     useEffect(() => {
         async function check() {
-            // Check localStorage first for quick rejection
             if (typeof window !== 'undefined') {
                 const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
                 const lastShown = localStorage.getItem(STORAGE_KEY);
                 if (lastShown === todayStr) return;
             }
 
-            // Check server
             let status;
             try {
                 status = await checkDailyLoginStatus(userId);
-            } catch { return; } // Fail silently
+            } catch { return; }
+
             if (status.alreadyClaimed) {
-                // Mark as shown so we don't check again
                 if (typeof window !== 'undefined') {
                     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
                     localStorage.setItem(STORAGE_KEY, todayStr);
@@ -72,6 +74,8 @@ export function DailyLoginReward({ userId }: { userId: string }) {
             setStreakCount(status.streakCount);
             setBonusCoins(status.bonusCoins);
             setUserName(status.userName);
+            setCalendar(status.calendar);
+            setAllPriorDaysClaimed(status.allPriorDaysClaimed);
             setVisible(true);
         }
         check();
@@ -97,16 +101,20 @@ export function DailyLoginReward({ userId }: { userId: string }) {
 
         if (result.success) {
             setCoinsAwarded(result.coinsAwarded);
+            setWeeklyBonusTitle(result.weeklyBonusTitle);
             setPhase('claimed');
 
-            // Spawn coin cascade animation + sound
+            // Update today's calendar entry to claimed
+            setCalendar(prev => prev.map(d =>
+                d.status === 'today' ? { ...d, status: 'claimed' as const } : d
+            ));
+
             playSound('coin_earned');
             if (animationsEnabled) {
                 spawnCoinParticles();
                 triggerCelebration('confetti');
             }
 
-            // Mark as shown in localStorage
             if (typeof window !== 'undefined') {
                 const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
                 localStorage.setItem(STORAGE_KEY, todayStr);
@@ -129,11 +137,6 @@ export function DailyLoginReward({ userId }: { userId: string }) {
         : streakTier === 'fiamma'
             ? 'text-ember-400'
             : 'text-brand-orange';
-    const flameGlow = streakTier === 'inferno'
-        ? 'shadow-[0_0_20px_rgba(168,85,247,0.4)]'
-        : streakTier === 'fiamma'
-            ? 'shadow-[0_0_20px_rgba(239,68,68,0.3)]'
-            : '';
 
     return (
         <div className="modal-backdrop" style={{ zIndex: 70 }}>
@@ -152,75 +155,77 @@ export function DailyLoginReward({ userId }: { userId: string }) {
                             zIndex: 72,
                         }}
                     >
-                        🪙
+                        <Coins className="text-gold-400" style={{ width: `${p.size}px`, height: `${p.size}px` }} />
                     </div>
                 ))}
 
                 <div
-                    className="relative max-w-sm w-full mx-2 sm:mx-4"
+                    className="relative max-w-lg w-full mx-4"
                     onClick={e => e.stopPropagation()}
                 >
-                    <div className="modal-content p-8 text-center bg-gradient-to-b from-brand-charcoal via-ash-800 to-ash-900 overflow-visible">
+                    <div className="modal-content p-6 text-center bg-gradient-to-b from-[#1A1620] via-[#141118] to-[#0D0B0E] border border-[#2a2235] overflow-visible rounded-2xl">
                         {/* Top decorative glow */}
                         <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-40 h-24 bg-brand-orange/20 rounded-full blur-3xl pointer-events-none" />
 
                         {/* Welcome phase */}
                         {phase === 'welcome' && (
                             <>
-                                {/* Flame icon with streak */}
-                                <div className={`relative mx-auto mb-4 w-20 h-20 rounded-full flex items-center justify-center bg-gradient-to-br from-brand-orange/20 to-ember-500/20 border border-brand-orange/30 ${flameGlow} ${animationsEnabled ? 'animate-daily-flame-pulse' : ''}`}>
-                                    <Flame className={`w-10 h-10 ${flameColor} ${animationsEnabled ? 'animate-daily-flame-flicker' : ''}`} />
-                                    {streakCount > 0 && (
-                                        <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-gradient-to-br from-ember-500 to-brand-orange flex items-center justify-center text-white text-xs font-bold border-2 border-ash-800">
-                                            {streakCount}
-                                        </div>
-                                    )}
+                                {/* Compact header */}
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div className={`relative w-14 h-14 rounded-full flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-brand-orange/20 to-ember-500/20 border border-brand-orange/30 ${animationsEnabled ? 'animate-daily-flame-pulse' : ''}`}>
+                                        <Flame className={`w-7 h-7 ${flameColor} ${animationsEnabled ? 'animate-daily-flame-flicker' : ''}`} />
+                                        {streakCount > 0 && (
+                                            <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-gradient-to-br from-ember-500 to-brand-orange flex items-center justify-center text-white text-[10px] font-bold border-2 border-[#1A1620]">
+                                                {streakCount}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-left">
+                                        <h2 className="text-xl font-bold text-white">
+                                            Ciao, <span className="text-brand-orange">{userName}</span>!
+                                        </h2>
+                                        <p className="text-ash-400 text-xs">{welcomeMessage}</p>
+                                    </div>
                                 </div>
 
-                                {/* Welcome text */}
-                                <h2 className="text-2xl font-bold text-white mb-1">
-                                    Benvenuto, <span className="text-brand-orange">{userName}</span>!
-                                </h2>
-                                <p className="text-ash-400 text-sm mb-5">
-                                    {welcomeMessage}
-                                </p>
+                                {/* Weekly Calendar Strip */}
+                                <div className="mb-5">
+                                    <div className="flex items-center justify-between gap-1.5">
+                                        {calendar.map((day) => (
+                                            <CalendarDay
+                                                key={day.date}
+                                                day={day}
+                                                allPriorDaysClaimed={allPriorDaysClaimed}
+                                                animationsEnabled={animationsEnabled}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
 
-                                {/* Streak info */}
-                                {streakCount > 0 ? (
-                                    <div className="mb-5 p-3 rounded-xl bg-white/5 border border-white/10">
-                                        <div className="flex items-center justify-center gap-2 mb-1">
+                                {/* Streak multiplier info */}
+                                {streakCount > 0 && (
+                                    <div className="mb-4 p-2.5 rounded-xl bg-white/5 border border-white/10">
+                                        <div className="flex items-center justify-center gap-2">
                                             <Flame className={`w-4 h-4 ${flameColor}`} />
                                             <span className="text-white font-semibold text-sm">
                                                 Streak: {streakCount} {streakCount === 1 ? 'giorno' : 'giorni'}
                                             </span>
-                                        </div>
-                                        <p className="text-ash-400 text-xs">
-                                            {streakTier === 'inferno'
-                                                ? 'Moltiplicatore INFERNO x3! Sei inarrestabile!'
-                                                : streakTier === 'fiamma'
-                                                    ? 'Moltiplicatore Fiamma x1.5! Continua cosi!'
-                                                    : 'Continua a completare quest per aumentare il moltiplicatore!'}
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="mb-5 p-3 rounded-xl bg-white/5 border border-white/10">
-                                        <div className="flex items-center justify-center gap-2 mb-1">
-                                            <Star className="w-4 h-4 text-ash-400" />
-                                            <span className="text-ash-300 font-semibold text-sm">
-                                                Nessuna streak attiva
+                                            <span className="text-ash-400 text-xs">
+                                                {streakTier === 'inferno'
+                                                    ? '(x3 Inferno!)'
+                                                    : streakTier === 'fiamma'
+                                                        ? '(x1.5 Fiamma)'
+                                                        : ''}
                                             </span>
                                         </div>
-                                        <p className="text-ash-500 text-xs">
-                                            Completa una quest oggi per iniziare la tua streak!
-                                        </p>
                                     </div>
                                 )}
 
-                                {/* Daily bonus preview */}
-                                <div className="mb-6 flex items-center justify-center gap-3">
-                                    <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-gold-500/20 to-brand-orange/20 border border-gold-400/30">
+                                {/* Today's reward preview */}
+                                <div className="mb-5 flex items-center justify-center gap-3">
+                                    <div className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-gold-500/20 to-brand-orange/20 border border-gold-400/30">
                                         <Coins className="w-5 h-5 text-gold-400" />
-                                        <span className="text-xl font-bold text-white">+{bonusCoins}</span>
+                                        <span className="text-2xl font-bold text-white">+{bonusCoins}</span>
                                         <span className="text-gold-300 text-sm font-medium">coins</span>
                                     </div>
                                 </div>
@@ -228,9 +233,9 @@ export function DailyLoginReward({ userId }: { userId: string }) {
                                 {/* Claim button */}
                                 <button
                                     onClick={handleClaim}
-                                    className="w-full py-3.5 px-6 rounded-xl font-bold text-lg bg-gradient-to-r from-brand-orange via-gold-400 to-brand-orange text-brand-charcoal hover:shadow-glow-gold hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
+                                    className="w-full py-3.5 px-6 rounded-xl font-bold text-lg bg-gradient-to-r from-brand-orange via-gold-400 to-brand-orange text-brand-charcoal hover:shadow-[0_0_20px_rgba(255,215,0,0.3)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
                                 >
-                                    Inizia la giornata!
+                                    Riscuoti il bonus!
                                 </button>
                             </>
                         )}
@@ -249,13 +254,13 @@ export function DailyLoginReward({ userId }: { userId: string }) {
                         {phase === 'claimed' && (
                             <>
                                 {/* Success icon */}
-                                <div className={`mx-auto mb-4 w-20 h-20 rounded-full flex items-center justify-center bg-gradient-to-br from-gold-500/30 to-brand-orange/30 border border-gold-400/40 ${animationsEnabled ? 'animate-daily-coin-bounce' : ''}`}>
-                                    <Coins className="w-10 h-10 text-gold-400" />
+                                <div className={`mx-auto mb-3 w-16 h-16 rounded-full flex items-center justify-center bg-gradient-to-br from-gold-500/30 to-brand-orange/30 border border-gold-400/40 ${animationsEnabled ? 'animate-daily-coin-bounce' : ''}`}>
+                                    <Coins className="w-8 h-8 text-gold-400" />
                                 </div>
 
                                 {/* Coins awarded */}
                                 <div className="mb-2 flex items-center justify-center gap-2">
-                                    <span className={`text-4xl font-bold text-white ${animationsEnabled ? 'animate-daily-count-up' : ''}`}>
+                                    <span className={`text-3xl font-bold text-white ${animationsEnabled ? 'animate-daily-count-up' : ''}`}>
                                         +{coinsAwarded}
                                     </span>
                                     <span className="text-gold-300 text-lg font-medium">coins</span>
@@ -265,8 +270,37 @@ export function DailyLoginReward({ userId }: { userId: string }) {
                                     Bonus giornaliero riscosso!
                                 </p>
 
+                                {/* Weekly bonus title unlock */}
+                                {weeklyBonusTitle && (
+                                    <div className="mb-3 p-2.5 rounded-lg bg-purple-500/10 border border-purple-400/30">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Crown className="w-4 h-4 text-purple-400" />
+                                            <span className="text-purple-300 text-sm font-bold">
+                                                Titolo sbloccato: Maratoneta Settimanale!
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Mini calendar showing week status after claim */}
+                                <div className="mb-4 flex items-center justify-center gap-1.5">
+                                    {calendar.map((day) => (
+                                        <div
+                                            key={day.date}
+                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold
+                                                ${day.status === 'claimed' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : ''}
+                                                ${day.status === 'missed' ? 'bg-red-500/10 text-red-400/50 border border-red-500/20' : ''}
+                                                ${day.status === 'today' ? 'bg-gold-400/15 text-gold-400 border border-gold-400/30' : ''}
+                                                ${day.status === 'future' ? 'bg-white/5 text-ash-600 border border-white/10' : ''}
+                                            `}
+                                        >
+                                            {day.status === 'claimed' ? <Check className="w-3.5 h-3.5" /> : day.status === 'missed' ? <X className="w-3.5 h-3.5" /> : day.label.charAt(0)}
+                                        </div>
+                                    ))}
+                                </div>
+
                                 {streakCount > 0 && (
-                                    <p className="text-ash-500 text-xs mb-5">
+                                    <p className="text-ash-500 text-xs mb-4">
                                         <Flame className="w-3 h-3 inline text-ember-400" /> Streak di {streakCount} giorni — {
                                             streakCount >= 7 ? 'bonus MASSIMO!' :
                                                 streakCount >= 3 ? 'bonus aumentato!' :
@@ -275,36 +309,92 @@ export function DailyLoginReward({ userId }: { userId: string }) {
                                     </p>
                                 )}
 
-                                {/* Streak bonus tiers info */}
-                                <div className="mb-6 grid grid-cols-3 gap-2 text-center">
-                                    <div className={`p-2 rounded-lg ${streakCount < 3 ? 'bg-brand-orange/10 border border-brand-orange/30 ring-1 ring-brand-orange/20' : 'bg-white/5 border border-white/10'}`}>
-                                        <Zap className="w-3 h-3 mx-auto text-brand-orange mb-0.5" />
-                                        <div className="text-xs text-white font-semibold">+5</div>
-                                        <div className="text-[10px] text-ash-500">Base</div>
-                                    </div>
-                                    <div className={`p-2 rounded-lg ${streakCount >= 3 && streakCount < 7 ? 'bg-ember-500/10 border border-ember-400/30 ring-1 ring-ember-400/20' : 'bg-white/5 border border-white/10'}`}>
-                                        <Flame className="w-3 h-3 mx-auto text-ember-400 mb-0.5" />
-                                        <div className="text-xs text-white font-semibold">+10</div>
-                                        <div className="text-[10px] text-ash-500">3+ giorni</div>
-                                    </div>
-                                    <div className={`p-2 rounded-lg ${streakCount >= 7 ? 'bg-purple-500/10 border border-purple-400/30 ring-1 ring-purple-400/20' : 'bg-white/5 border border-white/10'}`}>
-                                        <Flame className="w-3 h-3 mx-auto text-purple-400 mb-0.5" />
-                                        <div className="text-xs text-white font-semibold">+20</div>
-                                        <div className="text-[10px] text-ash-500">7+ giorni</div>
-                                    </div>
-                                </div>
-
                                 <button
                                     onClick={handleClose}
-                                    className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-gradient-to-r from-brand-orange via-gold-400 to-brand-orange text-brand-charcoal hover:shadow-glow-gold transition-all duration-300"
+                                    className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-gradient-to-r from-brand-orange via-gold-400 to-brand-orange text-brand-charcoal hover:shadow-[0_0_20px_rgba(255,215,0,0.3)] transition-all duration-300"
                                 >
-                                    Andiamo! 💪
+                                    Andiamo!
                                 </button>
                             </>
                         )}
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+/** Individual calendar day box */
+function CalendarDay({
+    day,
+    allPriorDaysClaimed,
+    animationsEnabled,
+}: {
+    day: DayCalendarEntry;
+    allPriorDaysClaimed: boolean;
+    animationsEnabled: boolean;
+}) {
+    const isClaimed = day.status === 'claimed';
+    const isMissed = day.status === 'missed';
+    const isToday = day.status === 'today';
+    const isFuture = day.status === 'future';
+
+    return (
+        <div
+            className={`
+                relative flex-1 flex flex-col items-center py-2.5 px-1 rounded-xl border transition-all duration-300
+                ${isToday ? 'border-gold-400/60 bg-gradient-to-b from-gold-400/15 to-brand-orange/10 shadow-[0_0_12px_rgba(255,215,0,0.15)]' : ''}
+                ${isToday && animationsEnabled ? 'animate-daily-calendar-glow' : ''}
+                ${isClaimed ? 'border-emerald-500/40 bg-emerald-500/8' : ''}
+                ${isMissed ? 'border-red-500/25 bg-red-500/5 opacity-50' : ''}
+                ${isFuture ? 'border-white/8 bg-white/[0.02] opacity-35' : ''}
+            `}
+        >
+            {/* Day label */}
+            <span className={`text-[10px] font-semibold uppercase tracking-wider mb-1
+                ${isToday ? 'text-gold-300' : isClaimed ? 'text-emerald-400' : isMissed ? 'text-red-400' : 'text-ash-500'}
+            `}>
+                {day.label}
+            </span>
+
+            {/* Status icon */}
+            <div className="relative w-8 h-8 flex items-center justify-center mb-1">
+                {isClaimed && (
+                    <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-emerald-400" />
+                    </div>
+                )}
+                {isMissed && (
+                    <div className="w-7 h-7 rounded-full bg-red-500/15 flex items-center justify-center">
+                        <X className="w-4 h-4 text-red-400/70" />
+                    </div>
+                )}
+                {isToday && (
+                    <div className={`w-7 h-7 rounded-full bg-gold-400/20 flex items-center justify-center ${animationsEnabled ? 'animate-daily-flame-flicker' : ''}`}>
+                        <Gift className="w-4 h-4 text-gold-400" />
+                    </div>
+                )}
+                {isFuture && (
+                    <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center">
+                        <Lock className="w-3.5 h-3.5 text-ash-600" />
+                    </div>
+                )}
+            </div>
+
+            {/* Coin amount */}
+            <div className={`flex items-center gap-0.5
+                ${isToday ? 'text-gold-300' : isClaimed ? 'text-emerald-300' : isMissed ? 'text-red-300/50' : 'text-ash-500'}
+            `}>
+                <Coins className="w-3 h-3" />
+                <span className="text-xs font-bold">
+                    {day.isStreakBonus && !allPriorDaysClaimed && !isClaimed ? '?' : day.reward}
+                </span>
+            </div>
+
+            {/* Sunday crown indicator */}
+            {day.isStreakBonus && (
+                <Crown className={`absolute -top-2 -right-1 w-3.5 h-3.5 ${allPriorDaysClaimed || isClaimed ? 'text-gold-400' : 'text-ash-600'}`} />
+            )}
         </div>
     );
 }

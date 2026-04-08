@@ -400,3 +400,41 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-013 — Daily bonus crescente con calendar visuale
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### Server Changes (dailyLoginActions.ts):
+1. **Escalating weekly rewards** — Mon 5c, Tue 8c, Wed 12c, Thu 15c, Fri 20c, Sat 30c, Sun 50c
+2. **Weekly calendar data** — `checkDailyLoginStatus` now returns `calendar: DayCalendarEntry[]` with 7 days, each showing label/date/reward/status
+3. **Sunday streak bonus** — If all Mon-Sat claimed, Sunday awards 50 coins + "Maratoneta Settimanale" title. If not all claimed, Sunday gives 15 coins base
+4. **Auto-equip title** — Weekly bonus title auto-equipped if user has no active title
+5. **Day-of-week reward calculation** — `claimDailyLogin` uses `getTodayWeekIndex()` to determine escalating reward instead of flat streak-tier bonus
+6. **New helpers** — `getWeekMondayStr()`, `getTodayWeekIndex()` for Rome-timezone week calculations
+7. **Exported type** — `DayCalendarEntry` interface for client import
+
+### Component Redesign (DailyLoginReward.tsx):
+1. **7-day calendar strip** — Horizontal row of 7 day boxes (Mon-Sun) with:
+   - Day label (Lun, Mar, Mer, etc.)
+   - Status icon: Check (claimed/green), X (missed/red), Gift (today/gold), Lock (future/dimmed)
+   - Coin amount per day
+   - Sunday crown indicator (gold if eligible, grey if not)
+2. **Today highlighted** — Golden glow animation (`daily-calendar-glow`), gradient background, gold accents
+3. **Claimed days** — Green border + emerald check icon
+4. **Missed days** — Red border + dimmed opacity + X icon
+5. **Future days** — Very dimmed with lock icon
+6. **Claimed phase** — Mini calendar summary strip showing week status after claiming
+7. **Weekly bonus title banner** — Purple banner announcing "Maratoneta Settimanale" title unlock
+8. **Coin cascade** — Existing coin particle animation using Coins icon (replaced emoji)
+9. **Compact header** — Flame icon + streak badge + welcome text in horizontal layout
+10. **Dark gaming card** — Full dark premium style consistent with gamification UI
+11. **Extracted CalendarDay component** — Clean separation for each day box rendering
+
+### CSS Keyframe Added (globals.css):
+- `daily-calendar-glow` — Pulsing golden box-shadow + inset glow for today's calendar box
+
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---
