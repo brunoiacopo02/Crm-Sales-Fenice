@@ -25,7 +25,10 @@ export default async function DashboardLayout({
         redirect("/login")
     }
 
-    const skinCss = await getEquippedSkinCss(session.user.id)
+    let skinCss: string | null = null;
+    try {
+        skinCss = await getEquippedSkinCss(session.user.id);
+    } catch { /* ignore skin errors */ }
     const isTheme = skinCss?.includes('skin-theme')
 
     // Mostriamo lo sprint banner solo ai ruoli per cui la gamification è attiva o ai supervisori
