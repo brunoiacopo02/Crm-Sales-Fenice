@@ -14,9 +14,10 @@ const ContactDrawer = dynamic(
 )
 import { PauseTimer } from "./PauseTimer"
 import { getUnreadNotifications, markNotificationsAsRead, markAllNotificationsAsRead } from "@/app/actions/notificationActions"
-import { getUserWalletCoins } from "@/app/actions/sprintActions"
+import { getUserWalletCoins, getUserLevelProgress } from "@/app/actions/sprintActions"
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications"
+import { getAnimationsEnabled, type RewardEarnedDetail } from "@/lib/animationUtils"
 
 export function Topbar() {
     const { toggle } = useSidebar()
@@ -38,14 +39,60 @@ export function Topbar() {
     const { notifications, setNotifications, liveToast, setLiveToast } = useRealtimeNotifications()
     const [isNotifOpen, setIsNotifOpen] = useState(false)
     const [walletCoins, setWalletCoins] = useState(0)
+    const [displayedCoins, setDisplayedCoins] = useState(0)
     const [skinCss, setSkinCss] = useState<string | null>(null)
     const prevNotifIdsRef = useRef<Set<string>>(new Set())
+    const [floatingCoins, setFloatingCoins] = useState<{ id: number; amount: number }[]>([])
+    const floatingIdRef = useRef(0)
+    const [coinBounce, setCoinBounce] = useState(false)
+    const [levelProgress, setLevelProgress] = useState<{ level: number; progressPercent: number; remainingXp: number; targetXp: number } | null>(null)
+    const isGamificationRole = session?.user?.role === "GDO" || session?.user?.role === "CONFERME"
 
     useEffect(() => {
         if (session?.user?.id) {
-            getUserWalletCoins(session.user.id).then(setWalletCoins).catch(console.error)
+            getUserWalletCoins(session.user.id).then(c => { setWalletCoins(c); setDisplayedCoins(c); }).catch(console.error)
             getEquippedSkinCss(session.user.id).then(setSkinCss).catch(console.error)
+            if (isGamificationRole) {
+                getUserLevelProgress(session.user.id).then(p => { if (p) setLevelProgress(p); }).catch(console.error)
+            }
         }
+    }, [session?.user?.id, isGamificationRole])
+
+    // Count-up animation when walletCoins changes
+    useEffect(() => {
+        if (walletCoins === displayedCoins) return
+        if (!getAnimationsEnabled()) { setDisplayedCoins(walletCoins); return; }
+        const diff = walletCoins - displayedCoins
+        const steps = Math.min(Math.abs(diff), 20)
+        const stepSize = diff / steps
+        let step = 0
+        const interval = setInterval(() => {
+            step++
+            if (step >= steps) { setDisplayedCoins(walletCoins); clearInterval(interval); return; }
+            setDisplayedCoins(prev => Math.round(prev + stepSize))
+        }, 30)
+        return () => clearInterval(interval)
+    }, [walletCoins]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Listen to reward_earned events for +X floating, wallet refresh, and XP bar update
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<RewardEarnedDetail>).detail
+            if (detail.coinsGained > 0 && getAnimationsEnabled()) {
+                const id = ++floatingIdRef.current
+                setFloatingCoins(prev => [...prev, { id, amount: detail.coinsGained }])
+                setCoinBounce(true)
+                setTimeout(() => setCoinBounce(false), 400)
+                setTimeout(() => setFloatingCoins(prev => prev.filter(f => f.id !== id)), 1500)
+            }
+            // Refresh wallet from server
+            if (session?.user?.id) {
+                getUserWalletCoins(session.user.id).then(setWalletCoins).catch(console.error)
+                getUserLevelProgress(session.user.id).then(p => { if (p) setLevelProgress(p); }).catch(console.error)
+            }
+        }
+        window.addEventListener('reward_earned', handler)
+        return () => window.removeEventListener('reward_earned', handler)
     }, [session?.user?.id])
 
     useEffect(() => {
@@ -217,9 +264,12 @@ export function Topbar() {
                     >
                         <Bell className="h-5 w-5" />
                         {notifications.filter(n => n.status === 'unread').length > 0 && (
-                            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-ember-400 to-fire-500 ring-2 ring-white text-[9px] font-bold text-white shadow-gaming-glow-fire">
-                                {notifications.filter(n => n.status === 'unread').length}
-                            </span>
+                            <div className="absolute -top-0.5 -right-0.5 flex items-center justify-center">
+                                <div className="absolute inset-0 h-5 w-5 rounded-full bg-gradient-to-br from-ember-400 to-fire-500 topbar-notif-ping opacity-60" />
+                                <div className="relative flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-ember-400 to-fire-500 ring-2 ring-white text-[9px] font-bold text-white shadow-gaming-glow-fire topbar-notif-pulse">
+                                    {notifications.filter(n => n.status === 'unread').length}
+                                </div>
+                            </div>
                         )}
                     </button>
 
@@ -272,15 +322,45 @@ export function Topbar() {
 
                 {/* User section */}
                 <div className="flex items-center gap-3 pl-3 lg:pl-4 border-l border-ash-200">
-                    {session?.user?.role === "GDO" && (
-                        <div className="flex items-center gap-1.5 bg-gradient-to-r from-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] text-[var(--color-gaming-gold)] font-bold px-3 py-1.5 rounded-full text-xs shadow-gaming-glow-gold border border-[var(--color-gaming-border-hover)]" title="I tuoi Fenice Coin vinti nello Sprint">
-                            <Image src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" width={16} height={16} className="object-contain drop-shadow-sm" />
-                            {walletCoins}
+                    {isGamificationRole && (
+                        <div className="relative flex items-center gap-1.5 bg-gradient-to-r from-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] text-[var(--color-gaming-gold)] font-bold px-3 py-1.5 rounded-full text-xs shadow-gaming-glow-gold border border-[var(--color-gaming-border-hover)]" title="I tuoi Fenice Coin">
+                            <Image
+                                src="/assets/store/icon_fenice_coin.png"
+                                alt="Fenice Coin"
+                                width={16}
+                                height={16}
+                                className={`object-contain drop-shadow-sm topbar-coin-spin ${coinBounce ? 'topbar-coin-bounce' : ''}`}
+                            />
+                            <span className="tabular-nums min-w-[2ch] text-center">{displayedCoins}</span>
+                            {/* Floating +X coins */}
+                            {floatingCoins.map(fc => (
+                                <span
+                                    key={fc.id}
+                                    className="absolute -top-1 right-0 text-[var(--color-gaming-gold)] font-bold text-xs topbar-coin-float pointer-events-none"
+                                >
+                                    +{fc.amount}
+                                </span>
+                            ))}
                         </div>
                     )}
 
-                    <div className="text-sm font-medium text-ash-700 hidden sm:block">
-                        {session?.user?.name || "GDO"}
+                    <div className="flex flex-col items-end justify-center hidden sm:flex">
+                        <div className="text-sm font-medium text-ash-700 leading-tight">
+                            {session?.user?.name || "GDO"}
+                        </div>
+                        {/* Mini XP bar */}
+                        {isGamificationRole && levelProgress && (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[10px] font-bold text-[var(--color-gaming-gold)]">Lv.{levelProgress.level}</span>
+                                <div className="w-16 h-1.5 rounded-full bg-ash-200/60 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-gradient-to-r from-[var(--color-fire-500)] to-[var(--color-gaming-gold)] topbar-xp-bar-shimmer transition-all duration-700 ease-out"
+                                        style={{ width: `${levelProgress.progressPercent}%` }}
+                                    />
+                                </div>
+                                <span className="text-[9px] text-ash-400 tabular-nums">{Math.round(levelProgress.progressPercent)}%</span>
+                            </div>
+                        )}
                     </div>
                     <div className="relative">
                         <div className={`h-9 w-9 rounded-full bg-gradient-to-br from-brand-orange to-fire-500 flex items-center justify-center text-white font-bold text-sm shadow-gaming-glow-fire ring-2 ring-fire-400/25 ${skinCss?.includes('skin-avatar') || skinCss?.includes('skin-effect') ? skinCss : ''}`}>

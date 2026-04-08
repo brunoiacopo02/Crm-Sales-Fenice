@@ -278,8 +278,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": "La topbar e' sempre visibile — il wallet animato e' un reminder costante della gamification."
+      "passes": true,
+      "notes": "Animated coin icon (topbar-coin-spin 4s rotation), coin bounce on earn (topbar-coin-bounce 0.4s flip+scale). Count-up animation interpolates old→new walletCoins in 20 steps. Floating +X text rises and fades on reward_earned events (topbar-coin-float). Notification badge redesigned: dual-layer with expanding ping ring (topbar-notif-ping) + gentle pulse (topbar-notif-pulse). Mini XP bar under username: Lv.X label + 64px gradient bar (fire→gold) with shimmer sweep + percentage. Wallet and XP bar now visible for both GDO and CONFERME (isGamificationRole). All animations respect getAnimationsEnabled(). SafeWrapper not needed (Topbar is structural). 7 new CSS keyframes. Build OK."
     },
     {
       "id": "FA-017",

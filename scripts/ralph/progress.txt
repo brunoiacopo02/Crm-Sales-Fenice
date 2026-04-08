@@ -525,3 +525,43 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-016 — Redesign Topbar wallet e notifiche con stile gaming
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### Wallet Coin Animation (Topbar.tsx):
+1. **Animated coin icon** — `topbar-coin-spin` (4s ease-in-out infinite) gentle Y-axis rotation with asymmetric keyframes (0°→20°→0°→-10°→0°)
+2. **Coin bounce on earn** — `topbar-coin-bounce` (0.4s) full 360° Y-rotation with scale 1→1.3→0.9→1. Triggered by `reward_earned` event
+3. **Count-up counter** — When `walletCoins` state changes, `displayedCoins` interpolates from old→new value in up to 20 steps at 30ms intervals. Tabular-nums font for stable width
+4. **Floating +X text** — On `reward_earned` with `coinsGained > 0`, spawns a `+X` element above wallet that floats upward 28px and fades out over 1.4s (`topbar-coin-float`). Gold text-shadow glow. Auto-cleanup after 1.5s
+
+### Notification Badge Redesign (Topbar.tsx):
+1. **Dual-layer badge** — Outer expanding ping ring (`topbar-notif-ping`, 2s cubic-bezier infinite) fading from 60% to 0% opacity as it scales to 1.8x. Inner badge with gentle pulse (`topbar-notif-pulse`, 2s scale 1→1.08)
+2. **Upgraded styling** — Larger 20px badge (up from 16px), positioned -top-0.5 -right-0.5 for better visibility
+3. **Gradient preserved** — ember-400→fire-500 gradient, ring-2 ring-white, shadow-gaming-glow-fire
+
+### Mini XP Bar (Topbar.tsx):
+1. **Level label** — `Lv.X` in gaming-gold, 10px font-bold
+2. **Progress bar** — 64px wide, 6px tall, rounded-full. Background: ash-200/60. Fill: gradient fire-500→gaming-gold with `topbar-xp-bar-shimmer` sweep animation (3s infinite)
+3. **Percentage** — 9px ash-400 text showing current XP progress rounded to integer
+4. **Data source** — `getUserLevelProgress(userId)` fetched on mount and refreshed on every `reward_earned` event
+5. **Layout** — Username + XP bar stacked vertically with flex-col, replacing the single-line name
+
+### Role Extension:
+- Added `isGamificationRole` check: `GDO || CONFERME` (was GDO-only)
+- Wallet coins + XP bar now visible for both GDO and CONFERME roles
+
+### CSS Keyframes Added (globals.css — 7 total):
+- `topbar-coin-spin`: gentle 4s Y-rotation
+- `topbar-coin-bounce`: 0.4s flip+scale on coin earn
+- `topbar-coin-float`: 1.4s rise+fade for +X text
+- `topbar-notif-pulse`: 2s gentle scale pulse
+- `topbar-notif-ping`: 2s expanding ring fade
+- `topbar-xp-shimmer`: 3s gradient position sweep
+
+### Respects getAnimationsEnabled(): ✓ Count-up skips to final value, floating +X suppressed, bounce suppressed
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---
