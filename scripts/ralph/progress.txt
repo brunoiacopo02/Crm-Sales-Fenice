@@ -330,3 +330,31 @@ Started: 2026-04-07
   - Agenda view groups leads by appointmentDate — empty when test data lacks dates (expected behavior)
   - Classifica page auto-selects Venditori tab based on user role — correct UX
 ---
+
+## 2026-04-08 - F3-026
+- E2E verification of complete Manager flow using Playwright on production build (next start)
+- Login as Manager (marketing@fenice.local / Marketing2026!): SUCCESS — redirected to /marketing-analytics
+- SIDEBAR: Marketing user has restricted sidebar (only "Marketing Analytics") by design — code explicitly checks for marketing@fenice.local and shows limited nav. Regular Managers would see 4 groups (Operativo, KPI, Team, Gamification) with 20+ links
+- ACCESSIBLE PAGES (9 pages without marketing redirect):
+  - /marketing-analytics: loads correctly with funnel table (8 funnels), Gestione Budget, Drill-Down per GDO — VERIFIED
+  - /kpi-gdo: loads with Manager mode (Team Intero Aggregato), metrics (Chiamate, Risposte, Tasso, Appuntamenti), trend charts — VERIFIED
+  - /kpi-conferme: loads with Dashboard Conferme, Progresso Settimanale (1/96), Storico Mensile, Bilanciamento Venditori — VERIFIED
+  - /manager-targets: loads with Target & Previsioni, tabs (Target GDO, Target Conferme, Target Venditori, Giorni Lavorativi, Regole Gamification), collapsible sections, "ATTENZIONE CRITICA" alert — VERIFIED
+  - /manager-rpg-monitor: loads with Cruscotto GDO RPG, table of GDO operators (105, 108, 109, 110, 113, 116), Evolution Stage, XP, Bonus, Stipendio, Fenice Coins — VERIFIED
+  - /team/store: loads with Gestione Fenice Store, catalog of items with CSS classes and costs, "Nuovo Elemento" button — VERIFIED
+  - /manager-gdo-performance: loads with Performance GDO Settimanali, GDO 114 data, Performance Absolute Mese by funnel, Storico Settimanale — VERIFIED
+  - /import: loads with Importa Lead tramite CSV, "Aggiungi Lead Singolo" button, preview & validation — VERIFIED
+  - /archivio: loads with Archivio Globale, filters (Tipo Data, GDO, Venditore, Esito), lead table with real data — VERIFIED
+- REDIRECTING PAGES (8 pages redirect marketing user to /marketing-analytics by design):
+  - /kpi-hub, /kpi-team, /kpi-venditori, /monitor-pause, /note-gdo, /analisi-qualita, /team, /scartati
+  - All correctly redirect without errors
+- Console errors: 1 pre-existing (Sprint banner fetch TypeError) — no new errors from Fase 3B
+- Screenshots saved: e2e-manager-marketing-analytics.png, e2e-manager-kpi-gdo.png, e2e-manager-kpi-conferme.png, e2e-manager-targets.png, e2e-manager-rpg-monitor.png, e2e-manager-store-admin.png, e2e-manager-gdo-performance.png, e2e-manager-import.png, e2e-manager-archivio.png
+- No code changes needed — all verification passed
+- npx next build: compiles successfully with zero errors
+- **Learnings per iterazioni future:**
+  - marketing@fenice.local is a restricted MANAGER — only sees Marketing Analytics in sidebar. Regular Managers see full 4-group sidebar
+  - 8 pages explicitly redirect marketing user: kpi-hub, kpi-team, kpi-venditori, monitor-pause, note-gdo, analisi-qualita, team, scartati
+  - 9 pages are accessible without redirect: marketing-analytics, kpi-gdo, kpi-conferme, manager-targets, import, archivio, manager-rpg-monitor, team/store, manager-gdo-performance
+  - Sprint banner fetch error is pre-existing and intermittent across all roles
+---
