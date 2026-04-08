@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Trophy, Medal, User, Crown, Flame, Phone, Zap, ArrowUp, ArrowDown, Star, Sparkles, CheckCircle, DollarSign, Users } from "lucide-react"
+import { Trophy, Medal, User, Crown, Flame, Phone, Zap, ArrowUp, ArrowDown, Star, Sparkles, CheckCircle, DollarSign, Users, ChevronUp, ChevronDown } from "lucide-react"
 import { getMultiMetricLeaderboard, getRoleLeaderboard } from "@/app/actions/leaderboardActions"
 import type { LeaderboardPeriod, LeaderboardMetric, LeaderboardRole } from "@/app/actions/leaderboardActions"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
+import { SafeWrapper } from "@/components/SafeWrapper"
 
 type LeaderboardItem = {
     userId: string
@@ -251,20 +252,26 @@ export function LeaderboardClient({
     const top3 = currentData.slice(0, 3)
     const rest = currentData.slice(3)
 
-    const getRankChangeIndicator = (userId: string) => {
+    const getRankChangeIndicator = (userId: string, variant: 'podium' | 'row' = 'row') => {
         const change = rankChanges.get(userId)
         if (!change) return null
         if (change > 0) {
             return (
-                <div className="flex items-center gap-0.5 text-emerald-400 text-xs font-black animate-slide-up bg-emerald-500/15 px-1.5 py-0.5 rounded-full border border-emerald-500/25">
-                    <ArrowUp className="h-3.5 w-3.5" />
+                <div
+                    className={`flex items-center gap-0.5 text-emerald-400 font-black bg-emerald-500/15 rounded-full border border-emerald-500/30 ${variant === 'podium' ? 'text-xs px-2 py-1 shadow-[0_0_8px_rgba(16,185,129,0.25)]' : 'text-[11px] px-1.5 py-0.5'}`}
+                    style={animationsEnabled ? { animation: 'lb-arrow-bounce-up 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards' } : undefined}
+                >
+                    <ChevronUp className={variant === 'podium' ? 'h-4 w-4' : 'h-3.5 w-3.5'} strokeWidth={3} />
                     <span>+{change}</span>
                 </div>
             )
         }
         return (
-            <div className="flex items-center gap-0.5 text-red-400 text-[10px] font-medium animate-fade-in opacity-70">
-                <ArrowDown className="h-2.5 w-2.5" />
+            <div
+                className={`flex items-center gap-0.5 text-red-400 font-semibold bg-red-500/10 rounded-full border border-red-500/20 ${variant === 'podium' ? 'text-[10px] px-2 py-0.5' : 'text-[10px] px-1.5 py-0.5'}`}
+                style={animationsEnabled ? { animation: 'lb-arrow-bounce-down 0.5s ease-out forwards' } : undefined}
+            >
+                <ChevronDown className="h-3 w-3" strokeWidth={3} />
                 <span>{Math.abs(change)}</span>
             </div>
         )
@@ -296,6 +303,7 @@ export function LeaderboardClient({
     }
 
     return (
+        <SafeWrapper>
         <div className="space-y-6">
             {/* Player of the Week Banner */}
             {playerOfWeek && currentPeriod === 'week' && playerOfWeek.appointmentCount > 0 && (
@@ -430,7 +438,10 @@ export function LeaderboardClient({
 
             {/* Podium Top 3 */}
             {top3.length > 0 && getScore(currentData[0]) > 0 && (
-                <div className="flex items-end justify-center gap-4 pt-6 pb-2 animate-slide-up">
+                <div className="relative flex items-end justify-center gap-5 pt-8 pb-2">
+                    {/* Podium background glow */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[var(--color-gaming-gold)]/5 via-transparent to-transparent rounded-3xl pointer-events-none" />
+
                     {/* 2nd Place */}
                     {top3.length > 1 && (() => {
                         const user = top3[1]
@@ -438,32 +449,45 @@ export function LeaderboardClient({
                         const score = getScore(user)
                         const rankChange = rankChanges.get(user.userId)
                         return (
-                            <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}>
-                                <div className="relative mb-2">
+                            <div
+                                className="flex flex-col items-center relative z-10"
+                                style={animationsEnabled ? { animation: 'lb-podium-entrance 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards', animationDelay: '150ms', opacity: 0 } : undefined}
+                            >
+                                <div className="relative mb-3">
                                     <div
-                                        className={`h-16 w-16 rounded-full flex items-center justify-center font-bold text-xl shadow-card border-3 border-ash-300 ring-2 ring-ash-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-ash-100 to-ash-200 text-ash-600'}`}
+                                        className={`h-16 w-16 rounded-full flex items-center justify-center font-bold text-xl border-[3px] ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-slate-200 via-slate-100 to-slate-300 text-slate-600'}`}
                                         style={animationsEnabled ? { animation: 'lb-podium-silver 3s ease-in-out infinite' } : undefined}
                                     >
                                         {user.displayName?.charAt(0) || 'U'}
                                     </div>
-                                    <div className="absolute -top-2 -right-1 w-7 h-7 rounded-full bg-gradient-to-br from-ash-300 to-ash-500 flex items-center justify-center text-white text-xs font-bold shadow-soft border-2 border-white">
+                                    <div className="absolute -top-2 -right-1 w-7 h-7 rounded-full bg-gradient-to-br from-slate-300 via-slate-200 to-slate-400 flex items-center justify-center text-white text-xs font-black shadow-md border-2 border-slate-100/50">
                                         2
                                     </div>
-                                    {getRankChangeIndicator(user.userId)}
                                 </div>
-                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                {getRankChangeIndicator(user.userId, 'podium')}
+                                <div className={`text-sm font-bold mt-1 ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
                                 {user.activeTitle && (
                                     <div className="text-[9px] font-bold text-purple-300 bg-purple-500/15 px-1.5 py-0.5 rounded-full border border-purple-500/25 mt-0.5">{user.activeTitle}</div>
                                 )}
                                 <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">{getRoleLabel(user)}</div>
-                                <div className="text-lg font-black text-[var(--color-gaming-text)] mt-1">{score}</div>
-                                <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)]">{getUnit()}</div>
+                                <div className="text-xl font-black text-slate-300 mt-1.5"
+                                    style={animationsEnabled && rankChange ? { animation: 'lb-score-pulse 0.5s ease-out' } : undefined}
+                                >{formatScore(score)}</div>
+                                <div className="text-[9px] uppercase font-bold tracking-wider text-slate-400">{getUnit()}</div>
                                 <ReactionButtons userId={user.userId} />
-                                {/* Pedestal — Silver */}
-                                <div className="w-24 h-20 mt-2 bg-gradient-to-t from-ash-300 via-ash-200 to-ash-100 rounded-t-xl border border-ash-300 flex items-center justify-center shadow-card"
-                                    style={animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : undefined}
+                                {/* Pedestal — Silver metallic */}
+                                <div
+                                    className="w-24 h-20 mt-2 rounded-t-xl border border-slate-400/30 flex items-center justify-center relative overflow-hidden"
+                                    style={{
+                                        background: 'linear-gradient(180deg, #c0cedc 0%, #a8b8c8 30%, #8898a8 60%, #788898 100%)',
+                                        ...(animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : {})
+                                    }}
                                 >
-                                    <Medal className="h-6 w-6 text-ash-400" />
+                                    {/* Metallic shimmer overlay */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent"
+                                        style={animationsEnabled ? { animation: 'lb-pedestal-silver-shimmer 4s ease-in-out infinite', backgroundSize: '200% 100%' } : undefined}
+                                    />
+                                    <Medal className="h-6 w-6 text-slate-200/80 drop-shadow-md relative z-10" />
                                 </div>
                             </div>
                         )
@@ -476,33 +500,51 @@ export function LeaderboardClient({
                         const score = getScore(user)
                         const rankChange = rankChanges.get(user.userId)
                         return (
-                            <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}>
-                                <div className="relative mb-2">
+                            <div
+                                className="flex flex-col items-center relative z-10"
+                                style={animationsEnabled ? { animation: 'lb-podium-entrance 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards', animationDelay: '0ms', opacity: 0 } : undefined}
+                            >
+                                <div className="relative mb-3">
+                                    {/* Gold ring glow behind avatar */}
+                                    <div className="absolute -inset-2 rounded-full bg-gradient-to-br from-[var(--color-gaming-gold)]/20 to-amber-500/10 blur-md" />
                                     <div
-                                        className={`h-20 w-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-elevated border-3 border-gold-400 ring-4 ring-gold-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-gold-100 to-gold-200 text-gold-700'}`}
+                                        className={`h-22 w-22 rounded-full flex items-center justify-center font-bold text-2xl border-[3px] relative ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-amber-200 via-yellow-100 to-amber-300 text-amber-700'}`}
                                         style={animationsEnabled ? { animation: 'lb-podium-gold 2.5s ease-in-out infinite' } : undefined}
                                     >
                                         {user.displayName?.charAt(0) || 'U'}
                                     </div>
-                                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                                        <Crown className="h-7 w-7 text-gold-500 drop-shadow-md" />
+                                    <div className="absolute -top-4 left-1/2"
+                                        style={animationsEnabled ? { animation: 'lb-crown-float 2s ease-in-out infinite', transformOrigin: 'center' } : { transform: 'translateX(-50%)' }}
+                                    >
+                                        <Crown className="h-8 w-8 text-[var(--color-gaming-gold)] drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]" />
                                     </div>
-                                    {getRankChangeIndicator(user.userId)}
                                 </div>
-                                <div className={`text-base font-bold ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[120px] truncate`}>{user.displayName}</div>
+                                {getRankChangeIndicator(user.userId, 'podium')}
+                                <div className={`text-base font-bold mt-1 ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[120px] truncate`}>{user.displayName}</div>
                                 {user.activeTitle && (
                                     <div className="text-[10px] font-bold text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-full border border-purple-500/25 mt-0.5">{user.activeTitle}</div>
                                 )}
                                 <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">{getRoleLabel(user)}</div>
-                                <div className="text-2xl font-black text-gold-600 mt-1">{score}</div>
-                                <div className="text-[10px] uppercase font-bold tracking-wider text-gold-500">{getUnit()}</div>
-                                {isMe && <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-brand-orange-200">TU</div>}
+                                <div className="text-2xl font-black text-[var(--color-gaming-gold)] mt-1.5 drop-shadow-[0_0_6px_rgba(255,215,0,0.3)]"
+                                    style={animationsEnabled && rankChange ? { animation: 'lb-score-pulse 0.5s ease-out' } : undefined}
+                                >{formatScore(score)}</div>
+                                <div className="text-[10px] uppercase font-bold tracking-wider text-amber-400/80">{getUnit()}</div>
+                                {isMe && <div className="bg-brand-orange/15 text-brand-orange text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1 border border-brand-orange/30 shadow-[0_0_8px_rgba(255,190,130,0.2)]">TU</div>}
                                 <ReactionButtons userId={user.userId} />
-                                {/* Pedestal — Gold */}
-                                <div className="w-28 h-28 mt-2 bg-gradient-to-t from-gold-300 via-gold-200 to-gold-50 rounded-t-xl border border-gold-300 flex items-center justify-center shadow-glow-gold"
-                                    style={animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : undefined}
+                                {/* Pedestal — Gold metallic */}
+                                <div
+                                    className="w-28 h-28 mt-2 rounded-t-xl border border-amber-400/30 flex items-center justify-center relative overflow-hidden"
+                                    style={{
+                                        background: 'linear-gradient(180deg, #ffd700 0%, #f0c800 20%, #d4a800 50%, #b8920a 80%, #a07d08 100%)',
+                                        boxShadow: '0 0 20px rgba(255, 215, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
+                                        ...(animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : {})
+                                    }}
                                 >
-                                    <Trophy className="h-8 w-8 text-gold-500" />
+                                    {/* Metallic shimmer overlay */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                                        style={animationsEnabled ? { animation: 'lb-pedestal-gold-shimmer 3s ease-in-out infinite', backgroundSize: '200% 100%' } : undefined}
+                                    />
+                                    <Trophy className="h-8 w-8 text-amber-100/90 drop-shadow-md relative z-10" />
                                 </div>
                             </div>
                         )
@@ -515,32 +557,45 @@ export function LeaderboardClient({
                         const score = getScore(user)
                         const rankChange = rankChanges.get(user.userId)
                         return (
-                            <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}>
-                                <div className="relative mb-2">
+                            <div
+                                className="flex flex-col items-center relative z-10"
+                                style={animationsEnabled ? { animation: 'lb-podium-entrance 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards', animationDelay: '300ms', opacity: 0 } : undefined}
+                            >
+                                <div className="relative mb-3">
                                     <div
-                                        className={`h-14 w-14 rounded-full flex items-center justify-center font-bold text-lg shadow-card border-3 border-brand-orange-300 ring-2 ring-brand-orange-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-brand-orange-50 to-brand-orange-100 text-brand-orange-600'}`}
+                                        className={`h-14 w-14 rounded-full flex items-center justify-center font-bold text-lg border-[3px] ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-orange-200 via-amber-100 to-orange-300 text-orange-700'}`}
                                         style={animationsEnabled ? { animation: 'lb-podium-bronze 2.8s ease-in-out infinite' } : undefined}
                                     >
                                         {user.displayName?.charAt(0) || 'U'}
                                     </div>
-                                    <div className="absolute -top-2 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-brand-orange-300 to-brand-orange-500 flex items-center justify-center text-white text-xs font-bold shadow-soft border-2 border-white">
+                                    <div className="absolute -top-2 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 via-amber-500 to-orange-600 flex items-center justify-center text-white text-xs font-black shadow-md border-2 border-orange-200/50">
                                         3
                                     </div>
-                                    {getRankChangeIndicator(user.userId)}
                                 </div>
-                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                {getRankChangeIndicator(user.userId, 'podium')}
+                                <div className={`text-sm font-bold mt-1 ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
                                 {user.activeTitle && (
                                     <div className="text-[9px] font-bold text-purple-300 bg-purple-500/15 px-1.5 py-0.5 rounded-full border border-purple-500/25 mt-0.5">{user.activeTitle}</div>
                                 )}
                                 <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">{getRoleLabel(user)}</div>
-                                <div className="text-lg font-black text-[var(--color-gaming-text)] mt-1">{score}</div>
-                                <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)]">{getUnit()}</div>
+                                <div className="text-lg font-black text-orange-300 mt-1.5"
+                                    style={animationsEnabled && rankChange ? { animation: 'lb-score-pulse 0.5s ease-out' } : undefined}
+                                >{formatScore(score)}</div>
+                                <div className="text-[9px] uppercase font-bold tracking-wider text-orange-400/70">{getUnit()}</div>
                                 <ReactionButtons userId={user.userId} />
-                                {/* Pedestal — Bronze */}
-                                <div className="w-20 h-16 mt-2 bg-gradient-to-t from-brand-orange-200 via-brand-orange-100 to-brand-orange-50 rounded-t-xl border border-brand-orange-200 flex items-center justify-center shadow-card"
-                                    style={animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : undefined}
+                                {/* Pedestal — Bronze metallic */}
+                                <div
+                                    className="w-20 h-16 mt-2 rounded-t-xl border border-orange-500/25 flex items-center justify-center relative overflow-hidden"
+                                    style={{
+                                        background: 'linear-gradient(180deg, #cd7f32 0%, #b87333 30%, #a0652a 60%, #8b5722 100%)',
+                                        ...(animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : {})
+                                    }}
                                 >
-                                    <Medal className="h-5 w-5 text-brand-orange-400" />
+                                    {/* Metallic shimmer overlay */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/12 to-transparent"
+                                        style={animationsEnabled ? { animation: 'lb-pedestal-silver-shimmer 4.5s ease-in-out infinite', backgroundSize: '200% 100%' } : undefined}
+                                    />
+                                    <Medal className="h-5 w-5 text-orange-100/80 drop-shadow-md relative z-10" />
                                 </div>
                             </div>
                         )
@@ -565,30 +620,34 @@ export function LeaderboardClient({
                             const topScore = getScore(currentData[0])
                             const rankChange = rankChanges.get(user.userId)
 
-                            // SA-007: Determine row highlight animation
-                            const rowHighlightStyle: React.CSSProperties | undefined = (() => {
+                            // Determine row animation based on rank change direction
+                            const rowAnimStyle: React.CSSProperties | undefined = (() => {
                                 if (!animationsEnabled || !rankChange) return undefined
-                                if (rankChange > 0) return { animation: 'lb-rank-up-highlight 3s ease-out forwards' }
-                                if (rankChange < 0) return { animation: 'lb-rank-down-highlight 2s ease-out forwards' }
+                                if (rankChange > 0) return {
+                                    animation: 'lb-row-slide-up 0.5s ease-out forwards, lb-rank-up-highlight 3s ease-out forwards',
+                                }
+                                if (rankChange < 0) return {
+                                    animation: 'lb-row-slide-down 0.5s ease-out forwards, lb-rank-down-highlight 2s ease-out forwards',
+                                }
                                 return undefined
                             })()
 
                             return (
                                 <li
                                     key={user.userId}
-                                    className={`relative transition-all duration-300 hover:bg-[var(--color-gaming-bg-surface)] animate-fade-in ${isMe ? 'bg-fire-500/5' : ''} ${rankChange ? 'animate-slide-up' : ''}`}
-                                    style={{ animationDelay: `${(index + 3) * 50}ms`, animationFillMode: 'backwards', ...rowHighlightStyle }}
+                                    className={`relative transition-all duration-300 hover:bg-[var(--color-gaming-bg-surface)] animate-fade-in ${isMe ? 'bg-fire-500/5' : ''}`}
+                                    style={{ animationDelay: `${(index + 3) * 50}ms`, animationFillMode: 'backwards', ...rowAnimStyle }}
                                 >
                                     {isMe && (
-                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-brand-orange to-ember-400 shadow-glow-orange z-10" />
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-brand-orange via-ember-400 to-fire-500 shadow-[0_0_8px_rgba(255,190,130,0.3)] z-10" />
                                     )}
 
                                     <div className="px-6 py-4 flex items-center justify-between">
                                         <div className="flex items-center gap-4">
                                             {/* Rank + change indicator */}
-                                            <div className="w-10 flex flex-col items-center">
-                                                <div className="text-sm font-bold text-[var(--color-gaming-text-muted)]">#{user.rank}</div>
-                                                {getRankChangeIndicator(user.userId)}
+                                            <div className="w-12 flex flex-col items-center gap-0.5">
+                                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text-muted)]'}`}>#{user.rank}</div>
+                                                {getRankChangeIndicator(user.userId, 'row')}
                                             </div>
 
                                             {/* Avatar */}
@@ -624,8 +683,11 @@ export function LeaderboardClient({
                                         <div className="flex items-center gap-3">
                                             <ReactionButtons userId={user.userId} />
                                             <div className="text-right">
-                                                <div className="text-2xl font-black tracking-tighter text-[var(--color-gaming-text)]">
-                                                    {score}
+                                                <div
+                                                    className={`text-2xl font-black tracking-tighter ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'}`}
+                                                    style={animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-score-pulse 0.5s ease-out' } : undefined}
+                                                >
+                                                    {formatScore(score)}
                                                 </div>
                                                 <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)] mt-0.5">
                                                     {getUnit()}
@@ -637,7 +699,7 @@ export function LeaderboardClient({
                                     {/* Progress bar relative to top score */}
                                     <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--color-gaming-bg-deep)]">
                                         <div
-                                            className={`h-full ${isMe ? 'bg-gradient-to-r from-fire-500 to-brand-orange' : 'bg-[var(--color-gaming-border)]'}`}
+                                            className={`h-full transition-all duration-1000 ${isMe ? 'bg-gradient-to-r from-fire-500 to-brand-orange shadow-[0_0_4px_rgba(255,107,26,0.4)]' : 'bg-[var(--color-gaming-border)]'}`}
                                             style={{
                                                 width: `${topScore > 0 ? Math.max(5, (score / topScore) * 100) : 0}%`,
                                                 transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)'
@@ -651,5 +713,6 @@ export function LeaderboardClient({
                 )}
             </div>
         </div>
+        </SafeWrapper>
     )
 }
