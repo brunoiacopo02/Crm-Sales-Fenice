@@ -31,6 +31,9 @@ Started: 2026-04-08
 - StreakAnxietyBanner: time-based state (hidden/at-risk/critical/safe) using Intl.DateTimeFormat for Rome timezone
 - StreakCounter visual states: safe (emerald), at-risk (red), default (streak-tier colors) — driven by isActiveToday + getRomeHour()
 - Time-based UI: use setInterval(60000) for minute-by-minute state transitions, setInterval(1000) for countdown timers
+- Leaderboard reactions: localStorage-only with REACTIONS_STORAGE_KEY, ReactionCounts type Record<string, Record<string, number>>
+- Podium pulse animations: lb-podium-gold/silver/bronze applied via inline style to respect getAnimationsEnabled()
+- Rank change row highlight: lb-rank-up-highlight (green glow 3s) and lb-rank-down-highlight (subtle red 2s) via inline style on <li>
 
 ---
 
@@ -202,4 +205,25 @@ Started: 2026-04-08
   - StreakCounter visual state computed inline with IIFE for clean ternary logic
   - Banner refreshes on reward_earned event — immediate feedback when user completes a quest (banner switches to safe)
   - Multiple dashboard pages (GDO, Conferme, Venditore) all share StreakCounter and StreakAnxietyBanner
+---
+
+## 2026-04-08 - SA-007
+- Implemented live leaderboard animations and emoji reactions
+- Enhanced rank change indicators: green badge with +N for rank-up (prominent), subtle faded red for rank-down
+- Added pulsing glow borders on top 3 podium avatars: gold (2.5s), silver (3s), bronze (2.8s)
+- Row highlight animation: green glow (3s fade) when user moves up, subtle red (2s fade) when down
+- Added emoji reaction buttons (fire, clap, lightning) on every leaderboard row — top 3 podium + rank 4+ list
+- Reactions stored in localStorage only (no DB persistence), with pop animation on click
+- All animations respect getAnimationsEnabled() toggle via inline styles
+- CSS keyframes: lb-rank-up-highlight, lb-rank-down-highlight, lb-podium-gold, lb-podium-silver, lb-podium-bronze, lb-reaction-pop
+- File modificati:
+  - src/app/(dashboard)/classifica/LeaderboardClient.tsx (reactions, podium pulses, row highlights, enhanced indicators)
+  - src/app/globals.css (6 new leaderboard animation keyframes + animation variable declarations)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - ReactionButtons as inline component inside LeaderboardClient — keeps state closure for handleReaction + lastReactedKey
+  - localStorage reactions keyed by userId → emoji → count — simple Record<string, Record<string, number>> pattern
+  - Podium pulse animations applied via inline style (not class) to respect getAnimationsEnabled() dynamically
+  - Row highlight uses IIFE pattern to compute style object inline — clean conditional animation logic
+  - Rank-up indicator enhanced with bg-emerald-50 pill + border vs rank-down subtle faded text — asymmetric visual weight
 ---

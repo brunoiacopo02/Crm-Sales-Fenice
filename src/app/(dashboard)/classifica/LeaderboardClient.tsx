@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Trophy, Medal, User, Crown, Flame, Phone, Zap, ArrowUp, ArrowDown, Star, Sparkles, CheckCircle, DollarSign, Users } from "lucide-react"
 import { getMultiMetricLeaderboard, getRoleLeaderboard } from "@/app/actions/leaderboardActions"
 import type { LeaderboardPeriod, LeaderboardMetric, LeaderboardRole } from "@/app/actions/leaderboardActions"
+import { getAnimationsEnabled } from "@/lib/animationUtils"
 
 type LeaderboardItem = {
     userId: string
@@ -43,6 +44,32 @@ const METRIC_TABS: { id: LeaderboardMetric; label: string; icon: typeof Trophy; 
     { id: 'streak', label: 'Streak', icon: Flame, unit: 'Giorni' },
 ]
 
+// --- SA-007: Emoji Reactions ---
+const REACTION_EMOJIS = [
+    { emoji: '🔥', label: 'Fuoco' },
+    { emoji: '👏', label: 'Applauso' },
+    { emoji: '⚡', label: 'Fulmine' },
+] as const
+
+type ReactionCounts = Record<string, Record<string, number>> // userId -> emoji -> count
+
+const REACTIONS_STORAGE_KEY = 'crm-fenice-lb-reactions'
+
+function loadReactions(): ReactionCounts {
+    if (typeof window === 'undefined') return {}
+    try {
+        const stored = localStorage.getItem(REACTIONS_STORAGE_KEY)
+        return stored ? JSON.parse(stored) : {}
+    } catch { return {} }
+}
+
+function saveReactions(reactions: ReactionCounts): void {
+    if (typeof window === 'undefined') return
+    try {
+        localStorage.setItem(REACTIONS_STORAGE_KEY, JSON.stringify(reactions))
+    } catch { /* quota exceeded */ }
+}
+
 export function LeaderboardClient({
     initialData,
     initialPeriod,
@@ -67,6 +94,27 @@ export function LeaderboardClient({
     const previousRanksRef = useRef<Map<string, number>>(new Map())
     const [rankChanges, setRankChanges] = useState<Map<string, number>>(new Map())
     const currentPeriod = (searchParams.get('period') as LeaderboardPeriod) || initialPeriod
+
+    // SA-007: Emoji reactions (localStorage-only)
+    const [reactions, setReactions] = useState<ReactionCounts>({})
+    const [lastReactedKey, setLastReactedKey] = useState<string | null>(null)
+    const animationsEnabled = typeof window !== 'undefined' ? getAnimationsEnabled() : true
+
+    useEffect(() => {
+        setReactions(loadReactions())
+    }, [])
+
+    const handleReaction = useCallback((userId: string, emoji: string) => {
+        setReactions(prev => {
+            const userReactions = { ...(prev[userId] || {}) }
+            userReactions[emoji] = (userReactions[emoji] || 0) + 1
+            const next = { ...prev, [userId]: userReactions }
+            saveReactions(next)
+            return next
+        })
+        setLastReactedKey(`${userId}-${emoji}`)
+        setTimeout(() => setLastReactedKey(null), 300)
+    }, [])
 
     useEffect(() => {
         setCurrentData(initialData)
@@ -208,16 +256,41 @@ export function LeaderboardClient({
         if (!change) return null
         if (change > 0) {
             return (
-                <div className="flex items-center gap-0.5 text-emerald-500 text-xs font-bold animate-slide-up">
-                    <ArrowUp className="h-3 w-3" />
-                    <span>{change}</span>
+                <div className="flex items-center gap-0.5 text-emerald-500 text-xs font-black animate-slide-up bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+                    <ArrowUp className="h-3.5 w-3.5" />
+                    <span>+{change}</span>
                 </div>
             )
         }
         return (
-            <div className="flex items-center gap-0.5 text-red-500 text-xs font-bold animate-slide-up">
-                <ArrowDown className="h-3 w-3" />
+            <div className="flex items-center gap-0.5 text-red-400 text-[10px] font-medium animate-fade-in opacity-70">
+                <ArrowDown className="h-2.5 w-2.5" />
                 <span>{Math.abs(change)}</span>
+            </div>
+        )
+    }
+
+    // SA-007: Reaction buttons component for a user row
+    const ReactionButtons = ({ userId }: { userId: string }) => {
+        const userReactions = reactions[userId] || {}
+        return (
+            <div className="flex items-center gap-1">
+                {REACTION_EMOJIS.map(({ emoji, label }) => {
+                    const count = userReactions[emoji] || 0
+                    const isPopping = lastReactedKey === `${userId}-${emoji}`
+                    return (
+                        <button
+                            key={emoji}
+                            onClick={(e) => { e.stopPropagation(); handleReaction(userId, emoji) }}
+                            title={label}
+                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-all duration-150 hover:bg-ash-100 hover:scale-110 active:scale-95 ${count > 0 ? 'bg-ash-50 border border-ash-200' : 'border border-transparent'}`}
+                            style={isPopping && animationsEnabled ? { animation: 'lb-reaction-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' } : undefined}
+                        >
+                            <span className="text-sm leading-none">{emoji}</span>
+                            {count > 0 && <span className="text-[10px] font-bold text-ash-500">{count}</span>}
+                        </button>
+                    )
+                })}
             </div>
         )
     }
@@ -363,10 +436,14 @@ export function LeaderboardClient({
                         const user = top3[1]
                         const isMe = user.userId === loggedUserId
                         const score = getScore(user)
+                        const rankChange = rankChanges.get(user.userId)
                         return (
                             <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}>
                                 <div className="relative mb-2">
-                                    <div className={`h-16 w-16 rounded-full flex items-center justify-center font-bold text-xl shadow-card border-3 border-ash-300 ring-2 ring-ash-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-ash-100 to-ash-200 text-ash-600'}`}>
+                                    <div
+                                        className={`h-16 w-16 rounded-full flex items-center justify-center font-bold text-xl shadow-card border-3 border-ash-300 ring-2 ring-ash-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-ash-100 to-ash-200 text-ash-600'}`}
+                                        style={animationsEnabled ? { animation: 'lb-podium-silver 3s ease-in-out infinite' } : undefined}
+                                    >
                                         {user.displayName?.charAt(0) || 'U'}
                                     </div>
                                     <div className="absolute -top-2 -right-1 w-7 h-7 rounded-full bg-gradient-to-br from-ash-300 to-ash-500 flex items-center justify-center text-white text-xs font-bold shadow-soft border-2 border-white">
@@ -381,8 +458,11 @@ export function LeaderboardClient({
                                 <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
                                 <div className="text-lg font-black text-ash-700 mt-1">{score}</div>
                                 <div className="text-[9px] uppercase font-bold tracking-wider text-ash-400">{getUnit()}</div>
+                                <ReactionButtons userId={user.userId} />
                                 {/* Pedestal — Silver */}
-                                <div className="w-24 h-20 mt-2 bg-gradient-to-t from-ash-300 via-ash-200 to-ash-100 rounded-t-xl border border-ash-300 flex items-center justify-center shadow-card">
+                                <div className="w-24 h-20 mt-2 bg-gradient-to-t from-ash-300 via-ash-200 to-ash-100 rounded-t-xl border border-ash-300 flex items-center justify-center shadow-card"
+                                    style={animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : undefined}
+                                >
                                     <Medal className="h-6 w-6 text-ash-400" />
                                 </div>
                             </div>
@@ -394,10 +474,14 @@ export function LeaderboardClient({
                         const user = top3[0]
                         const isMe = user.userId === loggedUserId
                         const score = getScore(user)
+                        const rankChange = rankChanges.get(user.userId)
                         return (
                             <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}>
                                 <div className="relative mb-2">
-                                    <div className={`h-20 w-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-elevated border-3 border-gold-400 ring-4 ring-gold-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-gold-100 to-gold-200 text-gold-700'}`}>
+                                    <div
+                                        className={`h-20 w-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-elevated border-3 border-gold-400 ring-4 ring-gold-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-gold-100 to-gold-200 text-gold-700'}`}
+                                        style={animationsEnabled ? { animation: 'lb-podium-gold 2.5s ease-in-out infinite' } : undefined}
+                                    >
                                         {user.displayName?.charAt(0) || 'U'}
                                     </div>
                                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -413,8 +497,11 @@ export function LeaderboardClient({
                                 <div className="text-2xl font-black text-gold-600 mt-1">{score}</div>
                                 <div className="text-[10px] uppercase font-bold tracking-wider text-gold-500">{getUnit()}</div>
                                 {isMe && <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-brand-orange-200">TU</div>}
+                                <ReactionButtons userId={user.userId} />
                                 {/* Pedestal — Gold */}
-                                <div className="w-28 h-28 mt-2 bg-gradient-to-t from-gold-300 via-gold-200 to-gold-50 rounded-t-xl border border-gold-300 flex items-center justify-center shadow-glow-gold">
+                                <div className="w-28 h-28 mt-2 bg-gradient-to-t from-gold-300 via-gold-200 to-gold-50 rounded-t-xl border border-gold-300 flex items-center justify-center shadow-glow-gold"
+                                    style={animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : undefined}
+                                >
                                     <Trophy className="h-8 w-8 text-gold-500" />
                                 </div>
                             </div>
@@ -426,10 +513,14 @@ export function LeaderboardClient({
                         const user = top3[2]
                         const isMe = user.userId === loggedUserId
                         const score = getScore(user)
+                        const rankChange = rankChanges.get(user.userId)
                         return (
                             <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}>
                                 <div className="relative mb-2">
-                                    <div className={`h-14 w-14 rounded-full flex items-center justify-center font-bold text-lg shadow-card border-3 border-brand-orange-300 ring-2 ring-brand-orange-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-brand-orange-50 to-brand-orange-100 text-brand-orange-600'}`}>
+                                    <div
+                                        className={`h-14 w-14 rounded-full flex items-center justify-center font-bold text-lg shadow-card border-3 border-brand-orange-300 ring-2 ring-brand-orange-200/50 ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-gradient-to-br from-brand-orange-50 to-brand-orange-100 text-brand-orange-600'}`}
+                                        style={animationsEnabled ? { animation: 'lb-podium-bronze 2.8s ease-in-out infinite' } : undefined}
+                                    >
                                         {user.displayName?.charAt(0) || 'U'}
                                     </div>
                                     <div className="absolute -top-2 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-brand-orange-300 to-brand-orange-500 flex items-center justify-center text-white text-xs font-bold shadow-soft border-2 border-white">
@@ -444,8 +535,11 @@ export function LeaderboardClient({
                                 <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
                                 <div className="text-lg font-black text-ash-700 mt-1">{score}</div>
                                 <div className="text-[9px] uppercase font-bold tracking-wider text-ash-400">{getUnit()}</div>
+                                <ReactionButtons userId={user.userId} />
                                 {/* Pedestal — Bronze */}
-                                <div className="w-20 h-16 mt-2 bg-gradient-to-t from-brand-orange-200 via-brand-orange-100 to-brand-orange-50 rounded-t-xl border border-brand-orange-200 flex items-center justify-center shadow-card">
+                                <div className="w-20 h-16 mt-2 bg-gradient-to-t from-brand-orange-200 via-brand-orange-100 to-brand-orange-50 rounded-t-xl border border-brand-orange-200 flex items-center justify-center shadow-card"
+                                    style={animationsEnabled && rankChange && rankChange > 0 ? { animation: 'lb-rank-up-highlight 3s ease-out forwards' } : undefined}
+                                >
                                     <Medal className="h-5 w-5 text-brand-orange-400" />
                                 </div>
                             </div>
@@ -471,11 +565,19 @@ export function LeaderboardClient({
                             const topScore = getScore(currentData[0])
                             const rankChange = rankChanges.get(user.userId)
 
+                            // SA-007: Determine row highlight animation
+                            const rowHighlightStyle: React.CSSProperties | undefined = (() => {
+                                if (!animationsEnabled || !rankChange) return undefined
+                                if (rankChange > 0) return { animation: 'lb-rank-up-highlight 3s ease-out forwards' }
+                                if (rankChange < 0) return { animation: 'lb-rank-down-highlight 2s ease-out forwards' }
+                                return undefined
+                            })()
+
                             return (
                                 <li
                                     key={user.userId}
                                     className={`relative transition-all duration-300 hover:bg-brand-orange-50/20 animate-fade-in ${isMe ? 'bg-brand-orange-50/30' : ''} ${rankChange ? 'animate-slide-up' : ''}`}
-                                    style={{ animationDelay: `${(index + 3) * 50}ms`, animationFillMode: 'backwards' }}
+                                    style={{ animationDelay: `${(index + 3) * 50}ms`, animationFillMode: 'backwards', ...rowHighlightStyle }}
                                 >
                                     {isMe && (
                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-brand-orange to-ember-400 shadow-glow-orange z-10" />
@@ -518,8 +620,9 @@ export function LeaderboardClient({
                                             </div>
                                         </div>
 
-                                        {/* SCORE */}
-                                        <div className="flex items-center gap-4">
+                                        {/* SCORE + REACTIONS */}
+                                        <div className="flex items-center gap-3">
+                                            <ReactionButtons userId={user.userId} />
                                             <div className="text-right">
                                                 <div className="text-2xl font-black tracking-tighter text-ash-800">
                                                     {score}
