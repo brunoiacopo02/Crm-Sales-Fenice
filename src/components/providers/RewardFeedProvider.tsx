@@ -15,8 +15,13 @@ export function RewardFeedProvider({ children }: { children?: React.ReactNode })
         const detail = (e as CustomEvent<RewardEarnedDetail>).detail;
         if (!detail) return;
 
-        // Sound: coin ding for every reward
-        playSound('coin_earned');
+        // Sound: coin ding when coins earned, XP whoosh when XP earned (staggered 80ms)
+        if (detail.coinsGained > 0) {
+            playSound('coin_earned');
+        }
+        if (detail.xpGained > 0) {
+            setTimeout(() => playSound('xp_gained'), detail.coinsGained > 0 ? 80 : 0);
+        }
 
         // Level-up celebration is handled by CelebrationOverlay directly listening to reward_earned events
 

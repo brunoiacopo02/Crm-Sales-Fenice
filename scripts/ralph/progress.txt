@@ -565,3 +565,45 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-017 — Suoni sintetici per ogni azione (Web Audio API)
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### Sound Inventory (all Web Audio API, zero external files):
+
+| SoundType | Function | Description | Duration | Wired In |
+|---|---|---|---|---|
+| `coin_earned` | `playCoinDing` | Bright sine ding 1200→1800→1400Hz | 300ms | RewardFeedProvider (when coinsGained > 0) |
+| `xp_gained` | `playXpWhoosh` | Ascending sine sweep 400→1200Hz | 200ms | RewardFeedProvider (when xpGained > 0, 80ms stagger) |
+| `level_up` | `playLevelUpFanfare` | 4-note triangle arpeggio C5→E5→G5→C6 | 500ms | CelebrationOverlay |
+| `evolution_fanfare` | `playEvolutionFanfare` | Rumble + 7-note arp + power chord + shimmer | 3000ms | CelebrationOverlay |
+| `achievement` | `playAchievementTriumph` | C5 major triad triangle chord | 800ms | CelebrationOverlay |
+| `quest_complete` | `playQuestChime` | 3-note sine chime E5→G5→C6 | 400ms | QuestChainModal |
+| `streak_maintained` | `playStreakBurst` | Sawtooth whoosh + sine shimmer | 300ms | StreakAnxietyBanner |
+| `hot_streak_activate` | `playHotStreakActivate` | Sawtooth flame burst + square crackle | 200ms | HotStreak (on inactive→active) |
+| `chest_drum_roll` | `playChestDrumRoll` | 24-hit crescendo + snare hit | 2200ms | ChestOpeningAnimation |
+| `chest_reveal_common` | `playChestRevealCommon` | Muted sine thud 400→300Hz | 400ms | ChestOpeningAnimation |
+| `chest_reveal_rare` | `playChestRevealRare` | 2-note sine chime C5+G5 | 500ms | ChestOpeningAnimation |
+| `chest_reveal_epic` | `playChestRevealEpic` | Sawtooth sweep + triangle chord stab | 800ms | ChestOpeningAnimation |
+| `chest_reveal_legendary` | `playChestRevealLegendary` | Impact whoosh + arp + sustained chord | 1500ms | ChestOpeningAnimation |
+
+### New Sound Added (soundEngine.ts):
+- **`hot_streak_activate`** — Flame burst effect (200ms):
+  - Layer 1: Sawtooth oscillator 150→500→300Hz with fast attack envelope (fire whoosh)
+  - Layer 2: Square oscillator 800→1600→1200Hz at low gain (crackle shimmer)
+
+### Wiring Changes:
+
+1. **RewardFeedProvider.tsx** — Previously played `coin_earned` for every reward. Now:
+   - Plays `coin_earned` only when `coinsGained > 0`
+   - Plays `xp_gained` when `xpGained > 0`, staggered 80ms after coin sound if both present
+   - This prevents double-ding when only XP is earned, and gives layered audio feedback when both
+
+2. **HotStreak.tsx** — Added `playSound('hot_streak_activate')` when mode transitions from `inactive` to `active` or `intense`. Uses functional `setMode(prev => ...)` to detect transition without extra state.
+
+### Toggle: ✓ All sounds gated by `getSoundsEnabled()` in `playSound()`. SoundToggle component already in settings.
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---

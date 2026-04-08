@@ -298,8 +298,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": "Il feedback sonoro rafforza il loop dopaminico. Deve essere soddisfacente ma non fastidioso."
+      "passes": true,
+      "notes": "All 12 sound types implemented in soundEngine.ts via Web Audio API oscillators. New: hot_streak_activate (flame burst: sawtooth whoosh + square crackle, 200ms). Wired xp_gained in RewardFeedProvider (80ms stagger after coin_earned). Wired hot_streak_activate in HotStreak on mode transition inactive→active. All sounds respect SoundToggle. Build OK."
     },
     {
       "id": "FA-018",

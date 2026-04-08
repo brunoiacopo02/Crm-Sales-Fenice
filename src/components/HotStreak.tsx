@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { Flame } from 'lucide-react';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
+import { playSound } from '@/lib/soundEngine';
 import { useRealtimeBroadcast } from '@/components/providers/RealtimeProvider';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -54,10 +55,16 @@ export function HotStreak({ children }: { children: ReactNode }) {
         const count = actionTimestampsRef.current.length;
 
         if (count >= INTENSE_THRESHOLD) {
-            setMode('intense');
+            setMode(prev => {
+                if (prev === 'inactive') playSound('hot_streak_activate');
+                return 'intense';
+            });
             startDecayTimer();
         } else if (count >= ACTIVE_THRESHOLD) {
-            setMode('active');
+            setMode(prev => {
+                if (prev === 'inactive') playSound('hot_streak_activate');
+                return 'active';
+            });
             startDecayTimer();
         }
         // Don't deactivate here — let the decay timer handle that

@@ -44,6 +44,7 @@ export type SoundType =
     | 'achievement'
     | 'quest_complete'
     | 'streak_maintained'
+    | 'hot_streak_activate'
     | 'chest_drum_roll'
     | 'chest_reveal_common'
     | 'chest_reveal_rare'
@@ -79,6 +80,9 @@ export function playSound(type: SoundType): void {
             break;
         case 'streak_maintained':
             playStreakBurst(ctx);
+            break;
+        case 'hot_streak_activate':
+            playHotStreakActivate(ctx);
             break;
         case 'chest_drum_roll':
             playChestDrumRoll(ctx);
@@ -278,6 +282,37 @@ function playEvolutionFanfare(ctx: AudioContext) {
     shimmer.connect(shimmerGain).connect(ctx.destination);
     shimmer.start(t + 2.0);
     shimmer.stop(t + 3.0);
+}
+
+/** Quick flame burst — hot streak activated (200ms) */
+function playHotStreakActivate(ctx: AudioContext) {
+    const t = ctx.currentTime;
+    // Low fire burst
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(150, t);
+    osc1.frequency.exponentialRampToValueAtTime(500, t + 0.08);
+    osc1.frequency.exponentialRampToValueAtTime(300, t + 0.2);
+    gain1.gain.setValueAtTime(0.1, t);
+    gain1.gain.linearRampToValueAtTime(0.15, t + 0.04);
+    gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc1.connect(gain1).connect(ctx.destination);
+    osc1.start(t);
+    osc1.stop(t + 0.2);
+    // High crackle shimmer
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(800, t + 0.02);
+    osc2.frequency.exponentialRampToValueAtTime(1600, t + 0.1);
+    osc2.frequency.exponentialRampToValueAtTime(1200, t + 0.2);
+    gain2.gain.setValueAtTime(0.03, t + 0.02);
+    gain2.gain.linearRampToValueAtTime(0.06, t + 0.06);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc2.connect(gain2).connect(ctx.destination);
+    osc2.start(t + 0.02);
+    osc2.stop(t + 0.2);
 }
 
 // ─── Chest/Loot Opening Sounds ──────────────────────────────────────
