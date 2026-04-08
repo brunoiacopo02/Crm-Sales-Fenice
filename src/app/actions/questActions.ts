@@ -437,6 +437,11 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             reason: coinReason,
         });
 
+        // Mark quest as claimed by setting currentValue to -1 (sentinel)
+        await db.update(questProgress).set({
+            currentValue: -1,
+        }).where(eq(questProgress.id, questProgressId));
+
         return { success: true };
     } catch (error) {
         console.error("Errore completeQuest:", error);
@@ -495,11 +500,14 @@ export async function getUserQuests(userId: string): Promise<{
             sql`(${questProgress.dateScope} = ${todayScope} OR ${questProgress.dateScope} = ${weekScope})`
         ));
 
-    const daily = rows
+    // Filter out claimed quests (currentValue = -1 is the "claimed" sentinel)
+    const activeRows = rows.filter(r => r.currentValue !== -1);
+
+    const daily = activeRows
         .filter(r => r.questType === 'daily')
         .map(({ questType, dateScope, ...rest }) => rest);
 
-    const weekly = rows
+    const weekly = activeRows
         .filter(r => r.questType === 'weekly')
         .map(({ questType, dateScope, ...rest }) => rest);
 
