@@ -118,3 +118,28 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-005 — Redesign Store con card premium e effetto rarità
+**Status:** PASSED ✓
+**Date:** 2026-04-08
+**Commit:** 7a2dbaf
+
+### Changes:
+1. **Rarity tiers redesigned** — 4 distinct visual tiers based on cost:
+   - Comune (< 300): bronze/copper metallic border, warm amber glow on hover
+   - Raro (300-999): silver/slate metallic border, silver glow on hover
+   - Epico (1000-2999): gold border with pulsing gold glow animation (`shop-card-epic`)
+   - Leggendario (3000+): purple border with pulsing purple glow + holographic shimmer overlay (`shop-card-legendary`)
+2. **Holographic shimmer** — CSS `shop-holographic-overlay` on legendary cards: animated gradient sweep (purple/pink/blue) across card surface
+3. **3D tilt on hover** — CSS perspective transform: cards subtly rotate on Y/X axis and lift on hover via `shop-card-3d` + `shop-card-inner`
+4. **Animated Fenice Coin** — `shop-coin-animated` class: gentle Y-axis rotation on coin icons in both header wallet and card prices
+5. **Sparkle effects** — Animated sparkle icons on epic+ cards in preview area with staggered timing
+6. **Filter buttons upgraded** — Each category filter has distinct active gradient + glow matching its color theme; inactive filters have subtle hover transitions
+7. **Rarity badges with icons** — Each rarity badge now shows a contextual icon (Flame/Sparkles/Crown/Gem)
+8. **SafeWrapper** — Entire ShopClient wrapped in SafeWrapper error boundary
+9. **CSS keyframes added** — `shop-holographic`, `shop-coin-rotate`, `shop-legendary-pulse`, `shop-epic-pulse`, `shop-sparkle`
+
+### Store Logic: ✓ Zero changes to buy/equip/unequip logic, wallet reads walletCoins
+### Build: ✓ Zero errors
+
+---

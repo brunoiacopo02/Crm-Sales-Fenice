@@ -86,8 +86,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "Usare Stitch per il design, Nano Banana per asset grafici se servono icone."
+      "passes": true,
+      "notes": "Rarity tiers: Comune (bronze border), Raro (silver), Epico (gold + pulse glow), Leggendario (purple + holographic shimmer + pulse). 3D tilt on hover via CSS perspective. Animated Fenice Coin rotation. Sparkle effects on epic+ cards. SafeWrapper. Filter buttons with active glow. Build OK."
     },
     {
       "id": "FA-006",
