@@ -100,6 +100,11 @@
   --animate-loot-glow-gold: loot-glow-gold 2s ease-in-out infinite;
   --animate-loot-glow-purple: loot-glow-purple 2s ease-in-out infinite;
 
+  /* === SOCIAL NOTIFICATION TOAST ANIMATIONS === */
+  --animate-social-toast-glow: social-toast-glow 2s ease-in-out infinite;
+  --animate-social-toast-shimmer: social-toast-shimmer 2s ease-in-out forwards;
+  --animate-social-toast-icon-pulse: social-toast-icon-pulse 1.5s ease-in-out 1;
+
   /* === DAILY LOGIN ANIMATIONS === */
   --animate-coin-cascade: coin-cascade 2s ease-in forwards;
   --animate-daily-flame-pulse: daily-flame-pulse 2s ease-in-out infinite;
@@ -299,6 +304,35 @@
   0% { transform: scale(0.5) translateY(10px); opacity: 0; }
   50% { transform: scale(1.15) translateY(-3px); }
   100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* === SOCIAL NOTIFICATION TOAST ANIMATIONS (SA-004) === */
+
+@keyframes social-toast-glow {
+  0%, 100% { box-shadow: 0 0 8px -2px var(--toast-glow-color, rgba(255, 190, 130, 0.3)); }
+  50% { box-shadow: 0 0 20px -2px var(--toast-glow-color, rgba(255, 190, 130, 0.5)); }
+}
+
+@keyframes social-toast-shimmer {
+  0% { background: linear-gradient(90deg, transparent 0%, var(--toast-glow-color, rgba(255, 190, 130, 0.4)) 50%, transparent 100%); background-size: 200% 100%; background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes social-toast-icon-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+.social-toast-glow {
+  animation: social-toast-glow 2s ease-in-out infinite;
+}
+
+.social-toast-shimmer {
+  animation: social-toast-shimmer 2s ease-in-out forwards;
+}
+
+.social-toast-icon {
+  animation: social-toast-icon-pulse 1.5s ease-in-out 1;
 }
 
 @layer base {

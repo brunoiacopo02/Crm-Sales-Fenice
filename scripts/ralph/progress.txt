@@ -23,6 +23,9 @@ Started: 2026-04-08
 - DailyLoginReward pattern: localStorage quick rejection + server-side idempotent claim
 - ActivityFeed pattern: aggregate multiple tables independently in server action, merge+sort in JS, return top N
 - Feed refresh: setInterval(30s) + window.addEventListener('reward_earned') for immediate updates
+- SocialNotificationProvider: 3 Supabase Realtime channels (social-achievements, social-bossbattles, social-seasonal) + custom event 'social_notification'
+- emitSocialNotification() in animationUtils.ts for programmatic social toasts
+- Toast types config: per-type icon, borderColor, iconColor, glowColor in SocialNotificationToast.tsx
 
 ---
 
@@ -106,4 +109,34 @@ Started: 2026-04-08
   - Coin cascade: emoji-based particles are lightweight and visually effective
   - Streak tier calculation reused from streakUtils but inline to avoid circular deps
   - Pattern: localStorage for quick UI rejection, server for idempotent coin granting
+---
+
+## 2026-04-08 - SA-004
+- Implemented push-style social notifications for important gamification events
+- Created SocialNotificationToast component with slide-in-from-right animation, contextual icons, CTA buttons
+- Created SocialNotificationProvider with Supabase Realtime integration on 3 channels:
+  - social-achievements: INSERT on userAchievements → "X ha sbloccato un badge!" (skips self)
+  - social-bossbattles: UPDATE on bossBattles → "Boss sconfitto!" on defeat
+  - social-seasonal: INSERT on seasonalEvents → "Evento stagionale iniziato!" with multiplier info
+- Added periodic boss battle timer check (every 60s): warns "Boss Battle: X ore rimaste!" when < 2 hours left
+- Added emitSocialNotification() utility in animationUtils.ts for programmatic notifications
+- Listens to custom event 'social_notification' for in-app triggers (e.g., rank changes from leaderboard)
+- 4 notification types: rank_overtaken (ember), rare_achievement (gold), boss_battle_ending (ember-dark), seasonal_event (brand-orange)
+- Max 3 toasts visible, auto-dismiss after 5 seconds, click to dismiss
+- CSS: social-toast-glow (pulsing shadow), social-toast-shimmer (top accent line), social-toast-icon (pulse once)
+- Respects getAnimationsEnabled() toggle
+- Mounted SocialNotificationProvider in dashboard layout between RewardFeedProvider and SidebarProvider
+- File modificati:
+  - src/lib/animationUtils.ts (emitSocialNotification + types)
+  - src/components/SocialNotificationToast.tsx (NEW)
+  - src/components/providers/SocialNotificationProvider.tsx (NEW)
+  - src/app/(dashboard)/layout.tsx (add provider)
+  - src/app/globals.css (social toast animation keyframes + theme vars)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Supabase Realtime: create separate channels per table (social-achievements, social-bossbattles, social-seasonal) — don't touch existing 'public:leads-changes' channel
+  - Toast positioning: use top offset (not bottom like RewardPopup) to avoid overlap with reward popups
+  - Boss battle timer: use useRef Set to track notified battle IDs, prevent duplicate notifications
+  - Pattern: emitSocialNotification() can be called from leaderboard component when rank changes detected
+  - CSS custom properties (--toast-glow-color) via inline style for per-type glow coloring in animations
 ---

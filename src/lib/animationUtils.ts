@@ -39,3 +39,26 @@ export function emitRewardEarned(data: RewardEarnedDetail): void {
     if (!getAnimationsEnabled()) return;
     window.dispatchEvent(new CustomEvent('reward_earned', { detail: data }));
 }
+
+// --- Social Notification System (SA-004) ---
+
+export type SocialNotificationType =
+    | 'rank_overtaken'
+    | 'rare_achievement'
+    | 'boss_battle_ending'
+    | 'seasonal_event';
+
+export interface SocialNotificationDetail {
+    type: SocialNotificationType;
+    title: string;
+    message: string;
+    ctaLabel?: string;
+    ctaHref?: string;
+    actorName?: string; // who triggered it (e.g., "Marco" unlocked a badge)
+}
+
+export function emitSocialNotification(data: SocialNotificationDetail): void {
+    if (typeof window === 'undefined') return;
+    if (!getAnimationsEnabled()) return;
+    window.dispatchEvent(new CustomEvent('social_notification', { detail: data }));
+}
