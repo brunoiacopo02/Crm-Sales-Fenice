@@ -74,7 +74,7 @@ export function WeeklyBonusWidget({ userId, role }: { userId: string; role?: str
                     </div>
                     <div className="mt-4 inline-flex items-center gap-2 bg-white/5 rounded-xl px-4 py-2 border border-white/10">
                         <Zap className="h-4 w-4 text-gold-400" />
-                        <div className="font-semibold">{state.currentPresences} {role === 'CONFERME' ? 'Conferme Fatte' : 'Presenze Effettive'}</div>
+                        <div className="font-semibold">{state.currentPresences} {role === 'CONFERME' ? 'Chiusure' : 'Presenze Effettive'}</div>
                     </div>
                 </div>
 

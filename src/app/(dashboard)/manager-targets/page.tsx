@@ -4,6 +4,7 @@ import ManagerTargetsClient from './ManagerTargetsClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
 import { ManagerOperativaBoard } from "@/components/ManagerOperativaBoard"
+import { ManualAdjustmentPanel } from "@/components/ManualAdjustmentPanel"
 
 export default async function ManagerTargetsPage({
     searchParams
@@ -38,7 +39,8 @@ export default async function ManagerTargetsPage({
                 venditori={venditori}
             />
 
-            <div className="max-w-7xl mx-auto mb-8 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-7xl mx-auto mb-8 px-4 sm:px-6 lg:px-8 space-y-6">
+                <ManualAdjustmentPanel />
                 <ManagerOperativaBoard />
             </div>
         </div>

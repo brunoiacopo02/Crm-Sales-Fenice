@@ -404,3 +404,14 @@ export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     rewardTier2: real('rewardTier2').default(270).notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
+
+// Aggiustamenti manuali admin (presenze GDO, chiusure Conferme)
+export const manualAdjustments = pgTable('manualAdjustments', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull(),
+    type: text('type').notNull(), // 'presenze' | 'chiusure'
+    count: integer('count').notNull().default(1),
+    note: text('note'),
+    addedByUserId: text('addedByUserId').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});

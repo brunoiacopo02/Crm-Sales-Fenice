@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from "@/db";
-import { leads, users, weeklyGamificationRules, callLogs } from "@/db/schema";
+import { leads, users, weeklyGamificationRules, callLogs, manualAdjustments } from "@/db/schema";
 import { eq, and, gte, lte, isNotNull, sql, or } from "drizzle-orm";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
 
@@ -276,17 +276,32 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
     let currentPresences = 0;
 
     if (overrides?.role === 'CONFERME') {
-        // Per Conferme: conta i lead confermati da questo operatore nella settimana
+        // Per Conferme: conta le CHIUSURE dei lead confermati da questo operatore nella settimana
+        // (lead dove confirmationsUserId = questo operatore E salespersonOutcome = 'Chiuso')
         const confermeLeads = await db.select().from(leads).where(
             and(
                 eq(leads.confirmationsUserId, gdoUserId),
                 eq(leads.confirmationsOutcome, 'confermato'),
-                isNotNull(leads.confirmationsTimestamp),
-                gte(leads.confirmationsTimestamp, currentWeekStart),
-                lte(leads.confirmationsTimestamp, currentWeekEnd)
+                eq(leads.salespersonOutcome, 'Chiuso'),
+                isNotNull(leads.salespersonOutcomeAt),
+                gte(leads.salespersonOutcomeAt, currentWeekStart),
+                lte(leads.salespersonOutcomeAt, currentWeekEnd)
             )
         );
         currentPresences = confermeLeads.length;
+
+        // Aggiungi aggiustamenti manuali admin per questa settimana
+        try {
+            const adjustments = await db.select().from(manualAdjustments).where(
+                and(
+                    eq(manualAdjustments.userId, gdoUserId),
+                    eq(manualAdjustments.type, 'chiusure'),
+                    gte(manualAdjustments.createdAt, currentWeekStart),
+                    lte(manualAdjustments.createdAt, currentWeekEnd)
+                )
+            );
+            adjustments.forEach(a => { currentPresences += a.count; });
+        } catch { /* tabella non ancora migrata */ }
     } else {
         // Per GDO: conta le presenze effettive
         const monthLeads = await db.select().from(leads).where(
@@ -302,6 +317,19 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
                 currentPresences++;
             }
         });
+
+        // Aggiungi aggiustamenti manuali admin per questa settimana
+        try {
+            const adjustments = await db.select().from(manualAdjustments).where(
+                and(
+                    eq(manualAdjustments.userId, gdoUserId),
+                    eq(manualAdjustments.type, 'presenze'),
+                    gte(manualAdjustments.createdAt, currentWeekStart),
+                    lte(manualAdjustments.createdAt, currentWeekEnd)
+                )
+            );
+            adjustments.forEach(a => { currentPresences += a.count; });
+        } catch { /* tabella non ancora migrata */ }
     }
 
     return {
