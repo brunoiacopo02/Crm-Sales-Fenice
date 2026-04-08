@@ -486,3 +486,42 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-015 — Micro-animazioni su ogni azione della pipeline
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+**Commit:** 0b0b54b
+
+### CSS Keyframes Added (globals.css):
+- `pa-bounce` — translateY -4px micro-bounce (200ms), used for NON_RISPOSTO and generic outcomes
+- `pa-slide-out` — translateX 50px + fade-out (600ms), used for APPUNTAMENTO (card slides right)
+- `pa-fade-discard` — translateY 12px + fade-out (400ms), used for DA_SCARTARE (card fades down)
+- `pa-amber-pulse` — amber glow box-shadow pulse (800ms), used for RICHIAMO/SNOOZE
+- `pa-confetti-burst` — confetti particle burst with CSS custom properties for random trajectories
+
+### GDO Pipeline (GdoQuickActions.tsx):
+1. **Import** — Added `getAnimationsEnabled` from animationUtils
+2. **spawnMiniConfetti()** — Helper spawns 10 tiny colored particles (fixed positioning) from card center, each with random trajectory via CSS custom props `--pa-x/--pa-y/--pa-r`, auto-cleanup after 1s
+3. **handleAction()** — After successful server action and before router.refresh(), finds parent card via `containerRef.closest('[data-lead-card]')`:
+   - APPUNTAMENTO → confetti burst + pa-slide-out (650ms delay)
+   - DA_SCARTARE → pa-fade-discard (450ms delay)
+   - RICHIAMO → pa-amber-pulse (850ms delay)
+   - NON_RISPOSTO → pa-bounce (250ms delay)
+4. Delay before router.refresh() lets animation play before DOM removal
+
+### LeadCard (LeadCard.tsx):
+- Added `data-lead-card={lead.id}` attribute to both row and vertical layout root divs for DOM targeting
+
+### Conferme Pipeline (ConfermeBoardRow.tsx):
+1. **Import** — Added `getAnimationsEnabled` from animationUtils
+2. **animateAndRefresh()** — Reusable helper applies animation to rowRef.current, waits for duration + 50ms buffer, clears animation, then calls onRefresh()
+3. **handleQuickNR** → pa-bounce (200ms)
+4. **handleUndoNR** → pa-bounce (200ms)
+5. **handleSaveSnooze** → pa-amber-pulse (800ms)
+6. **handleSaveRecall** → pa-amber-pulse (800ms)
+
+### Respects getAnimationsEnabled(): ✓ All animations gated behind the toggle
+### Pipeline Logic: ✓ Not touched — zero changes to server actions, outcomes, or data flow
+### Build: ✓ Zero errors
+
+---

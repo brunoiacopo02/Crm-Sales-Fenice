@@ -263,8 +263,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": "Feedback visivo immediato = dopamina istantanea. Ma discreto, non deve distrarre."
+      "passes": true,
+      "notes": "4 distinct micro-animations: NON_RISPOSTO → bounce (translateY -4px, 200ms), APPUNTAMENTO → mini confetti burst (10 particles) + slide-out right (600ms), DA_SCARTARE → fade-out + slide-down (400ms), RICHIAMO/SNOOZE → amber glow pulse (800ms). GDO via GdoQuickActions DOM traversal to [data-lead-card]. Conferme via ConfermeBoardRow rowRef with animateAndRefresh helper. CSS-only keyframes (pa-bounce, pa-slide-out, pa-fade-discard, pa-amber-pulse, pa-confetti-burst). Respects getAnimationsEnabled(). Zero logic changes. Build OK."
     },
     {
       "id": "FA-016",
