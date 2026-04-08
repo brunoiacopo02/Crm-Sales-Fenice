@@ -135,7 +135,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Ispirazione: progress bar dei giochi RPG. L'anticipazione del reward e' piu' potente del reward stesso."
     },
     {

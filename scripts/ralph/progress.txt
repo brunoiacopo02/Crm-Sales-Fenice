@@ -34,6 +34,8 @@ Started: 2026-04-08
 - Leaderboard reactions: localStorage-only with REACTIONS_STORAGE_KEY, ReactionCounts type Record<string, Record<string, number>>
 - Podium pulse animations: lb-podium-gold/silver/bronze applied via inline style to respect getAnimationsEnabled()
 - Rank change row highlight: lb-rank-up-highlight (green glow 3s) and lb-rank-down-highlight (subtle red 2s) via inline style on <li>
+- XP milestones: compute server-side in rpgProfileActions (xpMilestones, totalThreeLevelXp, upcomingRewards), pass as props to ProfileClient
+- Upcoming rewards: aggregate ROADMAP_REWARDS + EVOLUTION_STAGES + UNLOCKABLE_TITLES, sort by level, slice(0,3)
 
 ---
 
@@ -226,4 +228,29 @@ Started: 2026-04-08
   - Podium pulse animations applied via inline style (not class) to respect getAnimationsEnabled() dynamically
   - Row highlight uses IIFE pattern to compute style object inline — clean conditional animation logic
   - Rank-up indicator enhanced with bg-emerald-50 pill + border vs rank-down subtle faded text — asymmetric visual weight
+---
+
+## 2026-04-08 - SA-008
+- Implemented enhanced XP progress bar with 3-level milestones and reward anticipation
+- Extended XP bar range to show next 3 levels with diamond markers at each level boundary
+- Markers show reward icons (Coins/Flame/Crown) when a level has a special reward (roadmap, evolution, title)
+- Hover tooltip on each marker shows "Liv. X: [reward description]"
+- Burst animation (scale + gold glow) on markers that the fill has already passed
+- Shimmer CSS animation on unfilled portion of the bar (xp-shimmer: moving gradient, 3s infinite)
+- Added "Prossimi premi" section below the XP bar with 3 compact cards for closest upcoming rewards
+- Cards color-coded by type: gold (coins), ember (evolution), purple (title)
+- Each card shows: type icon, reward label, detail description, level needed
+- Server action enhanced to compute: xpMilestones (3 levels with cumulative XP + rewards), totalThreeLevelXp, upcomingRewards (aggregated from ROADMAP_REWARDS + EVOLUTION_STAGES + UNLOCKABLE_TITLES)
+- File modificati:
+  - src/app/actions/rpgProfileActions.ts (added xpMilestones, totalThreeLevelXp, upcomingRewards computation)
+  - src/app/(dashboard)/profilo/ProfileClient.tsx (enhanced XP bar + Prossimi Premi section)
+  - src/app/globals.css (xp-shimmer + xp-marker-burst keyframes)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Can't import gamificationEngine.ts constants in client components (has `db` import) — compute server-side and pass as data
+  - Extended bar range: cumulativeXp over 3 levels using calculateTargetXp(level+i) for each
+  - Marker position = xpCumulative / totalThreeLevelXp * 100 — simple percentage placement
+  - Tooltip with hover state: useState for hoveredMilestone index, absolute positioning with arrow
+  - Shimmer: background-size 200% + animation moving background-position — lightweight CSS-only effect
+  - Burst animation with animationDelay staggering: 0.8s + idx * 0.3s for sequential reveals
 ---

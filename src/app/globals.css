@@ -956,6 +956,19 @@ body .skin-theme-nebula {
   90% { transform: rotate(4deg) scale(1); }
 }
 
+/* === XP MILESTONE PROGRESS BAR (SA-008) === */
+
+@keyframes xp-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes xp-marker-burst {
+  0% { transform: rotate(45deg) scale(1); box-shadow: 0 0 0 0 rgba(201, 161, 60, 0.6); }
+  50% { transform: rotate(45deg) scale(1.6); box-shadow: 0 0 12px 4px rgba(201, 161, 60, 0.4); }
+  100% { transform: rotate(45deg) scale(1); box-shadow: 0 0 8px 0 rgba(201, 161, 60, 0.6); }
+}
+
 /* === LEADERBOARD LIVE ANIMATIONS (SA-007) === */
 
 @keyframes lb-rank-up-highlight {

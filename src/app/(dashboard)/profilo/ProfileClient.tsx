@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from "next/image"
 import {
-    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award
+    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award, Gift
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
@@ -55,10 +55,22 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     const {
         displayName, gdoCode, role,
         baseSalaryEur, level, experience,
-        stage, targetXpForNext, financials, roadmap
+        stage, targetXpForNext, financials, roadmap,
+        xpMilestones, totalThreeLevelXp, upcomingRewards,
     } = profileData;
 
     const progressPerc = Math.min((experience / targetXpForNext) * 100, 100);
+
+    // Enhanced XP bar: spans 3 levels, current fill = experience / totalThreeLevelXp
+    const extendedProgressPerc = totalThreeLevelXp > 0 ? Math.min((experience / totalThreeLevelXp) * 100, 100) : 0;
+    const milestoneMarkers = (xpMilestones || []).map((m: any) => ({
+        ...m,
+        position: totalThreeLevelXp > 0 ? (m.xpCumulative / totalThreeLevelXp) * 100 : 0,
+        isPassed: experience >= m.xpCumulative,
+    }));
+
+    // Tooltip state for milestone markers
+    const [hoveredMilestone, setHoveredMilestone] = useState<number | null>(null);
 
     // Fenice evolution transition: detect stage change and trigger pulse
     const [showEvolutionPulse, setShowEvolutionPulse] = useState(false);
@@ -157,20 +169,125 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         </div>
                     )}
 
-                    {/* XP Bar */}
+                    {/* Enhanced XP Bar with Milestones */}
                     <div className="w-full space-y-2 z-10">
                         <div className="flex justify-between text-xs font-bold">
                             <div className="text-brand-orange-300">{experience} XP</div>
-                            <div className="text-ash-400">{targetXpForNext} XP</div>
+                            <div className="text-ash-400">Liv. {level + 3}</div>
                         </div>
-                        <div className="relative w-full h-3.5 bg-ash-800 rounded-full overflow-hidden shadow-inner border border-ash-700">
+                        <div className="relative w-full h-4 bg-ash-800 rounded-full overflow-hidden shadow-inner border border-ash-700">
+                            {/* Shimmer on unfilled portion */}
+                            <div
+                                className="absolute top-0 h-full w-full rounded-full"
+                                style={{
+                                    background: 'linear-gradient(90deg, transparent 0%, rgba(255,190,130,0.06) 40%, rgba(255,190,130,0.12) 50%, rgba(255,190,130,0.06) 60%, transparent 100%)',
+                                    backgroundSize: '200% 100%',
+                                    animation: getAnimationsEnabled() ? 'xp-shimmer 3s ease-in-out infinite' : 'none',
+                                }}
+                            />
+                            {/* Fill bar */}
                             <div
                                 className="absolute top-0 left-0 h-full bg-gradient-to-r from-ember-500 via-brand-orange to-gold-400 rounded-full transition-[width] duration-1000 ease-out shadow-[0_0_12px_rgba(255,190,130,0.4)]"
-                                style={{ width: `${progressPerc}%` }}
-                            ></div>
+                                style={{ width: `${extendedProgressPerc}%` }}
+                            />
+                            {/* Milestone markers */}
+                            {milestoneMarkers.map((marker: any, idx: number) => (
+                                <div
+                                    key={idx}
+                                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-20"
+                                    style={{ left: `${marker.position}%` }}
+                                    onMouseEnter={() => setHoveredMilestone(idx)}
+                                    onMouseLeave={() => setHoveredMilestone(null)}
+                                >
+                                    {/* Marker diamond */}
+                                    <div
+                                        className={`w-3 h-3 rotate-45 border-2 cursor-pointer transition-all duration-300 ${
+                                            marker.isPassed
+                                                ? 'bg-gold-400 border-gold-300 shadow-[0_0_8px_rgba(201,161,60,0.6)]'
+                                                : marker.hasReward
+                                                    ? 'bg-ember-500 border-ember-400 shadow-[0_0_6px_rgba(234,88,12,0.4)]'
+                                                    : 'bg-ash-600 border-ash-500'
+                                        }`}
+                                        style={marker.isPassed && getAnimationsEnabled() ? {
+                                            animation: 'xp-marker-burst 0.6s ease-out forwards',
+                                            animationDelay: `${0.8 + idx * 0.3}s`,
+                                        } : undefined}
+                                    />
+                                    {/* Reward icon above marker */}
+                                    {marker.hasReward && (
+                                        <div className={`absolute -top-5 left-1/2 -translate-x-1/2 ${marker.isPassed ? 'text-gold-400' : 'text-ash-400'}`}>
+                                            {marker.rewardType === 'coins' ? <Coins className="w-3 h-3" /> :
+                                             marker.rewardType === 'evolution' ? <Flame className="w-3 h-3" /> :
+                                             marker.rewardType === 'title' ? <Crown className="w-3 h-3" /> :
+                                             <Star className="w-3 h-3" />}
+                                        </div>
+                                    )}
+                                    {/* Tooltip on hover */}
+                                    {hoveredMilestone === idx && (
+                                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-ash-900 border border-ash-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap z-30 pointer-events-none">
+                                            Liv. {marker.level}{marker.rewards.length > 0 ? `: ${marker.rewards[0]}` : ''}
+                                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-ash-900" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        {/* Level labels under the bar */}
+                        <div className="relative w-full h-4">
+                            {milestoneMarkers.map((marker: any, idx: number) => (
+                                <div
+                                    key={idx}
+                                    className={`absolute text-[9px] font-bold -translate-x-1/2 ${marker.isPassed ? 'text-gold-400' : 'text-ash-500'}`}
+                                    style={{ left: `${marker.position}%` }}
+                                >
+                                    {marker.level}
+                                </div>
+                            ))}
                         </div>
                         <div className="text-xs text-ash-500 font-medium text-right">Mancano {targetXpForNext - experience} XP al Liv. {level + 1}</div>
                     </div>
+
+                    {/* Prossimi Premi (upcoming rewards preview) */}
+                    {upcomingRewards && upcomingRewards.length > 0 && (
+                        <div className="w-full mt-4 z-10">
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-ash-400 mb-2 flex items-center gap-1.5">
+                                <Gift className="w-3 h-3" /> Prossimi Premi
+                            </div>
+                            <div className="space-y-1.5">
+                                {(upcomingRewards as any[]).map((reward: any, idx: number) => {
+                                    const typeStyles = reward.type === 'coins'
+                                        ? 'border-gold-500/30 bg-gold-500/5'
+                                        : reward.type === 'evolution'
+                                            ? 'border-ember-500/30 bg-ember-500/5'
+                                            : 'border-purple-500/30 bg-purple-500/5';
+                                    const iconColor = reward.type === 'coins'
+                                        ? 'text-gold-400'
+                                        : reward.type === 'evolution'
+                                            ? 'text-ember-400'
+                                            : 'text-purple-400';
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={`flex items-center gap-2.5 border rounded-lg px-3 py-2 ${typeStyles} transition-all duration-200 hover:scale-[1.02]`}
+                                        >
+                                            <div className={`flex-shrink-0 ${iconColor}`}>
+                                                {reward.type === 'coins' ? <Coins className="w-4 h-4" /> :
+                                                 reward.type === 'evolution' ? <Flame className="w-4 h-4" /> :
+                                                 <Crown className="w-4 h-4" />}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-[11px] font-bold text-white truncate">{reward.label}</div>
+                                                <div className="text-[9px] text-ash-500">{reward.detail}</div>
+                                            </div>
+                                            <div className="text-[9px] font-bold text-ash-500 flex-shrink-0">
+                                                Liv. {reward.level}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Mini stats */}
                     <div className="mt-6 w-full grid grid-cols-2 gap-3 z-10">
