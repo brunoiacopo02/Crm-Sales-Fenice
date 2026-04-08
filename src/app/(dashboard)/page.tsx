@@ -4,6 +4,7 @@ import { PipelineBoard } from "@/components/PipelineBoard"
 import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
 import { StreakCounter } from "@/components/StreakCounter"
+import { SafeWrapper } from "@/components/SafeWrapper"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
@@ -11,6 +12,9 @@ const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ 
 const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
 const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").then(m => ({ default: m.BossBattleBanner })))
 const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
+const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
+const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
+const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -51,7 +55,10 @@ export default async function DashboardPage() {
 
     return (
         <div className="space-y-4">
-            <LootDropModal userId={session!.user.id} />
+            {/* Overlays — wrapped in SafeWrapper so crashes don't take down the page */}
+            <SafeWrapper><CelebrationOverlay /></SafeWrapper>
+            <SafeWrapper><LootDropModal userId={session!.user.id} /></SafeWrapper>
+            <SafeWrapper><DailyLoginReward userId={session!.user.id} /></SafeWrapper>
 
             {pipelineError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -68,12 +75,14 @@ export default async function DashboardPage() {
                 </div>
             </div>
 
-            <SeasonalEventBanner />
-            <BossBattleBanner userId={session!.user.id} />
+            <SafeWrapper><SeasonalEventBanner /></SafeWrapper>
+            <SafeWrapper><BossBattleBanner userId={session!.user.id} /></SafeWrapper>
 
             <GdoDailyObjectives gdoUserId={session!.user.id} />
 
             <StreakCounter userId={session!.user.id} />
+
+            <SafeWrapper><StreakAnxietyBanner userId={session!.user.id} /></SafeWrapper>
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />
 
@@ -86,7 +95,7 @@ export default async function DashboardPage() {
                 recalls={recalls}
             />
 
-            <QuestPanel userId={session!.user.id} />
+            <SafeWrapper><QuestPanel userId={session!.user.id} /></SafeWrapper>
         </div>
     )
 }

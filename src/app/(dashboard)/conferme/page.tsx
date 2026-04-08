@@ -3,10 +3,12 @@ import { ConfermeBoard } from "@/components/ConfermeBoard"
 import { TeamRadarWidget } from "@/components/TeamRadarWidget"
 import { ConfermeDailyObjectives } from "@/components/ConfermeDailyObjectives"
 import { StreakCounter } from "@/components/StreakCounter"
+import { SafeWrapper } from "@/components/SafeWrapper"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
+const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 
 export default async function ConfermePage() {
     const supabase = await createClient();
@@ -36,13 +38,14 @@ export default async function ConfermePage() {
                 <>
                     <ConfermeDailyObjectives confermeUserId={session.user.id} />
                     <StreakCounter userId={session.user.id} />
+                    <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
                 </>
             )}
 
             <ConfermeBoard currentUser={session.user} />
 
             {session.user.role === 'CONFERME' && (
-                <QuestPanel userId={session.user.id} />
+                <SafeWrapper><QuestPanel userId={session.user.id} /></SafeWrapper>
             )}
         </div>
     )
