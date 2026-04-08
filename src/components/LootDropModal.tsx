@@ -91,9 +91,9 @@ export function LootDropModal({ userId }: { userId: string }) {
         if (!currentDrop || loading) return;
         setLoading(true);
 
-        // Phase 1: Shake animation
+        // Phase 1: Shake animation with suspense (2 seconds of increasing shake)
         setPhase('shaking');
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 2000));
 
         // Phase 2: Opening burst
         setPhase('opening');
@@ -105,8 +105,10 @@ export function LootDropModal({ userId }: { userId: string }) {
         if (result.success && result.reward) {
             setReward(result.reward);
             setPhase('revealed');
-            // Trigger confetti for epic/legendary drops
+            // Trigger enhanced loot_reveal celebration for epic/legendary drops
             if (result.reward.rarity === 'epic' || result.reward.rarity === 'legendary') {
+                triggerCelebration('loot_reveal', { type: 'loot_reveal', lootRarity: result.reward.rarity });
+            } else if (result.reward.rarity === 'rare') {
                 triggerCelebration('confetti');
             }
         } else {

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { RewardPopup, getRandomMotivationalMessage } from '@/components/RewardPopup';
 import type { RewardPopupData } from '@/components/RewardPopup';
 import type { RewardEarnedDetail } from '@/lib/animationUtils';
+import { triggerCelebration } from '@/lib/animationUtils';
 
 const MAX_VISIBLE = 3;
 
@@ -13,6 +14,13 @@ export function RewardFeedProvider({ children }: { children: React.ReactNode }) 
     const handleRewardEarned = useCallback((e: Event) => {
         const detail = (e as CustomEvent<RewardEarnedDetail>).detail;
         if (!detail) return;
+
+        // Trigger enhanced level-up celebration overlay
+        if (detail.didLevelUp && detail.newLevel) {
+            setTimeout(() => {
+                triggerCelebration('level_up', { type: 'level_up', level: detail.newLevel });
+            }, 500); // Slight delay so reward popup shows first
+        }
 
         const popup: RewardPopupData = {
             id: `reward-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

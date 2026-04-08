@@ -20,10 +20,22 @@ export function setAnimationsEnabled(enabled: boolean): void {
     localStorage.setItem(STORAGE_KEY, enabled ? 'on' : 'off');
 }
 
-export function triggerCelebration(type: 'fire' | 'confetti'): void {
+export type CelebrationTypeBasic = 'fire' | 'confetti';
+export type CelebrationTypeEnhanced = 'level_up' | 'achievement' | 'loot_reveal';
+export type CelebrationType = CelebrationTypeBasic | CelebrationTypeEnhanced;
+
+export interface CelebrationDetail {
+    type: CelebrationType;
+    level?: number;           // for level_up
+    achievementName?: string; // for achievement
+    achievementIcon?: string; // for achievement (emoji or icon name)
+    lootRarity?: string;      // for loot_reveal
+}
+
+export function triggerCelebration(type: CelebrationType, detail?: Partial<CelebrationDetail>): void {
     if (typeof window === 'undefined') return;
     if (!getAnimationsEnabled()) return;
-    window.dispatchEvent(new CustomEvent('celebration', { detail: { type } }));
+    window.dispatchEvent(new CustomEvent('celebration', { detail: { type, ...detail } }));
 }
 
 export interface RewardEarnedDetail {

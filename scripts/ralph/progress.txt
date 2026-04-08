@@ -254,3 +254,33 @@ Started: 2026-04-08
   - Shimmer: background-size 200% + animation moving background-position — lightweight CSS-only effect
   - Burst animation with animationDelay staggering: 0.8s + idx * 0.3s for sequential reveals
 ---
+
+## 2026-04-08 - SA-009
+- Extended CelebrationOverlay with 3 new enhanced celebration types: level_up, achievement, loot_reveal
+- Level-up: full-screen overlay with Fenice flame ring (orbiting particles, glow), "LIVELLO X!" typewriter text, confetti+fire particles
+- Achievement: badge materializing with spring animation, golden particles burst, glow effect, achievement name/icon display
+- Loot reveal: chest burst effect with rarity-colored glow (gold/purple/blue), rarity text, confetti+gold particles
+- All enhanced celebrations: click-to-dismiss, auto-dismiss after 4-5s, backdrop with fade, fadeout transition
+- Updated triggerCelebration in animationUtils.ts to accept CelebrationDetail (level, achievementName, achievementIcon, lootRarity)
+- Exported CelebrationType union type for type safety across codebase
+- RewardFeedProvider now triggers level_up celebration overlay when didLevelUp is true (500ms delay for popup priority)
+- LootDropModal now triggers loot_reveal celebration for epic/legendary drops (instead of plain confetti)
+- Enhanced loot shake animation: loot-shake-crescendo (2s, increasing intensity from 1px to 10px displacement)
+- CelebrationOverlay realtime_update handler now passes achievementName/icon to achievement celebration
+- 13 new CSS keyframes: celeb-backdrop-in, celeb-fenice-flames, celeb-fenice-glow, celeb-fenice-icon, celeb-orbit, celeb-cursor-blink, celeb-subtitle-in, celeb-badge-materialize, celeb-badge-glow, celeb-badge-particle, celeb-chest-burst, loot-shake-crescendo
+- All animations respect getAnimationsEnabled() toggle
+- File modificati:
+  - src/components/CelebrationOverlay.tsx (full rewrite with 3 new modes + click-to-dismiss)
+  - src/lib/animationUtils.ts (CelebrationType union, CelebrationDetail interface, enhanced triggerCelebration)
+  - src/components/providers/RewardFeedProvider.tsx (level_up trigger on didLevelUp)
+  - src/components/LootDropModal.tsx (loot_reveal trigger, 2s shake crescendo)
+  - src/app/globals.css (13 new keyframes + loot-shake-crescendo replacement)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - CelebrationOverlay modes: legacy (fire/confetti) use particles-only, enhanced (level_up/achievement/loot_reveal) add backdrop + centered content + click-to-dismiss
+  - Typewriter effect: setInterval(80ms) with progressive slice — cleanup interval ref on unmount and cleanup function
+  - Orbiting particles: use transformOrigin offset from center + rotate animation for orbital motion
+  - Crescendo shake: define many keyframe steps (0-100% in 5% increments) with progressively larger displacement for tension build
+  - triggerCelebration backward-compatible: CelebrationType includes 'fire'|'confetti', old callers unaffected
+  - Level-up celebration delayed 500ms from RewardFeedProvider so reward popup shows first
+---

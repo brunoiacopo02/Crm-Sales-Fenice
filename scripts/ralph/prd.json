@@ -152,7 +152,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "Ispirazione: apertura loot box gaming. Il momento celebrativo deve essere MEMORABILE."
     },
     {
