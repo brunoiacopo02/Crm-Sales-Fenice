@@ -115,12 +115,12 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
             {/* ═══════════════════════════════════════════════════════
                 HERO BANNER — Full-width dark RPG character banner
             ═══════════════════════════════════════════════════════ */}
-            <div className="relative overflow-hidden rounded-b-3xl lg:rounded-3xl lg:mx-4 lg:mt-4 bg-gradient-to-b from-brand-charcoal via-ash-900 to-ember-900/90 min-h-[340px] lg:min-h-[380px]">
+            <div className="relative overflow-hidden rounded-b-3xl lg:rounded-3xl lg:mx-4 lg:mt-4 bg-gradient-to-b from-[var(--color-gaming-bg-deep)] via-[var(--color-gaming-bg)] to-[var(--color-gaming-bg-surface)] min-h-[340px] lg:min-h-[380px]">
                 {/* Decorative fire/magic particles */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div className="absolute top-0 left-1/4 w-64 h-64 bg-ember-500/10 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 6s ease-in-out infinite' } : undefined} />
-                    <div className="absolute bottom-0 right-1/4 w-80 h-48 bg-brand-orange/10 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 8s ease-in-out infinite reverse' } : undefined} />
-                    <div className="absolute top-1/3 right-10 w-40 h-40 bg-gold-500/8 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 7s ease-in-out infinite 2s' } : undefined} />
+                    <div className="absolute top-0 left-1/4 w-64 h-64 bg-fire-500/8 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 6s ease-in-out infinite' } : undefined} />
+                    <div className="absolute bottom-0 right-1/4 w-80 h-48 bg-brand-orange/8 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 8s ease-in-out infinite reverse' } : undefined} />
+                    <div className="absolute top-1/3 right-10 w-40 h-40 bg-[var(--color-gaming-gold)]/6 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 7s ease-in-out infinite 2s' } : undefined} />
                     {/* Subtle grid pattern overlay */}
                     <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
                 </div>
@@ -130,9 +130,9 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     <div className="flex items-center gap-1.5 mb-6">
                         {allStages.map((s, idx) => (
                             <div key={s.name} className="flex items-center gap-1.5">
-                                <div className={`w-2 h-2 rounded-full transition-all ${idx <= currentStageIdx ? 'bg-ember-400 shadow-[0_0_6px_rgba(232,82,63,0.5)]' : 'bg-ash-700'}`} />
+                                <div className={`w-2 h-2 rounded-full transition-all ${idx <= currentStageIdx ? 'bg-fire-400 shadow-[0_0_6px_var(--color-fire-glow)]' : 'bg-[var(--color-gaming-border)]'}`} />
                                 {idx < allStages.length - 1 && (
-                                    <div className={`w-6 h-0.5 ${idx < currentStageIdx ? 'bg-ember-400/60' : 'bg-ash-700'}`} />
+                                    <div className={`w-6 h-0.5 ${idx < currentStageIdx ? 'bg-fire-400/60' : 'bg-[var(--color-gaming-border)]'}`} />
                                 )}
                             </div>
                         ))}
@@ -147,10 +147,10 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         } : {
                             background: 'conic-gradient(from 0deg, rgba(232,82,63,0.3), rgba(255,190,130,0.4), rgba(201,161,60,0.3), rgba(232,82,63,0.3))',
                         }} />
-                        <div className="absolute -inset-2 rounded-full bg-brand-charcoal" />
+                        <div className="absolute -inset-2 rounded-full bg-[var(--color-gaming-bg-deep)]" />
 
                         {/* Avatar image */}
-                        <div className="relative w-full h-full rounded-full border-3 border-ember-400/60 bg-gradient-to-br from-ember-800 to-brand-charcoal flex items-center justify-center overflow-hidden">
+                        <div className="relative w-full h-full rounded-full border-3 border-fire-400/60 bg-gradient-to-br from-[var(--color-gaming-bg-surface)] to-[var(--color-gaming-bg-deep)] flex items-center justify-center overflow-hidden">
                             {stage.imageUrl ? (
                                 <Image src={stage.imageUrl} alt={stage.name} width={160} height={160} className="w-full h-full rounded-full object-cover" />
                             ) : (
@@ -159,7 +159,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         </div>
 
                         {/* Level badge */}
-                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-brand-orange to-brand-orange-500 text-brand-charcoal font-black text-sm px-5 py-1 rounded-full border-2 border-brand-orange-300 shadow-glow-orange whitespace-nowrap">
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-fire-500 to-brand-orange text-white font-black text-sm px-5 py-1 rounded-full border-2 border-fire-400/60 shadow-gaming-glow-fire whitespace-nowrap">
                             LV. {level}
                         </div>
 
@@ -185,11 +185,11 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                                 </div>
                             )}
                         </div>
-                        <div className="text-ash-500 text-xs mt-1.5 font-medium">GDO {gdoCode} · {role}</div>
+                        <div className="text-[var(--color-gaming-text-muted)] text-xs mt-1.5 font-medium">GDO {gdoCode} · {role}</div>
                     </div>
 
                     {/* Quick Stats Bar — RPG HUD style */}
-                    <div className="mt-6 flex items-center gap-4 lg:gap-6 bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl px-5 py-3">
+                    <div className="mt-6 flex items-center gap-4 lg:gap-6 bg-[var(--color-gaming-bg-card)]/60 backdrop-blur-sm border border-[var(--color-gaming-border)] rounded-2xl px-5 py-3">
                         <div className="flex items-center gap-1.5">
                             <Flame className={`h-4 w-4 ${streakInfo && streakInfo.streakCount >= 7 ? 'text-ember-400' : 'text-brand-orange-400'}`} />
                             <span className="text-lg font-black text-white">{streakInfo?.streakCount ?? 0}</span>
@@ -223,14 +223,14 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 XP PROGRESS BAR — Below hero, full width
             ═══════════════════════════════════════════════════════ */}
             <div className="mx-4 lg:mx-8 -mt-1 relative z-20">
-                <div className="bg-gradient-to-r from-ash-900 via-brand-charcoal to-ash-900 rounded-2xl border border-ash-700/60 p-4 shadow-elevated">
+                <div className="bg-gradient-to-r from-[var(--color-gaming-bg-deep)] via-[var(--color-gaming-bg)] to-[var(--color-gaming-bg-deep)] rounded-2xl border border-[var(--color-gaming-border)] p-4 shadow-gaming-elevated">
                     <div className="flex justify-between text-xs font-bold mb-2">
                         <div className="text-brand-orange-300 flex items-center gap-1">
                             <Zap className="w-3 h-3" /> {experience} / {targetXpForNext} XP
                         </div>
                         <div className="text-ash-400">Prossimi 3 livelli → Liv. {level + 3}</div>
                     </div>
-                    <div className="relative w-full h-5 bg-ash-800 rounded-full overflow-hidden shadow-inner border border-ash-700">
+                    <div className="relative w-full h-5 bg-[var(--color-gaming-bg-deep)] rounded-full overflow-hidden shadow-inner border border-[var(--color-gaming-border)]">
                         {/* Shimmer */}
                         <div className="absolute top-0 h-full w-full rounded-full" style={{
                             background: 'linear-gradient(90deg, transparent 0%, rgba(255,190,130,0.06) 40%, rgba(255,190,130,0.12) 50%, rgba(255,190,130,0.06) 60%, transparent 100%)',
@@ -239,7 +239,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         }} />
                         {/* Fill */}
                         <div
-                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-ember-500 via-brand-orange to-gold-400 rounded-full transition-[width] duration-1000 ease-out shadow-[0_0_12px_rgba(255,190,130,0.4)]"
+                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-fire-500 via-brand-orange to-[var(--color-gaming-gold)] rounded-full transition-[width] duration-1000 ease-out shadow-[0_0_12px_var(--color-fire-glow)]"
                             style={{ width: `${extendedProgressPerc}%` }}
                         />
                         {/* Milestone markers */}
@@ -306,8 +306,8 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                                 style={{ animationDelay: `${idx * 60}ms`, animationFillMode: 'backwards' }}
                             >
                                 <stat.icon className={`h-4 w-4 ${stat.color} mx-auto mb-1.5 opacity-80`} />
-                                <div className="text-xl font-black text-ash-800">{stat.value}</div>
-                                <div className="text-[9px] uppercase font-bold tracking-wider text-ash-400 mt-0.5">{stat.label}</div>
+                                <div className="text-xl font-black text-[var(--color-gaming-text)]">{stat.value}</div>
+                                <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)] mt-0.5">{stat.label}</div>
                             </div>
                         ))}
                     </div>
@@ -323,31 +323,31 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     <div className="space-y-5">
                         {/* Upcoming Rewards */}
                         {upcomingRewards && upcomingRewards.length > 0 && (
-                            <div className="border border-ash-200/60 bg-white rounded-2xl shadow-card p-5 animate-fade-in">
-                                <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                    <div className="p-1.5 rounded-lg bg-gift-gradient bg-gold-100 border border-gold-200">
-                                        <Gift className="w-4 h-4 text-gold-500" />
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in">
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <div className="p-1.5 rounded-lg bg-[var(--color-gaming-gold)]/10 border border-[var(--color-gaming-gold)]/20">
+                                        <Gift className="w-4 h-4 text-[var(--color-gaming-gold)]" />
                                     </div>
                                     Prossimi Premi
                                 </h3>
                                 <div className="space-y-2">
                                     {(upcomingRewards as any[]).map((reward: any, idx: number) => {
                                         const typeStyles = reward.type === 'coins'
-                                            ? 'border-gold-500/30 bg-gradient-to-r from-gold-50 to-gold-100/50'
+                                            ? 'border-[var(--color-gaming-gold)]/25 bg-gradient-to-r from-[var(--color-gaming-gold)]/8 to-transparent'
                                             : reward.type === 'evolution'
-                                                ? 'border-ember-500/30 bg-gradient-to-r from-ember-50 to-ember-100/50'
-                                                : 'border-purple-500/30 bg-gradient-to-r from-purple-50 to-purple-100/50';
-                                        const iconColor = reward.type === 'coins' ? 'text-gold-500' : reward.type === 'evolution' ? 'text-ember-500' : 'text-purple-500';
+                                                ? 'border-fire-400/25 bg-gradient-to-r from-fire-500/8 to-transparent'
+                                                : 'border-purple-500/25 bg-gradient-to-r from-purple-500/8 to-transparent';
+                                        const iconColor = reward.type === 'coins' ? 'text-[var(--color-gaming-gold)]' : reward.type === 'evolution' ? 'text-fire-400' : 'text-purple-400';
                                         return (
                                             <div key={idx} className={`flex items-center gap-3 border rounded-xl px-4 py-3 ${typeStyles} hover:scale-[1.01] transition-transform duration-200`}>
                                                 <div className={`flex-shrink-0 ${iconColor}`}>
                                                     {reward.type === 'coins' ? <Coins className="w-5 h-5" /> : reward.type === 'evolution' ? <Flame className="w-5 h-5" /> : <Crown className="w-5 h-5" />}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="text-sm font-bold text-ash-800 truncate">{reward.label}</div>
-                                                    <div className="text-[10px] text-ash-500">{reward.detail}</div>
+                                                    <div className="text-sm font-bold text-[var(--color-gaming-text)] truncate">{reward.label}</div>
+                                                    <div className="text-[10px] text-[var(--color-gaming-text-muted)]">{reward.detail}</div>
                                                 </div>
-                                                <div className="text-xs font-bold text-ash-400 bg-ash-100 px-2 py-1 rounded-lg flex-shrink-0">Liv. {reward.level}</div>
+                                                <div className="text-xs font-bold text-[var(--color-gaming-text-muted)] bg-[var(--color-gaming-bg-surface)] px-2 py-1 rounded-lg flex-shrink-0 border border-[var(--color-gaming-border)]">Liv. {reward.level}</div>
                                             </div>
                                         );
                                     })}
@@ -357,9 +357,9 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
 
                         {/* Streak & Multiplier Card */}
                         {streakInfo && (
-                            <div className="relative overflow-hidden border border-ember-200/60 bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/80 rounded-2xl shadow-card p-5 animate-fade-in">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-ember-500/10 rounded-full blur-3xl pointer-events-none" />
-                                <h3 className="text-sm font-bold text-ash-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <div className="relative overflow-hidden border border-[var(--color-gaming-border)] bg-gradient-to-br from-[var(--color-gaming-bg)] via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] rounded-2xl shadow-gaming-card p-5 animate-fade-in">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-fire-500/8 rounded-full blur-3xl pointer-events-none" />
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
                                     <Flame className="w-4 h-4 text-ember-400" /> Streak & Multiplier
                                 </h3>
                                 <div className="flex items-center gap-4">
@@ -389,10 +389,10 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
 
                         {/* Equipped Cosmetics */}
                         {equippedItems.length > 0 && (
-                            <div className="border border-purple-200/40 bg-gradient-to-br from-purple-50/50 to-ash-50 rounded-2xl shadow-card p-5 animate-fade-in">
-                                <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                    <div className="p-1.5 rounded-lg bg-purple-100 border border-purple-200">
-                                        <Gem className="w-4 h-4 text-purple-500" />
+                            <div className="border border-purple-500/20 bg-gradient-to-br from-purple-500/8 to-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in">
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <div className="p-1.5 rounded-lg bg-purple-500/15 border border-purple-500/25">
+                                        <Gem className="w-4 h-4 text-purple-400" />
                                     </div>
                                     Cosmetici Equipaggiati
                                 </h3>
@@ -401,16 +401,16 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                                         const isEquipped = equippedItemInfo?.id === item.id;
                                         const cssType = item.cssValue.startsWith('skin-avatar-') ? 'Avatar' : item.cssValue.startsWith('skin-theme-') ? 'Tema' : item.cssValue.startsWith('skin-effect-') ? 'Effetto' : 'Cosmetico';
                                         return (
-                                            <div key={item.id} className={`flex items-center gap-3 border rounded-xl px-4 py-3 transition-all duration-200 ${isEquipped ? 'border-purple-300 bg-purple-50 shadow-soft' : 'border-ash-200/60 bg-white hover:border-purple-200'}`}>
-                                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isEquipped ? 'bg-purple-200 text-purple-600' : 'bg-ash-100 text-ash-400'}`}>
+                                            <div key={item.id} className={`flex items-center gap-3 border rounded-xl px-4 py-3 transition-all duration-200 ${isEquipped ? 'border-purple-500/40 bg-purple-500/10 shadow-gaming-card' : 'border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-surface)] hover:border-purple-500/30'}`}>
+                                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isEquipped ? 'bg-purple-500/20 text-purple-400' : 'bg-[var(--color-gaming-bg-card)] text-[var(--color-gaming-text-muted)]'}`}>
                                                     <Sparkles className="w-4 h-4" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="text-sm font-bold text-ash-800 truncate">{item.name}</div>
-                                                    <div className="text-[10px] text-ash-500">{cssType} · {item.description}</div>
+                                                    <div className="text-sm font-bold text-[var(--color-gaming-text)] truncate">{item.name}</div>
+                                                    <div className="text-[10px] text-[var(--color-gaming-text-muted)]">{cssType} · {item.description}</div>
                                                 </div>
                                                 {isEquipped && (
-                                                    <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">ATTIVO</div>
+                                                    <div className="text-[9px] font-bold text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-full border border-purple-500/25">ATTIVO</div>
                                                 )}
                                             </div>
                                         );

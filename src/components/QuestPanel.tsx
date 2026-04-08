@@ -29,8 +29,8 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
     return (
         <div className={`relative rounded-xl p-3.5 transition-all duration-500 border ${
             isComplete
-                ? 'bg-gradient-to-r from-gold-900/40 to-gold-800/20 border-gold-500/40 shadow-glow-gold'
-                : 'bg-white/5 border-white/10 hover:border-white/20'
+                ? 'bg-gradient-to-r from-gold-900/40 to-gold-800/20 border-gold-500/40 shadow-gaming-glow-gold'
+                : 'bg-[var(--color-gaming-bg-card)] border-[var(--color-gaming-border)] hover:border-[var(--color-gaming-border-hover)]'
         }`}>
             {/* Completion glow overlay */}
             {isComplete && (
@@ -42,10 +42,10 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm text-white/90 truncate">{quest.title}</div>
-                        <div className="text-xs text-ash-400 mt-0.5 line-clamp-1">{quest.description}</div>
+                        <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5 line-clamp-1">{quest.description}</div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex items-center gap-0.5 text-xs font-medium text-brand-orange-300">
+                        <div className="flex items-center gap-0.5 text-xs font-medium text-fire-400">
                             <Zap className="h-3 w-3" />
                             {quest.rewardXp}
                         </div>
@@ -58,12 +58,12 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
 
                 {/* Progress bar */}
                 <div className="flex items-center gap-2.5">
-                    <div className="flex-1 h-2 bg-ash-800/80 rounded-full overflow-hidden border border-ash-700/40">
+                    <div className="flex-1 h-2 bg-[var(--color-gaming-bg-deep)] rounded-full overflow-hidden border border-[var(--color-gaming-border)]">
                         <div
                             className={`h-full rounded-full transition-[width] duration-1000 ease-out ${
                                 isComplete
-                                    ? 'bg-gradient-to-r from-gold-500 to-gold-300 shadow-[0_0_8px_rgba(201,161,60,0.5)]'
-                                    : 'bg-gradient-to-r from-ember-500 via-brand-orange to-gold-400'
+                                    ? 'bg-gradient-to-r from-gold-500 to-[var(--color-gaming-gold)] shadow-[0_0_8px_rgba(255,215,0,0.4)]'
+                                    : 'bg-gradient-to-r from-fire-500 via-brand-orange to-[var(--color-gaming-amber)]'
                             }`}
                             style={{ width: `${progress}%` }}
                         />
@@ -78,7 +78,7 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
                     <div className="mt-2 flex justify-end">
                         <button
                             onClick={() => onClaim(quest.progressId)}
-                            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+                            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-[var(--color-gaming-gold)]/15 text-[var(--color-gaming-gold)] border border-[var(--color-gaming-gold)]/25 hover:bg-[var(--color-gaming-gold)]/25 hover:shadow-gaming-glow-gold transition-all"
                         >
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             Riscuoti
@@ -173,10 +173,10 @@ export function QuestPanel({ userId }: { userId: string }) {
     const completedWeekly = quests.weekly.filter(q => q.completed).length;
 
     return (
-        <div className="w-full border shadow-elevated rounded-2xl p-5 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/40 border-ash-700">
+        <div className="w-full border rounded-2xl p-5 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-[var(--color-gaming-bg)] via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] border-[var(--color-gaming-border)] shadow-gaming-card">
             {/* Decorative blurs */}
-            <div className="absolute top-0 left-0 w-48 h-48 bg-brand-orange/8 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/4 pointer-events-none" />
-            <div className="absolute bottom-0 right-0 w-36 h-36 bg-ember-500/8 rounded-full blur-3xl translate-y-1/3 translate-x-1/4 pointer-events-none" />
+            <div className="absolute top-0 left-0 w-48 h-48 bg-fire-500/6 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+            <div className="absolute bottom-0 right-0 w-36 h-36 bg-brand-orange/6 rounded-full blur-3xl translate-y-1/3 translate-x-1/4 pointer-events-none" />
 
             <div className="relative z-10">
                 {/* Header */}
@@ -185,12 +185,12 @@ export function QuestPanel({ userId }: { userId: string }) {
                     onClick={() => setCollapsed(!collapsed)}
                 >
                     <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-lg bg-brand-orange/15">
-                            <Scroll className="h-5 w-5 text-brand-orange" />
+                        <div className="p-1.5 rounded-lg bg-fire-500/15 border border-fire-500/20">
+                            <Scroll className="h-5 w-5 text-fire-400" />
                         </div>
                         <div>
                             <h3 className="text-base font-bold tracking-tight text-white">Quest Attive</h3>
-                            <div className="text-xs text-ash-400 mt-0.5">
+                            <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">
                                 {completedDaily}/{totalDaily} giornaliere · {completedWeekly}/{totalWeekly} settimanali
                             </div>
                         </div>

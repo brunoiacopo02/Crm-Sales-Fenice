@@ -53,8 +53,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Usare Stitch in modalita Pro. La pipeline NON deve diventare scura — solo gli elementi gamification."
+      "passes": true,
+      "notes": "Design tokens gaming premium aggiunti a globals.css. Palette calda (fuoco/oro/ambra su scuro profondo) applicata a: Sidebar, Topbar wallet, StreakCounter, QuestPanel, ShopClient, ProfileClient, LeaderboardClient. Pipeline resta chiara. Build OK."
     },
     {
       "id": "FA-004",

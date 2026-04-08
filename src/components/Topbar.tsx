@@ -217,7 +217,7 @@ export function Topbar() {
                     >
                         <Bell className="h-5 w-5" />
                         {notifications.filter(n => n.status === 'unread').length > 0 && (
-                            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-ember-500 ring-2 ring-white text-[9px] font-bold text-white">
+                            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-ember-400 to-fire-500 ring-2 ring-white text-[9px] font-bold text-white shadow-gaming-glow-fire">
                                 {notifications.filter(n => n.status === 'unread').length}
                             </span>
                         )}
@@ -273,7 +273,7 @@ export function Topbar() {
                 {/* User section */}
                 <div className="flex items-center gap-3 pl-3 lg:pl-4 border-l border-ash-200">
                     {session?.user?.role === "GDO" && (
-                        <div className="flex items-center gap-1.5 bg-gradient-to-r from-gold-50 to-brand-orange-50 text-gold-700 font-bold px-2.5 py-1 rounded-full text-xs shadow-soft border border-gold-200" title="I tuoi Fenice Coin vinti nello Sprint">
+                        <div className="flex items-center gap-1.5 bg-gradient-to-r from-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] text-[var(--color-gaming-gold)] font-bold px-3 py-1.5 rounded-full text-xs shadow-gaming-glow-gold border border-[var(--color-gaming-border-hover)]" title="I tuoi Fenice Coin vinti nello Sprint">
                             <Image src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" width={16} height={16} className="object-contain drop-shadow-sm" />
                             {walletCoins}
                         </div>
@@ -283,7 +283,7 @@ export function Topbar() {
                         {session?.user?.name || "GDO"}
                     </div>
                     <div className="relative">
-                        <div className={`h-9 w-9 rounded-full bg-gradient-to-br from-brand-orange to-brand-orange-500 flex items-center justify-center text-white font-bold text-sm shadow-soft ring-2 ring-brand-orange/20 ${skinCss?.includes('skin-avatar') || skinCss?.includes('skin-effect') ? skinCss : ''}`}>
+                        <div className={`h-9 w-9 rounded-full bg-gradient-to-br from-brand-orange to-fire-500 flex items-center justify-center text-white font-bold text-sm shadow-gaming-glow-fire ring-2 ring-fire-400/25 ${skinCss?.includes('skin-avatar') || skinCss?.includes('skin-effect') ? skinCss : ''}`}>
                             {session?.user?.name?.charAt(0) || "U"}
                         </div>
                         <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 ring-2 ring-white" />

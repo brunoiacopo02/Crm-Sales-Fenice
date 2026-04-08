@@ -86,20 +86,20 @@ export function StreakCounter({ userId }: { userId: string }) {
                     ? 'text-ember-400'
                     : streakCount >= 3
                         ? 'text-brand-orange'
-                        : 'text-ash-400';
+                        : 'text-[var(--color-gaming-text-muted)]';
 
     // Border/glow based on state
     const borderStateClass = visualState === 'safe'
         ? 'border-emerald-500/30'
         : visualState === 'at-risk'
             ? 'border-red-500/30'
-            : 'border-ash-700';
+            : 'border-[var(--color-gaming-border)]';
 
     const bgStateClass = visualState === 'safe'
-        ? 'from-brand-charcoal via-emerald-900/20 to-emerald-900/10'
+        ? 'from-[var(--color-gaming-bg)] via-emerald-900/20 to-emerald-900/10'
         : visualState === 'at-risk'
-            ? 'from-brand-charcoal via-red-900/20 to-red-900/10'
-            : 'from-brand-charcoal via-ash-900 to-ember-900/30';
+            ? 'from-[var(--color-gaming-bg)] via-red-900/20 to-red-900/10'
+            : 'from-[var(--color-gaming-bg)] via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)]';
 
     const glowClass = visualState === 'safe'
         ? (animationsEnabled ? 'animate-streak-safe-glow' : '')
@@ -112,7 +112,7 @@ export function StreakCounter({ userId }: { userId: string }) {
         ? 'bg-emerald-500/15'
         : visualState === 'at-risk'
             ? 'bg-red-500/15'
-            : streakCount >= 3 ? 'bg-ember-500/15' : 'bg-ash-800/50';
+            : streakCount >= 3 ? 'bg-ember-500/15' : 'bg-[var(--color-gaming-bg-card)]';
 
     // Shake animation for at-risk streaks (original behavior, enhanced)
     const atRisk = !isActiveToday && streakCount > 0;
@@ -131,7 +131,7 @@ export function StreakCounter({ userId }: { userId: string }) {
         : 100;
 
     return (
-        <div className={`w-full border shadow-elevated rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br ${bgStateClass} ${borderStateClass} ${glowClass} ${shakeClass}`}>
+        <div className={`w-full border shadow-gaming-card rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br ${bgStateClass} ${borderStateClass} ${glowClass} ${shakeClass}`}>
             {/* Background glow based on state */}
             {visualState === 'safe' && (
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
@@ -152,7 +152,7 @@ export function StreakCounter({ userId }: { userId: string }) {
                     <div>
                         <div className="flex items-baseline gap-1.5">
                             <span className="text-2xl font-black tabular-nums text-white">{streakCount}</span>
-                            <span className="text-xs font-medium text-ash-400">
+                            <span className="text-xs font-medium text-[var(--color-gaming-text-muted)]">
                                 {streakCount === 1 ? 'giorno' : 'giorni'}
                             </span>
                         </div>
@@ -167,14 +167,14 @@ export function StreakCounter({ userId }: { userId: string }) {
                 </div>
 
                 {/* Divider */}
-                <div className="h-10 w-px bg-ash-700/50" />
+                <div className="h-10 w-px bg-[var(--color-gaming-border)]" />
 
                 {/* Multiplier + progress to next tier */}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1.5">
                         <MultiplierBadge multiplier={multiplier} tierLabel={tierLabel} />
                         {nextMilestone && (
-                            <div className="flex items-center gap-1 text-xs text-ash-400">
+                            <div className="flex items-center gap-1 text-xs text-[var(--color-gaming-text-muted)]">
                                 <TrendingUp className="h-3 w-3" />
                                 <span>{nextMilestone.daysToNext}g a x{nextMilestone.nextMultiplier}</span>
                             </div>
@@ -186,7 +186,7 @@ export function StreakCounter({ userId }: { userId: string }) {
 
                     {/* Progress bar to next tier */}
                     {nextMilestone && (
-                        <div className="h-1.5 bg-ash-800/80 rounded-full overflow-hidden border border-ash-700/40">
+                        <div className="h-1.5 bg-[var(--color-gaming-bg-deep)] rounded-full overflow-hidden border border-[var(--color-gaming-border)]">
                             <div
                                 className={`h-full rounded-full transition-[width] duration-1000 ease-out ${
                                     multiplier >= 2
@@ -200,7 +200,7 @@ export function StreakCounter({ userId }: { userId: string }) {
                         </div>
                     )}
                     {!nextMilestone && (
-                        <div className="h-1.5 bg-ash-800/80 rounded-full overflow-hidden border border-ash-700/40">
+                        <div className="h-1.5 bg-[var(--color-gaming-bg-deep)] rounded-full overflow-hidden border border-[var(--color-gaming-border)]">
                             <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-purple-300 shadow-[0_0_8px_rgba(168,85,247,0.5)]" style={{ width: '100%' }} />
                         </div>
                     )}

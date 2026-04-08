@@ -72,3 +72,29 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-003 — Design system gaming: palette calda premium su tutto il CRM
+**Status:** PASSED ✓
+**Date:** 2026-04-08
+
+### Design Tokens Added to globals.css:
+- **Gaming Premium Palette**: `--color-gaming-bg-deep` (#0D0B0E), `--color-gaming-bg` (#141118), `--color-gaming-bg-card` (#1A1620), etc.
+- **Fire Accent Scale**: `--color-fire-400` (#FF8C42), `--color-fire-500` (#FF6B1A), `--color-fire-glow`
+- **Gaming Gold/Amber**: `--color-gaming-gold` (#FFD700), `--color-gaming-amber` (#FFAB00)
+- **Gaming Shadows**: `--shadow-gaming-card`, `--shadow-gaming-elevated`, `--shadow-gaming-glow-fire`, `--shadow-gaming-glow-gold`
+- **Utility Classes**: `.card-gaming`, `.glass-gaming`, `.gaming-section`, `.bg-gradient-gaming-*`, `.text-gaming-*`, `.divider-gaming`
+
+### Components Updated (7 total):
+1. **Sidebar.tsx** — `bg-gradient-gaming-sidebar`, fire-accent logo, gaming borders
+2. **Topbar.tsx** — Dark premium wallet with gold glow, fire notification badge
+3. **QuestPanel.tsx** — Gaming bg, fire progress bars, gold claim button
+4. **StreakCounter.tsx** — Gaming bg tokens, gaming borders
+5. **ShopClient.tsx** — Full light→dark: gaming bg, dark rarity cards with warm glow borders
+6. **ProfileClient.tsx** — Gaming hero banner, fire evolution trail, gaming XP bar
+7. **LeaderboardClient.tsx** — Full light→dark: gaming tabs, dark list rows, fire accents
+
+### Pipeline Protection: ✓ Pipeline stays white/light — only gamification UI is dark premium
+
+### Build: ✓ Zero errors
+
+---

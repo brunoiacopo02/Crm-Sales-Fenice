@@ -10,11 +10,11 @@ type Category = 'all' | 'avatar' | 'theme' | 'effect' | 'title'
 type SortOrder = 'none' | 'asc' | 'desc'
 
 const CATEGORIES: { key: Category; label: string; icon: typeof ShoppingBag; color: string }[] = [
-    { key: 'all', label: 'Tutti', icon: ShoppingBag, color: 'bg-ash-200 text-ash-700 border-ash-300' },
-    { key: 'avatar', label: 'Skin Avatar', icon: Star, color: 'bg-purple-100 text-purple-700 border-purple-300' },
-    { key: 'theme', label: 'Temi', icon: Palette, color: 'bg-blue-100 text-blue-700 border-blue-300' },
-    { key: 'effect', label: 'Effetti', icon: Wand2, color: 'bg-amber-100 text-amber-700 border-amber-300' },
-    { key: 'title', label: 'Titoli', icon: Award, color: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+    { key: 'all', label: 'Tutti', icon: ShoppingBag, color: 'bg-white/10 text-white border-white/20' },
+    { key: 'avatar', label: 'Skin Avatar', icon: Star, color: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+    { key: 'theme', label: 'Temi', icon: Palette, color: 'bg-blue-500/15 text-blue-300 border-blue-500/30' },
+    { key: 'effect', label: 'Effetti', icon: Wand2, color: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+    { key: 'title', label: 'Titoli', icon: Award, color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
 ]
 
 function getItemCategory(cssValue: string): Category {
@@ -116,10 +116,10 @@ export function ShopClient({ userId }: { userId: string }) {
 
     // Rarity helper based on cost (rebalanced for new economy: base 50-200, rare 500-1000, premium 2000-5000)
     const getRarity = (cost: number) => {
-        if (cost >= 3000) return { label: 'Leggendario', border: 'border-gold-400', glow: 'shadow-glow-gold', bg: 'from-gold-50 to-gold-100/50', text: 'text-gold-600', badge: 'bg-gradient-to-r from-gold-400 to-gold-500 text-white' }
-        if (cost >= 1000) return { label: 'Epico', border: 'border-ember-400', glow: 'shadow-glow-ember', bg: 'from-ember-50 to-ember-100/50', text: 'text-ember-600', badge: 'bg-gradient-to-r from-ember-400 to-ember-500 text-white' }
-        if (cost >= 300) return { label: 'Raro', border: 'border-brand-orange-400', glow: 'shadow-glow-orange', bg: 'from-brand-orange-50 to-brand-orange-100/50', text: 'text-brand-orange-600', badge: 'bg-gradient-to-r from-brand-orange to-brand-orange-500 text-brand-charcoal' }
-        return { label: 'Comune', border: 'border-ash-300', glow: 'shadow-soft', bg: 'from-ash-50 to-ash-100/50', text: 'text-ash-500', badge: 'bg-ash-200 text-ash-700' }
+        if (cost >= 3000) return { label: 'Leggendario', border: 'border-[var(--color-gaming-gold)]/50', glow: 'shadow-gaming-glow-gold', bg: 'from-[var(--color-gaming-gold)]/10 to-[var(--color-gaming-bg-surface)]', text: 'text-[var(--color-gaming-gold)]', badge: 'bg-gradient-to-r from-gold-400 to-gold-500 text-white' }
+        if (cost >= 1000) return { label: 'Epico', border: 'border-ember-400/50', glow: 'shadow-gaming-glow-fire', bg: 'from-ember-500/10 to-[var(--color-gaming-bg-surface)]', text: 'text-ember-400', badge: 'bg-gradient-to-r from-ember-400 to-ember-500 text-white' }
+        if (cost >= 300) return { label: 'Raro', border: 'border-brand-orange/40', glow: 'shadow-gaming-glow-amber', bg: 'from-brand-orange/10 to-[var(--color-gaming-bg-surface)]', text: 'text-brand-orange', badge: 'bg-gradient-to-r from-brand-orange to-brand-orange-500 text-brand-charcoal' }
+        return { label: 'Comune', border: 'border-[var(--color-gaming-border-hover)]', glow: 'shadow-gaming-card', bg: 'from-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)]', text: 'text-[var(--color-gaming-text-muted)]', badge: 'bg-white/10 text-white/70' }
     }
 
     const filteredItems = useMemo(() => {
@@ -150,36 +150,36 @@ export function ShopClient({ userId }: { userId: string }) {
     const myItemIds = new Set(inventory.map(i => i.id))
 
     return (
-        <div className="bg-white rounded-2xl shadow-card border border-ash-200/60 overflow-hidden">
+        <div className="bg-[var(--color-gaming-bg)] rounded-2xl shadow-gaming-elevated border border-[var(--color-gaming-border)] overflow-hidden">
             {/* Header / Tabs */}
-            <div className="border-b border-ash-200/60 bg-gradient-to-r from-ash-50 to-ash-100/50 flex items-center justify-between px-6">
+            <div className="border-b border-[var(--color-gaming-border)] bg-gradient-to-r from-[var(--color-gaming-bg-deep)] to-[var(--color-gaming-bg-card)] flex items-center justify-between px-6">
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => setActiveTab('shop')}
-                        className={`py-4 px-4 font-semibold text-sm flex items-center gap-2 border-b-2 transition-all duration-200 ${activeTab === 'shop' ? 'border-brand-orange text-brand-orange-700' : 'border-transparent text-ash-500 hover:text-ash-800'}`}
+                        className={`py-4 px-4 font-semibold text-sm flex items-center gap-2 border-b-2 transition-all duration-200 ${activeTab === 'shop' ? 'border-fire-400 text-fire-400' : 'border-transparent text-[var(--color-gaming-text-muted)] hover:text-white'}`}
                     >
                         <ShoppingBag className="h-4 w-4" /> Vetrina
                     </button>
                     <button
                         onClick={() => setActiveTab('inventory')}
-                        className={`py-4 px-4 font-semibold text-sm flex items-center gap-2 border-b-2 transition-all duration-200 ${activeTab === 'inventory' ? 'border-brand-orange text-brand-orange-700' : 'border-transparent text-ash-500 hover:text-ash-800'}`}
+                        className={`py-4 px-4 font-semibold text-sm flex items-center gap-2 border-b-2 transition-all duration-200 ${activeTab === 'inventory' ? 'border-fire-400 text-fire-400' : 'border-transparent text-[var(--color-gaming-text-muted)] hover:text-white'}`}
                     >
                         <Box className="h-4 w-4" /> Il mio Inventario
                     </button>
                 </div>
 
                 {/* Coin Balance Badge */}
-                <div className="flex items-center gap-2.5 bg-gradient-to-r from-gold-50 to-brand-orange-50 border border-gold-200 px-5 py-2 rounded-full shadow-soft">
+                <div className="flex items-center gap-2.5 bg-gradient-to-r from-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] border border-[var(--color-gaming-border-hover)] px-5 py-2 rounded-full shadow-gaming-glow-gold">
                     <div className="relative">
                         <Image src="/assets/store/icon_fenice_coin.png" alt="Fenice Coin" width={20} height={20} className="object-contain drop-shadow-sm" />
                         <div className="absolute inset-0 animate-glow-pulse rounded-full" />
                     </div>
-                    <div className="text-sm font-bold text-gold-700">{wallet} <span className="text-gold-500">Coin</span></div>
+                    <div className="text-sm font-bold text-[var(--color-gaming-gold)]">{wallet} <span className="text-[var(--color-gaming-gold-dim)]">Coin</span></div>
                 </div>
             </div>
 
             {/* Content Body */}
-            <div className="p-6 bg-gradient-to-b from-ash-50/50 to-white min-h-[400px]">
+            <div className="p-6 bg-gradient-to-b from-[var(--color-gaming-bg)] to-[var(--color-gaming-bg-deep)] min-h-[400px]">
                 {activeTab === 'shop' && (
                     <div>
                         {/* Category Filters + Sort */}
@@ -196,8 +196,8 @@ export function ShopClient({ userId }: { userId: string }) {
                                             onClick={() => setActiveCategory(cat.key)}
                                             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 ${
                                                 isActive
-                                                    ? `${cat.color} shadow-soft ring-1 ring-offset-1 ring-ash-200`
-                                                    : 'bg-white text-ash-500 border-ash-200 hover:bg-ash-50 hover:text-ash-700'
+                                                    ? `${cat.color} shadow-gaming-card`
+                                                    : 'bg-[var(--color-gaming-bg-card)] text-[var(--color-gaming-text-muted)] border-[var(--color-gaming-border)] hover:bg-[var(--color-gaming-bg-card-hover)] hover:text-white'
                                             }`}
                                         >
                                             <Icon className="h-3.5 w-3.5" />
@@ -213,8 +213,8 @@ export function ShopClient({ userId }: { userId: string }) {
                                 onClick={cycleSortOrder}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 ${
                                     sortOrder !== 'none'
-                                        ? 'bg-brand-orange-50 text-brand-orange-700 border-brand-orange-200 shadow-soft'
-                                        : 'bg-white text-ash-500 border-ash-200 hover:bg-ash-50 hover:text-ash-700'
+                                        ? 'bg-fire-500/15 text-fire-400 border-fire-500/30 shadow-gaming-glow-fire'
+                                        : 'bg-[var(--color-gaming-bg-card)] text-[var(--color-gaming-text-muted)] border-[var(--color-gaming-border)] hover:bg-[var(--color-gaming-bg-card-hover)] hover:text-white'
                                 }`}
                                 title={sortOrder === 'none' ? 'Ordina per prezzo' : sortOrder === 'asc' ? 'Prezzo crescente' : 'Prezzo decrescente'}
                             >
@@ -226,9 +226,9 @@ export function ShopClient({ userId }: { userId: string }) {
                         {/* Items Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                             {filteredItems.length === 0 ? (
-                                <div className="col-span-full py-16 flex flex-col items-center justify-center text-ash-400 animate-fade-in">
-                                    <div className="w-16 h-16 rounded-2xl bg-ash-100 flex items-center justify-center mb-4">
-                                        <ShoppingBag className="h-8 w-8 text-ash-300" />
+                                <div className="col-span-full py-16 flex flex-col items-center justify-center text-[var(--color-gaming-text-muted)] animate-fade-in">
+                                    <div className="w-16 h-16 rounded-2xl bg-[var(--color-gaming-bg-card)] flex items-center justify-center mb-4 border border-[var(--color-gaming-border)]">
+                                        <ShoppingBag className="h-8 w-8 text-[var(--color-gaming-text-muted)]" />
                                     </div>
                                     <div className="text-sm font-medium">
                                         {activeCategory === 'all' ? 'Nessun oggetto disponibile nello store.' : `Nessun oggetto nella categoria "${getCategoryMeta(activeCategory).label}".`}
@@ -245,11 +245,11 @@ export function ShopClient({ userId }: { userId: string }) {
                                     return (
                                         <div
                                             key={item.id}
-                                            className={`bg-white border-2 ${rarity.border} rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-elevated hover:-translate-y-1 group animate-fade-in ${wasBought ? 'ring-2 ring-gold-400 ring-offset-2' : ''}`}
+                                            className={`bg-[var(--color-gaming-bg-card)] border-2 ${rarity.border} rounded-2xl overflow-hidden transition-all duration-300 hover:${rarity.glow} hover:-translate-y-1 group animate-fade-in ${wasBought ? 'ring-2 ring-[var(--color-gaming-gold)] ring-offset-2 ring-offset-[var(--color-gaming-bg)]' : ''}`}
                                             style={{ animationDelay: `${idx * 60}ms`, animationFillMode: 'backwards' }}
                                         >
                                             {/* Preview Area */}
-                                            <div className={`h-36 bg-gradient-to-br ${rarity.bg} border-b border-ash-100 flex items-center justify-center p-6 relative overflow-hidden`}>
+                                            <div className={`h-36 bg-gradient-to-br ${rarity.bg} border-b border-[var(--color-gaming-border)] flex items-center justify-center p-6 relative overflow-hidden`}>
                                                 {/* Decorative particles */}
                                                 <div className="absolute top-2 right-2 opacity-20">
                                                     <Sparkles className={`h-5 w-5 ${rarity.text}`} />
@@ -261,7 +261,7 @@ export function ShopClient({ userId }: { userId: string }) {
                                                     <div className={`h-20 w-20 bg-white shadow-card rounded-full relative z-10 flex items-center justify-center text-transparent ${item.cssValue} transition-transform duration-300 group-hover:scale-110`} />
                                                 )}
                                                 {isOwned && (
-                                                    <div className="absolute top-3 right-3 bg-emerald-100 text-emerald-600 p-1.5 rounded-full shadow-soft border border-emerald-200">
+                                                    <div className="absolute top-3 right-3 bg-emerald-500/15 text-emerald-400 p-1.5 rounded-full shadow-gaming-card border border-emerald-500/30">
                                                         <CheckCircle2 className="h-4 w-4" />
                                                     </div>
                                                 )}
@@ -278,19 +278,19 @@ export function ShopClient({ userId }: { userId: string }) {
 
                                             {/* Info */}
                                             <div className="p-5">
-                                                <h3 className="font-bold text-ash-800 text-base mb-1">{item.name}</h3>
-                                                <div className="text-xs text-ash-500 line-clamp-2 h-8">{item.description}</div>
+                                                <h3 className="font-bold text-[var(--color-gaming-text)] text-base mb-1">{item.name}</h3>
+                                                <div className="text-xs text-[var(--color-gaming-text-muted)] line-clamp-2 h-8">{item.description}</div>
 
                                                 {/* Price */}
                                                 <div className="mt-4 flex items-center gap-2 mb-4">
                                                     <Image src="/assets/store/icon_fenice_coin.png" alt="coin" width={16} height={16} />
-                                                    <div className="text-sm font-bold text-gold-700">{item.cost} Coin</div>
+                                                    <div className="text-sm font-bold text-[var(--color-gaming-gold)]">{item.cost} Coin</div>
                                                 </div>
 
                                                 {/* Action */}
                                                 <div>
                                                     {isOwned ? (
-                                                        <div className="w-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
+                                                        <div className="w-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
                                                             <CheckCircle2 className="h-4 w-4" /> Acquistato
                                                         </div>
                                                     ) : (
@@ -298,8 +298,8 @@ export function ShopClient({ userId }: { userId: string }) {
                                                             onClick={() => handleBuy(item)}
                                                             disabled={!canAfford || processingId === item.id}
                                                             className={`w-full font-semibold py-2.5 text-sm rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ${canAfford
-                                                                ? 'bg-gradient-to-r from-brand-charcoal to-ash-800 hover:from-ash-800 hover:to-brand-charcoal text-white shadow-soft hover:shadow-card'
-                                                                : 'bg-ash-100 text-ash-400 cursor-not-allowed border border-ash-200'}`}
+                                                                ? 'bg-gradient-to-r from-fire-500 to-brand-orange hover:from-brand-orange hover:to-fire-500 text-white shadow-gaming-glow-fire hover:shadow-gaming-glow-amber'
+                                                                : 'bg-[var(--color-gaming-bg-surface)] text-[var(--color-gaming-text-muted)] cursor-not-allowed border border-[var(--color-gaming-border)]'}`}
                                                         >
                                                             {!canAfford && <Lock className="h-3.5 w-3.5" />}
                                                             {processingId === item.id ? (
@@ -322,12 +322,12 @@ export function ShopClient({ userId }: { userId: string }) {
                 {activeTab === 'inventory' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         {inventory.length === 0 ? (
-                            <div className="col-span-full py-16 flex flex-col items-center justify-center text-ash-400 bg-white rounded-2xl border-2 border-dashed border-ash-200 animate-fade-in">
-                                <div className="w-16 h-16 rounded-2xl bg-ash-100 flex items-center justify-center mb-4">
-                                    <Box className="h-8 w-8 text-ash-300" />
+                            <div className="col-span-full py-16 flex flex-col items-center justify-center text-[var(--color-gaming-text-muted)] bg-[var(--color-gaming-bg-card)] rounded-2xl border-2 border-dashed border-[var(--color-gaming-border)] animate-fade-in">
+                                <div className="w-16 h-16 rounded-2xl bg-[var(--color-gaming-bg-surface)] flex items-center justify-center mb-4 border border-[var(--color-gaming-border)]">
+                                    <Box className="h-8 w-8 text-[var(--color-gaming-text-muted)]" />
                                 </div>
-                                <div className="text-sm font-semibold text-ash-500">Il tuo inventario è vuoto.</div>
-                                <div className="text-xs mt-1.5 text-ash-400">Completa i Focus Sprint per guadagnare Coin e sbloccare ricompense!</div>
+                                <div className="text-sm font-semibold text-[var(--color-gaming-text)]">Il tuo inventario è vuoto.</div>
+                                <div className="text-xs mt-1.5 text-[var(--color-gaming-text-muted)]">Completa i Focus Sprint per guadagnare Coin e sbloccare ricompense!</div>
                             </div>
                         ) : (
                             inventory.map((item, idx) => {
@@ -336,10 +336,10 @@ export function ShopClient({ userId }: { userId: string }) {
                                 return (
                                     <div
                                         key={item.id}
-                                        className={`bg-white border-2 ${rarity.border} rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-elevated hover:-translate-y-1 group animate-fade-in`}
+                                        className={`bg-[var(--color-gaming-bg-card)] border-2 ${rarity.border} rounded-2xl overflow-hidden transition-all duration-300 hover:${rarity.glow} hover:-translate-y-1 group animate-fade-in`}
                                         style={{ animationDelay: `${idx * 60}ms`, animationFillMode: 'backwards' }}
                                     >
-                                        <div className={`h-36 bg-gradient-to-br ${rarity.bg} border-b border-ash-100 flex items-center justify-center p-6 relative overflow-hidden`}>
+                                        <div className={`h-36 bg-gradient-to-br ${rarity.bg} border-b border-[var(--color-gaming-border)] flex items-center justify-center p-6 relative overflow-hidden`}>
                                             <div className="absolute top-3 left-3">
                                                 <div className={`${rarity.badge} text-[10px] font-bold px-2.5 py-1 rounded-full shadow-soft uppercase tracking-wider`}>
                                                     {rarity.label}
@@ -352,19 +352,19 @@ export function ShopClient({ userId }: { userId: string }) {
                                             )}
                                         </div>
                                         <div className="p-5">
-                                            <h3 className="font-bold text-ash-800 text-base mb-4">{item.name}</h3>
+                                            <h3 className="font-bold text-[var(--color-gaming-text)] text-base mb-4">{item.name}</h3>
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => handleEquip(item)}
                                                     disabled={processingId === item.id}
-                                                    className="flex-1 bg-gradient-to-r from-brand-orange to-brand-orange-500 hover:from-brand-orange-500 hover:to-brand-orange text-brand-charcoal font-semibold py-2.5 text-sm rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-soft hover:shadow-glow-orange"
+                                                    className="flex-1 bg-gradient-to-r from-fire-500 to-brand-orange hover:from-brand-orange hover:to-fire-500 text-white font-semibold py-2.5 text-sm rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-gaming-glow-fire hover:shadow-gaming-glow-amber"
                                                 >
                                                     <Star className="h-3.5 w-3.5" /> Equipaggia
                                                 </button>
                                                 <button
                                                     onClick={() => handleUnequip(item)}
                                                     disabled={processingId === item.id}
-                                                    className="px-4 bg-ash-100 hover:bg-ash-200 text-ash-600 font-semibold py-2.5 text-sm rounded-xl transition-all duration-200 flex items-center justify-center border border-ash-200"
+                                                    className="px-4 bg-[var(--color-gaming-bg-surface)] hover:bg-[var(--color-gaming-bg-card-hover)] text-[var(--color-gaming-text-muted)] font-semibold py-2.5 text-sm rounded-xl transition-all duration-200 flex items-center justify-center border border-[var(--color-gaming-border)]"
                                                     title="Rimuovi"
                                                 >
                                                     Togli

@@ -144,12 +144,12 @@ export function Sidebar() {
             )}
 
             <aside
-                className={`flex flex-col h-screen bg-gradient-to-b from-ash-800 via-brand-charcoal to-ash-900 text-white custom-scrollbar fixed inset-y-0 left-0 z-40 w-72 transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:relative lg:z-auto lg:w-64 lg:translate-x-0 lg:border-r lg:border-white/5`}
+                className={`flex flex-col h-screen bg-gradient-gaming-sidebar text-white custom-scrollbar fixed inset-y-0 left-0 z-40 w-72 transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:relative lg:z-auto lg:w-64 lg:translate-x-0 lg:border-r lg:border-[var(--color-gaming-border)]`}
             >
                 {/* Logo */}
                 <div className="p-5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-orange to-brand-orange-600 flex items-center justify-center font-bold text-brand-charcoal shadow-glow-orange text-sm">
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-orange to-fire-500 flex items-center justify-center font-bold text-brand-charcoal shadow-gaming-glow-fire text-sm">
                             F
                         </div>
                         <span className="font-semibold text-base text-white tracking-wide">Fenice CRM</span>
@@ -163,7 +163,7 @@ export function Sidebar() {
                 </div>
 
                 {/* Gradient divider */}
-                <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                <div className="mx-4 h-px bg-gradient-to-r from-transparent via-[var(--color-gaming-border-hover)] to-transparent" />
 
                 {/* Navigation */}
                 <nav className="flex-1 px-3 mt-4 space-y-1 overflow-y-auto pb-4 custom-scrollbar">
@@ -171,10 +171,10 @@ export function Sidebar() {
                         navGroups.map((group, groupIdx) => (
                             <div key={group.label}>
                                 {groupIdx > 0 && (
-                                    <div className="mx-1 my-2 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                                    <div className="mx-1 my-2 h-px bg-gradient-to-r from-transparent via-[var(--color-gaming-border-hover)] to-transparent" />
                                 )}
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-ash-500">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-gaming-text-muted)]">
                                         {group.label}
                                     </span>
                                 </div>
@@ -185,12 +185,12 @@ export function Sidebar() {
                                             key={item.href}
                                             href={item.href}
                                             className={`group flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 ${isActive
-                                                ? "bg-brand-orange/15 text-white font-medium shadow-[inset_3px_0_0_var(--color-brand-orange)]"
-                                                : "text-ash-400 hover:text-white hover:bg-white/5"
+                                                ? "bg-brand-orange/10 text-white font-medium shadow-[inset_3px_0_0_var(--color-fire-400)] border border-[var(--color-gaming-border)]"
+                                                : "text-ash-400 hover:text-white hover:bg-[var(--color-gaming-bg-card)]"
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-brand-orange" : "text-ash-500 group-hover:text-brand-orange-300"}`} />
+                                                <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-fire-400" : "text-[var(--color-gaming-text-muted)] group-hover:text-brand-orange-300"}`} />
                                                 <span className="text-sm">{item.name}</span>
                                             </div>
                                             {item.badge !== undefined && item.badge > 0 && (
@@ -211,12 +211,12 @@ export function Sidebar() {
                                     key={item.href}
                                     href={item.href}
                                     className={`group flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
-                                        ? "bg-brand-orange/15 text-white font-medium shadow-[inset_3px_0_0_var(--color-brand-orange)]"
-                                        : "text-ash-400 hover:text-white hover:bg-white/5"
+                                        ? "bg-brand-orange/10 text-white font-medium shadow-[inset_3px_0_0_var(--color-fire-400)] border border-[var(--color-gaming-border)]"
+                                        : "text-ash-400 hover:text-white hover:bg-[var(--color-gaming-bg-card)]"
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-brand-orange" : "text-ash-500 group-hover:text-brand-orange-300"}`} />
+                                        <item.icon className={`h-[18px] w-[18px] transition-colors duration-200 ${isActive ? "text-fire-400" : "text-[var(--color-gaming-text-muted)] group-hover:text-brand-orange-300"}`} />
                                         <span className="text-sm">{item.name}</span>
                                     </div>
                                     {item.badge !== undefined && item.badge > 0 && (
@@ -231,13 +231,13 @@ export function Sidebar() {
                 </nav>
 
                 {/* Bottom divider */}
-                <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                <div className="mx-4 h-px bg-gradient-to-r from-transparent via-[var(--color-gaming-border-hover)] to-transparent" />
 
                 {/* Sign out */}
                 <div className="p-3">
                     <button
                         onClick={handleSignOut}
-                        className="flex items-center gap-3 px-3 py-2.5 w-full text-left rounded-lg text-ash-400 hover:text-ember-300 hover:bg-white/5 transition-all duration-200"
+                        className="flex items-center gap-3 px-3 py-2.5 w-full text-left rounded-lg text-[var(--color-gaming-text-muted)] hover:text-ember-300 hover:bg-[var(--color-gaming-bg-card)] transition-all duration-200"
                     >
                         <LogOut className="h-[18px] w-[18px]" />
                         <span className="text-sm">Disconnetti</span>

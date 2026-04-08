@@ -256,7 +256,7 @@ export function LeaderboardClient({
         if (!change) return null
         if (change > 0) {
             return (
-                <div className="flex items-center gap-0.5 text-emerald-500 text-xs font-black animate-slide-up bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+                <div className="flex items-center gap-0.5 text-emerald-400 text-xs font-black animate-slide-up bg-emerald-500/15 px-1.5 py-0.5 rounded-full border border-emerald-500/25">
                     <ArrowUp className="h-3.5 w-3.5" />
                     <span>+{change}</span>
                 </div>
@@ -283,11 +283,11 @@ export function LeaderboardClient({
                             key={emoji}
                             onClick={(e) => { e.stopPropagation(); handleReaction(userId, emoji) }}
                             title={label}
-                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-all duration-150 hover:bg-ash-100 hover:scale-110 active:scale-95 ${count > 0 ? 'bg-ash-50 border border-ash-200' : 'border border-transparent'}`}
+                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-all duration-150 hover:bg-[var(--color-gaming-bg-surface)] hover:scale-110 active:scale-95 ${count > 0 ? 'bg-[var(--color-gaming-bg-card)] border border-[var(--color-gaming-border)]' : 'border border-transparent'}`}
                             style={isPopping && animationsEnabled ? { animation: 'lb-reaction-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' } : undefined}
                         >
                             <span className="text-sm leading-none">{emoji}</span>
-                            {count > 0 && <span className="text-[10px] font-bold text-ash-500">{count}</span>}
+                            {count > 0 && <span className="text-[10px] font-bold text-[var(--color-gaming-text-muted)]">{count}</span>}
                         </button>
                     )
                 })}
@@ -299,11 +299,11 @@ export function LeaderboardClient({
         <div className="space-y-6">
             {/* Player of the Week Banner */}
             {playerOfWeek && currentPeriod === 'week' && playerOfWeek.appointmentCount > 0 && (
-                <div className="relative overflow-hidden rounded-2xl border border-gold-200/60 bg-gradient-to-r from-gold-50 via-brand-orange-50/50 to-gold-50 p-5 shadow-glow-gold animate-fade-in">
-                    <div className="absolute top-0 right-0 w-40 h-40 bg-gold-200/30 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
+                <div className="relative overflow-hidden rounded-2xl border border-[var(--color-gaming-gold)]/25 bg-gradient-to-r from-[var(--color-gaming-bg-card)] via-[var(--color-gaming-bg-surface)] to-[var(--color-gaming-bg-card)] p-5 shadow-gaming-glow-gold animate-fade-in">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-[var(--color-gaming-gold)]/8 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
                     <div className="flex items-center gap-4">
                         <div className="relative">
-                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-gold-200 to-gold-400 flex items-center justify-center font-bold text-xl text-white border-2 border-gold-300 shadow-glow-gold">
+                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-gold-300 to-gold-500 flex items-center justify-center font-bold text-xl text-white border-2 border-gold-400 shadow-gaming-glow-gold">
                                 {playerOfWeek.displayName?.charAt(0) || 'U'}
                             </div>
                             <div className="absolute -top-2 -right-1">
@@ -312,30 +312,30 @@ export function LeaderboardClient({
                         </div>
                         <div className="flex-1">
                             <div className="flex items-center gap-2">
-                                <Sparkles className="h-4 w-4 text-gold-500" />
-                                <span className="text-xs font-bold uppercase tracking-widest text-gold-600">Player of the Week</span>
+                                <Sparkles className="h-4 w-4 text-[var(--color-gaming-gold)]" />
+                                <span className="text-xs font-bold uppercase tracking-widest text-[var(--color-gaming-gold)]">Player of the Week</span>
                             </div>
-                            <div className="text-lg font-bold text-ash-800 mt-0.5">
+                            <div className="text-lg font-bold text-[var(--color-gaming-text)] mt-0.5">
                                 {playerOfWeek.displayName}
                                 {playerOfWeek.activeTitle && (
-                                    <span className="ml-2 text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200 align-middle">
+                                    <span className="ml-2 text-[10px] font-bold text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-full border border-purple-500/25 align-middle">
                                         {playerOfWeek.activeTitle}
                                     </span>
                                 )}
                             </div>
-                            <div className="text-sm text-ash-500">
+                            <div className="text-sm text-[var(--color-gaming-text-muted)]">
                                 {playerOfWeek.appointmentCount} appuntamenti questa settimana
                             </div>
                         </div>
                         <div className="hidden sm:flex items-center">
-                            <Crown className="h-10 w-10 text-gold-400 drop-shadow-md" />
+                            <Crown className="h-10 w-10 text-[var(--color-gaming-gold)] drop-shadow-md" />
                         </div>
                     </div>
                 </div>
             )}
 
             {/* Role Tabs */}
-            <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-xl border border-ash-200/60 shadow-soft flex flex-wrap gap-1.5">
+            <div className="bg-[var(--color-gaming-bg-card)]/90 backdrop-blur-sm p-1.5 rounded-xl border border-[var(--color-gaming-border)] shadow-gaming-card flex flex-wrap gap-1.5">
                 {ROLE_TABS.map(tab => {
                     const Icon = tab.icon
                     return (
@@ -344,8 +344,8 @@ export function LeaderboardClient({
                             onClick={() => handleRoleChange(tab.id)}
                             disabled={isPending}
                             className={`flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${currentRole === tab.id
-                                ? 'bg-gradient-to-r from-ember-500 to-brand-orange text-white shadow-card'
-                                : 'text-ash-500 hover:bg-ash-50 hover:text-ash-800'
+                                ? 'bg-gradient-to-r from-fire-500 to-brand-orange text-white shadow-gaming-glow-fire'
+                                : 'text-[var(--color-gaming-text-muted)] hover:bg-[var(--color-gaming-bg-surface)] hover:text-white'
                                 }`}
                         >
                             <Icon className="h-3.5 w-3.5" />
@@ -357,7 +357,7 @@ export function LeaderboardClient({
 
             {/* Metric Tabs (GDO only) */}
             {currentRole === 'GDO' && (
-            <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-xl border border-ash-200/60 shadow-soft flex flex-wrap gap-1.5">
+            <div className="bg-[var(--color-gaming-bg-card)]/90 backdrop-blur-sm p-1.5 rounded-xl border border-[var(--color-gaming-border)] shadow-gaming-card flex flex-wrap gap-1.5">
                 {METRIC_TABS.map(tab => {
                     const Icon = tab.icon
                     return (
@@ -366,8 +366,8 @@ export function LeaderboardClient({
                             onClick={() => handleMetricChange(tab.id)}
                             disabled={isPending}
                             className={`flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${currentMetric === tab.id
-                                ? 'bg-gradient-to-r from-brand-charcoal to-ash-800 text-white shadow-card'
-                                : 'text-ash-500 hover:bg-ash-50 hover:text-ash-800'
+                                ? 'bg-gradient-to-r from-[var(--color-gaming-bg-surface)] to-[var(--color-gaming-bg-card-hover)] text-white shadow-gaming-card border border-[var(--color-gaming-border-hover)]'
+                                : 'text-[var(--color-gaming-text-muted)] hover:bg-[var(--color-gaming-bg-surface)] hover:text-white'
                                 }`}
                         >
                             <Icon className="h-3.5 w-3.5" />
@@ -379,15 +379,15 @@ export function LeaderboardClient({
             )}
 
             {/* Period Filters */}
-            <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-xl border border-ash-200/60 shadow-soft flex gap-1.5 max-w-fit">
+            <div className="bg-[var(--color-gaming-bg-card)]/90 backdrop-blur-sm p-1.5 rounded-xl border border-[var(--color-gaming-border)] shadow-gaming-card flex gap-1.5 max-w-fit">
                 {periods.map(p => (
                     <button
                         key={p.id}
                         onClick={() => handlePeriodChange(p.id as LeaderboardPeriod)}
                         disabled={isPending}
                         className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${currentPeriod === p.id
-                            ? 'bg-gradient-to-r from-brand-charcoal to-ash-800 text-white shadow-card'
-                            : 'text-ash-500 hover:bg-ash-50 hover:text-ash-800'
+                            ? 'bg-gradient-to-r from-[var(--color-gaming-bg-surface)] to-[var(--color-gaming-bg-card-hover)] text-white shadow-gaming-card border border-[var(--color-gaming-border-hover)]'
+                            : 'text-[var(--color-gaming-text-muted)] hover:bg-[var(--color-gaming-bg-surface)] hover:text-white'
                             }`}
                     >
                         {p.label}
@@ -398,21 +398,21 @@ export function LeaderboardClient({
             {/* Gamification Banner for Logged User */}
             {loggedUserItem && (
                 <div className={`p-4 rounded-2xl border animate-fade-in ${loggedUserIndex === 0
-                    ? 'bg-gradient-to-r from-gold-50 via-brand-orange-50 to-gold-50 border-gold-200/60 shadow-glow-gold'
-                    : 'bg-gradient-to-r from-brand-orange-50 to-ash-50 border-brand-orange-200/40 shadow-soft'
+                    ? 'bg-gradient-to-r from-[var(--color-gaming-gold)]/10 via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-gold)]/10 border-[var(--color-gaming-gold)]/25 shadow-gaming-glow-gold'
+                    : 'bg-gradient-to-r from-fire-500/8 to-[var(--color-gaming-bg-card)] border-fire-400/20 shadow-gaming-card'
                     } flex items-center justify-between`}>
                     <div className="flex items-center gap-4">
                         <div className={`p-3 rounded-xl ${loggedUserIndex === 0
-                            ? 'bg-gradient-to-br from-gold-100 to-gold-200 text-gold-600 shadow-glow-gold'
-                            : 'bg-brand-orange-100 text-brand-orange-600'
+                            ? 'bg-gradient-to-br from-[var(--color-gaming-gold)]/15 to-[var(--color-gaming-gold)]/25 text-[var(--color-gaming-gold)] shadow-gaming-glow-gold'
+                            : 'bg-fire-500/15 text-fire-400'
                             }`}>
                             {loggedUserIndex === 0 ? <Crown className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
                         </div>
                         <div>
-                            <div className="font-bold text-ash-800">
+                            <div className="font-bold text-[var(--color-gaming-text)]">
                                 {loggedUserIndex === 0 ? 'Leader attuale!' : 'Continua così!'}
                             </div>
-                            <div className="text-sm text-ash-600 mt-0.5">
+                            <div className="text-sm text-[var(--color-gaming-text-muted)] mt-0.5">
                                 {gapMessage || `Aggiungi ${getUnit().toLowerCase()} per scalare la classifica.`}
                             </div>
                         </div>
@@ -420,7 +420,7 @@ export function LeaderboardClient({
 
                     {loggedUserItem && loggedUserIndex > 0 && (
                         <div className="hidden md:flex flex-col items-end gap-2">
-                            <div className="text-xs font-bold text-ash-500 bg-ash-100 px-3 py-1.5 rounded-full border border-ash-200">
+                            <div className="text-xs font-bold text-[var(--color-gaming-text-muted)] bg-[var(--color-gaming-bg-surface)] px-3 py-1.5 rounded-full border border-[var(--color-gaming-border)]">
                                 Target: {getScore(currentData[loggedUserIndex - 1])} {getUnit().toLowerCase()}
                             </div>
                         </div>
@@ -451,13 +451,13 @@ export function LeaderboardClient({
                                     </div>
                                     {getRankChangeIndicator(user.userId)}
                                 </div>
-                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-ash-700'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
                                 {user.activeTitle && (
-                                    <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
+                                    <div className="text-[9px] font-bold text-purple-300 bg-purple-500/15 px-1.5 py-0.5 rounded-full border border-purple-500/25 mt-0.5">{user.activeTitle}</div>
                                 )}
-                                <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
-                                <div className="text-lg font-black text-ash-700 mt-1">{score}</div>
-                                <div className="text-[9px] uppercase font-bold tracking-wider text-ash-400">{getUnit()}</div>
+                                <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">{getRoleLabel(user)}</div>
+                                <div className="text-lg font-black text-[var(--color-gaming-text)] mt-1">{score}</div>
+                                <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)]">{getUnit()}</div>
                                 <ReactionButtons userId={user.userId} />
                                 {/* Pedestal — Silver */}
                                 <div className="w-24 h-20 mt-2 bg-gradient-to-t from-ash-300 via-ash-200 to-ash-100 rounded-t-xl border border-ash-300 flex items-center justify-center shadow-card"
@@ -489,11 +489,11 @@ export function LeaderboardClient({
                                     </div>
                                     {getRankChangeIndicator(user.userId)}
                                 </div>
-                                <div className={`text-base font-bold ${isMe ? 'text-brand-orange' : 'text-ash-800'} text-center max-w-[120px] truncate`}>{user.displayName}</div>
+                                <div className={`text-base font-bold ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[120px] truncate`}>{user.displayName}</div>
                                 {user.activeTitle && (
-                                    <div className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
+                                    <div className="text-[10px] font-bold text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-full border border-purple-500/25 mt-0.5">{user.activeTitle}</div>
                                 )}
-                                <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
+                                <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">{getRoleLabel(user)}</div>
                                 <div className="text-2xl font-black text-gold-600 mt-1">{score}</div>
                                 <div className="text-[10px] uppercase font-bold tracking-wider text-gold-500">{getUnit()}</div>
                                 {isMe && <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-brand-orange-200">TU</div>}
@@ -528,13 +528,13 @@ export function LeaderboardClient({
                                     </div>
                                     {getRankChangeIndicator(user.userId)}
                                 </div>
-                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-ash-700'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
+                                <div className={`text-sm font-bold ${isMe ? 'text-brand-orange' : 'text-[var(--color-gaming-text)]'} text-center max-w-[100px] truncate`}>{user.displayName}</div>
                                 {user.activeTitle && (
-                                    <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200 mt-0.5">{user.activeTitle}</div>
+                                    <div className="text-[9px] font-bold text-purple-300 bg-purple-500/15 px-1.5 py-0.5 rounded-full border border-purple-500/25 mt-0.5">{user.activeTitle}</div>
                                 )}
-                                <div className="text-xs text-ash-500 mt-0.5">{getRoleLabel(user)}</div>
-                                <div className="text-lg font-black text-ash-700 mt-1">{score}</div>
-                                <div className="text-[9px] uppercase font-bold tracking-wider text-ash-400">{getUnit()}</div>
+                                <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">{getRoleLabel(user)}</div>
+                                <div className="text-lg font-black text-[var(--color-gaming-text)] mt-1">{score}</div>
+                                <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)]">{getUnit()}</div>
                                 <ReactionButtons userId={user.userId} />
                                 {/* Pedestal — Bronze */}
                                 <div className="w-20 h-16 mt-2 bg-gradient-to-t from-brand-orange-200 via-brand-orange-100 to-brand-orange-50 rounded-t-xl border border-brand-orange-200 flex items-center justify-center shadow-card"
@@ -549,16 +549,16 @@ export function LeaderboardClient({
             )}
 
             {/* The Rest of the List (rank 4+) */}
-            <div className={`bg-white rounded-2xl shadow-card border border-ash-200/60 overflow-hidden transition-opacity duration-300 ${isPending ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+            <div className={`bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card border border-[var(--color-gaming-border)] overflow-hidden transition-opacity duration-300 ${isPending ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                 {currentData.length === 0 ? (
-                    <div className="p-16 text-center text-ash-400 animate-fade-in">
-                        <div className="w-16 h-16 rounded-2xl bg-ash-100 flex items-center justify-center mx-auto mb-4">
-                            <Trophy className="h-8 w-8 text-ash-300" />
+                    <div className="p-16 text-center text-[var(--color-gaming-text-muted)] animate-fade-in">
+                        <div className="w-16 h-16 rounded-2xl bg-[var(--color-gaming-bg-surface)] flex items-center justify-center mx-auto mb-4 border border-[var(--color-gaming-border)]">
+                            <Trophy className="h-8 w-8 text-[var(--color-gaming-text-muted)]" />
                         </div>
                         <div>Nessun dato per questo periodo e metrica.</div>
                     </div>
                 ) : (
-                    <ul className="divide-y divide-ash-100">
+                    <ul className="divide-y divide-[var(--color-gaming-border)]">
                         {rest.map((user, index) => {
                             const isMe = user.userId === loggedUserId
                             const score = getScore(user)
@@ -576,7 +576,7 @@ export function LeaderboardClient({
                             return (
                                 <li
                                     key={user.userId}
-                                    className={`relative transition-all duration-300 hover:bg-brand-orange-50/20 animate-fade-in ${isMe ? 'bg-brand-orange-50/30' : ''} ${rankChange ? 'animate-slide-up' : ''}`}
+                                    className={`relative transition-all duration-300 hover:bg-[var(--color-gaming-bg-surface)] animate-fade-in ${isMe ? 'bg-fire-500/5' : ''} ${rankChange ? 'animate-slide-up' : ''}`}
                                     style={{ animationDelay: `${(index + 3) * 50}ms`, animationFillMode: 'backwards', ...rowHighlightStyle }}
                                 >
                                     {isMe && (
@@ -587,13 +587,13 @@ export function LeaderboardClient({
                                         <div className="flex items-center gap-4">
                                             {/* Rank + change indicator */}
                                             <div className="w-10 flex flex-col items-center">
-                                                <div className="text-sm font-bold text-ash-400">#{user.rank}</div>
+                                                <div className="text-sm font-bold text-[var(--color-gaming-text-muted)]">#{user.rank}</div>
                                                 {getRankChangeIndicator(user.userId)}
                                             </div>
 
                                             {/* Avatar */}
                                             <div className="relative">
-                                                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm shadow-soft ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-brand-orange text-white' : 'bg-ash-100 text-ash-600 border border-ash-200'
+                                                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm shadow-gaming-card ${user.equippedSkinCss ? user.equippedSkinCss : isMe ? 'bg-fire-500 text-white' : 'bg-[var(--color-gaming-bg-surface)] text-[var(--color-gaming-text)] border border-[var(--color-gaming-border)]'
                                                     }`}>
                                                     {user.displayName?.charAt(0) || 'U'}
                                                 </div>
@@ -602,19 +602,19 @@ export function LeaderboardClient({
                                             {/* INFO */}
                                             <div>
                                                 <div className="flex items-center gap-2">
-                                                    <div className={`font-semibold ${isMe ? 'text-brand-orange-700' : 'text-ash-800'}`}>
+                                                    <div className={`font-semibold ${isMe ? 'text-fire-400' : 'text-[var(--color-gaming-text)]'}`}>
                                                         {user.displayName}
                                                     </div>
                                                     {isMe && (
-                                                        <div className="bg-brand-orange-100 text-brand-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-brand-orange-200">
+                                                        <div className="bg-fire-500/15 text-fire-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-fire-500/25">
                                                             TU
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="text-ash-500 text-xs flex items-center gap-1.5 mt-0.5">
+                                                <div className="text-[var(--color-gaming-text-muted)] text-xs flex items-center gap-1.5 mt-0.5">
                                                     <User className="h-3 w-3" /> {getRoleLabel(user)}
                                                     {user.activeTitle && (
-                                                        <div className="text-[9px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full border border-purple-200">{user.activeTitle}</div>
+                                                        <div className="text-[9px] font-bold text-purple-300 bg-purple-500/15 px-1.5 py-0.5 rounded-full border border-purple-500/25">{user.activeTitle}</div>
                                                     )}
                                                 </div>
                                             </div>
@@ -624,10 +624,10 @@ export function LeaderboardClient({
                                         <div className="flex items-center gap-3">
                                             <ReactionButtons userId={user.userId} />
                                             <div className="text-right">
-                                                <div className="text-2xl font-black tracking-tighter text-ash-800">
+                                                <div className="text-2xl font-black tracking-tighter text-[var(--color-gaming-text)]">
                                                     {score}
                                                 </div>
-                                                <div className="text-[10px] uppercase font-bold tracking-wider text-ash-400 mt-0.5">
+                                                <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)] mt-0.5">
                                                     {getUnit()}
                                                 </div>
                                             </div>
@@ -635,9 +635,9 @@ export function LeaderboardClient({
                                     </div>
 
                                     {/* Progress bar relative to top score */}
-                                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-ash-50">
+                                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--color-gaming-bg-deep)]">
                                         <div
-                                            className={`h-full ${isMe ? 'bg-gradient-to-r from-brand-orange to-ember-400' : 'bg-ash-200'}`}
+                                            className={`h-full ${isMe ? 'bg-gradient-to-r from-fire-500 to-brand-orange' : 'bg-[var(--color-gaming-border)]'}`}
                                             style={{
                                                 width: `${topScore > 0 ? Math.max(5, (score / topScore) * 100) : 0}%`,
                                                 transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)'

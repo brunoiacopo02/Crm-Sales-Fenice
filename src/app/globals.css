@@ -61,6 +61,29 @@
   --color-ash-800: #332F2B;
   --color-ash-900: #272626;
 
+  /* === GAMING PREMIUM PALETTE === */
+  /* Deep dark backgrounds with warm undertone */
+  --color-gaming-bg-deep: #0D0B0E;
+  --color-gaming-bg: #141118;
+  --color-gaming-bg-card: #1A1620;
+  --color-gaming-bg-card-hover: #211C2A;
+  --color-gaming-bg-surface: #241F2E;
+  --color-gaming-border: rgba(255, 190, 130, 0.12);
+  --color-gaming-border-hover: rgba(255, 190, 130, 0.25);
+  --color-gaming-text: #F0EBE3;
+  --color-gaming-text-muted: #9B8E80;
+
+  /* Fire accent scale (warm primaries) */
+  --color-fire-400: #FF8C42;
+  --color-fire-500: #FF6B1A;
+  --color-fire-600: #E85D0A;
+  --color-fire-glow: rgba(255, 107, 26, 0.4);
+
+  /* Amber/Gold gaming accents */
+  --color-gaming-gold: #FFD700;
+  --color-gaming-gold-dim: #B8960C;
+  --color-gaming-amber: #FFAB00;
+
   /* === SHADOWS === */
   --shadow-soft: 0 1px 3px 0 rgba(39, 38, 38, 0.06), 0 1px 2px -1px rgba(39, 38, 38, 0.06);
   --shadow-card: 0 2px 8px -2px rgba(39, 38, 38, 0.08), 0 1px 3px -1px rgba(39, 38, 38, 0.06);
@@ -68,6 +91,14 @@
   --shadow-glow-orange: 0 0 16px -2px rgba(255, 190, 130, 0.4);
   --shadow-glow-ember: 0 0 16px -2px rgba(232, 82, 63, 0.3);
   --shadow-glow-gold: 0 0 16px -2px rgba(201, 161, 60, 0.3);
+
+  /* === GAMING SHADOWS === */
+  --shadow-gaming-card: 0 4px 20px -4px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 190, 130, 0.08);
+  --shadow-gaming-elevated: 0 8px 32px -4px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 190, 130, 0.1);
+  --shadow-gaming-glow-fire: 0 0 20px -4px rgba(255, 107, 26, 0.35), 0 0 8px -2px rgba(255, 107, 26, 0.2);
+  --shadow-gaming-glow-gold: 0 0 20px -4px rgba(255, 215, 0, 0.3), 0 0 8px -2px rgba(255, 215, 0, 0.15);
+  --shadow-gaming-glow-amber: 0 0 20px -4px rgba(255, 171, 0, 0.3), 0 0 8px -2px rgba(255, 171, 0, 0.15);
+  --shadow-gaming-inner: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 
   /* === BORDER RADIUS === */
   --radius-sm: 6px;
@@ -857,6 +888,66 @@
   .bg-gradient-charcoal {
     background: linear-gradient(135deg, var(--color-ash-800) 0%, var(--color-brand-charcoal) 100%);
   }
+
+  /* === GAMING PREMIUM UTILITIES === */
+
+  /* Dark gaming card with warm border */
+  .card-gaming {
+    background: var(--color-gaming-bg-card);
+    border: 1px solid var(--color-gaming-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-gaming-card);
+    transition: all 0.25s ease;
+  }
+  .card-gaming:hover {
+    background: var(--color-gaming-bg-card-hover);
+    border-color: var(--color-gaming-border-hover);
+    box-shadow: var(--shadow-gaming-elevated);
+  }
+
+  /* Gaming glass effect (dark glassmorphism) */
+  .glass-gaming {
+    background: rgba(20, 17, 24, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-gaming-border);
+  }
+
+  /* Gaming section wrapper — applies dark premium bg */
+  .gaming-section {
+    background: var(--color-gaming-bg);
+    color: var(--color-gaming-text);
+  }
+
+  /* Gaming gradients */
+  .bg-gradient-gaming-fire {
+    background: linear-gradient(135deg, var(--color-fire-500) 0%, var(--color-brand-orange) 50%, var(--color-gaming-gold) 100%);
+  }
+  .bg-gradient-gaming-dark {
+    background: linear-gradient(180deg, var(--color-gaming-bg-deep) 0%, var(--color-gaming-bg) 100%);
+  }
+  .bg-gradient-gaming-card {
+    background: linear-gradient(145deg, var(--color-gaming-bg-card) 0%, var(--color-gaming-bg-surface) 100%);
+  }
+  .bg-gradient-gaming-sidebar {
+    background: linear-gradient(180deg, #0D0B0E 0%, #141118 40%, #1A1222 100%);
+  }
+
+  /* Gaming text glow */
+  .text-gaming-gold {
+    color: var(--color-gaming-gold);
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+  }
+  .text-gaming-fire {
+    color: var(--color-fire-400);
+    text-shadow: 0 0 8px rgba(255, 107, 26, 0.3);
+  }
+
+  /* Gaming divider with warm accent */
+  .divider-gaming {
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, var(--color-gaming-border-hover) 50%, transparent 100%);
+  }
 }
 
 /* =========================================
@@ -1089,6 +1180,18 @@ body .skin-theme-nebula {
   0% { transform: scale(1); }
   50% { transform: scale(1.3); }
   100% { transform: scale(1); }
+}
+
+/* === GAMING PREMIUM ANIMATIONS === */
+
+@keyframes gaming-border-glow {
+  0%, 100% { border-color: rgba(255, 190, 130, 0.12); }
+  50% { border-color: rgba(255, 190, 130, 0.25); }
+}
+
+@keyframes gaming-fire-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 /* === RPG PROFILE IMMERSIVE (SA-011) === */
