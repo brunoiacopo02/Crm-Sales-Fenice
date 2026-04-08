@@ -19,6 +19,8 @@ Started: 2026-04-08
 - emitRewardEarned() in src/lib/animationUtils.ts — dispatch reward_earned CustomEvent
 - awardXpAndCoins returns RewardData | null — server actions pass rewardData in response
 - Server actions return { success: true, rewardData } — client code calls emitRewardEarned after success
+- Daily idempotency: check coinTransactions with reason + gte(createdAt, todayStart) — no schema change needed
+- DailyLoginReward pattern: localStorage quick rejection + server-side idempotent claim
 - ActivityFeed pattern: aggregate multiple tables independently in server action, merge+sort in JS, return top N
 - Feed refresh: setInterval(30s) + window.addEventListener('reward_earned') for immediate updates
 
@@ -79,4 +81,29 @@ Started: 2026-04-08
   - Auto-refresh + event-driven refresh pattern: setInterval(30s) + window.addEventListener('reward_earned')
   - Color system: orange (appointments), ember (quests), gold (achievements/legendary), ash (generic events)
   - Scrollable feed with max-h-[400px] keeps dashboard compact
+---
+
+## 2026-04-08 - SA-003
+- Implemented daily login reward welcome screen with streak-based bonus coins
+- Created server action checkDailyLoginStatus + claimDailyLogin (idempotent via coinTransactions check)
+- Created DailyLoginReward modal component with 3 phases: welcome, claiming, claimed
+- Bonus tiers: +5 base, +10 if streak >= 3, +20 if streak >= 7
+- Coin cascade animation with emoji coins falling from top (20 particles, staggered)
+- Animated flame icon with pulse/flicker based on streak tier (base/fiamma/inferno)
+- localStorage check + server timestamp for once-per-day display
+- Modal shows streak info, motivational messages, bonus tier breakdown
+- CSS keyframes: coin-cascade, daily-flame-pulse, daily-flame-flicker, daily-coin-bounce, daily-count-up
+- Dynamically imported in dashboard page (no ssr: false needed — client component handles it)
+- File modificati:
+  - src/app/actions/dailyLoginActions.ts (NEW - checkDailyLoginStatus + claimDailyLogin)
+  - src/components/DailyLoginReward.tsx (NEW - modal component with 3 phases)
+  - src/app/(dashboard)/page.tsx (added DailyLoginReward dynamic import + render)
+  - src/app/globals.css (coin cascade + daily login animation keyframes + CSS vars)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - No schema migration needed: use coinTransactions reason='Daily login bonus' + gte(createdAt, todayStart) for idempotency
+  - ssr: false in dynamic() not allowed in Server Components (Next.js 16) — client components handle their own SSR guards
+  - Coin cascade: emoji-based particles are lightweight and visually effective
+  - Streak tier calculation reused from streakUtils but inline to avoid circular deps
+  - Pattern: localStorage for quick UI rejection, server for idempotent coin granting
 ---

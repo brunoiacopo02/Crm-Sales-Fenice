@@ -53,7 +53,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Ispirazione: daily login di giochi mobile. Il reward cresce con la streak = incentivo a tornare."
     },
     {

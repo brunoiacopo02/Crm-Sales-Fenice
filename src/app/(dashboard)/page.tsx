@@ -13,6 +13,7 @@ const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").t
 const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
 const ActivityFeed = dynamic(() => import("@/components/ActivityFeed").then(m => ({ default: m.ActivityFeed })))
+const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -41,6 +42,7 @@ export default async function DashboardPage() {
         <div className="space-y-6">
             <CelebrationOverlay />
             <LootDropModal userId={session!.user.id} />
+            <DailyLoginReward userId={session!.user.id} />
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                     Pipeline Chiamate
