@@ -305,3 +305,28 @@ Started: 2026-04-07
   - Storico view has 400ms debounce before fetching — wait at least 2s for data to load
   - Conferme account (Andrea) has 0 coins, 0 XP, Liv. 1 — all gamification features functional but no activity yet
 ---
+
+## 2026-04-08 - F3-025
+- E2E verification of complete Venditori flow using Playwright on production build (next start)
+- Login as Venditore (sales001@fenice.com / 1234): SUCCESS — redirected to /venditore
+- Dashboard loads with 3 leads assigned (Target 114 0, Target 113 3, Target 113 Sorpasso 5) all with "Da Esitare" status
+- LISTA view: table with columns Giorno e Ora, Lead, Funnel, GDO Fissatore, Stato Vendita — all functional
+- AGENDA view: functional (empty because test leads have no appointmentDate set)
+- Team Classifica view: podium (Sales 001 at #1) + table with POSIZIONE, VENDITORE, FATTURATO, TARGET, PROGRESSO columns
+- Period selector (Oggi/Settimana/Mese) works correctly on Classifica
+- QuestPanel: 0/3 daily (Registra 3 Esiti, Registra 5 Esiti, Closer Seriale) + 0/2 weekly (Settimana da Closer, Fattura 15.000 EUR)
+- Streak counter: 0 giorni, "Inizia la tua streak", 3g a x1.5 — VERIFIED
+- Profilo RPG: Uovo Liv. 1, 0 XP, €1,350 stipendio, Tracker Settimanale Week 2, 0 Presenze Effettive
+- Fenice Store: 17 items (Skin Avatar 4, Temi 6, Effetti 7), 0 coins balance
+- Classifica page: multi-role tabs (GDO, Conferme, Venditori auto-selected), period tabs (Oggi/Settimana/Mese), leaderboard by € FATTURATO
+- Sidebar: 4 links (Dashboard Vendite, Il mio Profilo / RPG, Classifica, Fenice Store)
+- Console errors: 1 pre-existing (404 /api/user/profile on store) — no new errors from Fase 3B
+- Screenshots saved: e2e-venditori-dashboard-main.png, e2e-venditori-agenda.png, e2e-venditori-classifica-view.png, e2e-venditori-classifica-bottom.png, e2e-venditori-profilo-rpg.png, e2e-venditori-store.png, e2e-venditori-classifica.png
+- No code changes needed — all verification passed
+- npx next build: compiles successfully with zero errors
+- **Learnings per iterazioni future:**
+  - Venditore account (Sales 001) has 0 coins, 0 XP, Liv. 1 — gamification features functional but no activity
+  - Team Classifica in dashboard uses KpiVenditoriClient component — same as /kpi-venditori page
+  - Agenda view groups leads by appointmentDate — empty when test data lacks dates (expected behavior)
+  - Classifica page auto-selects Venditori tab based on user role — correct UX
+---
