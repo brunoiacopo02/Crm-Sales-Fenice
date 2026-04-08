@@ -6,6 +6,7 @@ import { claimTimedChestReward } from '@/app/actions/timedChestActions';
 import { triggerCelebration } from '@/lib/animationUtils';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
 import { useRouter } from 'next/navigation';
+import { ChestOpeningAnimation, type ChestRarity } from '@/components/ChestOpeningAnimation';
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -249,49 +250,45 @@ export function TimedChest({ userId }: { userId: string }) {
         };
     }, [uiPhase, chestState.readyAt]);
 
-    // Open the chest
+    // Open the chest — fetch reward first, then animate with correct rarity
     const handleOpen = useCallback(async () => {
         if (uiPhase !== 'ready' || loading) return;
         setLoading(true);
         setMinimized(false);
 
-        const animationsEnabled = getAnimationsEnabled();
-
-        // Phase 1: Shake (1s)
-        setUiPhase('opening');
-        if (animationsEnabled) {
-            await new Promise(r => setTimeout(r, 1000));
-        }
-
-        // Phase 2: Continue animation while server works
+        // Call server first to get rarity for animation visuals
         const result = await claimTimedChestReward(userId);
-
-        if (animationsEnabled) {
-            // Wait for burst to finish (remaining 2s)
-            await new Promise(r => setTimeout(r, 2000));
-        }
 
         if (!mountedRef.current) return;
 
         if (result.success && result.reward) {
             setReward(result.reward);
-            setUiPhase('revealed');
-
-            // Celebration effects for high-rarity chests
-            if (result.reward.rarity === 'legendary') {
-                triggerCelebration('loot_reveal', { type: 'loot_reveal', lootRarity: 'legendary' });
-            } else if (result.reward.rarity === 'epic') {
-                triggerCelebration('loot_reveal', { type: 'loot_reveal', lootRarity: 'epic' });
-            } else if (result.reward.rarity === 'rare') {
-                triggerCelebration('confetti');
-            }
+            // Now start the opening animation with known rarity
+            setUiPhase('opening');
         } else {
             // Error — reset to hidden
             setUiPhase('hidden');
+            setLoading(false);
         }
-
-        setLoading(false);
     }, [uiPhase, loading, userId]);
+
+    // Called when ChestOpeningAnimation finishes its 3-phase sequence
+    const handleAnimationComplete = useCallback(() => {
+        if (!mountedRef.current) return;
+        setUiPhase('revealed');
+        setLoading(false);
+
+        // Celebration effects for high-rarity chests
+        if (reward) {
+            if (reward.rarity === 'legendary') {
+                triggerCelebration('loot_reveal', { type: 'loot_reveal', lootRarity: 'legendary' });
+            } else if (reward.rarity === 'epic') {
+                triggerCelebration('loot_reveal', { type: 'loot_reveal', lootRarity: 'epic' });
+            } else if (reward.rarity === 'rare') {
+                triggerCelebration('confetti');
+            }
+        }
+    }, [reward]);
 
     // Close and reset for next cycle
     const handleClose = useCallback(() => {
@@ -441,99 +438,74 @@ export function TimedChest({ userId }: { userId: string }) {
         );
     }
 
-    // Opening phase — full screen overlay with suspense animation
-    if (uiPhase === 'opening') {
-        return (
-            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
-                <div className="relative max-w-sm w-full mx-4">
-                    <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#1a1620] to-[#12100e] p-8 text-center overflow-hidden">
-                        {/* Chest with growing shake + glow */}
-                        <div className="relative mx-auto mb-6 w-28 h-28 flex items-center justify-center animate-chest-opening-shake">
-                            {/* Glow ring behind chest */}
-                            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-amber-500/0 via-yellow-400/30 to-amber-500/0 animate-chest-glow-ring" />
-
-                            <div className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center border-2 border-yellow-400/60 shadow-[0_0_40px_rgba(234,179,8,0.5)] animate-chest-glow-intensify">
-                                <Package className="w-14 h-14 text-[#1a1620] transition-all duration-1000" />
-                            </div>
-
-                            {/* Particles escaping from edges */}
-                            <div className="absolute -top-3 left-4 animate-chest-particle-escape-1"><Sparkles className="w-4 h-4 text-yellow-400" /></div>
-                            <div className="absolute -top-2 right-6 animate-chest-particle-escape-2"><Sparkles className="w-3.5 h-3.5 text-amber-400" /></div>
-                            <div className="absolute top-2 -left-3 animate-chest-particle-escape-3"><Sparkles className="w-3 h-3 text-yellow-300" /></div>
-                            <div className="absolute top-4 -right-3 animate-chest-particle-escape-4"><Sparkles className="w-4 h-4 text-amber-300" /></div>
-                            <div className="absolute -bottom-2 left-6 animate-chest-particle-escape-5"><Sparkles className="w-3.5 h-3.5 text-yellow-500" /></div>
-                            <div className="absolute -bottom-3 right-4 animate-chest-particle-escape-6"><Sparkles className="w-3 h-3 text-amber-500" /></div>
-                        </div>
-
-                        <h2 className="text-xl font-bold text-white mb-1">Apertura in corso...</h2>
-                        <p className="text-white/40 text-sm">Cosa ci sara dentro?</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Revealed phase — show reward
-    if (uiPhase === 'revealed' && reward) {
+    // Opening + Revealed phases — handled by ChestOpeningAnimation
+    if ((uiPhase === 'opening' || uiPhase === 'revealed') && reward) {
         const config = RARITY_CONFIG[reward.rarity] || RARITY_CONFIG.common;
 
         return (
-            <div
-                className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in"
-                onClick={handleClose}
+            <ChestOpeningAnimation
+                isOpening={uiPhase === 'opening'}
+                rarity={(reward.rarity as ChestRarity) || 'common'}
+                onAnimationComplete={handleAnimationComplete}
             >
+                {/* Revealed reward content — rendered after animation completes */}
                 <div
-                    className="relative max-w-sm w-full mx-4 animate-chest-reveal-entrance"
-                    onClick={e => e.stopPropagation()}
+                    className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in"
+                    onClick={handleClose}
                 >
-                    <div className={`rounded-2xl border-2 ${config.border} ${config.bgColor} ${config.glow} p-8 text-center overflow-hidden`}>
-                        {/* Close button */}
-                        <button
-                            onClick={handleClose}
-                            className="absolute top-3 right-3 text-white/30 hover:text-white/70 transition-colors"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
+                    <div
+                        className="relative max-w-sm w-full mx-4 animate-chest-reveal-entrance"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className={`rounded-2xl border-2 ${config.border} ${config.bgColor} ${config.glow} p-8 text-center overflow-hidden`}>
+                            {/* Close button */}
+                            <button
+                                onClick={handleClose}
+                                className="absolute top-3 right-3 text-white/30 hover:text-white/70 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
 
-                        {/* Rarity badge */}
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4 ${config.textColor} bg-white/10 border border-white/20`}>
-                            <span>{config.icon}</span>
-                            <span>{config.label}</span>
-                        </div>
-
-                        {/* Reward icon orb */}
-                        <div className={`mx-auto mb-4 w-20 h-20 rounded-full flex items-center justify-center bg-gradient-to-br ${config.gradient} animate-chest-reward-pulse`}>
-                            {reward.bonusTitle ? (
-                                <Crown className="w-10 h-10 text-white" />
-                            ) : (
-                                <Coins className="w-10 h-10 text-white" />
-                            )}
-                        </div>
-
-                        {/* Coins reward */}
-                        <div className="flex items-center justify-center gap-2 mb-2">
-                            <Coins className="w-6 h-6 text-yellow-400" />
-                            <span className="text-3xl font-bold text-white">+{reward.coins}</span>
-                            <span className="text-yellow-300/80 text-lg font-medium">coins</span>
-                        </div>
-
-                        {/* Bonus title for legendary */}
-                        {reward.bonusTitle && (
-                            <div className="mt-3 p-3 rounded-xl bg-white/10 border border-yellow-400/30">
-                                <div className="text-xs text-yellow-400/70 uppercase tracking-wider mb-1">Titolo Sbloccato</div>
-                                <div className="text-lg font-bold text-yellow-300">{reward.bonusTitle}</div>
+                            {/* Rarity badge */}
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4 ${config.textColor} bg-white/10 border border-white/20`}>
+                                <span>{config.icon}</span>
+                                <span>{config.label}</span>
                             </div>
-                        )}
 
-                        <button
-                            onClick={handleClose}
-                            className="mt-6 w-full py-3 px-6 rounded-xl font-semibold text-sm bg-white/10 text-white hover:bg-white/20 transition-all"
-                        >
-                            Fantastico!
-                        </button>
+                            {/* Reward icon orb */}
+                            <div className={`mx-auto mb-4 w-20 h-20 rounded-full flex items-center justify-center bg-gradient-to-br ${config.gradient} animate-chest-reward-pulse`}>
+                                {reward.bonusTitle ? (
+                                    <Crown className="w-10 h-10 text-white" />
+                                ) : (
+                                    <Coins className="w-10 h-10 text-white" />
+                                )}
+                            </div>
+
+                            {/* Coins reward */}
+                            <div className="flex items-center justify-center gap-2 mb-2">
+                                <Coins className="w-6 h-6 text-yellow-400" />
+                                <span className="text-3xl font-bold text-white">+{reward.coins}</span>
+                                <span className="text-yellow-300/80 text-lg font-medium">coins</span>
+                            </div>
+
+                            {/* Bonus title for legendary */}
+                            {reward.bonusTitle && (
+                                <div className="mt-3 p-3 rounded-xl bg-white/10 border border-yellow-400/30">
+                                    <div className="text-xs text-yellow-400/70 uppercase tracking-wider mb-1">Titolo Sbloccato</div>
+                                    <div className="text-lg font-bold text-yellow-300">{reward.bonusTitle}</div>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleClose}
+                                className="mt-6 w-full py-3 px-6 rounded-xl font-semibold text-sm bg-white/10 text-white hover:bg-white/20 transition-all"
+                            >
+                                Fantastico!
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </ChestOpeningAnimation>
         );
     }
 

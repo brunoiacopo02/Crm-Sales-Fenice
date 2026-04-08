@@ -208,8 +208,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": "Ispirazione: apertura loot box di qualsiasi gioco. Il momento di suspense e' PIU' importante del contenuto."
+      "passes": true,
+      "notes": "Shared ChestOpeningAnimation component with 3-phase suspense (phase1: crescendo shake, phase2: intense glow+particles, phase3: burst+reveal). Rarity-specific visuals: common (stone/grey, 8 particles), rare (blue, 16 particles), epic (purple glow, 24 particles), legendary (gold, 32 particles + confetti rain). 5 new Web Audio API sounds: drum_roll (2s crescendo), reveal_common (muted thud), reveal_rare (2-note chime), reveal_epic (rising chord), reveal_legendary (full fanfare). Reused by both TimedChest and LootDropModal. CSS-only keyframes (co-shake-phase1/2, co-burst-scale, co-glow-pulse, co-ring-expand, co-particle-burst, co-flash, co-confetti-fall, co-text-reveal). Build OK."
     },
     {
       "id": "FA-013",

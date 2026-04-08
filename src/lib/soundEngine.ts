@@ -42,7 +42,12 @@ export type SoundType =
     | 'level_up'
     | 'achievement'
     | 'quest_complete'
-    | 'streak_maintained';
+    | 'streak_maintained'
+    | 'chest_drum_roll'
+    | 'chest_reveal_common'
+    | 'chest_reveal_rare'
+    | 'chest_reveal_epic'
+    | 'chest_reveal_legendary';
 
 /**
  * Play a synthesized sound effect. No-op if sounds are disabled or AudioContext unavailable.
@@ -70,6 +75,21 @@ export function playSound(type: SoundType): void {
             break;
         case 'streak_maintained':
             playStreakBurst(ctx);
+            break;
+        case 'chest_drum_roll':
+            playChestDrumRoll(ctx);
+            break;
+        case 'chest_reveal_common':
+            playChestRevealCommon(ctx);
+            break;
+        case 'chest_reveal_rare':
+            playChestRevealRare(ctx);
+            break;
+        case 'chest_reveal_epic':
+            playChestRevealEpic(ctx);
+            break;
+        case 'chest_reveal_legendary':
+            playChestRevealLegendary(ctx);
             break;
     }
 }
@@ -192,4 +212,152 @@ function playStreakBurst(ctx: AudioContext) {
     osc2.connect(gain2).connect(ctx.destination);
     osc2.start(t + 0.05);
     osc2.stop(t + 0.3);
+}
+
+// ─── Chest/Loot Opening Sounds ──────────────────────────────────────
+
+/** Crescendo drum roll — building suspense over 2s */
+function playChestDrumRoll(ctx: AudioContext) {
+    const t = ctx.currentTime;
+    const hits = 24;
+    for (let i = 0; i < hits; i++) {
+        const progress = i / hits;
+        const start = t + progress * 2;
+        // Accelerating hits — gap shrinks as we go
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        // Pitch rises from low to medium
+        osc.frequency.setValueAtTime(120 + progress * 200, start);
+        osc.frequency.exponentialRampToValueAtTime(100 + progress * 150, start + 0.06);
+        // Volume crescendo
+        const vol = 0.03 + progress * 0.12;
+        gain.gain.setValueAtTime(vol, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.08);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.08);
+    }
+    // Final snare-like hit at the end
+    const noise = ctx.createOscillator();
+    const noiseGain = ctx.createGain();
+    noise.type = 'sawtooth';
+    noise.frequency.setValueAtTime(300, t + 2);
+    noise.frequency.exponentialRampToValueAtTime(150, t + 2.15);
+    noiseGain.gain.setValueAtTime(0.15, t + 2);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
+    noise.connect(noiseGain).connect(ctx.destination);
+    noise.start(t + 2);
+    noise.stop(t + 2.2);
+}
+
+/** Muted thud — common reveal */
+function playChestRevealCommon(ctx: AudioContext) {
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, t);
+    osc.frequency.exponentialRampToValueAtTime(300, t + 0.2);
+    gain.gain.setValueAtTime(0.15, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.4);
+}
+
+/** Bright two-note chime — rare reveal */
+function playChestRevealRare(ctx: AudioContext) {
+    const t = ctx.currentTime;
+    const notes = [523.25, 783.99]; // C5, G5
+    notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        const start = t + i * 0.12;
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.2, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.4);
+    });
+}
+
+/** Dramatic rising chord — epic reveal */
+function playChestRevealEpic(ctx: AudioContext) {
+    const t = ctx.currentTime;
+    // Rising sweep
+    const sweep = ctx.createOscillator();
+    const sweepGain = ctx.createGain();
+    sweep.type = 'sawtooth';
+    sweep.frequency.setValueAtTime(200, t);
+    sweep.frequency.exponentialRampToValueAtTime(800, t + 0.2);
+    sweepGain.gain.setValueAtTime(0.06, t);
+    sweepGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    sweep.connect(sweepGain).connect(ctx.destination);
+    sweep.start(t);
+    sweep.stop(t + 0.3);
+    // Chord stab
+    const chord = [523.25, 659.25, 783.99]; // C5 major
+    chord.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t + 0.15);
+        gain.gain.setValueAtTime(0, t + 0.15);
+        gain.gain.linearRampToValueAtTime(0.18, t + 0.2);
+        gain.gain.setValueAtTime(0.18, t + 0.45);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t + 0.15);
+        osc.stop(t + 0.8);
+    });
+}
+
+/** Full fanfare — legendary reveal: ascending arpeggio + sustained chord */
+function playChestRevealLegendary(ctx: AudioContext) {
+    const t = ctx.currentTime;
+    // Impact whoosh
+    const whoosh = ctx.createOscillator();
+    const whooshGain = ctx.createGain();
+    whoosh.type = 'sawtooth';
+    whoosh.frequency.setValueAtTime(100, t);
+    whoosh.frequency.exponentialRampToValueAtTime(1200, t + 0.15);
+    whooshGain.gain.setValueAtTime(0.08, t);
+    whooshGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    whoosh.connect(whooshGain).connect(ctx.destination);
+    whoosh.start(t);
+    whoosh.stop(t + 0.25);
+    // Ascending arpeggio: C5 → E5 → G5 → C6
+    const arp = [523.25, 659.25, 783.99, 1046.5];
+    arp.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        const start = t + 0.1 + i * 0.1;
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.15, start + 0.03);
+        gain.gain.setValueAtTime(0.15, start + 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.3);
+    });
+    // Sustained golden chord at the end
+    const sustain = [523.25, 659.25, 783.99, 1046.5];
+    sustain.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t + 0.5);
+        gain.gain.setValueAtTime(0, t + 0.5);
+        gain.gain.linearRampToValueAtTime(0.1, t + 0.55);
+        gain.gain.setValueAtTime(0.1, t + 0.9);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t + 0.5);
+        osc.stop(t + 1.5);
+    });
 }

@@ -1619,6 +1619,132 @@ body .skin-theme-nebula {
   50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(255,255,255,0.2); }
 }
 
+/* ===== CHEST OPENING ANIMATION (FA-012) — Shared suspense animation ===== */
+
+/* Phase 1: Gentle-to-medium shake (building tension) — 1s */
+@keyframes co-shake-phase1 {
+  0% { transform: translateX(0) rotate(0); }
+  5% { transform: translateX(-1px) rotate(-0.3deg); }
+  10% { transform: translateX(1px) rotate(0.3deg); }
+  15% { transform: translateX(-1px) rotate(-0.5deg); }
+  20% { transform: translateX(1.5px) rotate(0.5deg); }
+  25% { transform: translateX(-1.5px) rotate(-0.7deg); }
+  30% { transform: translateX(2px) rotate(0.7deg); }
+  35% { transform: translateX(-2px) rotate(-0.8deg); }
+  40% { transform: translateX(2px) rotate(0.8deg); }
+  45% { transform: translateX(-2.5px) rotate(-1deg); }
+  50% { transform: translateX(2.5px) rotate(1deg); }
+  55% { transform: translateX(-3px) rotate(-1deg); }
+  60% { transform: translateX(3px) rotate(1.2deg); }
+  65% { transform: translateX(-3px) rotate(-1.2deg); }
+  70% { transform: translateX(3.5px) rotate(1.3deg); }
+  75% { transform: translateX(-3.5px) rotate(-1.5deg); }
+  80% { transform: translateX(4px) rotate(1.5deg); }
+  85% { transform: translateX(-4px) rotate(-1.5deg); }
+  90% { transform: translateX(4.5px) rotate(1.8deg); }
+  95% { transform: translateX(-4.5px) rotate(-1.8deg); }
+  100% { transform: translateX(5px) rotate(2deg); }
+}
+
+/* Phase 2: Intense shake + scale (about to burst) — 1s */
+@keyframes co-shake-phase2 {
+  0% { transform: translateX(5px) rotate(2deg) scale(1); }
+  4% { transform: translateX(-5px) rotate(-2deg) scale(1.01); }
+  8% { transform: translateX(6px) rotate(2.5deg) scale(1.02); }
+  12% { transform: translateX(-6px) rotate(-2.5deg) scale(1.02); }
+  16% { transform: translateX(6px) rotate(3deg) scale(1.03); }
+  20% { transform: translateX(-7px) rotate(-3deg) scale(1.04); }
+  24% { transform: translateX(7px) rotate(3deg) scale(1.04); }
+  28% { transform: translateX(-7px) rotate(-3.5deg) scale(1.05); }
+  32% { transform: translateX(8px) rotate(3.5deg) scale(1.05); }
+  36% { transform: translateX(-8px) rotate(-3.5deg) scale(1.06); }
+  40% { transform: translateX(8px) rotate(4deg) scale(1.06); }
+  44% { transform: translateX(-8px) rotate(-4deg) scale(1.07); }
+  48% { transform: translateX(9px) rotate(4deg) scale(1.07); }
+  52% { transform: translateX(-9px) rotate(-4deg) scale(1.08); }
+  56% { transform: translateX(9px) rotate(4.5deg) scale(1.08); }
+  60% { transform: translateX(-10px) rotate(-4.5deg) scale(1.09); }
+  64% { transform: translateX(10px) rotate(4.5deg) scale(1.09); }
+  68% { transform: translateX(-10px) rotate(-5deg) scale(1.1); }
+  72% { transform: translateX(10px) rotate(5deg) scale(1.1); }
+  76% { transform: translateX(-10px) rotate(-5deg) scale(1.1); }
+  80% { transform: translateX(11px) rotate(5deg) scale(1.11); }
+  84% { transform: translateX(-11px) rotate(-5deg) scale(1.11); }
+  88% { transform: translateX(11px) rotate(5.5deg) scale(1.12); }
+  92% { transform: translateX(-11px) rotate(-5.5deg) scale(1.12); }
+  96% { transform: translateX(12px) rotate(5.5deg) scale(1.13); }
+  100% { transform: translateX(0) rotate(0) scale(1.15); }
+}
+
+/* Phase 3: Burst scale out */
+@keyframes co-burst-scale {
+  0% { transform: scale(1.15); opacity: 1; }
+  40% { transform: scale(1.4); opacity: 0.9; }
+  70% { transform: scale(0.3); opacity: 0.4; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+/* Glow ring pulse during phase2 */
+@keyframes co-glow-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1.3); }
+  50% { opacity: 0.7; transform: scale(1.6); }
+}
+
+/* Expanding ring */
+@keyframes co-ring-expand {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  50% { transform: scale(2); opacity: 0.3; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+/* Icon wobble during phase2 */
+@keyframes co-icon-wobble {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+
+/* Particle escaping from chest edges — phase2 */
+@keyframes co-particle-escape {
+  0% { transform: rotate(var(--angle, 0deg)) translateY(0) scale(1); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: rotate(var(--angle, 0deg)) translateY(-60px) scale(0.3); opacity: 0; }
+}
+
+/* Particle burst outward — phase3 reveal */
+@keyframes co-particle-burst {
+  0% { transform: rotate(var(--angle, 0deg)) translateY(0); opacity: 1; }
+  30% { opacity: 1; }
+  100% { transform: rotate(var(--angle, 0deg)) translateY(-180px); opacity: 0; }
+}
+
+/* Full-screen white flash */
+@keyframes co-flash {
+  0% { transform: scale(0.5); opacity: 1; }
+  50% { transform: scale(4); opacity: 0.8; }
+  100% { transform: scale(8); opacity: 0; }
+}
+
+/* Legendary confetti fall */
+@keyframes co-confetti-fall {
+  0% { transform: translateY(0) rotate(0); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translateY(400px) rotate(720deg); opacity: 0; }
+}
+
+/* Phase text fade-in */
+@keyframes co-text-fade {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Rarity text reveal */
+@keyframes co-text-reveal {
+  0% { opacity: 0; transform: scale(0.5); letter-spacing: 0.5em; }
+  60% { opacity: 1; transform: scale(1.1); letter-spacing: 0.15em; }
+  100% { opacity: 1; transform: scale(1); letter-spacing: 0.1em; }
+}
+
 /* ===== HOT STREAK (FA-009) ===== */
 
 /* Fire gradient sweep along borders — normal mode (3+ actions) */

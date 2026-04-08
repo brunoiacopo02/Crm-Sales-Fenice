@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Package, Sparkles, Coins, Zap, Crown, X } from 'lucide-react';
+import { Coins, Zap, Crown, X } from 'lucide-react';
 import { getUserPendingLootDrops, openLootDrop } from '@/app/actions/lootDropActions';
 import { useRouter } from 'next/navigation';
 import { triggerCelebration } from '@/lib/animationUtils';
+import { ChestOpeningAnimation, type ChestRarity } from '@/components/ChestOpeningAnimation';
 
 interface PendingDrop {
     id: string;
@@ -71,7 +72,7 @@ export function LootDropModal({ userId }: { userId: string }) {
     const router = useRouter();
     const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
     const [currentDrop, setCurrentDrop] = useState<PendingDrop | null>(null);
-    const [phase, setPhase] = useState<'idle' | 'shaking' | 'opening' | 'revealed'>('idle');
+    const [phase, setPhase] = useState<'idle' | 'opening' | 'revealed'>('idle');
     const [reward, setReward] = useState<RevealedReward | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -91,32 +92,32 @@ export function LootDropModal({ userId }: { userId: string }) {
         if (!currentDrop || loading) return;
         setLoading(true);
 
-        // Phase 1: Shake animation with suspense (2 seconds of increasing shake)
-        setPhase('shaking');
-        await new Promise(r => setTimeout(r, 2000));
-
-        // Phase 2: Opening burst
-        setPhase('opening');
-        await new Promise(r => setTimeout(r, 800));
-
-        // Actually open the drop on the server
+        // Call server first to get reward and actual rarity
         const result = await openLootDrop(userId, currentDrop.id);
 
         if (result.success && result.reward) {
             setReward(result.reward);
-            setPhase('revealed');
-            // Trigger enhanced loot_reveal celebration for epic/legendary drops
-            if (result.reward.rarity === 'epic' || result.reward.rarity === 'legendary') {
-                triggerCelebration('loot_reveal', { type: 'loot_reveal', lootRarity: result.reward.rarity });
-            } else if (result.reward.rarity === 'rare') {
-                triggerCelebration('confetti');
-            }
+            // Start the 3-phase suspense animation with known rarity
+            setPhase('opening');
         } else {
             setPhase('idle');
+            setLoading(false);
         }
-
-        setLoading(false);
     }, [currentDrop, userId, loading]);
+
+    const handleAnimationComplete = useCallback(() => {
+        setPhase('revealed');
+        setLoading(false);
+
+        // Trigger celebration effects for high-rarity drops
+        if (reward) {
+            if (reward.rarity === 'epic' || reward.rarity === 'legendary') {
+                triggerCelebration('loot_reveal', { type: 'loot_reveal', lootRarity: reward.rarity });
+            } else if (reward.rarity === 'rare') {
+                triggerCelebration('confetti');
+            }
+        }
+    }, [reward]);
 
     const handleClose = useCallback(() => {
         setPhase('idle');
@@ -138,36 +139,31 @@ export function LootDropModal({ userId }: { userId: string }) {
 
     const config = RARITY_CONFIG[reward?.rarity || 'common'];
 
-    return (
-        <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={phase === 'revealed' ? handleClose : undefined}>
-            <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 61 }}>
-                <div
-                    className="relative max-w-sm w-full mx-2 sm:mx-4"
-                    onClick={e => e.stopPropagation()}
-                >
-                    {/* Pre-reveal: Box to open */}
-                    {phase !== 'revealed' && (
+    // Opening phase — ChestOpeningAnimation handles the suspense
+    if (phase === 'opening' && reward) {
+        return (
+            <ChestOpeningAnimation
+                isOpening={true}
+                rarity={(reward.rarity as ChestRarity) || 'common'}
+                onAnimationComplete={handleAnimationComplete}
+            >
+                {/* This renders after animation completes — but we'll transition to 'revealed' phase instead */}
+                <div />
+            </ChestOpeningAnimation>
+        );
+    }
+
+    // Idle phase — show loot crate with open button
+    if (phase === 'idle') {
+        return (
+            <div className="modal-backdrop" style={{ zIndex: 60 }}>
+                <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 61 }}>
+                    <div className="relative max-w-sm w-full mx-2 sm:mx-4" onClick={e => e.stopPropagation()}>
                         <div className="modal-content p-8 text-center bg-gradient-to-b from-brand-charcoal via-ash-800 to-ash-900">
-                            {/* Loot crate icon */}
-                            <div className={`relative mx-auto mb-6 w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center ${
-                                phase === 'shaking' ? 'animate-loot-shake' : ''
-                            } ${phase === 'opening' ? 'animate-loot-burst' : ''}`}>
-                                <div className={`w-20 h-20 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-brand-orange-600 via-brand-orange to-gold-400 flex items-center justify-center border-2 border-brand-orange-300 shadow-glow-orange transition-all duration-300 ${
-                                    phase === 'shaking' ? 'scale-110' : ''
-                                }`}>
-                                    <Package className={`w-14 h-14 text-brand-charcoal ${
-                                        phase === 'opening' ? 'opacity-0 scale-150 transition-all duration-500' : 'transition-all duration-300'
-                                    }`} />
+                            <div className="relative mx-auto mb-6 w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center">
+                                <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-brand-orange-600 via-brand-orange to-gold-400 flex items-center justify-center border-2 border-brand-orange-300 shadow-glow-orange">
+                                    <svg className="w-14 h-14 text-brand-charcoal" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
                                 </div>
-                                {/* Sparkle particles during shake */}
-                                {phase === 'shaking' && (
-                                    <>
-                                        <div className="absolute -top-2 -left-2 animate-loot-particle-1"><Sparkles className="w-5 h-5 text-brand-orange" /></div>
-                                        <div className="absolute -top-3 right-0 animate-loot-particle-2"><Sparkles className="w-4 h-4 text-gold-400" /></div>
-                                        <div className="absolute bottom-0 -left-3 animate-loot-particle-3"><Sparkles className="w-4 h-4 text-ember-300" /></div>
-                                        <div className="absolute -bottom-2 right-2 animate-loot-particle-1"><Sparkles className="w-5 h-5 text-brand-orange-300" /></div>
-                                    </>
-                                )}
                             </div>
 
                             <h2 className="text-xl font-bold text-white mb-2">Loot Drop!</h2>
@@ -187,10 +183,18 @@ export function LootDropModal({ userId }: { userId: string }) {
                                 {loading ? 'Apertura...' : 'Apri il Bottino'}
                             </button>
                         </div>
-                    )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
-                    {/* Post-reveal: Reward display */}
-                    {phase === 'revealed' && reward && (
+    // Revealed phase — show reward
+    if (phase === 'revealed' && reward) {
+        return (
+            <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={handleClose}>
+                <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 61 }}>
+                    <div className="relative max-w-sm w-full mx-2 sm:mx-4" onClick={e => e.stopPropagation()}>
                         <div className={`modal-content p-8 text-center bg-gradient-to-b ${config.bgColor} border-2 ${config.border} ${config.glow} animate-loot-reveal`}>
                             {/* Close button */}
                             <button
@@ -247,9 +251,11 @@ export function LootDropModal({ userId }: { userId: string }) {
                                 {pendingDrops.length > 1 ? `Continua (${pendingDrops.length - 1} rimanenti)` : 'Fantastico!'}
                             </button>
                         </div>
-                    )}
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    }
+
+    return null;
 }
