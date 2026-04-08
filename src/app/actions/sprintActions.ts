@@ -178,3 +178,19 @@ export async function getUserWalletCoins(userId: string) {
     const user = await (await db.select({ walletCoins: users.walletCoins }).from(users).where(eq(users.id, userId)))[0]
     return user?.walletCoins || 0
 }
+
+export async function getUserLevelProgress(userId: string) {
+    const user = await (await db.select({
+        level: users.level,
+        experience: users.experience,
+    }).from(users).where(eq(users.id, userId)))[0]
+    if (!user) return null
+    const targetXp = GAME_CONSTANTS.calculateTargetXp(user.level)
+    return {
+        level: user.level,
+        experience: user.experience,
+        targetXp,
+        progressPercent: targetXp > 0 ? Math.min((user.experience / targetXp) * 100, 100) : 0,
+        remainingXp: Math.max(targetXp - user.experience, 0),
+    }
+}

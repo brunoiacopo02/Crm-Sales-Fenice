@@ -310,3 +310,44 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-011 — Progress nudge: micro-banner "Mancano solo X!" vicino ai traguardi
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### Changes:
+
+#### 1. Quest Proximity Nudge (QuestPanel.tsx — QuestCard)
+- When quest progress >= 70% and not yet completed, a golden micro-banner appears below the progress bar
+- Text: "Solo X azioni al premio!" with Zap icon
+- Uses `nudge-pulse` CSS animation (gentle opacity pulse)
+- Correctly calculates remaining actions: `targetValue - currentValue`
+
+#### 2. Level Proximity Nudge (new: LevelNudge.tsx)
+- New lightweight component that fetches user level/XP via `getUserLevelProgress()` server action
+- When XP progress >= 80% of level target, shows a pulsing golden banner
+- Text: "Quasi al livello X!" + "Mancano solo Y XP — continua cosi!"
+- Mini XP progress bar on the right showing exact XP/target
+- Refreshes on `reward_earned` events to update in real-time
+- Uses `level-nudge-pulse` CSS animation (scale + golden glow pulse)
+- Added to GDO dashboard (page.tsx) and Conferme dashboard (conferme/page.tsx)
+- Wrapped in SafeWrapper on both pages
+
+#### 3. Streak Inline Nudge (StreakCounter.tsx)
+- When streak > 0 and not active today (but before at-risk hour >= 18), shows inline amber pill badge
+- Text: "Non perdere la streak!" with AlertTriangle icon
+- Only shows in `default` visual state (not when already `safe` or `at-risk`)
+- Complements the existing StreakAnxietyBanner which handles >= 18:00 Rome time
+- Uses `nudge-pulse` CSS animation
+
+#### 4. Server Action (sprintActions.ts)
+- New `getUserLevelProgress(userId)` returns: level, experience, targetXp, progressPercent, remainingXp
+
+#### CSS Keyframes Added (globals.css):
+- `nudge-pulse` — gentle opacity pulse (0.85 → 1 → 0.85) for quest and streak nudges
+- `level-nudge-pulse` — scale (1 → 1.02) + golden box-shadow pulse for level nudge
+
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---

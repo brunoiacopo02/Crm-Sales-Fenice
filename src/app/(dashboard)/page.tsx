@@ -17,6 +17,7 @@ const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay
 const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
 const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 const HotStreak = dynamic(() => import("@/components/HotStreak").then(m => ({ default: m.HotStreak })))
+const LevelNudge = dynamic(() => import("@/components/LevelNudge").then(m => ({ default: m.LevelNudge })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -85,6 +86,7 @@ export default async function DashboardPage() {
 
             <StreakCounter userId={session!.user.id} />
 
+            <SafeWrapper><LevelNudge userId={session!.user.id} /></SafeWrapper>
             <SafeWrapper><StreakAnxietyBanner userId={session!.user.id} /></SafeWrapper>
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />

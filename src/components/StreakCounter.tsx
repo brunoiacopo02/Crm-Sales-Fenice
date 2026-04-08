@@ -164,6 +164,15 @@ export function StreakCounter({ userId }: { userId: string }) {
                                     : streakCount > 0 ? 'Completa una quest!' : 'Inizia la tua streak'}
                         </div>
                     </div>
+                    {/* Inline streak nudge: amber when streak > 0, not active today, not yet at-risk hour */}
+                    {streakCount > 0 && !isActiveToday && visualState === 'default' && (
+                        <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 animate-[nudge-pulse_2s_ease-in-out_infinite]">
+                            <AlertTriangle className="h-2.5 w-2.5 text-amber-400" />
+                            <span className="text-[10px] font-semibold text-amber-400">
+                                Non perdere la streak!
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Divider */}

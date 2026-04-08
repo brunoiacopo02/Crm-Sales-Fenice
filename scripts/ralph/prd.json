@@ -190,8 +190,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": "Progress endowment: mostrare vicinanza al traguardo motiva piu' che mostrare il traguardo stesso."
+      "passes": true,
+      "notes": "Quest nudge: golden micro-banner below QuestCard progress bar when 70%+ ('Solo X azioni al premio!'). Level nudge: LevelNudge component with pulsing golden badge when XP >= 80% ('Quasi al livello X! Mancano Y XP'). Streak nudge: inline amber pill in StreakCounter when streak > 0 and not active today ('Non perdere la streak!'). CSS keyframes: nudge-pulse, level-nudge-pulse. SafeWrapper on both dashboards. Build OK."
     },
     {
       "id": "FA-012",

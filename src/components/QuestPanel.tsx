@@ -73,6 +73,16 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
                     </div>
                 </div>
 
+                {/* Progress nudge: golden micro-banner when 70%+ and not yet complete */}
+                {!isComplete && progress >= 70 && (
+                    <div className="mt-1.5 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--color-gaming-gold)]/8 border border-[var(--color-gaming-gold)]/15 animate-[nudge-pulse_2s_ease-in-out_infinite]">
+                        <Zap className="h-3 w-3 text-[var(--color-gaming-gold)] shrink-0" />
+                        <span className="text-[11px] font-semibold text-[var(--color-gaming-gold)]">
+                            Solo {quest.targetValue - quest.currentValue} {quest.targetValue - quest.currentValue === 1 ? 'azione' : 'azioni'} al premio!
+                        </span>
+                    </div>
+                )}
+
                 {/* Claim button for completed quests */}
                 {isComplete && (
                     <div className="mt-2 flex justify-end">

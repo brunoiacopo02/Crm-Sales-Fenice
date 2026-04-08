@@ -9,6 +9,7 @@ import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
+const LevelNudge = dynamic(() => import("@/components/LevelNudge").then(m => ({ default: m.LevelNudge })))
 const HotStreak = dynamic(() => import("@/components/HotStreak").then(m => ({ default: m.HotStreak })))
 
 export default async function ConfermePage() {
@@ -39,6 +40,7 @@ export default async function ConfermePage() {
                 <>
                     <ConfermeDailyObjectives confermeUserId={session.user.id} />
                     <StreakCounter userId={session.user.id} />
+                    <SafeWrapper><LevelNudge userId={session.user.id} /></SafeWrapper>
                     <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
                 </>
             )}
