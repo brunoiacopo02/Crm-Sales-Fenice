@@ -61,7 +61,7 @@ export function Sidebar() {
     if (role === "GDO") {
         navItems = [
             { name: "La mia Pipeline", href: "/", icon: Phone },
-            { name: "Il mio Profilo / RPG", href: "/profilo", icon: Gamepad2 },
+            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2 },
             { name: "I miei Richiami", href: "/richiami", icon: Calendar, badge: expiredCount },
             { name: "I miei Appuntamenti", href: "/appuntamenti", icon: Users },
             { name: "Classifica", href: "/classifica", icon: Trophy },
@@ -73,14 +73,14 @@ export function Sidebar() {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
             { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
-            { name: "Il mio Profilo / RPG", href: "/profilo", icon: Gamepad2 },
+            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2 },
             { name: "Classifica", href: "/classifica", icon: Trophy },
             { name: "Fenice Store", href: "/store", icon: Store },
         ]
     } else if (role === "VENDITORE") {
         navItems = [
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
-            { name: "Il mio Profilo / RPG", href: "/profilo", icon: Gamepad2 },
+            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2 },
             { name: "Classifica", href: "/classifica", icon: Trophy },
             { name: "Fenice Store", href: "/store", icon: Store },
         ]

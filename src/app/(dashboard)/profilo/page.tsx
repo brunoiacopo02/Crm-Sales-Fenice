@@ -19,14 +19,18 @@ export default async function ProfiloPage() {
 
     try {
         const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory] = await Promise.all([
-            getGdoRpgProfile(supabaseUser.id),
-            getUserAchievements(supabaseUser.id),
-            getUnlockedTitles(supabaseUser.id),
-            getStreakInfo(supabaseUser.id),
-            getUserQuests(supabaseUser.id),
-            getUserLifetimeStats(supabaseUser.id),
-            getUserInventory(supabaseUser.id),
+            getGdoRpgProfile(supabaseUser.id).catch(e => { console.error("Profile error:", e); return null; }),
+            getUserAchievements(supabaseUser.id).catch(() => ({ achievements: [] })),
+            getUnlockedTitles(supabaseUser.id).catch(() => ({ titles: [], activeTitle: null })),
+            getStreakInfo(supabaseUser.id).catch(() => ({ streakCount: 0, isActiveToday: false, multiplier: 1, tierLabel: 'x1' })),
+            getUserQuests(supabaseUser.id).catch(() => ({ daily: [], weekly: [] })),
+            getUserLifetimeStats(supabaseUser.id).catch(() => undefined),
+            getUserInventory(supabaseUser.id).catch(() => []),
         ]);
+
+        if (!profileData) {
+            return <div className="p-8 text-center text-ash-500">Errore caricamento profilo. Riprova tra qualche secondo.</div>;
+        }
 
         // Find equipped item from inventory
         const equippedItemId = profileData.equippedItemId;
