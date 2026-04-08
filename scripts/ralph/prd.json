@@ -314,8 +314,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": "Il TL ha il controllo completo della gamification."
+      "passes": true,
+      "notes": "Full TL monitor redesign. fetchAllTeamRpgProfiles fetches both GDO+CONFERME. getTeamGamificationOverview returns totalQuestsToday, avgStreak, mostActiveUser, per-user quest counts. Enhanced table: level, XP bar, streak flame, quests today badge, walletCoins, role badge. Team overview: 4 stat cards (team size, quests today, avg streak, most active). Boss Battle panel: view active battle HP/contributors or create new with title/HP/rewards/endTime. Seasonal Event panel: view active event multipliers or create new with theme/dates/multipliers, deactivate button. Fixed addGdoCoins to use walletCoins+coinTransaction (was using legacy coins). SafeWrapper on page.tsx. Build OK."
     },
     {
       "id": "FA-019",

@@ -607,3 +607,58 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-018 — TL Monitor potenziato: vista completa gamification team
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### Server Action Changes (managerRpgActions.ts):
+1. **fetchAllTeamRpgProfiles()** — New function that fetches both GDO AND CONFERME active users (was GDO-only). Returns profiles with `role` field appended. Sorted by level descending.
+2. **getTeamGamificationOverview()** — New function returning:
+   - `totalQuestsToday`: count of all completed quests today across GDO+CONFERME
+   - `avgStreak`: average streak count across all team members
+   - `mostActiveUser`: user with most quests completed today (name, count, role)
+   - `teamSize`: number of active GDO+CONFERME users
+   - `userQuestsToday`: Record<userId, questCount> for per-row display
+3. **addGdoCoins()** — **BUG FIX**: was updating legacy `coins` field, now correctly updates `walletCoins` and logs `coinTransactions` with reason "Bonus manuale dal TL"
+
+### Page Changes (page.tsx):
+1. **Data fetching** — Now fetches in parallel: `fetchAllTeamRpgProfiles()`, `getTeamGamificationOverview()`, `getActiveBossBattle()`, `getActiveEvent()`
+2. **Props** — Passes `managerId`, `teamOverview`, `activeBoss`, `activeEvent` to client
+3. **SafeWrapper** — Entire ManagerRpgClient wrapped in SafeWrapper
+
+### Client Redesign (ManagerRpgClient.tsx):
+
+#### Team Overview Cards (4 stat cards):
+1. **Team Attivo** — Users icon + team size count
+2. **Quest Completate Oggi** — Target icon + total quests count (brand-orange)
+3. **Media Streak** — Flame icon + average streak in days (fire-500)
+4. **Più Attivo Oggi** — Trophy icon + name + quest count + role
+
+#### Boss Battle Panel (collapsible):
+- **Active state**: Shows title, HP bar (color-coded: red→orange→green as HP decreases), reward info, contributor count, top 5 contributors with DMG
+- **No battle state**: Creation form with: title, description, HP, end datetime, reward coins, reward XP. "Lancia Boss Battle" button calls `createBossBattle()`
+
+#### Seasonal Event Panel (collapsible):
+- **Active state**: Shows title, end date, XP/Coins multiplier badges, theme label. "Disattiva Evento" button calls `deactivateSeasonalEvent()`
+- **No event state**: Creation form with: title, description, theme selector (5 themes), XP multiplier, coins multiplier, start/end datetime. "Crea Evento Stagionale" button calls `createSeasonalEvent()`
+
+#### Enhanced Team Table:
+- **Columns**: Operatore (name+stage), Ruolo (GDO/Conferme badge), Livello (shield badge), XP (bar), Streak (flame icon, color-coded), Quest Oggi (count badge), Fenice Coins (walletCoins), Azioni
+- **Role badges**: GDO = orange, Conferme = blue
+- **Streak colors**: ≥7 days = fire-500, ≥3 days = amber-500, <3 = ash-300
+- **Quest badge**: green if >0, grey if 0
+- **Coins**: Displays `walletCoins` (not legacy `coins`)
+- **Actions**: View Profile (link), Update Salary (modal), Add Coins (modal)
+
+#### Inline Constants:
+- Boss/Event constants inlined to avoid importing `gamificationEngine.ts` (which imports db/server modules that can't run in client bundle)
+
+### Feedback System:
+- Success/error toast banner with auto-dismissable close button
+- Appears after any boss/event/salary/coins action
+
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---

@@ -1,5 +1,8 @@
-import { fetchAllGdoRpgProfiles } from '@/app/actions/managerRpgActions';
+import { fetchAllTeamRpgProfiles, getTeamGamificationOverview } from '@/app/actions/managerRpgActions';
+import { getActiveBossBattle } from '@/app/actions/bossBattleActions';
+import { getActiveEvent } from '@/app/actions/seasonalEventActions';
 import ManagerRpgClient from './ManagerRpgClient';
+import { SafeWrapper } from '@/components/SafeWrapper';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
 
@@ -12,9 +15,22 @@ export default async function ManagerRpgPage() {
         redirect('/unauthorized');
     }
 
-    const profiles = await fetchAllGdoRpgProfiles();
+    const [profiles, teamOverview, activeBoss, activeEvent] = await Promise.all([
+        fetchAllTeamRpgProfiles(),
+        getTeamGamificationOverview(),
+        getActiveBossBattle(),
+        getActiveEvent(),
+    ]);
 
     return (
-        <ManagerRpgClient initialProfiles={profiles} />
+        <SafeWrapper>
+            <ManagerRpgClient
+                initialProfiles={profiles}
+                teamOverview={teamOverview}
+                managerId={supabaseUser.id}
+                activeBoss={activeBoss}
+                activeEvent={activeEvent}
+            />
+        </SafeWrapper>
     );
 }
