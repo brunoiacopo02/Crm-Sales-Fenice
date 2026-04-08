@@ -1,130 +1,354 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fase-1-bugfix",
-  "description": "Fase 1 — Correzioni & Bug Fix: dati mancanti in Performance GDO e Marketing, riorganizzazione dashboard, fix orari, pause, esiti, import lead",
+  "branchName": "ralph/fenice-addiction-v2",
+  "description": "Fenice Addiction v2 — Redesign visivo completo gamification + UI premium gaming style + fix sistema XP/coins. Solo GDO e Conferme. NO deploy.",
   "userStories": [
     {
-      "id": "F1-001",
-      "title": "Performance GDO: aggiungere lead assegnati e percentuale fissaggio",
-      "description": "Nella sezione Performance GDO (manager-gdo-performance) mancano due metriche chiave: il numero di lead assegnati a ciascun GDO e la percentuale di fissaggio (appuntamenti / lead lavorati).",
+      "id": "FA-001",
+      "title": "Audit e fix completo sistema XP/coins/store end-to-end",
+      "description": "Verificare che TUTTO il flusso XP e coins funzioni: awardXpAndCoins usa walletCoins, completeQuest usa walletCoins, store scala walletCoins, streak multiplier applicato, coinTransactions loggato.",
       "acceptanceCriteria": [
-        "Aggiungere colonna 'Lead Assegnati' nella tabella GDO in src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx",
-        "Aggiungere colonna '% Fissaggio' calcolata come (appuntamenti fissati / lead assegnati * 100)",
-        "Aggiornare il server action in managerAdvancedActions o simile per fornire i dati necessari",
-        "Le nuove colonne devono essere visibili nel periodo selezionato (oggi/mese/trimestre)",
+        "Verificare che awardXpAndCoins in gamificationEngine.ts aggiorni walletCoins (NON coins)",
+        "Verificare che completeQuest in questActions.ts aggiorni walletCoins (NON coins)",
+        "Verificare che completeQuest setti currentValue=-1 dopo claim (quest sparisce)",
+        "Verificare che buyShopItem in shopActions.ts legga e scali walletCoins",
+        "Verificare che getUserWalletCoins legga walletCoins (usato dal Topbar)",
+        "Verificare che streak multiplier sia applicato in awardXpAndCoins",
+        "Verificare che coinTransactions venga inserito per ogni guadagno coins",
+        "Fixare qualsiasi inconsistenza trovata",
         "npx next build compila senza errori"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "ManagerOperativaBoard ha gia' leadAssegnati e fissaggioTotale — riusare la stessa logica di query."
+      "passes": true,
+      "notes": "CRITICO: questo fix deve andare per primo. Senza XP/coins corretti, tutto il resto non ha senso."
     },
     {
-      "id": "F1-002",
-      "title": "Marketing Analytics: aggiungere lead assegnati e percentuale fissaggio",
-      "description": "Nella sezione Marketing Analytics mancano le metriche 'lead assegnati' e 'percentuale di fissaggio' per ogni funnel e per ogni GDO nel drill-down.",
+      "id": "FA-002",
+      "title": "Ribilanciamento curva XP e reward per azione",
+      "description": "La curva XP deve essere veloce all'inizio e rallentare dopo. I reward per azione devono essere bilanciati.",
       "acceptanceCriteria": [
-        "Aggiungere 'Lead Assegnati' nella tabella funnel di MarketingAnalyticsClient.tsx",
-        "Aggiungere '% Fissaggio' (appuntamenti / lead assegnati * 100) nella tabella funnel",
-        "Aggiungere le stesse metriche nel drill-down GDO per funnel",
-        "Aggiornare il server action marketingActions.ts per calcolare e ritornare questi dati",
-        "Protezione divisione per zero sui calcoli percentuali",
+        "Livello 1-10: target XP basso (100-350 XP per livello) — crescita veloce",
+        "Livello 10-20: target XP medio (350-800 XP per livello)",
+        "Livello 20-30: target XP alto (800-1500 XP per livello)",
+        "Livello 30+: target XP molto alto (1500+ XP per livello)",
+        "Verificare che la formula calculateTargetXp produca questa curva",
+        "Reward azioni: FISSATO=15XP+10coins, CONFERMATO=20XP+8coins, CHIUSO=50XP+25coins, PRESENZIATO=30XP+15coins",
+        "Aggiornare GAME_CONSTANTS.ACTIONS in gamificationEngine.ts",
         "npx next build compila senza errori"
       ],
       "priority": 2,
       "passes": false,
-      "notes": "Il tipo GdoStatTableRow va esteso con i nuovi campi."
+      "notes": ""
     },
     {
-      "id": "F1-003",
-      "title": "Riorganizzare Dashboard Operativa in KPI Team GDO",
-      "description": "Spostare la tabella 'Dashboard Operativa Aziendale' (ManagerOperativaBoard) dentro la sezione KPI Team GDO. Rimuovere la tabella 'Classifica GDO' dalla sezione KPI Team GDO.",
+      "id": "FA-003",
+      "title": "Design system gaming: palette calda premium su tutto il CRM",
+      "description": "Usare Stitch per generare una palette calda gaming (fuoco/oro/ambra su scuro premium) e applicarla come design tokens in globals.css.",
       "acceptanceCriteria": [
-        "Integrare il componente ManagerOperativaBoard (o i suoi dati) dentro la pagina kpi-team",
-        "Rimuovere la 'Classifica GDO' dalla pagina kpi-team se presente",
-        "La tabella operativa deve mantenere tutte le sue colonne e il filtro periodo (oggi/mese/trimestre)",
-        "Il layout deve essere coerente con il resto della pagina KPI Team",
-        "Se ManagerOperativaBoard era usato altrove, verificare che non si rompa nulla",
+        "Usare Stitch MCP per generare palette gaming premium: sfondo scuro (blu notte/antracite), accent oro/fuoco, testi chiari",
+        "Aggiornare globals.css con nuovi design tokens: colori, shadows, gradienti",
+        "Applicare la palette alle aree gamification: sidebar, topbar wallet, streak, quest, profilo, store, classifica",
+        "La pipeline chiamate deve restare con sfondo chiaro e leggibile (non applicare il tema scuro alla pipeline)",
+        "Transizione morbida tra zona pipeline (chiara) e zona gamification (scura premium)",
         "npx next build compila senza errori"
       ],
       "priority": 3,
       "passes": false,
-      "notes": "ManagerOperativaBoard e' in src/components/ManagerOperativaBoard.tsx, KPI Team e' in src/app/(dashboard)/kpi-team/"
+      "notes": "Usare Stitch in modalita Pro. La pipeline NON deve diventare scura — solo gli elementi gamification."
     },
     {
-      "id": "F1-004",
-      "title": "Fix orario andamento chiamate KPI Team GDO a 13:30-20:00",
-      "description": "Nella tabella 'Andamento Chiamate e Appuntamenti' in KPI Team GDO, l'orario lavorativo deve essere 13:30-20:00, non calcolato da primo all'ultimo log.",
+      "id": "FA-004",
+      "title": "Redesign LeadCard pipeline con rarita' per funnel",
+      "description": "Le card dei lead nella pipeline devono avere un bordo colorato per 'rarita' basata sul funnel. Migliore gerarchia visiva.",
       "acceptanceCriteria": [
-        "Modificare il calcolo in kpiTeamActions.ts per usare range fisso 13:30-20:00 Europe/Rome",
-        "Il calcolo chiamate/ora deve basarsi sulle ore lavorate nel range 13:30-20:00 (6.5 ore)",
-        "Se il GDO ha loggato chiamate fuori orario, quelle chiamate contano ma le ore restano 6.5",
-        "Il grafico/tabella andamento deve mostrare solo le fasce orarie 13:30-20:00",
+        "Ogni LeadCard ha un bordo laterale colorato basato sul funnel (oro=alto valore, argento=medio, bronzo=base)",
+        "Mapping funnel → rarita' configurabile (es. TELEGRAM=bronzo, JOB SIMULATOR=argento, CORSO 10 ORE=oro)",
+        "Effetto glow leggero su hover della card",
+        "Nome lead prominente, telefono con icona copy funzionante, funnel come badge colorato",
+        "NON modificare la logica di pipeline (click, esiti, azioni rapide) — solo styling",
         "npx next build compila senza errori"
       ],
       "priority": 4,
       "passes": false,
-      "notes": "Attualmente teamHoursWorked e' calcolato da timestamp primo-ultimo log."
+      "notes": "Solo restyling visivo. La logica resta intatta."
     },
     {
-      "id": "F1-005",
-      "title": "Fix Monitor Pause: calcolo tempo e rimozione limite 2 pause",
-      "description": "Il conteggio del tempo in pausa non e' corretto. Inoltre il limite di 2 pause al giorno va rimosso per permettere pause illimitate (mantenendo il limite di 15 min per pausa).",
+      "id": "FA-005",
+      "title": "Redesign Store con card premium e effetto rarita'",
+      "description": "Lo store deve sembrare un negozio di un gioco: card con bordi metallici, effetto holografico per item leggendari, hover flip per preview.",
       "acceptanceCriteria": [
-        "Auditare e fixare il calcolo durationSeconds e exceededSeconds in pauseUtils.ts e pauseActions.ts",
-        "Rimuovere o alzare significativamente MAX_PAUSES_PER_DAY in pauseUtils.ts (attualmente 2)",
-        "Mantenere MAX_MINUTES_PER_PAUSE a 15 minuti",
-        "Rimuovere la logica isBlocked basata su usedPauses >= MAX_PAUSES_PER_DAY in pauseActions.ts",
-        "Verificare che il monitor pause del manager mostri i dati corretti",
+        "Card prodotto con bordo colorato per rarita': bronzo per base, argento per raro, oro per epico, viola/diamante per leggendario",
+        "Item leggendari con effetto shimmer/holografico CSS animato",
+        "Hover sulla card: leggero tilt 3D o glow intensificato",
+        "Prezzo in coins con icona Fenice Coin animata",
+        "Preview dell'effetto (skin/tema) visibile nella card",
+        "Filtri per categoria gia' implementati — migliorare solo lo stile dei filtri",
         "npx next build compila senza errori"
       ],
       "priority": 5,
       "passes": false,
-      "notes": "BREAK_RULES in pauseUtils.ts: MAX_PAUSES_PER_DAY: 2, MAX_MINUTES_PER_PAUSE: 15. Il blocking e' su riga ~174 di pauseActions.ts."
+      "notes": "Usare Stitch per il design, Nano Banana per asset grafici se servono icone."
     },
     {
-      "id": "F1-006",
-      "title": "Aggiungere esito 'Numero inesistente' tra le cause scarto",
-      "description": "Tra le cause di scarto lead chiamato manca l'opzione 'Numero inesistente'. Va aggiunta come nuova opzione nel modale esiti.",
+      "id": "FA-006",
+      "title": "Redesign Profilo come Character Sheet RPG",
+      "description": "Il profilo deve sembrare la scheda di un personaggio di un gioco RPG moderno.",
       "acceptanceCriteria": [
-        "Aggiungere 'numero inesistente' alla lista discardReasons in OutcomeModal.tsx",
-        "Verificare che il nuovo esito venga salvato correttamente nel database (campo rejectReason o simile)",
-        "Verificare che il nuovo esito appaia correttamente nell'archivio e nei report",
+        "Hero banner con avatar Fenice grande, effetto particelle fuoco CSS, nome e titolo attivo",
+        "Stats in layout RPG: livello prominente, barra XP con milestone marker, coins wallet",
+        "Sezione badge con griglia visual (sbloccati luminosi, locked in grigio con silhouette)",
+        "Sezione quest attive con progress bar",
+        "Streak counter con fiamma animata CSS",
+        "Sezione 'Prossimi Premi' con card per i 3 reward piu' vicini",
+        "Il TL/Manager vede questo profilo per ogni GDO dal RPG Monitor",
+        "Usare Stitch per generare il layout, convertire in Tailwind",
         "npx next build compila senza errori"
       ],
       "priority": 6,
       "passes": false,
-      "notes": "Le discard reasons attuali: non interessato, disoccupato, straniero, solo informazioni, non vuole prendere l'appuntamento."
+      "notes": "Il profilo deve far sentire il GDO come un personaggio di gioco."
     },
     {
-      "id": "F1-007",
-      "title": "Fix Import Lead: permettere duplicati e lead senza nome",
-      "description": "L'import CSV attualmente rifiuta lead con telefono/email duplicati e lead senza nome. Bisogna rendere entrambi opzionali.",
+      "id": "FA-007",
+      "title": "Redesign Classifica con podio animato e effetti ranking",
+      "description": "La classifica deve sembrare un leaderboard gaming con podio top 3 animato.",
       "acceptanceCriteria": [
-        "Aggiungere checkbox/opzione 'Consenti duplicati' nel form di import che bypassa il check duplicati",
-        "Permettere il caricamento di lead senza nome (campo nome vuoto o placeholder)",
-        "Se il nome manca, usare un placeholder tipo 'Lead senza nome' o lasciare vuoto",
-        "Rimuovere il requisito di email obbligatoria (renderla opzionale)",
-        "Mantenere la validazione telefono (minimo 5 cifre)",
+        "Top 3: podio con effetto metallico (oro pulsante, argento brillante, bronzo)",
+        "Animazione slide quando le posizioni cambiano (polling 10s gia' attivo)",
+        "Freccia verde animata quando un utente sale, rossa quando scende",
+        "Tab per ruolo: GDO (appuntamenti), Conferme (conferme), mantenere le tab esistenti",
+        "Il tuo nome evidenziato con bordo brand-orange",
         "npx next build compila senza errori"
       ],
       "priority": 7,
       "passes": false,
-      "notes": "importLeads.ts riga 131-135 rifiuta lead senza nome. Il check duplicati usa processedPhones/processedEmails Sets + query DB."
+      "notes": ""
     },
     {
-      "id": "F1-008",
-      "title": "Import Lead: migliorare mapping colonne CSV",
-      "description": "Il mapping colonne CSV e' rigido (Nome, Telefono1, Cognome/Funnel, Email). Aggiungere piu' opzioni di mapping per supportare CSV con header diversi.",
+      "id": "FA-008",
+      "title": "Scrigno a tempo: reward anticipato dopo X chiamate",
+      "description": "Dopo un numero random di chiamate (5-15), appare uno scrigno sulla dashboard. Si puo' aprire dopo un countdown. Contiene reward random.",
       "acceptanceCriteria": [
-        "Mostrare un'anteprima delle prime 3-5 righe del CSV prima dell'import",
-        "Permettere all'utente di mappare manualmente le colonne CSV ai campi del CRM (nome, telefono, email, funnel)",
-        "Supportare header alternativi comuni (es. 'Nome e Cognome', 'Phone', 'Cellulare', 'Fonte')",
-        "Se una colonna non viene mappata, il campo resta vuoto (tranne telefono che e' obbligatorio)",
+        "Creare componente TimedChest che traccia le azioni dell'utente nel giorno",
+        "Dopo 5-15 azioni (random), appare un'icona scrigno animata (glow pulsante, shake leggero)",
+        "Lo scrigno ha un countdown di 15-30 minuti prima di poter essere aperto",
+        "Apertura: animazione suspense 3s (shake crescente → glow → burst → reveal)",
+        "Contenuto random pesato: 60% comune (10-30 coins), 25% raro (50-100), 12% epico (200), 3% leggendario (500+titolo)",
+        "Reward aggiunto a walletCoins con coinTransaction",
+        "Dati persistiti: usare localStorage per scrigno corrente, server per reward",
+        "Wrappare in SafeWrapper",
         "npx next build compila senza errori"
       ],
       "priority": 8,
       "passes": false,
-      "notes": "Attualmente il mapping e' case-insensitive e hardcoded in importLeads.ts."
+      "notes": "Ispirazione: Clash Royale chest. L'anticipazione del countdown crea urgenza di tornare."
+    },
+    {
+      "id": "FA-009",
+      "title": "Hot Streak visuale: la UI si infuoca dopo azioni consecutive",
+      "description": "Dopo 3 azioni consecutive senza pausa, bordi e elementi UI si 'infuocano' con effetti CSS.",
+      "acceptanceCriteria": [
+        "Tracciare azioni consecutive dell'utente (chiamata, fissaggio, conferma)",
+        "Dopo 3 azioni in <10 minuti: attivare 'hot streak mode'",
+        "Hot streak: bordo top della pipeline diventa gradiente fuoco animato, piccolo badge fiamma visibile",
+        "Dopo 5 azioni consecutive: intensificare (bordo piu' luminoso, badge piu' grande)",
+        "Si disattiva dopo 5 minuti senza azioni",
+        "Effetto puramente visivo CSS — non tocca la logica",
+        "npx next build compila senza errori"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Feedback visivo che il GDO sta andando forte. Incentiva a non fermarsi."
+    },
+    {
+      "id": "FA-010",
+      "title": "Notifiche FOMO live: toast quando un collega agisce",
+      "description": "Toast brevi e non invasivi quando un collega fa un'azione rilevante.",
+      "acceptanceCriteria": [
+        "Toast slide-in da destra, durata 4 secondi, max 2 visibili",
+        "Tipi: '[Nome] ha fissato un appuntamento!', '[Nome] ha sbloccato un badge!', '[Nome] e' in hot streak!'",
+        "Dati da Supabase Realtime subscription su leadEvents (INSERT) — NON creare nuovi channel, riusare quelli esistenti",
+        "Filtrare solo eventi di GDO/CONFERME attivi (no venditori, no manager)",
+        "Toast ha icona contestuale (telefono per app, trofeo per badge, fiamma per streak)",
+        "Wrappare in SafeWrapper",
+        "Se Realtime fallisce, il toast semplicemente non appare (silent fail)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Crea competizione sociale. NON creare nuovi channel Supabase — riusare quelli in RealtimeProvider."
+    },
+    {
+      "id": "FA-011",
+      "title": "Progress nudge: micro-banner 'Mancano solo X!' vicino ai traguardi",
+      "description": "Quando l'utente e' vicino a completare una quest o raggiungere un livello, mostrare un nudge motivazionale.",
+      "acceptanceCriteria": [
+        "Se una quest e' al 70%+: mostrare micro-banner dorato sotto la quest 'Solo X azioni al premio!'",
+        "Se XP e' al 80%+ del livello: mostrare badge pulsante 'Quasi al livello X!'",
+        "Se streak e' a rischio (fine giornata, nessuna quest completata): banner amber 'Non perdere la tua streak!'",
+        "I nudge devono essere discreti — non popup, ma badge/testi inline",
+        "npx next build compila senza errori"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Progress endowment: mostrare vicinanza al traguardo motiva piu' che mostrare il traguardo stesso."
+    },
+    {
+      "id": "FA-012",
+      "title": "Animazione apertura scrigno con suspense",
+      "description": "L'apertura dello scrigno (e del loot drop) deve avere un'animazione con suspense crescente.",
+      "acceptanceCriteria": [
+        "Fase 1 (1s): scrigno trema con shake crescente",
+        "Fase 2 (1s): glow dorato che si intensifica, particelle che escono dai bordi",
+        "Fase 3 (1s): burst di luce → reveal del contenuto con rarita' visiva",
+        "Comune: bordo grigio, poche particelle. Raro: bordo blu, piu' particelle. Epico: bordo viola, glow. Leggendario: bordo oro, confetti + suono fanfara",
+        "Suono diverso per rarita' (Web Audio API sintetico)",
+        "Tutta l'animazione CSS + JS leggero, no librerie",
+        "Riutilizzare per LootDropModal esistente",
+        "npx next build compila senza errori"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "Ispirazione: apertura loot box di qualsiasi gioco. Il momento di suspense e' PIU' importante del contenuto."
+    },
+    {
+      "id": "FA-013",
+      "title": "Daily bonus crescente con calendar visuale",
+      "description": "Il daily login reward deve mostrare un calendario settimana con reward crescenti e il giorno corrente evidenziato.",
+      "acceptanceCriteria": [
+        "Modale daily login mostra 7 giorni della settimana con reward crescenti: Lun 5c, Mar 8c, Mer 12c, Gio 15c, Ven 20c, Sab 30c (se lavora), Dom bonus streak",
+        "Il giorno corrente e' evidenziato con glow",
+        "I giorni passati mostrano check verde se reclamati, X rosso se saltati",
+        "Animazione coins cascata quando si reclama",
+        "Bonus 7° giorno consecutivo: 50 coins + titolo speciale",
+        "Aggiornare claimDailyLogin in dailyLoginActions.ts per il bonus crescente",
+        "Wrappare in SafeWrapper",
+        "npx next build compila senza errori"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Ispirazione: giochi mobile daily calendar. Incentiva a tornare ogni giorno."
+    },
+    {
+      "id": "FA-014",
+      "title": "Celebrazione level-up epica con evoluzione Fenice",
+      "description": "Il level-up deve essere un momento memorabile con animazione full-screen della Fenice.",
+      "acceptanceCriteria": [
+        "Overlay full-screen con sfondo scuro semi-trasparente",
+        "Testo 'LIVELLO X!' con effetto typewriter dorato",
+        "Particelle fuoco CSS che salgono dal basso",
+        "Se si evolve (cambio stadio Fenice): animazione speciale con transizione tra i due stadi",
+        "Confetti cascata dopo il reveal",
+        "Suono fanfara sintetico (Web Audio API)",
+        "Si chiude con click/tap ovunque dopo 3 secondi",
+        "Aggiornare CelebrationOverlay.tsx esistente",
+        "Wrappare in SafeWrapper",
+        "npx next build compila senza errori"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Il level-up deve essere IL momento dell'esperienza. Memorabile e condivisibile."
+    },
+    {
+      "id": "FA-015",
+      "title": "Micro-animazioni su ogni azione della pipeline",
+      "description": "Ogni azione produttiva nella pipeline deve avere un feedback visivo immediato.",
+      "acceptanceCriteria": [
+        "Quando si esita un lead (qualsiasi esito): la card fa micro-bounce (translateY -4px per 200ms)",
+        "Quando si fissa un appuntamento: confetti leggeri per 1s + card slide-out",
+        "Quando si scarta un lead: card fade-out con leggero slide-down",
+        "Quando si programma un richiamo: card pulsa in ambra per 1s",
+        "Le animazioni sono CSS-only, rispettano getAnimationsEnabled()",
+        "NON modificare la logica degli esiti — solo aggiungere classi CSS dopo il successo",
+        "npx next build compila senza errori"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Feedback visivo immediato = dopamina istantanea. Ma discreto, non deve distrarre."
+    },
+    {
+      "id": "FA-016",
+      "title": "Redesign Topbar wallet e notifiche con stile gaming",
+      "description": "Il wallet coins nella topbar deve avere animazione quando si guadagnano coins. Le notifiche devono avere stile gaming.",
+      "acceptanceCriteria": [
+        "Wallet coins: icona coin animata (leggera rotazione), contatore che fa 'count-up' quando arrivano nuovi coins",
+        "Quando si guadagnano coins: effetto '+X' che sale e svanisce accanto al wallet",
+        "Badge notifiche: pulse rosso gaming-style (non il cerchietto piatto attuale)",
+        "XP bar mini nella topbar: barra sottile sotto il nome utente che mostra il progresso verso il livello",
+        "npx next build compila senza errori"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "La topbar e' sempre visibile — il wallet animato e' un reminder costante della gamification."
+    },
+    {
+      "id": "FA-017",
+      "title": "Suoni sintetici per ogni azione (Web Audio API)",
+      "description": "Effetti sonori brevi e soddisfacenti per le azioni chiave, tutti generati via Web Audio API.",
+      "acceptanceCriteria": [
+        "Coin earned: ding metallico breve (200ms)",
+        "XP gained: whoosh ascendente (150ms)",
+        "Level up: fanfara 3 note (500ms)",
+        "Achievement: triumph chord (400ms)",
+        "Quest complete: success chime (300ms)",
+        "Scrigno/loot: drum roll crescente (2s) + reveal (varia per rarita')",
+        "Hot streak activate: flame burst (200ms)",
+        "Tutti generati con Web Audio API oscillator + envelope in soundEngine.ts",
+        "Toggle on/off in impostazioni (gia' implementato SoundToggle)",
+        "npx next build compila senza errori"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Il feedback sonoro rafforza il loop dopaminico. Deve essere soddisfacente ma non fastidioso."
+    },
+    {
+      "id": "FA-018",
+      "title": "TL Monitor potenziato: vista completa gamification team",
+      "description": "Il Team Leader deve poter vedere e controllare tutta la gamification del team.",
+      "acceptanceCriteria": [
+        "In manager-rpg-monitor: mostrare per ogni GDO/Conferme: livello, XP, coins, streak, quest completate oggi, hot streak attivo",
+        "Possibilita' di aggiungere coins manualmente (gia' implementato in ManualAdjustmentPanel)",
+        "Possibilita' di lanciare un Boss Battle dal pannello",
+        "Possibilita' di creare un Evento Stagionale",
+        "Overview team: totale quest completate oggi, media streak, GDO piu' attivo",
+        "npx next build compila senza errori"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Il TL ha il controllo completo della gamification."
+    },
+    {
+      "id": "FA-019",
+      "title": "Sidebar e navigazione con stile gaming premium",
+      "description": "La sidebar deve avere uno stile piu' gaming: gradiente scuro premium, icone con effetti, indicatore attivo animato.",
+      "acceptanceCriteria": [
+        "Sidebar: gradiente scuro verticale (brand-charcoal → nero profondo)",
+        "Voce attiva: bordo laterale brand-orange con glow, sfondo leggermente piu' chiaro",
+        "Hover sulle voci: leggero glow arancione, icona che si illumina",
+        "Sezione gamification (Store, Profilo, Classifica) con separatore decorativo fiamma/oro",
+        "Logo Fenice in alto con leggero pulse",
+        "npx next build compila senza errori"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "FA-020",
+      "title": "Verifica build, hydration e coerenza visiva finale",
+      "description": "Test completo finale: build, zero hydration errors, coerenza visiva su tutte le pagine.",
+      "acceptanceCriteria": [
+        "npx next build compila con ZERO errori",
+        "Verificare che NESSUN componente abbia bottoni/link dentro span/p",
+        "Verificare che TUTTI i componenti gamification siano wrappati in SafeWrapper",
+        "Verificare che la palette calda sia applicata coerentemente",
+        "Verificare che la pipeline chiamate sia rimasta intatta e leggibile",
+        "Verificare che il sistema XP/coins funzioni (audit finale walletCoins)",
+        "NON fare push, NON fare merge, NON fare deploy"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "Ultimo step. Solo verifica locale."
     }
   ]
 }
