@@ -5,10 +5,12 @@ import dynamic from "next/dynamic"
 import { redirect } from "next/navigation"
 
 const SprintBanner = dynamic(() => import("@/components/SprintBanner").then(mod => mod.SprintBanner))
+const FomoToast = dynamic(() => import("@/components/FomoToast").then(mod => ({ default: mod.FomoToast })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
+import { SafeWrapper } from "@/components/SafeWrapper"
 // Social overlay providers DISABLED — caused WSOD. Will fix in dedicated session.
 
 export default async function DashboardLayout({
@@ -46,6 +48,7 @@ export default async function DashboardLayout({
                         </main>
                     </div>
                 </div>
+                <SafeWrapper><FomoToast /></SafeWrapper>
             </SidebarProvider>
         </RealtimeProvider>
     )

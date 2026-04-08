@@ -1628,3 +1628,9 @@ body .skin-theme-nebula {
   0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.5)); }
   50% { transform: scale(1.15); filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.8)); }
 }
+
+/* === FOMO TOAST ANIMATIONS === */
+@keyframes fomo-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { Flame } from 'lucide-react';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
+import { useRealtimeBroadcast } from '@/components/providers/RealtimeProvider';
+import { useAuth } from '@/components/AuthProvider';
 
 type HotStreakMode = 'inactive' | 'active' | 'intense';
 
@@ -23,6 +25,9 @@ export function HotStreak({ children }: { children: ReactNode }) {
     const [mode, setMode] = useState<HotStreakMode>('inactive');
     const actionTimestampsRef = useRef<number[]>([]);
     const decayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const broadcastedRef = useRef(false);
+    const { broadcastFomo } = useRealtimeBroadcast();
+    const { user } = useAuth();
 
     const clearDecayTimer = useCallback(() => {
         if (decayTimerRef.current) {
@@ -36,6 +41,7 @@ export function HotStreak({ children }: { children: ReactNode }) {
         decayTimerRef.current = setTimeout(() => {
             setMode('inactive');
             actionTimestampsRef.current = [];
+            broadcastedRef.current = false;
         }, DECAY_TIMEOUT_MS);
     }, [clearDecayTimer]);
 
@@ -55,7 +61,19 @@ export function HotStreak({ children }: { children: ReactNode }) {
             startDecayTimer();
         }
         // Don't deactivate here — let the decay timer handle that
-    }, [startDecayTimer]);
+
+        // Broadcast hot streak to colleagues (once per activation)
+        if (count >= ACTIVE_THRESHOLD && !broadcastedRef.current && user) {
+            broadcastedRef.current = true;
+            try {
+                broadcastFomo('fomo_hotstreak', {
+                    userId: user.id,
+                    name: user.user_metadata?.name || 'Un collega',
+                    displayName: user.user_metadata?.displayName || user.user_metadata?.name || 'Un collega',
+                });
+            } catch { /* silent fail */ }
+        }
+    }, [startDecayTimer, broadcastFomo, user]);
 
     useEffect(() => {
         const handleReward = () => {

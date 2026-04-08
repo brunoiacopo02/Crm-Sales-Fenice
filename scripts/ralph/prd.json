@@ -175,8 +175,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": "Crea competizione sociale. NON creare nuovi channel Supabase — riusare quelli in RealtimeProvider."
+      "passes": true,
+      "notes": "FomoToast component: 3 event sources on existing public:leads-changes channel (leadEvents INSERT, userAchievements INSERT, broadcast fomo_hotstreak). User name cache from getGdoAndConfermeUsers(). Filters own events + non-GDO/CONFERME. Max 2 toasts, 4s auto-dismiss, slide-in from right. Contextual icons (Phone, CheckCircle, Trophy, Flame). HotStreak broadcasts via RealtimeProvider context. SafeWrapper in layout. Silent fail on all paths. Build OK."
     },
     {
       "id": "FA-011",
