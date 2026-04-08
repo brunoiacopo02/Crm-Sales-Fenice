@@ -1093,6 +1093,11 @@ body .skin-theme-nebula {
 
 /* === RPG PROFILE IMMERSIVE (SA-011) === */
 
+@keyframes social-comparison-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(201,161,60,0.2); }
+  50% { box-shadow: 0 0 12px rgba(201,161,60,0.5); }
+}
+
 @keyframes rpg-float {
   0%, 100% { transform: translateY(0) scale(1); opacity: 0.6; }
   50% { transform: translateY(-12px) scale(1.05); opacity: 1; }

@@ -15,6 +15,7 @@ const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBann
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
 const ActivityFeed = dynamic(() => import("@/components/ActivityFeed").then(m => ({ default: m.ActivityFeed })))
 const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
+const SocialComparisonBadge = dynamic(() => import("@/components/SocialComparisonBadge").then(m => ({ default: m.SocialComparisonBadge })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -87,6 +88,7 @@ export default async function DashboardPage() {
                 {/* Right: Gamification sidebar (streak + quests) */}
                 <div className="order-2 xl:order-3">
                     <div className="lg:sticky lg:top-4 space-y-4">
+                        <SocialComparisonBadge userId={session!.user.id} role="GDO" />
                         <StreakCounter userId={session!.user.id} />
                         <StreakAnxietyBanner userId={session!.user.id} />
                         <QuestPanel userId={session!.user.id} />
