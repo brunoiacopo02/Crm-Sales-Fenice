@@ -5,8 +5,6 @@ import { StreakCounter } from "@/components/StreakCounter"
 import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
-const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
-const SocialComparisonBadge = dynamic(() => import("@/components/SocialComparisonBadge").then(m => ({ default: m.SocialComparisonBadge })))
 
 export default async function VenditorePage() {
     const supabase = await createClient();
@@ -32,9 +30,7 @@ export default async function VenditorePage() {
 
             {session.user.role === 'VENDITORE' && (
                 <>
-                    <SocialComparisonBadge userId={session.user.id} role="VENDITORE" />
                     <StreakCounter userId={session.user.id} />
-                    <StreakAnxietyBanner userId={session.user.id} />
                     <QuestPanel userId={session.user.id} />
                 </>
             )}

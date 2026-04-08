@@ -7,8 +7,6 @@ import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
-const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
-const SocialComparisonBadge = dynamic(() => import("@/components/SocialComparisonBadge").then(m => ({ default: m.SocialComparisonBadge })))
 
 export default async function ConfermePage() {
     const supabase = await createClient();
@@ -36,16 +34,8 @@ export default async function ConfermePage() {
 
             {session.user.role === 'CONFERME' && (
                 <>
-                    <div className="flex flex-wrap items-start gap-3">
-                        <div className="flex-1 min-w-[250px]">
-                            <ConfermeDailyObjectives confermeUserId={session.user.id} />
-                        </div>
-                        <div className="flex-1 min-w-[250px]">
-                            <StreakCounter userId={session.user.id} />
-                        </div>
-                        <SocialComparisonBadge userId={session.user.id} role="CONFERME" />
-                    </div>
-                    <StreakAnxietyBanner userId={session.user.id} />
+                    <ConfermeDailyObjectives confermeUserId={session.user.id} />
+                    <StreakCounter userId={session.user.id} />
                 </>
             )}
 

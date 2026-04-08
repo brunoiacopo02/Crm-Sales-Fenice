@@ -8,14 +8,9 @@ import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
-const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
 const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").then(m => ({ default: m.BossBattleBanner })))
 const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
-const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
-const ActivityFeed = dynamic(() => import("@/components/ActivityFeed").then(m => ({ default: m.ActivityFeed })))
-const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
-const SocialComparisonBadge = dynamic(() => import("@/components/SocialComparisonBadge").then(m => ({ default: m.SocialComparisonBadge })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -42,12 +37,8 @@ export default async function DashboardPage() {
 
     return (
         <div className="space-y-4">
-            {/* Overlays */}
-            <CelebrationOverlay />
             <LootDropModal userId={session!.user.id} />
-            <DailyLoginReward userId={session!.user.id} />
 
-            {/* Full-width header */}
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                     Pipeline Chiamate
@@ -57,26 +48,15 @@ export default async function DashboardPage() {
                 </div>
             </div>
 
-            {/* Full-width event banners */}
             <SeasonalEventBanner />
             <BossBattleBanner userId={session!.user.id} />
 
-            {/* Gamification compatta: streak + obiettivi in riga */}
-            <div className="flex flex-wrap items-start gap-3">
-                <div className="flex-1 min-w-[250px]">
-                    <GdoDailyObjectives gdoUserId={session!.user.id} />
-                </div>
-                <div className="flex-1 min-w-[250px]">
-                    <StreakCounter userId={session!.user.id} />
-                </div>
-                <SocialComparisonBadge userId={session!.user.id} role="GDO" />
-            </div>
+            <GdoDailyObjectives gdoUserId={session!.user.id} />
 
-            <StreakAnxietyBanner userId={session!.user.id} />
+            <StreakCounter userId={session!.user.id} />
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />
 
-            {/* Pipeline — il focus principale */}
             <PipelineBoard
                 firstCall={firstCall}
                 secondCall={secondCall}
@@ -86,7 +66,6 @@ export default async function DashboardPage() {
                 recalls={recalls}
             />
 
-            {/* Quest in fondo, collassabile */}
             <QuestPanel userId={session!.user.id} />
         </div>
     )
