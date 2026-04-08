@@ -278,3 +278,30 @@ Started: 2026-04-07
   - Sprint banner fetch error is intermittent, likely from missing sprint data in DB
   - Production build is much faster for Playwright E2E than dev server
 ---
+
+## 2026-04-08 - F3-024
+- E2E verification of complete Conferme flow using Playwright on production build (next start)
+- Login as Conferme (andrea@fenice.local / 1234): SUCCESS — redirected to /conferme
+- Dashboard loads with 6 appointments in Pomeriggio, 0 in Mattina, 1 in Richiami
+- Tabs: Pomeriggio (6), Mattina (0), Richiami (1), Storico — all functional
+- VSL icons: "VSL NON Vista" (EyeOff red) visible on leads without confVslSeen — VERIFIED
+- Provenienza contatti: GDO name (GDO 114) + funnel (JOB SIMULATOR, TELEGRAM) visible on all lead cards — VERIFIED
+- Storico tab: 7 rows — 6 Scartato (reason: non interessato) + 1 Confermato (Giorgia Furnò), showing GDO fissatore, esito, motivo, data
+- ConfermeDrawer opens correctly: Dati Lead, Note, Gestione Esiti tabs
+- Gestione Esiti: "Scartato Direttamente" shows dropdown with 7 reasons including "Attaccato in faccia" — VERIFIED
+- QuestPanel: 0/3 daily (Pulizia Rapida, Sentinella Attiva, Operatore Instancabile) + 0/2 weekly (Settimana Operativa, Settimana da Confermatore)
+- Streak counter: 0 giorni, "Inizia la tua streak", 3g a x1.5 — VERIFIED
+- Profilo RPG: loads correctly — Uovo Liv. 1, 0 XP, €1,350 stipendio, Tracker Settimanale
+- Fenice Store: loads with 17 items, categories (Skin Avatar 4, Temi 6, Effetti 7), 0 coins
+- Classifica: multi-role tabs (GDO, Conferme active, Venditori), period tabs (Oggi, Settimana, Mese), leaderboard by CONFERME metric
+- KPI Conferme: Progresso Settimanale (0/24), Storico Mensile, Bilanciamento Venditori, Calendario Mese
+- Console errors: 1 pre-existing (404 /api/user/profile on store) — no new errors from Fase 3B
+- Screenshots saved: e2e-conferme-dashboard-main.png, e2e-conferme-mattina.png, e2e-conferme-richiami.png, e2e-conferme-storico.png, e2e-conferme-drawer-open.png, e2e-conferme-gestione-esiti2.png, e2e-conferme-scarto-reasons.png, e2e-conferme-profilo-rpg.png, e2e-conferme-store.png, e2e-conferme-classifica.png, e2e-conferme-kpi.png
+- No code changes needed — all verification passed
+- npx next build: compiles successfully with zero errors
+- **Learnings per iterazioni future:**
+  - Playwright accessibility snapshot can be stale after React state updates — use evaluate() to check actual DOM
+  - ConfermeDrawer opens via click on card div, not via snapshot ref click — use evaluate() for reliable clicks
+  - Storico view has 400ms debounce before fetching — wait at least 2s for data to load
+  - Conferme account (Andrea) has 0 coins, 0 XP, Liv. 1 — all gamification features functional but no activity yet
+---

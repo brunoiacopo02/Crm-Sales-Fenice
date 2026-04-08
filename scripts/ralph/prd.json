@@ -241,7 +241,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "NON modificare appuntamenti reali. Solo navigazione e verifica."
     },
     {
