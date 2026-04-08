@@ -9,7 +9,7 @@ import { playSound } from '@/lib/soundEngine';
 
 const MAX_VISIBLE = 3;
 
-export function RewardFeedProvider({ children }: { children: React.ReactNode }) {
+export function RewardFeedProvider({ children }: { children?: React.ReactNode }) {
     const [queue, setQueue] = useState<RewardPopupData[]>([]);
 
     const handleRewardEarned = useCallback((e: Event) => {

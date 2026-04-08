@@ -14,7 +14,7 @@ const MAX_VISIBLE = 3;
 // Boss battle check interval: every 60 seconds
 const BOSS_CHECK_INTERVAL = 60_000;
 
-export function SocialNotificationProvider({ children }: { children: React.ReactNode }) {
+export function SocialNotificationProvider({ children }: { children?: React.ReactNode }) {
     const [queue, setQueue] = useState<SocialToastData[]>([]);
     const { user } = useAuth();
     const supabase = createClient();

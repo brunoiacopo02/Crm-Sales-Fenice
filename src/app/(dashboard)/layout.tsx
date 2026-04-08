@@ -9,7 +9,9 @@ const SprintBanner = dynamic(() => import("@/components/SprintBanner").then(mod 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
-// RewardFeedProvider and SocialNotificationProvider removed — caused WSOD crashes
+// Social providers loaded as standalone overlays — if they crash, app keeps working
+const RewardFeedOverlay = dynamic(() => import("@/components/providers/RewardFeedProvider").then(m => ({ default: m.RewardFeedProvider })))
+const SocialNotificationsOverlay = dynamic(() => import("@/components/providers/SocialNotificationProvider").then(m => ({ default: m.SocialNotificationProvider })))
 
 export default async function DashboardLayout({
     children,
@@ -47,6 +49,8 @@ export default async function DashboardLayout({
                     </div>
                 </div>
             </SidebarProvider>
+            <RewardFeedOverlay />
+            <SocialNotificationsOverlay />
         </RealtimeProvider>
     )
 }
