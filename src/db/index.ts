@@ -2,14 +2,13 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 
-// Use Supabase Transaction Pooler (IPv4, handles many concurrent connections)
-const poolerUrl = "postgresql://postgres.ncutwzsifzundikwllxp:Infernape02.88I@aws-1-eu-west-1.pooler.supabase.com:6543/postgres";
-const poolUrl = process.env.DATABASE_POOLER_URL || poolerUrl;
+// Direct connection to Supabase PostgreSQL (IPv4 add-on enabled, Pro plan)
+const dbUrl = process.env.DATABASE_URL || "postgresql://postgres:Infernape02.88I@db.ncutwzsifzundikwllxp.supabase.co:5432/postgres";
 
 const pool = new Pool({
-    connectionString: poolUrl,
-    max: 2,
-    idleTimeoutMillis: 10000,
+    connectionString: dbUrl,
+    max: 10,
+    idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     ssl: {
         rejectUnauthorized: false
