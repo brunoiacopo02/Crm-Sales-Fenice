@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
 import type { CelebrationDetail } from '@/lib/animationUtils';
+import { playSound } from '@/lib/soundEngine';
 
 type CelebrationMode = 'fire' | 'confetti' | 'level_up' | 'achievement' | 'loot_reveal';
 
@@ -119,6 +120,7 @@ export function CelebrationOverlay() {
 
         } else if (celebMode === 'achievement') {
             // Badge materializing with golden particles
+            playSound('achievement');
             runParticleEffect('gold_burst');
 
             timerRef.current = setTimeout(() => {
@@ -128,6 +130,7 @@ export function CelebrationOverlay() {
 
         } else if (celebMode === 'loot_reveal') {
             // Chest burst celebration (triggered after loot reveal)
+            playSound('achievement');
             runParticleEffect('confetti');
             runParticleEffect('gold_burst');
 

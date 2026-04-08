@@ -9,6 +9,7 @@ import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
 import TitleSelector from "@/components/TitleSelector"
 import { AnimationToggle } from "@/components/AnimationToggle"
+import { SoundToggle } from "@/components/SoundToggle"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
@@ -586,6 +587,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         <Settings className="w-4 h-4 text-ash-500" /> Impostazioni
                     </h3>
                     <AnimationToggle />
+                    <SoundToggle />
                 </div>
 
             </div>

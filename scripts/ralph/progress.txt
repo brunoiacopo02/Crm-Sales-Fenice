@@ -39,6 +39,9 @@ Started: 2026-04-08
 - GDO dashboard: 3-col grid layout (feed|pipeline|quest) — grid-cols-1 lg:[1fr_300px] xl:[280px_1fr_300px] with order utilities for responsive reflow
 - RPG Profile: hero banner (dark gradient) + XP bar below + 2-col layout (rewards/streak | financials/roadmap) + quest log + badges + settings
 - Equipped items: getUserInventory(userId) returns shopItem[], match equippedItemId from users table to find active cosmetic
+- Sound engine: playSound(type) from src/lib/soundEngine.ts — Web Audio API synth, OFF by default, localStorage key 'crm-fenice-sounds'
+- getSoundsEnabled()/setSoundsEnabled() pattern mirrors getAnimationsEnabled()/setAnimationsEnabled() but independent toggle
+- SoundToggle in src/components/SoundToggle.tsx — mirrors AnimationToggle layout, placed in ProfileClient settings
 
 ---
 
@@ -330,4 +333,45 @@ Started: 2026-04-08
   - Quick stats HUD: bg-white/5 backdrop-blur-sm for glass-morphism effect on dark background
   - CSS cssValue prefix parsing: skin-avatar-*, skin-theme-*, skin-effect-* for cosmetic type labels
   - Two-column below hero keeps financial info prominent while adding RPG elements alongside
+---
+
+## 2026-04-08 - SA-012
+- Implemented sound design with Web Audio API synthesized sounds (zero external files)
+- Created soundEngine.ts with 6 synthesized sound types using oscillator + gain envelopes:
+  - coin_earned: bright sine ding (1200→1800→1400Hz, 0.3s)
+  - xp_gained: ascending sine sweep (400→1200Hz, 0.2s)
+  - level_up: 4-note triangle fanfare (C5→E5→G5→C6, 0.6s total)
+  - achievement: major triad triangle chord (C5+E5+G5 sustained 0.8s)
+  - quest_complete: 3-note ascending sine chime (E5→G5→C6, 0.36s)
+  - streak_maintained: sawtooth whoosh + sine shimmer (0.3s)
+- Sounds OFF by default — user must opt-in via toggle (localStorage key: crm-fenice-sounds)
+- Created SoundToggle component matching AnimationToggle visual pattern (Volume2/VolumeX icons)
+- Plays preview coin_earned sound when user enables toggle
+- Integrated sound triggers at 6 key points:
+  - RewardFeedProvider: coin_earned on every reward, level_up on didLevelUp
+  - CelebrationOverlay: achievement on achievement/loot_reveal celebrations
+  - QuestChainModal: quest_complete on modal open
+  - DailyLoginReward: coin_earned on successful claim
+  - StreakAnxietyBanner: streak_maintained when transitioning from at-risk/critical to safe
+- Added SoundToggle to ProfileClient settings section next to AnimationToggle
+- All sounds respect getSoundsEnabled() toggle independently from animations toggle
+- AudioContext lazy-initialized, auto-resumed from suspended state (browser gesture policy)
+- File modificati:
+  - src/lib/soundEngine.ts (NEW — Web Audio API synthesized sound engine)
+  - src/components/SoundToggle.tsx (NEW — toggle UI component)
+  - src/components/providers/RewardFeedProvider.tsx (import + coin_earned + level_up sounds)
+  - src/components/CelebrationOverlay.tsx (import + achievement sound on achievement/loot modes)
+  - src/components/QuestChainModal.tsx (import + quest_complete sound)
+  - src/components/DailyLoginReward.tsx (import + coin_earned sound on claim)
+  - src/components/StreakAnxietyBanner.tsx (import + streak_maintained sound on safe transition)
+  - src/app/(dashboard)/profilo/ProfileClient.tsx (import + render SoundToggle in settings)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Web Audio API oscillators: sine for clean tones, triangle for warm fanfare, sawtooth for aggressive whoosh
+  - Gain envelope pattern: setValueAtTime → linearRampToValueAtTime (attack) → exponentialRampToValueAtTime (decay to 0.001, never 0)
+  - Sounds OFF by default: getSoundsEnabled() returns false unless user explicitly enables — respect opt-in
+  - AudioContext.state === 'suspended': browsers suspend until user gesture — call resume() before playing
+  - playSound() is fire-and-forget, no-op when disabled — safe to call from any component without guards
+  - SoundToggle plays preview sound when enabling — immediate feedback confirms it works
+  - StreakAnxietyBanner: use functional setState updater to detect state transition (prev === 'at-risk') and play sound
 ---

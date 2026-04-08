@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Flame, Coins, Sparkles, Zap, Star } from 'lucide-react';
 import { checkDailyLoginStatus, claimDailyLogin } from '@/app/actions/dailyLoginActions';
 import { getAnimationsEnabled, triggerCelebration } from '@/lib/animationUtils';
+import { playSound } from '@/lib/soundEngine';
 import { useRouter } from 'next/navigation';
 
 const STORAGE_KEY = 'crm-fenice-daily-login-last';
@@ -95,7 +96,8 @@ export function DailyLoginReward({ userId }: { userId: string }) {
             setCoinsAwarded(result.coinsAwarded);
             setPhase('claimed');
 
-            // Spawn coin cascade animation
+            // Spawn coin cascade animation + sound
+            playSound('coin_earned');
             if (animationsEnabled) {
                 spawnCoinParticles();
                 triggerCelebration('confetti');

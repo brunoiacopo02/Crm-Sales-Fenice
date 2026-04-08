@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Trophy, Zap, Coins, ChevronRight, Sparkles, Star } from 'lucide-react';
 import { getAnimationsEnabled, triggerCelebration } from '@/lib/animationUtils';
+import { playSound } from '@/lib/soundEngine';
 
 interface CompletedQuestInfo {
     title: string;
@@ -92,6 +93,7 @@ export function QuestChainModal({ completedQuest, nextQuest, onClose }: QuestCha
         if (animationsEnabled) {
             triggerCelebration('confetti');
         }
+        playSound('quest_complete');
         // Show teaser after 1.5 seconds
         const timer = setTimeout(() => {
             setShowTeaser(true);

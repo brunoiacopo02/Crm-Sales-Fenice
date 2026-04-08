@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Flame, ShieldCheck, AlertTriangle, Clock } from 'lucide-react';
 import { getStreakInfo } from '@/app/actions/streakActions';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
+import { playSound } from '@/lib/soundEngine';
 
 type StreakState = 'safe' | 'at-risk' | 'critical' | 'hidden';
 
@@ -99,7 +100,13 @@ export function StreakAnxietyBanner({ userId }: { userId: string }) {
 
             // If streak is active today = safe
             if (isActiveToday) {
-                setStreakState('safe');
+                setStreakState(prev => {
+                    // Play sound when transitioning from at-risk/critical to safe
+                    if (prev === 'at-risk' || prev === 'critical') {
+                        playSound('streak_maintained');
+                    }
+                    return 'safe';
+                });
                 return;
             }
 

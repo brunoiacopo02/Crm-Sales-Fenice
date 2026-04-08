@@ -200,7 +200,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "Ispirazione: suoni Duolingo/Candy Crush. Il feedback sonoro rafforza il loop dopaminico."
     },
     {

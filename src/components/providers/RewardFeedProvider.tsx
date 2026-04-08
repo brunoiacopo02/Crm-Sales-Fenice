@@ -5,6 +5,7 @@ import { RewardPopup, getRandomMotivationalMessage } from '@/components/RewardPo
 import type { RewardPopupData } from '@/components/RewardPopup';
 import type { RewardEarnedDetail } from '@/lib/animationUtils';
 import { triggerCelebration } from '@/lib/animationUtils';
+import { playSound } from '@/lib/soundEngine';
 
 const MAX_VISIBLE = 3;
 
@@ -15,10 +16,14 @@ export function RewardFeedProvider({ children }: { children: React.ReactNode }) 
         const detail = (e as CustomEvent<RewardEarnedDetail>).detail;
         if (!detail) return;
 
+        // Sound: coin ding for every reward
+        playSound('coin_earned');
+
         // Trigger enhanced level-up celebration overlay
         if (detail.didLevelUp && detail.newLevel) {
             setTimeout(() => {
                 triggerCelebration('level_up', { type: 'level_up', level: detail.newLevel });
+                playSound('level_up');
             }, 500); // Slight delay so reward popup shows first
         }
 
