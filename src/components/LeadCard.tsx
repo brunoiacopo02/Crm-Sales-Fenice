@@ -22,6 +22,59 @@ type LeadProps = {
     isRowLayout?: boolean
 }
 
+// --- Funnel Rarity System (styling only) ---
+type FunnelRarity = 'gold' | 'silver' | 'bronze'
+
+const FUNNEL_RARITY_MAP: Record<string, FunnelRarity> = {
+    'CORSO 10 ORE': 'gold',
+    'JOB SIMULATOR': 'gold',
+    'TELEGRAM': 'silver',
+    'TELEGRAM-TK': 'silver',
+    'GOOGLE': 'silver',
+    'ORG': 'bronze',
+    'DATABASE': 'bronze',
+    'SOCIAL': 'bronze',
+}
+
+const RARITY_STYLES: Record<FunnelRarity, {
+    border: string
+    hoverGlow: string
+    badgeBg: string
+    badgeText: string
+    badgeBorder: string
+    accentGradient: string
+}> = {
+    gold: {
+        border: 'border-l-amber-400',
+        hoverGlow: 'hover:shadow-[0_0_18px_-4px_rgba(255,215,0,0.35)]',
+        badgeBg: 'bg-amber-50',
+        badgeText: 'text-amber-700',
+        badgeBorder: 'border-amber-300/70',
+        accentGradient: 'before:from-amber-400 before:via-yellow-300 before:to-amber-500',
+    },
+    silver: {
+        border: 'border-l-slate-400',
+        hoverGlow: 'hover:shadow-[0_0_18px_-4px_rgba(148,163,184,0.35)]',
+        badgeBg: 'bg-slate-50',
+        badgeText: 'text-slate-600',
+        badgeBorder: 'border-slate-300/70',
+        accentGradient: 'before:from-slate-400 before:via-slate-300 before:to-slate-400',
+    },
+    bronze: {
+        border: 'border-l-orange-400/70',
+        hoverGlow: 'hover:shadow-[0_0_18px_-4px_rgba(194,130,80,0.3)]',
+        badgeBg: 'bg-orange-50/70',
+        badgeText: 'text-orange-700/80',
+        badgeBorder: 'border-orange-300/50',
+        accentGradient: 'before:from-orange-400/70 before:via-orange-300/60 before:to-orange-400/70',
+    },
+}
+
+function getFunnelRarity(funnel: string | null): FunnelRarity {
+    if (!funnel) return 'bronze'
+    return FUNNEL_RARITY_MAP[funnel.toUpperCase()] ?? 'bronze'
+}
+
 export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
     // Client-side time for expiry checks (avoids hydration mismatch)
     const [clientNow, setClientNow] = useState(0)
@@ -63,13 +116,16 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
         statusDot = "bg-emerald-500"
     }
 
+    const rarity = getFunnelRarity(lead.funnel)
+    const rarityStyle = RARITY_STYLES[rarity]
+
     if (isRowLayout) {
         return (
-            <div className={`relative bg-white border border-ash-200/80 rounded-xl px-4 py-3 shadow-soft hover:shadow-card hover:border-brand-orange/30 transition-all duration-200 flex items-center justify-between gap-4 group cursor-pointer ${leftAccent}`}>
+            <div className={`relative bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl px-4 py-3 shadow-soft ${rarityStyle.hoverGlow} hover:border-brand-orange/30 transition-all duration-200 flex items-center justify-between gap-4 group cursor-pointer ${leftAccent}`}>
 
                 {/* 1. Nome & Contatti */}
                 <div className="flex-1 min-w-0 sm:min-w-[220px] flex flex-col justify-center">
-                    <div className="font-bold text-ash-900 text-sm flex items-center gap-2">
+                    <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2">
                         <div className="flex items-center gap-2">
                             {lead.name}
                             {lead.status === 'APPOINTMENT' && (
@@ -108,7 +164,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                 {/* 2. Funnel & Status Pills */}
                 <div className="w-52 hidden md:flex flex-col items-start gap-2">
                     {lead.funnel ? (
-                        <div className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-ash-100 text-ash-600 border border-ash-200/80">
+                        <div className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${rarityStyle.badgeBg} ${rarityStyle.badgeText} ${rarityStyle.badgeBorder}`}>
                             {lead.funnel}
                         </div>
                     ) : <div className="text-[10px] text-ash-300 italic">No funnel</div>}
@@ -171,10 +227,10 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
 
     // Default Fallback (vertical layout for other contexts)
     return (
-        <div className="bg-white border border-ash-200/80 rounded-xl p-4 shadow-soft hover:shadow-card transition-all duration-200 mb-3 flex flex-col relative group">
+        <div className={`bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl p-4 shadow-soft ${rarityStyle.hoverGlow} transition-all duration-200 mb-3 flex flex-col relative group`}>
             <div className="flex justify-between items-start mb-2">
                 <div>
-                    <div className="font-semibold text-ash-800 text-base">{lead.name}</div>
+                    <div className="font-bold text-ash-900 text-[15px] leading-tight">{lead.name}</div>
                     <div className="flex items-center gap-2 text-sm text-ash-500 mt-1 group/phone">
                         <Phone className="h-3 w-3" />
                         {lead.phone}
@@ -193,7 +249,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
             </div>
             {lead.funnel && (
                 <div className="mb-4">
-                    <div className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-ash-100 text-ash-600 border border-ash-200/80">
+                    <div className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider border ${rarityStyle.badgeBg} ${rarityStyle.badgeText} ${rarityStyle.badgeBorder}`}>
                         {lead.funnel}
                     </div>
                 </div>
