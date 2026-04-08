@@ -53,7 +53,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
 }) {
 
     const {
-        displayName, gdoCode,
+        displayName, gdoCode, role,
         baseSalaryEur, level, experience,
         stage, targetXpForNext, financials, roadmap
     } = profileData;
@@ -198,27 +198,35 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                             <div className="p-2 rounded-xl bg-emerald-100 border border-emerald-200">
                                 <HandCoins className="w-5 h-5" />
                             </div>
-                            <h3 className="font-bold tracking-tight">Proiezione Stipendio Lordo Mese</h3>
+                            <h3 className="font-bold tracking-tight">{financials.showSalary ? 'Proiezione Stipendio Lordo Mese' : 'Bonus Settimanale'}</h3>
                         </div>
 
-                        <div className="flex items-baseline gap-2 text-ash-900">
-                            <div className="text-5xl font-black tracking-tighter">€ {financials.expectedSalaryGross.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
-                        </div>
-
-                        <div className="mt-6 grid grid-cols-3 gap-4 border-t border-emerald-200/50 pt-6">
-                            <div>
-                                <div className="text-xs font-semibold text-ash-500 uppercase">Base</div>
-                                <div className="text-lg font-bold text-ash-700">€ {baseSalaryEur}</div>
+                        {financials.showSalary ? (
+                            <>
+                                <div className="flex items-baseline gap-2 text-ash-900">
+                                    <div className="text-5xl font-black tracking-tighter">€ {financials.expectedSalaryGross.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                                </div>
+                                <div className="mt-6 grid grid-cols-3 gap-4 border-t border-emerald-200/50 pt-6">
+                                    <div>
+                                        <div className="text-xs font-semibold text-ash-500 uppercase">Base</div>
+                                        <div className="text-lg font-bold text-ash-700">€ {baseSalaryEur}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-semibold text-ash-500 uppercase">Bonus Mese Stimato</div>
+                                        <div className="text-lg font-bold text-emerald-700">+ € {financials.earnedMonthBonus}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-semibold text-ash-500 uppercase">Storico Passate Settimane</div>
+                                        <div className="text-lg font-bold text-ash-700">€ {financials.historicalBonus}</div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex items-baseline gap-2 text-ash-900">
+                                <div className="text-5xl font-black tracking-tighter">+ € {financials.earnedMonthBonus}</div>
+                                <div className="text-sm text-ash-500 ml-2">bonus stimato</div>
                             </div>
-                            <div>
-                                <div className="text-xs font-semibold text-ash-500 uppercase">Bonus Mese Stimato</div>
-                                <div className="text-lg font-bold text-emerald-700">+ € {financials.earnedMonthBonus}</div>
-                            </div>
-                            <div>
-                                <div className="text-xs font-semibold text-ash-500 uppercase">Storico Passate Settimane</div>
-                                <div className="text-lg font-bold text-ash-700">€ {financials.historicalBonus}</div>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Widget settimanale incassato (Gamification Presenze) */}
@@ -226,7 +234,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
                             <Target className="w-4 h-4 text-brand-orange-500" /> Obiettivo in Corso
                         </h3>
-                        <WeeklyBonusWidget userId={profileData.id} />
+                        <WeeklyBonusWidget userId={profileData.id} role={role} />
                     </div>
 
                 </div>

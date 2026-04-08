@@ -15,13 +15,24 @@ interface WidgetState {
     weekEnd: string;
 }
 
-export function WeeklyBonusWidget({ userId }: { userId: string }) {
+export function WeeklyBonusWidget({ userId, role }: { userId: string; role?: string }) {
     const [state, setState] = useState<WidgetState | null>(null);
 
     useEffect(() => {
         if (!userId) return;
-        getCurrentGdoGamificationState(userId).then(setState).catch(console.error);
-    }, [userId]);
+        if (role === 'CONFERME') {
+            // Fetch con override conferme — i target vengono passati dal rpgProfileActions
+            getCurrentGdoGamificationState(userId, undefined, {
+                role: 'CONFERME',
+                target1Override: 18,
+                reward1Override: 145,
+                target2Override: 21,
+                reward2Override: 290,
+            }).then(setState).catch(console.error);
+        } else {
+            getCurrentGdoGamificationState(userId).then(setState).catch(console.error);
+        }
+    }, [userId, role]);
 
     if (!state) return <div className="skeleton-card h-40" />;
 
@@ -56,14 +67,14 @@ export function WeeklyBonusWidget({ userId }: { userId: string }) {
                         <div className="p-1.5 rounded-lg bg-ember-500/20">
                             <Flame className="h-5 w-5 text-ember-400" />
                         </div>
-                        <h2 className="text-xl font-bold tracking-tight text-brand-orange-300">Tracker Settimanale GDO</h2>
+                        <h2 className="text-xl font-bold tracking-tight text-brand-orange-300">Tracker Settimanale {role === 'CONFERME' ? 'Conferme' : 'GDO'}</h2>
                     </div>
                     <div className="text-sm text-ash-400 font-medium">
                         {state.currentWeekName} <span className="text-ash-500 ml-1">({state.weekStart} - {state.weekEnd})</span>
                     </div>
                     <div className="mt-4 inline-flex items-center gap-2 bg-white/5 rounded-xl px-4 py-2 border border-white/10">
                         <Zap className="h-4 w-4 text-gold-400" />
-                        <div className="font-semibold">{state.currentPresences} Presenze Effettive</div>
+                        <div className="font-semibold">{state.currentPresences} {role === 'CONFERME' ? 'Conferme Fatte' : 'Presenze Effettive'}</div>
                     </div>
                 </div>
 

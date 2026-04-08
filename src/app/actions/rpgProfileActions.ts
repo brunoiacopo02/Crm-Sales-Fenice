@@ -11,22 +11,33 @@ export async function getGdoRpgProfile(userId: string) {
     if (userRows.length === 0) throw new Error("Utente non trovato");
 
     const user = userRows[0];
+    const role = user.role || 'GDO';
 
     // Recupero il Gamification State di questa settimana correntemente in corso
-    const weekState = await getCurrentGdoGamificationState(userId);
+    let weekState;
+    if (role === 'CONFERME') {
+        // Per Conferme: target da confermeTargetTier1/Tier2, reward fissi 145/290
+        weekState = await getCurrentGdoGamificationState(userId, undefined, {
+            role: 'CONFERME',
+            target1Override: user.confermeTargetTier1 || 18,
+            reward1Override: 145,
+            target2Override: user.confermeTargetTier2 || 21,
+            reward2Override: 290,
+        });
+    } else {
+        weekState = await getCurrentGdoGamificationState(userId);
+    }
 
-    // Potremmo ricalcolare live i bonus del mese intero incrociando i target, ma per l'MVP
-    // simuliamo lo sblocco live incrociando i dati settimanali attuali.
     let expectedMonthBonus = 0;
     if (weekState.currentPresences >= weekState.target2) expectedMonthBonus += weekState.reward2;
-    // se non raggiunge il T2 ma raggiunge il T1
     else if (weekState.currentPresences >= weekState.target1) expectedMonthBonus += weekState.reward1;
-
-    // A scopi illustrativi sulla Dashboard, usiamo totalBonusesEur come cassaforte storica.
-    const expectedSalaryGross = user.baseSalaryEur + expectedMonthBonus + user.totalBonusesEur;
 
     const currentStage = getEvolutionStage(user.level);
     const targetXpForNext = GAME_CONSTANTS.calculateTargetXp(user.level);
+
+    // Per venditori e manager non mostriamo lo stipendio, solo il bonus
+    const showSalary = role === 'GDO' || role === 'CONFERME';
+    const expectedSalaryGross = showSalary ? user.baseSalaryEur + expectedMonthBonus + user.totalBonusesEur : 0;
 
     return {
         ...user,
@@ -36,8 +47,9 @@ export async function getGdoRpgProfile(userId: string) {
         financials: {
             expectedSalaryGross,
             earnedMonthBonus: expectedMonthBonus,
-            historicalBonus: user.totalBonusesEur
+            historicalBonus: user.totalBonusesEur,
+            showSalary,
         },
-        roadmap: ROADMAP_REWARDS.filter(r => r.level >= user.level).slice(0, 3) // Le prossime 3 milestone
+        roadmap: ROADMAP_REWARDS.filter(r => r.level >= user.level).slice(0, 3)
     }
 }

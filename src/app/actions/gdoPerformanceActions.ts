@@ -236,7 +236,7 @@ export async function getManagerGdoTables(monthString: string) {
 /**
  * FASE 2.2: Logica GDO Frontend (Widget Ultra Veloce)
  */
-export async function getCurrentGdoGamificationState(gdoUserId: string, testTodayOverride?: Date) {
+export async function getCurrentGdoGamificationState(gdoUserId: string, testTodayOverride?: Date, overrides?: { role?: string; target1Override?: number; reward1Override?: number; target2Override?: number; reward2Override?: number }) {
     const today = testTodayOverride || new Date();
     const currentMonthStr = today.toISOString().slice(0, 7);
     const weeks = getMonthWeeks(currentMonthStr);
@@ -257,30 +257,52 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
     let target1 = 10, reward1 = 135;
     let target2 = 13, reward2 = 270;
 
-    const rules = await db.select().from(weeklyGamificationRules).where(eq(weeklyGamificationRules.month, currentMonthStr));
-    if (rules.length > 0) {
-        target1 = rules[0].targetTier1;
-        reward1 = rules[0].rewardTier1;
-        target2 = rules[0].targetTier2;
-        reward2 = rules[0].rewardTier2;
+    if (overrides?.target1Override) {
+        target1 = overrides.target1Override;
+        reward1 = overrides.reward1Override || 145;
+        target2 = overrides.target2Override || 21;
+        reward2 = overrides.reward2Override || 290;
+    } else {
+        const rules = await db.select().from(weeklyGamificationRules).where(eq(weeklyGamificationRules.month, currentMonthStr));
+        if (rules.length > 0) {
+            target1 = rules[0].targetTier1;
+            reward1 = rules[0].rewardTier1;
+            target2 = rules[0].targetTier2;
+            reward2 = rules[0].rewardTier2;
+        }
     }
 
-    // Conta le presenze matematiche SOLO in questa settimana in corso.
-    const monthLeads = await db.select().from(leads).where(
-        and(
-            eq(leads.assignedToId, gdoUserId),
-            isNotNull(leads.appointmentDate),
-            gte(leads.appointmentDate, currentWeekStart),
-            lte(leads.appointmentDate, currentWeekEnd)
-        )
-    );
-
+    // Conta le presenze/conferme SOLO in questa settimana in corso.
     let currentPresences = 0;
-    monthLeads.forEach(l => {
-        if (isPresenziato(l.salespersonOutcome)) {
-            currentPresences++;
-        }
-    });
+
+    if (overrides?.role === 'CONFERME') {
+        // Per Conferme: conta i lead confermati da questo operatore nella settimana
+        const confermeLeads = await db.select().from(leads).where(
+            and(
+                eq(leads.confirmationsUserId, gdoUserId),
+                eq(leads.confirmationsOutcome, 'confermato'),
+                isNotNull(leads.confirmationsTimestamp),
+                gte(leads.confirmationsTimestamp, currentWeekStart),
+                lte(leads.confirmationsTimestamp, currentWeekEnd)
+            )
+        );
+        currentPresences = confermeLeads.length;
+    } else {
+        // Per GDO: conta le presenze effettive
+        const monthLeads = await db.select().from(leads).where(
+            and(
+                eq(leads.assignedToId, gdoUserId),
+                isNotNull(leads.appointmentDate),
+                gte(leads.appointmentDate, currentWeekStart),
+                lte(leads.appointmentDate, currentWeekEnd)
+            )
+        );
+        monthLeads.forEach(l => {
+            if (isPresenziato(l.salespersonOutcome)) {
+                currentPresences++;
+            }
+        });
+    }
 
     return {
         currentPresences,
