@@ -42,6 +42,8 @@ Started: 2026-04-08
 - Sound engine: playSound(type) from src/lib/soundEngine.ts — Web Audio API synth, OFF by default, localStorage key 'crm-fenice-sounds'
 - getSoundsEnabled()/setSoundsEnabled() pattern mirrors getAnimationsEnabled()/setAnimationsEnabled() but independent toggle
 - SoundToggle in src/components/SoundToggle.tsx — mirrors AnimationToggle layout, placed in ProfileClient settings
+- SocialComparisonBadge: reuses existing leaderboard actions, calculates percentile client-side with 30s polling + reward_earned refresh
+- Tier system: gold (top 10% or rank 1), silver (top 25%), bronze (top 50%), neutral — based on position ratio not percentile
 
 ---
 
@@ -374,4 +376,48 @@ Started: 2026-04-08
   - playSound() is fire-and-forget, no-op when disabled — safe to call from any component without guards
   - SoundToggle plays preview sound when enabling — immediate feedback confirms it works
   - StreakAnxietyBanner: use functional setState updater to detect state transition (prev === 'at-risk') and play sound
+---
+
+## 2026-04-08 - SA-013
+- Implemented social comparison badge: "Sei meglio del X% dei colleghi"
+- Created server action getSocialComparison(userId, role) that calculates rank percentile from today's leaderboard
+- Reuses existing getLeaderboard/getConfermeLeaderboard/getVenditoriLeaderboard for data
+- Percentile formula: (totalUsers - rank) / (totalUsers - 1) * 100
+- 4 tiers: gold (top 10% or rank 1), silver (top 25%), bronze (top 50%), neutral (below 50%)
+- Dynamic messages: "Sei il migliore oggi!", "Solo N persone davanti a te!", "Sei meglio del X% dei tuoi colleghi!"
+- Created SocialComparisonBadge client component with tier-colored badge, icon, percentile display
+- Auto-refreshes every 30s + on reward_earned event (2s delay for server processing)
+- Gold tier icon has pulsing glow animation (social-comparison-glow keyframe)
+- Integrated in 4 pages: GDO dashboard (right sidebar), Conferme dashboard, Venditore dashboard, Profile (after stat cards)
+- File modificati:
+  - src/app/actions/socialComparisonActions.ts (NEW — server action for percentile calculation)
+  - src/components/SocialComparisonBadge.tsx (NEW — client badge component with tier system)
+  - src/app/(dashboard)/page.tsx (added SocialComparisonBadge to GDO dashboard)
+  - src/app/(dashboard)/conferme/page.tsx (added SocialComparisonBadge to Conferme dashboard)
+  - src/app/(dashboard)/venditore/page.tsx (added SocialComparisonBadge to Venditore dashboard)
+  - src/app/(dashboard)/profilo/ProfileClient.tsx (added SocialComparisonBadge to profile)
+  - src/app/globals.css (social-comparison-glow keyframe)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Reuse existing leaderboard actions rather than duplicating DB queries — getSocialComparison wraps getLeaderboard/role variants
+  - Percentile: (totalUsers - rank) / (totalUsers - 1) * 100 handles edge case of single user (returns 100%)
+  - Tier: position-based (rank/total * 100) not percentile-based — ensures rank 1 is always gold if they have score
+  - Dynamic messages: special cases first (score 0, rank 1, aheadCount <= 3), then percentile-based
+  - SocialComparisonBadge uses setTimeout(2000) on reward_earned to let server process the new data before refresh
+---
+
+## 2026-04-08 - SA-014
+- Verified build and visual coherence for all Social Addiction Redesign stories (SA-001 through SA-013)
+- **Build check**: `npx next build` compiles with ZERO errors (Turbopack, 11.4s, 50 static pages)
+- **Hydration audit**: All 14 new/modified components audited — 12 buttons found, ALL properly wrapped in `<div>` containers. Zero `<span>`/`<p>` hydration violations.
+- **CSS animation audit**: All 44+ new CSS keyframe animations use GPU-accelerated properties only (transform, opacity, box-shadow, background-position, filter). Zero layout-shift-causing properties (no width/height/margin/padding/top/left animations).
+- **Design system compliance**: All components follow premium design system (ash-*, ember-*, gold-* palette), respect getAnimationsEnabled() toggle, use brand colors consistently.
+- NO push, NO merge, NO deploy — local verification only.
+- File modificati:
+  - scripts/ralph/prd.json (passes: true for SA-014)
+- **Learnings per iterazioni future:**
+  - Full Social Addiction Redesign: 14 stories, all passing build, hydration-safe, animation-safe
+  - Pattern: Web Audio API synth sounds > audio files for bundle size
+  - Pattern: CSS-only animations with transform/opacity for zero layout shift
+  - Pattern: localStorage for client-only state (reactions, sound toggle, animation toggle)
 ---

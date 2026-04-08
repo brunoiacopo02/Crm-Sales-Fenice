@@ -215,7 +215,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "Ispirazione: Spotify Wrapped percentili. La comparazione sociale e' il driver motivazionale piu' potente."
     },
     {
@@ -230,7 +230,7 @@
         "NON fare push, NON fare merge, NON fare deploy — solo verifica locale"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "SOLO LOCALE. Il deploy lo faranno manualmente dopo review."
     }
   ]
