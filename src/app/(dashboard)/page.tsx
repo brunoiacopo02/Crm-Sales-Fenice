@@ -33,7 +33,19 @@ export default async function DashboardPage() {
     }
 
     // Fetch leads for the current pipeline state
-    const { firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive, recalls } = await getPipelineLeads()
+    let firstCall: any[] = [], secondCall: any[] = [], thirdCall: any[] = [], fourthCall: any[] = [], recalls: any[] = [];
+    let isFourthCallActive = false;
+    try {
+        const data = await getPipelineLeads();
+        firstCall = data.firstCall;
+        secondCall = data.secondCall;
+        thirdCall = data.thirdCall;
+        fourthCall = data.fourthCall;
+        isFourthCallActive = data.isFourthCallActive;
+        recalls = data.recalls;
+    } catch (e) {
+        console.error("Pipeline fetch error:", e);
+    }
 
     return (
         <div className="space-y-4">

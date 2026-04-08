@@ -27,24 +27,12 @@ export async function middleware(request: NextRequest) {
         }
     );
 
-    let user = null;
-    try {
-        const { data } = await supabase.auth.getUser();
-        user = data?.user;
-    } catch {
-        // Token refresh can fail — pass through and let page handle auth
-        // Don't redirect to login on auth errors — the page-level auth check will handle it
-    }
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user && !request.nextUrl.pathname.startsWith('/login') && !request.nextUrl.pathname.startsWith('/api/')) {
-        // Only redirect to login if we're sure the user is not authenticated
-        // Check if there's a session cookie present — if so, don't redirect (may be a transient auth error)
-        const hasSessionCookie = request.cookies.getAll().some(c => c.name.includes('auth-token'));
-        if (!hasSessionCookie) {
-            const url = request.nextUrl.clone();
-            url.pathname = '/login';
-            return NextResponse.redirect(url);
-        }
+    if (!user && !request.nextUrl.pathname.startsWith('/login')) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        return NextResponse.redirect(url);
     }
 
     return supabaseResponse;
