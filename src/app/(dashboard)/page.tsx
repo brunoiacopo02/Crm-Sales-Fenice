@@ -35,6 +35,7 @@ export default async function DashboardPage() {
     // Fetch leads for the current pipeline state
     let firstCall: any[] = [], secondCall: any[] = [], thirdCall: any[] = [], fourthCall: any[] = [], recalls: any[] = [];
     let isFourthCallActive = false;
+    let pipelineError = "";
     try {
         const data = await getPipelineLeads();
         firstCall = data.firstCall;
@@ -43,13 +44,20 @@ export default async function DashboardPage() {
         fourthCall = data.fourthCall;
         isFourthCallActive = data.isFourthCallActive;
         recalls = data.recalls;
-    } catch (e) {
+    } catch (e: any) {
+        pipelineError = e?.message || String(e);
         console.error("Pipeline fetch error:", e);
     }
 
     return (
         <div className="space-y-4">
             <LootDropModal userId={session!.user.id} />
+
+            {pipelineError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    Errore caricamento pipeline: {pipelineError}. Prova a ricaricare la pagina (Ctrl+Shift+R).
+                </div>
+            )}
 
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight text-gray-900">
