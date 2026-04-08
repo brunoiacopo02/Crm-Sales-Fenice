@@ -1,237 +1,130 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/social-addiction-redesign",
-  "description": "Social Addiction Redesign — Rendere il CRM coinvolgente come un social network. Dopamina, micro-reward, feed live, FOMO, streak anxiety, celebrazioni. Solo locale, NO deploy.",
+  "branchName": "ralph/fase-1-bugfix",
+  "description": "Fase 1 — Correzioni & Bug Fix: dati mancanti in Performance GDO e Marketing, riorganizzazione dashboard, fix orari, pause, esiti, import lead",
   "userStories": [
     {
-      "id": "SA-001",
-      "title": "Micro-reward pop-up su ogni azione",
-      "description": "Ogni azione produttiva (chiamata, fissaggio, conferma, chiusura) deve mostrare un pop-up animato con XP e coins guadagnati, come i +1 dei social.",
+      "id": "F1-001",
+      "title": "Performance GDO: aggiungere lead assegnati e percentuale fissaggio",
+      "description": "Nella sezione Performance GDO (manager-gdo-performance) mancano due metriche chiave: il numero di lead assegnati a ciascun GDO e la percentuale di fissaggio (appuntamenti / lead lavorati).",
       "acceptanceCriteria": [
-        "Creare componente RewardPopup che appare in basso a destra con animazione slide-up + fade",
-        "Mostra: icona azione, '+X XP', '+Y coins', messaggio motivazionale random",
-        "Il popup scompare dopo 3 secondi con fade-out",
-        "Aggiungere un context/provider globale RewardFeedProvider che raccoglie i reward e li mostra in coda",
-        "Integrare con awardXpAndCoins — ogni volta che viene chiamato, emette un evento custom 'reward_earned'",
-        "Il popup deve avere effetto glow e particelle leggere (CSS only)",
-        "Usare skill gamification-loops per variable reward messaging",
+        "Aggiungere colonna 'Lead Assegnati' nella tabella GDO in src/app/(dashboard)/manager-gdo-performance/ManagerGdoClient.tsx",
+        "Aggiungere colonna '% Fissaggio' calcolata come (appuntamenti fissati / lead assegnati * 100)",
+        "Aggiornare il server action in managerAdvancedActions o simile per fornire i dati necessari",
+        "Le nuove colonne devono essere visibili nel periodo selezionato (oggi/mese/trimestre)",
         "npx next build compila senza errori"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "Ispirazione: notifiche Instagram like/follow. Breve, colorato, dopamina immediata."
+      "passes": false,
+      "notes": "ManagerOperativaBoard ha gia' leadAssegnati e fissaggioTotale — riusare la stessa logica di query."
     },
     {
-      "id": "SA-002",
-      "title": "Feed attivita' live nella dashboard",
-      "description": "Un feed in tempo reale tipo social che mostra le azioni dei colleghi: chi ha fissato un appuntamento, chi ha sbloccato un badge, chi ha vinto uno sprint.",
+      "id": "F1-002",
+      "title": "Marketing Analytics: aggiungere lead assegnati e percentuale fissaggio",
+      "description": "Nella sezione Marketing Analytics mancano le metriche 'lead assegnati' e 'percentuale di fissaggio' per ogni funnel e per ogni GDO nel drill-down.",
       "acceptanceCriteria": [
-        "Creare componente ActivityFeed con lista scrollabile di eventi recenti",
-        "Mostra: avatar/iniziali utente, azione (ha fissato un app, ha sbloccato badge X, ha raggiunto streak 7), timestamp relativo (2 min fa)",
-        "Dati da leadEvents + coinTransactions + userAchievements (ultimi 50 eventi)",
-        "Creare server action getActivityFeed() che aggrega da piu' tabelle",
-        "Auto-refresh ogni 30 secondi o su evento realtime",
-        "Posizionare nella dashboard principale (sidebar destra o sezione dedicata)",
-        "Design: card compatte con bordo colorato per tipo evento, hover effect",
+        "Aggiungere 'Lead Assegnati' nella tabella funnel di MarketingAnalyticsClient.tsx",
+        "Aggiungere '% Fissaggio' (appuntamenti / lead assegnati * 100) nella tabella funnel",
+        "Aggiungere le stesse metriche nel drill-down GDO per funnel",
+        "Aggiornare il server action marketingActions.ts per calcolare e ritornare questi dati",
+        "Protezione divisione per zero sui calcoli percentuali",
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Ispirazione: feed Twitter/Instagram stories. Crea FOMO e competizione sociale."
+      "passes": false,
+      "notes": "Il tipo GdoStatTableRow va esteso con i nuovi campi."
     },
     {
-      "id": "SA-003",
-      "title": "Daily login reward e welcome screen",
-      "description": "Quando l'utente fa login la prima volta nel giorno, mostrare una welcome screen con il daily reward (coins bonus) e lo stato streak.",
+      "id": "F1-003",
+      "title": "Riorganizzare Dashboard Operativa in KPI Team GDO",
+      "description": "Spostare la tabella 'Dashboard Operativa Aziendale' (ManagerOperativaBoard) dentro la sezione KPI Team GDO. Rimuovere la tabella 'Classifica GDO' dalla sezione KPI Team GDO.",
       "acceptanceCriteria": [
-        "Creare componente DailyLoginReward che appare come modale full-screen leggero",
-        "Mostra: 'Benvenuto [nome]!', streak attuale con fiamma animata, daily bonus coins (+5 base, +10 se streak >= 3, +20 se streak >= 7)",
-        "Bottone 'Inizia la giornata!' che chiude il modale e reclama i coins",
-        "Il modale appare solo UNA volta al giorno (check via localStorage + server timestamp)",
-        "Creare server action claimDailyLogin(userId) che aggiunge coins e aggiorna streak",
-        "Animazione: coins che cadono dall'alto con effetto cascata quando si reclama",
+        "Integrare il componente ManagerOperativaBoard (o i suoi dati) dentro la pagina kpi-team",
+        "Rimuovere la 'Classifica GDO' dalla pagina kpi-team se presente",
+        "La tabella operativa deve mantenere tutte le sue colonne e il filtro periodo (oggi/mese/trimestre)",
+        "Il layout deve essere coerente con il resto della pagina KPI Team",
+        "Se ManagerOperativaBoard era usato altrove, verificare che non si rompa nulla",
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Ispirazione: daily login di giochi mobile. Il reward cresce con la streak = incentivo a tornare."
+      "passes": false,
+      "notes": "ManagerOperativaBoard e' in src/components/ManagerOperativaBoard.tsx, KPI Team e' in src/app/(dashboard)/kpi-team/"
     },
     {
-      "id": "SA-004",
-      "title": "Notifiche push-style per eventi importanti",
-      "description": "Notifiche toast animate che appaiono per eventi sociali: qualcuno ti ha superato in classifica, un collega ha sbloccato un achievement raro, il boss battle sta per finire.",
+      "id": "F1-004",
+      "title": "Fix orario andamento chiamate KPI Team GDO a 13:30-20:00",
+      "description": "Nella tabella 'Andamento Chiamate e Appuntamenti' in KPI Team GDO, l'orario lavorativo deve essere 13:30-20:00, non calcolato da primo all'ultimo log.",
       "acceptanceCriteria": [
-        "Creare componente SocialNotificationToast con animazione slide-in da destra",
-        "Tipi di notifica: 'Ti hanno superato in classifica!', 'X ha sbloccato [badge raro]!', 'Boss Battle: 2 ore rimaste!', 'Evento stagionale iniziato!'",
-        "Ogni toast ha: icona contestuale, messaggio, CTA opzionale (es. 'Vai alla classifica')",
-        "Integrazione con Supabase Realtime per ricevere notifiche live",
-        "Le notifiche hanno suoni opzionali (rispetta toggle animationsEnabled)",
-        "Stack di max 3 notifiche visibili contemporaneamente",
+        "Modificare il calcolo in kpiTeamActions.ts per usare range fisso 13:30-20:00 Europe/Rome",
+        "Il calcolo chiamate/ora deve basarsi sulle ore lavorate nel range 13:30-20:00 (6.5 ore)",
+        "Se il GDO ha loggato chiamate fuori orario, quelle chiamate contano ma le ore restano 6.5",
+        "Il grafico/tabella andamento deve mostrare solo le fasce orarie 13:30-20:00",
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Ispirazione: notifiche TikTok/Instagram. FOMO + urgenza + competizione."
+      "passes": false,
+      "notes": "Attualmente teamHoursWorked e' calcolato da timestamp primo-ultimo log."
     },
     {
-      "id": "SA-005",
-      "title": "Quest chain: sblocco a catena con teaser",
-      "description": "Quando completi una quest, mostra subito la prossima quest sbloccata con un teaser del reward. Effetto 'just one more'.",
+      "id": "F1-005",
+      "title": "Fix Monitor Pause: calcolo tempo e rimozione limite 2 pause",
+      "description": "Il conteggio del tempo in pausa non e' corretto. Inoltre il limite di 2 pause al giorno va rimosso per permettere pause illimitate (mantenendo il limite di 15 min per pausa).",
       "acceptanceCriteria": [
-        "Quando una quest viene completata, mostrare modale 'Quest Completata!' con confetti",
-        "Sotto il messaggio di completamento, mostrare: 'Prossima sfida: [titolo]' con progress bar a 0% e reward preview",
-        "Bottone 'Accetta la sfida!' che chiude il modale (la quest e' gia' attiva)",
-        "Se non ci sono quest successive, mostrare 'Hai completato tutto! Torna domani per nuove sfide'",
-        "Animazione celebrativa: confetti + glow + XP counter che scorre verso l'alto",
+        "Auditare e fixare il calcolo durationSeconds e exceededSeconds in pauseUtils.ts e pauseActions.ts",
+        "Rimuovere o alzare significativamente MAX_PAUSES_PER_DAY in pauseUtils.ts (attualmente 2)",
+        "Mantenere MAX_MINUTES_PER_PAUSE a 15 minuti",
+        "Rimuovere la logica isBlocked basata su usedPauses >= MAX_PAUSES_PER_DAY in pauseActions.ts",
+        "Verificare che il monitor pause del manager mostri i dati corretti",
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "Ispirazione: 'just one more episode' di Netflix. La catena di quest crea loop di engagement."
+      "passes": false,
+      "notes": "BREAK_RULES in pauseUtils.ts: MAX_PAUSES_PER_DAY: 2, MAX_MINUTES_PER_PAUSE: 15. Il blocking e' su riga ~174 di pauseActions.ts."
     },
     {
-      "id": "SA-006",
-      "title": "Streak anxiety: visual warning e countdown",
-      "description": "Quando la streak sta per rompersi (fine giornata, nessuna quest completata), mostrare warning crescenti con urgenza visiva.",
+      "id": "F1-006",
+      "title": "Aggiungere esito 'Numero inesistente' tra le cause scarto",
+      "description": "Tra le cause di scarto lead chiamato manca l'opzione 'Numero inesistente'. Va aggiunta come nuova opzione nel modale esiti.",
       "acceptanceCriteria": [
-        "Se sono le 18:00+ e la streak non e' stata mantenuta oggi, mostrare banner rosso pulsante nella dashboard",
-        "Il banner mostra: icona fiamma che trema, 'La tua streak di X giorni sta per rompersi!', countdown alle 23:59",
-        "Se la streak e' attiva (quest completata), mostrare invece badge verde 'Streak sicura per oggi'",
-        "Dopo le 20:00: il banner diventa piu' urgente con shake animation",
-        "Il StreakCounter esistente deve cambiare colore/animazione in base allo stato (safe/at-risk/broken)",
+        "Aggiungere 'numero inesistente' alla lista discardReasons in OutcomeModal.tsx",
+        "Verificare che il nuovo esito venga salvato correttamente nel database (campo rejectReason o simile)",
+        "Verificare che il nuovo esito appaia correttamente nell'archivio e nei report",
         "npx next build compila senza errori"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Ispirazione: Duolingo streak anxiety. La paura di perdere la streak motiva a completare almeno una quest."
+      "passes": false,
+      "notes": "Le discard reasons attuali: non interessato, disoccupato, straniero, solo informazioni, non vuole prendere l'appuntamento."
     },
     {
-      "id": "SA-007",
-      "title": "Leaderboard live con animazioni ranking e reazioni",
-      "description": "Il leaderboard deve aggiornarsi in tempo reale con animazioni quando qualcuno cambia posizione, e permettere reazioni (emoji) ai risultati dei colleghi.",
+      "id": "F1-007",
+      "title": "Fix Import Lead: permettere duplicati e lead senza nome",
+      "description": "L'import CSV attualmente rifiuta lead con telefono/email duplicati e lead senza nome. Bisogna rendere entrambi opzionali.",
       "acceptanceCriteria": [
-        "Il leaderboard si aggiorna ogni 10 secondi (gia' implementato) con animazione slide sulle righe che cambiano posizione",
-        "Quando un utente sale di posizione: freccia verde animata + highlight riga per 3 secondi",
-        "Quando un utente scende: freccia rossa sottile",
-        "Effetto speciale top 3: bordo dorato pulsante per il primo, argento per il secondo, bronzo per il terzo",
-        "Aggiungere bottone emoji reaction (fuoco, applauso, fulmine) accanto a ogni riga — click incrementa counter visibile",
-        "Le reactions sono solo visive (localStorage), non persistite nel DB",
+        "Aggiungere checkbox/opzione 'Consenti duplicati' nel form di import che bypassa il check duplicati",
+        "Permettere il caricamento di lead senza nome (campo nome vuoto o placeholder)",
+        "Se il nome manca, usare un placeholder tipo 'Lead senza nome' o lasciare vuoto",
+        "Rimuovere il requisito di email obbligatoria (renderla opzionale)",
+        "Mantenere la validazione telefono (minimo 5 cifre)",
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "Ispirazione: live leaderboard gaming + Instagram reactions. Competizione sociale visiva."
+      "passes": false,
+      "notes": "importLeads.ts riga 131-135 rifiuta lead senza nome. Il check duplicati usa processedPhones/processedEmails Sets + query DB."
     },
     {
-      "id": "SA-008",
-      "title": "Progress bar XP con milestones e anticipazione reward",
-      "description": "La progress bar XP nel profilo deve mostrare le milestone future con anteprime dei reward, creando anticipazione.",
+      "id": "F1-008",
+      "title": "Import Lead: migliorare mapping colonne CSV",
+      "description": "Il mapping colonne CSV e' rigido (Nome, Telefono1, Cognome/Funnel, Email). Aggiungere piu' opzioni di mapping per supportare CSV con header diversi.",
       "acceptanceCriteria": [
-        "La barra XP deve mostrare marker per i prossimi 3 livelli con icone reward",
-        "Hover su un marker mostra tooltip: 'Livello X: sblocchi [reward]'",
-        "Quando il fill della barra passa un marker: animazione burst + suono opzionale",
-        "Sotto la barra: sezione 'Prossimi premi' con card per i 3 reward piu' vicini (coins milestone, evoluzione Fenice, titolo)",
-        "Effetto shimmer sulla porzione non ancora raggiunta della barra",
+        "Mostrare un'anteprima delle prime 3-5 righe del CSV prima dell'import",
+        "Permettere all'utente di mappare manualmente le colonne CSV ai campi del CRM (nome, telefono, email, funnel)",
+        "Supportare header alternativi comuni (es. 'Nome e Cognome', 'Phone', 'Cellulare', 'Fonte')",
+        "Se una colonna non viene mappata, il campo resta vuoto (tranne telefono che e' obbligatorio)",
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "Ispirazione: progress bar dei giochi RPG. L'anticipazione del reward e' piu' potente del reward stesso."
-    },
-    {
-      "id": "SA-009",
-      "title": "Effetti celebrativi potenziati: level-up, loot, achievement",
-      "description": "Potenziare le animazioni celebrative per renderle memorabili e condivisibili.",
-      "acceptanceCriteria": [
-        "Level-up: full-screen overlay con animazione Fenice che evolve (fiamme CSS), confetti cascata, testo 'LIVELLO X!' con effetto typewriter",
-        "Achievement sbloccato: badge che si materializza con glow + particelle dorate, suono triumph",
-        "Loot drop: modale con effetto 'apertura scrigno' — suspense di 2 secondi prima del reveal con shake crescente",
-        "Ogni celebrazione ha durata 3-5 secondi e si chiude con tap/click ovunque",
-        "Tutte le animazioni CSS-only (no librerie), rispettano toggle animationsEnabled",
-        "CelebrationOverlay component gia' esiste — estenderlo con i nuovi effetti",
-        "npx next build compila senza errori"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": "Ispirazione: apertura loot box gaming. Il momento celebrativo deve essere MEMORABILE."
-    },
-    {
-      "id": "SA-010",
-      "title": "Stitch: redesign dashboard GDO con layout social-first",
-      "description": "Usare Stitch per generare un design social-first della dashboard GDO che integri feed, quest, streak in modo fluido.",
-      "acceptanceCriteria": [
-        "Usare Stitch MCP per generare design della dashboard GDO con layout: feed attivita' a sinistra, pipeline al centro, quest/streak a destra",
-        "Il design deve sembrare un mix tra LinkedIn feed e dashboard gaming",
-        "Convertire il design Stitch in componenti Tailwind/React",
-        "Mantenere TUTTE le funzionalita' esistenti della pipeline",
-        "Il layout deve essere responsive (feed collassa sotto su mobile)",
-        "npx next build compila senza errori"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": "Usare Stitch in modalita Pro per massima qualita'. Skill ui-design-system per pattern."
-    },
-    {
-      "id": "SA-011",
-      "title": "Stitch: redesign profilo RPG immersivo",
-      "description": "Usare Stitch per generare un profilo RPG immersivo che sembri una pagina profilo di un gioco RPG moderno.",
-      "acceptanceCriteria": [
-        "Usare Stitch MCP per generare design profilo RPG: hero banner con avatar Fenice grande, stats in stile RPG, badge showcase, quest log, streak flame",
-        "Il design deve sembrare un profilo di un gioco RPG (Genshin Impact / Honkai Star Rail style)",
-        "Sezioni: Hero Banner, Stats Grid, Badge Wall, Quest Log attive, Streak & Multiplier, Store Items equipaggiati",
-        "Convertire in Tailwind/React mantenendo dati e logica esistenti",
-        "npx next build compila senza errori"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": "Usare Stitch Pro. Il profilo deve far sentire il GDO come un personaggio di un gioco."
-    },
-    {
-      "id": "SA-012",
-      "title": "Sound design: effetti audio opzionali per azioni",
-      "description": "Aggiungere effetti sonori brevi e soddisfacenti per le azioni chiave, con toggle globale.",
-      "acceptanceCriteria": [
-        "Creare file audio brevi (< 1 secondo) per: coin earned (ding), XP gained (whoosh), level up (fanfare), achievement (triumph), quest complete (success chime), streak maintained (flame burst)",
-        "Usare Web Audio API o HTMLAudioElement per riprodurre i suoni",
-        "I suoni si attivano SOLO se l'utente ha attivato 'Effetti sonori' nelle impostazioni",
-        "Creare toggle 'Effetti sonori' accanto al toggle animazioni esistente",
-        "I file audio devono essere piccoli (< 50KB totali) e in formato MP3/OGG",
-        "Se i file audio non sono disponibili, generare suoni sintetici con Web Audio API (oscillator + envelope)",
-        "npx next build compila senza errori"
-      ],
-      "priority": 12,
-      "passes": true,
-      "notes": "Ispirazione: suoni Duolingo/Candy Crush. Il feedback sonoro rafforza il loop dopaminico."
-    },
-    {
-      "id": "SA-013",
-      "title": "Comparazione sociale: 'Sei meglio del X% dei colleghi'",
-      "description": "Mostrare messaggi di comparazione sociale tipo 'Sei nel top 20% dei GDO questa settimana' per motivare attraverso il confronto.",
-      "acceptanceCriteria": [
-        "In dashboard e profilo, mostrare badge: 'Top X%' basato sulla posizione in classifica vs totale utenti attivi del ruolo",
-        "Messaggi dinamici: 'Sei meglio del 80% dei tuoi colleghi!', 'Solo 2 persone davanti a te!', 'Sei il migliore oggi!'",
-        "Il badge cambia colore: oro (top 10%), argento (top 25%), bronzo (top 50%), neutro (sotto 50%)",
-        "Aggiornamento in tempo reale con il leaderboard",
-        "npx next build compila senza errori"
-      ],
-      "priority": 13,
-      "passes": true,
-      "notes": "Ispirazione: Spotify Wrapped percentili. La comparazione sociale e' il driver motivazionale piu' potente."
-    },
-    {
-      "id": "SA-014",
-      "title": "Verifica build e coerenza visiva",
-      "description": "Verificare che tutto compili e sia visivamente coerente. NON fare deploy.",
-      "acceptanceCriteria": [
-        "npx next build compila con ZERO errori",
-        "Verificare che nessun componente nuovo abbia problemi di hydration (bottoni in span/p)",
-        "Verificare che i nuovi componenti seguano il design system premium esistente",
-        "Verificare che le animazioni CSS non causino layout shift",
-        "NON fare push, NON fare merge, NON fare deploy — solo verifica locale"
-      ],
-      "priority": 14,
-      "passes": true,
-      "notes": "SOLO LOCALE. Il deploy lo faranno manualmente dopo review."
+      "passes": false,
+      "notes": "Attualmente il mapping e' case-insensitive e hardcoded in importLeads.ts."
     }
   ]
 }
