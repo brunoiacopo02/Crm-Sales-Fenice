@@ -1292,3 +1292,78 @@ body .skin-theme-nebula {
   transform-style: preserve-3d;
   will-change: transform;
 }
+
+/* ═══════════════════════════════════════
+   RPG Profile — Fire Particles & Effects
+   ═══════════════════════════════════════ */
+
+@keyframes rpg-fire-particle {
+  0% { opacity: 0; transform: translateY(0) translateX(0) scale(0.3); }
+  15% { opacity: 0.9; }
+  60% { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-120px) translateX(var(--drift, 10px)) scale(0); }
+}
+
+@keyframes rpg-ember-float {
+  0% { opacity: 0; transform: translateY(0) scale(0.5); }
+  20% { opacity: 0.7; }
+  100% { opacity: 0; transform: translateY(-80px) translateX(var(--drift, -5px)) scale(0); }
+}
+
+@keyframes rpg-badge-unlock-glow {
+  0%, 100% { box-shadow: 0 0 8px -2px var(--glow-color, rgba(201,161,60,0.3)); }
+  50% { box-shadow: 0 0 20px -2px var(--glow-color, rgba(201,161,60,0.5)); }
+}
+
+@keyframes rpg-quest-progress-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.rpg-fire-particle {
+  position: absolute;
+  bottom: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--color-fire-400) 0%, transparent 70%);
+  animation: rpg-fire-particle 2.5s ease-out infinite;
+  pointer-events: none;
+}
+
+.rpg-ember {
+  position: absolute;
+  bottom: 10%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--color-gaming-gold);
+  animation: rpg-ember-float 3s ease-out infinite;
+  pointer-events: none;
+}
+
+/* Badge gaming dark theme overrides */
+.badge-gaming-card {
+  background: var(--color-gaming-bg-card);
+  border-color: var(--color-gaming-border);
+}
+
+.badge-gaming-card:hover {
+  border-color: var(--color-fire-400);
+  box-shadow: 0 0 12px -4px rgba(255,107,26,0.3);
+}
+
+.badge-gaming-locked {
+  opacity: 0.45;
+  filter: grayscale(60%) brightness(0.7);
+}
+
+.badge-gaming-unlocked {
+  animation: rpg-badge-unlock-glow 3s ease-in-out infinite;
+}
+
+/* Quest gaming shimmer bar */
+.quest-gaming-bar-shimmer {
+  background-size: 200% 100%;
+  animation: rpg-quest-progress-shimmer 2s linear infinite;
+}

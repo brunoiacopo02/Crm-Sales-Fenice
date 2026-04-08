@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateGdoBaseSalary, addGdoCoins } from '@/app/actions/managerRpgActions';
-import { Gamepad2, Coins, TrendingUp, UserCog, CheckCircle } from 'lucide-react';
+import { Gamepad2, Coins, TrendingUp, UserCog, CheckCircle, Eye } from 'lucide-react';
+import Link from 'next/link';
 
 interface Props {
     initialProfiles: any[];
@@ -127,6 +128,13 @@ export default function ManagerRpgClient({ initialProfiles }: Props) {
                                         </td>
                                         <td className="p-4 text-center">
                                             <div className="flex items-center justify-center gap-2">
+                                                <Link
+                                                    href={`/profilo/${p.id}`}
+                                                    className="p-2 bg-brand-orange-50 border border-brand-orange-200/60 rounded-lg text-brand-orange hover:bg-brand-orange-100 transition-all shadow-soft hover:shadow-card"
+                                                    title="Vedi Profilo RPG"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Link>
                                                 <button
                                                     onClick={() => openDialog(p.id, p.displayName || `GDO ${p.gdoCode}`, 'salary', p.baseSalaryEur)}
                                                     className="p-2 bg-white border border-ash-200/60 rounded-lg text-ash-600 hover:bg-ash-100 hover:text-ash-800 transition-all shadow-soft hover:shadow-card"

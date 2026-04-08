@@ -11,6 +11,7 @@ import TitleSelector from "@/components/TitleSelector"
 import { AnimationToggle } from "@/components/AnimationToggle"
 import { SoundToggle } from "@/components/SoundToggle"
 import { SocialComparisonBadge } from "@/components/SocialComparisonBadge"
+import { SafeWrapper } from "@/components/SafeWrapper"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
@@ -109,6 +110,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     const currentStageIdx = allStages.findIndex(s => s.name === stage.name);
 
     return (
+        <SafeWrapper>
         <div className="flex-1 pb-20 max-w-7xl mx-auto w-full">
             <CelebrationOverlay />
 
@@ -116,7 +118,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 HERO BANNER — Full-width dark RPG character banner
             ═══════════════════════════════════════════════════════ */}
             <div className="relative overflow-hidden rounded-b-3xl lg:rounded-3xl lg:mx-4 lg:mt-4 bg-gradient-to-b from-[var(--color-gaming-bg-deep)] via-[var(--color-gaming-bg)] to-[var(--color-gaming-bg-surface)] min-h-[340px] lg:min-h-[380px]">
-                {/* Decorative fire/magic particles */}
+                {/* Decorative ambient glow */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">
                     <div className="absolute top-0 left-1/4 w-64 h-64 bg-fire-500/8 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 6s ease-in-out infinite' } : undefined} />
                     <div className="absolute bottom-0 right-1/4 w-80 h-48 bg-brand-orange/8 rounded-full blur-3xl" style={animEnabled ? { animation: 'rpg-float 8s ease-in-out infinite reverse' } : undefined} />
@@ -124,6 +126,38 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     {/* Subtle grid pattern overlay */}
                     <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
                 </div>
+
+                {/* CSS Fire Particles — rising embers effect */}
+                {animEnabled && (
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                        {[...Array(12)].map((_, i) => (
+                            <div
+                                key={`fire-${i}`}
+                                className="rpg-fire-particle"
+                                style={{
+                                    left: `${8 + (i * 7.5)}%`,
+                                    animationDelay: `${i * 0.4}s`,
+                                    animationDuration: `${2 + (i % 3) * 0.8}s`,
+                                    ['--drift' as string]: `${(i % 2 === 0 ? 1 : -1) * (5 + i * 2)}px`,
+                                    opacity: 0,
+                                }}
+                            />
+                        ))}
+                        {[...Array(8)].map((_, i) => (
+                            <div
+                                key={`ember-${i}`}
+                                className="rpg-ember"
+                                style={{
+                                    left: `${12 + (i * 10)}%`,
+                                    animationDelay: `${0.3 + i * 0.5}s`,
+                                    animationDuration: `${2.5 + (i % 2) * 1}s`,
+                                    ['--drift' as string]: `${(i % 2 === 0 ? -1 : 1) * (3 + i * 3)}px`,
+                                    opacity: 0,
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
 
                 <div className="relative z-10 flex flex-col items-center pt-8 pb-6 px-4">
                     {/* Evolution Stage Trail */}
@@ -355,33 +389,77 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                             </div>
                         )}
 
-                        {/* Streak & Multiplier Card */}
+                        {/* Streak & Multiplier Card — Enhanced with animated flame */}
                         {streakInfo && (
                             <div className="relative overflow-hidden border border-[var(--color-gaming-border)] bg-gradient-to-br from-[var(--color-gaming-bg)] via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] rounded-2xl shadow-gaming-card p-5 animate-fade-in">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-fire-500/8 rounded-full blur-3xl pointer-events-none" />
-                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
-                                    <Flame className="w-4 h-4 text-ember-400" /> Streak & Multiplier
+                                {/* Warm glow behind streak count when active */}
+                                {streakInfo.streakCount >= 3 && (
+                                    <div className="absolute top-1/2 left-6 -translate-y-1/2 w-24 h-24 rounded-full blur-2xl pointer-events-none" style={{
+                                        background: streakInfo.streakCount >= 14 ? 'rgba(168,85,247,0.12)' : streakInfo.streakCount >= 7 ? 'rgba(234,88,12,0.12)' : 'rgba(255,190,130,0.1)',
+                                    }} />
+                                )}
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2 relative z-10">
+                                    <div className="p-1.5 rounded-lg bg-ember-500/15 border border-ember-500/25">
+                                        <Flame className="w-4 h-4 text-ember-400" />
+                                    </div>
+                                    Streak & Multiplier
                                 </h3>
-                                <div className="flex items-center gap-4">
-                                    <div className="text-center">
-                                        <div className={`text-4xl font-black ${streakInfo.streakCount >= 7 ? 'text-ember-400' : streakInfo.streakCount > 0 ? 'text-brand-orange-300' : 'text-ash-500'}`}>
-                                            {streakInfo.streakCount}
+                                <div className="flex items-center gap-5 relative z-10">
+                                    {/* Animated flame + counter */}
+                                    <div className="text-center relative">
+                                        {/* Animated flame icon behind counter */}
+                                        <div className="relative inline-flex items-center justify-center">
+                                            <Flame
+                                                className={`absolute -top-3 w-10 h-10 ${
+                                                    streakInfo.streakCount >= 14 ? 'text-purple-400' :
+                                                    streakInfo.streakCount >= 7 ? 'text-ember-400' :
+                                                    streakInfo.streakCount >= 3 ? 'text-brand-orange' :
+                                                    'text-[var(--color-gaming-text-muted)]'
+                                                }`}
+                                                style={animEnabled && streakInfo.streakCount >= 3 ? {
+                                                    animation: 'rpg-flame-flicker 1.5s ease-in-out infinite',
+                                                    filter: streakInfo.streakCount >= 7 ? 'drop-shadow(0 0 6px rgba(234,88,12,0.5))' : 'drop-shadow(0 0 4px rgba(255,190,130,0.4))',
+                                                } : undefined}
+                                            />
+                                            <div className={`text-4xl font-black relative z-10 mt-3 ${
+                                                streakInfo.streakCount >= 14 ? 'text-purple-400' :
+                                                streakInfo.streakCount >= 7 ? 'text-ember-400' :
+                                                streakInfo.streakCount > 0 ? 'text-brand-orange-300' : 'text-[var(--color-gaming-text-muted)]'
+                                            }`}>
+                                                {streakInfo.streakCount}
+                                            </div>
                                         </div>
-                                        <div className="text-[10px] text-ash-500 uppercase font-bold">Giorni</div>
+                                        <div className="text-[10px] text-[var(--color-gaming-text-muted)] uppercase font-bold mt-1">Giorni</div>
                                     </div>
                                     <div className="flex-1 space-y-2">
                                         <div className="flex items-center gap-2">
-                                            <Flame className={`w-5 h-5 ${streakInfo.streakCount >= 7 ? 'text-ember-400' : 'text-brand-orange-400'}`} style={animEnabled && streakInfo.streakCount >= 3 ? { animation: 'rpg-flame-flicker 1.5s ease-in-out infinite' } : undefined} />
                                             <span className="text-sm font-bold text-white">{streakInfo.tierLabel}</span>
+                                            {streakInfo.multiplier > 1 && (
+                                                <div className="text-xs font-bold bg-gradient-to-r from-ember-500 to-brand-orange px-3 py-1 rounded-full text-white shadow-[0_0_8px_rgba(255,107,26,0.3)]">
+                                                    x{streakInfo.multiplier}
+                                                </div>
+                                            )}
                                         </div>
-                                        {streakInfo.multiplier > 1 && (
-                                            <div className="text-xs font-bold bg-gradient-to-r from-ember-500 to-brand-orange px-3 py-1 rounded-full text-white inline-block">
-                                                x{streakInfo.multiplier} Multiplier attivo
+                                        <div className={`text-[11px] ${streakInfo.isActiveToday ? 'text-emerald-400' : 'text-[var(--color-gaming-text-muted)]'}`}>
+                                            {streakInfo.isActiveToday ? '✓ Streak attiva oggi' : 'Completa una quest per mantenere la streak'}
+                                        </div>
+                                        {/* Mini streak day indicators */}
+                                        {streakInfo.streakCount > 0 && (
+                                            <div className="flex items-center gap-1 mt-1">
+                                                {[3, 7, 14].map(milestone => (
+                                                    <div key={milestone} className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                                                        streakInfo.streakCount >= milestone
+                                                            ? milestone >= 14 ? 'border-purple-500/40 bg-purple-500/15 text-purple-400'
+                                                            : milestone >= 7 ? 'border-ember-500/40 bg-ember-500/15 text-ember-400'
+                                                            : 'border-brand-orange/40 bg-brand-orange/15 text-brand-orange-300'
+                                                            : 'border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-deep)] text-[var(--color-gaming-text-muted)]'
+                                                    }`}>
+                                                        {milestone}g
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
-                                        <div className="text-[11px] text-ash-500">
-                                            {streakInfo.isActiveToday ? 'Streak attiva oggi' : 'Completa una quest per mantenere la streak'}
-                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -461,37 +539,37 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
 
                         {/* Weekly Bonus Widget */}
                         <div className="animate-fade-in" style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}>
-                            <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
-                                <Target className="w-4 h-4 text-brand-orange-500" /> Obiettivo in Corso
+                            <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
+                                <Target className="w-4 h-4 text-brand-orange" /> Obiettivo in Corso
                             </h3>
                             <WeeklyBonusWidget userId={profileData.id} role={role} />
                         </div>
 
-                        {/* Roadmap / Prossimi Traguardi */}
-                        <div className="border border-gold-200/60 bg-gradient-to-br from-gold-50/50 to-white rounded-2xl shadow-card p-5 animate-fade-in" style={{ animationDelay: '120ms', animationFillMode: 'backwards' }}>
-                            <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-gold-100 border border-gold-200">
-                                    <Trophy className="w-4 h-4 text-gold-500" />
+                        {/* Roadmap / Prossimi Traguardi — gaming dark */}
+                        <div className="border border-[var(--color-gaming-gold)]/20 bg-gradient-to-br from-[var(--color-gaming-gold)]/8 to-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in" style={{ animationDelay: '120ms', animationFillMode: 'backwards' }}>
+                            <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-[var(--color-gaming-gold)]/10 border border-[var(--color-gaming-gold)]/20">
+                                    <Trophy className="w-4 h-4 text-[var(--color-gaming-gold)]" />
                                 </div>
                                 Prossimi Traguardi
                             </h3>
                             <div className="space-y-2.5">
                                 {roadmap.map((r: any, i: number) => (
-                                    <div key={i} className="flex items-center gap-3 border border-gold-200/60 bg-gradient-to-r from-gold-50 to-brand-orange-50/30 rounded-xl p-3 hover:shadow-soft transition-all duration-200">
-                                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-gold-100 to-gold-200 flex items-center justify-center border-2 border-gold-300 shadow-glow-gold text-gold-700 font-black text-sm flex-shrink-0">
+                                    <div key={i} className="flex items-center gap-3 border border-[var(--color-gaming-gold)]/15 bg-gradient-to-r from-[var(--color-gaming-gold)]/6 to-[var(--color-gaming-bg-surface)] rounded-xl p-3 hover:border-[var(--color-gaming-gold)]/30 transition-all duration-200">
+                                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[var(--color-gaming-gold)]/20 to-[var(--color-gaming-gold)]/10 flex items-center justify-center border-2 border-[var(--color-gaming-gold)]/30 shadow-[0_0_8px_rgba(201,161,60,0.2)] text-[var(--color-gaming-gold)] font-black text-sm flex-shrink-0">
                                             {r.level}
                                         </div>
                                         <div className="flex-1">
-                                            <div className="text-[10px] font-bold text-ash-500 uppercase tracking-widest">Al Livello {r.level}</div>
-                                            <div className="text-sm font-bold text-ash-800 flex items-center gap-1.5">
-                                                Sblocchi <Coins className="w-3.5 h-3.5 text-gold-500" /> <span className="text-gold-600">{r.rewardCoins} Coins</span>
+                                            <div className="text-[10px] font-bold text-[var(--color-gaming-text-muted)] uppercase tracking-widest">Al Livello {r.level}</div>
+                                            <div className="text-sm font-bold text-[var(--color-gaming-text)] flex items-center gap-1.5">
+                                                Sblocchi <Coins className="w-3.5 h-3.5 text-[var(--color-gaming-gold)]" /> <span className="text-[var(--color-gaming-gold)]">{r.rewardCoins} Coins</span>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                                 {roadmap.length === 0 && (
-                                    <div className="text-center p-6 text-ash-400 font-medium">
-                                        <Crown className="h-7 w-7 text-gold-400 mx-auto mb-2" />
+                                    <div className="text-center p-6 text-[var(--color-gaming-text-muted)] font-medium">
+                                        <Crown className="h-7 w-7 text-[var(--color-gaming-gold)] mx-auto mb-2" />
                                         <div className="text-sm">Hai sbloccato tutti i traguardi.</div>
                                     </div>
                                 )}
@@ -504,59 +582,60 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     QUEST LOG — Active quests in RPG quest journal style
                 ═══════════════════════════════════════════════════════ */}
                 {activeQuests && (activeQuests.daily.length > 0 || activeQuests.weekly.length > 0) && (
-                    <div className="border border-ash-200/60 bg-white rounded-2xl shadow-card p-5 animate-fade-in" style={{ animationDelay: '150ms', animationFillMode: 'backwards' }}>
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-ember-100 border border-ember-200">
-                                    <Sword className="w-4 h-4 text-ember-500" />
+                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in relative overflow-hidden" style={{ animationDelay: '150ms', animationFillMode: 'backwards' }}>
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-ember-500/5 rounded-full blur-3xl pointer-events-none" />
+                        <div className="flex items-center justify-between mb-4 relative z-10">
+                            <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-ember-500/15 border border-ember-500/25">
+                                    <Sword className="w-4 h-4 text-ember-400" />
                                 </div>
                                 Quest Log
                             </h3>
-                            <span className="text-[11px] font-bold text-ash-400">
+                            <span className="text-[11px] font-bold text-[var(--color-gaming-text-muted)]">
                                 {activeQuests.daily.filter(q => q.completed).length}/{activeQuests.daily.length} giornaliere · {activeQuests.weekly.filter(q => q.completed).length}/{activeQuests.weekly.length} settimanali
                             </span>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 relative z-10">
                             {[...activeQuests.daily, ...activeQuests.weekly].map((quest) => {
                                 const progress = quest.targetValue > 0 ? Math.min((quest.currentValue / quest.targetValue) * 100, 100) : 0;
                                 return (
                                     <div
                                         key={quest.progressId}
                                         className={`border rounded-xl p-3 flex items-center gap-3 transition-all duration-200 ${quest.completed
-                                            ? 'border-gold-200/60 bg-gradient-to-r from-gold-50/50 to-gold-100/30'
-                                            : 'border-ash-200/60 bg-ash-50/30 hover:border-ember-200/60'
+                                            ? 'border-[var(--color-gaming-gold)]/30 bg-gradient-to-r from-[var(--color-gaming-gold)]/10 to-[var(--color-gaming-bg-surface)]'
+                                            : 'border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-surface)] hover:border-ember-500/30'
                                         }`}
                                     >
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <div className={`text-sm font-semibold truncate ${quest.completed ? 'text-gold-700' : 'text-ash-800'}`}>
+                                                <div className={`text-sm font-semibold truncate ${quest.completed ? 'text-[var(--color-gaming-gold)]' : 'text-[var(--color-gaming-text)]'}`}>
                                                     {quest.title}
                                                 </div>
                                                 <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${quest.type === 'daily'
-                                                    ? 'bg-blue-100 text-blue-600 border border-blue-200'
-                                                    : 'bg-purple-100 text-purple-600 border border-purple-200'
+                                                    ? 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
+                                                    : 'bg-purple-500/15 text-purple-400 border border-purple-500/25'
                                                 }`}>
                                                     {quest.type === 'daily' ? 'D' : 'S'}
                                                 </div>
                                             </div>
                                             <div className="mt-1.5 flex items-center gap-2">
-                                                <div className="flex-1 h-1.5 bg-ash-200 rounded-full overflow-hidden">
+                                                <div className="flex-1 h-1.5 bg-[var(--color-gaming-bg-deep)] rounded-full overflow-hidden border border-[var(--color-gaming-border)]">
                                                     <div
                                                         className={`h-full rounded-full transition-all duration-700 ${quest.completed
-                                                            ? 'bg-gradient-to-r from-gold-400 to-gold-500'
-                                                            : 'bg-gradient-to-r from-ember-400 to-brand-orange'
+                                                            ? 'bg-gradient-to-r from-[var(--color-gaming-gold)] to-[var(--color-gaming-amber)]'
+                                                            : 'bg-gradient-to-r from-fire-500 to-brand-orange'
                                                         }`}
                                                         style={{ width: `${progress}%` }}
                                                     />
                                                 </div>
-                                                <span className="text-[10px] font-bold text-ash-500 whitespace-nowrap">
+                                                <span className="text-[10px] font-bold text-[var(--color-gaming-text-muted)] whitespace-nowrap">
                                                     {quest.currentValue}/{quest.targetValue}
                                                 </span>
                                             </div>
                                         </div>
                                         <div className="text-right flex-shrink-0">
-                                            <div className="text-[10px] font-bold text-ember-500">{quest.rewardXp} XP</div>
-                                            <div className="text-[10px] font-bold text-gold-500">{quest.rewardCoins} <Coins className="inline h-2.5 w-2.5" /></div>
+                                            <div className="text-[10px] font-bold text-ember-400">{quest.rewardXp} XP</div>
+                                            <div className="text-[10px] font-bold text-[var(--color-gaming-gold)]">{quest.rewardCoins} <Coins className="inline h-2.5 w-2.5" /></div>
                                         </div>
                                     </div>
                                 );
@@ -584,11 +663,14 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 )}
 
                 {/* ═══════════════════════════════════════════════════════
-                    SETTINGS
+                    SETTINGS — Gaming dark theme
                 ═══════════════════════════════════════════════════════ */}
-                <div className="animate-fade-in" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
-                    <h3 className="text-sm font-bold text-ash-800 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
-                        <Settings className="w-4 h-4 text-ash-500" /> Impostazioni
+                <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
+                    <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-[var(--color-gaming-bg-surface)] border border-[var(--color-gaming-border)]">
+                            <Settings className="w-4 h-4 text-[var(--color-gaming-text-muted)]" />
+                        </div>
+                        Impostazioni
                     </h3>
                     <AnimationToggle />
                     <SoundToggle />
@@ -596,5 +678,6 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
 
             </div>
         </div>
+        </SafeWrapper>
     );
 }
