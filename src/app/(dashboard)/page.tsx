@@ -10,6 +10,7 @@ import dynamic from "next/dynamic"
 
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
+const TimedChest = dynamic(() => import("@/components/TimedChest").then(m => ({ default: m.TimedChest })))
 const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").then(m => ({ default: m.BossBattleBanner })))
 const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
@@ -58,6 +59,7 @@ export default async function DashboardPage() {
             {/* Overlays — wrapped in SafeWrapper so crashes don't take down the page */}
             <SafeWrapper><CelebrationOverlay /></SafeWrapper>
             <SafeWrapper><LootDropModal userId={session!.user.id} /></SafeWrapper>
+            <SafeWrapper><TimedChest userId={session!.user.id} /></SafeWrapper>
             <SafeWrapper><DailyLoginReward userId={session!.user.id} /></SafeWrapper>
 
             {pipelineError && (

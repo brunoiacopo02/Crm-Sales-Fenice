@@ -205,3 +205,40 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-008 — Scrigno a tempo: reward anticipato dopo X chiamate
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### New Files Created:
+1. **src/app/actions/timedChestActions.ts** — Server action `claimTimedChestReward(userId)`:
+   - Rolls weighted rarity: 60% common (10-30c), 25% rare (50-100c), 12% epic (200c), 3% legendary (500c+title)
+   - Applies streak multiplier + seasonal event multiplier
+   - Updates `users.walletCoins` (not legacy `coins`), logs `coinTransactions`
+   - Auto-equips legendary title if user has no active title
+
+2. **src/components/TimedChest.tsx** — Client component with full lifecycle:
+   - localStorage state tracking: action count, random threshold (5-15), spawn timestamp, ready timestamp, phase, daily reset
+   - Listens to `reward_earned` custom events to count productive actions
+   - Phases: hidden → spawned (countdown) → ready (openable) → opening (3s suspense) → revealed
+   - Countdown: Random 15-30 minutes, displayed as MM:SS with progress bar
+   - Minimizable floating card in bottom-right corner
+   - Opening: 3-phase CSS suspense (growing shake → glow ring → particle escape → burst → reveal)
+   - Celebrations: triggerCelebration for epic/legendary/rare
+   - SafeWrapper in page.tsx
+
+### CSS Keyframes Added (globals.css):
+- `chest-entrance`, `chest-glow-pulse`, `chest-shake-subtle`, `chest-ready-pulse`
+- `chest-sparkle`, `chest-opening-shake` (3-phase growing shake over 3s)
+- `chest-glow-ring`, `chest-glow-intensify`, `chest-particle-escape` (6 variants)
+- `chest-reveal-entrance`, `chest-reward-pulse`
+
+### Data Persistence:
+- localStorage (`crm-fenice-timed-chest`): chest state with daily reset (Europe/Rome)
+- Server: reward granting only (walletCoins + coinTransaction)
+- Multi-cycle: resets with new random threshold after each claim
+
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---

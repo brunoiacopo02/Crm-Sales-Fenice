@@ -140,8 +140,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": "Ispirazione: Clash Royale chest. L'anticipazione del countdown crea urgenza di tornare."
+      "passes": true,
+      "notes": "TimedChest component: localStorage tracks actions (reward_earned events), random threshold 5-15 actions triggers chest spawn. 15-30 min countdown before opening. 3-phase CSS suspense animation (growing shake + glow ring + particle escape → burst → reveal). Weighted rarity: 60% common (10-30c), 25% rare (50-100c), 12% epic (200c), 3% legendary (500c+title). Server action claimTimedChestReward grants walletCoins with streak+event multipliers, logs coinTransaction. Minimizable floating card UI. SafeWrapper. Build OK."
     },
     {
       "id": "FA-009",
