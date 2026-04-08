@@ -1,430 +1,57 @@
-# Ralph Progress Log — CRM Fenice (Fase 3B — Gamification + Bug Fix + Performance + Debug E2E)
-Started: 2026-04-07
+# Ralph Progress Log — CRM Fenice (Social Addiction Redesign)
+Started: 2026-04-08
 
 ## Codebase Patterns
-- Optimistic locking: ogni UPDATE su leads DEVE includere `eq(leads.version, lead.version)` nel WHERE
-- Timezone: usare `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })` per date stringa
-- Server Actions ritornano `{ success: boolean, error?: string }`
 - Tailwind v4: custom theme in globals.css con design system premium (ash-*, ember-*, gold-*)
-- DATI REALI: NON toccare lead GDO 114, appuntamenti Conferme, account esistenti
-- MIGRAZIONI: SEMPRE eseguire sul DB di produzione dopo averle create. Middleware blocca /api/migrate-* senza auth — aggiungere bypass temporaneo in middleware.ts, eseguire, poi rimuovere il bypass
 - Gamification engine: awardXpAndCoins(userId, actionType, leadIdContext) in src/lib/gamificationEngine.ts
-- Quest system: tabelle quests + questProgress, server actions in questActions.ts
-- Achievement system: tabelle achievements + userAchievements
-- Store: 17 item attivi, categorie da cssValue prefix (skin-avatar-*, skin-theme-*, skin-effect-*)
-- Sidebar: riorganizzata in gruppi per Manager. Per Conferme e Venditori aggiungere voci gamification
-- QuestPanel componente gia' creato per GDO — riusabile per altri ruoli con filtro
-- Streak system gia' implementato su tabella users (streakCount, lastStreakDate)
-- Leaderboard: getLeaderboard in leaderboardActions.ts, attualmente solo per GDO (appuntamenti)
-- ConfermeBoard: usa getConfermeAppointments con fetchMode strict_kanban, filtra per status=APPOINTMENT + confirmationsOutcome IS NULL
-- ConfermeBoardRow: lead.confVslSeen = true mostra icona MonitorPlay blu. Aggiungere icona per NOT visto
-- NR Conferme: tracciati in confCall1At, confCall2At, confCall3At. recordConfermeNoAnswer gestisce il conteggio
-- ConfermeDrawer: motivi scarto in un array/select. Aggiungere 'ATTACCATO IN FACCIA'
-- Lead singolo form creato in F2-008 nella pagina /import. Aggiungere dropdown GDO
-- Bottone copia in LeadCard.tsx o componente simile — verificare che usi lead.phone
-- Achievement Conferme: 4 metriche lifetime (total_conferme, total_conferme_chiamate, total_conferme_richiami_ok, tasso_conferma_percent) in measureAchievementMetric
-- Achievement seeding: usare ON CONFLICT (id) DO NOTHING per idempotenza, ID pattern: ach-conf-*, ach-vend-*
-- Achievement Venditori: 3 metriche lifetime (total_deals_chiusi, total_fatturato_eur, tasso_chiusura_percent) in measureAchievementMetric
-- Supabase REST API seed: usare POST con Prefer: resolution=ignore-duplicates per upsert senza deploy
-- Account test: GDO 114 (gdo114@fenice.local / 1234), Conferme (andrea@fenice.local / 1234), Venditori (sales001@fenice.com / 1234), Manager (marketing@fenice.local / Marketing2026!)
-- REST API Supabase: usare SUPABASE_SERVICE_ROLE_KEY dal .env per apikey e Authorization
-- Quest role filtering: quests table has `role` column ('GDO'|'CONFERME'|'VENDITORE'), generateDailyQuests fetches user role and filters
-- CONFERME metrics in measureMetric: conferme_fatte (confirmationsOutcome='confermato'), conferme_chiamate (leadEvents conferme_*), conferme_scartate (confirmationsOutcome='scartato')
-- VENDITORE metrics in measureMetric: deals_chiusi (salespersonOutcome='Chiuso'), fatturato_eur (SUM closeAmountEur), esiti_registrati (any salespersonOutcomeAt), trattative_presentate (salespersonAssignedAt)
-- VENDITORE quest IDs: vend-d-* (daily), vend-w-* (weekly). Migration route: /api/migrate-quests-venditori
-- Leaderboard multi-role: getRoleLeaderboard(period, role) dispatcher, getConfermeLeaderboard/getVenditoriLeaderboard per ruolo
-- Lazy loading drawers/modals: `dynamic(() => import(...).then(mod => mod.X), { ssr: false, loading: () => <Spinner/> })` — tutti conditional-rendered
-- Gamification triggers: CONFERMATO (Conferme confirms appt), DEAL_CHIUSO (Venditore closes deal) — fire-and-forget in server actions
+- CelebrationOverlay componente gia' esiste in src/components/CelebrationOverlay.tsx — estenderlo
+- AnimationToggle e getAnimationsEnabled() in src/lib/animationUtils.ts — rispettare il toggle
+- RealtimeProvider in src/components/providers/RealtimeProvider.tsx — usare per eventi live
+- Supabase Realtime canali: 'public:leads-changes' (non toccare), 'conferme_realtime_board'
+- LeaderboardClient gia' fa polling 10s — estendere con animazioni
+- StreakCounter componente in src/components/StreakCounter.tsx — gia' ha logica at-risk
+- QuestPanel in src/components/QuestPanel.tsx — gia' mostra quest con progress
+- Store items usano cssValue con prefissi: skin-avatar-*, skin-theme-*, skin-effect-*
+- IMPORTANTE: NON fare deploy. Solo lavoro locale. NON pushare, NON mergiare.
+- DATI REALI: NON toccare lead GDO 114, appuntamenti Conferme, account esistenti
+- Per audio: usare Web Audio API per suoni sintetici leggeri, evitare file pesanti
+- RewardFeedProvider in src/components/providers/RewardFeedProvider.tsx — global popup queue
+- emitRewardEarned() in src/lib/animationUtils.ts — dispatch reward_earned CustomEvent
+- awardXpAndCoins returns RewardData | null — server actions pass rewardData in response
+- Server actions return { success: true, rewardData } — client code calls emitRewardEarned after success
 
 ---
 
-## 2026-04-07 - F3-010
-- Esteso il sistema quest ai ruoli CONFERME con metriche specifiche
-- Aggiunto colonna `role` alla tabella quests in schema.ts (default 'GDO')
-- Creato 9 quest template CONFERME: 6 daily (conferme_fatte x3, conferme_chiamate x2, conferme_scartate x1) + 3 weekly (conferme_fatte x2, conferme_chiamate x1)
-- In questActions.ts: generateDailyQuests ora fetcha il ruolo utente e filtra le quest per ruolo
-- In questActions.ts: measureMetric supporta 3 nuove metriche CONFERME (conferme_fatte, conferme_chiamate, conferme_scartate)
-- Creato migration route: src/app/api/migrate-quests-conferme/route.ts (ADD COLUMN + seed quests)
-- File modificati: src/db/schema.ts, src/app/actions/questActions.ts, src/app/api/migrate-quests-conferme/route.ts (new)
+## 2026-04-08 - SA-001
+- Implemented micro-reward popup system for every gamification action
+- Created RewardPopup component with slide-up animation, glow effect, CSS particles
+- Created RewardFeedProvider context/provider for global popup queue (max 3 visible)
+- Modified awardXpAndCoins to return RewardData (xpGained, coinsGained, actionType, didLevelUp)
+- Added emitRewardEarned() utility to animationUtils.ts
+- Integrated reward emission in: pipelineActions (FISSATO), confermeActions (CONFERMATO, CHIUSO, PRESENZIATO), venditoreActions (DEAL_CHIUSO)
+- Integrated client-side emission in: OutcomeModal, GdoQuickActions, ConfermeDrawer, VenditoreDrawer
+- Added FISSATO award to pipelineActions when GDO sets appointment (was imported but unused)
+- Added CSS keyframes: reward-glow-pulse, reward-particle-float + utility classes
+- Mounted RewardFeedProvider in dashboard layout wrapping all children
+- Variable reward messaging with 12 motivational messages (gamification-loops pattern)
+- File modificati:
+  - src/lib/gamificationEngine.ts (return RewardData)
+  - src/lib/animationUtils.ts (emitRewardEarned)
+  - src/components/RewardPopup.tsx (NEW)
+  - src/components/providers/RewardFeedProvider.tsx (NEW)
+  - src/app/(dashboard)/layout.tsx (add provider)
+  - src/app/actions/pipelineActions.ts (FISSATO award + rewardData)
+  - src/app/actions/confermeActions.ts (rewardData return)
+  - src/app/actions/venditoreActions.ts (rewardData return)
+  - src/components/OutcomeModal.tsx (emit reward)
+  - src/components/GdoQuickActions.tsx (emit reward)
+  - src/components/ConfermeDrawer.tsx (emit reward)
+  - src/components/VenditoreDrawer.tsx (emit reward)
+  - src/app/globals.css (reward popup keyframes)
+  - scripts/ralph/prd.json (passes: true)
 - **Learnings per iterazioni future:**
-  - Le interazioni CONFERME sono tracciate in leadEvents (non callLogs) con eventType conferme_*
-  - confirmationsUserId è il campo che lega il lead all'operatore Conferme
-  - Migrazione da eseguire su prod dopo push: /api/migrate-quests-conferme
+  - awardXpAndCoins era importata ma non usata in pipelineActions — ora awarda FISSATO
+  - Pattern di integrazione: server action returns rewardData, client emits CustomEvent — riusabile per tutte le future story
+  - Popup queue con MAX_VISIBLE=3 previene overlap di troppi popup
+  - CSS-only particles: usa animation con staggered delays per effetto naturale
 ---
-
-## 2026-04-07 - F3-011
-- Aggiunto QuestPanel (dynamic import) e StreakCounter alla dashboard Conferme per ruolo CONFERME
-- In Sidebar.tsx aggiunto 3 link gamification per CONFERME: Profilo RPG, Classifica, Fenice Store
-- Store/Profilo/Classifica pages non hanno restrizioni di ruolo, già accessibili da CONFERME
-- QuestPanel filtra quest per ruolo automaticamente (logica implementata in F3-010)
-- File modificati: src/app/(dashboard)/conferme/page.tsx, src/components/Sidebar.tsx
-- **Learnings per iterazioni future:**
-  - Le pagine /store, /profilo, /classifica non hanno auth check specifici per ruolo — accesso aperto a tutti gli utenti autenticati
-  - Pattern GDO: StreakCounter import statico, QuestPanel dynamic import — stesso pattern usato per Conferme
-  - Il QuestPanel mostra solo quest del ruolo corretto perchè generateDailyQuests filtra per ruolo utente (implementato in F3-010)
----
-
-## 2026-04-07 - F3-012
-- Creato 8 achievement specifici per ruolo CONFERME in 4 categorie:
-  - Confermatore + Maratoneta delle Conferme (metric: total_conferme, tiers: 50/200/500 e 750/1000/2000)
-  - Sentinella + Centralino Conferme (metric: total_conferme_chiamate, tiers: 100/500/1000 e 2000/5000/10000)
-  - Recuperatore + Salvatore (metric: total_conferme_richiami_ok, tiers: 10/50/100 e 150/300/500)
-  - Precisione Chirurgica + Cecchino (metric: tasso_conferma_percent, tiers: 80/90/95 e 85/92/98)
-- In achievementActions.ts: aggiunto 4 nuove metriche a measureAchievementMetric:
-  - total_conferme: COUNT leads con confirmationsOutcome='confermato' per user
-  - total_conferme_chiamate: COUNT leadEvents conferme_* per user
-  - total_conferme_richiami_ok: COUNT leads con confSnoozeAt + confermato (richiami andati a buon fine)
-  - tasso_conferma_percent: (conferme / (conferme + scartate)) * 100
-- Creato migration route: src/app/api/migrate-achievements-conferme/route.ts
-- Migrazione ESEGUITA su DB produzione e verificata via REST API
-- File modificati: src/app/actions/achievementActions.ts, src/app/api/migrate-achievements-conferme/route.ts (new)
-- **Learnings per iterazioni future:**
-  - Gli achievement Conferme usano metriche lifetime (senza time range), diversamente dalle quest che usano daily/weekly bounds
-  - Il metric `tasso_conferma_percent` è basato su percentuale intera (0-100), non decimale
-  - checkAchievements funziona automaticamente per i nuovi achievement perché itera tutti i record della tabella achievements
-  - I badge appaiono nel profilo RPG automaticamente perché getUserAchievements carica tutti gli achievement dal DB
----
-
-## 2026-04-07 - F3-013
-- Esteso il sistema quest ai ruoli VENDITORE con 4 nuove metriche specifiche
-- In questActions.ts measureMetric: aggiunto `deals_chiusi`, `fatturato_eur`, `esiti_registrati`, `trattative_presentate`
-  - deals_chiusi: COUNT leads con salespersonOutcome='Chiuso' per venditore nel periodo
-  - fatturato_eur: SUM closeAmountEur per lead chiusi dal venditore nel periodo
-  - esiti_registrati: COUNT leads con salespersonOutcomeAt nel periodo (qualsiasi esito)
-  - trattative_presentate: COUNT leads assegnati (salespersonAssignedAt) nel periodo
-- Creato 9 quest template VENDITORE: 6 daily + 3 weekly
-  - Daily: Primo Deal (1), Closer Seriale (3), Registra 3/5 Esiti, Fattura 3K, Presenta 2 Trattative
-  - Weekly: Settimana da Closer (5 deal), Fattura 15K EUR, Maratoneta Vendite (15 esiti)
-- generateDailyQuests già gestisce ruolo VENDITORE (riga 84 questActions.ts)
-- Creato migration route: src/app/api/migrate-quests-venditori/route.ts con ON CONFLICT DO NOTHING
-- File modificati: src/app/actions/questActions.ts, src/app/api/migrate-quests-venditori/route.ts (new)
-- **Learnings per iterazioni future:**
-  - I campi venditore chiave: salespersonUserId, salespersonOutcome ('Chiuso'|'Non chiuso'|'Sparito'), salespersonOutcomeAt, closeAmountEur, salespersonAssignedAt
-  - fatturato_eur usa SUM con COALESCE per evitare NULL, ritorna Number() per type safety
-  - Quest VENDITORE ID pattern: vend-d-* (daily), vend-w-* (weekly) — consistente con conf-d/w per CONFERME
-  - Migrazione da eseguire su prod dopo deploy: /api/migrate-quests-venditori
----
-
-## 2026-04-07 - F3-014
-- Aggiunto QuestPanel (dynamic import) e StreakCounter alla dashboard Venditori per ruolo VENDITORE
-- In Sidebar.tsx aggiunto 3 link gamification per VENDITORE: Profilo RPG, Classifica, Fenice Store
-- In achievementActions.ts aggiunto 3 nuove metriche Venditori a measureAchievementMetric:
-  - total_deals_chiusi: COUNT leads con salespersonOutcome='Chiuso' per venditore
-  - total_fatturato_eur: SUM closeAmountEur per lead chiusi dal venditore
-  - tasso_chiusura_percent: (chiusi / totale esiti) * 100
-- Creato 8 achievement Venditori in 3 categorie:
-  - Closer + Macchina da Vendite + Primo Deal (metric: total_deals_chiusi)
-  - Fatturatore + Milionario + Broker (metric: total_fatturato_eur)
-  - Persuasore + Inarrestabile (metric: tasso_chiusura_percent)
-- Migrazione ESEGUITA su DB produzione via Supabase REST API (8 achievement inseriti e verificati)
-- Creato migration route: src/app/api/migrate-achievements-venditori/route.ts
-- File modificati: src/app/(dashboard)/venditore/page.tsx, src/components/Sidebar.tsx, src/app/actions/achievementActions.ts, src/app/api/migrate-achievements-venditori/route.ts (new)
-- **Learnings per iterazioni future:**
-  - Production deploys only from main branch — per seeding dati usare Supabase REST API con POST + Prefer: resolution=ignore-duplicates
-  - Store/Profilo/Classifica non hanno auth check specifici per ruolo — accesso aperto a tutti gli utenti autenticati
-  - Pattern: StreakCounter import statico, QuestPanel dynamic import — stesso pattern per GDO, Conferme, Venditori
-  - Le metriche achievement Venditori usano salespersonUserId (non assignedToId) per il tracking
----
-
-## 2026-04-07 - F3-015
-- Aggiunto 2 nuovi action types in gamificationEngine.ts: CONFERMATO (+15 XP, +5 coins), DEAL_CHIUSO (+100 XP, +30 coins)
-- In confermeActions.ts setConfermeOutcome: awardXpAndCoins al Conferme worker su outcome 'confermato'
-- In venditoreActions.ts saveVenditoreOutcome: awardXpAndCoins al Venditore su outcome 'Chiuso' (solo primo esito)
-- Aggiunto 3 funzioni leaderboard in leaderboardActions.ts: getConfermeLeaderboard (ranked by conferme count), getVenditoriLeaderboard (ranked by fatturato EUR), getRoleLeaderboard (dispatcher)
-- In LeaderboardClient.tsx: aggiunto role tabs (GDO/Conferme/Venditori) con polling per ruolo
-  - GDO mantiene 4 metric tabs (appuntamenti, chiamate, xp, streak)
-  - Conferme mostra classifica per conferme effettuate nel periodo
-  - Venditori mostra classifica per fatturato EUR nel periodo
-- In page.tsx: passato userRole al LeaderboardClient, title generico "Classifica"
-- I trigger GDO esistenti (CHIUSO/PRESENZIATO in setSalespersonOutcome) NON modificati
-- File modificati: src/lib/gamificationEngine.ts, src/app/actions/confermeActions.ts, src/app/actions/venditoreActions.ts, src/app/actions/leaderboardActions.ts, src/app/(dashboard)/classifica/LeaderboardClient.tsx, src/app/(dashboard)/classifica/page.tsx
-- **Learnings per iterazioni future:**
-  - Il leaderboard Conferme usa confirmationsUserId + confirmationsTimestamp per filtrare per periodo
-  - Il leaderboard Venditori usa salespersonUserId + salespersonOutcomeAt + closeAmountEur per fatturato
-  - Le role tabs sono al livello superiore, le metric tabs GDO restano visibili solo quando GDO è selezionato
-  - I trigger XP/coins per Conferme e Venditori sono fire-and-forget con .catch() per non bloccare il flusso principale
----
-
-## 2026-04-07 - F3-016
-- In ConfermeBoardRow.tsx: aggiunto icona EyeOff (rosso bg-red-100 text-red-500) quando confVslSeen è false/null. L'icona MonitorPlay blu resta per VSL vista.
-- In ConfermeBoardRow.tsx: aggiunto badge funnel (uppercase, bg-ash-100 text-ash-600) accanto al nome GDO nella vista card
-- In ConfermeBoard.tsx: aggiunto funnel sotto il nome GDO nella vista tabella
-- GDO name era già visibile (text-brand-orange-600), confermato presente in entrambe le viste
-- File modificati: src/components/ConfermeBoardRow.tsx, src/components/ConfermeBoard.tsx
-- **Learnings per iterazioni future:**
-  - confVslSeen è boolean: true = VSL vista, false/null = NON vista
-  - lead.funnel è text, può essere null — sempre wrappare con condizionale
-  - La vista card (ConfermeBoardRow) e la vista tabella (ConfermeBoard) sono due rendering separati da aggiornare entrambi
----
-
-## 2026-04-07 - F3-017
-- Snoozed leads ora visibili anche nella vista principale (Pomeriggio/Mattina), non solo nel pannello laterale Snooze
-- Rimossa la filter `!confSnoozeAt` da normalTargetLeads in ConfermeBoard.tsx renderSelectedHourLeads()
-- Badge snooze (icona orologio + orario) già presente in ConfermeBoardRow — ora visibile nella vista principale
-- Creato server action `undoConfermeNoAnswer` in confermeActions.ts:
-  - Trova l'ultimo campo NR compilato (confCall3At → confCall2At → confCall1At) e lo annulla
-  - Elimina l'ultimo evento `conferme_no_answer` dal leadEvents
-  - Crea un evento `conferme_nr_undone` per audit trail
-  - Usa optimistic locking (version check)
-- Aggiunto bottone "Annulla NR" (con icona Undo2) in ConfermeBoardRow.tsx, visibile quando callsMade > 0
-- Aggiunto bottone "Annulla NR" in ConfermeDrawer.tsx nella barra azioni rapide, accanto al tempo ultimo NR
-- File modificati: src/app/actions/confermeActions.ts, src/components/ConfermeBoard.tsx, src/components/ConfermeBoardRow.tsx, src/components/ConfermeDrawer.tsx
-- **Learnings per iterazioni future:**
-  - I snoozed leads erano separati dalla vista principale tramite `filter(l => !l.lead.confSnoozeAt)` in renderSelectedHourLeads() — ora rimosso
-  - undoConfermeNoAnswer segue il pattern inverso di recordConfermeNoAnswer: confCall3At → 2At → 1At
-  - Il badge snooze in ConfermeBoardRow si attiva automaticamente se confSnoozeAt esiste — non serve logica aggiuntiva per mostrarlo nella vista principale
----
-
-## 2026-04-07 - F3-018
-- Aggiunta sezione 'Storico' nella dashboard Conferme con tab dedicato nella navigazione principale
-- Storico mostra tabella con: nome, telefono, GDO fissatore, esito (confermato/scartato con badge colorato), motivo scarto, data esito
-- In confermeActions.ts: aggiunto confermeStatus='storico' che filtra con isNotNull(confirmationsOutcome)
-- Aggiunto 'ATTACCATO IN FACCIA' alla lista motivi scarto in ConfermeDrawer.tsx (option value: 'attaccato in faccia')
-- In ConfermeBoard.tsx: aggiunto ViewMode 'storico', stato storicoData, fetch dedicato, tab Archive nella nav bar
-- Il motivo scarto viene salvato nel campo confirmationsDiscardReason (già esistente)
-- File modificati: src/app/actions/confermeActions.ts, src/components/ConfermeBoard.tsx, src/components/ConfermeDrawer.tsx
-- **Learnings per iterazioni future:**
-  - confermeStatus type union in getConfermeAppointments va aggiornato quando si aggiungono nuovi filtri (TypeScript strict)
-  - isNotNull importato da drizzle-orm per filtrare lead con outcome definito
-  - La vista Storico non ha date filter — mostra tutti i lead esitati senza limiti temporali (fino a 500 per limit query)
-  - Il tab Storico non ha conteggio badge perché i dati sono fetchati solo quando la vista è attiva
----
-
-## 2026-04-07 - F3-019
-- Implementato auto-discard al 4° NR consecutivo in recordConfermeNoAnswer
-- Quando confCall1At, confCall2At, confCall3At sono tutti compilati, il prossimo NR setta automaticamente confirmationsOutcome='scartato' con reason='4 NR consecutivi'
-- Il lead scompare dalla dashboard principale (filtrato da isNull(confirmationsOutcome)) e appare nello Storico/Scartati (F3-018)
-- Refactored recordConfermeNoAnswer con try/catch pattern (return error instead of throw) per type safety
-- Evento audit specifico: conferme_auto_discarded_4nr con metadata { reason, autoDiscard: true }
-- UI: bottone NR ora abilitato anche con 3 NR, mostra "4° NR (Scarta)" in rosso per avvertire l'operatore
-- ConfermeDrawer: bottone NR diventa rosso "4° NR (Scarta Auto)" quando confCall3At è compilato
-- File modificati: src/app/actions/confermeActions.ts, src/components/ConfermeBoardRow.tsx, src/components/ConfermeDrawer.tsx
-- **Learnings per iterazioni future:**
-  - No schema change needed — 4th NR reuses existing 3 confCall fields + sets confirmationsOutcome
-  - recordConfermeNoAnswer now uses try/catch pattern with { success, error } returns (consistent with setConfermeOutcome)
-  - Il bottone NR mostra stato visivo diverso (rosso) quando è al 4° tentativo per prevenire click accidentali
----
-
-## 2026-04-07 - F3-020
-- Verificato che il bottone copia in LeadCard.tsx usa correttamente `lead.phone` (nessun bug nel codice — il campo era già corretto)
-- Aggiunto dropdown GDO al form di creazione lead manuale (AddLeadModal.tsx)
-- Il dropdown mostra tutti i GDO attivi con displayName/name e gdoCode
-- Opzione "Automatico (distribuzione)" come default — usa l'algoritmo di distribuzione esistente
-- Se un GDO specifico è selezionato, il lead viene assegnato direttamente a quel GDO
-- In createManualLead (importLeads.ts): aggiunto campo opzionale `assignToGdoId` con validazione che il GDO sia attivo
-- File modificati: src/components/AddLeadModal.tsx, src/app/actions/importLeads.ts
-- **Learnings per iterazioni future:**
-  - getActiveGdosForImport restituisce { id, name: string|null, displayName: string|null, gdoCode: number|null, isActive: boolean }
-  - gdoCode è di tipo `number`, non `string` — attenzione ai tipi quando si usa in template literals
-  - Il copy button in LeadCard.tsx usa `lead.phone` direttamente — il campo è passato da getPipelineLeads che fa db.select() completo dalla tabella leads
----
-
-## 2026-04-07 - F3-021
-- Convertito 5 componenti pesanti da import statici a next/dynamic con ssr: false
-- ConfermeDrawer (in ConfermeBoard.tsx), VenditoreDrawer (in VenditoreDashboardClient.tsx), ContactDrawer (in Topbar.tsx), OutcomeModal (in RecallBoard.tsx + PipelineBoard.tsx), EditAppointmentModal (in AppointmentBoard.tsx)
-- Tutti usano named exports → pattern: `dynamic(() => import(...).then(mod => mod.Component), { ssr: false })`
-- Loading fallback: overlay semitrasparente con spinner animato (border-amber-500)
-- Tutti i componenti erano già conditionally rendered (isOpen/selectedLead guards), quindi si caricano solo su interazione utente
-- File modificati: src/components/ConfermeBoard.tsx, src/components/VenditoreDashboardClient.tsx, src/components/Topbar.tsx, src/components/RecallBoard.tsx, src/components/PipelineBoard.tsx, src/components/AppointmentBoard.tsx
-- **Learnings per iterazioni future:**
-  - Per named exports con next/dynamic: `.then(mod => mod.NamedExport)` — non serve wrappare in `{ default: ... }`
-  - Componenti conditionally rendered sono i migliori candidati per lazy loading — zero impatto UX
-  - `ssr: false` è obbligatorio per componenti client-only che usano browser APIs o DOM events
-  - In server components, `ssr: false` is NOT allowed with `next/dynamic` — omit it, use only `loading` callback
----
-
-## 2026-04-07 - F3-022
-- Audited all 38 server action files for N+1 query patterns
-- Fixed N+1 in achievementActions.ts: moved getActiveEventMultipliers() outside loops, replaced per-achievement user fetch with SQL increment (`coins + N`), combined tasso_conferma_percent and tasso_chiusura_percent from 2 queries each to 1 using CASE WHEN
-- Fixed N+1 in sprintActions.ts: replaced per-winner fetch+update+insert loop with single batch UPDATE (inArray) + batch INSERT for coinTransactions
-- Fixed N+1 in bossBattleActions.ts: replaced per-contributor update+insert+insert loop with single batch UPDATE (inArray) + batch INSERT coinTransactions + batch INSERT notifications
-- Fixed N+1 in questActions.ts: added metricCache to deduplicate measureMetric calls — quests sharing same metric+type only measure once
-- Code splitting: converted 4 heavy recharts/chart components to next/dynamic in server pages (KpiTeamDashboard, KpiGdoBoard, KpiBoardAdvanced, ManagerOperativaBoard) + SprintBanner in layout
-- Verified all 62 lucide-react imports are specific named imports (no barrel/wildcard)
-- Verified all 18 date-fns imports are specific named imports (no optimization needed)
-- File modificati: src/app/actions/achievementActions.ts, src/app/actions/sprintActions.ts, src/app/actions/bossBattleActions.ts, src/app/actions/questActions.ts, src/app/(dashboard)/kpi-team/page.tsx, src/app/(dashboard)/kpi-gdo/page.tsx, src/app/(dashboard)/analisi-qualita/page.tsx, src/app/(dashboard)/layout.tsx
-- **Learnings per iterazioni future:**
-  - SQL `coins + N` increment avoids read-before-write race conditions AND eliminates N+1 fetch
-  - inArray(users.id, arrayOfIds) + batch db.insert().values([...]) eliminates loop-based DB operations
-  - In Server Components, `next/dynamic` works for code splitting BUT `ssr: false` is NOT allowed — remove it
-  - metricCache pattern: `Map<cacheKey, Promise<number>>` can further optimize by parallelizing metric fetches
-  - importLeads.ts has N+1 (per-lead insert) but is admin-only rare operation — not worth batching
----
-
-## 2026-04-07 - F3-023
-- E2E verification of complete GDO flow using Playwright on production build (next start)
-- Login as GDO 114 (gdo114@fenice.local / 1234): SUCCESS
-- Pipeline loads with correct leads: 1ª Chiamata (12), 2ª Chiamata (31), 3ª Chiamata (15)
-- All 3 pipeline tabs switch correctly and show leads with proper data
-- Copy number buttons verified — each lead shows correct phone number from lead.phone
-- Quick actions (NR, Scartato, Richiamo, App Preso) visible on all lead cards, zero console errors
-- QuestPanel visible: "Quest Attive: 3/3 giornaliere, 0/2 settimanali, 3 completate"
-- Streak counter visible: 0 giorni, "Inizia la tua streak"
-- Profilo RPG: loads correctly with avatar (Uovo Liv. 1), XP bar, salary projection, weekly tracker
-- Fenice Store: loads with 17 items, categories (Skin Avatar 4, Temi 6, Effetti 7), 64 coins balance
-- Classifica: multi-role tabs (GDO, Conferme, Venditori), metric tabs (Appuntamenti, Chiamate, XP, Streak), podium
-- KPI GDO: targets, metrics (77 chiamate, 43% tasso, 8 appuntamenti), trend charts
-- Richiami: "Da Richiamare Ora 0", "In Arrivo 4"
-- Appuntamenti: 8 "In Programma", 9 "Archivio Storico", 17 totale
-- Sidebar: all 8 links present (Pipeline, Profilo RPG, Richiami, Appuntamenti, Classifica, Store, Performance, Storico Pause)
-- Console errors: 2 minor non-blocking (404 /api/user/profile on store, sprint banner fetch failure)
-- npx next build: compiles successfully with zero errors
-- Screenshots saved: e2e-gdo-pipeline-main.png, e2e-gdo-pipeline-2a-chiamata.png, e2e-gdo-pipeline-3a-chiamata.png, e2e-gdo-pipeline-fullpage.png, e2e-gdo-profilo-rpg.png, e2e-gdo-store.png, e2e-gdo-classifica.png, e2e-gdo-richiami.png, e2e-gdo-appuntamenti.png, e2e-gdo-kpi.png
-- No code changes needed — all verification passed
-- **Learnings per iterazioni future:**
-  - Dev mode (Turbopack) can hang on heavy pages like /profilo — use production build (next start) for E2E testing
-  - Pipeline has 3 tabs (1ª, 2ª, 3ª Chiamata) by design — no 4ª tab since F3-019 auto-discards at 4th NR
-  - /api/user/profile 404 is a pre-existing issue, not related to Fase 3B changes
-  - Sprint banner fetch error is intermittent, likely from missing sprint data in DB
-  - Production build is much faster for Playwright E2E than dev server
----
-
-## 2026-04-08 - F3-024
-- E2E verification of complete Conferme flow using Playwright on production build (next start)
-- Login as Conferme (andrea@fenice.local / 1234): SUCCESS — redirected to /conferme
-- Dashboard loads with 6 appointments in Pomeriggio, 0 in Mattina, 1 in Richiami
-- Tabs: Pomeriggio (6), Mattina (0), Richiami (1), Storico — all functional
-- VSL icons: "VSL NON Vista" (EyeOff red) visible on leads without confVslSeen — VERIFIED
-- Provenienza contatti: GDO name (GDO 114) + funnel (JOB SIMULATOR, TELEGRAM) visible on all lead cards — VERIFIED
-- Storico tab: 7 rows — 6 Scartato (reason: non interessato) + 1 Confermato (Giorgia Furnò), showing GDO fissatore, esito, motivo, data
-- ConfermeDrawer opens correctly: Dati Lead, Note, Gestione Esiti tabs
-- Gestione Esiti: "Scartato Direttamente" shows dropdown with 7 reasons including "Attaccato in faccia" — VERIFIED
-- QuestPanel: 0/3 daily (Pulizia Rapida, Sentinella Attiva, Operatore Instancabile) + 0/2 weekly (Settimana Operativa, Settimana da Confermatore)
-- Streak counter: 0 giorni, "Inizia la tua streak", 3g a x1.5 — VERIFIED
-- Profilo RPG: loads correctly — Uovo Liv. 1, 0 XP, €1,350 stipendio, Tracker Settimanale
-- Fenice Store: loads with 17 items, categories (Skin Avatar 4, Temi 6, Effetti 7), 0 coins
-- Classifica: multi-role tabs (GDO, Conferme active, Venditori), period tabs (Oggi, Settimana, Mese), leaderboard by CONFERME metric
-- KPI Conferme: Progresso Settimanale (0/24), Storico Mensile, Bilanciamento Venditori, Calendario Mese
-- Console errors: 1 pre-existing (404 /api/user/profile on store) — no new errors from Fase 3B
-- Screenshots saved: e2e-conferme-dashboard-main.png, e2e-conferme-mattina.png, e2e-conferme-richiami.png, e2e-conferme-storico.png, e2e-conferme-drawer-open.png, e2e-conferme-gestione-esiti2.png, e2e-conferme-scarto-reasons.png, e2e-conferme-profilo-rpg.png, e2e-conferme-store.png, e2e-conferme-classifica.png, e2e-conferme-kpi.png
-- No code changes needed — all verification passed
-- npx next build: compiles successfully with zero errors
-- **Learnings per iterazioni future:**
-  - Playwright accessibility snapshot can be stale after React state updates — use evaluate() to check actual DOM
-  - ConfermeDrawer opens via click on card div, not via snapshot ref click — use evaluate() for reliable clicks
-  - Storico view has 400ms debounce before fetching — wait at least 2s for data to load
-  - Conferme account (Andrea) has 0 coins, 0 XP, Liv. 1 — all gamification features functional but no activity yet
----
-
-## 2026-04-08 - F3-025
-- E2E verification of complete Venditori flow using Playwright on production build (next start)
-- Login as Venditore (sales001@fenice.com / 1234): SUCCESS — redirected to /venditore
-- Dashboard loads with 3 leads assigned (Target 114 0, Target 113 3, Target 113 Sorpasso 5) all with "Da Esitare" status
-- LISTA view: table with columns Giorno e Ora, Lead, Funnel, GDO Fissatore, Stato Vendita — all functional
-- AGENDA view: functional (empty because test leads have no appointmentDate set)
-- Team Classifica view: podium (Sales 001 at #1) + table with POSIZIONE, VENDITORE, FATTURATO, TARGET, PROGRESSO columns
-- Period selector (Oggi/Settimana/Mese) works correctly on Classifica
-- QuestPanel: 0/3 daily (Registra 3 Esiti, Registra 5 Esiti, Closer Seriale) + 0/2 weekly (Settimana da Closer, Fattura 15.000 EUR)
-- Streak counter: 0 giorni, "Inizia la tua streak", 3g a x1.5 — VERIFIED
-- Profilo RPG: Uovo Liv. 1, 0 XP, €1,350 stipendio, Tracker Settimanale Week 2, 0 Presenze Effettive
-- Fenice Store: 17 items (Skin Avatar 4, Temi 6, Effetti 7), 0 coins balance
-- Classifica page: multi-role tabs (GDO, Conferme, Venditori auto-selected), period tabs (Oggi/Settimana/Mese), leaderboard by € FATTURATO
-- Sidebar: 4 links (Dashboard Vendite, Il mio Profilo / RPG, Classifica, Fenice Store)
-- Console errors: 1 pre-existing (404 /api/user/profile on store) — no new errors from Fase 3B
-- Screenshots saved: e2e-venditori-dashboard-main.png, e2e-venditori-agenda.png, e2e-venditori-classifica-view.png, e2e-venditori-classifica-bottom.png, e2e-venditori-profilo-rpg.png, e2e-venditori-store.png, e2e-venditori-classifica.png
-- No code changes needed — all verification passed
-- npx next build: compiles successfully with zero errors
-- **Learnings per iterazioni future:**
-  - Venditore account (Sales 001) has 0 coins, 0 XP, Liv. 1 — gamification features functional but no activity
-  - Team Classifica in dashboard uses KpiVenditoriClient component — same as /kpi-venditori page
-  - Agenda view groups leads by appointmentDate — empty when test data lacks dates (expected behavior)
-  - Classifica page auto-selects Venditori tab based on user role — correct UX
----
-
-## 2026-04-08 - F3-026
-- E2E verification of complete Manager flow using Playwright on production build (next start)
-- Login as Manager (marketing@fenice.local / Marketing2026!): SUCCESS — redirected to /marketing-analytics
-- SIDEBAR: Marketing user has restricted sidebar (only "Marketing Analytics") by design — code explicitly checks for marketing@fenice.local and shows limited nav. Regular Managers would see 4 groups (Operativo, KPI, Team, Gamification) with 20+ links
-- ACCESSIBLE PAGES (9 pages without marketing redirect):
-  - /marketing-analytics: loads correctly with funnel table (8 funnels), Gestione Budget, Drill-Down per GDO — VERIFIED
-  - /kpi-gdo: loads with Manager mode (Team Intero Aggregato), metrics (Chiamate, Risposte, Tasso, Appuntamenti), trend charts — VERIFIED
-  - /kpi-conferme: loads with Dashboard Conferme, Progresso Settimanale (1/96), Storico Mensile, Bilanciamento Venditori — VERIFIED
-  - /manager-targets: loads with Target & Previsioni, tabs (Target GDO, Target Conferme, Target Venditori, Giorni Lavorativi, Regole Gamification), collapsible sections, "ATTENZIONE CRITICA" alert — VERIFIED
-  - /manager-rpg-monitor: loads with Cruscotto GDO RPG, table of GDO operators (105, 108, 109, 110, 113, 116), Evolution Stage, XP, Bonus, Stipendio, Fenice Coins — VERIFIED
-  - /team/store: loads with Gestione Fenice Store, catalog of items with CSS classes and costs, "Nuovo Elemento" button — VERIFIED
-  - /manager-gdo-performance: loads with Performance GDO Settimanali, GDO 114 data, Performance Absolute Mese by funnel, Storico Settimanale — VERIFIED
-  - /import: loads with Importa Lead tramite CSV, "Aggiungi Lead Singolo" button, preview & validation — VERIFIED
-  - /archivio: loads with Archivio Globale, filters (Tipo Data, GDO, Venditore, Esito), lead table with real data — VERIFIED
-- REDIRECTING PAGES (8 pages redirect marketing user to /marketing-analytics by design):
-  - /kpi-hub, /kpi-team, /kpi-venditori, /monitor-pause, /note-gdo, /analisi-qualita, /team, /scartati
-  - All correctly redirect without errors
-- Console errors: 1 pre-existing (Sprint banner fetch TypeError) — no new errors from Fase 3B
-- Screenshots saved: e2e-manager-marketing-analytics.png, e2e-manager-kpi-gdo.png, e2e-manager-kpi-conferme.png, e2e-manager-targets.png, e2e-manager-rpg-monitor.png, e2e-manager-store-admin.png, e2e-manager-gdo-performance.png, e2e-manager-import.png, e2e-manager-archivio.png
-- No code changes needed — all verification passed
-- npx next build: compiles successfully with zero errors
-- **Learnings per iterazioni future:**
-  - marketing@fenice.local is a restricted MANAGER — only sees Marketing Analytics in sidebar. Regular Managers see full 4-group sidebar
-  - 8 pages explicitly redirect marketing user: kpi-hub, kpi-team, kpi-venditori, monitor-pause, note-gdo, analisi-qualita, team, scartati
-  - 9 pages are accessible without redirect: marketing-analytics, kpi-gdo, kpi-conferme, manager-targets, import, archivio, manager-rpg-monitor, team/store, manager-gdo-performance
-  - Sprint banner fetch error is pre-existing and intermittent across all roles
----
-
-## 2026-04-08 - F3-027
-- Hydration audit: scanned ALL .tsx components for buttons/links inside <span>/<p> — NONE FOUND (no WSOD risk)
-- Fixed 2 Date hydration issues in client components:
-  - ConfermeKpiBoard.tsx: moved `new Date().toLocaleDateString()` for isToday comparison into useState+useEffect
-  - GdoPauseHistory.tsx: moved `new Date().toLocaleDateString()` for currentMonth into useState+useEffect
-- Schema vs DB comparison: verified ALL 30 tables and their columns via Supabase REST API — 100% match, no missing migrations
-- Responsive testing with Playwright at 375px (mobile) and 1440px (desktop) on 10 pages:
-  - GDO Pipeline: ✅ both widths
-  - Conferme Dashboard: ✅ both widths
-  - Venditore Dashboard: ✅ both widths
-  - Store: ✅ mobile
-  - Classifica: ✅ mobile
-  - Manager Marketing Analytics: ✅ mobile
-  - Manager Targets: ✅ mobile
-  - KPI Conferme (calendar): ✅ both widths — today highlight works correctly after hydration fix
-  - KPI GDO (charts): ✅ desktop
-- No overflow or truncation issues found — all pages use proper responsive patterns (grid stacking, overflow-x-auto, hamburger sidebar)
-- Zero console errors across all tested pages (only pre-existing sprint banner warning)
-- File modificati: src/components/ConfermeKpiBoard.tsx, src/components/GdoPauseHistory.tsx
-- **Learnings per iterazioni future:**
-  - Only `new Date()` (current time) in client components causes hydration mismatch — `new Date(dataFromProps)` is safe since data loads after hydration
-  - Use useState("") + useEffect(() => setState(formatted)) pattern for client-side date formatting
-  - All 30 schema tables are in sync with production DB — Fase 3B migrations were all executed correctly
-  - Playwright login via Enter key is more reliable than button click for form submission
-  - Close browser session between role switches to avoid stale auth cookies
----
-
-## 2026-04-08 - F3-028
-- Audited all components for React warnings: missing key, useEffect deps, unused vars — no issues found
-- Removed ALL debug console.log statements from production code:
-  - useRealtimeNotifications.ts: removed '🔔 Nuova notifica Live' debug log
-  - VenditoreDashboardClient.tsx: removed '🔄 Update in arrivo' debug log + unused payload param
-  - RealtimeProvider.tsx: removed '🔄 Lead aggiornato' debug log + unused payload param
-  - confermeActions.ts: removed Google Event Result debug log
-- Cleaned up debug markers in console.error statements:
-  - confermeActions.ts: cleaned @@@ VERSION MISMATCH @@@ → clean message
-  - confermeActions.ts: cleaned @@@ CRITICAL ERROR @@@ → clean message
-  - confermeActions.ts: cleaned @@@ ERR @@@ → clean message
-- Cleaned up emoji prefix in useRealtimeNotifications.ts error message
-- Kept legitimate console.error in catch blocks (server-side error logging)
-- Kept migration route console.log (operational logging for one-time routes)
-- TypeScript audit: build shows ZERO TypeScript errors/warnings
-- No @ts-ignore or @ts-expect-error comments found in codebase
-- No unused imports detected across all components
-- npx next build: compiles successfully with zero errors and zero significant warnings
-- File modificati: src/hooks/useRealtimeNotifications.ts, src/components/VenditoreDashboardClient.tsx, src/components/providers/RealtimeProvider.tsx, src/app/actions/confermeActions.ts
-- **Learnings per iterazioni future:**
-  - console.error in catch blocks is legitimate server-side logging — keep them
-  - Migration routes use console.log for operational tracking — keep them
-  - Test scripts (src/db/test*.ts, clean*.ts) use console.log for CLI output — keep them
-  - The only build warning is Next.js 16 middleware deprecation notice — not our code
-  - 108 `any` types exist but don't produce build warnings — TypeScript strict mode not enabled
----
-
-## 2026-04-08 - F3-029
-- Deploy finale e smoke test produzione completato
-- Git push branch ralph/fase-3b-gamification-bugfix-performance: SUCCESS
-- Merge in main: fast-forward, no conflicts (47 files changed, 1720 insertions)
-- Git push main: SUCCESS
-- Waited 120 seconds for Vercel deploy
-- curl https://crm-sales-fenice.vercel.app: 307 (redirect to login, expected) → following redirects → 200 OK
-- Site is live and functional
-- ALL 20 stories passes: true
-- **Learnings per iterazioni future:**
-  - curl senza -L ritorna 307 perché il middleware redirecta a /login — usare -L per follow redirects
-  - Fast-forward merge è il caso ideale — nessun conflitto quando si lavora su un solo branch
----
-
-# FASE 3B COMPLETATA — TUTTE LE 20 STORIES PASSATE

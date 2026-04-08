@@ -212,6 +212,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 alert(`Errore salvataggio esito: ${result.error}`)
                 return;
             }
+            if (result?.rewardData) {
+                const { emitRewardEarned } = await import('@/lib/animationUtils');
+                emitRewardEarned(result.rewardData);
+            }
             onRefresh()
             onClose()
         } catch (error) {
@@ -229,6 +233,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             if (result && !result.success) {
                 alert(`Errore salvataggio esito venditore: ${result.error}`);
                 return;
+            }
+            if (result?.rewardData) {
+                const { emitRewardEarned } = await import('@/lib/animationUtils');
+                emitRewardEarned(result.rewardData);
             }
             onRefresh()
             onClose()

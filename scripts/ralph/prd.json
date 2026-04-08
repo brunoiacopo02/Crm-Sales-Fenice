@@ -1,334 +1,237 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fase-3b-gamification-bugfix-performance",
-  "description": "Fase 3B — Gamification Conferme/Venditori + Bug Fix Conferme/GDO + Performance + Debug E2E Completo",
+  "branchName": "ralph/social-addiction-redesign",
+  "description": "Social Addiction Redesign — Rendere il CRM coinvolgente come un social network. Dopamina, micro-reward, feed live, FOMO, streak anxiety, celebrazioni. Solo locale, NO deploy.",
   "userStories": [
     {
-      "id": "F3-010",
-      "title": "Gamification Conferme: quest giornaliere e settimanali",
-      "description": "Estendere il sistema quest ai ruoli CONFERME con metriche specifiche.",
+      "id": "SA-001",
+      "title": "Micro-reward pop-up su ogni azione",
+      "description": "Ogni azione produttiva (chiamata, fissaggio, conferma, chiusura) deve mostrare un pop-up animato con XP e coins guadagnati, come i +1 dei social.",
       "acceptanceCriteria": [
-        "Aggiungere quest template per Conferme nella tabella quests: 'Conferma X appuntamenti', 'Chiama X lead da confermare', 'Scarta X non in target'",
-        "Almeno 5 quest giornaliere e 3 settimanali specifiche per Conferme",
-        "In generateDailyQuests, filtrare le quest per ruolo utente (GDO vs CONFERME)",
-        "In checkQuestProgress, implementare metriche Conferme: conferme fatte, chiamate conferme",
+        "Creare componente RewardPopup che appare in basso a destra con animazione slide-up + fade",
+        "Mostra: icona azione, '+X XP', '+Y coins', messaggio motivazionale random",
+        "Il popup scompare dopo 3 secondi con fade-out",
+        "Aggiungere un context/provider globale RewardFeedProvider che raccoglie i reward e li mostra in coda",
+        "Integrare con awardXpAndCoins — ogni volta che viene chiamato, emette un evento custom 'reward_earned'",
+        "Il popup deve avere effetto glow e particelle leggere (CSS only)",
+        "Usare skill gamification-loops per variable reward messaging",
         "npx next build compila senza errori"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Riusare lo stesso schema quests/questProgress. Solo nuovi template + logica metriche."
+      "notes": "Ispirazione: notifiche Instagram like/follow. Breve, colorato, dopamina immediata."
     },
     {
-      "id": "F3-011",
-      "title": "Gamification Conferme: UI quest, streak, accesso Store/Profilo/Classifica",
-      "description": "Mostrare pannello quest e streak nella dashboard Conferme e dare accesso alle pagine gamification.",
+      "id": "SA-002",
+      "title": "Feed attivita' live nella dashboard",
+      "description": "Un feed in tempo reale tipo social che mostra le azioni dei colleghi: chi ha fissato un appuntamento, chi ha sbloccato un badge, chi ha vinto uno sprint.",
       "acceptanceCriteria": [
-        "Aggiungere QuestPanel nella pagina /conferme",
-        "Mostrare solo quest pertinenti al ruolo CONFERME",
-        "Aggiungere streak counter con icona fiamma nella dashboard Conferme",
-        "In Sidebar.tsx aggiungere per ruolo CONFERME: link a Store, Profilo RPG, Classifica",
-        "Verificare che /store, /profilo, /classifica funzionino per ruolo CONFERME (aggiungere ruolo agli auth check)",
+        "Creare componente ActivityFeed con lista scrollabile di eventi recenti",
+        "Mostra: avatar/iniziali utente, azione (ha fissato un app, ha sbloccato badge X, ha raggiunto streak 7), timestamp relativo (2 min fa)",
+        "Dati da leadEvents + coinTransactions + userAchievements (ultimi 50 eventi)",
+        "Creare server action getActivityFeed() che aggrega da piu' tabelle",
+        "Auto-refresh ogni 30 secondi o su evento realtime",
+        "Posizionare nella dashboard principale (sidebar destra o sezione dedicata)",
+        "Design: card compatte con bordo colorato per tipo evento, hover effect",
         "npx next build compila senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "QuestPanel gia' creato per GDO — riusarlo con filtro ruolo."
+      "passes": false,
+      "notes": "Ispirazione: feed Twitter/Instagram stories. Crea FOMO e competizione sociale."
     },
     {
-      "id": "F3-012",
-      "title": "Gamification Conferme: achievement specifici",
-      "description": "Creare achievement/badge specifici per il ruolo Conferme.",
+      "id": "SA-003",
+      "title": "Daily login reward e welcome screen",
+      "description": "Quando l'utente fa login la prima volta nel giorno, mostrare una welcome screen con il daily reward (coins bonus) e lo stato streak.",
       "acceptanceCriteria": [
-        "Seedare almeno 8 achievement per Conferme: Confermatore (50/200/500 conferme), Sentinella (100/500/1000 chiamate), Recuperatore (10/50/100 richiami ok), Precisione Chirurgica (80/90/95% tasso conferma)",
-        "checkAchievements deve funzionare anche per metriche Conferme",
-        "I badge appaiono nel profilo RPG accanto a quelli generici",
-        "ESEGUIRE la migrazione seed sul DB di produzione (non solo creare il file)",
+        "Creare componente DailyLoginReward che appare come modale full-screen leggero",
+        "Mostra: 'Benvenuto [nome]!', streak attuale con fiamma animata, daily bonus coins (+5 base, +10 se streak >= 3, +20 se streak >= 7)",
+        "Bottone 'Inizia la giornata!' che chiude il modale e reclama i coins",
+        "Il modale appare solo UNA volta al giorno (check via localStorage + server timestamp)",
+        "Creare server action claimDailyLogin(userId) che aggiunge coins e aggiorna streak",
+        "Animazione: coins che cadono dall'alto con effetto cascata quando si reclama",
         "npx next build compila senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "INSERT nuovi record nella tabella achievements."
+      "passes": false,
+      "notes": "Ispirazione: daily login di giochi mobile. Il reward cresce con la streak = incentivo a tornare."
     },
     {
-      "id": "F3-013",
-      "title": "Gamification Venditori: quest giornaliere e settimanali",
-      "description": "Estendere il sistema quest ai ruoli VENDITORE con metriche specifiche.",
+      "id": "SA-004",
+      "title": "Notifiche push-style per eventi importanti",
+      "description": "Notifiche toast animate che appaiono per eventi sociali: qualcuno ti ha superato in classifica, un collega ha sbloccato un achievement raro, il boss battle sta per finire.",
       "acceptanceCriteria": [
-        "Aggiungere quest template per Venditori: 'Chiudi X deal', 'Fattura X EUR', 'Presenta X trattative', 'Registra esito per X lead'",
-        "Almeno 5 quest giornaliere e 3 settimanali specifiche per Venditori",
-        "In generateDailyQuests, filtrare per ruolo VENDITORE",
-        "In checkQuestProgress, implementare metriche Venditori: closeAmountEur, salespersonOutcome, conteggio trattative",
+        "Creare componente SocialNotificationToast con animazione slide-in da destra",
+        "Tipi di notifica: 'Ti hanno superato in classifica!', 'X ha sbloccato [badge raro]!', 'Boss Battle: 2 ore rimaste!', 'Evento stagionale iniziato!'",
+        "Ogni toast ha: icona contestuale, messaggio, CTA opzionale (es. 'Vai alla classifica')",
+        "Integrazione con Supabase Realtime per ricevere notifiche live",
+        "Le notifiche hanno suoni opzionali (rispetta toggle animationsEnabled)",
+        "Stack di max 3 notifiche visibili contemporaneamente",
         "npx next build compila senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Ispirazione: notifiche TikTok/Instagram. FOMO + urgenza + competizione."
     },
     {
-      "id": "F3-014",
-      "title": "Gamification Venditori: UI quest, streak, accesso Store/Profilo/Classifica + achievement",
-      "description": "UI gamification per venditori: quest panel, streak, accesso pagine, achievement specifici.",
+      "id": "SA-005",
+      "title": "Quest chain: sblocco a catena con teaser",
+      "description": "Quando completi una quest, mostra subito la prossima quest sbloccata con un teaser del reward. Effetto 'just one more'.",
       "acceptanceCriteria": [
-        "Aggiungere QuestPanel nella pagina /venditore",
-        "Aggiungere streak counter nella dashboard Venditori",
-        "In Sidebar.tsx aggiungere per ruolo VENDITORE: link a Store, Profilo RPG, Classifica",
-        "Verificare che le pagine funzionino per ruolo VENDITORE",
-        "Seedare almeno 8 achievement Venditori: Closer (10/50/100 chiusure), Fatturatore (10K/50K/100K EUR), Persuasore (70/80/90% chiusura)",
-        "ESEGUIRE la migrazione seed sul DB di produzione",
+        "Quando una quest viene completata, mostrare modale 'Quest Completata!' con confetti",
+        "Sotto il messaggio di completamento, mostrare: 'Prossima sfida: [titolo]' con progress bar a 0% e reward preview",
+        "Bottone 'Accetta la sfida!' che chiude il modale (la quest e' gia' attiva)",
+        "Se non ci sono quest successive, mostrare 'Hai completato tutto! Torna domani per nuove sfide'",
+        "Animazione celebrativa: confetti + glow + XP counter che scorre verso l'alto",
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Ispirazione: 'just one more episode' di Netflix. La catena di quest crea loop di engagement."
     },
     {
-      "id": "F3-015",
-      "title": "Leaderboard multi-ruolo + trigger XP/coins per Conferme e Venditori",
-      "description": "Estendere leaderboard a tutti i ruoli e attivare i trigger XP/coins per le nuove azioni.",
+      "id": "SA-006",
+      "title": "Streak anxiety: visual warning e countdown",
+      "description": "Quando la streak sta per rompersi (fine giornata, nessuna quest completata), mostrare warning crescenti con urgenza visiva.",
       "acceptanceCriteria": [
-        "Aggiungere tabs nel leaderboard: GDO (appuntamenti), Conferme (confermati), Venditori (fatturato)",
-        "Ogni tab mostra la classifica con metriche appropriate per il ruolo",
-        "In gamificationEngine.ts aggiungere action types: CONFERMATO (+15 XP, +5 coins), DEAL_CHIUSO (+100 XP, +30 coins)",
-        "In confermeActions.ts: chiamare awardXpAndCoins su conferma appuntamento",
-        "In venditoreActions.ts: chiamare awardXpAndCoins su chiusura deal",
-        "NON modificare i trigger GDO esistenti",
+        "Se sono le 18:00+ e la streak non e' stata mantenuta oggi, mostrare banner rosso pulsante nella dashboard",
+        "Il banner mostra: icona fiamma che trema, 'La tua streak di X giorni sta per rompersi!', countdown alle 23:59",
+        "Se la streak e' attiva (quest completata), mostrare invece badge verde 'Streak sicura per oggi'",
+        "Dopo le 20:00: il banner diventa piu' urgente con shake animation",
+        "Il StreakCounter esistente deve cambiare colore/animazione in base allo stato (safe/at-risk/broken)",
         "npx next build compila senza errori"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Ispirazione: Duolingo streak anxiety. La paura di perdere la streak motiva a completare almeno una quest."
     },
     {
-      "id": "F3-016",
-      "title": "Conferme: icona VSL non vista + provenienza contatti",
-      "description": "Aggiungere icona per lead che NON hanno visto la VSL e mostrare provenienza (GDO fissatore + funnel).",
+      "id": "SA-007",
+      "title": "Leaderboard live con animazioni ranking e reazioni",
+      "description": "Il leaderboard deve aggiornarsi in tempo reale con animazioni quando qualcuno cambia posizione, e permettere reazioni (emoji) ai risultati dei colleghi.",
       "acceptanceCriteria": [
-        "In ConfermeBoardRow.tsx: se confVslSeen e' false/null, mostrare icona diversa (es. EyeOff in rosso/grigio) per indicare VSL non vista",
-        "L'icona VSL vista (MonitorPlay blu) resta invariata",
-        "Mostrare nella riga del lead: nome GDO che ha fissato l'appuntamento (campo gdo.displayName o gdo.name dal JOIN)",
-        "Mostrare il funnel di provenienza del lead (campo lead.funnel)",
-        "Se queste info sono gia' visibili, verificare che siano sempre mostrate e non nascoste",
+        "Il leaderboard si aggiorna ogni 10 secondi (gia' implementato) con animazione slide sulle righe che cambiano posizione",
+        "Quando un utente sale di posizione: freccia verde animata + highlight riga per 3 secondi",
+        "Quando un utente scende: freccia rossa sottile",
+        "Effetto speciale top 3: bordo dorato pulsante per il primo, argento per il secondo, bronzo per il terzo",
+        "Aggiungere bottone emoji reaction (fuoco, applauso, fulmine) accanto a ogni riga — click incrementa counter visibile",
+        "Le reactions sono solo visive (localStorage), non persistite nel DB",
         "npx next build compila senza errori"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "Il JOIN con users (GDO) e' gia' fatto in getConfermeAppointments."
+      "passes": false,
+      "notes": "Ispirazione: live leaderboard gaming + Instagram reactions. Competizione sociale visiva."
     },
     {
-      "id": "F3-017",
-      "title": "Conferme: snooze visibile nella dashboard principale + annullare NR",
-      "description": "I lead in 'chiamare dopo' (snooze) devono restare visibili nella dashboard principale con indicazione specifica. L'operatore deve poter annullare un NR se si e' sbagliato.",
+      "id": "SA-008",
+      "title": "Progress bar XP con milestones e anticipazione reward",
+      "description": "La progress bar XP nel profilo deve mostrare le milestone future con anteprime dei reward, creando anticipazione.",
       "acceptanceCriteria": [
-        "I lead con confSnoozeAt devono apparire anche nella vista principale (Pomeriggio/Mattina), non solo nel pannello laterale Snooze",
-        "Nella vista principale, i lead snoozed devono avere un badge/indicatore visivo specifico (es. icona orologio + orario snooze)",
-        "Aggiungere bottone 'Annulla NR' o 'Reset NR' che rimuove l'ultima chiamata NR registrata",
-        "Il bottone Annulla NR deve decrementare il conteggio NR del lead e rimuovere l'ultimo callLog di tipo NR",
+        "La barra XP deve mostrare marker per i prossimi 3 livelli con icone reward",
+        "Hover su un marker mostra tooltip: 'Livello X: sblocchi [reward]'",
+        "Quando il fill della barra passa un marker: animazione burst + suono opzionale",
+        "Sotto la barra: sezione 'Prossimi premi' con card per i 3 reward piu' vicini (coins milestone, evoluzione Fenice, titolo)",
+        "Effetto shimmer sulla porzione non ancora raggiunta della barra",
         "npx next build compila senza errori"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "Le chiamate NR sono tracciate in callLogs e nel campo confCall1At/confCall2At/confCall3At."
+      "passes": false,
+      "notes": "Ispirazione: progress bar dei giochi RPG. L'anticipazione del reward e' piu' potente del reward stesso."
     },
     {
-      "id": "F3-018",
-      "title": "Conferme: sezione scartati e confermati + motivo scarto 'ATTACCATO IN FACCIA'",
-      "description": "Creare sezione per vedere gli app scartati e confermati. Aggiungere nuovo motivo scarto.",
+      "id": "SA-009",
+      "title": "Effetti celebrativi potenziati: level-up, loot, achievement",
+      "description": "Potenziare le animazioni celebrative per renderle memorabili e condivisibili.",
       "acceptanceCriteria": [
-        "Nella dashboard Conferme aggiungere un tab o vista 'Storico' che mostra lead scartati e confermati",
-        "Storico mostra: nome, telefono, GDO fissatore, esito (confermato/scartato), motivo scarto se presente, data esito",
-        "Aggiungere 'ATTACCATO IN FACCIA' alla lista motivi scarto in ConfermeDrawer.tsx",
-        "Il motivo viene salvato nel campo confirmationsDiscardReason",
+        "Level-up: full-screen overlay con animazione Fenice che evolve (fiamme CSS), confetti cascata, testo 'LIVELLO X!' con effetto typewriter",
+        "Achievement sbloccato: badge che si materializza con glow + particelle dorate, suono triumph",
+        "Loot drop: modale con effetto 'apertura scrigno' — suspense di 2 secondi prima del reveal con shake crescente",
+        "Ogni celebrazione ha durata 3-5 secondi e si chiude con tap/click ovunque",
+        "Tutte le animazioni CSS-only (no librerie), rispettano toggle animationsEnabled",
+        "CelebrationOverlay component gia' esiste — estenderlo con i nuovi effetti",
         "npx next build compila senza errori"
       ],
       "priority": 9,
-      "passes": true,
-      "notes": "I lead scartati hanno confirmationsOutcome='scartato', i confermati hanno 'confermato'."
+      "passes": false,
+      "notes": "Ispirazione: apertura loot box gaming. Il momento celebrativo deve essere MEMORABILE."
     },
     {
-      "id": "F3-019",
-      "title": "Conferme: 4° NR scarta automaticamente il lead",
-      "description": "Dopo 3 chiamate NR il lead resta. Al 4° NR il lead deve sparire dalla dashboard e andare in sezione scartati.",
+      "id": "SA-010",
+      "title": "Stitch: redesign dashboard GDO con layout social-first",
+      "description": "Usare Stitch per generare un design social-first della dashboard GDO che integri feed, quest, streak in modo fluido.",
       "acceptanceCriteria": [
-        "In recordConfermeNoAnswer (confermeActions.ts): dopo il 4° NR, settare automaticamente confirmationsOutcome='scartato' con reason='4 NR consecutivi'",
-        "Il lead con 4 NR sparisce dalla dashboard principale (gia' filtrato da isNull(confirmationsOutcome))",
-        "Il lead appare nella sezione Storico/Scartati creata in F3-018",
-        "Il conteggio NR si basa sui campi confCall1At, confCall2At, confCall3At + un eventuale 4° campo o conteggio",
+        "Usare Stitch MCP per generare design della dashboard GDO con layout: feed attivita' a sinistra, pipeline al centro, quest/streak a destra",
+        "Il design deve sembrare un mix tra LinkedIn feed e dashboard gaming",
+        "Convertire il design Stitch in componenti Tailwind/React",
+        "Mantenere TUTTE le funzionalita' esistenti della pipeline",
+        "Il layout deve essere responsive (feed collassa sotto su mobile)",
         "npx next build compila senza errori"
       ],
       "priority": 10,
-      "passes": true,
-      "notes": "Verificare come sono tracciati i NR attualmente (confCall1At/2/3 o callLogs)."
+      "passes": false,
+      "notes": "Usare Stitch in modalita Pro per massima qualita'. Skill ui-design-system per pattern."
     },
     {
-      "id": "F3-020",
-      "title": "GDO: fix copia numero nella pipeline + assegnazione GDO su lead singolo",
-      "description": "Il bottone copia nella pipeline prende il numero sbagliato. Quando si crea un lead singolo, poter selezionare il GDO.",
+      "id": "SA-011",
+      "title": "Stitch: redesign profilo RPG immersivo",
+      "description": "Usare Stitch per generare un profilo RPG immersivo che sembri una pagina profilo di un gioco RPG moderno.",
       "acceptanceCriteria": [
-        "In LeadCard.tsx o PipelineBoard.tsx: verificare che il bottone copia usi lead.phone e non un altro campo",
-        "Testare che il numero copiato sia effettivamente quello del lead corretto",
-        "Nel form di aggiunta lead singolo (creato in F2-008): aggiungere dropdown per selezionare il GDO a cui assegnare il lead",
-        "Il dropdown mostra tutti i GDO attivi con nome e codice",
-        "Il campo assignedToId del lead viene settato al GDO selezionato",
+        "Usare Stitch MCP per generare design profilo RPG: hero banner con avatar Fenice grande, stats in stile RPG, badge showcase, quest log, streak flame",
+        "Il design deve sembrare un profilo di un gioco RPG (Genshin Impact / Honkai Star Rail style)",
+        "Sezioni: Hero Banner, Stats Grid, Badge Wall, Quest Log attive, Streak & Multiplier, Store Items equipaggiati",
+        "Convertire in Tailwind/React mantenendo dati e logica esistenti",
         "npx next build compila senza errori"
       ],
       "priority": 11,
-      "passes": true,
-      "notes": "NON modificare lead esistenti. Solo fix logica copia e aggiunta campo al form."
+      "passes": false,
+      "notes": "Usare Stitch Pro. Il profilo deve far sentire il GDO come un personaggio di un gioco."
     },
     {
-      "id": "F3-021",
-      "title": "Performance: lazy loading componenti pesanti",
-      "description": "Implementare lazy loading per componenti che non servono al primo render.",
+      "id": "SA-012",
+      "title": "Sound design: effetti audio opzionali per azioni",
+      "description": "Aggiungere effetti sonori brevi e soddisfacenti per le azioni chiave, con toggle globale.",
       "acceptanceCriteria": [
-        "Wrappare con React.lazy/dynamic: ConfermeDrawer, VenditoreDrawer, ContactDrawer, OutcomeModal, EditAppointmentModal",
-        "I drawer e modali devono caricarsi solo quando vengono aperti",
-        "Fallback con skeleton/spinner durante il caricamento",
+        "Creare file audio brevi (< 1 secondo) per: coin earned (ding), XP gained (whoosh), level up (fanfare), achievement (triumph), quest complete (success chime), streak maintained (flame burst)",
+        "Usare Web Audio API o HTMLAudioElement per riprodurre i suoni",
+        "I suoni si attivano SOLO se l'utente ha attivato 'Effetti sonori' nelle impostazioni",
+        "Creare toggle 'Effetti sonori' accanto al toggle animazioni esistente",
+        "I file audio devono essere piccoli (< 50KB totali) e in formato MP3/OGG",
+        "Se i file audio non sono disponibili, generare suoni sintetici con Web Audio API (oscillator + envelope)",
         "npx next build compila senza errori"
       ],
       "priority": 12,
-      "passes": true,
-      "notes": "Usare next/dynamic con ssr: false per componenti client-only."
+      "passes": false,
+      "notes": "Ispirazione: suoni Duolingo/Candy Crush. Il feedback sonoro rafforza il loop dopaminico."
     },
     {
-      "id": "F3-022",
-      "title": "Performance: ottimizzazione query N+1 e code splitting",
-      "description": "Audit e fix query inefficienti + riduzione bundle size.",
+      "id": "SA-013",
+      "title": "Comparazione sociale: 'Sei meglio del X% dei colleghi'",
+      "description": "Mostrare messaggi di comparazione sociale tipo 'Sei nel top 20% dei GDO questa settimana' per motivare attraverso il confronto.",
       "acceptanceCriteria": [
-        "Auditare tutti i server actions per query N+1 (loop con query dentro) e convertire in JOIN/batch",
-        "Verificare import specifici lucide-react (non import * )",
-        "Verificare import specifici date-fns (non import * )",
-        "Se trova import pesanti, splittar con next/dynamic",
+        "In dashboard e profilo, mostrare badge: 'Top X%' basato sulla posizione in classifica vs totale utenti attivi del ruolo",
+        "Messaggi dinamici: 'Sei meglio del 80% dei tuoi colleghi!', 'Solo 2 persone davanti a te!', 'Sei il migliore oggi!'",
+        "Il badge cambia colore: oro (top 10%), argento (top 25%), bronzo (top 50%), neutro (sotto 50%)",
+        "Aggiornamento in tempo reale con il leaderboard",
         "npx next build compila senza errori"
       ],
       "priority": 13,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Ispirazione: Spotify Wrapped percentili. La comparazione sociale e' il driver motivazionale piu' potente."
     },
     {
-      "id": "F3-023",
-      "title": "Debug E2E: verifica completa flusso GDO",
-      "description": "Test end-to-end meticoloso del flusso GDO: login, pipeline, chiamate, esiti, appuntamenti, richiami.",
+      "id": "SA-014",
+      "title": "Verifica build e coerenza visiva",
+      "description": "Verificare che tutto compili e sia visivamente coerente. NON fare deploy.",
       "acceptanceCriteria": [
-        "Usare Playwright per navigare come GDO: login con gdo114@fenice.local / 1234",
-        "Verificare che la pipeline carichi con i lead corretti",
-        "Verificare che le tab (1a, 2a, 3a, 4a chiamata) funzionino",
-        "Verificare che il bottone copia numero copi il numero corretto",
-        "Verificare che le azioni rapide (esiti) funzionino senza errori console",
-        "Verificare che il QuestPanel e streak counter siano visibili",
-        "Verificare che Store, Profilo, Classifica siano accessibili dalla sidebar",
-        "Screenshot di ogni pagina visitata per documentazione",
-        "npx next build compila senza errori"
+        "npx next build compila con ZERO errori",
+        "Verificare che nessun componente nuovo abbia problemi di hydration (bottoni in span/p)",
+        "Verificare che i nuovi componenti seguano il design system premium esistente",
+        "Verificare che le animazioni CSS non causino layout shift",
+        "NON fare push, NON fare merge, NON fare deploy — solo verifica locale"
       ],
       "priority": 14,
-      "passes": true,
-      "notes": "NON modificare dati reali del GDO 114. Solo navigazione e verifica visiva."
-    },
-    {
-      "id": "F3-024",
-      "title": "Debug E2E: verifica completa flusso Conferme",
-      "description": "Test end-to-end meticoloso del flusso Conferme: login, dashboard, tab, snooze, NR, scarto, conferma, storico.",
-      "acceptanceCriteria": [
-        "Usare Playwright per navigare come Conferme: login con andrea@fenice.local / 1234",
-        "Verificare che la dashboard carichi con gli appuntamenti corretti (non 0)",
-        "Verificare le tab Pomeriggio/Mattina/Richiami con conteggi corretti",
-        "Verificare che l'icona VSL vista e VSL non vista appaiano correttamente",
-        "Verificare che la provenienza contatti (GDO + funnel) sia visibile",
-        "Verificare che lo storico scartati/confermati sia accessibile",
-        "Verificare che il motivo 'ATTACCATO IN FACCIA' sia presente tra le opzioni scarto",
-        "Verificare che QuestPanel, streak, Store, Profilo, Classifica funzionino per Conferme",
-        "Verificare assenza errori console su tutte le pagine visitate",
-        "Screenshot di ogni pagina",
-        "npx next build compila senza errori"
-      ],
-      "priority": 15,
-      "passes": true,
-      "notes": "NON modificare appuntamenti reali. Solo navigazione e verifica."
-    },
-    {
-      "id": "F3-025",
-      "title": "Debug E2E: verifica completa flusso Venditori",
-      "description": "Test end-to-end del flusso Venditori: login, dashboard, KPI, classifica con target bonus.",
-      "acceptanceCriteria": [
-        "Usare Playwright per navigare come Venditore: login con sales001@fenice.com / 1234",
-        "Verificare che la dashboard venditori carichi (appuntamenti assegnati visibili)",
-        "Verificare le viste LISTA/AGENDA/CLASSIFICA",
-        "Verificare che i KPI Venditori mostrino classifica per fatturato con target bonus",
-        "Verificare che QuestPanel, streak, Store, Profilo, Classifica funzionino per Venditori",
-        "Verificare assenza errori console",
-        "Screenshot di ogni pagina",
-        "npx next build compila senza errori"
-      ],
-      "priority": 16,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F3-026",
-      "title": "Debug E2E: verifica completa flusso Manager",
-      "description": "Test end-to-end del flusso Manager: login, tutte le sezioni, KPI hub, target, note GDO, store admin.",
-      "acceptanceCriteria": [
-        "Usare Playwright per navigare come Manager: login con marketing@fenice.local / Marketing2026!",
-        "Verificare che la sidebar mostri i gruppi organizzati (Operativo, KPI, Team, Gamification)",
-        "Verificare il KPI Hub con tutte le card di navigazione",
-        "Verificare la pagina Target con sezioni collassabili",
-        "Verificare Note GDO, Monitor Pause, Import Lead, Archivio",
-        "Verificare RPG Monitor, Store Admin",
-        "Verificare assenza errori console su TUTTE le pagine manager",
-        "Screenshot di ogni pagina",
-        "npx next build compila senza errori"
-      ],
-      "priority": 17,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F3-027",
-      "title": "Debug: hydration audit + migrazioni DB + responsive",
-      "description": "Audit hydration su tutti i componenti, verifica migrazioni DB, test responsive.",
-      "acceptanceCriteria": [
-        "Controllare TUTTI i componenti per bottoni/link dentro span o p (causa WSOD)",
-        "Verificare che nessun componente renderizzi Date lato server senza useEffect",
-        "Confrontare TUTTE le tabelle/colonne in schema.ts con il DB di produzione via REST API",
-        "Se mancano colonne o tabelle, ESEGUIRE la migrazione immediatamente",
-        "Usare Playwright per screenshot responsive a 375px e 1440px sulle pagine principali",
-        "Fix problemi di overflow, testo troncato su mobile",
-        "npx next build compila senza errori"
-      ],
-      "priority": 18,
-      "passes": true,
-      "notes": "CRITICO: eseguire migrazioni, non solo crearle."
-    },
-    {
-      "id": "F3-028",
-      "title": "Debug: console errors, warning, TypeScript strict",
-      "description": "Eliminare tutti gli errori e warning dalla console e dal compilatore TypeScript.",
-      "acceptanceCriteria": [
-        "Auditare tutti i componenti per warning React: missing key, useEffect deps, unused vars",
-        "Rimuovere tutti i console.log/console.error rimasti dal debug",
-        "Fix tutti i TypeScript strict warnings nel build output",
-        "Verificare che npx next build mostri ZERO warning significativi",
-        "npx next build compila senza errori"
-      ],
-      "priority": 19,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "F3-029",
-      "title": "Deploy finale e smoke test produzione completo",
-      "description": "Push, merge, deploy, verifica completa su tutte le pagine in produzione.",
-      "acceptanceCriteria": [
-        "Git push del branch su GitHub",
-        "Merge in main senza conflitti",
-        "Push main su GitHub",
-        "Attendere 120 secondi per il deploy Vercel",
-        "Verificare con curl che https://crm-sales-fenice.vercel.app ritorni 200",
-        "Usare Playwright per login e verificare che almeno la pagina conferme carichi con dati",
-        "Se il deploy fallisce o da WSOD, leggere i log e fixare prima di COMPLETE"
-      ],
-      "priority": 20,
-      "passes": true,
-      "notes": "NON rispondere COMPLETE se il sito non funziona."
+      "passes": false,
+      "notes": "SOLO LOCALE. Il deploy lo faranno manualmente dopo review."
     }
   ]
 }

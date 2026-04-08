@@ -228,7 +228,12 @@ export async function updateLeadOutcome(
     }
 
     // Team Goal trigger evaluation logic
+    let rewardData = null;
     if (outcome === 'APPUNTAMENTO') {
+        // Gamification: award XP for appointment set
+        if (effectiveUserId) {
+            rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
+        }
         await evaluateTeamGoals(leadId).catch((e: any) => {
             console.error("Team goal evaluation failed:", e)
         })
@@ -244,5 +249,5 @@ export async function updateLeadOutcome(
         }
     }
 
-    return { success: true }
+    return { success: true, rewardData }
 }

@@ -60,6 +60,10 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                 onClose()
                 return
             }
+            if (result?.rewardData) {
+                const { emitRewardEarned } = await import('@/lib/animationUtils');
+                emitRewardEarned(result.rewardData);
+            }
 
             router.refresh()
             onClose()

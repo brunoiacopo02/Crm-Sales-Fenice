@@ -57,6 +57,10 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                 router.refresh()
                 return
             }
+            if (result?.rewardData) {
+                const { emitRewardEarned } = await import('@/lib/animationUtils');
+                emitRewardEarned(result.rewardData);
+            }
 
             // Reset states
             setActivePopover(null)

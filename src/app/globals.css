@@ -184,6 +184,31 @@
   100% { opacity: 0; transform: translate(-20px, 16px) scale(0.3); }
 }
 
+/* === REWARD POPUP KEYFRAMES === */
+
+@keyframes reward-glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 190, 130, 0.15), inset 0 0 8px rgba(255, 190, 130, 0.05); }
+  50% { box-shadow: 0 0 20px rgba(255, 190, 130, 0.3), inset 0 0 12px rgba(255, 190, 130, 0.1); }
+}
+
+@keyframes reward-particle-float {
+  0% { opacity: 0; transform: scale(0) translateY(0); }
+  20% { opacity: 1; transform: scale(1) translateY(-4px); }
+  100% { opacity: 0; transform: scale(0.5) translateY(-20px); }
+}
+
+.reward-popup-glow {
+  animation: reward-glow-pulse 2s ease-in-out infinite;
+}
+
+.reward-glow-pulse {
+  animation: reward-glow-pulse 2s ease-in-out infinite;
+}
+
+.reward-particle {
+  animation: reward-particle-float 1.2s ease-out forwards;
+}
+
 /* === CELEBRATION KEYFRAMES === */
 
 @keyframes confetti-fall {

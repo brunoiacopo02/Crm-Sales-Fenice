@@ -87,8 +87,9 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         
 
     // Gamification: award XP/coins to Venditore on deal close (first outcome only)
+    let rewardData = null;
     if (!oldLead.salespersonOutcome && payload.outcome === 'Chiuso') {
-        await awardXpAndCoins(session.user.id, "DEAL_CHIUSO", leadId).catch(e => console.error("GameEngine DEAL_CHIUSO err:", e));
+        rewardData = await awardXpAndCoins(session.user.id, "DEAL_CHIUSO", leadId).catch(e => { console.error("GameEngine DEAL_CHIUSO err:", e); return null; });
     }
 
     // 1. Audit Log per la cronologia completa (Timeline)
@@ -125,5 +126,5 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         })
     }
 
-    return { success: true }
+    return { success: true, rewardData }
 }

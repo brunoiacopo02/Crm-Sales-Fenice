@@ -25,3 +25,17 @@ export function triggerCelebration(type: 'fire' | 'confetti'): void {
     if (!getAnimationsEnabled()) return;
     window.dispatchEvent(new CustomEvent('celebration', { detail: { type } }));
 }
+
+export interface RewardEarnedDetail {
+    xpGained: number;
+    coinsGained: number;
+    actionType: string;
+    didLevelUp: boolean;
+    newLevel?: number;
+}
+
+export function emitRewardEarned(data: RewardEarnedDetail): void {
+    if (typeof window === 'undefined') return;
+    if (!getAnimationsEnabled()) return;
+    window.dispatchEvent(new CustomEvent('reward_earned', { detail: data }));
+}
