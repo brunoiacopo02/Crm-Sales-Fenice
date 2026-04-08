@@ -171,13 +171,13 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
         const effectiveLootCoins = Math.floor(drop.rewardValue * eventMult.coins);
         const effectiveLootXp = Math.floor(drop.bonusXp * eventMult.xp);
 
-        // Award coins
-        const userRow = (await db.select({ coins: users.coins, experience: users.experience, level: users.level })
+        // Award coins — use walletCoins (the visible/spendable field)
+        const userRow = (await db.select({ walletCoins: users.walletCoins, experience: users.experience, level: users.level })
             .from(users)
             .where(eq(users.id, userId)))[0];
 
         if (userRow) {
-            const newCoins = userRow.coins + effectiveLootCoins;
+            const newCoins = userRow.walletCoins + effectiveLootCoins;
             let newXp = userRow.experience;
             let newLevel = userRow.level;
 
@@ -194,7 +194,7 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
             }
 
             const updateFields: Record<string, any> = {
-                coins: newCoins,
+                walletCoins: newCoins,
                 experience: newXp,
                 level: newLevel,
             };

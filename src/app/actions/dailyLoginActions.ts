@@ -123,7 +123,7 @@ export async function claimDailyLogin(userId: string): Promise<{
             // Already claimed, return current state
             const userRow = await db.select({
                 streakCount: users.streakCount,
-                coins: users.coins,
+                walletCoins: users.walletCoins,
             }).from(users).where(eq(users.id, userId));
             const streak = userRow[0]?.streakCount ?? 0;
             return { success: true, coinsAwarded: 0, streakCount: streak, multiplier: getStreakMultiplier(streak) };
@@ -133,7 +133,7 @@ export async function claimDailyLogin(userId: string): Promise<{
         const userRows = await db.select({
             streakCount: users.streakCount,
             lastStreakDate: users.lastStreakDate,
-            coins: users.coins,
+            walletCoins: users.walletCoins,
         }).from(users).where(eq(users.id, userId));
 
         if (userRows.length === 0) {
@@ -165,9 +165,9 @@ export async function claimDailyLogin(userId: string): Promise<{
             bonusCoins = 10;
         }
 
-        // Award coins
+        // Award coins — use walletCoins (the visible/spendable field)
         await db.update(users).set({
-            coins: user.coins + bonusCoins,
+            walletCoins: user.walletCoins + bonusCoins,
         }).where(eq(users.id, userId));
 
         // Log transaction

@@ -129,11 +129,11 @@ export async function updateStreak(userId: string): Promise<{ streakCount: numbe
         // Streak milestone reward: 50 coins every 7 days (F2-026) + seasonal event multiplier
         const { COINS: milestoneCoinReward, INTERVAL: milestoneInterval } = GAME_CONSTANTS.STREAK_MILESTONE;
         if (newStreak > 0 && newStreak % milestoneInterval === 0) {
-            const userRow = (await db.select({ coins: users.coins }).from(users).where(eq(users.id, userId)))[0];
+            const userRow = (await db.select({ walletCoins: users.walletCoins }).from(users).where(eq(users.id, userId)))[0];
             if (userRow) {
                 const eventMult = await getActiveEventMultipliers();
                 const effectiveMilestoneCoins = Math.floor(milestoneCoinReward * eventMult.coins);
-                await db.update(users).set({ coins: userRow.coins + effectiveMilestoneCoins }).where(eq(users.id, userId));
+                await db.update(users).set({ walletCoins: userRow.walletCoins + effectiveMilestoneCoins }).where(eq(users.id, userId));
                 const milestoneReason = eventMult.coins > 1
                     ? `Streak milestone: ${newStreak} giorni! (x${eventMult.coins} evento)`
                     : `Streak milestone: ${newStreak} giorni!`;
