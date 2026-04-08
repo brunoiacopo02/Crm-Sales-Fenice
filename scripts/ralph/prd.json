@@ -327,7 +327,7 @@
         "Se il deploy fallisce o da WSOD, leggere i log e fixare prima di COMPLETE"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "NON rispondere COMPLETE se il sito non funziona."
     }
   ]
