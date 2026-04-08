@@ -40,6 +40,7 @@ export type SoundType =
     | 'coin_earned'
     | 'xp_gained'
     | 'level_up'
+    | 'evolution_fanfare'
     | 'achievement'
     | 'quest_complete'
     | 'streak_maintained'
@@ -66,6 +67,9 @@ export function playSound(type: SoundType): void {
             break;
         case 'level_up':
             playLevelUpFanfare(ctx);
+            break;
+        case 'evolution_fanfare':
+            playEvolutionFanfare(ctx);
             break;
         case 'achievement':
             playAchievementTriumph(ctx);
@@ -212,6 +216,68 @@ function playStreakBurst(ctx: AudioContext) {
     osc2.connect(gain2).connect(ctx.destination);
     osc2.start(t + 0.05);
     osc2.stop(t + 0.3);
+}
+
+/** Epic evolution fanfare — dramatic ascending sweep + sustained power chord + shimmer tail */
+function playEvolutionFanfare(ctx: AudioContext) {
+    const t = ctx.currentTime;
+    // Phase 1: Low rumble build-up (0-0.4s)
+    const rumble = ctx.createOscillator();
+    const rumbleGain = ctx.createGain();
+    rumble.type = 'sawtooth';
+    rumble.frequency.setValueAtTime(80, t);
+    rumble.frequency.exponentialRampToValueAtTime(200, t + 0.4);
+    rumbleGain.gain.setValueAtTime(0.06, t);
+    rumbleGain.gain.linearRampToValueAtTime(0.12, t + 0.3);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    rumble.connect(rumbleGain).connect(ctx.destination);
+    rumble.start(t);
+    rumble.stop(t + 0.5);
+
+    // Phase 2: Ascending arpeggio C4→E4→G4→C5→E5→G5→C6 (0.3-1.2s)
+    const arp = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50];
+    arp.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        const start = t + 0.3 + i * 0.1;
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.12 + i * 0.01, start + 0.03);
+        gain.gain.setValueAtTime(0.12 + i * 0.01, start + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.3);
+    });
+
+    // Phase 3: Sustained power chord C5+E5+G5+C6 (1.0-2.5s)
+    const chord = [523.25, 659.25, 783.99, 1046.50];
+    chord.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t + 1.0);
+        gain.gain.setValueAtTime(0, t + 1.0);
+        gain.gain.linearRampToValueAtTime(0.12, t + 1.1);
+        gain.gain.setValueAtTime(0.12, t + 1.6);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t + 1.0);
+        osc.stop(t + 2.5);
+    });
+
+    // Phase 4: High shimmer tail (2.0-3.0s)
+    const shimmer = ctx.createOscillator();
+    const shimmerGain = ctx.createGain();
+    shimmer.type = 'sine';
+    shimmer.frequency.setValueAtTime(2093, t + 2.0); // C7
+    shimmer.frequency.exponentialRampToValueAtTime(1567.98, t + 3.0); // G6
+    shimmerGain.gain.setValueAtTime(0.04, t + 2.0);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, t + 3.0);
+    shimmer.connect(shimmerGain).connect(ctx.destination);
+    shimmer.start(t + 2.0);
+    shimmer.stop(t + 3.0);
 }
 
 // ─── Chest/Loot Opening Sounds ──────────────────────────────────────

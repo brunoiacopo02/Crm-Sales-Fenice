@@ -246,8 +246,8 @@
         "npx next build compila senza errori"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": "Il level-up deve essere IL momento dell'esperienza. Memorabile e condivisibile."
+      "passes": true,
+      "notes": "Epic level-up celebration redesign: 6-phase sequenced animation for evolution (fire_intro → level_text → evolution_old → evolution_flash → evolution_new → confetti_finale), 3-phase for regular level-up. 20 CSS fire particles + 12 embers rising from bottom. Typewriter 'LIVELLO X!' with golden gradient + glow pulse. Evolution: old stage emoji dissolves (brightness burn), flash burst with expanding rings, new stage materializes with golden orbiting particles. Confetti cascade finale (30 particles). Evolution fanfare sound (rumble → 7-note arpeggio → power chord → shimmer tail). Click-to-dismiss after 3s min. CelebrationOverlay listens to reward_earned directly for evolution detection. SafeWrapper already wrapping overlay. 12 new CSS keyframes. Build OK."
     },
     {
       "id": "FA-015",

@@ -30,6 +30,12 @@ export interface CelebrationDetail {
     achievementName?: string; // for achievement
     achievementIcon?: string; // for achievement (emoji or icon name)
     lootRarity?: string;      // for loot_reveal
+    // Evolution data for level_up
+    isEvolution?: boolean;        // true if this level-up triggers a Fenice evolution
+    previousStageName?: string;   // e.g. "Uovo"
+    newStageName?: string;        // e.g. "Pulcino"
+    previousStageEmoji?: string;  // emoji for old stage
+    newStageEmoji?: string;       // emoji for new stage
 }
 
 export function triggerCelebration(type: CelebrationType, detail?: Partial<CelebrationDetail>): void {

@@ -401,6 +401,94 @@
   100% { opacity: 1; transform: scale(1); }
 }
 
+/* === EPIC LEVEL-UP CELEBRATION (FA-014) === */
+
+@keyframes celeb-fire-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.3); }
+  10% { opacity: 1; }
+  50% { opacity: 0.8; transform: translateY(-40vh) scale(1); }
+  80% { opacity: 0.3; }
+  100% { opacity: 0; transform: translateY(-80vh) scale(0.5); }
+}
+
+@keyframes celeb-fire-rise-slow {
+  0% { opacity: 0; transform: translateY(0) scale(0.4) rotate(0deg); }
+  15% { opacity: 0.9; }
+  60% { opacity: 0.5; transform: translateY(-50vh) scale(0.8) rotate(10deg); }
+  100% { opacity: 0; transform: translateY(-90vh) scale(0.2) rotate(-5deg); }
+}
+
+@keyframes celeb-ember-drift {
+  0% { opacity: 0; transform: translateY(0) translateX(0); }
+  20% { opacity: 1; }
+  50% { transform: translateY(-35vh) translateX(15px); }
+  80% { opacity: 0.4; }
+  100% { opacity: 0; transform: translateY(-70vh) translateX(-10px); }
+}
+
+@keyframes celeb-level-entrance {
+  0% { opacity: 0; transform: scale(0.3) translateY(20px); filter: blur(8px); }
+  50% { opacity: 1; transform: scale(1.15) translateY(-5px); filter: blur(0); }
+  70% { transform: scale(0.95) translateY(2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+
+@keyframes celeb-level-glow {
+  0%, 100% { text-shadow: 0 0 20px rgba(255,215,0,0.4), 0 0 40px rgba(255,165,0,0.2); }
+  50% { text-shadow: 0 0 30px rgba(255,215,0,0.7), 0 0 60px rgba(255,165,0,0.4), 0 0 80px rgba(232,82,63,0.2); }
+}
+
+@keyframes celeb-evo-old-stage {
+  0% { opacity: 1; transform: scale(1) rotate(0deg); filter: brightness(1); }
+  40% { opacity: 0.8; transform: scale(1.1) rotate(-5deg); filter: brightness(1.5); }
+  70% { opacity: 0.3; transform: scale(0.5) rotate(10deg); filter: brightness(3) blur(4px); }
+  100% { opacity: 0; transform: scale(0) rotate(15deg); filter: brightness(5) blur(8px); }
+}
+
+@keyframes celeb-evo-flash {
+  0% { opacity: 0; transform: scale(0.5); }
+  30% { opacity: 1; transform: scale(1.5); }
+  60% { opacity: 0.8; transform: scale(2); }
+  100% { opacity: 0; transform: scale(3); }
+}
+
+@keyframes celeb-evo-new-stage {
+  0% { opacity: 0; transform: scale(3) rotate(-10deg); filter: blur(10px) brightness(3); }
+  30% { opacity: 0.5; transform: scale(1.3) rotate(5deg); filter: blur(2px) brightness(1.5); }
+  60% { opacity: 1; transform: scale(0.9) rotate(-2deg); filter: blur(0) brightness(1); }
+  80% { transform: scale(1.05) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); filter: blur(0) brightness(1); }
+}
+
+@keyframes celeb-evo-ring {
+  0% { opacity: 0.8; transform: scale(0.3); border-width: 4px; }
+  50% { opacity: 0.5; transform: scale(1.5); border-width: 2px; }
+  100% { opacity: 0; transform: scale(2.5); border-width: 1px; }
+}
+
+@keyframes celeb-evo-name-reveal {
+  0% { opacity: 0; transform: translateY(15px) scale(0.8); letter-spacing: 0.3em; }
+  50% { opacity: 1; transform: translateY(-3px) scale(1.05); letter-spacing: 0.15em; }
+  100% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 0.1em; }
+}
+
+@keyframes celeb-confetti-cascade {
+  0% { opacity: 0; transform: translateY(-10vh) rotate(0deg); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(110vh) rotate(720deg); }
+}
+
+@keyframes celeb-radial-burst {
+  0% { opacity: 0.6; transform: scale(0); }
+  50% { opacity: 0.3; }
+  100% { opacity: 0; transform: scale(4); }
+}
+
+@keyframes celeb-dismiss-hint {
+  0% { opacity: 0; }
+  100% { opacity: 0.4; }
+}
+
 @keyframes streak-shake {
   0%, 100% { transform: translateX(0); }
   10% { transform: translateX(-3px) rotate(-0.5deg); }

@@ -438,3 +438,51 @@ Started: 2026-04-08
 ### Build: ✓ Zero errors
 
 ---
+
+## FA-014 — Celebrazione level-up epica con evoluzione Fenice
+**Status:** PASSED ✓
+**Date:** 2026-04-09
+
+### Architecture:
+- CelebrationOverlay now listens DIRECTLY to `reward_earned` events for level-up detection with evolution awareness
+- Detects evolution by comparing old/new stage boundaries (client-side mirror of EVOLUTION_STAGES)
+- Triggers `evolution_fanfare` sound for evolutions, `level_up` for regular level-ups
+- CelebrationDetail extended with: `isEvolution`, `previousStageName`, `newStageName`, `previousStageEmoji`, `newStageEmoji`
+
+### Level-Up Phases (Regular — 5s total):
+1. **fire_intro** (0-1.2s): Dark overlay + 20 CSS fire particles + 12 embers rising from bottom
+2. **level_text** (1.2s): Typewriter "LIVELLO X!" with golden gradient text + radial burst
+3. **confetti_finale** (2.8s): Confetti cascade (30 particles) + fire + can dismiss
+4. Auto-dismiss at 5s
+
+### Level-Up Phases (Evolution — 8s total):
+1. **fire_intro** (0-1.2s): Dark overlay + fire particles + old stage emoji entrance
+2. **level_text** (1.2s): Typewriter "LIVELLO X!" with golden gradient
+3. **evolution_old** (2.5s): Old stage emoji dissolves (brightness burn + shrink + blur)
+4. **evolution_flash** (3.5s): Flash burst + 3 expanding amber rings
+5. **evolution_new** (4.0s): New stage materializes (scale 3→1) + golden orbiting particles
+6. **confetti_finale** (5.5s): "Evoluzione Fenice" title reveal + confetti cascade
+
+### Evolution Stage Boundaries:
+- Uovo (1-7) → Pulcino (8-17) → Fenice Giovane (18-25) → Fenice di Fuoco (26-34) → Divinita Fenice (35+)
+
+### New Sound — evolution_fanfare:
+- Low rumble → 7-note ascending arpeggio C4→C6 → sustained power chord → high shimmer tail (3s total)
+
+### CSS Keyframes Added (12):
+- `celeb-fire-rise`, `celeb-fire-rise-slow`, `celeb-ember-drift`, `celeb-level-entrance`, `celeb-level-glow`
+- `celeb-evo-old-stage`, `celeb-evo-flash`, `celeb-evo-new-stage`, `celeb-evo-ring`, `celeb-evo-name-reveal`
+- `celeb-confetti-cascade`, `celeb-radial-burst`, `celeb-dismiss-hint`
+
+### Files Modified:
+1. **CelebrationOverlay.tsx** — Full redesign with phased level-up sequence + evolution detection
+2. **animationUtils.ts** — CelebrationDetail extended with evolution fields
+3. **soundEngine.ts** — New `evolution_fanfare` SoundType + playEvolutionFanfare()
+4. **globals.css** — 12 new keyframes for epic level-up effects
+5. **RewardFeedProvider.tsx** — Removed level-up trigger (now handled by CelebrationOverlay directly)
+
+### SafeWrapper: ✓ Already wrapped on page.tsx
+### Pipeline Logic: ✓ Not touched
+### Build: ✓ Zero errors
+
+---
