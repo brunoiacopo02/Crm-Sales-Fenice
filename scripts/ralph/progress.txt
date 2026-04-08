@@ -37,6 +37,8 @@ Started: 2026-04-08
 - XP milestones: compute server-side in rpgProfileActions (xpMilestones, totalThreeLevelXp, upcomingRewards), pass as props to ProfileClient
 - Upcoming rewards: aggregate ROADMAP_REWARDS + EVOLUTION_STAGES + UNLOCKABLE_TITLES, sort by level, slice(0,3)
 - GDO dashboard: 3-col grid layout (feed|pipeline|quest) — grid-cols-1 lg:[1fr_300px] xl:[280px_1fr_300px] with order utilities for responsive reflow
+- RPG Profile: hero banner (dark gradient) + XP bar below + 2-col layout (rewards/streak | financials/roadmap) + quest log + badges + settings
+- Equipped items: getUserInventory(userId) returns shopItem[], match equippedItemId from users table to find active cosmetic
 
 ---
 
@@ -303,4 +305,29 @@ Started: 2026-04-08
   - ActivityFeed gets order-3 on mobile (bottom), order-1 on xl (left sidebar), lg:col-span-2 to span full width when grid is 2-col
   - min-w-0 on center column prevents flex/grid overflow from PipelineBoard
   - Sticky sidebars: xl:sticky xl:top-4 for desktop only, prevents mobile sticky issues
+---
+
+## 2026-04-08 - SA-011
+- Redesigned profilo page with immersive RPG character sheet layout
+- Hero Banner: full-width dark gradient with large centered avatar, conic-gradient fire ring spin animation, evolution stage trail (dot progress), level badge, title display, quick stats HUD bar (streak/XP/coins/multiplier)
+- XP Progress Bar: moved below hero as standalone dark section, enhanced with milestones + shimmer
+- Stats Grid: 6-card RPG stat display (Calls, Appointments, Level, XP, Streak, Coins) with colored gradients and hover scale
+- Two-column layout below: Left (Upcoming Rewards, Streak & Multiplier card, Equipped Cosmetics) | Right (Financials, Weekly Bonus, Roadmap)
+- Quest Log: restyled with Sword icon header, RPG quest journal aesthetic
+- Equipped Cosmetics section: new section showing all owned store items with ATTIVO badge for currently equipped item
+- Updated profilo/page.tsx to fetch getUserInventory() and pass equippedItems + equippedItemInfo as props
+- CSS animations: rpg-float (ambient glow particles), rpg-ring-spin (avatar conic-gradient rotation), rpg-flame-flicker (streak flame animation)
+- All existing data/logic preserved: financials, weekly bonus, achievement showcase, title selector, animation toggle
+- File modificati:
+  - src/app/(dashboard)/profilo/ProfileClient.tsx (full redesign with RPG immersive layout)
+  - src/app/(dashboard)/profilo/page.tsx (added getUserInventory fetch + equipped item props)
+  - src/app/globals.css (3 new RPG animation keyframes)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - getUserInventory returns shopItem objects — can find equipped item by matching equippedItemId from profileData
+  - Hero banner: conic-gradient + rpg-ring-spin creates convincing fire ring around avatar
+  - Evolution stage trail: simple dot + line pattern shows progression through 5 stages
+  - Quick stats HUD: bg-white/5 backdrop-blur-sm for glass-morphism effect on dark background
+  - CSS cssValue prefix parsing: skin-avatar-*, skin-theme-*, skin-effect-* for cosmetic type labels
+  - Two-column below hero keeps financial info prominent while adding RPG elements alongside
 ---
