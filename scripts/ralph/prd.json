@@ -86,7 +86,7 @@
         "npx next build compila senza errori"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Ispirazione: 'just one more episode' di Netflix. La catena di quest crea loop di engagement."
     },
     {

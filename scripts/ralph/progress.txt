@@ -26,6 +26,8 @@ Started: 2026-04-08
 - SocialNotificationProvider: 3 Supabase Realtime channels (social-achievements, social-bossbattles, social-seasonal) + custom event 'social_notification'
 - emitSocialNotification() in animationUtils.ts for programmatic social toasts
 - Toast types config: per-type icon, borderColor, iconColor, glowColor in SocialNotificationToast.tsx
+- QuestChainModal in src/components/QuestChainModal.tsx — shows quest completion celebration + next quest teaser
+- Quest chain pattern: after completeQuest, reload getUserQuests(), find next uncompleted, show chain modal
 
 ---
 
@@ -139,4 +141,31 @@ Started: 2026-04-08
   - Boss battle timer: use useRef Set to track notified battle IDs, prevent duplicate notifications
   - Pattern: emitSocialNotification() can be called from leaderboard component when rank changes detected
   - CSS custom properties (--toast-glow-color) via inline style for per-type glow coloring in animations
+---
+
+## 2026-04-08 - SA-005
+- Implemented quest chain modal: "just one more" effect when claiming completed quests
+- Created QuestChainModal component with confetti particles, XP/coins animated counters, next quest teaser
+- When claiming a quest in QuestPanel, modal shows: celebration + rewards, then slides in next uncompleted quest as teaser
+- If no more quests available, shows "Hai completato tutto! Torna domani per nuove sfide"
+- Confetti particles (35 CSS-only) with staggered timing and multi-color palette
+- XP counter animates from 0 to value with increment timer (count-up effect)
+- Trophy icon with gold glow pulse animation
+- Next quest card shows: title, description, progress bar at 0%, reward preview (XP + coins)
+- CTA button "Accetta la sfida!" / "Continua" depending on whether next quest exists
+- Modal appears with scale+translateY spring entrance animation
+- Backdrop with blur + click-to-dismiss (only after teaser appears)
+- All animations respect getAnimationsEnabled() toggle
+- CSS keyframes: quest-chain-confetti, quest-chain-modal-enter, quest-chain-glow, quest-chain-trophy-pulse, quest-chain-shimmer
+- File modificati:
+  - src/components/QuestChainModal.tsx (NEW — modal with celebration + next quest teaser)
+  - src/components/QuestPanel.tsx (import QuestChainModal, show after claim, find next uncompleted quest)
+  - src/app/globals.css (quest chain animation keyframes)
+  - scripts/ralph/prd.json (passes: true)
+- **Learnings per iterazioni future:**
+  - Pattern: after completeQuest, reload quests data, then find next uncompleted from fresh data
+  - QuestPanel has two components (QuestCard + QuestPanel) with similar JSX closing patterns — use unique context for edits
+  - Confetti in modal: use inline styles with Math.random() for natural staggering, CSS keyframes for animation
+  - XP count-up: simple setInterval with increment = value/30, clearing when target reached
+  - Modal phases: 'celebrate' (1.5s) → 'teaser' (interactive) — progressive disclosure keeps attention
 ---
