@@ -1,127 +1,153 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fenice-universe-run3",
-  "description": "Fenice Universe Run 3B — Redesign UI con Stitch MCP, immagini con Nanobana MCP, Realtime integration. USARE MCP OBBLIGATORIAMENTE.",
+  "branchName": "ralph/fase-3-prelancio",
+  "description": "Fase 3 Pre-Lancio — Performance optimization, debug pass, KPI time filter, script gamification. NO deploy.",
   "userStories": [
     {
-      "id": "FU-032",
-      "title": "REDESIGN: Toast notifiche con Stitch MCP",
-      "description": "Ridisegnare UniverseToast/UniverseToastProvider con design generato da Stitch MCP.",
+      "id": "F3-001",
+      "title": "Performance: lazy loading componenti pesanti",
+      "description": "Usare dynamic() import per componenti pesanti che non servono al first load.",
       "acceptanceCriteria": [
-        "OBBLIGATORIO: Usare mcp__stitch per generare il design del toast (generate_screen_from_text o edit_screens)",
-        "Prompt Stitch: 'Gaming notification toast for RPG CRM. Shows creature drop (name, rarity glow, element icon) and boss defeated (boss name, rewards). Bottom-right position, dark theme with warm fire/gold accents, 4s auto-dismiss. Rarity styling: common=grey, rare=blue glow, epic=purple glow, legendary=gold shimmer. Max 2 toasts stacked.'",
-        "Convertire il design Stitch in componenti Tailwind/React",
-        "Sostituire l'attuale UniverseToast.tsx con la versione ridisegnata",
-        "SafeWrapper, npx next build senza errori"
+        "Identificare i componenti piu pesanti (>500 righe): ConfermeBoard, ProfileClient, ShopClient, InventarioCreatureClient, MappaAvventuraClient, TradingClient",
+        "Wrappare con next/dynamic e { ssr: false } dove appropriato (componenti puramente client)",
+        "Aggiungere loading skeleton per ogni componente lazy-loaded",
+        "Verificare che Recharts (grafici) sia gia lazy-loaded, se no farlo",
+        "Verificare che CelebrationOverlay, ChestOpeningAnimation, CreatureRevealOverlay siano lazy",
+        "npx next build senza errori e verificare che il bundle size sia ridotto"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "Redesigned with Stitch MCP (Celestial Archive design system). Glassmorphism, 4px rarity accent bar, shimmer overlay, countdown progress bar, element icons."
+      "passes": false,
+      "notes": "NON lazy-loadare componenti server-side. Solo client components pesanti. Usare dynamic(() => import(...), { ssr: false, loading: () => <Skeleton /> })."
     },
     {
-      "id": "FU-033",
-      "title": "REDESIGN: Trading page con Stitch MCP",
-      "description": "Ridisegnare la pagina /trading con design generato da Stitch MCP.",
+      "id": "F3-002",
+      "title": "Performance: ottimizzare query DB con indici mancanti",
+      "description": "Verificare che tutte le query frequenti abbiano indici appropriati.",
       "acceptanceCriteria": [
-        "OBBLIGATORIO: Usare mcp__stitch per generare il design della pagina trading",
-        "Prompt Stitch: 'RPG creature trading marketplace for CRM gamification. Three tabs: My Tradeable Creatures (grid of creature cards with rarity borders), Received Offers (list with accept/reject buttons and creature preview), Sent Offers (status list). Dark gaming theme, warm fire/gold palette. Trade proposal modal: 4 steps (select your creature -> select recipient -> select their creature -> confirm). Creature cards show: name, rarity badge, element icon, level, XP/coin bonus.'",
-        "Convertire in Tailwind/React, sostituire TradingClient.tsx",
-        "SafeWrapper, npx next build senza errori"
+        "Analizzare le query piu frequenti: pipeline leads (per assignedToId + status), conferme (per confirmationsOutcome), recall (per recallDate), achievements (per userId)",
+        "Verificare in schema.ts che gli indici esistano per: leads.assignedToId, leads.status, leads.recallDate, leads.confirmationsOutcome, leads.appointmentDate",
+        "Aggiungere indici mancanti in schema.ts",
+        "Creare migration route /api/migrate-indexes/route.ts con CREATE INDEX IF NOT EXISTS per ogni indice",
+        "ESEGUIRE la migrazione sul DB di produzione",
+        "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Redesigned with Stitch MCP. Dark Celestial Archive theme, glassmorphism modal, rarity accent bars, tonal layering."
+      "passes": false,
+      "notes": "Indici compositi dove serve: (assignedToId, status), (assignedToId, recallDate). NON creare indici su colonne gia indicizzate."
     },
     {
-      "id": "FU-034",
-      "title": "REDESIGN: Duelli widget e modal con Stitch MCP",
-      "description": "Ridisegnare DuelWidget e DuelCreateModal con Stitch MCP.",
+      "id": "F3-003",
+      "title": "Performance: React.memo su componenti lista",
+      "description": "Aggiungere memoization ai componenti che renderizzano in lista per evitare re-render inutili.",
       "acceptanceCriteria": [
-        "OBBLIGATORIO: Usare mcp__stitch per generare il design",
-        "Prompt Stitch: 'RPG 1v1 duel widget for CRM dashboard. Compact card showing: opponent avatar/name, metric (appointments or calls), countdown timer, live score (you vs opponent) with progress bar. Dark gaming theme, competitive red/blue split design. Also: duel creation modal for managers with 2 player selection, metric choice, duration picker, coin reward input.'",
-        "Convertire in Tailwind/React, sostituire DuelWidget.tsx e DuelCreateModal.tsx",
-        "SafeWrapper, npx next build senza errori"
+        "Wrappare LeadCard con React.memo (renderizzato N volte nella pipeline)",
+        "Wrappare CreatureCard in InventarioCreatureClient con React.memo",
+        "Wrappare BossCard in MappaAvventuraClient con React.memo",
+        "Aggiungere useCallback ai handler onClick passati come props ai componenti memoizzati",
+        "NON memoizzare componenti che cambiano ad ogni render (con props dinamiche)",
+        "npx next build senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Redesigned with Stitch MCP. Competitive red/blue split, progress bar, glassmorphism modal, gradient CTAs."
+      "passes": false,
+      "notes": "React.memo previene re-render quando le props non cambiano. Utile per liste lunghe (pipeline 50+ lead, inventario 80 creature)."
     },
     {
-      "id": "FU-035",
-      "title": "REDESIGN: Creature reveal overlay con Stitch MCP",
-      "description": "Ridisegnare CreatureRevealOverlay con Stitch per renderla epica.",
+      "id": "F3-004",
+      "title": "Debug: verificare ogni pagina per ogni ruolo",
+      "description": "Test sistematico di ogni pagina per GDO, CONFERME, VENDITORE, MANAGER.",
       "acceptanceCriteria": [
-        "OBBLIGATORIO: Usare mcp__stitch per generare il design",
-        "Prompt Stitch: 'Epic fullscreen creature reveal animation for RPG CRM. Phase 1: dark background with ascending light particles. Phase 2: expanding light circle, creature appears with rarity glow (grey/blue/purple/gold). Phase 3: creature name, rarity badge, element icon, XP/coin bonuses fade in. Legendary has gold particle burst and screen shake. Button to dismiss. Dark premium gaming style.'",
-        "Convertire in Tailwind/React con CSS keyframes, sostituire CreatureRevealOverlay.tsx",
-        "SafeWrapper, npx next build senza errori"
+        "Per ogni pagina nel Sidebar di ogni ruolo: verificare che npx next build non dia errori",
+        "Verificare che le pagine gamification (profilo, store, classifica, creature, avventura, trading) funzionino per GDO",
+        "Verificare che le pagine Conferme (dashboard, KPI, inventario team, avventura team, chest widget) funzionino",
+        "Verificare che le pagine Manager (team, KPI, RPG monitor, targets, import, archivio) funzionino",
+        "Verificare che le pagine Venditore (dashboard, profilo, classifica, store) funzionino",
+        "Se una pagina ha errori di tipo/import, fixarla",
+        "npx next build senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Redesigned with Stitch MCP. Ascending particles, radial glow expansion, stat cards, gradient CTA, legendary burst."
+      "passes": false,
+      "notes": "Il test e statico (build + code review). Non serve browser. Cerca: import mancanti, tipi sbagliati, componenti non esistenti, SafeWrapper mancanti."
     },
     {
-      "id": "FU-036",
-      "title": "REDESIGN: Duel history nel profilo con Stitch MCP",
-      "description": "Ridisegnare DuelHistory.tsx con Stitch.",
+      "id": "F3-005",
+      "title": "Debug: rimuovere console.log e codice morto",
+      "description": "Pulire il codebase da console.log di debug, file inutilizzati, import non usati.",
       "acceptanceCriteria": [
-        "OBBLIGATORIO: Usare mcp__stitch per generare il design",
-        "Prompt Stitch: 'RPG duel history section for player profile. Shows: total duels, wins, losses, win rate percentage. List of recent duels with opponent name, metric, score, result badge (green WIN, red LOSS, grey DRAW), date. Dark gaming theme consistent with RPG profile.'",
-        "Convertire in Tailwind/React, sostituire DuelHistory.tsx",
-        "SafeWrapper, npx next build senza errori"
+        "Cercare e rimuovere tutti i console.log di debug (NON rimuovere console.error nei catch)",
+        "Cercare file in src/components/ e src/app/actions/ che non sono importati da nessuna parte e rimuoverli",
+        "Cercare import non usati nei file principali (pipelineActions, confermeActions, page.tsx files)",
+        "Rimuovere commenti TODO/FIXME/HACK se presenti",
+        "NON rimuovere SafeWrapper, NON rimuovere file che sembrano unused ma sono importati dinamicamente",
+        "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "Redesigned with Stitch MCP. Tonal stat cards, win rate gradient bar, left accent bars, glassmorphism container."
+      "passes": false,
+      "notes": "Attenzione a non rimuovere console.error nei catch (quelli servono per debug produzione). Attenzione ai dynamic import che non appaiono come import normali."
     },
     {
-      "id": "FU-025",
-      "title": "Asset: generare immagini creature con Nanobana MCP",
-      "description": "Generare immagini per le creature. USARE mcp__nanobana__generate_image.",
+      "id": "F3-006",
+      "title": "Fix: KPI aggregate filtrate per orario lavorativo 13:30-20:00",
+      "description": "Le KPI team contano tutte le chiamate senza filtrare l'orario di lavoro GDO.",
       "acceptanceCriteria": [
-        "OBBLIGATORIO: Usare mcp__nanobana__generate_image per ogni immagine",
-        "Generare almeno 20 immagini creature: 6 comuni, 6 rare, 5 epiche, 3 leggendarie",
-        "Stile: fantasy cartoon coerente, sfondo scuro/trasparente, creatura al centro",
-        "Prompt esempio per ogni creatura basato su nome+elemento: 'A cute fire chick creature named Fiammella, fantasy cartoon style, golden feathers, glowing embers, dark background, 512x512'",
-        "Salvare in public/assets/creatures/ con naming creature-{id}.png",
-        "Aggiornare DB creatures con imageUrl tramite script o seed route",
+        "In kpiTeamActions.ts: filtrare le chiamate nel range 13:30-20:00 Europe/Rome per i conteggi aggregate",
+        "La costante FIXED_HOURS_WORKED = 6.5 e gia corretta",
+        "Aggiungere filtro orario nella query callLogs: WHERE createdAt::time >= '13:30' AND createdAt::time <= '20:00' (con timezone Europe/Rome)",
+        "Applicare lo stesso filtro anche nel calcolo chiamate/ora nel trend chart",
+        "NON modificare il conteggio appuntamenti (quelli non hanno orario fisso)",
         "npx next build senza errori"
       ],
       "priority": 6,
       "passes": false,
-      "notes": "Nanobana usa Gemini. Se il modello non funziona, provare con mcp__nanobana__configure_gemini_token e mcp__nanobana__get_configuration_status prima."
+      "notes": "Solo le CHIAMATE vanno filtrate per orario. Appuntamenti, conferme, presenze, chiusure non hanno orario fisso."
     },
     {
-      "id": "FU-026",
-      "title": "Asset: generare immagini boss con Nanobana MCP",
-      "description": "Generare immagini per i 10 boss avventura. USARE mcp__nanobana__generate_image.",
+      "id": "F3-007",
+      "title": "Gamification: Script tracking nel CRM",
+      "description": "Tracciare quando un GDO segue lo script durante una chiamata per collegarlo alla gamification.",
       "acceptanceCriteria": [
-        "OBBLIGATORIO: Usare mcp__nanobana__generate_image per ogni boss",
-        "Generare immagini per tutti i 10 boss",
-        "Stile: fantasy dark, epico, minaccioso, elemento visibile",
-        "Salvare in public/assets/bosses/ con naming boss-{stageNumber}.png",
-        "Aggiornare DB con imageUrl",
+        "Aggiungere campo scriptCompleted (boolean default false) nella tabella callLogs via migration",
+        "Aggiungere campo in schema.ts: scriptCompleted: boolean('scriptCompleted').default(false)",
+        "In ScriptWidget.tsx: quando l'utente arriva all'ultimo blocco (step 11 Chiusura), dispatchare evento 'script_completed'",
+        "In OutcomeModal o pipelineActions: quando si registra un outcome, se lo script era aperto e completato, salvare scriptCompleted=true nel callLog",
+        "Creare server action getScriptCompletionRate(userId) che ritorna % chiamate con script completato",
         "npx next build senza errori"
       ],
       "priority": 7,
       "passes": false,
-      "notes": "Stessi requisiti Nanobana di FU-025."
+      "notes": "Lo ScriptWidget e gia nel drawer della LeadCard. Serve solo tracciare quando viene completato e salvarlo."
     },
     {
-      "id": "FU-031",
-      "title": "Integration: Supabase Realtime per team adventure",
-      "description": "Team Conferme vede danni boss live quando un collega agisce.",
+      "id": "F3-008",
+      "title": "Gamification: Achievement e Quest per lo Script",
+      "description": "Creare achievement e quest legati all'uso dello script chiamata.",
       "acceptanceCriteria": [
-        "In teamAdventureActions.ts (teamAttackBoss): broadcast su channel 'team-adventure'",
-        "In MappaAvventuraClient per CONFERME: subscribe al channel",
-        "Aggiornare HP bar boss in tempo reale",
-        "Mini-toast sotto HP bar con nome utente e danno inflitto",
-        "Cleanup subscription on unmount",
-        "SafeWrapper, npx next build senza errori"
+        "Aggiungere nuove achievement nel DB: 'Studente Modello' (10 script completati), 'Script Master' (50 script completati), 'Maestro della Persuasione' (200 script completati)",
+        "Aggiungere metrica 'total_scripts_completed' in achievementActions.ts measureAchievementMetric",
+        "Aggiungere quest giornaliera: 'Segui lo script per 5 chiamate oggi' (reward: 15 coins + 10 XP)",
+        "Aggiungere quest settimanale: 'Completa 20 script questa settimana' (reward: 50 coins + 30 XP)",
+        "Aggiungere le quest nel seed delle quest (questActions.ts o via seed route)",
+        "Le immagini badge sono gia in public/assets/gamification/script-master-badge.png e script-streak-badge.png",
+        "npx next build senza errori"
       ],
       "priority": 8,
       "passes": false,
-      "notes": "Pattern Supabase Realtime gia usato in RealtimeProvider."
+      "notes": "Le immagini badge script sono gia state generate con Gemini. Achievement usa il sistema esistente (achievementActions). Quest usa il sistema esistente (questActions)."
+    },
+    {
+      "id": "F3-009",
+      "title": "Gamification: Script completion rate visibile nel profilo e KPI",
+      "description": "Mostrare la percentuale di uso script nel profilo GDO e nelle KPI manager.",
+      "acceptanceCriteria": [
+        "Nel ProfileClient.tsx: aggiungere card 'Script Usage' che mostra: totale script completati, % chiamate con script, streak giorni consecutivi con script",
+        "Usare getScriptCompletionRate(userId) creato in F3-007",
+        "Nel manager KPI (ManagerGdoClient o KpiTeamDashboard): aggiungere colonna '% Script' per ogni GDO",
+        "Colorare la percentuale: verde >70%, giallo 40-70%, rosso <40%",
+        "SafeWrapper sulla card",
+        "npx next build senza errori"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Questo incentiva i TL a monitorare chi usa lo script e chi no."
     }
   ]
 }
