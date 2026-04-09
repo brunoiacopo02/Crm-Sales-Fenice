@@ -196,3 +196,15 @@ Started: 2026-04-09
 - Migration route: /api/migrate-universe/route.ts — aggiunto ALTER TABLE users ADD COLUMN IF NOT EXISTS "creatureDropCounter"
 - Script: scripts/ralph/migrate-drop-counter.js (chiama la migration route via fetch)
 - Build: npx next build — zero errors
+
+## FU-014 — Fix: stage advancement integration
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/adventureActions.ts
+- Functions added: countTodayActions(userId, metric), checkAndAdvanceStage(userId)
+- countTodayActions: counts today's actions using callLogs (chiamate), leadEvents (fissaggi), leads (conferme/presenze/chiusure)
+- checkAndAdvanceStage: skips boss stages (multiples of 10), checks daily requirements, calls advanceStage if met
+- pipelineActions.ts: checkAndAdvanceStage called after attackBoss for chiamata + fissaggio
+- confermeActions.ts: checkAndAdvanceStage called after attackBoss for conferma + chiusura + presenza
+- Pipeline logica sacra NON modificata
+- Build: npx next build — zero errors

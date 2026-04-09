@@ -31,7 +31,7 @@
         "npx next build senza errori"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Requirements: 1-10=50 chiamate, 11-20=3 fissaggi, 21-30=2 conferme, 31-40=2 presenze, 41-50=1 chiusura."
     },
     {
