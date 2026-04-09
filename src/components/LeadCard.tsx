@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
-import Link from "next/link"
+import { ScriptWidget } from "./ScriptWidget"
 
 type LeadProps = {
     lead: {
@@ -77,6 +77,7 @@ function getFunnelRarity(funnel: string | null): FunnelRarity {
 }
 
 export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
+    const [showScript, setShowScript] = useState(false)
     // Client-side time for expiry checks (avoids hydration mismatch)
     const [clientNow, setClientNow] = useState(0)
     useEffect(() => { setClientNow(Date.now()) }, [])
@@ -220,17 +221,40 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
 
                 {/* 4. Actions Right */}
                 <div className="flex items-center justify-end shrink-0 pl-2 gap-2">
-                    <Link
-                        href="/script"
-                        onClick={(e) => e.stopPropagation()}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setShowScript(true); }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-brand-orange/30 bg-brand-orange-50/50 text-brand-orange-700 hover:bg-brand-orange/10 transition-colors"
                         title="Apri script chiamata"
                     >
                         <FileText className="w-3.5 h-3.5" />
                         Script
-                    </Link>
+                    </button>
                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
                 </div>
+
+                {/* Script Drawer */}
+                {showScript && (
+                    <div className="fixed inset-0 z-[60] flex justify-end" onClick={() => setShowScript(false)}>
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                        <div
+                            className="relative w-full max-w-2xl h-full bg-white shadow-2xl overflow-y-auto animate-slide-in-right"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="sticky top-0 z-10 bg-white border-b border-ash-200 px-5 py-3 flex items-center justify-between">
+                                <div>
+                                    <div className="text-sm font-bold text-ash-800">Script Chiamata</div>
+                                    <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
+                                </div>
+                                <button onClick={() => setShowScript(false)} className="p-2 rounded-lg hover:bg-ash-100 transition-colors">
+                                    <X className="w-5 h-5 text-ash-500" />
+                                </button>
+                            </div>
+                            <div className="p-5">
+                                <ScriptWidget />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )
     }
