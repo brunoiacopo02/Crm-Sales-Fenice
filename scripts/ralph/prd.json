@@ -126,7 +126,7 @@
         "SafeWrapper, tema gaming scuro, npx next build senza errori"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Solo GDO. CONFERME hanno creature team non scambiabili."
     },
     {

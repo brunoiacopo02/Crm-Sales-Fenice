@@ -209,6 +209,17 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-020 — UI: Trading creature tra GDO
+- Status: DONE
+- Date: 2026-04-09
+- Files: src/app/(dashboard)/trading/page.tsx, TradingClient.tsx
+- Server actions added: getGdoUsersForTrading, getOtherUserCreatures, getAllOffers (tradingActions.ts)
+- Tabs: Scambiabili, Offerte Ricevute, Offerte Inviate
+- Modal: 4 step (select mine → select GDO → select theirs → confirm)
+- Sidebar: "Scambi Creature" (ArrowLeftRight icon) per GDO
+- SafeWrapper, rarity-styled creature cards
+- Build: npx next build — zero errors
+
 ## FU-019 — UI: Toast notifiche creature drop e boss defeat
 - Status: DONE
 - Date: 2026-04-09
