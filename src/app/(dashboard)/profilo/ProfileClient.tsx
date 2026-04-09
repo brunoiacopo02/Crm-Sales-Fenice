@@ -12,6 +12,7 @@ import { AnimationToggle } from "@/components/AnimationToggle"
 import { SoundToggle } from "@/components/SoundToggle"
 import { SocialComparisonBadge } from "@/components/SocialComparisonBadge"
 import { SafeWrapper } from "@/components/SafeWrapper"
+import { DuelHistory } from "@/components/DuelHistory"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
@@ -53,7 +54,7 @@ type EquippedItemInfo = {
     cssValue: string;
 }
 
-export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo }: {
+export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory }: {
     profileData: any;
     achievements?: any[];
     titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
@@ -62,6 +63,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     activeQuests?: { daily: QuestItem[]; weekly: QuestItem[] };
     equippedItems?: Array<{ id: string; name: string; description: string; cssValue: string }>;
     equippedItemInfo?: EquippedItemInfo | null;
+    duelHistory?: { duels: any[]; stats: { totalDuels: number; wins: number; losses: number; winRate: number } };
 }) {
 
     const {
@@ -579,6 +581,13 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                         </div>
                     </div>
                 </div>
+
+                {/* ═══════════════════════════════════════════════════════
+                    DUEL HISTORY — Storico sfide
+                ═══════════════════════════════════════════════════════ */}
+                {duelHistory && duelHistory.stats.totalDuels > 0 && (
+                    <DuelHistory duels={duelHistory.duels} stats={duelHistory.stats} />
+                )}
 
                 {/* ═══════════════════════════════════════════════════════
                     QUEST LOG — Active quests in RPG quest journal style

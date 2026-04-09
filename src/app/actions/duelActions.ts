@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { duels, users, coinTransactions } from "@/db/schema";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, desc, count } from "drizzle-orm";
 
 /**
  * Create a duel between two GDO users. Only TL/Manager can create duels.
@@ -206,5 +206,54 @@ export async function getActiveDuelsForUser(userId: string) {
     } catch (error) {
         console.error("Errore getActiveDuelsForUser:", error);
         return [];
+    }
+}
+
+/**
+ * Get completed duel history for a user (last 20).
+ */
+export async function getDuelHistory(userId: string) {
+    try {
+        const completedDuels = await db.select().from(duels)
+            .where(and(
+                eq(duels.status, 'completed'),
+                or(eq(duels.challengerId, userId), eq(duels.opponentId, userId))
+            ))
+            .orderBy(desc(duels.endTime))
+            .limit(20);
+
+        // Enrich with names
+        const enriched = await Promise.all(completedDuels.map(async (duel) => {
+            const isChallenger = duel.challengerId === userId;
+            const opponentId = isChallenger ? duel.opponentId : duel.challengerId;
+            const [opponent] = await db.select({ name: users.name, displayName: users.displayName })
+                .from(users).where(eq(users.id, opponentId));
+
+            const myScore = isChallenger ? duel.challengerScore : duel.opponentScore;
+            const theirScore = isChallenger ? duel.opponentScore : duel.challengerScore;
+            const result = duel.winnerId === userId ? 'VINTO' : duel.winnerId === null ? 'PARI' : 'PERSO';
+
+            return {
+                id: duel.id,
+                opponentName: opponent?.displayName || opponent?.name || 'GDO',
+                metric: duel.metric,
+                myScore,
+                theirScore,
+                result,
+                rewardCoins: duel.rewardCoins,
+                endTime: duel.endTime,
+            };
+        }));
+
+        // Stats
+        const totalDuels = enriched.length;
+        const wins = enriched.filter(d => d.result === 'VINTO').length;
+        const losses = enriched.filter(d => d.result === 'PERSO').length;
+        const winRate = totalDuels > 0 ? Math.round((wins / totalDuels) * 100) : 0;
+
+        return { duels: enriched, stats: { totalDuels, wins, losses, winRate } };
+    } catch (error) {
+        console.error("Errore getDuelHistory:", error);
+        return { duels: [], stats: { totalDuels: 0, wins: 0, losses: 0, winRate: 0 } };
     }
 }
