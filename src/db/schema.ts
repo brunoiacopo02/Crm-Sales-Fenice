@@ -394,6 +394,7 @@ export const seasonalEvents = pgTable('seasonalEvents', {
     xpMultiplier: real('xpMultiplier').default(1).notNull(),
     coinsMultiplier: real('coinsMultiplier').default(1).notNull(),
     isActive: boolean('isActive').default(true).notNull(),
+    creatureDropBoost: boolean('creatureDropBoost').default(false).notNull(),
     createdBy: text('createdBy').references(() => users.id),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });

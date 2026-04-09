@@ -141,6 +141,11 @@ export async function GET() {
             ALTER TABLE users ADD COLUMN IF NOT EXISTS "creatureDropCounter" INTEGER NOT NULL DEFAULT 0
         `);
 
+        // 11. creatureDropBoost on seasonalEvents
+        await db.execute(sql`
+            ALTER TABLE "seasonalEvents" ADD COLUMN IF NOT EXISTS "creatureDropBoost" BOOLEAN NOT NULL DEFAULT FALSE
+        `);
+
         // Indexes
         await db.execute(sql`
             CREATE INDEX IF NOT EXISTS user_creatures_user_idx ON "userCreatures" ("userId")

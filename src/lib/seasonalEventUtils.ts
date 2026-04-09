@@ -35,3 +35,35 @@ export async function getActiveEventMultipliers(): Promise<{ xp: number; coins: 
         return { xp: 1, coins: 1 };
     }
 }
+
+/**
+ * Returns creature drop boost configuration if an active seasonal event has creatureDropBoost enabled.
+ * thresholdReduction: drop threshold reduced from 25 to 15 actions
+ * rarityBoost: increased epic (12→18%) and legendary (3→6%) probabilities
+ */
+export async function getCreatureDropBoost(): Promise<{ thresholdReduction: number; rarityBoost: boolean } | null> {
+    try {
+        const now = new Date();
+        const rows = await db.select({
+            creatureDropBoost: seasonalEvents.creatureDropBoost,
+        })
+            .from(seasonalEvents)
+            .where(and(
+                eq(seasonalEvents.isActive, true),
+                eq(seasonalEvents.creatureDropBoost, true),
+                lte(seasonalEvents.startDate, now),
+                gte(seasonalEvents.endDate, now)
+            ))
+            .limit(1);
+
+        if (rows.length === 0) return null;
+
+        return {
+            thresholdReduction: 15, // reduced from 25 to 15
+            rarityBoost: true,
+        };
+    } catch (error) {
+        console.error('Error getCreatureDropBoost:', error);
+        return null;
+    }
+}

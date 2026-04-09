@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { creatures, userCreatures, coinTransactions, users } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
-// Rarity drop weights
+// Rarity drop weights (normal)
 const RARITY_WEIGHTS = [
     { rarity: 'common', weight: 60 },
     { rarity: 'rare', weight: 25 },
@@ -12,11 +12,20 @@ const RARITY_WEIGHTS = [
     { rarity: 'legendary', weight: 3 },
 ] as const;
 
-function pickRarity(override?: string): string {
+// Boosted rarity weights during seasonal events
+const BOOSTED_RARITY_WEIGHTS = [
+    { rarity: 'common', weight: 51 },
+    { rarity: 'rare', weight: 25 },
+    { rarity: 'epic', weight: 18 },
+    { rarity: 'legendary', weight: 6 },
+] as const;
+
+function pickRarity(override?: string, boosted?: boolean): string {
     if (override) return override;
+    const weights = boosted ? BOOSTED_RARITY_WEIGHTS : RARITY_WEIGHTS;
     const roll = Math.random() * 100;
     let cumulative = 0;
-    for (const rw of RARITY_WEIGHTS) {
+    for (const rw of weights) {
         cumulative += rw.weight;
         if (roll < cumulative) return rw.rarity;
     }
@@ -29,7 +38,15 @@ function pickRarity(override?: string): string {
  */
 export async function dropCreature(userId: string, rarityOverride?: string) {
     try {
-        const rarity = pickRarity(rarityOverride);
+        // Check seasonal event creature drop boost
+        let isBoosted = false;
+        try {
+            const { getCreatureDropBoost } = await import('@/lib/seasonalEventUtils');
+            const boost = await getCreatureDropBoost();
+            if (boost?.rarityBoost) isBoosted = true;
+        } catch { /* ignore */ }
+
+        const rarity = pickRarity(rarityOverride, isBoosted);
 
         // Get all creatures of this rarity
         const pool = await db.select().from(creatures)
@@ -77,11 +94,19 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
  */
 export async function maybeDropCreature(userId: string) {
     try {
-        // Atomic increment with threshold reset: if counter >= 24, reset to 0; else increment
+        // Check if seasonal event reduces drop threshold
+        let threshold = 24;
+        try {
+            const { getCreatureDropBoost } = await import('@/lib/seasonalEventUtils');
+            const boost = await getCreatureDropBoost();
+            if (boost) threshold = boost.thresholdReduction - 1; // 14 for threshold 15
+        } catch { /* ignore */ }
+
+        // Atomic increment with threshold reset
         const result = await db.execute(sql`
             UPDATE users
             SET "creatureDropCounter" = CASE
-                WHEN "creatureDropCounter" >= 24 THEN 0
+                WHEN "creatureDropCounter" >= ${threshold} THEN 0
                 ELSE "creatureDropCounter" + 1
             END
             WHERE id = ${userId}
