@@ -240,7 +240,7 @@
         "npx next build senza errori"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "Achievement system gia esistente (achievementActions.ts). Servono nuove metriche: total_bosses_defeated, total_creatures_owned, total_trades_completed, total_duels_won."
     },
     {

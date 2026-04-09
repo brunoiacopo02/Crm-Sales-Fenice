@@ -209,6 +209,14 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-028 — Integration: achievements collegati a Universe
+- Status: DONE
+- Date: 2026-04-09
+- New metrics in measureAchievementMetric: total_bosses_defeated, total_creatures_owned, total_trades_completed, total_duels_won
+- Seed route: /api/seed-universe-achievements (8 achievements, 3 tiers each)
+- checkAchievements integrated: adventureActions (boss), creatureActions (drop), tradingActions (accept), duelActions (complete)
+- Build: npx next build — zero errors
+
 ## FU-027 — UI: Team creature management per Conferme
 - Status: DONE
 - Date: 2026-04-09
