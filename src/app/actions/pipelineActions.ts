@@ -239,6 +239,8 @@ export async function updateLeadOutcome(
         checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check err:", e));
         const { maybeDropCreature } = await import('./creatureActions');
         maybeDropCreature(effectiveUserId).catch(e => console.error("Creature drop err:", e));
+        const { incrementDuelScore } = await import('./duelActions');
+        incrementDuelScore(effectiveUserId, 'chiamate', 1).catch(e => console.error("Duel score chiamate err:", e));
     }
 
     if (outcome === 'APPUNTAMENTO') {
@@ -252,6 +254,8 @@ export async function updateLeadOutcome(
             const { attackBoss: attackBossFissaggio, checkAndAdvanceStage: checkStageFissaggio } = await import('./adventureActions');
             attackBossFissaggio(effectiveUserId, 'fissaggio').catch(e => console.error("Adventure fissaggio err:", e));
             checkStageFissaggio(effectiveUserId).catch(e => console.error("Adventure stage check fissaggio err:", e));
+            const { incrementDuelScore: incrementDuelFissaggio } = await import('./duelActions');
+            incrementDuelFissaggio(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Duel score fissaggi err:", e));
         }
         await evaluateTeamGoals(leadId).catch((e: any) => {
             console.error("Team goal evaluation failed:", e)
