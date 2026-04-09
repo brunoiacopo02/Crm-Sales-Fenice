@@ -49,7 +49,7 @@
         "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "DIPENDE DA FU-024. SQL atomico previene race condition."
     },
     {

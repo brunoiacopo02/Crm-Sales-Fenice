@@ -208,3 +208,14 @@ Started: 2026-04-09
 - confermeActions.ts: checkAndAdvanceStage called after attackBoss for conferma + chiusura + presenza
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
+
+## FU-015 — Fix: creature drop triggers in pipeline
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/creatureActions.ts
+- Function added: maybeDropCreature(userId) — atomic SQL CASE WHEN counter (threshold 25)
+- pipelineActions.ts: maybeDropCreature called after every call for effectiveUserId
+- confermeActions.ts: maybeDropCreature called for oldLead.assignedToId after conferma/chiusura/presenza
+- Returns creature data for notification display
+- Pipeline logica sacra NON modificata
+- Build: npx next build — zero errors
