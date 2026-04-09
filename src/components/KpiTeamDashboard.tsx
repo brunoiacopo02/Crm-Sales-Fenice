@@ -3,7 +3,17 @@
 import { useState, useEffect } from "react"
 import { getTeamKpiDashboard, KpiPeriod } from "@/app/actions/kpiTeamActions"
 import { PhoneIncoming, PhoneOutgoing, UserPlus, Target, Clock, BarChart3, Calendar } from "lucide-react"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts'
+import dynamic from "next/dynamic"
+
+// Lazy load Recharts heavy components
+const LineChart = dynamic(() => import("recharts").then((mod) => mod.LineChart), { ssr: false })
+const Line = dynamic(() => import("recharts").then((mod) => mod.Line), { ssr: false })
+const XAxis = dynamic(() => import("recharts").then((mod) => mod.XAxis), { ssr: false })
+const YAxis = dynamic(() => import("recharts").then((mod) => mod.YAxis), { ssr: false })
+const CartesianGrid = dynamic(() => import("recharts").then((mod) => mod.CartesianGrid), { ssr: false })
+const RechartsTooltip = dynamic(() => import("recharts").then((mod) => mod.Tooltip), { ssr: false })
+const ResponsiveContainer = dynamic(() => import("recharts").then((mod) => mod.ResponsiveContainer), { ssr: false })
+const Legend = dynamic(() => import("recharts").then((mod) => mod.Legend), { ssr: false })
 
 export function KpiTeamDashboard() {
     const [period, setPeriod] = useState<KpiPeriod>('oggi')

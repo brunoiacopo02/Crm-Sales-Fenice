@@ -6,8 +6,11 @@ import { claimTimedChestReward } from '@/app/actions/timedChestActions';
 import { triggerCelebration } from '@/lib/animationUtils';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
 import { useRouter } from 'next/navigation';
-import { ChestOpeningAnimation, type ChestRarity } from '@/components/ChestOpeningAnimation';
+import type { ChestRarity } from '@/components/ChestOpeningAnimation';
 import { SafeWrapper } from '@/components/SafeWrapper';
+import dynamic from 'next/dynamic';
+
+const ChestOpeningAnimation = dynamic(() => import('@/components/ChestOpeningAnimation').then(m => ({ default: m.ChestOpeningAnimation })), { ssr: false });
 
 // ─── Constants ─────────────────────────────────────────────────────────
 

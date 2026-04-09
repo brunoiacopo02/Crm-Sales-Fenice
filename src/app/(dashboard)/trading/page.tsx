@@ -2,7 +2,9 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { getUserCreatures } from "@/app/actions/creatureActions";
 import { getAllOffers, getGdoUsersForTrading } from "@/app/actions/tradingActions";
-import TradingClient from "./TradingClient";
+import dynamic from "next/dynamic";
+
+const TradingClient = dynamic(() => import("./TradingClient"), { loading: () => <div className="animate-pulse space-y-4"><div className="h-10 bg-ash-200 rounded-lg w-1/3" /><div className="grid grid-cols-2 gap-4"><div className="h-64 bg-ash-100 rounded-xl" /><div className="h-64 bg-ash-100 rounded-xl" /></div></div> });
 
 export default async function TradingPage() {
     const supabase = await createClient();

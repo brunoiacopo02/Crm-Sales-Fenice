@@ -14,7 +14,7 @@ const YAxis = dynamic(() => import("recharts").then((mod) => mod.YAxis), { ssr: 
 const Tooltip = dynamic(() => import("recharts").then((mod) => mod.Tooltip), { ssr: false })
 const ResponsiveContainer = dynamic(() => import("recharts").then((mod) => mod.ResponsiveContainer), { ssr: false })
 const CartesianGrid = dynamic(() => import("recharts").then((mod) => mod.CartesianGrid), { ssr: false })
-import { Cell } from "recharts"
+const Cell = dynamic(() => import("recharts").then((mod) => mod.Cell), { ssr: false })
 export function KpiBoardAdvanced() {
     const { user: authUser, isLoading } = useAuth();
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;

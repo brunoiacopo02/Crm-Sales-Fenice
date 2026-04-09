@@ -5,8 +5,11 @@ import { Coins, Zap, Crown, X } from 'lucide-react';
 import { getUserPendingLootDrops, openLootDrop } from '@/app/actions/lootDropActions';
 import { useRouter } from 'next/navigation';
 import { triggerCelebration } from '@/lib/animationUtils';
-import { ChestOpeningAnimation, type ChestRarity } from '@/components/ChestOpeningAnimation';
+import type { ChestRarity } from '@/components/ChestOpeningAnimation';
 import { SafeWrapper } from '@/components/SafeWrapper';
+import dynamic from 'next/dynamic';
+
+const ChestOpeningAnimation = dynamic(() => import('@/components/ChestOpeningAnimation').then(m => ({ default: m.ChestOpeningAnimation })), { ssr: false });
 
 interface PendingDrop {
     id: string;

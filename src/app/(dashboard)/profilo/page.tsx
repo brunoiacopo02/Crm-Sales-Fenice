@@ -6,9 +6,11 @@ import { getUserQuests } from '@/app/actions/questActions';
 import { getUserLifetimeStats } from '@/app/actions/leaderboardActions';
 import { getUserInventory, getEquippedSkinCss } from '@/app/actions/shopActions';
 import { getDuelHistory } from '@/app/actions/duelActions';
-import ProfileClient from './ProfileClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
+import dynamic from 'next/dynamic';
+
+const ProfileClient = dynamic(() => import('./ProfileClient'), { loading: () => <div className="animate-pulse space-y-4"><div className="h-48 bg-ash-100 rounded-xl" /><div className="grid grid-cols-2 gap-4"><div className="h-32 bg-ash-100 rounded-xl" /><div className="h-32 bg-ash-100 rounded-xl" /></div><div className="h-64 bg-ash-100 rounded-xl" /></div> });
 
 export default async function ProfiloPage() {
     const supabase = await createClient();
