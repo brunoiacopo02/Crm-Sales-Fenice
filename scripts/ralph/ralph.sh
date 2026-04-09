@@ -1,14 +1,24 @@
 #!/bin/bash
-# Ralph Loop - Autonomous AI agent loop for CRM Fenice
-# Usage: ./scripts/ralph/ralph.sh [max_iterations]
-# Runs Claude Code in autonomous mode, one user story per iteration.
+# Ralph Wiggum - Long-running AI agent loop for CRM Fenice
+# Based on https://github.com/snarktank/ralph
+# Usage: ./scripts/ralph/ralph.sh [--tool amp|claude] [max_iterations]
 
 set -e
 
+# Parse arguments
+TOOL="claude"  # Default to claude for this project
 MAX_ITERATIONS=10
 
 while [[ $# -gt 0 ]]; do
   case $1 in
+    --tool)
+      TOOL="$2"
+      shift 2
+      ;;
+    --tool=*)
+      TOOL="${1#*=}"
+      shift
+      ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
@@ -17,6 +27,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
+  echo "Error: Invalid tool '$TOOL'. Must be 'amp' or 'claude'."
+  exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRD_FILE="$SCRIPT_DIR/prd.json"
@@ -54,6 +69,20 @@ if [ -f "$PRD_FILE" ]; then
   fi
 fi
 
+# Auto-checkout the target branch
+if [ -f "$PRD_FILE" ]; then
+  TARGET_BRANCH=$(jq -r '.branchName // empty' "$PRD_FILE" 2>/dev/null || echo "")
+  CURRENT_GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+
+  if [ -n "$TARGET_BRANCH" ] && [ "$TARGET_BRANCH" != "$CURRENT_GIT_BRANCH" ]; then
+    echo "Switching to branch: $TARGET_BRANCH"
+    git checkout "$TARGET_BRANCH" 2>/dev/null || {
+      echo "ERROR: Could not checkout $TARGET_BRANCH"
+      exit 1
+    }
+  fi
+fi
+
 # Initialize progress file if needed
 if [ ! -f "$PROGRESS_FILE" ]; then
   echo "# Ralph Progress Log" > "$PROGRESS_FILE"
@@ -61,25 +90,10 @@ if [ ! -f "$PROGRESS_FILE" ]; then
   echo "---" >> "$PROGRESS_FILE"
 fi
 
-# Auto-checkout the branch specified in the PRD
-if [ -f "$PRD_FILE" ]; then
-  TARGET_BRANCH=$(jq -r '.branchName // empty' "$PRD_FILE" 2>/dev/null || echo "")
-  CURRENT_GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
-
-  if [ -n "$TARGET_BRANCH" ] && [ "$TARGET_BRANCH" != "$CURRENT_GIT_BRANCH" ]; then
-    echo "PRD targets branch: $TARGET_BRANCH (currently on: $CURRENT_GIT_BRANCH)"
-    echo "Switching to $TARGET_BRANCH..."
-    git checkout "$TARGET_BRANCH" 2>/dev/null || {
-      echo "ERROR: Could not checkout $TARGET_BRANCH. Make sure it exists."
-      exit 1
-    }
-    echo "Switched to $TARGET_BRANCH"
-  fi
-fi
-
 echo ""
 echo "============================================"
 echo "  RALPH LOOP - CRM Fenice"
+echo "  Tool: $TOOL"
 echo "  Branch: $(git branch --show-current)"
 echo "  Max iterations: $MAX_ITERATIONS"
 echo "============================================"
@@ -88,10 +102,25 @@ echo ""
 for i in $(seq 1 $MAX_ITERATIONS); do
   echo ""
   echo "==============================================================="
-  echo "  Ralph Iteration $i of $MAX_ITERATIONS"
+  echo "  Ralph Iteration $i of $MAX_ITERATIONS ($TOOL)"
   echo "==============================================================="
 
-  OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+  # Check how many stories are left before this iteration
+  REMAINING=$(jq '[.userStories[] | select(.passes == false)] | length' "$PRD_FILE" 2>/dev/null || echo "?")
+  echo "  Stories remaining: $REMAINING"
+
+  if [[ "$REMAINING" == "0" ]]; then
+    echo ""
+    echo "All stories already completed!"
+    exit 0
+  fi
+
+  # Run the selected tool
+  if [[ "$TOOL" == "amp" ]]; then
+    OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
+  else
+    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+  fi
 
   # Check for completion signal
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
@@ -102,6 +131,10 @@ for i in $(seq 1 $MAX_ITERATIONS); do
     echo "========================================"
     exit 0
   fi
+
+  # Show what was completed this iteration
+  REMAINING_AFTER=$(jq '[.userStories[] | select(.passes == false)] | length' "$PRD_FILE" 2>/dev/null || echo "?")
+  echo "  Stories remaining after iteration: $REMAINING_AFTER"
 
   echo "Iteration $i complete. Continuing..."
   sleep 2

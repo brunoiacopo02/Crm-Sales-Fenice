@@ -109,17 +109,21 @@ Quando TUTTE le stories hanno `passes: true`, rispondi con:
 
 1. Leggi il PRD in `scripts/ralph/prd.json`
 2. Leggi il progress log in `scripts/ralph/progress.txt`
-3. Verifica di essere sul branch corretto. Se no, crealo da main.
-4. Scegli la story con priorita' piu' alta dove `passes: false`
-5. Implementa quella singola user story
+3. Verifica di essere sul branch corretto (`ralph/fenice-universe-run3`). Se no, fai checkout.
+4. Trova la story con priority PIU BASSA (numero piu piccolo) dove `passes: false`
+5. Implementa SOLO QUELLA singola user story
 6. `npx next build` deve compilare senza errori
 7. Committa con messaggio: `feat: [Story ID] - [Story Title]`
 8. Aggiorna il PRD (`passes: true`) e appendi al progress.txt
-9. UNA story per iterazione
+9. **FERMATI QUI. NON fare altre stories. La prossima iterazione se ne occuperà.**
+
+## REGOLA CRITICA — UNA SOLA STORY
+
+⚠️ DEVI implementare UNA SOLA story per iterazione. Dopo aver committato e aggiornato il PRD, FERMATI IMMEDIATAMENTE. Non continuare con la prossima story. Il loop esterno ralph.sh ti richiamerà per la prossima. Se fai più di una story per iterazione, il sistema non funziona correttamente. Dopo il commit della story, scrivi il tuo output e termina.
 
 ## Importante
 
-- Lavora su UNA story per iterazione
+- **UNA SOLA STORY per iterazione — poi fermati**
 - Committa frequentemente
 - Mantieni la build verde
 - USA Stitch e Nano Banana per il design
