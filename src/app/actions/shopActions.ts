@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { shopItems, userPurchases, users, coinTransactions } from "@/db/schema"
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, desc, sql } from "drizzle-orm"
 import crypto from "crypto"
 
 // --- MANAGER ACTIONS ---
@@ -84,9 +84,9 @@ export async function buyShopItem(userId: string, shopItemId: string) {
     // Transaction logic: Since Drizzle ORM does not fully abstract transaction in SQLite smoothly across multiple ops, 
     // we use sequential updates.
 
-    // Deduct
+    // Deduct (SQL-level decrement to prevent race conditions)
     await db.update(users)
-            .set({ walletCoins: user.walletCoins - item.cost })
+            .set({ walletCoins: sql`${users.walletCoins} - ${item.cost}` })
             .where(eq(users.id, userId))
         
 

@@ -126,7 +126,7 @@ export async function updateGdoBaseSalary(userId: string, newSalary: number) {
 export async function addGdoCoins(userId: string, amount: number) {
     const u = await db.select().from(users).where(eq(users.id, userId));
     if (u.length > 0) {
-        await db.update(users).set({ walletCoins: u[0].walletCoins + amount }).where(eq(users.id, userId));
+        await db.update(users).set({ walletCoins: sql`${users.walletCoins} + ${amount}` }).where(eq(users.id, userId));
         // Log the transaction
         await db.insert(coinTransactions).values({
             id: crypto.randomUUID(),

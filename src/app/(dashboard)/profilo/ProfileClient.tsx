@@ -348,7 +348,9 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 )}
 
                 {/* Social Comparison Badge */}
-                <SocialComparisonBadge userId={profileData.id} role={role} />
+                <SafeWrapper>
+                    <SocialComparisonBadge userId={profileData.id} role={role} />
+                </SafeWrapper>
 
                 {/* TWO-COLUMN: Upcoming Rewards + Streak | Financials + Weekly */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -542,7 +544,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                             <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
                                 <Target className="w-4 h-4 text-brand-orange" /> Obiettivo in Corso
                             </h3>
-                            <WeeklyBonusWidget userId={profileData.id} role={role} />
+                            <SafeWrapper><WeeklyBonusWidget userId={profileData.id} role={role} /></SafeWrapper>
                         </div>
 
                         {/* Roadmap / Prossimi Traguardi — gaming dark */}
@@ -648,18 +650,22 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     TITLE SELECTOR
                 ═══════════════════════════════════════════════════════ */}
                 {titleData && (
-                    <TitleSelector
-                        titles={titleData.titles}
-                        activeTitle={titleData.activeTitle}
-                        userId={profileData.id}
-                    />
+                    <SafeWrapper>
+                        <TitleSelector
+                            titles={titleData.titles}
+                            activeTitle={titleData.activeTitle}
+                            userId={profileData.id}
+                        />
+                    </SafeWrapper>
                 )}
 
                 {/* ═══════════════════════════════════════════════════════
                     BADGE WALL — Achievement showcase
                 ═══════════════════════════════════════════════════════ */}
                 {achievements.length > 0 && (
-                    <AchievementShowcase achievements={achievements} />
+                    <SafeWrapper>
+                        <AchievementShowcase achievements={achievements} />
+                    </SafeWrapper>
                 )}
 
                 {/* ═══════════════════════════════════════════════════════

@@ -235,7 +235,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                 {/* Script Drawer */}
                 {showScript && (
                     <div className="fixed inset-0 z-[60] flex justify-end" onClick={() => setShowScript(false)}>
-                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                        <div className="absolute inset-0 bg-black/50" />
                         <div
                             className="relative w-full max-w-2xl h-full bg-white shadow-2xl overflow-y-auto animate-slide-in-right"
                             onClick={(e) => e.stopPropagation()}

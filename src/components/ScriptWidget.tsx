@@ -230,21 +230,20 @@ export function ScriptWidget() {
   const minRequired = block.checklist?.min || 0;
   const timerDone = timerSeconds >= TIMER_SECONDS;
 
-  // Timer
+  // Timer — single interval, cleanup on unmount only
   useEffect(() => {
-    if (timerRunning && !timerDone) {
-      timerRef.current = setInterval(() => {
-        setTimerSeconds(prev => {
-          if (prev + 1 >= TIMER_SECONDS) {
-            setTimerRunning(false);
-            if (timerRef.current) clearInterval(timerRef.current);
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
+    if (!timerRunning) return;
+    timerRef.current = setInterval(() => {
+      setTimerSeconds(prev => {
+        const next = prev + 1;
+        if (next >= TIMER_SECONDS) {
+          setTimerRunning(false);
+        }
+        return next;
+      });
+    }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [timerRunning, timerDone]);
+  }, [timerRunning]);
 
   // Start timer on block 2
   useEffect(() => {

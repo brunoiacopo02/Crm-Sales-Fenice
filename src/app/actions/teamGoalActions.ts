@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { teamGoals, leads, users, coinTransactions, notifications } from "@/db/schema"
-import { eq, and, gte, lt } from "drizzle-orm"
+import { eq, and, gte, lt, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { differenceInDays } from "date-fns"
 import { revalidatePath } from "next/cache"
@@ -103,7 +103,7 @@ export async function evaluateTeamGoals(leadId: string) {
             for (const gdo of activeGdos) {
                 // Accredita Coin
                 await db.update(users)
-                                    .set({ walletCoins: gdo.walletCoins + goal.rewardCoins })
+                                    .set({ walletCoins: sql`${users.walletCoins} + ${goal.rewardCoins}` })
                                     .where(eq(users.id, gdo.id))
                     
 

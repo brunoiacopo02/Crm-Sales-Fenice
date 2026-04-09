@@ -746,7 +746,7 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role,
                                 <div className="pt-2">
                                     <div className="text-sm text-ash-500">
                                         Per il monitoraggio dettagliato di livelli, coins e achievement di ogni operatore, visita la sezione{' '}
-                                        <a href="/rpg-monitor" className="text-brand-orange hover:text-brand-orange-600 font-semibold underline underline-offset-2 transition-colors">
+                                        <a href="/manager-rpg-monitor" className="text-brand-orange hover:text-brand-orange-600 font-semibold underline underline-offset-2 transition-colors">
                                             RPG Monitor
                                         </a>.
                                     </div>
