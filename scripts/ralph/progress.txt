@@ -209,6 +209,22 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-027 — UI: Team creature management per Conferme
+- Status: DONE
+- Date: 2026-04-09
+- getTeamCreatures: added LEFT JOIN to users for contributedByName (displayName)
+- InventarioCreatureClient: added contributedByName to OwnedCreature type
+- CreatureCard: shows "Contributo di {name}" for team creatures
+- Equip/Fuse buttons already functional (equipTeamCreature, fuseTeamCreatures)
+- Build: npx next build — zero errors
+
+## FU-025 & FU-026 — Asset generation (BLOCKED)
+- Status: BLOCKED
+- Date: 2026-04-09
+- Reason: Nanobana MCP failing with model error (gemini-2.5-flash-image-preview not found)
+- Creatures and bosses continue to work with element icon placeholders
+- Will retry when Nanobana MCP is fixed
+
 ## FU-023 — UI: Creature reveal celebration overlay
 - Status: DONE
 - Date: 2026-04-09

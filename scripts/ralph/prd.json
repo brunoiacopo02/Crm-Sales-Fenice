@@ -220,7 +220,7 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "Le server actions teamAdventureActions gia supportano equip/fuse team. Solo UI."
     },
     {
