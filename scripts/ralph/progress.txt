@@ -115,3 +115,23 @@ Started: 2026-04-09
 - Integrazione confermeActions: contributeToTeam + teamAttackBoss per conferme/presenze/chiusure
 - XP contributi: conferma=20, presenza=30, chiusura=50
 - Build: npx next build — zero errors
+
+## FU-009 — Server actions: trading e duelli
+- Status: DONE
+- Date: 2026-04-09
+- Files: src/app/actions/tradingActions.ts, src/app/actions/duelActions.ts
+- Trading: createTradeOffer, acceptTradeOffer, rejectTradeOffer, getPendingOffers
+- Leggendarie e equipaggiate NON scambiabili (validazione server)
+- Duelli: createDuel (solo TL/Manager), getDuelStatus, incrementDuelScore, completeDuel, getActiveDuels
+- Duello: 2 GDO, metrica (fissaggi/chiamate), durata minuti, coins al vincitore
+- Auto-complete quando il tempo scade
+- Build: npx next build — zero errors
+
+---
+## RUN 1 COMPLETATA
+Tutte le 9 stories (FU-001 — FU-009) passano.
+- Schema DB: 9 tabelle create e migrate su prod
+- Seed: 80 creature + 10 boss seedati su prod
+- Server actions: creatureActions, chestActions, adventureActions, teamAdventureActions, tradingActions, duelActions
+- Integrazione: gamificationEngine.ts (creature bonus), pipelineActions, confermeActions
+- Pipeline: logica sacra NON modificata, solo hook gamification aggiuntivi
