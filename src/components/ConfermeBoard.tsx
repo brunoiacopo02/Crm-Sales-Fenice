@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise, Archive } from "lucide-react"
-import { getConfermeAppointments, updateLeadDataConferme } from "@/app/actions/confermeActions"
+import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
 
 import dynamic from "next/dynamic"
 
@@ -30,6 +30,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     const [kanbanData, setKanbanData] = useState<{ flatList: LeadData[], daDefinire: LeadData[] }>({ flatList: [], daDefinire: [] })
     const [tableData, setTableData] = useState<LeadData[]>([])
     const [storicoData, setStoricoData] = useState<LeadData[]>([])
+    const [storicoFilter, setStoricoFilter] = useState<'tutti' | 'confermati' | 'scartati'>('tutti')
 
     // Derived Data for Views
     const [oggiLeads, setOggiLeads] = useState<LeadData[]>([])
@@ -486,15 +487,36 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                             );
                         })()}
 
-                        {viewMode === 'storico' && (
+                        {viewMode === 'storico' && (() => {
+                            const filteredStorico = storicoFilter === 'tutti' ? storicoData
+                                : storicoFilter === 'confermati' ? storicoData.filter(i => i.lead.confirmationsOutcome === 'confermato')
+                                : storicoData.filter(i => i.lead.confirmationsOutcome === 'scartato');
+                            const confCount = storicoData.filter(i => i.lead.confirmationsOutcome === 'confermato').length;
+                            const scarCount = storicoData.filter(i => i.lead.confirmationsOutcome === 'scartato').length;
+
+                            const handleSetOutcome = async (leadId: string, version: number, outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato", e: React.MouseEvent) => {
+                                e.stopPropagation();
+                                const res = await setSalespersonOutcome(leadId, version, outcome);
+                                if (res.success) fetchLeads(false);
+                                else alert(res.error === 'CONCURRENCY_ERROR' ? 'Qualcun altro ha modificato questo lead. Ricarica.' : res.error || 'Errore');
+                            };
+
+                            return (
                             <div className="flex flex-col h-full bg-white rounded-2xl border border-ash-200/60 shadow-card overflow-hidden mb-8 max-w-[1400px] mx-auto w-full animate-fade-in">
                                 <div className="p-4 border-b border-ash-200/40 bg-gradient-to-r from-ash-50 to-white">
                                     <h2 className="text-lg font-black text-ash-800 uppercase tracking-wide flex items-center gap-2"><Archive className="w-5 h-5" /> Storico Conferme</h2>
-                                    <div className="text-ash-500 font-medium text-sm mt-1">Lead confermati e scartati dal team Conferme.</div>
+                                    <div className="flex items-center gap-2 mt-3">
+                                        {(['tutti', 'confermati', 'scartati'] as const).map(f => (
+                                            <button key={f} onClick={() => setStoricoFilter(f)}
+                                                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${storicoFilter === f ? 'bg-brand-orange text-white border-brand-orange' : 'bg-white text-ash-600 border-ash-200 hover:border-brand-orange/30'}`}>
+                                                {f === 'tutti' ? `Tutti (${storicoData.length})` : f === 'confermati' ? `Confermati (${confCount})` : `Scartati (${scarCount})`}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 <div className="flex-1 overflow-auto bg-white p-0">
-                                    {storicoData.length === 0 ? (
+                                    {filteredStorico.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center h-full text-ash-400 gap-3 py-10">
                                             <div className="w-16 h-16 rounded-2xl bg-ash-50 flex items-center justify-center shadow-soft">
                                                 <Archive className="w-8 h-8 text-ash-300" />
@@ -507,15 +529,15 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                 <tr className="bg-gradient-to-r from-ash-50 to-ash-100/50 sticky top-0 border-b border-ash-200/60 text-xs font-bold uppercase tracking-wider text-ash-500 z-10">
                                                     <th className="p-4 pl-6">Lead</th>
                                                     <th className="p-4">Telefono</th>
-                                                    <th className="p-4">GDO Fissatore</th>
-                                                    <th className="p-4">Esito</th>
-                                                    <th className="p-4">Motivo Scarto</th>
-                                                    <th className="p-4">Data Esito</th>
+                                                    <th className="p-4">GDO</th>
+                                                    <th className="p-4">Esito Conferma</th>
+                                                    <th className="p-4">Esito Vendita</th>
+                                                    <th className="p-4">Azioni</th>
                                                     <th className="p-4"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-ash-100/60">
-                                                {storicoData.map((item) => (
+                                                {filteredStorico.map((item) => (
                                                     <tr
                                                         key={item.lead.id}
                                                         className="hover:bg-brand-orange-50/30 transition-all duration-200 cursor-pointer group"
@@ -526,42 +548,65 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                     >
                                                         <td className="p-4 pl-6 align-top pt-5">
                                                             <div className="font-bold text-ash-800 text-[15px]">{item.lead.name}</div>
+                                                            <div className="text-xs text-ash-400 mt-0.5">{item.lead.funnel}</div>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <div className="text-sm text-ash-600 font-medium">{item.lead.phone}</div>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-ash-100 text-ash-700 border border-ash-200/60">
-                                                                {item.gdo?.displayName || item.gdo?.name || "Sconosciuto"}
+                                                                {item.gdo?.displayName || item.gdo?.name || "N/A"}
                                                             </span>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             {item.lead.confirmationsOutcome === "confermato" ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border border-emerald-200/60 shadow-soft">
-                                                                    <CheckCircle2 className="w-4 h-4 mr-1.5" /> Confermato
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
                                                                 </span>
                                                             ) : (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-ember-50 to-rose-50 text-ember-600 border border-ember-200/60 shadow-soft">
-                                                                    <XCircle className="w-4 h-4 mr-1.5" /> Scartato
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-4 align-top pt-5">
-                                                            {item.lead.confirmationsDiscardReason ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60 capitalize">
-                                                                    {item.lead.confirmationsDiscardReason}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-xs text-ash-400">—</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-4 align-top pt-5">
-                                                            {item.lead.confirmationsTimestamp ? (
-                                                                <div className="text-sm text-ash-600 font-medium">
-                                                                    {format(new Date(item.lead.confirmationsTimestamp), "dd MMM yyyy HH:mm", { locale: it })}
+                                                                <div>
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-ember-50 text-ember-600 border border-ember-200/60">
+                                                                        <XCircle className="w-3.5 h-3.5 mr-1" /> Scartato
+                                                                    </span>
+                                                                    {item.lead.confirmationsDiscardReason && (
+                                                                        <div className="text-[11px] text-ash-400 mt-1 capitalize">{item.lead.confirmationsDiscardReason}</div>
+                                                                    )}
                                                                 </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-4 align-top pt-5">
+                                                            {item.lead.salespersonOutcome ? (
+                                                                <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                                                                    item.lead.salespersonOutcome === 'Chiuso' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' :
+                                                                    item.lead.salespersonOutcome === 'Non chiuso' ? 'bg-amber-50 text-amber-700 border-amber-200/60' :
+                                                                    'bg-rose-50 text-rose-600 border-rose-200/60'
+                                                                }`}>
+                                                                    {item.lead.salespersonOutcome === 'Chiuso' ? '✅ Chiuso' :
+                                                                     item.lead.salespersonOutcome === 'Non chiuso' ? '📋 Presenziato' :
+                                                                     '❌ Sparito'}
+                                                                </span>
+                                                            ) : item.lead.confirmationsOutcome === 'confermato' ? (
+                                                                <span className="text-xs text-ash-400 italic">In attesa...</span>
                                                             ) : (
                                                                 <span className="text-xs text-ash-400">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-4 align-top pt-5" onClick={e => e.stopPropagation()}>
+                                                            {item.lead.confirmationsOutcome === 'confermato' && !item.lead.salespersonOutcome && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <button onClick={(e) => handleSetOutcome(item.lead.id, item.lead.version, 'Chiuso', e)}
+                                                                        className="px-2 py-1 rounded text-[11px] font-bold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors">
+                                                                        Chiuso
+                                                                    </button>
+                                                                    <button onClick={(e) => handleSetOutcome(item.lead.id, item.lead.version, 'Non chiuso', e)}
+                                                                        className="px-2 py-1 rounded text-[11px] font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors">
+                                                                        Presenziato
+                                                                    </button>
+                                                                    <button onClick={(e) => handleSetOutcome(item.lead.id, item.lead.version, 'Lead non presenziato', e)}
+                                                                        className="px-2 py-1 rounded text-[11px] font-bold bg-rose-500 text-white hover:bg-rose-600 transition-colors">
+                                                                        Sparito
+                                                                    </button>
+                                                                </div>
                                                             )}
                                                         </td>
                                                         <td className="p-4 text-right align-middle">
@@ -576,7 +621,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                     )}
                                 </div>
                             </div>
-                        )}
+                        );})()}
 
                         {viewMode === 'table' && (
                             <div className="flex flex-col h-full bg-white rounded-2xl border border-ash-200/60 shadow-card overflow-hidden mb-8 max-w-[1400px] mx-auto w-full animate-fade-in">
