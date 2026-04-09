@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server"
-import { Trophy, Medal, MapPin, Calendar, Clock, Star } from "lucide-react"
+import { Trophy, Star } from "lucide-react"
 import { LeaderboardClient } from "./LeaderboardClient"
 import { getLeaderboard, getPlayerOfTheWeek, LeaderboardPeriod } from "@/app/actions/leaderboardActions"
 import { TeamGoalBanner } from "@/components/TeamGoalBanner"

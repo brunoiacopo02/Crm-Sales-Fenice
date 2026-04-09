@@ -8,8 +8,6 @@ export async function GET() {
     }
 
     try {
-        console.log("Migrazione achievement system...");
-
         // Create achievements table
         await db.execute(sql`
             CREATE TABLE IF NOT EXISTS achievements (
@@ -82,7 +80,6 @@ export async function GET() {
             ON CONFLICT (id) DO NOTHING
         `);
 
-        console.log("Migrazione achievement system completata!");
         return NextResponse.json({ success: true, message: "Achievement system tables created and 15 achievements seeded." });
     } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);

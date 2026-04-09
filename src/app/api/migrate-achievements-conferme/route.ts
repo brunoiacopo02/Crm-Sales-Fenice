@@ -8,8 +8,6 @@ export async function GET() {
     }
 
     try {
-        console.log("Seeding Conferme achievements...");
-
         // Seed 8 Conferme-specific achievements across 4 categories
         await db.execute(sql`
             INSERT INTO achievements (id, name, description, icon, category, metric, "tier1Target", "tier2Target", "tier3Target")
@@ -34,7 +32,6 @@ export async function GET() {
             ON CONFLICT (id) DO NOTHING
         `);
 
-        console.log("Conferme achievements seeded successfully!");
         return NextResponse.json({ success: true, message: "8 Conferme achievements seeded." });
     } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);

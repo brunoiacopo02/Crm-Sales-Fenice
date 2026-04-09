@@ -4,7 +4,7 @@ import { getUnlockedTitles } from '@/app/actions/titleActions';
 import { getStreakInfo } from '@/app/actions/streakActions';
 import { getUserQuests } from '@/app/actions/questActions';
 import { getUserLifetimeStats } from '@/app/actions/leaderboardActions';
-import { getUserInventory, getEquippedSkinCss } from '@/app/actions/shopActions';
+import { getUserInventory } from '@/app/actions/shopActions';
 import { getDuelHistory } from '@/app/actions/duelActions';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"

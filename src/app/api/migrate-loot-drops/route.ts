@@ -8,8 +8,6 @@ export async function GET() {
     }
 
     try {
-        console.log("Migrazione loot drops system...");
-
         // Create lootDrops table
         await db.execute(sql`
             CREATE TABLE IF NOT EXISTS "lootDrops" (
@@ -38,7 +36,6 @@ export async function GET() {
             WHERE opened = FALSE
         `);
 
-        console.log("Migrazione loot drops completata!");
         return NextResponse.json({ success: true, message: "Loot drops migration completed" });
     } catch (error) {
         console.error("Errore migrazione loot drops:", error);

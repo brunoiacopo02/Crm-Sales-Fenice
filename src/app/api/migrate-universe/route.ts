@@ -4,8 +4,6 @@ import { sql } from "drizzle-orm";
 
 export async function GET() {
     try {
-        console.log("Migrazione Fenice Universe — creatures, userCreatures, adventureProgress, adventureBosses, actionChests...");
-
         // 1. creatures
         await db.execute(sql`
             CREATE TABLE IF NOT EXISTS "creatures" (
@@ -181,7 +179,6 @@ export async function GET() {
             CREATE INDEX IF NOT EXISTS duels_opponent_idx ON "duels" ("opponentId")
         `);
 
-        console.log("Migrazione Fenice Universe completata!");
         return NextResponse.json({ success: true, message: "Fenice Universe migration completed — 9 tables created" });
     } catch (error) {
         console.error("Errore migrazione Fenice Universe:", error);

@@ -8,8 +8,6 @@ export async function GET() {
     }
 
     try {
-        console.log("Migrazione quest system Conferme...");
-
         // 1. Add role column to quests table (default 'GDO' for existing quests)
         await db.execute(sql`
             ALTER TABLE quests ADD COLUMN IF NOT EXISTS "role" TEXT NOT NULL DEFAULT 'GDO'
@@ -31,7 +29,6 @@ export async function GET() {
             ON CONFLICT (id) DO NOTHING
         `);
 
-        console.log("Migrazione quest Conferme completata!");
         return NextResponse.json({ success: true, message: "Quest Conferme: role column added and templates seeded." });
     } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);

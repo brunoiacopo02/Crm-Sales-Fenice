@@ -8,8 +8,6 @@ export async function GET() {
     }
 
     try {
-        console.log("Migrazione quest system...");
-
         // Create quests table
         await db.execute(sql`
             CREATE TABLE IF NOT EXISTS quests (
@@ -70,7 +68,6 @@ export async function GET() {
             ON CONFLICT (id) DO NOTHING
         `);
 
-        console.log("Migrazione quest system completata!");
         return NextResponse.json({ success: true, message: "Quest system tables created and seeded." });
     } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);
