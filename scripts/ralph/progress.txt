@@ -430,3 +430,22 @@ Started: 2026-04-09
   - Gradient CTA button
 - SafeWrapper: yes
 - Build: npx next build — zero errors
+
+## FU-035 — REDESIGN: Creature reveal overlay con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3 Flash)
+- Design: "Aetheric Forge" fullscreen reveal — void background, ascending particles, radial glow
+- File: src/components/CreatureRevealOverlay.tsx (full rewrite)
+- Changes:
+  - 3 phases: glow expand (0.9s) → creature appear (0.7s) → info fade-in (0.6s)
+  - Ascending particles: 12 for normal, 30 for legendary (CSS animation)
+  - Radial glow: rarity-colored gradient expanding from center
+  - Creature container: glassmorphism + massive glow shadow (60-160px)
+  - Rarity badge: glowing dot + uppercase label
+  - Stat cards: XP bonus (purple) + Coin bonus (gold) with ambient glow
+  - Legendary: 25 particle burst + screen shake (5px)
+  - Gradient CTA button with gold glow
+  - No solid borders, tonal surfaces
+- SafeWrapper: yes
+- Build: npx next build — zero errors
