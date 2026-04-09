@@ -188,3 +188,282 @@ Started: 2026-04-09
 - LeadCard.tsx: supporta lastCallNote + callCount badge + ScriptWidget drawer
 - 13 route /api/migrate-* bloccate in produzione (NODE_ENV check)
 - Pagine /script, /test-drawer, /test-wsod rimosse
+
+## FU-024 — Migrate: campo creatureDropCounter nella tabella users
+- Status: DONE
+- Date: 2026-04-09
+- Schema: aggiunto creatureDropCounter: integer('creatureDropCounter').default(0).notNull() in users table
+- Migration route: /api/migrate-universe/route.ts — aggiunto ALTER TABLE users ADD COLUMN IF NOT EXISTS "creatureDropCounter"
+- Script: scripts/ralph/migrate-drop-counter.js (chiama la migration route via fetch)
+- Build: npx next build — zero errors
+
+## FU-014 — Fix: stage advancement integration
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/adventureActions.ts
+- Functions added: countTodayActions(userId, metric), checkAndAdvanceStage(userId)
+- countTodayActions: counts today's actions using callLogs (chiamate), leadEvents (fissaggi), leads (conferme/presenze/chiusure)
+- checkAndAdvanceStage: skips boss stages (multiples of 10), checks daily requirements, calls advanceStage if met
+- pipelineActions.ts: checkAndAdvanceStage called after attackBoss for chiamata + fissaggio
+- confermeActions.ts: checkAndAdvanceStage called after attackBoss for conferma + chiusura + presenza
+- Pipeline logica sacra NON modificata
+- Build: npx next build — zero errors
+
+---
+## RUN 3 SUMMARY
+- **16 of 18 stories PASSED** (FU-024, FU-014-023, FU-027-031)
+- **2 stories BLOCKED** (FU-025, FU-026 — Nanobana MCP model error)
+- Backend fixes: stage advancement, creature drops, duel scores, static imports, DB transactions
+- New UI: UniverseToast, Trading page, DuelWidget, DuelCreateModal, ChestWidget Conferme, CreatureRevealOverlay
+- Integrations: achievements, seasonal events, duel history, Supabase Realtime
+- All builds green, pipeline logica sacra untouched, no deploy
+- Branch: ralph/fenice-universe-run3
+
+## FU-031 — Integration: Supabase Realtime per team adventure
+- Status: DONE
+- Date: 2026-04-09
+- teamAdventureActions.ts: broadcast via supabase channel 'team-adventure' after boss HP update
+- RealtimeProvider: subscribes to 'team-adventure' channel, dispatches 'team_boss_damage_event'
+- MappaAvventuraClient: listens for live HP updates (liveBossHp state), shows damage toast
+- Toast: "{name} ha inflitto {damage} danni con un {action}!" with auto-dismiss 4s
+- Existing postgres_changes channels NOT altered
+- Build: npx next build — zero errors
+
+## FU-030 — UI: Storico sfide nel profilo
+- Status: DONE
+- Date: 2026-04-09
+- getDuelHistory: last 20 completed duels with opponent name, scores, result, stats
+- DuelHistory.tsx: stats bar (totali/vittorie/sconfitte/win rate) + duel list
+- Result badges: VINTO=verde, PERSO=rosso, PARI=grigio
+- ProfileClient: renders DuelHistory before Quest Log (hidden if no duels)
+- SafeWrapper protected, gaming dark theme
+- Build: npx next build — zero errors
+
+## FU-029 — Integration: seasonal events × creature drops
+- Status: DONE
+- Date: 2026-04-09
+- Schema: creatureDropBoost boolean added to seasonalEvents
+- Migration: ALTER TABLE seasonalEvents ADD COLUMN IF NOT EXISTS "creatureDropBoost"
+- seasonalEventUtils: getCreatureDropBoost() returns {thresholdReduction: 15, rarityBoost: true} or null
+- maybeDropCreature: threshold dynamically 24 (normal) or 14 (boosted)
+- dropCreature: boosted rarity weights (epic 18%, legendary 6%)
+- Build: npx next build — zero errors
+
+## FU-028 — Integration: achievements collegati a Universe
+- Status: DONE
+- Date: 2026-04-09
+- New metrics in measureAchievementMetric: total_bosses_defeated, total_creatures_owned, total_trades_completed, total_duels_won
+- Seed route: /api/seed-universe-achievements (8 achievements, 3 tiers each)
+- checkAchievements integrated: adventureActions (boss), creatureActions (drop), tradingActions (accept), duelActions (complete)
+- Build: npx next build — zero errors
+
+## FU-027 — UI: Team creature management per Conferme
+- Status: DONE
+- Date: 2026-04-09
+- getTeamCreatures: added LEFT JOIN to users for contributedByName (displayName)
+- InventarioCreatureClient: added contributedByName to OwnedCreature type
+- CreatureCard: shows "Contributo di {name}" for team creatures
+- Equip/Fuse buttons already functional (equipTeamCreature, fuseTeamCreatures)
+- Build: npx next build — zero errors
+
+## FU-025 & FU-026 — Asset generation (BLOCKED)
+- Status: BLOCKED
+- Date: 2026-04-09
+- Reason: Nanobana MCP failing with model error (gemini-2.5-flash-image-preview not found)
+- Creatures and bosses continue to work with element icon placeholders
+- Will retry when Nanobana MCP is fixed
+
+## FU-023 — UI: Creature reveal celebration overlay
+- Status: DONE
+- Date: 2026-04-09
+- File: src/components/CreatureRevealOverlay.tsx
+- 3 phases: glow expand (0.8s) → creature appear (1s) → info card
+- Rarity glow: common=#94a3b8, rare=#3b82f6, epic=#a855f7, legendary=#fbbf24
+- Legendary: shake + 20 gold particle effects
+- "Fantastico!" button to dismiss
+- Triggered via window event 'creature_reveal'
+- Respects getAnimationsEnabled()
+- SafeWrapper + CSS keyframes only
+- Dashboard layout: dynamic import + SafeWrapper
+- Build: npx next build — zero errors
+
+## FU-022 — UI: ChestWidget nella dashboard Conferme
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/(dashboard)/conferme/page.tsx
+- ChestWidget already imported, fixed userId from session.user.id to 'team-conferme'
+- isTeam=true per tracking condiviso team
+- Positioned sotto ConfermeDailyObjectives + StreakCounter
+- SafeWrapper presente
+- Build: npx next build — zero errors
+
+## FU-021 — UI: Duelli 1v1 widget + creazione
+- Status: DONE
+- Date: 2026-04-09
+- DuelWidget.tsx: compact widget with VS score, countdown timer, 30s polling
+- DuelCreateModal.tsx: select 2 GDOs, metric (fissaggi/chiamate), duration, reward
+- getActiveDuelsForUser: enriched with user names, auto-complete expired
+- GDO dashboard: DuelWidget after ChestWidget
+- /team page: DuelCreateModal button in header
+- SafeWrapper on all components
+- Build: npx next build — zero errors
+
+## FU-020 — UI: Trading creature tra GDO
+- Status: DONE
+- Date: 2026-04-09
+- Files: src/app/(dashboard)/trading/page.tsx, TradingClient.tsx
+- Server actions added: getGdoUsersForTrading, getOtherUserCreatures, getAllOffers (tradingActions.ts)
+- Tabs: Scambiabili, Offerte Ricevute, Offerte Inviate
+- Modal: 4 step (select mine → select GDO → select theirs → confirm)
+- Sidebar: "Scambi Creature" (ArrowLeftRight icon) per GDO
+- SafeWrapper, rarity-styled creature cards
+- Build: npx next build — zero errors
+
+## FU-019 — UI: Toast notifiche creature drop e boss defeat
+- Status: DONE
+- Date: 2026-04-09
+- File: src/components/UniverseToast.tsx
+- Types: creature_drop, boss_defeated, chest_ready
+- Position: fixed bottom-right (z-9997), max 2 concurrent, auto-dismiss 4s
+- Rarity styling: common=slate, rare=blue+glow, epic=purple+glow, legendary=gold+shake
+- Event: window.dispatchEvent('universe_toast', { detail: {...} })
+- Dashboard layout: dynamic import + SafeWrapper
+- Respects getAnimationsEnabled()
+- Build: npx next build — zero errors
+
+## FU-018 — Fix: DB transactions per operazioni critiche
+- Status: DONE
+- Date: 2026-04-09
+- fuseCreatures (creatureActions.ts): wrapped in db.transaction with tx.*
+- openChest (chestActions.ts): wrapped in db.transaction with tx.* (dropCreature called inside for creature ID, but uses own db)
+- acceptTradeOffer (tradingActions.ts): wrapped in db.transaction with tx.*
+- completeDuel (duelActions.ts): wrapped in db.transaction with tx.*
+- Build: npx next build — zero errors
+
+## FU-017 — Fix: convert dynamic imports to static
+- Status: DONE
+- Date: 2026-04-09
+- pipelineActions.ts: 7 dynamic imports → 4 static imports at top (chestActions, adventureActions, creatureActions, duelActions)
+- confermeActions.ts: 12 dynamic imports → 4 static imports at top (chestActions, adventureActions, creatureActions, teamAdventureActions)
+- All local aliases removed, direct function calls used
+- Build: npx next build — zero errors
+
+## FU-016 — Fix: duel score integration
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/pipelineActions.ts
+- incrementDuelScore called after every chiamata (metric 'chiamate', amount 1)
+- incrementDuelScore called after every fissaggio (metric 'fissaggi', amount 1)
+- Fire-and-forget with .catch() — pipeline logica NON modificata
+- Build: npx next build — zero errors
+
+## FU-015 — Fix: creature drop triggers in pipeline
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/creatureActions.ts
+- Function added: maybeDropCreature(userId) — atomic SQL CASE WHEN counter (threshold 25)
+- pipelineActions.ts: maybeDropCreature called after every call for effectiveUserId
+- confermeActions.ts: maybeDropCreature called for oldLead.assignedToId after conferma/chiusura/presenza
+- Returns creature data for notification display
+- Pipeline logica sacra NON modificata
+- Build: npx next build — zero errors
+
+## RUN 3B — Redesign con MCP
+Branch: ralph/fenice-universe-run3
+Started: 2026-04-09
+
+## FU-032 — REDESIGN: Toast notifiche con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3.1 Pro)
+- Design: "Celestial Archive" aesthetic — glassmorphism, tonal layering, rarity accent bars
+- File: src/components/UniverseToast.tsx (full rewrite)
+- Changes:
+  - Glassmorphism: rgba(32,31,31,0.75) + backdrop-blur(20px)
+  - 4px left rarity accent bar (Genshin style): grey/blue/purple/gold
+  - Rarity glow: ambient outer glow with rarity color spread
+  - Shimmer overlay animation for rare+ toasts (3s infinite)
+  - Countdown progress bar (shrink animation, rarity colored)
+  - Element icons in creature drop toasts (fuoco/terra/acqua/aria/luce/ombra)
+  - Boss rewards: coins + XP with icon badges
+  - Legendary shake animation (0.6s)
+  - No solid borders (design system rule)
+  - Colors: on_surface=#e5e2e1, on_surface_variant=#d4c5ab, primary=#ffe2ab
+- SafeWrapper: yes
+- Build: npx next build — zero errors
+
+## FU-033 — REDESIGN: Trading page con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3.1 Pro)
+- Design: "Celestial Archive" dark marketplace — glassmorphism, tonal layering, rarity accent bars
+- File: src/app/(dashboard)/trading/TradingClient.tsx (full rewrite)
+- Changes:
+  - Full dark theme conversion (was light slate, now dark surface #201f1f)
+  - Glassmorphism modal: rgba(32,31,31,0.85) + backdrop-blur(20px)
+  - CreatureCard: 4px left rarity accent bar, ambient glow, tonal surface
+  - OfferCard: tonal surface, rarity bars on sub-cards, status badges
+  - Gradient CTA button: #fd8b00 → #ffbf00 (135deg)
+  - Tab bar: tonal shift selection (not white bg)
+  - Progress steps: gradient fill
+  - Colors: on_surface=#e5e2e1, on_surface_variant=#d4c5ab, outline=#9c8f78
+- SafeWrapper: yes
+- Build: npx next build — zero errors
+
+## FU-034 — REDESIGN: Duelli widget e modal con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3 Flash)
+- Design: Competitive red/blue split, progress bar, glassmorphism modal
+- Files: src/components/DuelWidget.tsx, src/components/DuelCreateModal.tsx
+- DuelWidget changes:
+  - Competitive blue(winning) vs red(losing) score backgrounds
+  - Progress bar shifts toward leader (animated 500ms)
+  - Countdown badge with gold accent
+  - Tonal surface #201f1f, no solid borders
+  - Metric and reward footer with gold accents
+- DuelCreateModal changes:
+  - Glassmorphism modal: blur(20px) + ambient gold glow
+  - Labels: uppercase tracking-wider above inputs (design system rule)
+  - Inputs: surface_container_low background, ghost borders
+  - Metric/Duration: toggle buttons with gold active state
+  - Gradient CTA button
+- SafeWrapper: yes
+- Build: npx next build — zero errors
+
+## FU-035 — REDESIGN: Creature reveal overlay con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3 Flash)
+- Design: "Aetheric Forge" fullscreen reveal — void background, ascending particles, radial glow
+- File: src/components/CreatureRevealOverlay.tsx (full rewrite)
+- Changes:
+  - 3 phases: glow expand (0.9s) → creature appear (0.7s) → info fade-in (0.6s)
+  - Ascending particles: 12 for normal, 30 for legendary (CSS animation)
+  - Radial glow: rarity-colored gradient expanding from center
+  - Creature container: glassmorphism + massive glow shadow (60-160px)
+  - Rarity badge: glowing dot + uppercase label
+  - Stat cards: XP bonus (purple) + Coin bonus (gold) with ambient glow
+  - Legendary: 25 particle burst + screen shake (5px)
+  - Gradient CTA button with gold glow
+  - No solid borders, tonal surfaces
+- SafeWrapper: yes
+- Build: npx next build — zero errors
+
+## FU-036 — REDESIGN: Duel history nel profilo con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3 Flash)
+- Design: "Celestial Archive" duel history — tonal stat cards, gradient win rate bar
+- File: src/components/DuelHistory.tsx (full rewrite)
+- Changes:
+  - Glassmorphism container: rgba(32,31,31,0.7) + backdrop-blur(12px)
+  - Stat cards: tonal dark surface (#0e0e0e), colored values (green/red/gold)
+  - Win rate gradient bar: green → gold
+  - Duel rows: 3px left accent bar (green WIN, red LOSS, grey DRAW)
+  - Result badges: tonal bg + colored text, no solid borders
+  - Score: tabular-nums font feature
+  - Victory rewards: gold coin icon + ffe2ab text
+  - Colors: on_surface=#e5e2e1, outline=#9c8f78
+- SafeWrapper: yes
+- Build: npx next build — zero errors

@@ -13,6 +13,10 @@ import { evaluateTeamGoals } from "@/app/actions/teamGoalActions"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
 import { triggerLootDrop } from "@/app/actions/lootDropActions"
 import { contributeToBoss } from "@/app/actions/bossBattleActions"
+import { incrementChestProgress } from "@/app/actions/chestActions"
+import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
+import { maybeDropCreature } from "@/app/actions/creatureActions"
+import { incrementDuelScore } from "@/app/actions/duelActions"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
 async function checkFourthCallEligibility(gdoId: string): Promise<boolean> {
@@ -229,10 +233,26 @@ export async function updateLeadOutcome(
 
     // Team Goal trigger evaluation logic
     let rewardData = null;
+
+    // Fenice Universe: chest progress for every call (chiamate) + boss attack
+    if (effectiveUserId) {
+        incrementChestProgress(effectiveUserId, 'chiamate', 1).catch(e => console.error("Chest chiamate err:", e));
+        attackBoss(effectiveUserId, 'chiamata').catch(e => console.error("Adventure chiamata err:", e));
+        checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check err:", e));
+        maybeDropCreature(effectiveUserId).catch(e => console.error("Creature drop err:", e));
+        incrementDuelScore(effectiveUserId, 'chiamate', 1).catch(e => console.error("Duel score chiamate err:", e));
+    }
+
     if (outcome === 'APPUNTAMENTO') {
         // Gamification: award XP for appointment set
         if (effectiveUserId) {
             rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
+
+            // Fenice Universe: chest progress for fissaggi + boss attack
+            incrementChestProgress(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Chest fissaggi err:", e));
+            attackBoss(effectiveUserId, 'fissaggio').catch(e => console.error("Adventure fissaggio err:", e));
+            checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check fissaggio err:", e));
+            incrementDuelScore(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Duel score fissaggi err:", e));
         }
         await evaluateTeamGoals(leadId).catch((e: any) => {
             console.error("Team goal evaluation failed:", e)

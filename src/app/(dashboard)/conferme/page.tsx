@@ -7,6 +7,7 @@ import { SafeWrapper } from "@/components/SafeWrapper"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
+const ChestWidget = dynamic(() => import("@/components/ChestWidget").then(m => ({ default: m.ChestWidget })))
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 const LevelNudge = dynamic(() => import("@/components/LevelNudge").then(m => ({ default: m.LevelNudge })))
@@ -40,6 +41,7 @@ export default async function ConfermePage() {
                 <>
                     <ConfermeDailyObjectives confermeUserId={session.user.id} />
                     <StreakCounter userId={session.user.id} />
+                    <SafeWrapper><ChestWidget userId="team-conferme" isTeam /></SafeWrapper>
                     <SafeWrapper><LevelNudge userId={session.user.id} /></SafeWrapper>
                     <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
                 </>

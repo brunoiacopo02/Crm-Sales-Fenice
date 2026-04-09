@@ -8,6 +8,7 @@ import { SafeWrapper } from "@/components/SafeWrapper"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
+const ChestWidget = dynamic(() => import("@/components/ChestWidget").then(m => ({ default: m.ChestWidget })))
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
 const TimedChest = dynamic(() => import("@/components/TimedChest").then(m => ({ default: m.TimedChest })))
@@ -18,6 +19,7 @@ const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").t
 const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 const HotStreak = dynamic(() => import("@/components/HotStreak").then(m => ({ default: m.HotStreak })))
 const LevelNudge = dynamic(() => import("@/components/LevelNudge").then(m => ({ default: m.LevelNudge })))
+const DuelWidget = dynamic(() => import("@/components/DuelWidget").then(m => ({ default: m.DuelWidget })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -85,6 +87,10 @@ export default async function DashboardPage() {
             <GdoDailyObjectives gdoUserId={session!.user.id} />
 
             <StreakCounter userId={session!.user.id} />
+
+            <SafeWrapper><ChestWidget userId={session!.user.id} /></SafeWrapper>
+
+            <SafeWrapper><DuelWidget userId={session!.user.id} /></SafeWrapper>
 
             <SafeWrapper><LevelNudge userId={session!.user.id} /></SafeWrapper>
             <SafeWrapper><StreakAnxietyBanner userId={session!.user.id} /></SafeWrapper>

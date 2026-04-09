@@ -5,6 +5,7 @@ import { getStreakInfo } from '@/app/actions/streakActions';
 import { getUserQuests } from '@/app/actions/questActions';
 import { getUserLifetimeStats } from '@/app/actions/leaderboardActions';
 import { getUserInventory, getEquippedSkinCss } from '@/app/actions/shopActions';
+import { getDuelHistory } from '@/app/actions/duelActions';
 import ProfileClient from './ProfileClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
@@ -18,7 +19,7 @@ export default async function ProfiloPage() {
     }
 
     try {
-        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory] = await Promise.all([
+        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData] = await Promise.all([
             getGdoRpgProfile(supabaseUser.id).catch(e => { console.error("Profile error:", e); return null; }),
             getUserAchievements(supabaseUser.id).catch(() => ({ achievements: [] })),
             getUnlockedTitles(supabaseUser.id).catch(() => ({ titles: [], activeTitle: null })),
@@ -26,6 +27,7 @@ export default async function ProfiloPage() {
             getUserQuests(supabaseUser.id).catch(() => ({ daily: [], weekly: [] })),
             getUserLifetimeStats(supabaseUser.id).catch(() => undefined),
             getUserInventory(supabaseUser.id).catch(() => []),
+            getDuelHistory(supabaseUser.id).catch(() => ({ duels: [], stats: { totalDuels: 0, wins: 0, losses: 0, winRate: 0 } })),
         ]);
 
         if (!profileData) {
@@ -87,6 +89,7 @@ export default async function ProfiloPage() {
                     description: equippedItemInfo.description,
                     cssValue: equippedItemInfo.cssValue,
                 } : null}
+                duelHistory={duelHistoryData}
             />
         );
     } catch (e) {
