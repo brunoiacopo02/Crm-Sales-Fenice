@@ -234,8 +234,9 @@ export async function updateLeadOutcome(
     if (effectiveUserId) {
         const { incrementChestProgress } = await import('./chestActions');
         incrementChestProgress(effectiveUserId, 'chiamate', 1).catch(e => console.error("Chest chiamate err:", e));
-        const { attackBoss } = await import('./adventureActions');
+        const { attackBoss, checkAndAdvanceStage } = await import('./adventureActions');
         attackBoss(effectiveUserId, 'chiamata').catch(e => console.error("Adventure chiamata err:", e));
+        checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check err:", e));
     }
 
     if (outcome === 'APPUNTAMENTO') {
@@ -246,8 +247,9 @@ export async function updateLeadOutcome(
             // Fenice Universe: chest progress for fissaggi + boss attack
             const { incrementChestProgress } = await import('./chestActions');
             incrementChestProgress(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Chest fissaggi err:", e));
-            const { attackBoss: attackBossFissaggio } = await import('./adventureActions');
+            const { attackBoss: attackBossFissaggio, checkAndAdvanceStage: checkStageFissaggio } = await import('./adventureActions');
             attackBossFissaggio(effectiveUserId, 'fissaggio').catch(e => console.error("Adventure fissaggio err:", e));
+            checkStageFissaggio(effectiveUserId).catch(e => console.error("Adventure stage check fissaggio err:", e));
         }
         await evaluateTeamGoals(leadId).catch((e: any) => {
             console.error("Team goal evaluation failed:", e)

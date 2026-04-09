@@ -373,8 +373,9 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             // Fenice Universe: team chest progress for conferme + boss attacks + team XP
             const { incrementChestProgress } = await import('./chestActions');
             incrementChestProgress('team-conferme', 'conferme', 1).catch(e => console.error("Chest conferme err:", e));
-            const { attackBoss } = await import('./adventureActions');
+            const { attackBoss, checkAndAdvanceStage } = await import('./adventureActions');
             attackBoss(session.user.id, 'conferma').catch(e => console.error("Adventure conferma err:", e));
+            checkAndAdvanceStage(session.user.id).catch(e => console.error("Adventure stage check conferma err:", e));
             const { contributeToTeam, teamAttackBoss } = await import('./teamAdventureActions');
             contributeToTeam(session.user.id, 20).catch(e => console.error("Team XP conferma err:", e));
             teamAttackBoss('conferma', session.user.id).catch(e => console.error("Team boss conferma err:", e));
@@ -441,8 +442,9 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
                 const { incrementChestProgress } = await import('./chestActions');
                 incrementChestProgress(oldLead.assignedToId, 'chiusure', 1).catch(e => console.error("Chest chiusure GDO err:", e));
                 incrementChestProgress('team-conferme', 'chiusure', 1).catch(e => console.error("Chest chiusure team err:", e));
-                const { attackBoss: attackBossChiusura } = await import('./adventureActions');
+                const { attackBoss: attackBossChiusura, checkAndAdvanceStage: checkStageChiusura } = await import('./adventureActions');
                 attackBossChiusura(oldLead.assignedToId, 'chiusura').catch(e => console.error("Adventure chiusura err:", e));
+                checkStageChiusura(oldLead.assignedToId).catch(e => console.error("Adventure stage check chiusura err:", e));
                 const { contributeToTeam: contributeChiusura, teamAttackBoss: teamAttackChiusura } = await import('./teamAdventureActions');
                 contributeChiusura(session.user.id, 50).catch(e => console.error("Team XP chiusura err:", e));
                 teamAttackChiusura('chiusura', session.user.id).catch(e => console.error("Team boss chiusura err:", e));
@@ -453,8 +455,9 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
                 const { incrementChestProgress } = await import('./chestActions');
                 incrementChestProgress(oldLead.assignedToId, 'presenze', 1).catch(e => console.error("Chest presenze GDO err:", e));
                 incrementChestProgress('team-conferme', 'presenze', 1).catch(e => console.error("Chest presenze team err:", e));
-                const { attackBoss: attackBossPresenza } = await import('./adventureActions');
+                const { attackBoss: attackBossPresenza, checkAndAdvanceStage: checkStagePresenza } = await import('./adventureActions');
                 attackBossPresenza(oldLead.assignedToId, 'presenza').catch(e => console.error("Adventure presenza err:", e));
+                checkStagePresenza(oldLead.assignedToId).catch(e => console.error("Adventure stage check presenza err:", e));
                 const { contributeToTeam: contributePresenza, teamAttackBoss: teamAttackPresenza } = await import('./teamAdventureActions');
                 contributePresenza(session.user.id, 30).catch(e => console.error("Team XP presenza err:", e));
                 teamAttackPresenza('presenza', session.user.id).catch(e => console.error("Team boss presenza err:", e));

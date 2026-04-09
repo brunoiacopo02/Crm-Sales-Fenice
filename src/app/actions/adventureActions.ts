@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { adventureProgress, adventureBosses, users, coinTransactions } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { adventureProgress, adventureBosses, users, coinTransactions, callLogs, leadEvents, leads } from "@/db/schema";
+import { eq, and, gte, sql, count } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
 
 // Stage completion requirements (what it takes to advance 1 stage)
@@ -216,5 +216,95 @@ export async function getAllBosses() {
     } catch (error) {
         console.error("Errore getAllBosses:", error);
         return [];
+    }
+}
+
+/**
+ * Count today's actions for a given user and metric.
+ * Used by checkAndAdvanceStage to verify stage requirements.
+ */
+export async function countTodayActions(userId: string, metric: string): Promise<number> {
+    // Start of today in Europe/Rome timezone
+    const now = new Date();
+    const romeDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }); // YYYY-MM-DD
+    const todayStart = new Date(`${romeDateStr}T00:00:00+02:00`);
+
+    switch (metric) {
+        case 'chiamate': {
+            const [result] = await db.select({ c: count() }).from(callLogs)
+                .where(and(
+                    eq(callLogs.userId, userId),
+                    gte(callLogs.createdAt, todayStart)
+                ));
+            return result?.c ?? 0;
+        }
+        case 'fissaggi': {
+            const [result] = await db.select({ c: count() }).from(leadEvents)
+                .where(and(
+                    eq(leadEvents.userId, userId),
+                    eq(leadEvents.eventType, 'APPOINTMENT_SET'),
+                    gte(leadEvents.timestamp, todayStart)
+                ));
+            return result?.c ?? 0;
+        }
+        case 'conferme': {
+            const [result] = await db.select({ c: count() }).from(leads)
+                .where(and(
+                    eq(leads.assignedToId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato'),
+                    gte(leads.confirmationsTimestamp, todayStart)
+                ));
+            return result?.c ?? 0;
+        }
+        case 'presenze': {
+            const [result] = await db.select({ c: count() }).from(leads)
+                .where(and(
+                    eq(leads.assignedToId, userId),
+                    eq(leads.salespersonOutcome, 'Non chiuso'),
+                    gte(leads.salespersonOutcomeAt, todayStart)
+                ));
+            return result?.c ?? 0;
+        }
+        case 'chiusure': {
+            const [result] = await db.select({ c: count() }).from(leads)
+                .where(and(
+                    eq(leads.assignedToId, userId),
+                    eq(leads.salespersonOutcome, 'Chiuso'),
+                    gte(leads.salespersonOutcomeAt, todayStart)
+                ));
+            return result?.c ?? 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+/**
+ * Check if the user has met the current stage requirements and advance if so.
+ * Does NOT advance if the current stage is a boss stage (multiple of 10).
+ */
+export async function checkAndAdvanceStage(userId: string) {
+    try {
+        const [progress] = await db.select().from(adventureProgress)
+            .where(eq(adventureProgress.userId, userId));
+        if (!progress) return null;
+
+        // Don't advance on boss stages — boss must be defeated
+        if (progress.currentStage % 10 === 0) return null;
+
+        // Already completed
+        if (progress.currentStage >= 100) return null;
+
+        const requirement = getStageRequirement(progress.currentStage);
+        const todayCount = await countTodayActions(userId, requirement.metric);
+
+        if (todayCount >= requirement.value) {
+            return await advanceStage(userId);
+        }
+
+        return null;
+    } catch (error) {
+        console.error("Errore checkAndAdvanceStage:", error);
+        return null;
     }
 }
