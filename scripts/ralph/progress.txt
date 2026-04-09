@@ -209,6 +209,17 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-021 — UI: Duelli 1v1 widget + creazione
+- Status: DONE
+- Date: 2026-04-09
+- DuelWidget.tsx: compact widget with VS score, countdown timer, 30s polling
+- DuelCreateModal.tsx: select 2 GDOs, metric (fissaggi/chiamate), duration, reward
+- getActiveDuelsForUser: enriched with user names, auto-complete expired
+- GDO dashboard: DuelWidget after ChestWidget
+- /team page: DuelCreateModal button in header
+- SafeWrapper on all components
+- Build: npx next build — zero errors
+
 ## FU-020 — UI: Trading creature tra GDO
 - Status: DONE
 - Date: 2026-04-09

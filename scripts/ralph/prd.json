@@ -142,7 +142,7 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Solo TL/Manager creano. Widget auto-completa quando tempo scade."
     },
     {
