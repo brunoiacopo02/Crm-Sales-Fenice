@@ -40,7 +40,7 @@ export default async function ConfermePage() {
             {session.user.role === 'CONFERME' && (
                 <>
                     <ConfermeDailyObjectives confermeUserId={session.user.id} />
-                    <StreakCounter userId={session.user.id} />
+                    <SafeWrapper><StreakCounter userId={session.user.id} /></SafeWrapper>
                     <SafeWrapper><ChestWidget userId="team-conferme" isTeam /></SafeWrapper>
                     <SafeWrapper><LevelNudge userId={session.user.id} /></SafeWrapper>
                     <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>

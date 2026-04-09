@@ -586,7 +586,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     DUEL HISTORY — Storico sfide
                 ═══════════════════════════════════════════════════════ */}
                 {duelHistory && duelHistory.stats.totalDuels > 0 && (
-                    <DuelHistory duels={duelHistory.duels} stats={duelHistory.stats} />
+                    <SafeWrapper><DuelHistory duels={duelHistory.duels} stats={duelHistory.stats} /></SafeWrapper>
                 )}
 
                 {/* ═══════════════════════════════════════════════════════
