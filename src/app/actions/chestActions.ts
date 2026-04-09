@@ -105,71 +105,76 @@ export async function incrementChestProgress(userId: string, metric: string, amo
  */
 export async function openChest(userId: string, chestId: string) {
     try {
-        const [chest] = await db.select().from(actionChests)
-            .where(and(eq(actionChests.id, chestId), eq(actionChests.userId, userId)));
+        // Drop creature outside transaction (uses its own db calls)
+        let creatureDrop: Awaited<ReturnType<typeof dropCreature>> = null;
 
-        if (!chest) return { success: false, error: 'Baule non trovato' };
-        if (!chest.isReady) return { success: false, error: 'Baule non ancora pronto' };
-        if (chest.openedAt) return { success: false, error: 'Baule gia aperto' };
+        return await db.transaction(async (tx) => {
+            const [chest] = await tx.select().from(actionChests)
+                .where(and(eq(actionChests.id, chestId), eq(actionChests.userId, userId)));
 
-        // Determine rewards
-        const rewardDef = CHEST_REWARDS[chest.chestType] || CHEST_REWARDS.bronze;
-        const rewardCoins = Math.floor(Math.random() * (rewardDef.maxCoins - rewardDef.minCoins + 1)) + rewardDef.minCoins;
+            if (!chest) return { success: false, error: 'Baule non trovato' };
+            if (!chest.isReady) return { success: false, error: 'Baule non ancora pronto' };
+            if (chest.openedAt) return { success: false, error: 'Baule gia aperto' };
 
-        // Drop a creature
-        const creatureDrop = await dropCreature(userId);
+            // Determine rewards
+            const rewardDef = CHEST_REWARDS[chest.chestType] || CHEST_REWARDS.bronze;
+            const rewardCoins = Math.floor(Math.random() * (rewardDef.maxCoins - rewardDef.minCoins + 1)) + rewardDef.minCoins;
 
-        // Mark chest as opened
-        await db.update(actionChests)
-            .set({
-                openedAt: new Date(),
-                rewardCoins,
-                rewardCreatureId: creatureDrop?.creature?.id || null,
-            })
-            .where(eq(actionChests.id, chestId));
+            // Drop a creature (outside tx scope since it manages its own inserts)
+            creatureDrop = await dropCreature(userId);
 
-        // Award coins to user's wallet
-        const [user] = await db.select({ walletCoins: users.walletCoins }).from(users)
-            .where(eq(users.id, userId));
+            // Mark chest as opened
+            await tx.update(actionChests)
+                .set({
+                    openedAt: new Date(),
+                    rewardCoins,
+                    rewardCreatureId: creatureDrop?.creature?.id || null,
+                })
+                .where(eq(actionChests.id, chestId));
 
-        if (user) {
-            await db.update(users)
-                .set({ walletCoins: user.walletCoins + rewardCoins })
+            // Award coins to user's wallet
+            const [user] = await tx.select({ walletCoins: users.walletCoins }).from(users)
                 .where(eq(users.id, userId));
 
-            // Log coin transaction
-            await db.insert(coinTransactions).values({
-                id: crypto.randomUUID(),
-                userId,
-                amount: rewardCoins,
-                reason: `Baule ${chest.chestType} aperto`,
-            });
-        }
+            if (user) {
+                await tx.update(users)
+                    .set({ walletCoins: user.walletCoins + rewardCoins })
+                    .where(eq(users.id, userId));
 
-        // Create a new chest of the same type (reset cycle)
-        const chestDefs = [...GDO_CHEST_TYPES, ...TEAM_CHEST_TYPES];
-        const matchingDef = chestDefs.find(d => d.chestType === chest.chestType && d.requiredMetric === chest.requiredMetric);
+                // Log coin transaction
+                await tx.insert(coinTransactions).values({
+                    id: crypto.randomUUID(),
+                    userId,
+                    amount: rewardCoins,
+                    reason: `Baule ${chest.chestType} aperto`,
+                });
+            }
 
-        if (matchingDef) {
-            await db.insert(actionChests).values({
-                id: crypto.randomUUID(),
-                userId,
-                chestType: matchingDef.chestType,
-                requiredMetric: matchingDef.requiredMetric,
-                requiredValue: matchingDef.requiredValue,
-                currentValue: 0,
-                isReady: false,
-                openedAt: null,
-                rewardCreatureId: null,
-                rewardCoins: null,
-            });
-        }
+            // Create a new chest of the same type (reset cycle)
+            const chestDefs = [...GDO_CHEST_TYPES, ...TEAM_CHEST_TYPES];
+            const matchingDef = chestDefs.find(d => d.chestType === chest.chestType && d.requiredMetric === chest.requiredMetric);
 
-        return {
-            success: true,
-            rewardCoins,
-            creature: creatureDrop?.creature || null,
-        };
+            if (matchingDef) {
+                await tx.insert(actionChests).values({
+                    id: crypto.randomUUID(),
+                    userId,
+                    chestType: matchingDef.chestType,
+                    requiredMetric: matchingDef.requiredMetric,
+                    requiredValue: matchingDef.requiredValue,
+                    currentValue: 0,
+                    isReady: false,
+                    openedAt: null,
+                    rewardCreatureId: null,
+                    rewardCoins: null,
+                });
+            }
+
+            return {
+                success: true,
+                rewardCoins,
+                creature: creatureDrop?.creature || null,
+            };
+        });
     } catch (error) {
         console.error("Errore openChest:", error);
         return { success: false, error: String(error) };

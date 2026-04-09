@@ -107,41 +107,43 @@ export async function incrementDuelScore(userId: string, metric: string, amount:
  */
 export async function completeDuel(duelId: string) {
     try {
-        const [duel] = await db.select().from(duels)
-            .where(eq(duels.id, duelId));
-        if (!duel || duel.status === 'completed') return duel;
+        return await db.transaction(async (tx) => {
+            const [duel] = await tx.select().from(duels)
+                .where(eq(duels.id, duelId));
+            if (!duel || duel.status === 'completed') return duel;
 
-        let winnerId: string | null = null;
-        if (duel.challengerScore > duel.opponentScore) {
-            winnerId = duel.challengerId;
-        } else if (duel.opponentScore > duel.challengerScore) {
-            winnerId = duel.opponentId;
-        }
-        // If tie, no winner (no reward)
-
-        await db.update(duels)
-            .set({ status: 'completed', winnerId })
-            .where(eq(duels.id, duelId));
-
-        // Award coins to winner
-        if (winnerId && duel.rewardCoins > 0) {
-            const [winner] = await db.select({ walletCoins: users.walletCoins }).from(users)
-                .where(eq(users.id, winnerId));
-            if (winner) {
-                await db.update(users)
-                    .set({ walletCoins: winner.walletCoins + duel.rewardCoins })
-                    .where(eq(users.id, winnerId));
-
-                await db.insert(coinTransactions).values({
-                    id: crypto.randomUUID(),
-                    userId: winnerId,
-                    amount: duel.rewardCoins,
-                    reason: `Duello vinto (${duel.metric})`,
-                });
+            let winnerId: string | null = null;
+            if (duel.challengerScore > duel.opponentScore) {
+                winnerId = duel.challengerId;
+            } else if (duel.opponentScore > duel.challengerScore) {
+                winnerId = duel.opponentId;
             }
-        }
+            // If tie, no winner (no reward)
 
-        return { ...duel, status: 'completed', winnerId };
+            await tx.update(duels)
+                .set({ status: 'completed', winnerId })
+                .where(eq(duels.id, duelId));
+
+            // Award coins to winner
+            if (winnerId && duel.rewardCoins > 0) {
+                const [winner] = await tx.select({ walletCoins: users.walletCoins }).from(users)
+                    .where(eq(users.id, winnerId));
+                if (winner) {
+                    await tx.update(users)
+                        .set({ walletCoins: winner.walletCoins + duel.rewardCoins })
+                        .where(eq(users.id, winnerId));
+
+                    await tx.insert(coinTransactions).values({
+                        id: crypto.randomUUID(),
+                        userId: winnerId,
+                        amount: duel.rewardCoins,
+                        reason: `Duello vinto (${duel.metric})`,
+                    });
+                }
+            }
+
+            return { ...duel, status: 'completed' as const, winnerId };
+        });
     } catch (error) {
         console.error("Errore completeDuel:", error);
         return null;

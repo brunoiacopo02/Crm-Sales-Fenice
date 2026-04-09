@@ -159,48 +159,50 @@ export async function equipCreature(userId: string, userCreatureId: string) {
  */
 export async function fuseCreatures(userId: string, creatureId: string) {
     try {
-        // Get all copies of this creature owned by user
-        const copies = await db.select().from(userCreatures)
-            .where(and(eq(userCreatures.userId, userId), eq(userCreatures.creatureId, creatureId)));
+        return await db.transaction(async (tx) => {
+            // Get all copies of this creature owned by user
+            const copies = await tx.select().from(userCreatures)
+                .where(and(eq(userCreatures.userId, userId), eq(userCreatures.creatureId, creatureId)));
 
-        if (copies.length < 3) {
-            return { success: false, error: 'Servono almeno 3 copie per la fusione' };
-        }
+            if (copies.length < 3) {
+                return { success: false, error: 'Servono almeno 3 copie per la fusione' };
+            }
 
-        // Find the highest-level copy to keep (prefer equipped)
-        const sorted = [...copies].sort((a, b) => {
-            if (a.isEquipped && !b.isEquipped) return -1;
-            if (!a.isEquipped && b.isEquipped) return 1;
-            return b.level - a.level;
+            // Find the highest-level copy to keep (prefer equipped)
+            const sorted = [...copies].sort((a, b) => {
+                if (a.isEquipped && !b.isEquipped) return -1;
+                if (!a.isEquipped && b.isEquipped) return 1;
+                return b.level - a.level;
+            });
+
+            const keeper = sorted[0];
+
+            if (keeper.level >= 10) {
+                return { success: false, error: 'Creatura gia al livello massimo (10)' };
+            }
+
+            // Find 3 copies to consume (excluding the keeper)
+            const toConsume = sorted.filter(c => c.id !== keeper.id).slice(0, 3);
+            if (toConsume.length < 3) {
+                return { success: false, error: 'Servono almeno 3 copie extra per la fusione' };
+            }
+
+            // Delete the consumed copies
+            for (const c of toConsume) {
+                await tx.delete(userCreatures).where(eq(userCreatures.id, c.id));
+            }
+
+            // Level up the keeper
+            await tx.update(userCreatures)
+                .set({ level: keeper.level + 1 })
+                .where(eq(userCreatures.id, keeper.id));
+
+            return {
+                success: true,
+                newLevel: keeper.level + 1,
+                consumed: toConsume.length,
+            };
         });
-
-        const keeper = sorted[0];
-
-        if (keeper.level >= 10) {
-            return { success: false, error: 'Creatura gia al livello massimo (10)' };
-        }
-
-        // Find 3 copies to consume (excluding the keeper)
-        const toConsume = sorted.filter(c => c.id !== keeper.id).slice(0, 3);
-        if (toConsume.length < 3) {
-            return { success: false, error: 'Servono almeno 3 copie extra per la fusione' };
-        }
-
-        // Delete the consumed copies
-        for (const c of toConsume) {
-            await db.delete(userCreatures).where(eq(userCreatures.id, c.id));
-        }
-
-        // Level up the keeper
-        await db.update(userCreatures)
-            .set({ level: keeper.level + 1 })
-            .where(eq(userCreatures.id, keeper.id));
-
-        return {
-            success: true,
-            newLevel: keeper.level + 1,
-            consumed: toConsume.length,
-        };
     } catch (error) {
         console.error("Errore fuseCreatures:", error);
         return { success: false, error: String(error) };

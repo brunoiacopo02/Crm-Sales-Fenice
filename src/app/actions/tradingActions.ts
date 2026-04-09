@@ -65,26 +65,28 @@ export async function createTradeOffer(fromUserId: string, toUserId: string, off
  */
 export async function acceptTradeOffer(offerId: string, acceptingUserId: string) {
     try {
-        const [offer] = await db.select().from(tradingOffers)
-            .where(and(eq(tradingOffers.id, offerId), eq(tradingOffers.toUserId, acceptingUserId), eq(tradingOffers.status, 'pending')));
+        return await db.transaction(async (tx) => {
+            const [offer] = await tx.select().from(tradingOffers)
+                .where(and(eq(tradingOffers.id, offerId), eq(tradingOffers.toUserId, acceptingUserId), eq(tradingOffers.status, 'pending')));
 
-        if (!offer) return { success: false, error: 'Offerta non trovata o non piu valida' };
+            if (!offer) return { success: false, error: 'Offerta non trovata o non piu valida' };
 
-        // Swap ownership: offered creature goes to recipient, requested goes to sender
-        await db.update(userCreatures)
-            .set({ userId: offer.toUserId })
-            .where(eq(userCreatures.id, offer.offeredCreatureId));
+            // Swap ownership: offered creature goes to recipient, requested goes to sender
+            await tx.update(userCreatures)
+                .set({ userId: offer.toUserId })
+                .where(eq(userCreatures.id, offer.offeredCreatureId));
 
-        await db.update(userCreatures)
-            .set({ userId: offer.fromUserId })
-            .where(eq(userCreatures.id, offer.requestedCreatureId));
+            await tx.update(userCreatures)
+                .set({ userId: offer.fromUserId })
+                .where(eq(userCreatures.id, offer.requestedCreatureId));
 
-        // Mark offer as accepted
-        await db.update(tradingOffers)
-            .set({ status: 'accepted' })
-            .where(eq(tradingOffers.id, offerId));
+            // Mark offer as accepted
+            await tx.update(tradingOffers)
+                .set({ status: 'accepted' })
+                .where(eq(tradingOffers.id, offerId));
 
-        return { success: true };
+            return { success: true };
+        });
     } catch (error) {
         console.error("Errore acceptTradeOffer:", error);
         return { success: false, error: String(error) };
