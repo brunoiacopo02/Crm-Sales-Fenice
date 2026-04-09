@@ -6,6 +6,7 @@ import { getAnimationsEnabled } from '@/lib/animationUtils';
 import { playSound } from '@/lib/soundEngine';
 import { useRealtimeBroadcast } from '@/components/providers/RealtimeProvider';
 import { useAuth } from '@/components/AuthProvider';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 type HotStreakMode = 'inactive' | 'active' | 'intense';
 
@@ -103,6 +104,7 @@ export function HotStreak({ children }: { children: ReactNode }) {
     const isIntense = mode === 'intense';
 
     return (
+        <SafeWrapper fallback={null}>
         <div className="relative">
             {/* Fire border overlay — top */}
             <div
@@ -162,5 +164,6 @@ export function HotStreak({ children }: { children: ReactNode }) {
                 {children}
             </div>
         </div>
+        </SafeWrapper>
     );
 }

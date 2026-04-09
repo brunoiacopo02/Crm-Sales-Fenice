@@ -240,7 +240,7 @@ export async function checkAchievements(userId: string): Promise<{
                         const coinReward = Math.floor(baseCoinReward * eventMult.coins);
                         if (coinReward > 0) {
                             // Use SQL increment to avoid fetching user coins each time
-                            await db.update(users).set({ coins: sql`${users.coins} + ${coinReward}` }).where(eq(users.id, userId));
+                            await db.update(users).set({ walletCoins: sql`${users.walletCoins} + ${coinReward}` }).where(eq(users.id, userId));
                             const achReason = eventMult.coins > 1
                                 ? `Achievement ${tierLabels[tierNumber]}: ${ach.name} (x${eventMult.coins} evento)`
                                 : `Achievement ${tierLabels[tierNumber]}: ${ach.name}`;

@@ -6,6 +6,7 @@ import { getUserPendingLootDrops, openLootDrop } from '@/app/actions/lootDropAct
 import { useRouter } from 'next/navigation';
 import { triggerCelebration } from '@/lib/animationUtils';
 import { ChestOpeningAnimation, type ChestRarity } from '@/components/ChestOpeningAnimation';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 interface PendingDrop {
     id: string;
@@ -142,6 +143,7 @@ export function LootDropModal({ userId }: { userId: string }) {
     // Opening phase — ChestOpeningAnimation handles the suspense
     if (phase === 'opening' && reward) {
         return (
+            <SafeWrapper fallback={null}>
             <ChestOpeningAnimation
                 isOpening={true}
                 rarity={(reward.rarity as ChestRarity) || 'common'}
@@ -150,12 +152,14 @@ export function LootDropModal({ userId }: { userId: string }) {
                 {/* This renders after animation completes — but we'll transition to 'revealed' phase instead */}
                 <div />
             </ChestOpeningAnimation>
+            </SafeWrapper>
         );
     }
 
     // Idle phase — show loot crate with open button
     if (phase === 'idle') {
         return (
+            <SafeWrapper fallback={null}>
             <div className="modal-backdrop" style={{ zIndex: 60 }}>
                 <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 61 }}>
                     <div className="relative max-w-sm w-full mx-2 sm:mx-4" onClick={e => e.stopPropagation()}>
@@ -186,12 +190,14 @@ export function LootDropModal({ userId }: { userId: string }) {
                     </div>
                 </div>
             </div>
+            </SafeWrapper>
         );
     }
 
     // Revealed phase — show reward
     if (phase === 'revealed' && reward) {
         return (
+            <SafeWrapper fallback={null}>
             <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={handleClose}>
                 <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 61 }}>
                     <div className="relative max-w-sm w-full mx-2 sm:mx-4" onClick={e => e.stopPropagation()}>
@@ -254,6 +260,7 @@ export function LootDropModal({ userId }: { userId: string }) {
                     </div>
                 </div>
             </div>
+            </SafeWrapper>
         );
     }
 

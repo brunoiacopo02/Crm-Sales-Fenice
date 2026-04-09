@@ -1,147 +1,110 @@
-# Ralph Agent Instructions — CRM Fenice
+# Ralph Agent Instructions — CRM Fenice Addiction Redesign
 
-Sei un agente di coding autonomo che lavora sul progetto CRM Fenice.
+Sei un agente di coding autonomo che lavora sul progetto CRM Fenice. Questa run e' dedicata al REDESIGN VISIVO COMPLETO della gamification e dell'UI per renderla immersiva come un gioco mobile (Clash Royale, Duolingo). Lavori SOLO in locale, NON fai deploy.
 
 ## Contesto Progetto
 
-CRM Fenice e' un CRM proprietario di Fenice Academy costruito con Next.js (App Router), Tailwind CSS v4, Supabase (PostgreSQL), Drizzle ORM. Leggi il CLAUDE.md nella root del progetto per tutte le regole di codifica e l'architettura del database.
+CRM Fenice: Next.js 16 (App Router), Tailwind CSS v4, Supabase (PostgreSQL), Drizzle ORM. Leggi il CLAUDE.md nella root del progetto per regole di codifica.
+
+## Principi di Design OBBLIGATORI
+
+1. **La Pipeline Chiamate e' SACRA**: non modificare MAI la logica della pipeline. Solo restyling visivo delle card e del layout. La pipeline resta AL CENTRO della pagina, chiara e leggibile.
+2. **Produttivita' prima di tutto**: ogni elemento gamification deve incentivare un'AZIONE PRODUTTIVA (chiamata, fissaggio, conferma). Zero reward per azioni passive.
+3. **Solo GDO e CONFERME**: la gamification visiva si applica solo a questi due ruoli. VENDITORE e MANAGER/TL vedono la versione pulita. Il TL deve poter controllare tutto dal suo pannello.
+4. **Warm, non freddo**: palette calda (fuoco, oro, ambra su sfondo scuro premium). Mai grigi piatti. Ispirazione: Clash Royale (giallo primario, verde secondario), Genshin Impact (card con glow).
+5. **SafeWrapper SEMPRE**: ogni componente gamification DEVE essere wrappato in `<SafeWrapper>` (gia' creato in src/components/SafeWrapper.tsx). Se crasha, la pagina continua a funzionare.
+6. **walletCoins, non coins**: il campo corretto per i coins visibili e' `walletCoins` nella tabella users. MAI usare il campo `coins` (legacy). Lo store usa `walletCoins`. Le transazioni vanno loggate in `coinTransactions`.
+
+## Psicologia da Applicare
+
+- **Anticipazione > Ricompensa**: la dopamina si rilascia PRIMA del reward. Creare suspense (countdown, shake, glow crescente) prima di mostrare il premio.
+- **Variable Ratio Reward**: reward random sono piu' addictive di quelli fissi. I loot drop devono avere rarita' casuali.
+- **Loss Aversion**: la paura di perdere la streak motiva piu' del guadagno. La fiamma della streak deve sembrare "viva" e il suo spegnimento deve essere drammatico.
+- **Progress Endowment**: mostrare quanto sei VICINO al prossimo traguardo ("Solo 2 chiamate!", "Mancano 23 XP!").
+- **Social Proof**: toast live quando un collega fa qualcosa ("Marco ha fissato 2 app!").
+
+## Tool MCP Disponibili
+
+### Stitch (Google AI Design)
+- Usa Stitch per generare design UI da prompt. Chiedi design in modalita' Pro.
+- Usalo per: layout dashboard, card design, store UI, profilo RPG, leaderboard.
+- Converti il design in componenti Tailwind/React.
+
+### Nano Banana (Image Generation)
+- Usa per generare asset grafici: icone badge, sfondi, texture, avatar.
+- Prompt in inglese per migliori risultati.
+- Salva le immagini in public/assets/gamification/
+
+### Playwright (Browser Testing)
+- Dopo ogni componente visivo, verifica nel browser che renda bene.
+- Fai screenshot per documentazione.
+
+## Regole Tecniche
+
+- **Hydration**: bottoni interattivi MAI child di `<span>` o `<p>`. Usa `<div>`.
+- **Timezone**: `Europe/Rome` sempre.
+- **Animazioni**: CSS-only (keyframes + transition). Mai librerie esterne pesanti. Rispettare toggle `getAnimationsEnabled()`.
+- **Suoni**: Web Audio API sintetici (src/lib/soundEngine.ts esiste gia'). Rispettare toggle suoni.
+- **Responsive**: solo desktop (il CRM si usa solo da PC). Ignora mobile.
+
+## XP e Coins — Sistema Corretto
+
+Il sistema XP/coins DEVE funzionare cosi':
+- `awardXpAndCoins()` in gamificationEngine.ts aggiorna `walletCoins` (NON `coins`)
+- Applica streak multiplier (x1 base, x1.5 dopo 3gg, x2 dopo 7gg, x3 dopo 14gg)
+- Applica seasonal event multiplier
+- Logga in coinTransactions
+- Level-up: XP formula `100 * (level ^ 1.5)`. Overflow XP carry over.
+- `completeQuest()` in questActions.ts aggiorna `walletCoins` (NON `coins`) e marca la quest con currentValue=-1 dopo claim
+- Lo Store in shopActions.ts legge e scala `walletCoins` per acquisti
+
+## Store — Da Rivedere
+
+- Gli item devono avere categorie chiare (Avatar, Temi, Effetti, Titoli)
+- Prezzi bilanciati: base 50-200, raro 300-999, epico 1000-2999, leggendario 3000+
+- Effetto visivo diverso per rarita' (bordo, glow, animazione)
+- Card prodotto con preview visiva e hover effect
+
+## Curva di Crescita — Da Rivedere
+
+- Livello 1-10: veloce (incentiva i nuovi utenti)
+- Livello 10-20: medio
+- Livello 20-30: lento (reward piu' significativi)
+- Livello 30+: molto lento (status symbol)
+- Ogni evoluzione Fenice (Uovo → Pulcino → Giovane → Fuoco → Divinita') deve essere un momento EPICO
+
+## PROTEZIONE DATI REALI
+
+- MAI eseguire DELETE/UPDATE distruttivi su leads, users, o dati esistenti
+- MAI modificare lead del GDO 114 o appuntamenti Conferme
+- Le migrazioni schema devono essere ADDITIVE (ADD COLUMN, CREATE TABLE IF NOT EXISTS)
+- ESEGUIRE le migrazioni sul DB di produzione dopo averle create
+
+## Deploy
+
+**NON fare deploy in questa run.** Lavora solo in locale sul branch. NON pushare, NON mergiare in main.
+
+Quando TUTTE le stories hanno `passes: true`, rispondi con:
+<promise>COMPLETE</promise>
 
 ## Il Tuo Compito
 
 1. Leggi il PRD in `scripts/ralph/prd.json`
-2. Leggi il progress log in `scripts/ralph/progress.txt` (controlla la sezione Codebase Patterns prima)
-3. Verifica di essere sul branch corretto dal campo `branchName` del PRD. Se no, crealo da main.
-4. Scegli la **user story con priorita' piu' alta** dove `passes: false`
+2. Leggi il progress log in `scripts/ralph/progress.txt`
+3. Verifica di essere sul branch corretto. Se no, crealo da main.
+4. Scegli la story con priorita' piu' alta dove `passes: false`
 5. Implementa quella singola user story
-6. Esegui i quality check: `npx next build` (deve compilare senza errori)
-7. Se i check passano, committa TUTTI i cambiamenti con messaggio: `feat: [Story ID] - [Story Title]`
-8. Aggiorna il PRD per settare `passes: true` per la story completata
-9. Aggiungi il tuo progresso a `scripts/ralph/progress.txt`
-10. Se TUTTE le stories sono `passes: true`, esegui il deploy finale (vedi sezione Deploy)
-
-## PROTEZIONE DATI REALI — CRITICO
-
-Il database contiene lead e appuntamenti REALI in produzione. Devi rispettare queste regole ASSOLUTE:
-
-- **MAI** eseguire DELETE, TRUNCATE o UPDATE distruttivi sulla tabella `leads`
-- **MAI** modificare lead esistenti del GDO 114 o di qualsiasi altro GDO
-- **MAI** alterare appuntamenti reali gia' fissati nelle Conferme
-- **MAI** sovrascrivere `assignedToId` di lead esistenti
-- **MAI** droppare colonne o tabelle esistenti — usa solo ADD COLUMN per migrazioni
-- Per testare nuove feature, usa dati di test separati o logica condizionale
-- Le migrazioni schema devono essere ADDITIVE (aggiungere, mai rimuovere)
-- Se devi seedare dati, crea NUOVI record, non modificare quelli esistenti
-
-## MIGRAZIONI DATABASE — OBBLIGATORIO
-
-Quando aggiungi colonne o tabelle al database, DEVI eseguire la migrazione IMMEDIATAMENTE sul DB di produzione. NON limitarti a creare API route di migrazione — le devi anche eseguire.
-
-Procedura obbligatoria per ogni migrazione:
-1. Aggiungi la colonna/tabella in `src/db/schema.ts`
-2. Crea un API route in `src/app/api/migrate-<nome>/route.ts` con SQL `IF NOT EXISTS`
-3. DOPO il commit e push, chiama la route per eseguirla: `curl -s https://crm-sales-fenice.vercel.app/api/migrate-<nome>`
-4. Se la route e' protetta dal middleware (ritorna 307), aggiungi temporaneamente un bypass nel middleware per `/api/migrate-`, esegui la migrazione, poi rimuovi il bypass
-5. Verifica che la colonna/tabella esista usando curl sulla REST API Supabase: `curl -s "https://ncutwzsifzundikwllxp.supabase.co/rest/v1/<tabella>?select=<colonna>&limit=1"` con header apikey/Authorization dal file .env
-
-**Se salti questo step, il CRM va in WSOD (White Screen of Death) perche' Drizzle cerca colonne che non esistono nel DB.**
-
-## Regole Critiche CRM Fenice
-
-- **Hydration**: I bottoni interattivi NON possono mai essere child di `<span>` o `<p>`. Usa sempre `<div>`.
-- **Timezone**: Tutte le date in timezone `Europe/Rome`. Usare `toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })` per date stringa.
-- **ORM**: Usa SOLO Drizzle ORM via `src/db/schema.ts`. Mai query SQL raw.
-- **Realtime**: NON alterare i channel Supabase `postgres_changes`.
-- **Server Actions**: Posizionati in `src/app/actions/`. Chiamare `router.refresh()` nei componenti client dopo le mutazioni.
-- **Optimistic Locking**: Ogni UPDATE su leads DEVE includere `eq(leads.version, lead.version)` nel WHERE e incrementare version.
-- **Styling**: Tailwind CSS v4 con custom theme in `src/app/globals.css`. Colori brand: `brand-orange` (#FFBE82), `brand-charcoal` (#272626).
-
-## Tool MCP Disponibili — USALI
-
-Hai accesso a server MCP potenti. Usali attivamente:
-
-### Stitch (Google AI Design)
-- Usa Stitch per generare design UI da prompt testuali prima di implementare componenti visivi
-- Chiedi design in modalita' Pro (Gemini Pro) per massima qualita'
-- Scarica il codice HTML/CSS generato e convertilo in Tailwind/React
-- Utile per: redesign dashboard, componenti, layout, design system
-
-### Playwright (Browser Testing)
-- Per OGNI story che modifica UI, verifica nel browser che funzioni
-- Naviga alla pagina, fai screenshot, verifica il rendering
-- Verifica assenza errori console
-- Utile per: test visivo, hydration check, responsive check
-
-### Supabase
-- Usa per verificare lo stato delle tabelle dopo migrazioni
-- Controlla che i dati reali non siano stati alterati
-- Utile per: query di verifica, check integrità dati
-
-### Vercel
-- Dopo il deploy, verifica che il build sia READY
-- Controlla i build logs se fallisce
-- Utile per: deploy verification
-
-### Context7
-- Consulta documentazione aggiornata di Next.js, Tailwind, React
-- Utile per: API reference, pattern moderni, best practice
-
-## Skill Disponibili — USALE
-
-Hai accesso a skill specializzate. Invocale quando pertinenti:
-
-- **gamification-loops**: Best practice per engagement, streak, badge, reward variabili. Usala per TUTTE le story di gamification.
-- **ui-design-system**: Pattern componenti con TailwindCSS + Radix. Usala per redesign componenti.
-- **tailwindcss**: Reference Tailwind per styling. Usala per classi e pattern Tailwind.
-- **react-performance**: Ottimizzazione rendering React/Next.js. Usala per performance.
-- **supabase-backend-platform**: Pattern Supabase. Usala per query e auth.
-
-## Formato Progress Report
-
-APPENDI a scripts/ralph/progress.txt (mai sovrascrivere, sempre appendere):
-```
-## [Data/Ora] - [Story ID]
-- Cosa e' stato implementato
-- File modificati
-- **Learnings per iterazioni future:**
-  - Pattern scoperti
-  - Gotcha incontrati
-  - Contesto utile
----
-```
-
-## Consolida Pattern
-
-Se scopri un **pattern riusabile**, aggiungilo alla sezione `## Codebase Patterns` in CIMA a progress.txt.
-
-## Quality Requirements
-
-- TUTTI i commit devono passare `npx next build` senza errori
-- NON committare codice rotto
-- Cambiamenti focalizzati e minimali
-- Segui i pattern di codice esistenti
-- Rispetta le regole in CLAUDE.md (root del progetto)
-- Per story UI: verifica con Playwright che il rendering sia corretto
-
-## Deploy Finale
-
-**IN QUESTA RUN NON FARE DEPLOY.** Lavora solo in locale sul branch. NON pushare, NON mergiare in main.
-
-Quando TUTTE le stories hanno `passes: true`, rispondi semplicemente con:
-<promise>COMPLETE</promise>
-
-## Stop Condition
-
-Dopo aver completato una user story, controlla se TUTTE le stories hanno `passes: true`.
-
-Se ci sono ancora stories con `passes: false`, termina normalmente (un'altra iterazione prendera' la prossima story).
-
-Se TUTTE sono complete, esegui il Deploy Finale e poi rispondi con COMPLETE.
+6. `npx next build` deve compilare senza errori
+7. Committa con messaggio: `feat: [Story ID] - [Story Title]`
+8. Aggiorna il PRD (`passes: true`) e appendi al progress.txt
+9. UNA story per iterazione
 
 ## Importante
 
 - Lavora su UNA story per iterazione
 - Committa frequentemente
 - Mantieni la build verde
-- Leggi la sezione Codebase Patterns in progress.txt prima di iniziare
-- USA i tool MCP e le skill quando pertinenti
-- NON toccare i dati reali nel database
+- USA Stitch e Nano Banana per il design
+- WRAPPA tutto in SafeWrapper
+- NON toccare la logica della pipeline
+- NON fare deploy

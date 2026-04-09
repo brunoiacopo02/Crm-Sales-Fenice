@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Scroll, Swords, Star, Coins, Zap, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { generateDailyQuests, getUserQuests, checkQuestProgress, completeQuest } from '@/app/actions/questActions';
 import { QuestChainModal } from '@/components/QuestChainModal';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 interface QuestItem {
     progressId: string;
@@ -183,6 +184,7 @@ export function QuestPanel({ userId }: { userId: string }) {
     const completedWeekly = quests.weekly.filter(q => q.completed).length;
 
     return (
+        <SafeWrapper fallback={null}>
         <div className="w-full border rounded-2xl p-5 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-[var(--color-gaming-bg)] via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] border-[var(--color-gaming-border)] shadow-gaming-card">
             {/* Decorative blurs */}
             <div className="absolute top-0 left-0 w-48 h-48 bg-fire-500/6 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/4 pointer-events-none" />
@@ -272,5 +274,6 @@ export function QuestPanel({ userId }: { userId: string }) {
                 />
             )}
         </div>
+        </SafeWrapper>
     );
 }

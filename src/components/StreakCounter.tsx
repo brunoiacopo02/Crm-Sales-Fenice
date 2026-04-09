@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Flame, TrendingUp, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { getStreakInfo } from '@/app/actions/streakActions';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 type StreakVisualState = 'safe' | 'at-risk' | 'default';
 
@@ -131,6 +132,7 @@ export function StreakCounter({ userId }: { userId: string }) {
         : 100;
 
     return (
+        <SafeWrapper fallback={null}>
         <div className={`w-full border shadow-gaming-card rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br ${bgStateClass} ${borderStateClass} ${glowClass} ${shakeClass}`}>
             {/* Background glow based on state */}
             {visualState === 'safe' && (
@@ -216,5 +218,6 @@ export function StreakCounter({ userId }: { userId: string }) {
                 </div>
             </div>
         </div>
+        </SafeWrapper>
     );
 }

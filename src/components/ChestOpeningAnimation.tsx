@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Package, Sparkles } from 'lucide-react';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
 import { playSound } from '@/lib/soundEngine';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -184,6 +185,7 @@ export function ChestOpeningAnimation({
     // ─── Suspense Animation Overlay ────────────────────────────────────
 
     return (
+        <SafeWrapper fallback={null}>
         <div className="fixed inset-0 z-[70] flex items-center justify-center animate-fade-in">
             {/* Dark backdrop with rarity-tinted glow */}
             <div
@@ -370,5 +372,6 @@ export function ChestOpeningAnimation({
                 </div>
             </div>
         </div>
+        </SafeWrapper>
     );
 }

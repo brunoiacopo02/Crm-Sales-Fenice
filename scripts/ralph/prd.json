@@ -347,8 +347,8 @@
         "NON fare push, NON fare merge, NON fare deploy"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": "Ultimo step. Solo verifica locale."
+      "passes": true,
+      "notes": "Build OK zero errori. Hydration audit: zero issues. SafeWrapper: added to 10 missing components (TimedChest, HotStreak, FomoToast, LootDropModal, ChestOpeningAnimation, StreakCounter, QuestPanel, CelebrationOverlay, LevelNudge, RewardFeedProvider). walletCoins audit: fixed 2 critical bugs in achievementActions.ts and bossBattleActions.ts (were using legacy coins field). Pipeline untouched. Palette consistent across all gamification areas."
     }
   ]
 }

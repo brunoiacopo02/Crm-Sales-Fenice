@@ -186,7 +186,7 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
             // Single UPDATE for all contributors
             await db.update(users)
                 .set({
-                    coins: sql`${users.coins} + ${effectiveCoins}`,
+                    walletCoins: sql`${users.walletCoins} + ${effectiveCoins}`,
                     experience: sql`${users.experience} + ${effectiveXp}`,
                 })
                 .where(inArray(users.id, contributorIds));

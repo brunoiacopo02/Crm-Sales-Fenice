@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { getUserLevelProgress } from '@/app/actions/sprintActions';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 interface LevelProgress {
     level: number;
@@ -43,6 +44,7 @@ export function LevelNudge({ userId }: { userId: string }) {
     const pulseClass = animationsEnabled ? 'animate-[level-nudge-pulse_2.5s_ease-in-out_infinite]' : '';
 
     return (
+        <SafeWrapper fallback={null}>
         <div className={`w-full rounded-xl border border-[var(--color-gaming-gold)]/25 bg-gradient-to-r from-[var(--color-gaming-bg)] via-gold-900/15 to-[var(--color-gaming-bg-card)] px-4 py-3 flex items-center gap-3 ${pulseClass}`}>
             <div className="p-1.5 rounded-lg bg-[var(--color-gaming-gold)]/12 border border-[var(--color-gaming-gold)]/20">
                 <TrendingUp className="h-5 w-5 text-[var(--color-gaming-gold)]" />
@@ -68,5 +70,6 @@ export function LevelNudge({ userId }: { userId: string }) {
                 </div>
             </div>
         </div>
+        </SafeWrapper>
     );
 }

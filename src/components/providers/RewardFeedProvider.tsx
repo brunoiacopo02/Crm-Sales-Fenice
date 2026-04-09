@@ -5,6 +5,7 @@ import { RewardPopup, getRandomMotivationalMessage } from '@/components/RewardPo
 import type { RewardPopupData } from '@/components/RewardPopup';
 import type { RewardEarnedDetail } from '@/lib/animationUtils';
 import { playSound } from '@/lib/soundEngine';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 const MAX_VISIBLE = 3;
 
@@ -59,14 +60,16 @@ export function RewardFeedProvider({ children }: { children?: React.ReactNode })
     return (
         <>
             {children}
-            {visiblePopups.map((popup, i) => (
-                <RewardPopup
-                    key={popup.id}
-                    data={popup}
-                    onDismiss={handleDismiss}
-                    index={i}
-                />
-            ))}
+            <SafeWrapper fallback={null}>
+                {visiblePopups.map((popup, i) => (
+                    <RewardPopup
+                        key={popup.id}
+                        data={popup}
+                        onDismiss={handleDismiss}
+                        index={i}
+                    />
+                ))}
+            </SafeWrapper>
         </>
     );
 }

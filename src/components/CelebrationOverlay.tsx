@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
 import type { CelebrationDetail } from '@/lib/animationUtils';
 import { playSound } from '@/lib/soundEngine';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 type CelebrationMode = 'fire' | 'confetti' | 'level_up' | 'achievement' | 'loot_reveal';
 
@@ -287,6 +288,7 @@ export function CelebrationOverlay() {
     const isEvolution = detail?.isEvolution || false;
 
     return (
+        <SafeWrapper fallback={null}>
         <div
             className={`fixed inset-0 ${isEnhanced ? 'cursor-pointer' : 'pointer-events-none'} ${fadeClass}`}
             style={{ zIndex: 9999 }}
@@ -637,5 +639,6 @@ export function CelebrationOverlay() {
                 );
             })}
         </div>
+        </SafeWrapper>
     );
 }

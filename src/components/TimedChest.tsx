@@ -7,6 +7,7 @@ import { triggerCelebration } from '@/lib/animationUtils';
 import { getAnimationsEnabled } from '@/lib/animationUtils';
 import { useRouter } from 'next/navigation';
 import { ChestOpeningAnimation, type ChestRarity } from '@/components/ChestOpeningAnimation';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -319,6 +320,7 @@ export function TimedChest({ userId }: { userId: string }) {
     // Spawned phase (minimized) — small floating chest icon
     if ((uiPhase === 'spawned' || uiPhase === 'ready') && minimized) {
         return (
+            <SafeWrapper fallback={null}>
             <div className="fixed bottom-6 right-6 z-50">
                 <button
                     onClick={() => setMinimized(false)}
@@ -340,12 +342,14 @@ export function TimedChest({ userId }: { userId: string }) {
                     )}
                 </button>
             </div>
+            </SafeWrapper>
         );
     }
 
     // Spawned phase — chest with countdown
     if (uiPhase === 'spawned') {
         return (
+            <SafeWrapper fallback={null}>
             <div className="fixed bottom-6 right-6 z-50 animate-chest-entrance">
                 <div className="relative w-72 rounded-2xl border border-[var(--color-fire-400)]/30 bg-gradient-to-b from-[#1a1620] to-[#12100e] shadow-[0_0_30px_rgba(255,140,66,0.15)] overflow-hidden">
                     {/* Minimize button */}
@@ -395,12 +399,14 @@ export function TimedChest({ userId }: { userId: string }) {
                     </div>
                 </div>
             </div>
+            </SafeWrapper>
         );
     }
 
     // Ready phase — chest ready to open
     if (uiPhase === 'ready') {
         return (
+            <SafeWrapper fallback={null}>
             <div className="fixed bottom-6 right-6 z-50 animate-chest-entrance">
                 <div className="relative w-72 rounded-2xl border border-yellow-500/40 bg-gradient-to-b from-[#1a1620] to-[#14100e] shadow-[0_0_30px_rgba(234,179,8,0.25)] overflow-hidden animate-chest-ready-pulse">
                     {/* Minimize button */}
@@ -435,6 +441,7 @@ export function TimedChest({ userId }: { userId: string }) {
                     </div>
                 </div>
             </div>
+            </SafeWrapper>
         );
     }
 
@@ -443,6 +450,7 @@ export function TimedChest({ userId }: { userId: string }) {
         const config = RARITY_CONFIG[reward.rarity] || RARITY_CONFIG.common;
 
         return (
+            <SafeWrapper fallback={null}>
             <ChestOpeningAnimation
                 isOpening={uiPhase === 'opening'}
                 rarity={(reward.rarity as ChestRarity) || 'common'}
@@ -506,6 +514,7 @@ export function TimedChest({ userId }: { userId: string }) {
                     </div>
                 </div>
             </ChestOpeningAnimation>
+            </SafeWrapper>
         );
     }
 

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getGdoAndConfermeUsers } from '@/app/actions/manualAdjustmentActions';
 import { Phone, Trophy, Flame, CheckCircle } from 'lucide-react';
+import { SafeWrapper } from '@/components/SafeWrapper';
 
 type FomoToastType = 'appointment' | 'confirmation' | 'achievement' | 'hotstreak';
 
@@ -180,6 +181,7 @@ export function FomoToast() {
     if (toasts.length === 0) return null;
 
     return (
+        <SafeWrapper fallback={null}>
         <div className="fixed top-16 right-4 z-[9998] pointer-events-none flex flex-col gap-2">
             {toasts.map((toast) => {
                 const colors = TOAST_COLORS[toast.type];
@@ -221,5 +223,6 @@ export function FomoToast() {
                 );
             })}
         </div>
+        </SafeWrapper>
     );
 }
