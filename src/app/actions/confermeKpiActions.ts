@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { leads, users, monthlyTargets } from "@/db/schema"
-import { eq, and, gte, lte, asc, sql } from "drizzle-orm"
+import { eq, and, gte, lte, asc, sql, isNotNull } from "drizzle-orm"
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 
 /** Format a Date to 'yyyy-MM-dd' in Europe/Rome timezone */
@@ -237,15 +237,15 @@ export async function getConfermeDailyObjectives(confermeUserId: string) {
     const todayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
     const todayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
 
-    // Daily conferme target: 8 conferme al giorno (fisso, non derivato dal tier chiusure)
+    // Daily conferme target: 8 conferme al giorno per TUTTO IL TEAM (non individuale)
     const dailyTarget = 8
 
-    // Count today's confirmations by this operator
+    // Count today's confirmations by ALL conferme operators (team total)
     const confResult = await db.select({ count: sql<number>`count(*)::integer` })
         .from(leads)
         .where(and(
-            eq(leads.confirmationsUserId, confermeUserId),
             eq(leads.confirmationsOutcome, 'confermato'),
+            isNotNull(leads.confirmationsUserId),
             gte(leads.confirmationsTimestamp, todayStart),
             lte(leads.confirmationsTimestamp, todayEnd)
         ))
