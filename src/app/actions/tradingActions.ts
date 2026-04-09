@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { tradingOffers, userCreatures, creatures } from "@/db/schema";
-import { eq, and, or } from "drizzle-orm";
+import { tradingOffers, userCreatures, creatures, users } from "@/db/schema";
+import { eq, and, or, ne, desc } from "drizzle-orm";
 
 /**
  * Create a trade offer between two GDO users.
@@ -128,6 +128,95 @@ export async function getPendingOffers(userId: string) {
         return offers;
     } catch (error) {
         console.error("Errore getPendingOffers:", error);
+        return [];
+    }
+}
+
+/**
+ * Get all GDO users except the current one (for trade partner selection).
+ */
+export async function getGdoUsersForTrading(currentUserId: string) {
+    try {
+        return await db.select({
+            id: users.id,
+            name: users.name,
+            displayName: users.displayName,
+            gdoCode: users.gdoCode,
+        }).from(users)
+            .where(and(eq(users.role, 'GDO'), eq(users.isActive, true), ne(users.id, currentUserId)));
+    } catch (error) {
+        console.error("Errore getGdoUsersForTrading:", error);
+        return [];
+    }
+}
+
+/**
+ * Get tradable creatures of another user (not equipped, not legendary).
+ */
+export async function getOtherUserCreatures(userId: string) {
+    try {
+        return await db.select({
+            userCreatureId: userCreatures.id,
+            creatureId: userCreatures.creatureId,
+            level: userCreatures.level,
+            isEquipped: userCreatures.isEquipped,
+            name: creatures.name,
+            rarity: creatures.rarity,
+            element: creatures.element,
+            imageUrl: creatures.imageUrl,
+        }).from(userCreatures)
+            .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
+            .where(and(
+                eq(userCreatures.userId, userId),
+                eq(userCreatures.isEquipped, false),
+                ne(creatures.rarity, 'legendary')
+            ));
+    } catch (error) {
+        console.error("Errore getOtherUserCreatures:", error);
+        return [];
+    }
+}
+
+/**
+ * Get all offers for a user (all statuses) with creature info.
+ */
+export async function getAllOffers(userId: string) {
+    try {
+        const offers = await db.select().from(tradingOffers)
+            .where(or(eq(tradingOffers.fromUserId, userId), eq(tradingOffers.toUserId, userId)))
+            .orderBy(desc(tradingOffers.createdAt));
+
+        // Enrich with creature and user info
+        const enriched = await Promise.all(offers.map(async (offer) => {
+            const [offeredUC] = await db.select({
+                name: creatures.name, rarity: creatures.rarity, element: creatures.element, level: userCreatures.level,
+            }).from(userCreatures)
+                .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
+                .where(eq(userCreatures.id, offer.offeredCreatureId));
+
+            const [requestedUC] = await db.select({
+                name: creatures.name, rarity: creatures.rarity, element: creatures.element, level: userCreatures.level,
+            }).from(userCreatures)
+                .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
+                .where(eq(userCreatures.id, offer.requestedCreatureId));
+
+            const [fromUser] = await db.select({ name: users.name, displayName: users.displayName })
+                .from(users).where(eq(users.id, offer.fromUserId));
+            const [toUser] = await db.select({ name: users.name, displayName: users.displayName })
+                .from(users).where(eq(users.id, offer.toUserId));
+
+            return {
+                ...offer,
+                offeredCreature: offeredUC || null,
+                requestedCreature: requestedUC || null,
+                fromUserName: fromUser?.displayName || fromUser?.name || 'Sconosciuto',
+                toUserName: toUser?.displayName || toUser?.name || 'Sconosciuto',
+            };
+        }));
+
+        return enriched;
+    } catch (error) {
+        console.error("Errore getAllOffers:", error);
         return [];
     }
 }

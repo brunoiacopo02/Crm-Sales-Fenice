@@ -14,6 +14,7 @@ import {
     X,
     Compass,
     Sparkles,
+    ArrowLeftRight,
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
@@ -69,6 +70,7 @@ export function Sidebar() {
             { name: "Storico Pause", href: "/storico-pause", icon: Clock },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Inventario Creature", href: "/creature-inventario", icon: Sparkles, gamification: true },
+            { name: "Scambi Creature", href: "/trading", icon: ArrowLeftRight, gamification: true },
             { name: "Mappa Avventura", href: "/mappa-avventura", icon: Compass, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
             { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
