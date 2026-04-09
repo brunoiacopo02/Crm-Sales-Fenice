@@ -41,7 +41,7 @@ export default async function ConfermePage() {
                 <>
                     <ConfermeDailyObjectives confermeUserId={session.user.id} />
                     <StreakCounter userId={session.user.id} />
-                    <SafeWrapper><ChestWidget userId={session.user.id} isTeam /></SafeWrapper>
+                    <SafeWrapper><ChestWidget userId="team-conferme" isTeam /></SafeWrapper>
                     <SafeWrapper><LevelNudge userId={session.user.id} /></SafeWrapper>
                     <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
                 </>
