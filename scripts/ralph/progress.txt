@@ -91,3 +91,13 @@ Started: 2026-04-09
 - FIXED_HOURS_WORKED = 6.5 unchanged (correct)
 - Removed unused imports (sql, desc) from kpiTeamActions.ts
 - Build: OK
+
+## F3-007 — Gamification: Script tracking nel CRM (2026-04-09)
+- Added scriptCompleted boolean field (default false) to callLogs in schema.ts
+- Created migration route /api/migrate-script-completion/route.ts (ALTER TABLE ADD COLUMN IF NOT EXISTS)
+- ScriptWidget.tsx: dispatches custom DOM event 'script_completed' when user navigates to step 11 (Chiusura)
+- OutcomeModal.tsx: listens for 'script_completed' event, sets local state, passes to updateLeadOutcome on submit
+- pipelineActions.ts updateLeadOutcome: accepts scriptCompleted param, saves in callLog insert
+- Created getScriptCompletionRate(userId) in gdoPerformanceActions.ts: returns totalCalls, scriptCompletedCount, completionRate %
+- Migration executed on production DB: scriptCompleted column added to callLogs
+- Build: OK

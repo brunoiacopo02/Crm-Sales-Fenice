@@ -113,7 +113,7 @@
         "npx next build senza errori"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Lo ScriptWidget e gia nel drawer della LeadCard. Serve solo tracciare quando viene completato e salvarlo."
     },
     {
