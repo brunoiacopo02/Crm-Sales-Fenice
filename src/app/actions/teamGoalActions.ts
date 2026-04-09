@@ -85,13 +85,28 @@ export async function evaluateTeamGoals(leadId: string) {
 
         const isCompleted = goal.currentCount >= goal.targetCount
 
-        await db.update(teamGoals)
-                    .set({
-                        currentCount: goal.currentCount,
-                        status: isCompleted ? 'completed' : 'active'
-                    })
-                    .where(eq(teamGoals.id, goal.id))
-            
+        if (isCompleted) {
+            // Idempotency guard: atomically set status to 'completed' ONLY if still 'active'.
+            // If another concurrent call already completed it, this update affects 0 rows and we skip rewards.
+            const updated = await db.update(teamGoals)
+                .set({
+                    currentCount: goal.currentCount,
+                    status: 'completed'
+                })
+                .where(and(eq(teamGoals.id, goal.id), eq(teamGoals.status, 'active')))
+                .returning({ id: teamGoals.id })
+
+            if (updated.length === 0) {
+                // Another concurrent call already completed this goal — skip reward distribution
+                continue
+            }
+        } else {
+            await db.update(teamGoals)
+                .set({
+                    currentCount: goal.currentCount,
+                })
+                .where(eq(teamGoals.id, goal.id))
+        }
 
         if (isCompleted) {
             // Premiazione Corale!

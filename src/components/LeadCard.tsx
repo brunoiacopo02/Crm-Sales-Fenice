@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 
@@ -18,6 +18,7 @@ type LeadProps = {
         version: number
         recallDate?: Date | null
         appointmentDate?: Date | null
+        lastCallNote?: string | null
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -123,19 +124,23 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
 
     if (isRowLayout) {
         return (
-            <div data-lead-card={lead.id} className={`relative bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl px-4 py-3 shadow-soft ${rarityStyle.hoverGlow} hover:border-brand-orange/30 transition-all duration-200 flex items-center justify-between gap-4 group cursor-pointer ${leftAccent}`}>
+            <div data-lead-card={lead.id} className={`relative bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl px-4 py-3 shadow-soft ${rarityStyle.hoverGlow} hover:border-brand-orange/30 transition-all duration-200 flex flex-col gap-2 group cursor-pointer ${leftAccent}`}>
+                <div className="flex items-center justify-between gap-4">
 
                 {/* 1. Nome & Contatti */}
-                <div className="flex-1 min-w-0 sm:min-w-[220px] flex flex-col justify-center">
+                <div className="flex-1 min-w-0 sm:min-w-[200px] flex flex-col justify-center">
                     <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2">
                         <div className="flex items-center gap-2">
                             {lead.name}
                             {lead.status === 'APPOINTMENT' && (
                                 <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                             )}
+                            {lead.callCount > 0 && (
+                                <div className="text-[10px] font-bold text-ash-500 bg-ash-100 px-1.5 py-0.5 rounded-md">{lead.callCount}° ch.</div>
+                            )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-ash-500 mt-1.5">
+                    <div className="flex items-center gap-3 text-xs text-ash-500 mt-1">
                         <div className="flex items-center gap-1.5 group/phone">
                             <Phone className="h-3 w-3 text-ash-400" />
                             <div className="font-medium text-ash-600">{lead.phone}</div>
@@ -164,7 +169,7 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                 </div>
 
                 {/* 2. Funnel & Status Pills */}
-                <div className="w-52 hidden md:flex flex-col items-start gap-2">
+                <div className="w-44 hidden md:flex flex-col items-start gap-1.5">
                     {lead.funnel ? (
                         <div className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${rarityStyle.badgeBg} ${rarityStyle.badgeText} ${rarityStyle.badgeBorder}`}>
                             {lead.funnel}
@@ -231,6 +236,16 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                     </button>
                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
                 </div>
+
+                </div>{/* end main row */}
+
+                {/* Note row — shown when lastCallNote exists */}
+                {lead.lastCallNote && (
+                    <div className="flex items-start gap-2 px-1 pt-1 border-t border-ash-100">
+                        <MessageSquare className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="text-xs text-ash-600 leading-relaxed line-clamp-2">{lead.lastCallNote}</div>
+                    </div>
+                )}
 
                 {/* Script Drawer */}
                 {showScript && (

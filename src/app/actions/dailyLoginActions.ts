@@ -197,7 +197,7 @@ export async function claimDailyLogin(userId: string): Promise<{
     try {
         const todayStart = getTodayStartUTC();
 
-        // Idempotency check
+        // Quick pre-check outside transaction (fast path for already-claimed)
         const existingClaims = await db.select({ id: coinTransactions.id })
             .from(coinTransactions)
             .where(
@@ -216,111 +216,135 @@ export async function claimDailyLogin(userId: string): Promise<{
             return { success: true, coinsAwarded: 0, streakCount: streak, multiplier: getStreakMultiplier(streak), weeklyBonusTitle: false };
         }
 
-        // Get user data
-        const userRows = await db.select({
-            streakCount: users.streakCount,
-            lastStreakDate: users.lastStreakDate,
-            walletCoins: users.walletCoins,
-            activeTitle: users.activeTitle,
-        }).from(users).where(eq(users.id, userId));
+        // Use a transaction to prevent race-condition double-claims
+        const result = await db.transaction(async (tx) => {
+            // Re-check inside the transaction to guarantee atomicity
+            const claimsInTx = await tx.select({ id: coinTransactions.id })
+                .from(coinTransactions)
+                .where(
+                    and(
+                        eq(coinTransactions.userId, userId),
+                        eq(coinTransactions.reason, 'Daily login bonus'),
+                        gte(coinTransactions.createdAt, todayStart)
+                    )
+                );
 
-        if (userRows.length === 0) {
-            return { success: false, coinsAwarded: 0, streakCount: 0, multiplier: 1, weeklyBonusTitle: false };
-        }
-
-        const user = userRows[0];
-        const today = getTodayRome();
-
-        // Effective streak
-        let effectiveStreak = user.streakCount;
-        if (user.lastStreakDate && user.lastStreakDate !== today) {
-            const d = new Date(today + 'T12:00:00');
-            const prev = new Date(d);
-            do {
-                prev.setDate(prev.getDate() - 1);
-            } while (prev.getDay() === 0 || prev.getDay() === 6);
-            const prevWorkday = prev.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
-            if (user.lastStreakDate !== prevWorkday) {
-                effectiveStreak = 0;
+            if (claimsInTx.length > 0) {
+                const userRow = await tx.select({
+                    streakCount: users.streakCount,
+                }).from(users).where(eq(users.id, userId));
+                const streak = userRow[0]?.streakCount ?? 0;
+                return { success: true as const, coinsAwarded: 0, streakCount: streak, multiplier: getStreakMultiplier(streak), weeklyBonusTitle: false };
             }
-        }
 
-        // Calculate escalating reward based on day of week
-        const todayIndex = getTodayWeekIndex();
-        let bonusCoins = WEEKLY_REWARDS[todayIndex];
-        let weeklyBonusTitle = false;
+            // Get user data
+            const userRows = await tx.select({
+                streakCount: users.streakCount,
+                lastStreakDate: users.lastStreakDate,
+                walletCoins: users.walletCoins,
+                activeTitle: users.activeTitle,
+            }).from(users).where(eq(users.id, userId));
 
-        // Sunday special: check if all Mon-Sat were claimed this week
-        if (todayIndex === 6) {
-            const mondayStr = getWeekMondayStr();
-            const weekStart = new Date(mondayStr + 'T00:00:00+02:00');
-            const satDate = new Date(mondayStr + 'T12:00:00');
-            satDate.setDate(satDate.getDate() + 5);
-            const satEnd = new Date(satDate.toLocaleDateString('en-CA') + 'T23:59:59+02:00');
+            if (userRows.length === 0) {
+                return { success: false as const, coinsAwarded: 0, streakCount: 0, multiplier: 1, weeklyBonusTitle: false };
+            }
 
-            const monSatClaims = await db.select({
-                createdAt: coinTransactions.createdAt,
-            }).from(coinTransactions).where(
-                and(
-                    eq(coinTransactions.userId, userId),
-                    eq(coinTransactions.reason, 'Daily login bonus'),
-                    gte(coinTransactions.createdAt, weekStart),
-                    lte(coinTransactions.createdAt, satEnd),
-                )
-            );
+            const user = userRows[0];
+            const today = getTodayRome();
 
-            const claimedDates = new Set(
-                monSatClaims.map(c => c.createdAt.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }))
-            );
-
-            let allClaimed = true;
-            for (let i = 0; i < 6; i++) {
-                const d = new Date(mondayStr + 'T12:00:00');
-                d.setDate(d.getDate() + i);
-                if (!claimedDates.has(d.toLocaleDateString('en-CA'))) {
-                    allClaimed = false;
-                    break;
+            // Effective streak
+            let effectiveStreak = user.streakCount;
+            if (user.lastStreakDate && user.lastStreakDate !== today) {
+                const d = new Date(today + 'T12:00:00');
+                const prev = new Date(d);
+                do {
+                    prev.setDate(prev.getDate() - 1);
+                } while (prev.getDay() === 0 || prev.getDay() === 6);
+                const prevWorkday = prev.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
+                if (user.lastStreakDate !== prevWorkday) {
+                    effectiveStreak = 0;
                 }
             }
 
-            if (allClaimed) {
-                bonusCoins = WEEKLY_REWARDS[6]; // 50 coins
-                weeklyBonusTitle = true;
-            } else {
-                bonusCoins = SUNDAY_BASE_REWARD; // 15 coins
+            // Calculate escalating reward based on day of week
+            const todayIndex = getTodayWeekIndex();
+            let bonusCoins = WEEKLY_REWARDS[todayIndex];
+            let weeklyBonusTitle = false;
+
+            // Sunday special: check if all Mon-Sat were claimed this week
+            if (todayIndex === 6) {
+                const mondayStr = getWeekMondayStr();
+                const weekStart = new Date(mondayStr + 'T00:00:00+02:00');
+                const satDate = new Date(mondayStr + 'T12:00:00');
+                satDate.setDate(satDate.getDate() + 5);
+                const satEnd = new Date(satDate.toLocaleDateString('en-CA') + 'T23:59:59+02:00');
+
+                const monSatClaims = await tx.select({
+                    createdAt: coinTransactions.createdAt,
+                }).from(coinTransactions).where(
+                    and(
+                        eq(coinTransactions.userId, userId),
+                        eq(coinTransactions.reason, 'Daily login bonus'),
+                        gte(coinTransactions.createdAt, weekStart),
+                        lte(coinTransactions.createdAt, satEnd),
+                    )
+                );
+
+                const claimedDates = new Set(
+                    monSatClaims.map(c => c.createdAt.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }))
+                );
+
+                let allClaimed = true;
+                for (let i = 0; i < 6; i++) {
+                    const d = new Date(mondayStr + 'T12:00:00');
+                    d.setDate(d.getDate() + i);
+                    if (!claimedDates.has(d.toLocaleDateString('en-CA'))) {
+                        allClaimed = false;
+                        break;
+                    }
+                }
+
+                if (allClaimed) {
+                    bonusCoins = WEEKLY_REWARDS[6]; // 50 coins
+                    weeklyBonusTitle = true;
+                } else {
+                    bonusCoins = SUNDAY_BASE_REWARD; // 15 coins
+                }
             }
-        }
 
-        // Award coins — use walletCoins (the visible/spendable field)
-        const newCoins = user.walletCoins + bonusCoins;
-        const updateFields: Record<string, unknown> = { walletCoins: newCoins };
+            // Award coins — use walletCoins (the visible/spendable field)
+            const newCoins = user.walletCoins + bonusCoins;
+            const updateFields: Record<string, unknown> = { walletCoins: newCoins };
 
-        // Auto-equip weekly bonus title if earned and user has no active title
-        if (weeklyBonusTitle && !user.activeTitle) {
-            updateFields.activeTitle = WEEKLY_BONUS_TITLE;
-        }
+            // Auto-equip weekly bonus title if earned and user has no active title
+            if (weeklyBonusTitle && !user.activeTitle) {
+                updateFields.activeTitle = WEEKLY_BONUS_TITLE;
+            }
 
-        await db.update(users).set(updateFields).where(eq(users.id, userId));
+            await tx.update(users).set(updateFields).where(eq(users.id, userId));
 
-        // Log transaction
-        const reason = weeklyBonusTitle
-            ? 'Daily login bonus (settimana completa!)'
-            : 'Daily login bonus';
+            // Log transaction
+            const reason = weeklyBonusTitle
+                ? 'Daily login bonus (settimana completa!)'
+                : 'Daily login bonus';
 
-        await db.insert(coinTransactions).values({
-            id: crypto.randomUUID(),
-            userId,
-            amount: bonusCoins,
-            reason,
+            await tx.insert(coinTransactions).values({
+                id: crypto.randomUUID(),
+                userId,
+                amount: bonusCoins,
+                reason,
+            });
+
+            return {
+                success: true as const,
+                coinsAwarded: bonusCoins,
+                streakCount: effectiveStreak,
+                multiplier: getStreakMultiplier(effectiveStreak),
+                weeklyBonusTitle,
+            };
         });
 
-        return {
-            success: true,
-            coinsAwarded: bonusCoins,
-            streakCount: effectiveStreak,
-            multiplier: getStreakMultiplier(effectiveStreak),
-            weeklyBonusTitle,
-        };
+        return result;
     } catch (error) {
         console.error("Errore claimDailyLogin:", error);
         return { success: false, coinsAwarded: 0, streakCount: 0, multiplier: 1, weeklyBonusTitle: false };
