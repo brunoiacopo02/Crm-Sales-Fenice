@@ -29,8 +29,8 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "La pagina /trading e le server actions esistono. Solo redesign UI."
+      "passes": true,
+      "notes": "Redesigned with Stitch MCP. Dark Celestial Archive theme, glassmorphism modal, rarity accent bars, tonal layering."
     },
     {
       "id": "FU-034",

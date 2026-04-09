@@ -391,3 +391,21 @@ Started: 2026-04-09
   - Colors: on_surface=#e5e2e1, on_surface_variant=#d4c5ab, primary=#ffe2ab
 - SafeWrapper: yes
 - Build: npx next build — zero errors
+
+## FU-033 — REDESIGN: Trading page con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3.1 Pro)
+- Design: "Celestial Archive" dark marketplace — glassmorphism, tonal layering, rarity accent bars
+- File: src/app/(dashboard)/trading/TradingClient.tsx (full rewrite)
+- Changes:
+  - Full dark theme conversion (was light slate, now dark surface #201f1f)
+  - Glassmorphism modal: rgba(32,31,31,0.85) + backdrop-blur(20px)
+  - CreatureCard: 4px left rarity accent bar, ambient glow, tonal surface
+  - OfferCard: tonal surface, rarity bars on sub-cards, status badges
+  - Gradient CTA button: #fd8b00 → #ffbf00 (135deg)
+  - Tab bar: tonal shift selection (not white bg)
+  - Progress steps: gradient fill
+  - Colors: on_surface=#e5e2e1, on_surface_variant=#d4c5ab, outline=#9c8f78
+- SafeWrapper: yes
+- Build: npx next build — zero errors
