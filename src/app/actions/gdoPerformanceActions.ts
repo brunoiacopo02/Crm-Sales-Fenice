@@ -441,3 +441,28 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
         appointmentsTarget: dailyApptTarget,
     };
 }
+
+/**
+ * F3-007: Script completion rate for a GDO user.
+ * Returns total calls, calls with script completed, and percentage.
+ */
+export async function getScriptCompletionRate(userId: string) {
+    const totalResult = await db.select({ count: sql<number>`count(*)::integer` })
+        .from(callLogs)
+        .where(eq(callLogs.userId, userId));
+    const totalCalls = totalResult[0]?.count || 0;
+
+    const scriptResult = await db.select({ count: sql<number>`count(*)::integer` })
+        .from(callLogs)
+        .where(and(
+            eq(callLogs.userId, userId),
+            eq(callLogs.scriptCompleted, true)
+        ));
+    const scriptCompletedCount = scriptResult[0]?.count || 0;
+
+    return {
+        totalCalls,
+        scriptCompletedCount,
+        completionRate: totalCalls > 0 ? Math.round((scriptCompletedCount / totalCalls) * 100) : 0,
+    };
+}

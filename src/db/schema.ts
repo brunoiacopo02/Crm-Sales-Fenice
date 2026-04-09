@@ -110,6 +110,7 @@ export const callLogs = pgTable('callLogs', {
     outcome: text('outcome').notNull(),
     note: text('note'),
     discardReason: text('discardReason'),
+    scriptCompleted: boolean('scriptCompleted').default(false),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => {
     return {

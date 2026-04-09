@@ -30,6 +30,14 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
     const [dateStr, setDateStr] = useState("")
     const [discardReason, setDiscardReason] = useState("")
     const [loading, setLoading] = useState(false)
+    const [scriptCompleted, setScriptCompleted] = useState(false)
+
+    // Listen for script_completed event from ScriptWidget
+    useEffect(() => {
+        const handler = () => setScriptCompleted(true)
+        window.addEventListener('script_completed', handler)
+        return () => window.removeEventListener('script_completed', handler)
+    }, [])
 
     // ESC key handler
     const handleEsc = useCallback((e: KeyboardEvent) => {
@@ -54,7 +62,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                 targetDate = new Date(dateStr)
             }
 
-            const result = await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion)
+            const result = await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion, scriptCompleted)
 
             if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
                 alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
@@ -67,6 +75,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                 emitRewardEarned(result.rewardData);
             }
 
+            setScriptCompleted(false)
             router.refresh()
             onClose()
         } catch (e) {

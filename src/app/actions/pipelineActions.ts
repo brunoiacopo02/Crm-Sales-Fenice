@@ -147,7 +147,8 @@ export async function updateLeadOutcome(
     date?: Date, // recallDate or appointmentDate
     userId?: string,
     discardReason?: string, // New field
-    currentVersion?: number // Optimistic locking
+    currentVersion?: number, // Optimistic locking
+    scriptCompleted?: boolean // Script tracking
 ) {
 
     const supabase = await createClient();
@@ -172,7 +173,7 @@ export async function updateLeadOutcome(
     let appointmentDate: Date | null = null
     let appointmentCreatedAt: Date | null = null
 
-    // Create Call Log (legacy)
+    // Create Call Log
     await db.insert(callLogs).values({
         id: crypto.randomUUID(),
         leadId,
@@ -180,6 +181,7 @@ export async function updateLeadOutcome(
         outcome,
         note,
         discardReason: discardReason || null,
+        scriptCompleted: scriptCompleted || false,
         createdAt: now,
     })
 
