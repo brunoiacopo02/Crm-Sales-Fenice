@@ -237,6 +237,8 @@ export async function updateLeadOutcome(
         const { attackBoss, checkAndAdvanceStage } = await import('./adventureActions');
         attackBoss(effectiveUserId, 'chiamata').catch(e => console.error("Adventure chiamata err:", e));
         checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check err:", e));
+        const { maybeDropCreature } = await import('./creatureActions');
+        maybeDropCreature(effectiveUserId).catch(e => console.error("Creature drop err:", e));
     }
 
     if (outcome === 'APPUNTAMENTO') {

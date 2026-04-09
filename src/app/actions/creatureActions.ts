@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from "@/db";
-import { creatures, userCreatures, coinTransactions } from "@/db/schema";
+import { creatures, userCreatures, coinTransactions, users } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 // Rarity drop weights
@@ -60,6 +60,39 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
         };
     } catch (error) {
         console.error("Errore dropCreature:", error);
+        return null;
+    }
+}
+
+/**
+ * Atomically increment creatureDropCounter. When threshold (25 actions) is reached,
+ * reset to 0 and trigger a creature drop. Prevents race conditions via single SQL UPDATE.
+ * Returns dropped creature data if a drop occurred, null otherwise.
+ */
+export async function maybeDropCreature(userId: string) {
+    try {
+        // Atomic increment with threshold reset: if counter >= 24, reset to 0; else increment
+        const result = await db.execute(sql`
+            UPDATE users
+            SET "creatureDropCounter" = CASE
+                WHEN "creatureDropCounter" >= 24 THEN 0
+                ELSE "creatureDropCounter" + 1
+            END
+            WHERE id = ${userId}
+            RETURNING "creatureDropCounter"
+        `);
+
+        const newCounter = result.rows?.[0]?.creatureDropCounter;
+
+        // If counter was reset to 0, threshold reached — drop a creature!
+        if (newCounter === 0) {
+            const drop = await dropCreature(userId);
+            return drop;
+        }
+
+        return null;
+    } catch (error) {
+        console.error("Errore maybeDropCreature:", error);
         return null;
     }
 }

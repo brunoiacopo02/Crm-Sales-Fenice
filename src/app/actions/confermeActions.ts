@@ -376,6 +376,10 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             const { attackBoss, checkAndAdvanceStage } = await import('./adventureActions');
             attackBoss(session.user.id, 'conferma').catch(e => console.error("Adventure conferma err:", e));
             checkAndAdvanceStage(session.user.id).catch(e => console.error("Adventure stage check conferma err:", e));
+            if (oldLead.assignedToId) {
+                const { maybeDropCreature } = await import('./creatureActions');
+                maybeDropCreature(oldLead.assignedToId).catch(e => console.error("Creature drop conferma err:", e));
+            }
             const { contributeToTeam, teamAttackBoss } = await import('./teamAdventureActions');
             contributeToTeam(session.user.id, 20).catch(e => console.error("Team XP conferma err:", e));
             teamAttackBoss('conferma', session.user.id).catch(e => console.error("Team boss conferma err:", e));
@@ -445,6 +449,8 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
                 const { attackBoss: attackBossChiusura, checkAndAdvanceStage: checkStageChiusura } = await import('./adventureActions');
                 attackBossChiusura(oldLead.assignedToId, 'chiusura').catch(e => console.error("Adventure chiusura err:", e));
                 checkStageChiusura(oldLead.assignedToId).catch(e => console.error("Adventure stage check chiusura err:", e));
+                const { maybeDropCreature: maybeDropChiusura } = await import('./creatureActions');
+                maybeDropChiusura(oldLead.assignedToId).catch(e => console.error("Creature drop chiusura err:", e));
                 const { contributeToTeam: contributeChiusura, teamAttackBoss: teamAttackChiusura } = await import('./teamAdventureActions');
                 contributeChiusura(session.user.id, 50).catch(e => console.error("Team XP chiusura err:", e));
                 teamAttackChiusura('chiusura', session.user.id).catch(e => console.error("Team boss chiusura err:", e));
@@ -458,6 +464,8 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
                 const { attackBoss: attackBossPresenza, checkAndAdvanceStage: checkStagePresenza } = await import('./adventureActions');
                 attackBossPresenza(oldLead.assignedToId, 'presenza').catch(e => console.error("Adventure presenza err:", e));
                 checkStagePresenza(oldLead.assignedToId).catch(e => console.error("Adventure stage check presenza err:", e));
+                const { maybeDropCreature: maybeDropPresenza } = await import('./creatureActions');
+                maybeDropPresenza(oldLead.assignedToId).catch(e => console.error("Creature drop presenza err:", e));
                 const { contributeToTeam: contributePresenza, teamAttackBoss: teamAttackPresenza } = await import('./teamAdventureActions');
                 contributePresenza(session.user.id, 30).catch(e => console.error("Team XP presenza err:", e));
                 teamAttackPresenza('presenza', session.user.id).catch(e => console.error("Team boss presenza err:", e));
