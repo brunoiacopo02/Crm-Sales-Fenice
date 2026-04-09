@@ -71,8 +71,8 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "Componente esiste. Redesign."
+      "passes": true,
+      "notes": "Redesigned with Stitch MCP. Tonal stat cards, win rate gradient bar, left accent bars, glassmorphism container."
     },
     {
       "id": "FU-025",

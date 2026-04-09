@@ -449,3 +449,21 @@ Started: 2026-04-09
   - No solid borders, tonal surfaces
 - SafeWrapper: yes
 - Build: npx next build — zero errors
+
+## FU-036 — REDESIGN: Duel history nel profilo con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3 Flash)
+- Design: "Celestial Archive" duel history — tonal stat cards, gradient win rate bar
+- File: src/components/DuelHistory.tsx (full rewrite)
+- Changes:
+  - Glassmorphism container: rgba(32,31,31,0.7) + backdrop-blur(12px)
+  - Stat cards: tonal dark surface (#0e0e0e), colored values (green/red/gold)
+  - Win rate gradient bar: green → gold
+  - Duel rows: 3px left accent bar (green WIN, red LOSS, grey DRAW)
+  - Result badges: tonal bg + colored text, no solid borders
+  - Score: tabular-nums font feature
+  - Victory rewards: gold coin icon + ffe2ab text
+  - Colors: on_surface=#e5e2e1, outline=#9c8f78
+- SafeWrapper: yes
+- Build: npx next build — zero errors
