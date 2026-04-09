@@ -209,6 +209,16 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-022 — UI: ChestWidget nella dashboard Conferme
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/(dashboard)/conferme/page.tsx
+- ChestWidget already imported, fixed userId from session.user.id to 'team-conferme'
+- isTeam=true per tracking condiviso team
+- Positioned sotto ConfermeDailyObjectives + StreakCounter
+- SafeWrapper presente
+- Build: npx next build — zero errors
+
 ## FU-021 — UI: Duelli 1v1 widget + creazione
 - Status: DONE
 - Date: 2026-04-09
