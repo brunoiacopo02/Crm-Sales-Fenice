@@ -405,6 +405,64 @@ export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- FENICE UNIVERSE: CREATURE SYSTEM ---
+export const creatures = pgTable('creatures', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    rarity: text('rarity').notNull(), // 'common' | 'rare' | 'epic' | 'legendary'
+    element: text('element').notNull(), // 'fuoco' | 'terra' | 'acqua' | 'aria' | 'luce' | 'ombra'
+    imageUrl: text('imageUrl'),
+    baseXpBonus: real('baseXpBonus').notNull(), // 0.02 common, 0.05 rare, 0.10 epic, 0.15 legendary
+    baseCoinBonus: real('baseCoinBonus').notNull(), // 0.01 common, 0.03 rare, 0.05 epic, 0.10 legendary
+    maxLevel: integer('maxLevel').default(10).notNull(),
+    isActive: boolean('isActive').default(true).notNull(),
+});
+
+export const userCreatures = pgTable('userCreatures', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    creatureId: text('creatureId').notNull().references(() => creatures.id),
+    level: integer('level').default(1).notNull(),
+    xpFed: integer('xpFed').default(0).notNull(),
+    isEquipped: boolean('isEquipped').default(false).notNull(),
+    obtainedAt: timestamp('obtainedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const adventureProgress = pgTable('adventureProgress', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    currentStage: integer('currentStage').default(1).notNull(),
+    currentBossHp: integer('currentBossHp'), // nullable — NULL if not in boss fight
+    lastStageCompletedAt: timestamp('lastStageCompletedAt', { withTimezone: true, mode: 'date' }),
+});
+
+export const adventureBosses = pgTable('adventureBosses', {
+    id: text('id').primaryKey(),
+    stageNumber: integer('stageNumber').notNull(), // 10, 20, 30, ...
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    imageUrl: text('imageUrl'),
+    totalHp: integer('totalHp').notNull(),
+    element: text('element').notNull(),
+    rewardCreatureId: text('rewardCreatureId').references(() => creatures.id),
+    rewardCoins: integer('rewardCoins').notNull(),
+    rewardTitle: text('rewardTitle'),
+});
+
+export const actionChests = pgTable('actionChests', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    chestType: text('chestType').notNull(), // 'bronze' | 'silver' | 'gold' | 'platinum' | 'boss'
+    requiredMetric: text('requiredMetric').notNull(), // 'chiamate' | 'fissaggi' | 'conferme' | 'presenze' | 'chiusure'
+    requiredValue: integer('requiredValue').notNull(),
+    currentValue: integer('currentValue').default(0).notNull(),
+    isReady: boolean('isReady').default(false).notNull(),
+    openedAt: timestamp('openedAt', { withTimezone: true, mode: 'date' }),
+    rewardCreatureId: text('rewardCreatureId').references(() => creatures.id),
+    rewardCoins: integer('rewardCoins'),
+});
+
 // Aggiustamenti manuali admin (presenze GDO, chiusure Conferme)
 export const manualAdjustments = pgTable('manualAdjustments', {
     id: text('id').primaryKey(),
