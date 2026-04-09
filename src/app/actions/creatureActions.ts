@@ -175,6 +175,18 @@ export async function fuseCreatures(userId: string, creatureId: string) {
 }
 
 /**
+ * Get all creature definitions (for collection counter).
+ */
+export async function getAllCreatureDefinitions() {
+    try {
+        return await db.select().from(creatures).where(eq(creatures.isActive, true));
+    } catch (error) {
+        console.error("Errore getAllCreatureDefinitions:", error);
+        return [];
+    }
+}
+
+/**
  * Get the XP and coin bonus from the user's equipped creature.
  * Bonus scales with level: level 1 = base, level 10 = base * 3.
  */

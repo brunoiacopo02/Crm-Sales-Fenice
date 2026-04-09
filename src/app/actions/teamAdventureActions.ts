@@ -172,6 +172,71 @@ export async function getTeamCreatures() {
 }
 
 /**
+ * Equip a team creature. Un-equips the currently equipped one first.
+ */
+export async function equipTeamCreature(teamCreatureId: string) {
+    try {
+        // Un-equip all currently equipped
+        await db.update(teamCreatures)
+            .set({ isEquipped: false })
+            .where(and(eq(teamCreatures.teamId, TEAM_ID), eq(teamCreatures.isEquipped, true)));
+
+        // Equip the selected one
+        await db.update(teamCreatures)
+            .set({ isEquipped: true })
+            .where(and(eq(teamCreatures.id, teamCreatureId), eq(teamCreatures.teamId, TEAM_ID)));
+
+        return { success: true };
+    } catch (error) {
+        console.error("Errore equipTeamCreature:", error);
+        return { success: false, error: String(error) };
+    }
+}
+
+/**
+ * Fuse 3 copies of the same creature in team inventory to level up one.
+ */
+export async function fuseTeamCreatures(creatureId: string) {
+    try {
+        const copies = await db.select().from(teamCreatures)
+            .where(and(eq(teamCreatures.teamId, TEAM_ID), eq(teamCreatures.creatureId, creatureId)));
+
+        if (copies.length < 3) {
+            return { success: false, error: 'Servono almeno 3 copie per la fusione' };
+        }
+
+        const sorted = [...copies].sort((a, b) => {
+            if (a.isEquipped && !b.isEquipped) return -1;
+            if (!a.isEquipped && b.isEquipped) return 1;
+            return b.level - a.level;
+        });
+
+        const keeper = sorted[0];
+        if (keeper.level >= 10) {
+            return { success: false, error: 'Creatura già al livello massimo (10)' };
+        }
+
+        const toConsume = sorted.filter(c => c.id !== keeper.id).slice(0, 3);
+        if (toConsume.length < 3) {
+            return { success: false, error: 'Servono almeno 3 copie extra per la fusione' };
+        }
+
+        for (const c of toConsume) {
+            await db.delete(teamCreatures).where(eq(teamCreatures.id, c.id));
+        }
+
+        await db.update(teamCreatures)
+            .set({ level: keeper.level + 1 })
+            .where(eq(teamCreatures.id, keeper.id));
+
+        return { success: true, newLevel: keeper.level + 1, consumed: toConsume.length };
+    } catch (error) {
+        console.error("Errore fuseTeamCreatures:", error);
+        return { success: false, error: String(error) };
+    }
+}
+
+/**
  * Get team adventure progress (stage + boss).
  */
 export async function getTeamAdventureProgress() {
