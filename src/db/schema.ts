@@ -97,6 +97,9 @@ export const leads = pgTable('leads', {
         assignedToIdx: index('assigned_to_idx').on(table.assignedToId),
         recallDateIdx: index('recall_date_idx').on(table.recallDate),
         appointmentDateIdx: index('appointment_date_idx').on(table.appointmentDate),
+        confirmationsOutcomeIdx: index('confirmations_outcome_idx').on(table.confirmationsOutcome),
+        assignedStatusIdx: index('assigned_status_idx').on(table.assignedToId, table.status),
+        assignedRecallIdx: index('assigned_recall_idx').on(table.assignedToId, table.recallDate),
     };
 });
 
@@ -108,6 +111,11 @@ export const callLogs = pgTable('callLogs', {
     note: text('note'),
     discardReason: text('discardReason'),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        userIdIdx: index('calllogs_user_id_idx').on(table.userId),
+        userCreatedAtIdx: index('calllogs_user_created_at_idx').on(table.userId, table.createdAt),
+    };
 });
 
 export const leadEvents = pgTable('leadEvents', {
@@ -122,6 +130,11 @@ export const leadEvents = pgTable('leadEvents', {
     metadata: jsonb('metadata'),
 
     timestamp: timestamp('timestamp', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        leadIdIdx: index('lead_events_lead_id_idx').on(table.leadId),
+        userIdIdx: index('lead_events_user_id_idx').on(table.userId),
+    };
 });
 
 export const breakSessions = pgTable('breakSessions', {
@@ -319,6 +332,11 @@ export const questProgress = pgTable('questProgress', {
     completedAt: timestamp('completedAt', { withTimezone: true, mode: 'date' }),
     dateScope: text('dateScope').notNull(), // 'YYYY-MM-DD' for daily, 'YYYY-Wnn' for weekly
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        userIdIdx: index('quest_progress_user_id_idx').on(table.userId),
+        userDateScopeIdx: index('quest_progress_user_date_idx').on(table.userId, table.dateScope),
+    };
 });
 
 // --- ACHIEVEMENT / BADGE SYSTEM ---
@@ -341,6 +359,10 @@ export const userAchievements = pgTable('userAchievements', {
     achievementId: text('achievementId').notNull().references(() => achievements.id),
     tier: integer('tier').notNull(), // 1 = bronze, 2 = silver, 3 = gold
     unlockedAt: timestamp('unlockedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        userIdIdx: index('user_achievements_user_id_idx').on(table.userId),
+    };
 });
 
 // --- LOOT DROP SYSTEM ---
@@ -431,6 +453,10 @@ export const userCreatures = pgTable('userCreatures', {
     xpFed: integer('xpFed').default(0).notNull(),
     isEquipped: boolean('isEquipped').default(false).notNull(),
     obtainedAt: timestamp('obtainedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        userIdIdx: index('user_creatures_user_id_idx').on(table.userId),
+    };
 });
 
 export const adventureProgress = pgTable('adventureProgress', {

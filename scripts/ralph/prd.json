@@ -32,7 +32,7 @@
         "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Indici compositi dove serve: (assignedToId, status), (assignedToId, recallDate). NON creare indici su colonne gia indicizzate."
     },
     {

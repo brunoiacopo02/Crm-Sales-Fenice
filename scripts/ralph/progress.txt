@@ -32,3 +32,16 @@ Started: 2026-04-09
 - CelebrationOverlay e CreatureRevealOverlay erano gia lazy (verificato)
 - Note: ssr:false non consentito in Server Components (Next.js App Router), usato solo loading skeleton
 - Build: OK
+
+## F3-002 — Performance: ottimizzare query DB con indici mancanti (2026-04-09)
+- Analyzed frequent queries: pipeline (assignedToId+status), conferme (confirmationsOutcome), recall (assignedToId+recallDate), achievements (userId), KPI (callLogs userId+createdAt)
+- Added 3 new indexes on leads: confirmations_outcome_idx, assigned_status_idx (composite), assigned_recall_idx (composite)
+- Added 2 indexes on callLogs: calllogs_user_id_idx, calllogs_user_created_at_idx (composite)
+- Added 2 indexes on leadEvents: lead_events_lead_id_idx, lead_events_user_id_idx
+- Added 1 index on userAchievements: user_achievements_user_id_idx
+- Added 2 indexes on questProgress: quest_progress_user_id_idx, quest_progress_user_date_idx (composite)
+- Added 1 index on userCreatures: user_creatures_user_id_idx
+- Total: 11 new indexes across 5 tables
+- Created migration route /api/migrate-indexes/route.ts
+- Executed migration on production DB: all 11 indexes created successfully
+- Build: OK
