@@ -289,7 +289,7 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Pattern Supabase Realtime gia usato in RealtimeProvider. NON alterare i channel esistenti postgres_changes."
     }
   ]

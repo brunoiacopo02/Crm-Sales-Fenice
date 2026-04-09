@@ -209,6 +209,16 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-031 — Integration: Supabase Realtime per team adventure
+- Status: DONE
+- Date: 2026-04-09
+- teamAdventureActions.ts: broadcast via supabase channel 'team-adventure' after boss HP update
+- RealtimeProvider: subscribes to 'team-adventure' channel, dispatches 'team_boss_damage_event'
+- MappaAvventuraClient: listens for live HP updates (liveBossHp state), shows damage toast
+- Toast: "{name} ha inflitto {damage} danni con un {action}!" with auto-dismiss 4s
+- Existing postgres_changes channels NOT altered
+- Build: npx next build — zero errors
+
 ## FU-030 — UI: Storico sfide nel profilo
 - Status: DONE
 - Date: 2026-04-09
