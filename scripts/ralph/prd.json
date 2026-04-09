@@ -1,7 +1,7 @@
 {
   "project": "CRM Fenice",
   "branchName": "ralph/fenice-universe-run3",
-  "description": "Fenice Universe Run 3 — Backend fixes (stage advancement, creature drops, duels), DB transactions, new UI (trading, duels, notifications, celebrations). NO deploy.",
+  "description": "Fenice Universe Run 3 — Backend fixes, new UI, asset generation, cross-system integration. 20 stories. NO deploy.",
   "userStories": [
     {
       "id": "FU-024",
@@ -15,183 +15,282 @@
       ],
       "priority": 0,
       "passes": false,
-      "notes": "Story pre-requisito per FU-015. La route /api/migrate-universe NON e bloccata in dev (solo in prod). Eseguire in locale."
+      "notes": "Pre-requisito per FU-015. La route /api/migrate-universe NON e bloccata in dev (solo in prod)."
     },
     {
       "id": "FU-014",
       "title": "Fix: stage advancement integration",
-      "description": "advanceStage() in adventureActions.ts non viene MAI chiamata dalle pipeline/conferme actions. Gli stadi non-boss non avanzano mai.",
+      "description": "advanceStage() non viene MAI chiamata. Gli stadi non-boss non avanzano mai.",
       "acceptanceCriteria": [
-        "Creare helper countTodayActions(userId, metric) in adventureActions.ts che conta le azioni di oggi per la metrica specificata",
-        "Creare helper checkAndAdvanceStage(userId) che: ottiene progresso attuale, calcola requirement stadio, conta azioni oggi, se soddisfatto chiama advanceStage",
+        "Creare helper countTodayActions(userId, metric) in adventureActions.ts che conta azioni di oggi",
+        "Creare helper checkAndAdvanceStage(userId) che verifica requirements e avanza se soddisfatti",
         "In pipelineActions.ts: dopo attackBoss, chiamare checkAndAdvanceStage(effectiveUserId) in try/catch",
         "In confermeActions.ts: dopo teamAttackBoss, chiamare checkAndAdvanceStage(session.user.id) in try/catch",
-        "checkAndAdvanceStage deve NON avanzare se lo stadio corrente e un boss stage (multiplo di 10) — quelli avanzano tramite attackBoss",
-        "Pipeline logica sacra NON modificata — solo hook aggiuntivi",
+        "checkAndAdvanceStage NON avanza se stadio corrente e boss stage (multiplo di 10)",
+        "Pipeline logica sacra NON modificata",
         "npx next build senza errori"
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Stage requirements crescenti: 1-10=50 chiamate/giorno, 11-20=3 fissaggi, 21-30=2 conferme, 31-40=2 presenze, 41-50=1 chiusura. Boss stages avanzano gia via attackBoss."
+      "notes": "Requirements: 1-10=50 chiamate, 11-20=3 fissaggi, 21-30=2 conferme, 31-40=2 presenze, 41-50=1 chiusura."
     },
     {
       "id": "FU-015",
       "title": "Fix: creature drop triggers in pipeline",
-      "description": "dropCreature() non viene mai triggerato dal gameplay diretto. Serve un trigger ogni ~25 azioni produttive.",
+      "description": "dropCreature() non viene triggerato dal gameplay. Serve trigger ogni ~25 azioni.",
       "acceptanceCriteria": [
-        "Creare helper maybeDropCreature(userId) in creatureActions.ts: usa SQL increment su creatureDropCounter, se >= 25 resetta a 0 e chiama dropCreature",
-        "Usare SQL atomico: UPDATE users SET creatureDropCounter = CASE WHEN creatureDropCounter >= 24 THEN 0 ELSE creatureDropCounter + 1 END WHERE id = ? RETURNING creatureDropCounter",
-        "Se il returning value e 0 (appena resettato), significa che si e raggiunta la soglia: eseguire dropCreature(userId)",
-        "In pipelineActions.ts: chiamare maybeDropCreature(effectiveUserId) dopo ogni outcome in try/catch",
-        "In confermeActions.ts: chiamare maybeDropCreature per il GDO (lead.assignedToId) dopo conferma/presenza/chiusura in try/catch",
-        "Ritornare i dati della creatura droppata (o null) per eventuale notifica",
-        "Pipeline logica sacra NON modificata",
+        "Creare maybeDropCreature(userId) in creatureActions.ts con SQL increment atomico su creatureDropCounter",
+        "UPDATE users SET creatureDropCounter = CASE WHEN creatureDropCounter >= 24 THEN 0 ELSE creatureDropCounter + 1 END RETURNING creatureDropCounter",
+        "Se returning = 0 (soglia raggiunta), eseguire dropCreature(userId)",
+        "In pipelineActions.ts: chiamare maybeDropCreature dopo ogni outcome in try/catch",
+        "In confermeActions.ts: chiamare maybeDropCreature per GDO (lead.assignedToId) dopo conferma/presenza/chiusura",
+        "Ritornare dati creatura per notifica",
+        "Pipeline NON modificata",
         "npx next build senza errori"
       ],
       "priority": 2,
       "passes": false,
-      "notes": "DIPENDE DA FU-024 (campo creatureDropCounter). Counter usa SQL increment atomico per evitare race condition."
+      "notes": "DIPENDE DA FU-024. SQL atomico previene race condition."
     },
     {
       "id": "FU-016",
       "title": "Fix: duel score integration",
-      "description": "incrementDuelScore() esiste ma non viene mai chiamato dalle pipeline actions durante un duello attivo.",
+      "description": "incrementDuelScore() mai chiamato dalle pipeline actions.",
       "acceptanceCriteria": [
-        "In pipelineActions.ts: dopo ogni chiamata (qualsiasi outcome), chiamare incrementDuelScore(effectiveUserId, 'chiamate', 1) in try/catch",
-        "In pipelineActions.ts: dopo ogni fissaggio (APPUNTAMENTO), chiamare incrementDuelScore(effectiveUserId, 'fissaggi', 1) in try/catch",
-        "Verificare che incrementDuelScore gestisca correttamente il caso nessun duello attivo (return silenzioso senza errori)",
-        "Pipeline logica sacra NON modificata",
+        "In pipelineActions.ts: dopo ogni chiamata, chiamare incrementDuelScore(effectiveUserId, 'chiamate', 1) in try/catch",
+        "In pipelineActions.ts: dopo ogni fissaggio, chiamare incrementDuelScore(effectiveUserId, 'fissaggi', 1) in try/catch",
+        "Pipeline NON modificata",
         "npx next build senza errori"
       ],
       "priority": 3,
       "passes": false,
-      "notes": "incrementDuelScore fa gia il check interno. Se nessun duello attivo per questo utente/metrica, non fa nulla."
+      "notes": "incrementDuelScore gestisce internamente il caso nessun duello attivo."
     },
     {
       "id": "FU-017",
       "title": "Fix: convert dynamic imports to static",
-      "description": "pipelineActions.ts e confermeActions.ts usano await import() ripetuti. Pulire con import statici.",
+      "description": "Pulire gli await import() ripetuti in pipeline/conferme actions.",
       "acceptanceCriteria": [
-        "In pipelineActions.ts: sostituire TUTTI i await import('./chestActions'), await import('./adventureActions'), await import('./creatureActions'), await import('./duelActions') con import statici al TOP del file",
-        "In confermeActions.ts: sostituire TUTTI i await import('./chestActions'), await import('./adventureActions'), await import('./teamAdventureActions'), await import('./creatureActions') con import statici al TOP del file",
-        "Rimuovere le variabili locali duplicate (const { incrementChestProgress } = await import(...))",
-        "Testare che tutti i riferimenti funzionino correttamente dopo il refactor",
+        "In pipelineActions.ts: tutti await import('./chestActions'), ./adventureActions, ./creatureActions, ./duelActions → import statici al TOP",
+        "In confermeActions.ts: tutti await import('./chestActions'), ./adventureActions, ./teamAdventureActions, ./creatureActions → import statici al TOP",
+        "Rimuovere variabili locali duplicate (const { fn } = await import(...))",
         "npx next build senza errori"
       ],
       "priority": 4,
       "passes": false,
-      "notes": "Fare DOPO FU-014, FU-015, FU-016 cosi si pulisce tutto insieme. File sono in src/app/actions/."
+      "notes": "Fare DOPO FU-014/015/016."
     },
     {
       "id": "FU-018",
       "title": "Fix: DB transactions per operazioni critiche",
-      "description": "fuseCreatures, openChest, acceptTradeOffer, completeDuel non usano transazioni. Concurrent calls possono duplicare reward.",
+      "description": "fuseCreatures, openChest, acceptTradeOffer, completeDuel senza transazioni.",
       "acceptanceCriteria": [
-        "Wrappare fuseCreatures() in db.transaction(async (tx) => {...}) — read+delete+update atomici",
-        "Wrappare openChest() in db.transaction(async (tx) => {...}) — check isReady + award + reset atomici",
-        "Wrappare acceptTradeOffer() in db.transaction(async (tx) => {...}) — swap ownership atomico",
-        "Wrappare completeDuel() in db.transaction(async (tx) => {...}) — check status + award winner atomico",
-        "Dentro ogni transaction: usare tx.select, tx.update, tx.insert, tx.delete al posto di db.*",
+        "fuseCreatures() in db.transaction(async (tx) => {...})",
+        "openChest() in db.transaction(async (tx) => {...})",
+        "acceptTradeOffer() in db.transaction(async (tx) => {...})",
+        "completeDuel() in db.transaction(async (tx) => {...})",
+        "Usare tx.* dentro ogni transaction",
         "npx next build senza errori"
       ],
       "priority": 5,
       "passes": false,
-      "notes": "Pattern: db.transaction(async (tx) => { const [row] = await tx.select()...; await tx.update()...; }). Drizzle node-postgres supporta nativamente le transaction."
+      "notes": "Drizzle: db.transaction(async (tx) => {...})."
     },
     {
       "id": "FU-019",
       "title": "UI: Toast notifiche creature drop e boss defeat",
-      "description": "Nessuna notifica visuale quando un GDO ottiene creatura o sconfigge boss.",
+      "description": "Nessuna notifica visuale per eventi Universe.",
       "acceptanceCriteria": [
-        "Creare componente UniverseToast.tsx: toast generico per eventi Universe",
-        "Supportare tipi: 'creature_drop' (nome, rarita, elemento), 'boss_defeated' (nome boss, reward), 'chest_ready' (tipo baule)",
-        "Toast non-bloccante, posizionato bottom-right, auto-dismiss dopo 4s",
-        "Styling per rarita: comune=bordo grigio, raro=bordo blu+glow, epico=bordo viola+glow, leggendario=bordo oro+shake",
-        "Max 2 toast contemporanei (nuovi sostituiscono i vecchi)",
-        "Creare UniverseToastProvider.tsx da wrappare nel layout dashboard (pattern simile a FomoToast)",
-        "Esporre metodo globale showUniverseToast() via window event o context",
-        "SafeWrapper su tutto",
-        "npx next build senza errori"
+        "Creare UniverseToast.tsx: toast per creature_drop, boss_defeated, chest_ready",
+        "Toast bottom-right, auto-dismiss 4s, max 2 contemporanei",
+        "Styling rarita: comune=grigio, raro=blu+glow, epico=viola+glow, leggendario=oro+shake",
+        "Creare UniverseToastProvider.tsx nel layout dashboard (pattern FomoToast)",
+        "Esporre via window event 'universe_toast'",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 6,
       "passes": false,
-      "notes": "Pattern: dispatch custom event 'universe_toast' con detail, provider lo ascolta. Simile a come FomoToast funziona."
+      "notes": "Pattern simile a FomoToast. Dispatch custom event con detail."
     },
     {
       "id": "FU-020",
       "title": "UI: Trading creature tra GDO",
-      "description": "Server actions trading esistono ma zero UI. I GDO devono poter scambiare creature.",
+      "description": "Server actions trading esistono, zero UI.",
       "acceptanceCriteria": [
-        "Creare pagina /trading con TradingClient.tsx",
-        "Server page: auth check, fetch getUserCreatures + getPendingOffers + lista GDO attivi",
-        "Tab 'Scambiabili': griglia creature NON equipped e NON legendary con bottone 'Proponi Scambio'",
-        "Tab 'Offerte Ricevute': lista offerte pending con preview creatura offerta/richiesta + Accetta/Rifiuta",
-        "Tab 'Offerte Inviate': lista offerte sent con stato",
-        "Modal 'Proponi Scambio': step 1 seleziona tua creatura, step 2 seleziona GDO, step 3 seleziona sua creatura, step 4 conferma",
-        "Preview creature in modal: card mini con nome, rarita, elemento, livello",
-        "Aggiungere voce 'Scambi Creature' nella sidebar GDO sezione gamification (icon ArrowLeftRight da lucide)",
-        "SafeWrapper su tutto, tema gaming scuro",
-        "npx next build senza errori"
+        "Pagina /trading con TradingClient.tsx",
+        "Tab Scambiabili: griglia creature NON equipped/legendary con bottone Proponi",
+        "Tab Offerte Ricevute: preview creature + Accetta/Rifiuta",
+        "Tab Offerte Inviate: stato pending/accepted/rejected",
+        "Modal Proponi Scambio: 4 step (tua creatura → GDO → sua creatura → conferma)",
+        "Sidebar GDO: voce 'Scambi Creature' (icon ArrowLeftRight) in sezione gamification",
+        "SafeWrapper, tema gaming scuro, npx next build senza errori"
       ],
       "priority": 7,
       "passes": false,
-      "notes": "Solo ruolo GDO puo scambiare. CONFERME hanno creature team (non scambiabili individualmente). Server actions validano gia legendary+equipped."
+      "notes": "Solo GDO. CONFERME hanno creature team non scambiabili."
     },
     {
       "id": "FU-021",
       "title": "UI: Duelli 1v1 widget + creazione",
-      "description": "Server actions duelli esistono ma zero UI. TL/Manager creano, GDO competono.",
+      "description": "Server actions duelli esistono, zero UI.",
       "acceptanceCriteria": [
-        "Creare DuelWidget.tsx: widget compatto che mostra duello attivo per il GDO corrente",
-        "Widget: avatar avversario, metrica, countdown timer, score tuo vs avversario, barra progresso",
-        "Se nessun duello attivo: non renderizzare nulla (return null)",
-        "Polling ogni 30s per aggiornare punteggio (useEffect + setInterval)",
-        "Creare DuelCreateModal.tsx per TL/Manager: seleziona 2 GDO, metrica, durata, reward coins",
-        "Durate disponibili: 30min, 1h, 2h, 4h, giornata intera",
-        "Posizionare DuelWidget nella dashboard GDO page (src/app/(dashboard)/page.tsx), sopra la pipeline",
-        "Posizionare bottone 'Crea Duello' nella pagina manager /team",
-        "SafeWrapper su widget e modal",
-        "npx next build senza errori"
+        "DuelWidget.tsx: widget compatto dashboard GDO con avversario, metrica, countdown, score live",
+        "Se nessun duello attivo: return null",
+        "Polling 30s per aggiornamento punteggio",
+        "DuelCreateModal.tsx per TL/Manager: seleziona 2 GDO, metrica, durata (30min/1h/2h/4h/giornata), reward",
+        "DuelWidget nella dashboard GDO page, DuelCreateModal bottone in /team",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 8,
       "passes": false,
-      "notes": "Solo TL/Manager creano duelli (check nel server action). Widget auto-completa quando tempo scade (getDuelStatus fa auto-complete)."
+      "notes": "Solo TL/Manager creano. Widget auto-completa quando tempo scade."
     },
     {
       "id": "FU-022",
       "title": "UI: ChestWidget nella dashboard Conferme",
-      "description": "ChestWidget esiste ed e nella dashboard GDO ma manca nella pagina Conferme.",
+      "description": "ChestWidget manca nella pagina Conferme.",
       "acceptanceCriteria": [
-        "In src/app/(dashboard)/conferme/page.tsx: importare ChestWidget",
-        "Renderizzare ChestWidget con props isTeam={true} userId='team-conferme'",
-        "Posizionare sotto ConfermeDailyObjectives (o altro punto logico)",
-        "SafeWrapper intorno al widget",
-        "npx next build senza errori"
+        "In /conferme page: importare e renderizzare ChestWidget con isTeam=true userId='team-conferme'",
+        "Posizionare sotto obiettivi giornalieri Conferme",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 9,
       "passes": false,
-      "notes": "ChestWidget gia supporta isTeam prop. Solo importare e posizionare."
+      "notes": "ChestWidget gia supporta isTeam. Solo import + posizionamento."
     },
     {
       "id": "FU-023",
       "title": "UI: Creature reveal celebration overlay",
-      "description": "Quando un GDO ottiene una nuova creatura serve una animazione reveal epica.",
+      "description": "Animazione reveal epica quando un GDO ottiene una creatura.",
       "acceptanceCriteria": [
-        "Creare componente CreatureRevealOverlay.tsx: overlay fullscreen con reveal animato",
-        "Fase 1 (0.8s): sfondo scuro fade-in con particelle di luce ascendenti",
-        "Fase 2 (1.5s): cerchio di luce che si espande, creatura appare al centro con glow rarita",
-        "Fase 3 (1s): nome, rarita badge, elemento icon, bonus XP/coins mostrati con stagger fade-in",
-        "Bottone 'Fantastico!' per chiudere overlay",
-        "Colori glow per rarita: common=#94a3b8, rare=#3b82f6, epic=#a855f7, legendary=#fbbf24",
-        "Legendary ha effetto speciale: screen shake leggero + particelle oro + suono (se abilitato)",
-        "Props: creatureName, rarity, element, xpBonus, coinBonus, onClose",
-        "Rispettare getAnimationsEnabled() — se disabilitato, mostra solo card statica",
-        "SafeWrapper, CSS keyframes only, no librerie esterne",
-        "npx next build senza errori"
+        "CreatureRevealOverlay.tsx: overlay fullscreen con 3 fasi (luce→creatura→info)",
+        "Glow colori per rarita (common=#94a3b8, rare=#3b82f6, epic=#a855f7, legendary=#fbbf24)",
+        "Legendary: screen shake + particelle oro",
+        "Bottone 'Fantastico!' per chiudere",
+        "Rispettare getAnimationsEnabled()",
+        "SafeWrapper, CSS keyframes only, npx next build senza errori"
       ],
       "priority": 10,
       "passes": false,
-      "notes": "Pattern simile a ChestOpeningAnimation.tsx. Pure CSS keyframes. Trigger via window event 'creature_reveal'."
+      "notes": "Pattern simile a ChestOpeningAnimation. Trigger via window event 'creature_reveal'."
+    },
+    {
+      "id": "FU-025",
+      "title": "Asset: generare immagini creature con Nanobana MCP",
+      "description": "Tutte le 80 creature hanno imageUrl null. Generare immagini rappresentative.",
+      "acceptanceCriteria": [
+        "Usare Nanobana MCP (generate_image) per creare almeno 20 immagini creature rappresentative",
+        "Distribuire: 6 comuni, 6 rare, 5 epiche, 3 leggendarie",
+        "Stile: fantasy cartoon coerente, sfondo trasparente o scuro, 512x512",
+        "Prompt in inglese per ogni creatura basato su nome+elemento (es: 'A cute fire chick creature, fantasy cartoon style, golden feathers, glowing embers')",
+        "Salvare in public/assets/creatures/ con naming: creature-{id}.png",
+        "Aggiornare il DB (creatures table) con imageUrl per le creature generate",
+        "Creare script scripts/ralph/update-creature-images.js per l'update batch",
+        "Le creature senza immagine mantengono il placeholder icon elemento"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Nanobana MCP genera immagini AI. Prompt dettagliati per coerenza stile. Focus sulle creature piu visibili (leggendarie + epiche prima)."
+    },
+    {
+      "id": "FU-026",
+      "title": "Asset: generare immagini boss con Nanobana MCP",
+      "description": "I 10 boss avventura hanno imageUrl null. Generare immagini epiche.",
+      "acceptanceCriteria": [
+        "Usare Nanobana MCP per generare immagini per tutti i 10 boss",
+        "Stile: fantasy dark, epico, minaccioso. Ogni boss deve avere il suo elemento visibile",
+        "Boss 1 Lupo Ombra (fuoco), Boss 2 Toro Pietra (terra), Boss 3 Serpente (acqua), Boss 4 Aquila (aria), Boss 5 Drago Rosso (fuoco), Boss 6 Scorpione (terra), Boss 7 Kraken (acqua), Boss 8 Fenice Oscura (ombra), Boss 9 Chimera (luce), Boss 10 Divinita del Fuoco (fuoco)",
+        "Salvare in public/assets/bosses/ con naming: boss-{stageNumber}.png",
+        "Aggiornare DB con imageUrl",
+        "Creare script scripts/ralph/update-boss-images.js"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "Prompt esempio: 'An epic dark fantasy stone bull boss creature, glowing earth element, menacing pose, detailed, 512x512'"
+    },
+    {
+      "id": "FU-027",
+      "title": "UI: Team creature management per Conferme",
+      "description": "Conferme non possono equipaggiare o fondere creature team dalla loro interfaccia.",
+      "acceptanceCriteria": [
+        "Nella pagina /creature-inventario per CONFERME: mostrare creature team (gia funziona)",
+        "Aggiungere bottone Equipaggia su creature team che chiama equipTeamCreature",
+        "Aggiungere bottone Fondi su creature team con 4+ copie che chiama fuseTeamCreatures",
+        "Mostrare chi ha contribuito ogni creatura (contributedByUserId → displayName)",
+        "SafeWrapper, npx next build senza errori"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Le server actions teamAdventureActions gia supportano equip/fuse team. Solo UI."
+    },
+    {
+      "id": "FU-028",
+      "title": "Integration: achievements collegati a Universe",
+      "description": "Collegare il sistema achievement esistente con le meccaniche Universe.",
+      "acceptanceCriteria": [
+        "Aggiungere nuove achievement in DB (via seed o migrate): 'Primo Boss Sconfitto' (1 boss), 'Cacciatore di Boss' (5 boss), 'Sterminatore' (10 boss)",
+        "Aggiungere achievement: 'Collezionista Novizio' (10 creature), 'Collezionista Esperto' (30 creature), 'Collezionista Leggendario' (60 creature)",
+        "Aggiungere achievement: 'Commerciante' (1 scambio completato), 'Mercante' (10 scambi)",
+        "Aggiungere achievement: 'Duellante' (1 duello vinto), 'Campione Arena' (10 duelli vinti)",
+        "In adventureActions (boss defeated): chiamare checkAchievements per boss count",
+        "In creatureActions (drop): chiamare checkAchievements per creature count",
+        "In tradingActions (accept): chiamare checkAchievements per trade count",
+        "In duelActions (complete): chiamare checkAchievements per duel wins",
+        "Seed route per inserire le nuove achievement definitions",
+        "npx next build senza errori"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Achievement system gia esistente (achievementActions.ts). Servono nuove metriche: total_bosses_defeated, total_creatures_owned, total_trades_completed, total_duels_won."
+    },
+    {
+      "id": "FU-029",
+      "title": "Integration: seasonal events × creature drops",
+      "description": "Durante eventi stagionali le creature drop devono essere potenziate.",
+      "acceptanceCriteria": [
+        "In maybeDropCreature: se c'e un evento stagionale attivo, ridurre la soglia drop da 25 a 15",
+        "In dropCreature: se c'e un evento stagionale attivo, aumentare probabilita rarita (epic 12→18%, legendary 3→6%)",
+        "Aggiungere campo opzionale 'creatureDropBoost' nella tabella seasonalEvents (boolean default false)",
+        "Migrate schema + DB",
+        "In seasonalEventUtils: esporre getCreatureDropBoost() che ritorna {thresholdReduction, rarityBoost}",
+        "npx next build senza errori"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Seasonal events gia esistenti. Solo aggiungere la connessione con creature drops."
+    },
+    {
+      "id": "FU-030",
+      "title": "UI: Storico sfide nel profilo",
+      "description": "Sezione nel profilo RPG che mostra cronologia duelli vinti/persi.",
+      "acceptanceCriteria": [
+        "Creare server action getDuelHistory(userId) in duelActions.ts: ritorna ultimi 20 duelli completati dell'utente",
+        "Creare componente DuelHistory.tsx: lista compatta con avversario, metrica, score, risultato (VINTO/PERSO/PARI), data",
+        "Vincita = badge verde, Sconfitta = badge rosso, Pari = badge grigio",
+        "Mostrare statistiche: duelli totali, vittorie, sconfitte, win rate %",
+        "Aggiungere sezione nel ProfileClient.tsx tra Quest Log e Title Selector",
+        "SafeWrapper, tema gaming scuro, npx next build senza errori"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Solo se ci sono duelli completati. Se nessun duello: non mostrare la sezione."
+    },
+    {
+      "id": "FU-031",
+      "title": "Integration: Supabase Realtime per team adventure",
+      "description": "Team Conferme deve vedere danni boss live quando un collega agisce.",
+      "acceptanceCriteria": [
+        "In teamAdventureActions.ts (teamAttackBoss): dopo l'update del boss HP, inviare evento Supabase Realtime",
+        "Pattern: broadcast su channel 'team-adventure' con payload {bossHp, damage, userName, action}",
+        "In MappaAvventuraClient per CONFERME: sottoscrivere al channel 'team-adventure'",
+        "Quando arriva evento: aggiornare HP bar del boss in tempo reale con animazione",
+        "Mostrare mini-toast 'Marco ha inflitto 50 danni con un fissaggio!' sotto la HP bar",
+        "Cleanup subscription on unmount",
+        "SafeWrapper, npx next build senza errori"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Pattern Supabase Realtime gia usato in RealtimeProvider. NON alterare i channel esistenti postgres_changes."
     }
   ]
 }

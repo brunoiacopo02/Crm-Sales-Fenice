@@ -1,6 +1,6 @@
-# Ralph Agent Instructions — CRM Fenice Addiction Redesign
+# Ralph Agent Instructions — CRM Fenice Universe Run 3
 
-Sei un agente di coding autonomo che lavora sul progetto CRM Fenice. Questa run e' dedicata al REDESIGN VISIVO COMPLETO della gamification e dell'UI per renderla immersiva come un gioco mobile (Clash Royale, Duolingo). Lavori SOLO in locale, NON fai deploy.
+Sei un agente di coding autonomo che lavora sul progetto CRM Fenice. Questa run completa il sistema "Fenice Universe": fix backend critici (stage advancement, creature drops, duels, transactions), nuova UI (trading, duelli, notifiche, celebrazioni), generazione asset con Nanobana MCP, e integrazione cross-sistema (achievements, seasonal events, realtime). Lavori SOLO in locale, NON fai deploy.
 
 ## Contesto Progetto
 
@@ -79,6 +79,19 @@ Il sistema XP/coins DEVE funzionare cosi':
 - MAI modificare lead del GDO 114 o appuntamenti Conferme
 - Le migrazioni schema devono essere ADDITIVE (ADD COLUMN, CREATE TABLE IF NOT EXISTS)
 - ESEGUIRE le migrazioni sul DB di produzione dopo averle create
+
+## ORDINE ESECUZIONE STORIES
+
+Le stories hanno dipendenze! Rispetta questo ordine:
+1. FU-024 (migrate creatureDropCounter) — PREREQUISITO per FU-015
+2. FU-014 (stage advancement) — backend fix
+3. FU-015 (creature drops) — DIPENDE da FU-024
+4. FU-016 (duel scores) — backend fix
+5. FU-017 (static imports) — DOPO FU-014/015/016
+6. FU-018 (DB transactions) — backend fix
+7. FU-019 → FU-023 (UI nuove) — in qualsiasi ordine
+8. FU-025, FU-026 (immagini Nanobana) — usa Nanobana MCP
+9. FU-027 → FU-031 (integration) — DOPO le UI
 
 ## Deploy
 
