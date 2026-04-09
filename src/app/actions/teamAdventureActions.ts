@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { teamRpgProfile, teamCreatures, adventureBosses, creatures, users, coinTransactions } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
 
 const TEAM_ID = 'team-conferme';
@@ -145,7 +145,7 @@ export async function teamDropCreature(confermeUserId: string) {
  */
 export async function getTeamCreatures() {
     try {
-        return await db
+        const rows = await db
             .select({
                 teamCreatureId: teamCreatures.id,
                 creatureId: teamCreatures.creatureId,
@@ -161,10 +161,13 @@ export async function getTeamCreatures() {
                 imageUrl: creatures.imageUrl,
                 baseXpBonus: creatures.baseXpBonus,
                 baseCoinBonus: creatures.baseCoinBonus,
+                contributedByName: users.displayName,
             })
             .from(teamCreatures)
             .innerJoin(creatures, eq(teamCreatures.creatureId, creatures.id))
+            .leftJoin(users, eq(teamCreatures.contributedByUserId, users.id))
             .where(eq(teamCreatures.teamId, TEAM_ID));
+        return rows;
     } catch (error) {
         console.error("Errore getTeamCreatures:", error);
         return [];

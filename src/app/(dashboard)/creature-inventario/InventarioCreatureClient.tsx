@@ -38,6 +38,7 @@ type OwnedCreature = {
     baseCoinBonus: number;
     maxLevel?: number;
     contributedByUserId?: string | null;
+    contributedByName?: string | null;
 };
 
 type Props = {
@@ -103,6 +104,7 @@ function CreatureCard({
     onEquip,
     onFuse,
     isPending,
+    isTeam,
 }: {
     creature: OwnedCreature;
     copyCount: number;
@@ -110,6 +112,7 @@ function CreatureCard({
     onEquip: () => void;
     onFuse: () => void;
     isPending: boolean;
+    isTeam?: boolean;
 }) {
     const rarityConf = RARITY_CONFIG[creature.rarity] || RARITY_CONFIG.common;
     const ElIcon = ELEMENT_ICONS[creature.element] || Zap;
@@ -172,6 +175,13 @@ function CreatureCard({
                 <div className="text-[10px] text-white/50">
                     <Layers className="inline h-3 w-3 mr-1" />
                     {copyCount} copie possedute
+                </div>
+            )}
+
+            {/* Contributor (team mode) */}
+            {isTeam && creature.contributedByName && (
+                <div className="text-[10px] text-white/40 truncate">
+                    Contributo di <span className="text-amber-400/70">{creature.contributedByName}</span>
                 </div>
             )}
 
@@ -419,6 +429,7 @@ export default function InventarioCreatureClient({ allCreatures, ownedCreatures,
                                         onEquip={() => handleEquip(creature)}
                                         onFuse={() => handleFuse(creature)}
                                         isPending={isPending}
+                                        isTeam={isTeam}
                                     />
                                 </SafeWrapper>
                             );
