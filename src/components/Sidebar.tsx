@@ -62,6 +62,7 @@ export function Sidebar() {
     if (role === "GDO") {
         navItems = [
             { name: "La mia Pipeline", href: "/", icon: Phone },
+            { name: "Script Chiamata", href: "/script", icon: FileText },
             { name: "I miei Richiami", href: "/richiami", icon: Calendar, badge: expiredCount },
             { name: "I miei Appuntamenti", href: "/appuntamenti", icon: Users },
             { name: "Le mie Performance", href: "/kpi-gdo", icon: LayoutDashboard },
