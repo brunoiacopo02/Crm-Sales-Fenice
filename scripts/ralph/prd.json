@@ -171,7 +171,7 @@
         "SafeWrapper, CSS keyframes only, npx next build senza errori"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Pattern simile a ChestOpeningAnimation. Trigger via window event 'creature_reveal'."
     },
     {

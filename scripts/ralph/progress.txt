@@ -209,6 +209,20 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-023 — UI: Creature reveal celebration overlay
+- Status: DONE
+- Date: 2026-04-09
+- File: src/components/CreatureRevealOverlay.tsx
+- 3 phases: glow expand (0.8s) → creature appear (1s) → info card
+- Rarity glow: common=#94a3b8, rare=#3b82f6, epic=#a855f7, legendary=#fbbf24
+- Legendary: shake + 20 gold particle effects
+- "Fantastico!" button to dismiss
+- Triggered via window event 'creature_reveal'
+- Respects getAnimationsEnabled()
+- SafeWrapper + CSS keyframes only
+- Dashboard layout: dynamic import + SafeWrapper
+- Build: npx next build — zero errors
+
 ## FU-022 — UI: ChestWidget nella dashboard Conferme
 - Status: DONE
 - Date: 2026-04-09
