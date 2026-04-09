@@ -222,6 +222,45 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
                 ));
             return result[0]?.value ?? 0;
         }
+        case 'conferme_presenze': {
+            // Lead confermati da questo operatore dove il lead si è presentato (salespersonOutcome non è 'Sparito')
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato'),
+                    isNotNull(leads.salespersonOutcome),
+                    isNotNull(leads.salespersonOutcomeAt),
+                    gte(leads.salespersonOutcomeAt, start),
+                    lte(leads.salespersonOutcomeAt, end)
+                ));
+            // Filter out 'Sparito' in JS since Drizzle ne() doesn't chain well with the above
+            const presenze = await db.select({ outcome: leads.salespersonOutcome })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato'),
+                    isNotNull(leads.salespersonOutcome),
+                    isNotNull(leads.salespersonOutcomeAt),
+                    gte(leads.salespersonOutcomeAt, start),
+                    lte(leads.salespersonOutcomeAt, end)
+                ));
+            return presenze.filter(l => l.outcome !== 'Sparito').length;
+        }
+        case 'conferme_chiusure': {
+            // Lead confermati da questo operatore e poi chiusi dal venditore
+            const result = await db.select({ value: count() })
+                .from(leads)
+                .where(and(
+                    eq(leads.confirmationsUserId, userId),
+                    eq(leads.confirmationsOutcome, 'confermato'),
+                    eq(leads.salespersonOutcome, 'Chiuso'),
+                    isNotNull(leads.salespersonOutcomeAt),
+                    gte(leads.salespersonOutcomeAt, start),
+                    lte(leads.salespersonOutcomeAt, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
         // --- VENDITORE metrics ---
         case 'deals_chiusi': {
             const result = await db.select({ value: count() })
