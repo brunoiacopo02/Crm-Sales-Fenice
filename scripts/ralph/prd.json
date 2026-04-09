@@ -97,7 +97,7 @@
         "npx next build senza errori"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "Solo le CHIAMATE vanno filtrate per orario. Appuntamenti, conferme, presenze, chiusure non hanno orario fisso."
     },
     {

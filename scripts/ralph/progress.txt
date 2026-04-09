@@ -80,3 +80,14 @@ Started: 2026-04-09
 - console.warn in googleCalendar.ts kept (legitimate operational warning)
 - Total: 700 lines of dead code removed across 25 files
 - Build: OK
+
+## F3-006 — Fix: KPI aggregate filtrate per orario lavorativo 13:30-20:00 (2026-04-09)
+- Added isWithinWorkingHours() helper: checks if timestamp falls in 13:30-20:00 Europe/Rome
+- Aggregate call metrics (totalCalls, totalAnswers, teamAnswerRate, teamCallsPerHour, totalRecalls) now filtered to working hours only
+- totalAppointments NOT filtered (appointments don't have fixed working hours)
+- Per-GDO ranking: calls/answers filtered to working hours, appointments always counted
+- Daily trend chart (settimana/mese) now filters by working hours
+- Hourly trend chart (oggi/ieri) already implicitly filtered via 13:30-20:00 time bucketing
+- FIXED_HOURS_WORKED = 6.5 unchanged (correct)
+- Removed unused imports (sql, desc) from kpiTeamActions.ts
+- Build: OK
