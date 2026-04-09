@@ -7,9 +7,10 @@ const dbUrl = process.env.DATABASE_URL || "postgresql://postgres:Infernape02.88I
 
 const pool = new Pool({
     connectionString: dbUrl,
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
+    max: 15,
+    idleTimeoutMillis: 20000,
+    connectionTimeoutMillis: 15000,
+    allowExitOnIdle: true,
     ssl: {
         rejectUnauthorized: false
     }
