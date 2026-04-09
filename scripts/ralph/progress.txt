@@ -51,3 +51,14 @@ Started: 2026-04-09
 - Bonus: comuni 2%XP/1%coin, rare 5%/3%, epiche 10%/5%, leggendarie 15%/10%
 - Immagini: placeholder (imageUrl=null), da generare con Nano Banana MCP
 - Build: npx next build — zero errors
+
+## FU-004 — Seed 10 boss avventura nel DB
+- Status: DONE
+- Date: 2026-04-09
+- Seed route: /api/seed-bosses/route.ts
+- Seed script: scripts/ralph/seed-bosses-prod.js
+- Executed on prod: 10 boss seedati (stage 10-100, HP 300-5000)
+- Boss rewards: creature epiche/leggendarie + coins + titoli unici
+- Boss 5 (Drago Rosso), 8 (Fenice Oscura), 10 (Divinita del Fuoco) droppano leggendarie
+- Immagini: placeholder (imageUrl=null), da generare con Nano Banana MCP
+- Build: npx next build — zero errors
