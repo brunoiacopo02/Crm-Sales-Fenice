@@ -15,8 +15,8 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Il componente esiste gia ma e stato fatto senza Stitch. Ridisegnare con qualita superiore."
+      "passes": true,
+      "notes": "Redesigned with Stitch MCP (Celestial Archive design system). Glassmorphism, 4px rarity accent bar, shimmer overlay, countdown progress bar, element icons."
     },
     {
       "id": "FU-033",

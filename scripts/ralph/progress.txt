@@ -367,3 +367,27 @@ Started: 2026-04-09
 - Returns creature data for notification display
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
+
+## RUN 3B — Redesign con MCP
+Branch: ralph/fenice-universe-run3
+Started: 2026-04-09
+
+## FU-032 — REDESIGN: Toast notifiche con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3.1 Pro)
+- Design: "Celestial Archive" aesthetic — glassmorphism, tonal layering, rarity accent bars
+- File: src/components/UniverseToast.tsx (full rewrite)
+- Changes:
+  - Glassmorphism: rgba(32,31,31,0.75) + backdrop-blur(20px)
+  - 4px left rarity accent bar (Genshin style): grey/blue/purple/gold
+  - Rarity glow: ambient outer glow with rarity color spread
+  - Shimmer overlay animation for rare+ toasts (3s infinite)
+  - Countdown progress bar (shrink animation, rarity colored)
+  - Element icons in creature drop toasts (fuoco/terra/acqua/aria/luce/ombra)
+  - Boss rewards: coins + XP with icon badges
+  - Legendary shake animation (0.6s)
+  - No solid borders (design system rule)
+  - Colors: on_surface=#e5e2e1, on_surface_variant=#d4c5ab, primary=#ffe2ab
+- SafeWrapper: yes
+- Build: npx next build — zero errors
