@@ -370,9 +370,11 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         if (outcome === "confermato") {
             rewardData = await awardXpAndCoins(session.user.id, "CONFERMATO", leadId).catch(e => { console.error("GameEngine CONFERMATO err:", e); return null; });
 
-            // Fenice Universe: team chest progress for conferme
+            // Fenice Universe: team chest progress for conferme + boss attack
             const { incrementChestProgress } = await import('./chestActions');
             incrementChestProgress('team-conferme', 'conferme', 1).catch(e => console.error("Chest conferme err:", e));
+            const { attackBoss } = await import('./adventureActions');
+            attackBoss(session.user.id, 'conferma').catch(e => console.error("Adventure conferma err:", e));
         }
 
         // Notifiche Live (Pilota E2E)
@@ -432,17 +434,21 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
             if (outcome === 'Chiuso') {
                 rewardData = await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId).catch(e => { console.error("GameEngine CHIUSO err:", e); return null; });
 
-                // Fenice Universe: chest progress for chiusure (GDO + team)
+                // Fenice Universe: chest progress for chiusure (GDO + team) + boss attack
                 const { incrementChestProgress } = await import('./chestActions');
                 incrementChestProgress(oldLead.assignedToId, 'chiusure', 1).catch(e => console.error("Chest chiusure GDO err:", e));
                 incrementChestProgress('team-conferme', 'chiusure', 1).catch(e => console.error("Chest chiusure team err:", e));
+                const { attackBoss: attackBossChiusura } = await import('./adventureActions');
+                attackBossChiusura(oldLead.assignedToId, 'chiusura').catch(e => console.error("Adventure chiusura err:", e));
             } else if (outcome === 'Non chiuso') {
                 rewardData = await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId).catch(e => { console.error("GameEngine PRESENZIATO err:", e); return null; });
 
-                // Fenice Universe: chest progress for presenze (GDO + team)
+                // Fenice Universe: chest progress for presenze (GDO + team) + boss attack
                 const { incrementChestProgress } = await import('./chestActions');
                 incrementChestProgress(oldLead.assignedToId, 'presenze', 1).catch(e => console.error("Chest presenze GDO err:", e));
                 incrementChestProgress('team-conferme', 'presenze', 1).catch(e => console.error("Chest presenze team err:", e));
+                const { attackBoss: attackBossPresenza } = await import('./adventureActions');
+                attackBossPresenza(oldLead.assignedToId, 'presenza').catch(e => console.error("Adventure presenza err:", e));
             }
         }
 

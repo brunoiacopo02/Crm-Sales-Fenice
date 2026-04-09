@@ -88,3 +88,17 @@ Started: 2026-04-09
 - Apertura baule: creature drop + coins random + reset ciclo
 - Pipeline NON modificata (solo hook aggiuntivi in try/catch)
 - Build: npx next build — zero errors
+
+## FU-007 — Server actions: percorso avventura e boss GDO
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/adventureActions.ts
+- Functions: getAdventureProgress, advanceStage, attackBoss
+- 100 stadi con requisiti crescenti (chiamate -> fissaggi -> conferme -> presenze -> chiusure)
+- Boss ogni 10 stadi con HP che decresce tramite azioni
+- Danni: chiamata=5, fissaggio=50, conferma=30, presenza=40, chiusura=100
+- Boss sconfitto: reward creature + coins + titolo + avanzamento
+- Integrazione pipelineActions: chiamata + fissaggio
+- Integrazione confermeActions: conferma + presenze + chiusure
+- Pipeline NON modificata (solo hook aggiuntivi)
+- Build: npx next build — zero errors

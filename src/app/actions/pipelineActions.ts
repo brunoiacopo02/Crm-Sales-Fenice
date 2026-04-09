@@ -230,10 +230,12 @@ export async function updateLeadOutcome(
     // Team Goal trigger evaluation logic
     let rewardData = null;
 
-    // Fenice Universe: chest progress for every call (chiamate)
+    // Fenice Universe: chest progress for every call (chiamate) + boss attack
     if (effectiveUserId) {
         const { incrementChestProgress } = await import('./chestActions');
         incrementChestProgress(effectiveUserId, 'chiamate', 1).catch(e => console.error("Chest chiamate err:", e));
+        const { attackBoss } = await import('./adventureActions');
+        attackBoss(effectiveUserId, 'chiamata').catch(e => console.error("Adventure chiamata err:", e));
     }
 
     if (outcome === 'APPUNTAMENTO') {
@@ -241,9 +243,11 @@ export async function updateLeadOutcome(
         if (effectiveUserId) {
             rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
 
-            // Fenice Universe: chest progress for fissaggi
+            // Fenice Universe: chest progress for fissaggi + boss attack
             const { incrementChestProgress } = await import('./chestActions');
             incrementChestProgress(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Chest fissaggi err:", e));
+            const { attackBoss: attackBossFissaggio } = await import('./adventureActions');
+            attackBossFissaggio(effectiveUserId, 'fissaggio').catch(e => console.error("Adventure fissaggio err:", e));
         }
         await evaluateTeamGoals(leadId).catch((e: any) => {
             console.error("Team goal evaluation failed:", e)
