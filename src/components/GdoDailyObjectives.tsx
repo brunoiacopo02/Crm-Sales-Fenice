@@ -10,6 +10,7 @@ interface GdoDailyObjectivesProps {
 
 interface Objectives {
     callsDone: number;
+    callsTarget: number;
     pipelineSize: number;
     appointmentsDone: number;
     appointmentsTarget: number;
@@ -74,9 +75,9 @@ export function GdoDailyObjectives({ gdoUserId }: GdoDailyObjectivesProps) {
                     </div>
                     <div className="flex items-baseline gap-1">
                         <div className="text-2xl font-bold text-white">{data.callsDone}</div>
-                        <div className="text-sm text-gray-400">/ {data.pipelineSize}</div>
+                        <div className="text-sm text-gray-400">/ {data.callsTarget}</div>
                     </div>
-                    <ProgressBar current={data.callsDone} target={data.pipelineSize} />
+                    <ProgressBar current={data.callsDone} target={data.callsTarget} />
                 </div>
 
                 {/* Fissaggi oggi */}

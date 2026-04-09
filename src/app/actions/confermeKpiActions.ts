@@ -237,13 +237,8 @@ export async function getConfermeDailyObjectives(confermeUserId: string) {
     const todayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
     const todayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
 
-    // Get user's weekly conferme target (Tier 1 = base target)
-    const userRow = await db.select({
-        confermeTargetTier1: users.confermeTargetTier1
-    }).from(users).where(eq(users.id, confermeUserId)).limit(1)
-    const weeklyTarget = userRow[0]?.confermeTargetTier1 || 19
-    // Mon-Fri = 5 working days per week
-    const dailyTarget = Math.ceil(weeklyTarget / 5)
+    // Daily conferme target: 8 conferme al giorno (fisso, non derivato dal tier chiusure)
+    const dailyTarget = 8
 
     // Count today's confirmations by this operator
     const confResult = await db.select({ count: sql<number>`count(*)::integer` })

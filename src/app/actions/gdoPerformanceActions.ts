@@ -435,6 +435,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
 
     return {
         callsDone,
+        callsTarget: 90,
         pipelineSize,
         appointmentsDone,
         appointmentsTarget: dailyApptTarget,
