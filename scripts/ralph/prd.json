@@ -93,7 +93,7 @@
         "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Drizzle: db.transaction(async (tx) => {...})."
     },
     {

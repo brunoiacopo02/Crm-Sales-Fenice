@@ -209,6 +209,15 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-018 — Fix: DB transactions per operazioni critiche
+- Status: DONE
+- Date: 2026-04-09
+- fuseCreatures (creatureActions.ts): wrapped in db.transaction with tx.*
+- openChest (chestActions.ts): wrapped in db.transaction with tx.* (dropCreature called inside for creature ID, but uses own db)
+- acceptTradeOffer (tradingActions.ts): wrapped in db.transaction with tx.*
+- completeDuel (duelActions.ts): wrapped in db.transaction with tx.*
+- Build: npx next build — zero errors
+
 ## FU-017 — Fix: convert dynamic imports to static
 - Status: DONE
 - Date: 2026-04-09
