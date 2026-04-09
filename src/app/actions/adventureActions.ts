@@ -206,3 +206,15 @@ export async function attackBoss(userId: string, actionType: string) {
         return null;
     }
 }
+
+/**
+ * Get all adventure bosses (for map display).
+ */
+export async function getAllBosses() {
+    try {
+        return await db.select().from(adventureBosses).orderBy(adventureBosses.stageNumber);
+    } catch (error) {
+        console.error("Errore getAllBosses:", error);
+        return [];
+    }
+}

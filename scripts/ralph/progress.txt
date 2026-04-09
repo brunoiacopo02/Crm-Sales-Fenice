@@ -127,6 +127,25 @@ Started: 2026-04-09
 - Auto-complete quando il tempo scade
 - Build: npx next build — zero errors
 
+## FU-010 — UI: Inventario Creature con card e filtri
+- Status: DONE (previous run)
+
+## FU-011 — UI: Mappa Avventura con stadi e boss
+- Status: DONE
+- Date: 2026-04-09
+- Files: src/app/(dashboard)/mappa-avventura/page.tsx, MappaAvventuraClient.tsx
+- Server action added: getAllBosses() in adventureActions.ts
+- Page /mappa-avventura: 100 stadi in 10 zone, boss card ogni 10
+- Stadi: completati=verde, corrente=arancio pulsante, futuri=grigio locked
+- Boss card: nome, HP bar (con danni di riferimento), elemento, rewards preview
+- Boss attivo: banner prominente con HP bar grande e danni recenti
+- Conferme: mostra avventura TEAM (teamRpgProfile), non individuale
+- Team stats: livello team + XP visibili nella progress bar
+- SafeWrapper su tutto (pagina + ogni sezione + boss banner)
+- Sidebar: "Mappa Avventura" per GDO, "Avventura Team" per CONFERME (icon Compass)
+- Venditori/TL: NON hanno questa voce
+- Build: npx next build — zero errors
+
 ---
 ## RUN 1 COMPLETATA
 Tutte le 9 stories (FU-001 — FU-009) passano.

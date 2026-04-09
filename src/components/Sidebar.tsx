@@ -69,6 +69,7 @@ export function Sidebar() {
             { name: "Storico Pause", href: "/storico-pause", icon: Clock },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Inventario Creature", href: "/creature-inventario", icon: Sparkles, gamification: true },
+            { name: "Mappa Avventura", href: "/mappa-avventura", icon: Compass, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
             { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
         ]
@@ -78,6 +79,7 @@ export function Sidebar() {
             { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Inventario Team", href: "/creature-inventario", icon: Sparkles, gamification: true },
+            { name: "Avventura Team", href: "/mappa-avventura", icon: Compass, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
             { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
         ]
