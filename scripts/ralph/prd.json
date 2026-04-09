@@ -48,7 +48,7 @@
         "npx next build senza errori"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "React.memo previene re-render quando le props non cambiano. Utile per liste lunghe (pipeline 50+ lead, inventario 80 creature)."
     },
     {

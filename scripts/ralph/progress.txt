@@ -45,3 +45,13 @@ Started: 2026-04-09
 - Created migration route /api/migrate-indexes/route.ts
 - Executed migration on production DB: all 11 indexes created successfully
 - Build: OK
+
+## F3-003 — Performance: React.memo su componenti lista (2026-04-09)
+- Wrapped LeadCard with React.memo (rendered 50+ times in PipelineBoard and RecallBoard)
+- Wrapped CreatureCard with React.memo in InventarioCreatureClient (rendered in grid of 80+ creatures)
+- Wrapped BossCard with React.memo in MappaAvventuraClient (rendered per adventure section)
+- Added useCallback to handleEquip and handleFuse in InventarioCreatureClient to stabilize references
+- Changed CreatureCard onEquip/onFuse to accept creature parameter, parent passes stable callbacks directly
+- PipelineBoard/RecallBoard: setSelectedLeadId from useState is already a stable reference, no useCallback needed
+- BossCard: no callback props, only primitive/object props — memo prevents re-renders when parent state changes
+- Build: OK
