@@ -8,6 +8,7 @@ import { SafeWrapper } from "@/components/SafeWrapper"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
+const ChestWidget = dynamic(() => import("@/components/ChestWidget").then(m => ({ default: m.ChestWidget })))
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
 const TimedChest = dynamic(() => import("@/components/TimedChest").then(m => ({ default: m.TimedChest })))
@@ -85,6 +86,8 @@ export default async function DashboardPage() {
             <GdoDailyObjectives gdoUserId={session!.user.id} />
 
             <StreakCounter userId={session!.user.id} />
+
+            <SafeWrapper><ChestWidget userId={session!.user.id} /></SafeWrapper>
 
             <SafeWrapper><LevelNudge userId={session!.user.id} /></SafeWrapper>
             <SafeWrapper><StreakAnxietyBanner userId={session!.user.id} /></SafeWrapper>
