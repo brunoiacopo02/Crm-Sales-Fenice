@@ -7,6 +7,7 @@ import { redirect } from "next/navigation"
 const SprintBanner = dynamic(() => import("@/components/SprintBanner").then(mod => mod.SprintBanner))
 const FomoToast = dynamic(() => import("@/components/FomoToast").then(mod => ({ default: mod.FomoToast })))
 const UniverseToast = dynamic(() => import("@/components/UniverseToast").then(mod => ({ default: mod.UniverseToast })))
+const CreatureRevealOverlay = dynamic(() => import("@/components/CreatureRevealOverlay").then(mod => ({ default: mod.CreatureRevealOverlay })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
@@ -51,6 +52,7 @@ export default async function DashboardLayout({
                 </div>
                 <SafeWrapper><FomoToast /></SafeWrapper>
                 <SafeWrapper><UniverseToast /></SafeWrapper>
+                <SafeWrapper><CreatureRevealOverlay /></SafeWrapper>
             </SidebarProvider>
         </RealtimeProvider>
     )
