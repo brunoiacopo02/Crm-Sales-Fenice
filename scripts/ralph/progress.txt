@@ -209,6 +209,18 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-019 — UI: Toast notifiche creature drop e boss defeat
+- Status: DONE
+- Date: 2026-04-09
+- File: src/components/UniverseToast.tsx
+- Types: creature_drop, boss_defeated, chest_ready
+- Position: fixed bottom-right (z-9997), max 2 concurrent, auto-dismiss 4s
+- Rarity styling: common=slate, rare=blue+glow, epic=purple+glow, legendary=gold+shake
+- Event: window.dispatchEvent('universe_toast', { detail: {...} })
+- Dashboard layout: dynamic import + SafeWrapper
+- Respects getAnimationsEnabled()
+- Build: npx next build — zero errors
+
 ## FU-018 — Fix: DB transactions per operazioni critiche
 - Status: DONE
 - Date: 2026-04-09

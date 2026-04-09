@@ -109,7 +109,7 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "Pattern simile a FomoToast. Dispatch custom event con detail."
     },
     {
