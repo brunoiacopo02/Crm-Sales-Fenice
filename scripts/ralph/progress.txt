@@ -188,3 +188,11 @@ Started: 2026-04-09
 - LeadCard.tsx: supporta lastCallNote + callCount badge + ScriptWidget drawer
 - 13 route /api/migrate-* bloccate in produzione (NODE_ENV check)
 - Pagine /script, /test-drawer, /test-wsod rimosse
+
+## FU-024 — Migrate: campo creatureDropCounter nella tabella users
+- Status: DONE
+- Date: 2026-04-09
+- Schema: aggiunto creatureDropCounter: integer('creatureDropCounter').default(0).notNull() in users table
+- Migration route: /api/migrate-universe/route.ts — aggiunto ALTER TABLE users ADD COLUMN IF NOT EXISTS "creatureDropCounter"
+- Script: scripts/ralph/migrate-drop-counter.js (chiama la migration route via fetch)
+- Build: npx next build — zero errors

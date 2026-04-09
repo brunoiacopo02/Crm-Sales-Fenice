@@ -14,7 +14,7 @@
         "npx next build senza errori"
       ],
       "priority": 0,
-      "passes": false,
+      "passes": true,
       "notes": "Pre-requisito per FU-015. La route /api/migrate-universe NON e bloccata in dev (solo in prod)."
     },
     {
