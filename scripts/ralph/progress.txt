@@ -154,3 +154,37 @@ Tutte le 9 stories (FU-001 — FU-009) passano.
 - Server actions: creatureActions, chestActions, adventureActions, teamAdventureActions, tradingActions, duelActions
 - Integrazione: gamificationEngine.ts (creature bonus), pipelineActions, confermeActions
 - Pipeline: logica sacra NON modificata, solo hook gamification aggiuntivi
+
+## RUN 2 COMPLETATA
+Tutte le 4 stories (FU-010 — FU-013) passano.
+- UI Inventario Creature: /creature-inventario con filtri, equip, fusione
+- UI Mappa Avventura: /mappa-avventura con 100 stadi, boss, team variant
+- UI ChestWidget: nella dashboard GDO con apertura animata
+- Sidebar: aggiornata per GDO e CONFERME con voci Universe
+
+---
+## RUN 3 — Backend Fixes + New UI
+Branch: ralph/fenice-universe-run3
+Rebased su main (include tutti i bugfix del 2026-04-09: sicurezza, race conditions, profilo, richiami)
+Started: 2026-04-09
+
+### BUG NOTI DA FIXARE (da revisione Claude):
+1. advanceStage() MAI chiamata — stadi non-boss non avanzano (FU-014)
+2. dropCreature() MAI triggerato dal gameplay — creature solo da bauli (FU-015)
+3. incrementDuelScore() MAI integrato in pipeline (FU-016)
+4. Dynamic imports ripetuti in pipeline/conferme actions (FU-017)
+5. Nessuna transaction DB su fusione/chest/trading/duel (FU-018)
+6. Nessuna UI per trading creature (FU-020)
+7. Nessuna UI per duelli 1v1 (FU-021)
+8. ChestWidget mancante in dashboard Conferme (FU-022)
+9. Nessuna notifica toast per creature/boss (FU-019)
+10. Nessuna animazione reveal creature (FU-023)
+
+### CODEBASE AGGIORNAMENTI IMPORTANTI (da main):
+- shopActions.ts: walletCoins usa SQL increment (sql`${users.walletCoins} - ${item.cost}`)
+- managerRpgActions.ts: fetchAllGdoRpgProfiles ora e batch (batchComputeRpgProfiles)
+- teamGoalActions.ts: idempotency guard con atomic status check
+- dailyLoginActions.ts: transaction wrapping per prevenire double-claim
+- LeadCard.tsx: supporta lastCallNote + callCount badge + ScriptWidget drawer
+- 13 route /api/migrate-* bloccate in produzione (NODE_ENV check)
+- Pagine /script, /test-drawer, /test-wsod rimosse
