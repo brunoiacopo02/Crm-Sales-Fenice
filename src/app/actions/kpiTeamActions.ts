@@ -3,9 +3,21 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
-import { sql, gte, lte, eq, and, desc } from "drizzle-orm"
+import { gte, lte, eq, and } from "drizzle-orm"
 import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from "date-fns"
 export type KpiPeriod = 'oggi' | 'ieri' | 'settimana' | 'mese'
+
+/** Verifica se un timestamp cade nell'orario lavorativo GDO 13:30-20:00 Europe/Rome */
+function isWithinWorkingHours(date: Date): boolean {
+    const romeTime = date.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
+    const [hStr, mStr] = romeTime.split(':')
+    const h = parseInt(hStr)
+    const m = parseInt(mStr)
+    if (h === 13 && m >= 30) return true
+    if (h >= 14 && h <= 19) return true
+    if (h === 20 && m === 0) return true
+    return false
+}
 
 export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: string) {
     const supabase = await createClient();
@@ -61,11 +73,14 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     const userMap = new Map(allUsers.map(u => [u.id, u]))
 
     // 1. CALCOLO AGGREGATI TOTALI TEAM
-    const totalCalls = logs.length
-    const answeredLogs = logs.filter(l => l.outcome !== 'NON_RISPOSTO')
+    // Filtro orario lavorativo 13:30-20:00 Europe/Rome per conteggi chiamate
+    const workingHoursLogs = logs.filter(l => isWithinWorkingHours(l.createdAt))
+    const totalCalls = workingHoursLogs.length
+    const answeredLogs = workingHoursLogs.filter(l => l.outcome !== 'NON_RISPOSTO')
     const totalAnswers = answeredLogs.length
+    // Appuntamenti NON filtrati per orario (non hanno orario fisso)
     const totalAppointments = logs.filter(l => l.outcome === 'APPUNTAMENTO').length
-    const totalRecalls = logs.filter(l => l.outcome === 'RICHIAMO').length // Solo a fini statistici se serve
+    const totalRecalls = workingHoursLogs.filter(l => l.outcome === 'RICHIAMO').length
 
     // Chiamate / Ora: range fisso 13:30-20:00 = 6.5 ore lavorative
     const FIXED_HOURS_WORKED = 6.5
@@ -95,13 +110,18 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
         const rank = rankingMap.get(log.userId)
         if (!rank) continue
 
-        rank.calls += 1
-        if (log.outcome !== 'NON_RISPOSTO') rank.answers += 1
+        // Appuntamenti sempre conteggiati (non hanno orario fisso)
         if (log.outcome === 'APPUNTAMENTO') rank.appointments += 1
 
-        const logTime = log.createdAt.getTime()
-        if (logTime < rank.firstCallTime) rank.firstCallTime = logTime
-        if (logTime > rank.lastCallTime) rank.lastCallTime = logTime
+        // Chiamate/risposte solo in orario lavorativo 13:30-20:00
+        if (isWithinWorkingHours(log.createdAt)) {
+            rank.calls += 1
+            if (log.outcome !== 'NON_RISPOSTO') rank.answers += 1
+
+            const logTime = log.createdAt.getTime()
+            if (logTime < rank.firstCallTime) rank.firstCallTime = logTime
+            if (logTime > rank.lastCallTime) rank.lastCallTime = logTime
+        }
     }
 
     // Trasformazione e calcoli percentuali per Ranking
@@ -159,6 +179,8 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
             cursor.setDate(cursor.getDate() + 1)
         }
         for (const log of logs) {
+            // Filtro orario lavorativo anche nel trend giornaliero
+            if (!isWithinWorkingHours(log.createdAt)) continue
             const label = format(log.createdAt, 'EEE dd/MM')
             if (trendMap.has(label)) {
                 const entry = trendMap.get(label)!
