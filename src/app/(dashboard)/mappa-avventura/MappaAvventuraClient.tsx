@@ -1,13 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { SafeWrapper } from '@/components/SafeWrapper';
 import {
     Compass, Lock, CheckCircle2, Swords, Shield, Sparkles, Crown,
     Flame, Droplets, Wind, Sun, Moon, Mountain, Zap, Heart,
     ChevronDown, ChevronUp, Trophy,
 } from 'lucide-react';
-import { useState } from 'react';
 
 // Types
 type BossDef = {
@@ -241,7 +240,33 @@ function StageNode({
 
 export default function MappaAvventuraClient({ progress, bosses, isTeam, userId }: Props) {
     const currentStage = progress?.currentStage ?? 1;
-    const activeBoss = progress?.activeBoss ?? null;
+    const initialBoss = progress?.activeBoss ?? null;
+
+    // Realtime boss HP for team mode
+    const [liveBossHp, setLiveBossHp] = useState<number | null>(null);
+    const [lastDamageEvent, setLastDamageEvent] = useState<{ userName: string; damage: number; action: string } | null>(null);
+
+    useEffect(() => {
+        if (!isTeam) return;
+
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (!detail) return;
+            setLiveBossHp(detail.bossHp);
+            setLastDamageEvent({ userName: detail.userName, damage: detail.damage, action: detail.action });
+            // Auto-clear damage toast after 4s
+            setTimeout(() => setLastDamageEvent(null), 4000);
+        };
+
+        window.addEventListener('team_boss_damage_event', handler);
+        return () => window.removeEventListener('team_boss_damage_event', handler);
+    }, [isTeam]);
+
+    // Use live HP if available, otherwise initial
+    const activeBoss = initialBoss ? {
+        ...initialBoss,
+        currentHp: liveBossHp !== null ? liveBossHp : initialBoss.currentHp,
+    } : null;
 
     // Build boss lookup map
     const bossMap = useMemo(() => {
@@ -342,6 +367,12 @@ export default function MappaAvventuraClient({ progress, bosses, isTeam, userId 
                                     <span className="text-white font-mono font-bold text-lg">{activeBoss.currentHp} / {activeBoss.totalHp}</span>
                                 </div>
                                 <HpBar current={activeBoss.currentHp} total={activeBoss.totalHp} size="large" />
+                                {/* Live damage toast for team mode */}
+                                {isTeam && lastDamageEvent && (
+                                    <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-xs text-amber-300 animate-pulse">
+                                        ⚔️ {lastDamageEvent.userName} ha inflitto {lastDamageEvent.damage} danni con un {lastDamageEvent.action}!
+                                    </div>
+                                )}
                                 <div className="text-xs text-white/40 mt-2">
                                     Ogni azione lavorativa infligge danni al boss. Sconfiggilo per ottenere ricompense!
                                 </div>

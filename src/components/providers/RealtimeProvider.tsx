@@ -72,8 +72,22 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
         channelRef.current = channel
 
+        // Team adventure channel for boss damage broadcasts
+        const teamChannel = supabase.channel('team-adventure')
+            .on(
+                'broadcast',
+                { event: 'team_boss_damage' },
+                (payload) => {
+                    try {
+                        window.dispatchEvent(new CustomEvent('team_boss_damage_event', { detail: payload.payload }));
+                    } catch { /* silent fail */ }
+                }
+            )
+            .subscribe()
+
         return () => {
             supabase.removeChannel(channel)
+            supabase.removeChannel(teamChannel)
             channelRef.current = null
         }
     }, [router, supabase])

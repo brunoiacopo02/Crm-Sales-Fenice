@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { teamRpgProfile, teamCreatures, adventureBosses, creatures, users, coinTransactions } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
+import { createClient } from "@/utils/supabase/server";
 
 const TEAM_ID = 'team-conferme';
 
@@ -293,6 +294,21 @@ export async function teamAttackBoss(actionType: string, confermeUserId: string)
             await db.update(teamRpgProfile)
                 .set({ currentBossHp: newHp })
                 .where(eq(teamRpgProfile.id, TEAM_ID));
+
+            // Broadcast damage event for live updates
+            try {
+                const [confermeUser] = await db.select({ displayName: users.displayName, name: users.name })
+                    .from(users).where(eq(users.id, confermeUserId));
+                const userName = confermeUser?.displayName || confermeUser?.name || 'Operatore';
+                const supabase = await createClient();
+                const channel = supabase.channel('team-adventure');
+                await channel.send({
+                    type: 'broadcast',
+                    event: 'team_boss_damage',
+                    payload: { bossHp: newHp, totalHp: boss.totalHp, damage, userName, action: actionType },
+                });
+                supabase.removeChannel(channel);
+            } catch { /* broadcast errors are non-critical */ }
 
             return {
                 bossDefeated: false,
