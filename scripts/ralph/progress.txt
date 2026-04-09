@@ -62,3 +62,15 @@ Started: 2026-04-09
 - Boss 5 (Drago Rosso), 8 (Fenice Oscura), 10 (Divinita del Fuoco) droppano leggendarie
 - Immagini: placeholder (imageUrl=null), da generare con Nano Banana MCP
 - Build: npx next build — zero errors
+
+## FU-005 — Server actions: creature drop, inventario, equip, fusione
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/creatureActions.ts
+- Functions: dropCreature, getUserCreatures, equipCreature, fuseCreatures, getEquippedCreatureBonus
+- Drop: random pesato (60% common, 25% rare, 12% epic, 3% legendary)
+- Fusione: 3 copie = +1 livello (max 10), keeper = highest level or equipped
+- Bonus: scala linearmente da 1x (livello 1) a 3x (livello 10) del bonus base
+- Integrazione: getEquippedCreatureBonus chiamata in awardXpAndCoins (gamificationEngine.ts)
+- Multiplier chain: reward * streak * event * (1 + creatureBonus)
+- Build: npx next build — zero errors

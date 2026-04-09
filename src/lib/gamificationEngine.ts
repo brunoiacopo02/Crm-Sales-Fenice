@@ -156,9 +156,13 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
         const { getActiveEventMultipliers } = await import('@/lib/seasonalEventUtils');
         const eventMult = await getActiveEventMultipliers();
 
-        // Combined multipliers: streak × event
-        const effectiveXp = Math.floor(reward.xp * streakMult * eventMult.xp);
-        const effectiveCoins = Math.floor(reward.coins * streakMult * eventMult.coins);
+        // Apply equipped creature bonus
+        const { getEquippedCreatureBonus } = await import('@/app/actions/creatureActions');
+        const creatureBonus = await getEquippedCreatureBonus(userId);
+
+        // Combined multipliers: streak × event × (1 + creature bonus)
+        const effectiveXp = Math.floor(reward.xp * streakMult * eventMult.xp * (1 + creatureBonus.xpBonus));
+        const effectiveCoins = Math.floor(reward.coins * streakMult * eventMult.coins * (1 + creatureBonus.coinBonus));
 
         let newXp = user.experience + effectiveXp;
         let newWalletCoins = user.walletCoins + effectiveCoins;
@@ -205,7 +209,7 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
                 leadId: leadIdContext,
                 eventType: `RPG_AWARD_${actionType}`,
                 userId: userId,
-                metadata: { xpGained: effectiveXp, coinsGained: effectiveCoins, levelUp: didLevelUp, streakMult, eventMultiplier: eventMult.xp > 1 || eventMult.coins > 1 ? eventMult : undefined }
+                metadata: { xpGained: effectiveXp, coinsGained: effectiveCoins, levelUp: didLevelUp, streakMult, eventMultiplier: eventMult.xp > 1 || eventMult.coins > 1 ? eventMult : undefined, creatureBonus: creatureBonus.xpBonus > 0 ? creatureBonus : undefined }
             });
         }
 
