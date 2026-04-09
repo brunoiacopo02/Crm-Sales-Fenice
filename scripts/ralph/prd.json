@@ -43,8 +43,8 @@
         "SafeWrapper, npx next build senza errori"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "I componenti esistono ma vanno ridisegnati con Stitch."
+      "passes": true,
+      "notes": "Redesigned with Stitch MCP. Competitive red/blue split, progress bar, glassmorphism modal, gradient CTAs."
     },
     {
       "id": "FU-035",

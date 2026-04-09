@@ -409,3 +409,24 @@ Started: 2026-04-09
   - Colors: on_surface=#e5e2e1, on_surface_variant=#d4c5ab, outline=#9c8f78
 - SafeWrapper: yes
 - Build: npx next build — zero errors
+
+## FU-034 — REDESIGN: Duelli widget e modal con Stitch MCP
+- Status: DONE
+- Date: 2026-04-09
+- MCP Used: mcp__stitch__generate_screen_from_text (project 3926801154501826843, Gemini 3 Flash)
+- Design: Competitive red/blue split, progress bar, glassmorphism modal
+- Files: src/components/DuelWidget.tsx, src/components/DuelCreateModal.tsx
+- DuelWidget changes:
+  - Competitive blue(winning) vs red(losing) score backgrounds
+  - Progress bar shifts toward leader (animated 500ms)
+  - Countdown badge with gold accent
+  - Tonal surface #201f1f, no solid borders
+  - Metric and reward footer with gold accents
+- DuelCreateModal changes:
+  - Glassmorphism modal: blur(20px) + ambient gold glow
+  - Labels: uppercase tracking-wider above inputs (design system rule)
+  - Inputs: surface_container_low background, ghost borders
+  - Metric/Duration: toggle buttons with gold active state
+  - Gradient CTA button
+- SafeWrapper: yes
+- Build: npx next build — zero errors
