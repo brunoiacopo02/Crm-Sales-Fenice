@@ -65,7 +65,7 @@
         "npx next build senza errori"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Il test e statico (build + code review). Non serve browser. Cerca: import mancanti, tipi sbagliati, componenti non esistenti, SafeWrapper mancanti."
     },
     {

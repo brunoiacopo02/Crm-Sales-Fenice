@@ -55,3 +55,14 @@ Started: 2026-04-09
 - PipelineBoard/RecallBoard: setSelectedLeadId from useState is already a stable reference, no useCallback needed
 - BossCard: no callback props, only primitive/object props — memo prevents re-renders when parent state changes
 - Build: OK
+
+## F3-004 — Debug: verificare ogni pagina per ogni ruolo (2026-04-09)
+- Verified all 30 page.tsx files across 4 roles: GDO (11 pages), CONFERME (7 pages), VENDITORE (4 pages), MANAGER (16 pages)
+- Build passes cleanly with 56 static pages generated
+- All dynamic imports verified: 27 component files + 4 relative imports all resolve correctly
+- All gamification components verified for SafeWrapper coverage
+- Fixed: StreakCounter missing SafeWrapper in dashboard page.tsx, venditore/page.tsx, conferme/page.tsx
+- Fixed: DuelHistory missing SafeWrapper in profilo/ProfileClient.tsx
+- No missing imports, wrong types, or non-existent component references found
+- HotStreak was already wrapped in SafeWrapper in both dashboard and conferme pages
+- Build: OK
