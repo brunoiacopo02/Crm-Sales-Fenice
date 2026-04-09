@@ -8,6 +8,10 @@ import crypto from "crypto"
 import { createGoogleCalendarEvent, checkFreeBusy } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
+import { incrementChestProgress } from "@/app/actions/chestActions"
+import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
+import { maybeDropCreature } from "@/app/actions/creatureActions"
+import { contributeToTeam, teamAttackBoss } from "@/app/actions/teamAdventureActions"
 
 export async function getConfermeAppointments(filters: {
     startDate?: Date;
@@ -371,16 +375,12 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             rewardData = await awardXpAndCoins(session.user.id, "CONFERMATO", leadId).catch(e => { console.error("GameEngine CONFERMATO err:", e); return null; });
 
             // Fenice Universe: team chest progress for conferme + boss attacks + team XP
-            const { incrementChestProgress } = await import('./chestActions');
             incrementChestProgress('team-conferme', 'conferme', 1).catch(e => console.error("Chest conferme err:", e));
-            const { attackBoss, checkAndAdvanceStage } = await import('./adventureActions');
             attackBoss(session.user.id, 'conferma').catch(e => console.error("Adventure conferma err:", e));
             checkAndAdvanceStage(session.user.id).catch(e => console.error("Adventure stage check conferma err:", e));
             if (oldLead.assignedToId) {
-                const { maybeDropCreature } = await import('./creatureActions');
                 maybeDropCreature(oldLead.assignedToId).catch(e => console.error("Creature drop conferma err:", e));
             }
-            const { contributeToTeam, teamAttackBoss } = await import('./teamAdventureActions');
             contributeToTeam(session.user.id, 20).catch(e => console.error("Team XP conferma err:", e));
             teamAttackBoss('conferma', session.user.id).catch(e => console.error("Team boss conferma err:", e));
         }
@@ -443,32 +443,24 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
                 rewardData = await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId).catch(e => { console.error("GameEngine CHIUSO err:", e); return null; });
 
                 // Fenice Universe: chest progress for chiusure (GDO + team) + boss attacks + team XP
-                const { incrementChestProgress } = await import('./chestActions');
                 incrementChestProgress(oldLead.assignedToId, 'chiusure', 1).catch(e => console.error("Chest chiusure GDO err:", e));
                 incrementChestProgress('team-conferme', 'chiusure', 1).catch(e => console.error("Chest chiusure team err:", e));
-                const { attackBoss: attackBossChiusura, checkAndAdvanceStage: checkStageChiusura } = await import('./adventureActions');
-                attackBossChiusura(oldLead.assignedToId, 'chiusura').catch(e => console.error("Adventure chiusura err:", e));
-                checkStageChiusura(oldLead.assignedToId).catch(e => console.error("Adventure stage check chiusura err:", e));
-                const { maybeDropCreature: maybeDropChiusura } = await import('./creatureActions');
-                maybeDropChiusura(oldLead.assignedToId).catch(e => console.error("Creature drop chiusura err:", e));
-                const { contributeToTeam: contributeChiusura, teamAttackBoss: teamAttackChiusura } = await import('./teamAdventureActions');
-                contributeChiusura(session.user.id, 50).catch(e => console.error("Team XP chiusura err:", e));
-                teamAttackChiusura('chiusura', session.user.id).catch(e => console.error("Team boss chiusura err:", e));
+                attackBoss(oldLead.assignedToId, 'chiusura').catch(e => console.error("Adventure chiusura err:", e));
+                checkAndAdvanceStage(oldLead.assignedToId).catch(e => console.error("Adventure stage check chiusura err:", e));
+                maybeDropCreature(oldLead.assignedToId).catch(e => console.error("Creature drop chiusura err:", e));
+                contributeToTeam(session.user.id, 50).catch(e => console.error("Team XP chiusura err:", e));
+                teamAttackBoss('chiusura', session.user.id).catch(e => console.error("Team boss chiusura err:", e));
             } else if (outcome === 'Non chiuso') {
                 rewardData = await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId).catch(e => { console.error("GameEngine PRESENZIATO err:", e); return null; });
 
                 // Fenice Universe: chest progress for presenze (GDO + team) + boss attacks + team XP
-                const { incrementChestProgress } = await import('./chestActions');
                 incrementChestProgress(oldLead.assignedToId, 'presenze', 1).catch(e => console.error("Chest presenze GDO err:", e));
                 incrementChestProgress('team-conferme', 'presenze', 1).catch(e => console.error("Chest presenze team err:", e));
-                const { attackBoss: attackBossPresenza, checkAndAdvanceStage: checkStagePresenza } = await import('./adventureActions');
-                attackBossPresenza(oldLead.assignedToId, 'presenza').catch(e => console.error("Adventure presenza err:", e));
-                checkStagePresenza(oldLead.assignedToId).catch(e => console.error("Adventure stage check presenza err:", e));
-                const { maybeDropCreature: maybeDropPresenza } = await import('./creatureActions');
-                maybeDropPresenza(oldLead.assignedToId).catch(e => console.error("Creature drop presenza err:", e));
-                const { contributeToTeam: contributePresenza, teamAttackBoss: teamAttackPresenza } = await import('./teamAdventureActions');
-                contributePresenza(session.user.id, 30).catch(e => console.error("Team XP presenza err:", e));
-                teamAttackPresenza('presenza', session.user.id).catch(e => console.error("Team boss presenza err:", e));
+                attackBoss(oldLead.assignedToId, 'presenza').catch(e => console.error("Adventure presenza err:", e));
+                checkAndAdvanceStage(oldLead.assignedToId).catch(e => console.error("Adventure stage check presenza err:", e));
+                maybeDropCreature(oldLead.assignedToId).catch(e => console.error("Creature drop presenza err:", e));
+                contributeToTeam(session.user.id, 30).catch(e => console.error("Team XP presenza err:", e));
+                teamAttackBoss('presenza', session.user.id).catch(e => console.error("Team boss presenza err:", e));
             }
         }
 
