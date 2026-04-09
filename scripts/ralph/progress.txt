@@ -209,6 +209,15 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-016 — Fix: duel score integration
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/pipelineActions.ts
+- incrementDuelScore called after every chiamata (metric 'chiamate', amount 1)
+- incrementDuelScore called after every fissaggio (metric 'fissaggi', amount 1)
+- Fire-and-forget with .catch() — pipeline logica NON modificata
+- Build: npx next build — zero errors
+
 ## FU-015 — Fix: creature drop triggers in pipeline
 - Status: DONE
 - Date: 2026-04-09
