@@ -229,10 +229,21 @@ export async function updateLeadOutcome(
 
     // Team Goal trigger evaluation logic
     let rewardData = null;
+
+    // Fenice Universe: chest progress for every call (chiamate)
+    if (effectiveUserId) {
+        const { incrementChestProgress } = await import('./chestActions');
+        incrementChestProgress(effectiveUserId, 'chiamate', 1).catch(e => console.error("Chest chiamate err:", e));
+    }
+
     if (outcome === 'APPUNTAMENTO') {
         // Gamification: award XP for appointment set
         if (effectiveUserId) {
             rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
+
+            // Fenice Universe: chest progress for fissaggi
+            const { incrementChestProgress } = await import('./chestActions');
+            incrementChestProgress(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Chest fissaggi err:", e));
         }
         await evaluateTeamGoals(leadId).catch((e: any) => {
             console.error("Team goal evaluation failed:", e)

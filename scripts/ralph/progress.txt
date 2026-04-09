@@ -74,3 +74,17 @@ Started: 2026-04-09
 - Integrazione: getEquippedCreatureBonus chiamata in awardXpAndCoins (gamificationEngine.ts)
 - Multiplier chain: reward * streak * event * (1 + creatureBonus)
 - Build: npx next build — zero errors
+
+## FU-006 — Server actions: bauli azione-based
+- Status: DONE
+- Date: 2026-04-09
+- File: src/app/actions/chestActions.ts
+- Functions: getOrCreateActiveChests, incrementChestProgress, openChest, getUserChests
+- GDO chests: bronzo(20 chiamate), argento(5 fissaggi), oro(3 presenze), platino(1 chiusura)
+- Team Conferme chests: bronzo(24 conferme), argento(15 presenze), oro(8 chiusure), platino(20 chiusure)
+- Integrazione pipelineActions: chiamate (ogni outcome) + fissaggi (APPUNTAMENTO)
+- Integrazione confermeActions: conferme (confermato) + presenze/chiusure (Non chiuso/Chiuso)
+- Team usa userId 'team-conferme' per tracciamento condiviso
+- Apertura baule: creature drop + coins random + reset ciclo
+- Pipeline NON modificata (solo hook aggiuntivi in try/catch)
+- Build: npx next build — zero errors
