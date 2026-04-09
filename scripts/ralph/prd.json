@@ -81,7 +81,7 @@
         "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Attenzione a non rimuovere console.error nei catch (quelli servono per debug produzione). Attenzione ai dynamic import che non appaiono come import normali."
     },
     {

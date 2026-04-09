@@ -66,3 +66,17 @@ Started: 2026-04-09
 - No missing imports, wrong types, or non-existent component references found
 - HotStreak was already wrapped in SafeWrapper in both dashboard and conferme pages
 - Build: OK
+
+## F3-005 — Debug: rimuovere console.log e codice morto (2026-04-09)
+- Removed 34 console.log statements from 13 migration/seed API route files
+- Kept all console.error in catch blocks (needed for production debugging)
+- Deleted 6 unused db utility/test scripts: query.ts, cleanFourthCall.ts, cleanAllLeads.ts, cleanTestLeads.ts, testFourthCall.ts, testLiveLeaderboard.ts
+- Deleted unused ActivityFeed.tsx component + activityFeedActions.ts (not imported anywhere)
+- Removed unused imports: logLeadEvent, checkLeaderboardOvertake, checkAndCompleteExpiredSprint from pipelineActions.ts
+- Removed unused import: asc from confermeActions.ts
+- Removed unused import: getEquippedSkinCss from profilo/page.tsx
+- Removed unused imports: Medal, MapPin, Calendar, Clock from classifica/page.tsx
+- No TODO/FIXME/HACK comments found in codebase
+- console.warn in googleCalendar.ts kept (legitimate operational warning)
+- Total: 700 lines of dead code removed across 25 files
+- Build: OK
