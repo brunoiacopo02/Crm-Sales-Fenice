@@ -16,7 +16,7 @@
         "npx next build senza errori e verificare che il bundle size sia ridotto"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "NON lazy-loadare componenti server-side. Solo client components pesanti. Usare dynamic(() => import(...), { ssr: false, loading: () => <Skeleton /> })."
     },
     {

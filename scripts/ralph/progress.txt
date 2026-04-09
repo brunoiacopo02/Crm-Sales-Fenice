@@ -22,3 +22,13 @@ Started: 2026-04-09
 - Immagini AI generate (22 creature + 10 boss + 4 gamification)
 - Bug fix: pooler DB, race conditions, profilo SafeWrapper, richiami note
 - Sicurezza: 13 route migrate protette, link fixati, test pages rimosse
+
+## F3-001 — Performance: lazy loading componenti pesanti (2026-04-09)
+- Dynamic import per 6 componenti pesanti: ConfermeBoard (759L), ProfileClient (698L), ShopClient (531L), InventarioCreatureClient (460L), MappaAvventuraClient (495L), TradingClient (789L)
+- Loading skeleton animati per ogni componente lazy-loaded
+- ChestOpeningAnimation (377L) lazy-loaded in ChestWidget, LootDropModal, TimedChest
+- Recharts lazy-loaded in KpiTeamDashboard (era import statico)
+- Fixed Cell import statico in KpiBoardAdvanced e KpiGdoBoard
+- CelebrationOverlay e CreatureRevealOverlay erano gia lazy (verificato)
+- Note: ssr:false non consentito in Server Components (Next.js App Router), usato solo loading skeleton
+- Build: OK
