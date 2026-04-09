@@ -40,7 +40,9 @@ const DISCARD_REASONS = [
     "straniero",
     "solo informazioni",
     "non vuole prendere l'appuntamento",
-    "numero inesistente"
+    "numero inesistente",
+    "non ha potere decisionale",
+    "non ha soldi"
 ]
 
 export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActionsProps) {

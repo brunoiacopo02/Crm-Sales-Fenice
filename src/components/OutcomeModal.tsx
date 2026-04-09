@@ -18,7 +18,9 @@ const DISCARD_REASONS = [
     "straniero",
     "solo informazioni",
     "non vuole prendere l'appuntamento",
-    "numero inesistente"
+    "numero inesistente",
+    "non ha potere decisionale",
+    "non ha soldi"
 ]
 
 export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeModalProps) {

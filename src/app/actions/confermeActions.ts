@@ -474,7 +474,7 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
         if (!oldLead) return { success: false, error: "Lead not found" };
         if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
 
-        let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date() };
+        let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date(), confSnoozeAt: null };
         let isAutoDiscard = false;
 
         if (!oldLead.confCall1At) {
