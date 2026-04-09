@@ -209,6 +209,16 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+---
+## RUN 3 SUMMARY
+- **16 of 18 stories PASSED** (FU-024, FU-014-023, FU-027-031)
+- **2 stories BLOCKED** (FU-025, FU-026 — Nanobana MCP model error)
+- Backend fixes: stage advancement, creature drops, duel scores, static imports, DB transactions
+- New UI: UniverseToast, Trading page, DuelWidget, DuelCreateModal, ChestWidget Conferme, CreatureRevealOverlay
+- Integrations: achievements, seasonal events, duel history, Supabase Realtime
+- All builds green, pipeline logica sacra untouched, no deploy
+- Branch: ralph/fenice-universe-run3
+
 ## FU-031 — Integration: Supabase Realtime per team adventure
 - Status: DONE
 - Date: 2026-04-09
