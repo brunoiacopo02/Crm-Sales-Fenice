@@ -272,7 +272,7 @@
         "SafeWrapper, tema gaming scuro, npx next build senza errori"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "Solo se ci sono duelli completati. Se nessun duello: non mostrare la sezione."
     },
     {

@@ -209,6 +209,16 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-030 — UI: Storico sfide nel profilo
+- Status: DONE
+- Date: 2026-04-09
+- getDuelHistory: last 20 completed duels with opponent name, scores, result, stats
+- DuelHistory.tsx: stats bar (totali/vittorie/sconfitte/win rate) + duel list
+- Result badges: VINTO=verde, PERSO=rosso, PARI=grigio
+- ProfileClient: renders DuelHistory before Quest Log (hidden if no duels)
+- SafeWrapper protected, gaming dark theme
+- Build: npx next build — zero errors
+
 ## FU-029 — Integration: seasonal events × creature drops
 - Status: DONE
 - Date: 2026-04-09
