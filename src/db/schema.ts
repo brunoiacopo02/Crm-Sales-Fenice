@@ -463,6 +463,54 @@ export const actionChests = pgTable('actionChests', {
     rewardCoins: integer('rewardCoins'),
 });
 
+// --- FENICE UNIVERSE: TEAM RPG (CONFERME) ---
+export const teamRpgProfile = pgTable('teamRpgProfile', {
+    id: text('id').primaryKey(),
+    teamName: text('teamName').default('Team Conferme').notNull(),
+    level: integer('level').default(1).notNull(),
+    totalXp: integer('totalXp').default(0).notNull(),
+    currentStage: integer('currentStage').default(1).notNull(),
+    currentBossHp: integer('currentBossHp'), // nullable
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const teamCreatures = pgTable('teamCreatures', {
+    id: text('id').primaryKey(),
+    teamId: text('teamId').notNull().references(() => teamRpgProfile.id),
+    creatureId: text('creatureId').notNull().references(() => creatures.id),
+    level: integer('level').default(1).notNull(),
+    xpFed: integer('xpFed').default(0).notNull(),
+    isEquipped: boolean('isEquipped').default(false).notNull(),
+    obtainedAt: timestamp('obtainedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    contributedByUserId: text('contributedByUserId').references(() => users.id),
+});
+
+// --- FENICE UNIVERSE: TRADING & DUELS ---
+export const tradingOffers = pgTable('tradingOffers', {
+    id: text('id').primaryKey(),
+    fromUserId: text('fromUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    toUserId: text('toUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    offeredCreatureId: text('offeredCreatureId').notNull().references(() => userCreatures.id),
+    requestedCreatureId: text('requestedCreatureId').notNull().references(() => userCreatures.id),
+    status: text('status').default('pending').notNull(), // 'pending' | 'accepted' | 'rejected'
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const duels = pgTable('duels', {
+    id: text('id').primaryKey(),
+    challengerId: text('challengerId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    opponentId: text('opponentId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    metric: text('metric').notNull(), // 'fissaggi' | 'chiamate'
+    duration: integer('duration').notNull(), // minutes
+    startTime: timestamp('startTime', { withTimezone: true, mode: 'date' }).notNull(),
+    endTime: timestamp('endTime', { withTimezone: true, mode: 'date' }).notNull(),
+    challengerScore: integer('challengerScore').default(0).notNull(),
+    opponentScore: integer('opponentScore').default(0).notNull(),
+    winnerId: text('winnerId').references(() => users.id),
+    rewardCoins: integer('rewardCoins').notNull(),
+    status: text('status').default('active').notNull(), // 'active' | 'completed'
+});
+
 // Aggiustamenti manuali admin (presenze GDO, chiusure Conferme)
 export const manualAdjustments = pgTable('manualAdjustments', {
     id: text('id').primaryKey(),
