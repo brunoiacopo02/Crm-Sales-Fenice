@@ -3,6 +3,11 @@ import { redirect } from "next/navigation"
 import { TeamManagementClient } from "@/components/TeamManagementClient"
 import { ManagerSprintCard } from "@/components/ManagerSprintCard"
 import { TeamGoalAdminClient } from "@/components/TeamGoalAdminClient"
+import { SafeWrapper } from "@/components/SafeWrapper"
+import dynamic from "next/dynamic"
+import { getGdoUsersForTrading } from "@/app/actions/tradingActions"
+
+const DuelCreateModal = dynamic(() => import("@/components/DuelCreateModal").then(m => ({ default: m.DuelCreateModal })))
 
 export default async function TeamPage() {
     const supabase = await createClient();
@@ -18,6 +23,8 @@ export default async function TeamPage() {
         redirect("/marketing-analytics")
     }
 
+    const gdoUsers = await getGdoUsersForTrading(session.user.id);
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -29,6 +36,9 @@ export default async function TeamPage() {
                         Amministrazione account operatori, generazione credenziali e modifica profili (Display Name, Avatar, Status).
                     </p>
                 </div>
+                <SafeWrapper>
+                    <DuelCreateModal gdoUsers={gdoUsers} creatorRole={session.user.role} />
+                </SafeWrapper>
             </div>
 
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">

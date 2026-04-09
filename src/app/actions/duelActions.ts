@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { duels, users, coinTransactions } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 
 /**
  * Create a duel between two GDO users. Only TL/Manager can create duels.
@@ -159,6 +159,42 @@ export async function getActiveDuels() {
             .where(eq(duels.status, 'active'));
     } catch (error) {
         console.error("Errore getActiveDuels:", error);
+        return [];
+    }
+}
+
+/**
+ * Get active duels for a specific user with enriched data.
+ */
+export async function getActiveDuelsForUser(userId: string) {
+    try {
+        const activeDuels = await db.select().from(duels)
+            .where(and(
+                eq(duels.status, 'active'),
+                or(eq(duels.challengerId, userId), eq(duels.opponentId, userId))
+            ));
+
+        // Auto-complete expired and enrich with names
+        const enriched = await Promise.all(activeDuels.map(async (duel) => {
+            if (new Date() > duel.endTime) {
+                await completeDuel(duel.id);
+                return null;
+            }
+            const [challenger] = await db.select({ name: users.name, displayName: users.displayName })
+                .from(users).where(eq(users.id, duel.challengerId));
+            const [opponent] = await db.select({ name: users.name, displayName: users.displayName })
+                .from(users).where(eq(users.id, duel.opponentId));
+
+            return {
+                ...duel,
+                challengerName: challenger?.displayName || challenger?.name || 'GDO',
+                opponentName: opponent?.displayName || opponent?.name || 'GDO',
+            };
+        }));
+
+        return enriched.filter(Boolean);
+    } catch (error) {
+        console.error("Errore getActiveDuelsForUser:", error);
         return [];
     }
 }
