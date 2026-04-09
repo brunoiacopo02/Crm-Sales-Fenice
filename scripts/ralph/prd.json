@@ -256,7 +256,7 @@
         "npx next build senza errori"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "Seasonal events gia esistenti. Solo aggiungere la connessione con creature drops."
     },
     {

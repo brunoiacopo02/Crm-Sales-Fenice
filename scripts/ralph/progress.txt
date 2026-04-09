@@ -209,6 +209,16 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-029 — Integration: seasonal events × creature drops
+- Status: DONE
+- Date: 2026-04-09
+- Schema: creatureDropBoost boolean added to seasonalEvents
+- Migration: ALTER TABLE seasonalEvents ADD COLUMN IF NOT EXISTS "creatureDropBoost"
+- seasonalEventUtils: getCreatureDropBoost() returns {thresholdReduction: 15, rarityBoost: true} or null
+- maybeDropCreature: threshold dynamically 24 (normal) or 14 (boosted)
+- dropCreature: boosted rarity weights (epic 18%, legendary 6%)
+- Build: npx next build — zero errors
+
 ## FU-028 — Integration: achievements collegati a Universe
 - Status: DONE
 - Date: 2026-04-09
