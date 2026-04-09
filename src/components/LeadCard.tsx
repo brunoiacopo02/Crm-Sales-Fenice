@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
+import Link from "next/link"
 
 type LeadProps = {
     lead: {
@@ -218,7 +219,16 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
                 </div>
 
                 {/* 4. Actions Right */}
-                <div className="flex items-center justify-end shrink-0 pl-2">
+                <div className="flex items-center justify-end shrink-0 pl-2 gap-2">
+                    <Link
+                        href="/script"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-brand-orange/30 bg-brand-orange-50/50 text-brand-orange-700 hover:bg-brand-orange/10 transition-colors"
+                        title="Apri script chiamata"
+                    >
+                        <FileText className="w-3.5 h-3.5" />
+                        Script
+                    </Link>
                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
                 </div>
             </div>
