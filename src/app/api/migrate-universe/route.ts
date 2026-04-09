@@ -136,6 +136,11 @@ export async function GET() {
             )
         `);
 
+        // 10. creatureDropCounter on users
+        await db.execute(sql`
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS "creatureDropCounter" INTEGER NOT NULL DEFAULT 0
+        `);
+
         // Indexes
         await db.execute(sql`
             CREATE INDEX IF NOT EXISTS user_creatures_user_idx ON "userCreatures" ("userId")

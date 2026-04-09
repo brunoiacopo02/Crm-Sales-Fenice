@@ -38,6 +38,9 @@ export const users = pgTable('users', {
     // Title system
     activeTitle: text('activeTitle'), // Currently equipped title, nullable
 
+    // Universe: creature drop counter (triggers drop every ~25 actions)
+    creatureDropCounter: integer('creatureDropCounter').default(0).notNull(),
+
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
