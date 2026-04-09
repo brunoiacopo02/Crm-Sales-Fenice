@@ -1,354 +1,296 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fenice-addiction-v2",
-  "description": "Fenice Addiction v2 — Redesign visivo completo gamification + UI premium gaming style + fix sistema XP/coins. Solo GDO e Conferme. NO deploy.",
+  "branchName": "ralph/fenice-universe-run3",
+  "description": "Fenice Universe Run 3 — Backend fixes, new UI, asset generation, cross-system integration. 20 stories. NO deploy.",
   "userStories": [
     {
-      "id": "FA-001",
-      "title": "Audit e fix completo sistema XP/coins/store end-to-end",
-      "description": "Verificare che TUTTO il flusso XP e coins funzioni: awardXpAndCoins usa walletCoins, completeQuest usa walletCoins, store scala walletCoins, streak multiplier applicato, coinTransactions loggato.",
+      "id": "FU-024",
+      "title": "Migrate: campo creatureDropCounter nella tabella users",
+      "description": "Aggiungere la colonna necessaria per il creature drop trigger.",
       "acceptanceCriteria": [
-        "Verificare che awardXpAndCoins in gamificationEngine.ts aggiorni walletCoins (NON coins)",
-        "Verificare che completeQuest in questActions.ts aggiorni walletCoins (NON coins)",
-        "Verificare che completeQuest setti currentValue=-1 dopo claim (quest sparisce)",
-        "Verificare che buyShopItem in shopActions.ts legga e scali walletCoins",
-        "Verificare che getUserWalletCoins legga walletCoins (usato dal Topbar)",
-        "Verificare che streak multiplier sia applicato in awardXpAndCoins",
-        "Verificare che coinTransactions venga inserito per ogni guadagno coins",
-        "Fixare qualsiasi inconsistenza trovata",
-        "npx next build compila senza errori"
+        "In /api/migrate-universe/route.ts: aggiungere ALTER TABLE users ADD COLUMN IF NOT EXISTS creatureDropCounter INTEGER NOT NULL DEFAULT 0",
+        "In schema.ts: aggiungere creatureDropCounter: integer('creatureDropCounter').default(0).notNull() nella tabella users",
+        "Creare script scripts/ralph/migrate-drop-counter.js che chiama la migrazione via fetch locale",
+        "npx next build senza errori"
+      ],
+      "priority": 0,
+      "passes": false,
+      "notes": "Pre-requisito per FU-015. La route /api/migrate-universe NON e bloccata in dev (solo in prod)."
+    },
+    {
+      "id": "FU-014",
+      "title": "Fix: stage advancement integration",
+      "description": "advanceStage() non viene MAI chiamata. Gli stadi non-boss non avanzano mai.",
+      "acceptanceCriteria": [
+        "Creare helper countTodayActions(userId, metric) in adventureActions.ts che conta azioni di oggi",
+        "Creare helper checkAndAdvanceStage(userId) che verifica requirements e avanza se soddisfatti",
+        "In pipelineActions.ts: dopo attackBoss, chiamare checkAndAdvanceStage(effectiveUserId) in try/catch",
+        "In confermeActions.ts: dopo teamAttackBoss, chiamare checkAndAdvanceStage(session.user.id) in try/catch",
+        "checkAndAdvanceStage NON avanza se stadio corrente e boss stage (multiplo di 10)",
+        "Pipeline logica sacra NON modificata",
+        "npx next build senza errori"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "CRITICO: questo fix deve andare per primo. Senza XP/coins corretti, tutto il resto non ha senso."
+      "passes": false,
+      "notes": "Requirements: 1-10=50 chiamate, 11-20=3 fissaggi, 21-30=2 conferme, 31-40=2 presenze, 41-50=1 chiusura."
     },
     {
-      "id": "FA-002",
-      "title": "Ribilanciamento curva XP e reward per azione",
-      "description": "La curva XP deve essere veloce all'inizio e rallentare dopo. I reward per azione devono essere bilanciati.",
+      "id": "FU-015",
+      "title": "Fix: creature drop triggers in pipeline",
+      "description": "dropCreature() non viene triggerato dal gameplay. Serve trigger ogni ~25 azioni.",
       "acceptanceCriteria": [
-        "Livello 1-10: target XP basso (100-350 XP per livello) — crescita veloce",
-        "Livello 10-20: target XP medio (350-800 XP per livello)",
-        "Livello 20-30: target XP alto (800-1500 XP per livello)",
-        "Livello 30+: target XP molto alto (1500+ XP per livello)",
-        "Verificare che la formula calculateTargetXp produca questa curva",
-        "Reward azioni: FISSATO=15XP+10coins, CONFERMATO=20XP+8coins, CHIUSO=50XP+25coins, PRESENZIATO=30XP+15coins",
-        "Aggiornare GAME_CONSTANTS.ACTIONS in gamificationEngine.ts",
-        "npx next build compila senza errori"
+        "Creare maybeDropCreature(userId) in creatureActions.ts con SQL increment atomico su creatureDropCounter",
+        "UPDATE users SET creatureDropCounter = CASE WHEN creatureDropCounter >= 24 THEN 0 ELSE creatureDropCounter + 1 END RETURNING creatureDropCounter",
+        "Se returning = 0 (soglia raggiunta), eseguire dropCreature(userId)",
+        "In pipelineActions.ts: chiamare maybeDropCreature dopo ogni outcome in try/catch",
+        "In confermeActions.ts: chiamare maybeDropCreature per GDO (lead.assignedToId) dopo conferma/presenza/chiusura",
+        "Ritornare dati creatura per notifica",
+        "Pipeline NON modificata",
+        "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Formula: 82 + 17*level + level^2. Actions: FISSATO=15xp+10c, CONFERMATO=20xp+8c, PRESENZIATO=30xp+15c, CHIUSO=50xp+25c."
+      "passes": false,
+      "notes": "DIPENDE DA FU-024. SQL atomico previene race condition."
     },
     {
-      "id": "FA-003",
-      "title": "Design system gaming: palette calda premium su tutto il CRM",
-      "description": "Usare Stitch per generare una palette calda gaming (fuoco/oro/ambra su scuro premium) e applicarla come design tokens in globals.css.",
+      "id": "FU-016",
+      "title": "Fix: duel score integration",
+      "description": "incrementDuelScore() mai chiamato dalle pipeline actions.",
       "acceptanceCriteria": [
-        "Usare Stitch MCP per generare palette gaming premium: sfondo scuro (blu notte/antracite), accent oro/fuoco, testi chiari",
-        "Aggiornare globals.css con nuovi design tokens: colori, shadows, gradienti",
-        "Applicare la palette alle aree gamification: sidebar, topbar wallet, streak, quest, profilo, store, classifica",
-        "La pipeline chiamate deve restare con sfondo chiaro e leggibile (non applicare il tema scuro alla pipeline)",
-        "Transizione morbida tra zona pipeline (chiara) e zona gamification (scura premium)",
-        "npx next build compila senza errori"
+        "In pipelineActions.ts: dopo ogni chiamata, chiamare incrementDuelScore(effectiveUserId, 'chiamate', 1) in try/catch",
+        "In pipelineActions.ts: dopo ogni fissaggio, chiamare incrementDuelScore(effectiveUserId, 'fissaggi', 1) in try/catch",
+        "Pipeline NON modificata",
+        "npx next build senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Design tokens gaming premium aggiunti a globals.css. Palette calda (fuoco/oro/ambra su scuro profondo) applicata a: Sidebar, Topbar wallet, StreakCounter, QuestPanel, ShopClient, ProfileClient, LeaderboardClient. Pipeline resta chiara. Build OK."
+      "passes": false,
+      "notes": "incrementDuelScore gestisce internamente il caso nessun duello attivo."
     },
     {
-      "id": "FA-004",
-      "title": "Redesign LeadCard pipeline con rarita' per funnel",
-      "description": "Le card dei lead nella pipeline devono avere un bordo colorato per 'rarita' basata sul funnel. Migliore gerarchia visiva.",
+      "id": "FU-017",
+      "title": "Fix: convert dynamic imports to static",
+      "description": "Pulire gli await import() ripetuti in pipeline/conferme actions.",
       "acceptanceCriteria": [
-        "Ogni LeadCard ha un bordo laterale colorato basato sul funnel (oro=alto valore, argento=medio, bronzo=base)",
-        "Mapping funnel → rarita' configurabile (es. TELEGRAM=bronzo, JOB SIMULATOR=argento, CORSO 10 ORE=oro)",
-        "Effetto glow leggero su hover della card",
-        "Nome lead prominente, telefono con icona copy funzionante, funnel come badge colorato",
-        "NON modificare la logica di pipeline (click, esiti, azioni rapide) — solo styling",
-        "npx next build compila senza errori"
+        "In pipelineActions.ts: tutti await import('./chestActions'), ./adventureActions, ./creatureActions, ./duelActions → import statici al TOP",
+        "In confermeActions.ts: tutti await import('./chestActions'), ./adventureActions, ./teamAdventureActions, ./creatureActions → import statici al TOP",
+        "Rimuovere variabili locali duplicate (const { fn } = await import(...))",
+        "npx next build senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Funnel rarity system: CORSO 10 ORE/JOB SIMULATOR=gold, TELEGRAM/TELEGRAM-TK/GOOGLE=silver, ORG/DATABASE/SOCIAL=bronze. Colored left border, hover glow, colored funnel badge. Zero logic changes. Build OK."
+      "passes": false,
+      "notes": "Fare DOPO FU-014/015/016."
     },
     {
-      "id": "FA-005",
-      "title": "Redesign Store con card premium e effetto rarita'",
-      "description": "Lo store deve sembrare un negozio di un gioco: card con bordi metallici, effetto holografico per item leggendari, hover flip per preview.",
+      "id": "FU-018",
+      "title": "Fix: DB transactions per operazioni critiche",
+      "description": "fuseCreatures, openChest, acceptTradeOffer, completeDuel senza transazioni.",
       "acceptanceCriteria": [
-        "Card prodotto con bordo colorato per rarita': bronzo per base, argento per raro, oro per epico, viola/diamante per leggendario",
-        "Item leggendari con effetto shimmer/holografico CSS animato",
-        "Hover sulla card: leggero tilt 3D o glow intensificato",
-        "Prezzo in coins con icona Fenice Coin animata",
-        "Preview dell'effetto (skin/tema) visibile nella card",
-        "Filtri per categoria gia' implementati — migliorare solo lo stile dei filtri",
-        "npx next build compila senza errori"
+        "fuseCreatures() in db.transaction(async (tx) => {...})",
+        "openChest() in db.transaction(async (tx) => {...})",
+        "acceptTradeOffer() in db.transaction(async (tx) => {...})",
+        "completeDuel() in db.transaction(async (tx) => {...})",
+        "Usare tx.* dentro ogni transaction",
+        "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "Rarity tiers: Comune (bronze border), Raro (silver), Epico (gold + pulse glow), Leggendario (purple + holographic shimmer + pulse). 3D tilt on hover via CSS perspective. Animated Fenice Coin rotation. Sparkle effects on epic+ cards. SafeWrapper. Filter buttons with active glow. Build OK."
+      "passes": false,
+      "notes": "Drizzle: db.transaction(async (tx) => {...})."
     },
     {
-      "id": "FA-006",
-      "title": "Redesign Profilo come Character Sheet RPG",
-      "description": "Il profilo deve sembrare la scheda di un personaggio di un gioco RPG moderno.",
+      "id": "FU-019",
+      "title": "UI: Toast notifiche creature drop e boss defeat",
+      "description": "Nessuna notifica visuale per eventi Universe.",
       "acceptanceCriteria": [
-        "Hero banner con avatar Fenice grande, effetto particelle fuoco CSS, nome e titolo attivo",
-        "Stats in layout RPG: livello prominente, barra XP con milestone marker, coins wallet",
-        "Sezione badge con griglia visual (sbloccati luminosi, locked in grigio con silhouette)",
-        "Sezione quest attive con progress bar",
-        "Streak counter con fiamma animata CSS",
-        "Sezione 'Prossimi Premi' con card per i 3 reward piu' vicini",
-        "Il TL/Manager vede questo profilo per ogni GDO dal RPG Monitor",
-        "Usare Stitch per generare il layout, convertire in Tailwind",
-        "npx next build compila senza errori"
+        "Creare UniverseToast.tsx: toast per creature_drop, boss_defeated, chest_ready",
+        "Toast bottom-right, auto-dismiss 4s, max 2 contemporanei",
+        "Styling rarita: comune=grigio, raro=blu+glow, epico=viola+glow, leggendario=oro+shake",
+        "Creare UniverseToastProvider.tsx nel layout dashboard (pattern FomoToast)",
+        "Esporre via window event 'universe_toast'",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Full RPG character sheet redesign: CSS fire particles in hero banner (12 fire + 8 ember particles with staggered animations), AchievementShowcase converted to dark gaming theme (luminous unlocked badges with glow, grey silhouette locked), Quest Log dark gaming theme, Streak section with animated flame + milestone indicators, TitleSelector dark gaming theme, Settings dark gaming theme, Prossimi Traguardi dark gaming theme. TL/Manager can view any GDO profile via /profilo/[userId] with role-based access. SafeWrapper wraps entire profile. Build OK."
+      "passes": false,
+      "notes": "Pattern simile a FomoToast. Dispatch custom event con detail."
     },
     {
-      "id": "FA-007",
-      "title": "Redesign Classifica con podio animato e effetti ranking",
-      "description": "La classifica deve sembrare un leaderboard gaming con podio top 3 animato.",
+      "id": "FU-020",
+      "title": "UI: Trading creature tra GDO",
+      "description": "Server actions trading esistono, zero UI.",
       "acceptanceCriteria": [
-        "Top 3: podio con effetto metallico (oro pulsante, argento brillante, bronzo)",
-        "Animazione slide quando le posizioni cambiano (polling 10s gia' attivo)",
-        "Freccia verde animata quando un utente sale, rossa quando scende",
-        "Tab per ruolo: GDO (appuntamenti), Conferme (conferme), mantenere le tab esistenti",
-        "Il tuo nome evidenziato con bordo brand-orange",
-        "npx next build compila senza errori"
+        "Pagina /trading con TradingClient.tsx",
+        "Tab Scambiabili: griglia creature NON equipped/legendary con bottone Proponi",
+        "Tab Offerte Ricevute: preview creature + Accetta/Rifiuta",
+        "Tab Offerte Inviate: stato pending/accepted/rejected",
+        "Modal Proponi Scambio: 4 step (tua creatura → GDO → sua creatura → conferma)",
+        "Sidebar GDO: voce 'Scambi Creature' (icon ArrowLeftRight) in sezione gamification",
+        "SafeWrapper, tema gaming scuro, npx next build senza errori"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "Metallic podium pedestals (gold/silver/bronze gradients with shimmer overlays). Floating crown animation for 1st place. Podium entrance animation with bounce. Enhanced rank change: bouncing ChevronUp (green glow) and ChevronDown (red). Row slide-up/slide-down animations on rank changes. Score pulse animation on rank improvement. Self-highlight: brand-orange left border with fire glow, orange rank number, orange score. SafeWrapper wraps entire component. Build OK."
+      "passes": false,
+      "notes": "Solo GDO. CONFERME hanno creature team non scambiabili."
     },
     {
-      "id": "FA-008",
-      "title": "Scrigno a tempo: reward anticipato dopo X chiamate",
-      "description": "Dopo un numero random di chiamate (5-15), appare uno scrigno sulla dashboard. Si puo' aprire dopo un countdown. Contiene reward random.",
+      "id": "FU-021",
+      "title": "UI: Duelli 1v1 widget + creazione",
+      "description": "Server actions duelli esistono, zero UI.",
       "acceptanceCriteria": [
-        "Creare componente TimedChest che traccia le azioni dell'utente nel giorno",
-        "Dopo 5-15 azioni (random), appare un'icona scrigno animata (glow pulsante, shake leggero)",
-        "Lo scrigno ha un countdown di 15-30 minuti prima di poter essere aperto",
-        "Apertura: animazione suspense 3s (shake crescente → glow → burst → reveal)",
-        "Contenuto random pesato: 60% comune (10-30 coins), 25% raro (50-100), 12% epico (200), 3% leggendario (500+titolo)",
-        "Reward aggiunto a walletCoins con coinTransaction",
-        "Dati persistiti: usare localStorage per scrigno corrente, server per reward",
-        "Wrappare in SafeWrapper",
-        "npx next build compila senza errori"
+        "DuelWidget.tsx: widget compatto dashboard GDO con avversario, metrica, countdown, score live",
+        "Se nessun duello attivo: return null",
+        "Polling 30s per aggiornamento punteggio",
+        "DuelCreateModal.tsx per TL/Manager: seleziona 2 GDO, metrica, durata (30min/1h/2h/4h/giornata), reward",
+        "DuelWidget nella dashboard GDO page, DuelCreateModal bottone in /team",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "TimedChest component: localStorage tracks actions (reward_earned events), random threshold 5-15 actions triggers chest spawn. 15-30 min countdown before opening. 3-phase CSS suspense animation (growing shake + glow ring + particle escape → burst → reveal). Weighted rarity: 60% common (10-30c), 25% rare (50-100c), 12% epic (200c), 3% legendary (500c+title). Server action claimTimedChestReward grants walletCoins with streak+event multipliers, logs coinTransaction. Minimizable floating card UI. SafeWrapper. Build OK."
+      "passes": false,
+      "notes": "Solo TL/Manager creano. Widget auto-completa quando tempo scade."
     },
     {
-      "id": "FA-009",
-      "title": "Hot Streak visuale: la UI si infuoca dopo azioni consecutive",
-      "description": "Dopo 3 azioni consecutive senza pausa, bordi e elementi UI si 'infuocano' con effetti CSS.",
+      "id": "FU-022",
+      "title": "UI: ChestWidget nella dashboard Conferme",
+      "description": "ChestWidget manca nella pagina Conferme.",
       "acceptanceCriteria": [
-        "Tracciare azioni consecutive dell'utente (chiamata, fissaggio, conferma)",
-        "Dopo 3 azioni in <10 minuti: attivare 'hot streak mode'",
-        "Hot streak: bordo top della pipeline diventa gradiente fuoco animato, piccolo badge fiamma visibile",
-        "Dopo 5 azioni consecutive: intensificare (bordo piu' luminoso, badge piu' grande)",
-        "Si disattiva dopo 5 minuti senza azioni",
-        "Effetto puramente visivo CSS — non tocca la logica",
-        "npx next build compila senza errori"
+        "In /conferme page: importare e renderizzare ChestWidget con isTeam=true userId='team-conferme'",
+        "Posizionare sotto obiettivi giornalieri Conferme",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 9,
-      "passes": true,
-      "notes": "HotStreak component: listens to reward_earned events, tracks actions in 10-min window. 3+ actions → active mode (amber fire border + flame badge), 5+ → intense mode (red fire border + 'ON FIRE' badge with glow). Auto-deactivates after 5 min inactivity. CSS-only animations (hot-streak-fire-sweep, hot-streak-badge-pulse). Applied to PipelineBoard (GDO) and ConfermeBoard (Conferme). SafeWrapper. Respects getAnimationsEnabled(). Zero logic changes. Build OK."
+      "passes": false,
+      "notes": "ChestWidget gia supporta isTeam. Solo import + posizionamento."
     },
     {
-      "id": "FA-010",
-      "title": "Notifiche FOMO live: toast quando un collega agisce",
-      "description": "Toast brevi e non invasivi quando un collega fa un'azione rilevante.",
+      "id": "FU-023",
+      "title": "UI: Creature reveal celebration overlay",
+      "description": "Animazione reveal epica quando un GDO ottiene una creatura.",
       "acceptanceCriteria": [
-        "Toast slide-in da destra, durata 4 secondi, max 2 visibili",
-        "Tipi: '[Nome] ha fissato un appuntamento!', '[Nome] ha sbloccato un badge!', '[Nome] e' in hot streak!'",
-        "Dati da Supabase Realtime subscription su leadEvents (INSERT) — NON creare nuovi channel, riusare quelli esistenti",
-        "Filtrare solo eventi di GDO/CONFERME attivi (no venditori, no manager)",
-        "Toast ha icona contestuale (telefono per app, trofeo per badge, fiamma per streak)",
-        "Wrappare in SafeWrapper",
-        "Se Realtime fallisce, il toast semplicemente non appare (silent fail)",
-        "npx next build compila senza errori"
+        "CreatureRevealOverlay.tsx: overlay fullscreen con 3 fasi (luce→creatura→info)",
+        "Glow colori per rarita (common=#94a3b8, rare=#3b82f6, epic=#a855f7, legendary=#fbbf24)",
+        "Legendary: screen shake + particelle oro",
+        "Bottone 'Fantastico!' per chiudere",
+        "Rispettare getAnimationsEnabled()",
+        "SafeWrapper, CSS keyframes only, npx next build senza errori"
       ],
       "priority": 10,
-      "passes": true,
-      "notes": "FomoToast component: 3 event sources on existing public:leads-changes channel (leadEvents INSERT, userAchievements INSERT, broadcast fomo_hotstreak). User name cache from getGdoAndConfermeUsers(). Filters own events + non-GDO/CONFERME. Max 2 toasts, 4s auto-dismiss, slide-in from right. Contextual icons (Phone, CheckCircle, Trophy, Flame). HotStreak broadcasts via RealtimeProvider context. SafeWrapper in layout. Silent fail on all paths. Build OK."
+      "passes": false,
+      "notes": "Pattern simile a ChestOpeningAnimation. Trigger via window event 'creature_reveal'."
     },
     {
-      "id": "FA-011",
-      "title": "Progress nudge: micro-banner 'Mancano solo X!' vicino ai traguardi",
-      "description": "Quando l'utente e' vicino a completare una quest o raggiungere un livello, mostrare un nudge motivazionale.",
+      "id": "FU-025",
+      "title": "Asset: generare immagini creature con Nanobana MCP",
+      "description": "Tutte le 80 creature hanno imageUrl null. Generare immagini rappresentative.",
       "acceptanceCriteria": [
-        "Se una quest e' al 70%+: mostrare micro-banner dorato sotto la quest 'Solo X azioni al premio!'",
-        "Se XP e' al 80%+ del livello: mostrare badge pulsante 'Quasi al livello X!'",
-        "Se streak e' a rischio (fine giornata, nessuna quest completata): banner amber 'Non perdere la tua streak!'",
-        "I nudge devono essere discreti — non popup, ma badge/testi inline",
-        "npx next build compila senza errori"
+        "Usare Nanobana MCP (generate_image) per creare almeno 20 immagini creature rappresentative",
+        "Distribuire: 6 comuni, 6 rare, 5 epiche, 3 leggendarie",
+        "Stile: fantasy cartoon coerente, sfondo trasparente o scuro, 512x512",
+        "Prompt in inglese per ogni creatura basato su nome+elemento (es: 'A cute fire chick creature, fantasy cartoon style, golden feathers, glowing embers')",
+        "Salvare in public/assets/creatures/ con naming: creature-{id}.png",
+        "Aggiornare il DB (creatures table) con imageUrl per le creature generate",
+        "Creare script scripts/ralph/update-creature-images.js per l'update batch",
+        "Le creature senza immagine mantengono il placeholder icon elemento"
       ],
       "priority": 11,
-      "passes": true,
-      "notes": "Quest nudge: golden micro-banner below QuestCard progress bar when 70%+ ('Solo X azioni al premio!'). Level nudge: LevelNudge component with pulsing golden badge when XP >= 80% ('Quasi al livello X! Mancano Y XP'). Streak nudge: inline amber pill in StreakCounter when streak > 0 and not active today ('Non perdere la streak!'). CSS keyframes: nudge-pulse, level-nudge-pulse. SafeWrapper on both dashboards. Build OK."
+      "passes": false,
+      "notes": "Nanobana MCP genera immagini AI. Prompt dettagliati per coerenza stile. Focus sulle creature piu visibili (leggendarie + epiche prima)."
     },
     {
-      "id": "FA-012",
-      "title": "Animazione apertura scrigno con suspense",
-      "description": "L'apertura dello scrigno (e del loot drop) deve avere un'animazione con suspense crescente.",
+      "id": "FU-026",
+      "title": "Asset: generare immagini boss con Nanobana MCP",
+      "description": "I 10 boss avventura hanno imageUrl null. Generare immagini epiche.",
       "acceptanceCriteria": [
-        "Fase 1 (1s): scrigno trema con shake crescente",
-        "Fase 2 (1s): glow dorato che si intensifica, particelle che escono dai bordi",
-        "Fase 3 (1s): burst di luce → reveal del contenuto con rarita' visiva",
-        "Comune: bordo grigio, poche particelle. Raro: bordo blu, piu' particelle. Epico: bordo viola, glow. Leggendario: bordo oro, confetti + suono fanfara",
-        "Suono diverso per rarita' (Web Audio API sintetico)",
-        "Tutta l'animazione CSS + JS leggero, no librerie",
-        "Riutilizzare per LootDropModal esistente",
-        "npx next build compila senza errori"
+        "Usare Nanobana MCP per generare immagini per tutti i 10 boss",
+        "Stile: fantasy dark, epico, minaccioso. Ogni boss deve avere il suo elemento visibile",
+        "Boss 1 Lupo Ombra (fuoco), Boss 2 Toro Pietra (terra), Boss 3 Serpente (acqua), Boss 4 Aquila (aria), Boss 5 Drago Rosso (fuoco), Boss 6 Scorpione (terra), Boss 7 Kraken (acqua), Boss 8 Fenice Oscura (ombra), Boss 9 Chimera (luce), Boss 10 Divinita del Fuoco (fuoco)",
+        "Salvare in public/assets/bosses/ con naming: boss-{stageNumber}.png",
+        "Aggiornare DB con imageUrl",
+        "Creare script scripts/ralph/update-boss-images.js"
       ],
       "priority": 12,
-      "passes": true,
-      "notes": "Shared ChestOpeningAnimation component with 3-phase suspense (phase1: crescendo shake, phase2: intense glow+particles, phase3: burst+reveal). Rarity-specific visuals: common (stone/grey, 8 particles), rare (blue, 16 particles), epic (purple glow, 24 particles), legendary (gold, 32 particles + confetti rain). 5 new Web Audio API sounds: drum_roll (2s crescendo), reveal_common (muted thud), reveal_rare (2-note chime), reveal_epic (rising chord), reveal_legendary (full fanfare). Reused by both TimedChest and LootDropModal. CSS-only keyframes (co-shake-phase1/2, co-burst-scale, co-glow-pulse, co-ring-expand, co-particle-burst, co-flash, co-confetti-fall, co-text-reveal). Build OK."
+      "passes": false,
+      "notes": "Prompt esempio: 'An epic dark fantasy stone bull boss creature, glowing earth element, menacing pose, detailed, 512x512'"
     },
     {
-      "id": "FA-013",
-      "title": "Daily bonus crescente con calendar visuale",
-      "description": "Il daily login reward deve mostrare un calendario settimana con reward crescenti e il giorno corrente evidenziato.",
+      "id": "FU-027",
+      "title": "UI: Team creature management per Conferme",
+      "description": "Conferme non possono equipaggiare o fondere creature team dalla loro interfaccia.",
       "acceptanceCriteria": [
-        "Modale daily login mostra 7 giorni della settimana con reward crescenti: Lun 5c, Mar 8c, Mer 12c, Gio 15c, Ven 20c, Sab 30c (se lavora), Dom bonus streak",
-        "Il giorno corrente e' evidenziato con glow",
-        "I giorni passati mostrano check verde se reclamati, X rosso se saltati",
-        "Animazione coins cascata quando si reclama",
-        "Bonus 7° giorno consecutivo: 50 coins + titolo speciale",
-        "Aggiornare claimDailyLogin in dailyLoginActions.ts per il bonus crescente",
-        "Wrappare in SafeWrapper",
-        "npx next build compila senza errori"
+        "Nella pagina /creature-inventario per CONFERME: mostrare creature team (gia funziona)",
+        "Aggiungere bottone Equipaggia su creature team che chiama equipTeamCreature",
+        "Aggiungere bottone Fondi su creature team con 4+ copie che chiama fuseTeamCreatures",
+        "Mostrare chi ha contribuito ogni creatura (contributedByUserId → displayName)",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 13,
-      "passes": true,
-      "notes": "Weekly calendar visual: 7-day strip (Lun-Dom) with escalating rewards (5, 8, 12, 15, 20, 30, 50). Day statuses: claimed (green check), missed (red X), today (golden glow + Gift icon), future (dimmed + lock). Sunday is streak bonus day: 50c + 'Maratoneta Settimanale' title if all Mon-Sat claimed, otherwise 15c base. Coin cascade on claim. Mini calendar summary in claimed phase. Dark gaming card style. SafeWrapper. Build OK."
+      "passes": false,
+      "notes": "Le server actions teamAdventureActions gia supportano equip/fuse team. Solo UI."
     },
     {
-      "id": "FA-014",
-      "title": "Celebrazione level-up epica con evoluzione Fenice",
-      "description": "Il level-up deve essere un momento memorabile con animazione full-screen della Fenice.",
+      "id": "FU-028",
+      "title": "Integration: achievements collegati a Universe",
+      "description": "Collegare il sistema achievement esistente con le meccaniche Universe.",
       "acceptanceCriteria": [
-        "Overlay full-screen con sfondo scuro semi-trasparente",
-        "Testo 'LIVELLO X!' con effetto typewriter dorato",
-        "Particelle fuoco CSS che salgono dal basso",
-        "Se si evolve (cambio stadio Fenice): animazione speciale con transizione tra i due stadi",
-        "Confetti cascata dopo il reveal",
-        "Suono fanfara sintetico (Web Audio API)",
-        "Si chiude con click/tap ovunque dopo 3 secondi",
-        "Aggiornare CelebrationOverlay.tsx esistente",
-        "Wrappare in SafeWrapper",
-        "npx next build compila senza errori"
+        "Aggiungere nuove achievement in DB (via seed o migrate): 'Primo Boss Sconfitto' (1 boss), 'Cacciatore di Boss' (5 boss), 'Sterminatore' (10 boss)",
+        "Aggiungere achievement: 'Collezionista Novizio' (10 creature), 'Collezionista Esperto' (30 creature), 'Collezionista Leggendario' (60 creature)",
+        "Aggiungere achievement: 'Commerciante' (1 scambio completato), 'Mercante' (10 scambi)",
+        "Aggiungere achievement: 'Duellante' (1 duello vinto), 'Campione Arena' (10 duelli vinti)",
+        "In adventureActions (boss defeated): chiamare checkAchievements per boss count",
+        "In creatureActions (drop): chiamare checkAchievements per creature count",
+        "In tradingActions (accept): chiamare checkAchievements per trade count",
+        "In duelActions (complete): chiamare checkAchievements per duel wins",
+        "Seed route per inserire le nuove achievement definitions",
+        "npx next build senza errori"
       ],
       "priority": 14,
-      "passes": true,
-      "notes": "Epic level-up celebration redesign: 6-phase sequenced animation for evolution (fire_intro → level_text → evolution_old → evolution_flash → evolution_new → confetti_finale), 3-phase for regular level-up. 20 CSS fire particles + 12 embers rising from bottom. Typewriter 'LIVELLO X!' with golden gradient + glow pulse. Evolution: old stage emoji dissolves (brightness burn), flash burst with expanding rings, new stage materializes with golden orbiting particles. Confetti cascade finale (30 particles). Evolution fanfare sound (rumble → 7-note arpeggio → power chord → shimmer tail). Click-to-dismiss after 3s min. CelebrationOverlay listens to reward_earned directly for evolution detection. SafeWrapper already wrapping overlay. 12 new CSS keyframes. Build OK."
+      "passes": false,
+      "notes": "Achievement system gia esistente (achievementActions.ts). Servono nuove metriche: total_bosses_defeated, total_creatures_owned, total_trades_completed, total_duels_won."
     },
     {
-      "id": "FA-015",
-      "title": "Micro-animazioni su ogni azione della pipeline",
-      "description": "Ogni azione produttiva nella pipeline deve avere un feedback visivo immediato.",
+      "id": "FU-029",
+      "title": "Integration: seasonal events × creature drops",
+      "description": "Durante eventi stagionali le creature drop devono essere potenziate.",
       "acceptanceCriteria": [
-        "Quando si esita un lead (qualsiasi esito): la card fa micro-bounce (translateY -4px per 200ms)",
-        "Quando si fissa un appuntamento: confetti leggeri per 1s + card slide-out",
-        "Quando si scarta un lead: card fade-out con leggero slide-down",
-        "Quando si programma un richiamo: card pulsa in ambra per 1s",
-        "Le animazioni sono CSS-only, rispettano getAnimationsEnabled()",
-        "NON modificare la logica degli esiti — solo aggiungere classi CSS dopo il successo",
-        "npx next build compila senza errori"
+        "In maybeDropCreature: se c'e un evento stagionale attivo, ridurre la soglia drop da 25 a 15",
+        "In dropCreature: se c'e un evento stagionale attivo, aumentare probabilita rarita (epic 12→18%, legendary 3→6%)",
+        "Aggiungere campo opzionale 'creatureDropBoost' nella tabella seasonalEvents (boolean default false)",
+        "Migrate schema + DB",
+        "In seasonalEventUtils: esporre getCreatureDropBoost() che ritorna {thresholdReduction, rarityBoost}",
+        "npx next build senza errori"
       ],
       "priority": 15,
-      "passes": true,
-      "notes": "4 distinct micro-animations: NON_RISPOSTO → bounce (translateY -4px, 200ms), APPUNTAMENTO → mini confetti burst (10 particles) + slide-out right (600ms), DA_SCARTARE → fade-out + slide-down (400ms), RICHIAMO/SNOOZE → amber glow pulse (800ms). GDO via GdoQuickActions DOM traversal to [data-lead-card]. Conferme via ConfermeBoardRow rowRef with animateAndRefresh helper. CSS-only keyframes (pa-bounce, pa-slide-out, pa-fade-discard, pa-amber-pulse, pa-confetti-burst). Respects getAnimationsEnabled(). Zero logic changes. Build OK."
+      "passes": false,
+      "notes": "Seasonal events gia esistenti. Solo aggiungere la connessione con creature drops."
     },
     {
-      "id": "FA-016",
-      "title": "Redesign Topbar wallet e notifiche con stile gaming",
-      "description": "Il wallet coins nella topbar deve avere animazione quando si guadagnano coins. Le notifiche devono avere stile gaming.",
+      "id": "FU-030",
+      "title": "UI: Storico sfide nel profilo",
+      "description": "Sezione nel profilo RPG che mostra cronologia duelli vinti/persi.",
       "acceptanceCriteria": [
-        "Wallet coins: icona coin animata (leggera rotazione), contatore che fa 'count-up' quando arrivano nuovi coins",
-        "Quando si guadagnano coins: effetto '+X' che sale e svanisce accanto al wallet",
-        "Badge notifiche: pulse rosso gaming-style (non il cerchietto piatto attuale)",
-        "XP bar mini nella topbar: barra sottile sotto il nome utente che mostra il progresso verso il livello",
-        "npx next build compila senza errori"
+        "Creare server action getDuelHistory(userId) in duelActions.ts: ritorna ultimi 20 duelli completati dell'utente",
+        "Creare componente DuelHistory.tsx: lista compatta con avversario, metrica, score, risultato (VINTO/PERSO/PARI), data",
+        "Vincita = badge verde, Sconfitta = badge rosso, Pari = badge grigio",
+        "Mostrare statistiche: duelli totali, vittorie, sconfitte, win rate %",
+        "Aggiungere sezione nel ProfileClient.tsx tra Quest Log e Title Selector",
+        "SafeWrapper, tema gaming scuro, npx next build senza errori"
       ],
       "priority": 16,
-      "passes": true,
-      "notes": "Animated coin icon (topbar-coin-spin 4s rotation), coin bounce on earn (topbar-coin-bounce 0.4s flip+scale). Count-up animation interpolates old→new walletCoins in 20 steps. Floating +X text rises and fades on reward_earned events (topbar-coin-float). Notification badge redesigned: dual-layer with expanding ping ring (topbar-notif-ping) + gentle pulse (topbar-notif-pulse). Mini XP bar under username: Lv.X label + 64px gradient bar (fire→gold) with shimmer sweep + percentage. Wallet and XP bar now visible for both GDO and CONFERME (isGamificationRole). All animations respect getAnimationsEnabled(). SafeWrapper not needed (Topbar is structural). 7 new CSS keyframes. Build OK."
+      "passes": false,
+      "notes": "Solo se ci sono duelli completati. Se nessun duello: non mostrare la sezione."
     },
     {
-      "id": "FA-017",
-      "title": "Suoni sintetici per ogni azione (Web Audio API)",
-      "description": "Effetti sonori brevi e soddisfacenti per le azioni chiave, tutti generati via Web Audio API.",
+      "id": "FU-031",
+      "title": "Integration: Supabase Realtime per team adventure",
+      "description": "Team Conferme deve vedere danni boss live quando un collega agisce.",
       "acceptanceCriteria": [
-        "Coin earned: ding metallico breve (200ms)",
-        "XP gained: whoosh ascendente (150ms)",
-        "Level up: fanfara 3 note (500ms)",
-        "Achievement: triumph chord (400ms)",
-        "Quest complete: success chime (300ms)",
-        "Scrigno/loot: drum roll crescente (2s) + reveal (varia per rarita')",
-        "Hot streak activate: flame burst (200ms)",
-        "Tutti generati con Web Audio API oscillator + envelope in soundEngine.ts",
-        "Toggle on/off in impostazioni (gia' implementato SoundToggle)",
-        "npx next build compila senza errori"
+        "In teamAdventureActions.ts (teamAttackBoss): dopo l'update del boss HP, inviare evento Supabase Realtime",
+        "Pattern: broadcast su channel 'team-adventure' con payload {bossHp, damage, userName, action}",
+        "In MappaAvventuraClient per CONFERME: sottoscrivere al channel 'team-adventure'",
+        "Quando arriva evento: aggiornare HP bar del boss in tempo reale con animazione",
+        "Mostrare mini-toast 'Marco ha inflitto 50 danni con un fissaggio!' sotto la HP bar",
+        "Cleanup subscription on unmount",
+        "SafeWrapper, npx next build senza errori"
       ],
       "priority": 17,
-      "passes": true,
-      "notes": "All 12 sound types implemented in soundEngine.ts via Web Audio API oscillators. New: hot_streak_activate (flame burst: sawtooth whoosh + square crackle, 200ms). Wired xp_gained in RewardFeedProvider (80ms stagger after coin_earned). Wired hot_streak_activate in HotStreak on mode transition inactive→active. All sounds respect SoundToggle. Build OK."
-    },
-    {
-      "id": "FA-018",
-      "title": "TL Monitor potenziato: vista completa gamification team",
-      "description": "Il Team Leader deve poter vedere e controllare tutta la gamification del team.",
-      "acceptanceCriteria": [
-        "In manager-rpg-monitor: mostrare per ogni GDO/Conferme: livello, XP, coins, streak, quest completate oggi, hot streak attivo",
-        "Possibilita' di aggiungere coins manualmente (gia' implementato in ManualAdjustmentPanel)",
-        "Possibilita' di lanciare un Boss Battle dal pannello",
-        "Possibilita' di creare un Evento Stagionale",
-        "Overview team: totale quest completate oggi, media streak, GDO piu' attivo",
-        "npx next build compila senza errori"
-      ],
-      "priority": 18,
-      "passes": true,
-      "notes": "Full TL monitor redesign. fetchAllTeamRpgProfiles fetches both GDO+CONFERME. getTeamGamificationOverview returns totalQuestsToday, avgStreak, mostActiveUser, per-user quest counts. Enhanced table: level, XP bar, streak flame, quests today badge, walletCoins, role badge. Team overview: 4 stat cards (team size, quests today, avg streak, most active). Boss Battle panel: view active battle HP/contributors or create new with title/HP/rewards/endTime. Seasonal Event panel: view active event multipliers or create new with theme/dates/multipliers, deactivate button. Fixed addGdoCoins to use walletCoins+coinTransaction (was using legacy coins). SafeWrapper on page.tsx. Build OK."
-    },
-    {
-      "id": "FA-019",
-      "title": "Sidebar e navigazione con stile gaming premium",
-      "description": "La sidebar deve avere uno stile piu' gaming: gradiente scuro premium, icone con effetti, indicatore attivo animato.",
-      "acceptanceCriteria": [
-        "Sidebar: gradiente scuro verticale (brand-charcoal → nero profondo)",
-        "Voce attiva: bordo laterale brand-orange con glow, sfondo leggermente piu' chiaro",
-        "Hover sulle voci: leggero glow arancione, icona che si illumina",
-        "Sezione gamification (Store, Profilo, Classifica) con separatore decorativo fiamma/oro",
-        "Logo Fenice in alto con leggero pulse",
-        "npx next build compila senza errori"
-      ],
-      "priority": 19,
-      "passes": true,
-      "notes": "Enhanced sidebar gradient (4-stop dark premium). Active items: sidebar-item-active class with fire-400 left border + inset glow shadow + gradient bg. Hover: sidebar-item-hover with orange glow on hover + icon filter drop-shadow. Gamification separator: fire→gold→fire gradient line with blurred glow and flame emoji center (shown before Profilo/Classifica/Store for GDO/CONFERME, before Gamification group for MANAGER). Logo pulse: sidebar-logo-pulse keyframe (3s cycling box-shadow glow). GDO/CONFERME nav reordered: work items first, gamification items grouped after separator. MANAGER Gamification group label in gold-dim. Build OK."
-    },
-    {
-      "id": "FA-020",
-      "title": "Verifica build, hydration e coerenza visiva finale",
-      "description": "Test completo finale: build, zero hydration errors, coerenza visiva su tutte le pagine.",
-      "acceptanceCriteria": [
-        "npx next build compila con ZERO errori",
-        "Verificare che NESSUN componente abbia bottoni/link dentro span/p",
-        "Verificare che TUTTI i componenti gamification siano wrappati in SafeWrapper",
-        "Verificare che la palette calda sia applicata coerentemente",
-        "Verificare che la pipeline chiamate sia rimasta intatta e leggibile",
-        "Verificare che il sistema XP/coins funzioni (audit finale walletCoins)",
-        "NON fare push, NON fare merge, NON fare deploy"
-      ],
-      "priority": 20,
-      "passes": true,
-      "notes": "Build OK zero errori. Hydration audit: zero issues. SafeWrapper: added to 10 missing components (TimedChest, HotStreak, FomoToast, LootDropModal, ChestOpeningAnimation, StreakCounter, QuestPanel, CelebrationOverlay, LevelNudge, RewardFeedProvider). walletCoins audit: fixed 2 critical bugs in achievementActions.ts and bossBattleActions.ts (were using legacy coins field). Pipeline untouched. Palette consistent across all gamification areas."
+      "passes": false,
+      "notes": "Pattern Supabase Realtime gia usato in RealtimeProvider. NON alterare i channel esistenti postgres_changes."
     }
   ]
 }

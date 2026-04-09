@@ -61,9 +61,26 @@ if [ ! -f "$PROGRESS_FILE" ]; then
   echo "---" >> "$PROGRESS_FILE"
 fi
 
+# Auto-checkout the branch specified in the PRD
+if [ -f "$PRD_FILE" ]; then
+  TARGET_BRANCH=$(jq -r '.branchName // empty' "$PRD_FILE" 2>/dev/null || echo "")
+  CURRENT_GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+
+  if [ -n "$TARGET_BRANCH" ] && [ "$TARGET_BRANCH" != "$CURRENT_GIT_BRANCH" ]; then
+    echo "PRD targets branch: $TARGET_BRANCH (currently on: $CURRENT_GIT_BRANCH)"
+    echo "Switching to $TARGET_BRANCH..."
+    git checkout "$TARGET_BRANCH" 2>/dev/null || {
+      echo "ERROR: Could not checkout $TARGET_BRANCH. Make sure it exists."
+      exit 1
+    }
+    echo "Switched to $TARGET_BRANCH"
+  fi
+fi
+
 echo ""
 echo "============================================"
 echo "  RALPH LOOP - CRM Fenice"
+echo "  Branch: $(git branch --show-current)"
 echo "  Max iterations: $MAX_ITERATIONS"
 echo "============================================"
 echo ""
