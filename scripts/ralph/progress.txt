@@ -101,3 +101,18 @@ Started: 2026-04-09
 - Created getScriptCompletionRate(userId) in gdoPerformanceActions.ts: returns totalCalls, scriptCompletedCount, completionRate %
 - Migration executed on production DB: scriptCompleted column added to callLogs
 - Build: OK
+
+## F3-008 — Gamification: Achievement e Quest per lo Script (2026-04-10)
+- Added 'total_scripts_completed' metric to measureAchievementMetric in achievementActions.ts (counts callLogs where scriptCompleted=true)
+- Added 'scripts_completed' time-scoped metric to measureMetric in questActions.ts (counts callLogs with scriptCompleted=true within date range)
+- Created 3 new achievements in 'script' category:
+  - 'Studente Modello' (ach-script-studente): 10/50/200 scripts completed (icon: BookOpen)
+  - 'Script Master' (ach-script-master): 300/500/1000 scripts completed (icon: GraduationCap)
+  - 'Maestro della Persuasione' (ach-script-persuasione): 1500/3000/5000 scripts completed (icon: Sparkles)
+- Created 2 new quests for GDO role:
+  - Daily: 'Seguace dello Script' (quest-d-script-5): 5 scripts/day, reward 10 XP + 15 coins
+  - Weekly: 'Disciplina Settimanale' (quest-w-script-20): 20 scripts/week, reward 30 XP + 50 coins
+- Created migration route /api/migrate-script-achievements/route.ts
+- Badge images already exist: script-master-badge.png and script-streak-badge.png
+- Migration executed on production DB: 3 achievements + 2 quests seeded successfully
+- Build: OK

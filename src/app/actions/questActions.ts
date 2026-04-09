@@ -180,6 +180,17 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
                 ));
             return result[0]?.value ?? 0;
         }
+        case 'scripts_completed': {
+            const result = await db.select({ value: count() })
+                .from(callLogs)
+                .where(and(
+                    eq(callLogs.userId, userId),
+                    eq(callLogs.scriptCompleted, true),
+                    gte(callLogs.createdAt, start),
+                    lte(callLogs.createdAt, end)
+                ));
+            return result[0]?.value ?? 0;
+        }
         // --- CONFERME metrics ---
         case 'conferme_fatte': {
             const result = await db.select({ value: count() })

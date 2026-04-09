@@ -130,7 +130,7 @@
         "npx next build senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Le immagini badge script sono gia state generate con Gemini. Achievement usa il sistema esistente (achievementActions). Quest usa il sistema esistente (questActions)."
     },
     {
