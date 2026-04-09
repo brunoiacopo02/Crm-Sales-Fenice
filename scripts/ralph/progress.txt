@@ -209,6 +209,14 @@ Started: 2026-04-09
 - Pipeline logica sacra NON modificata
 - Build: npx next build — zero errors
 
+## FU-017 — Fix: convert dynamic imports to static
+- Status: DONE
+- Date: 2026-04-09
+- pipelineActions.ts: 7 dynamic imports → 4 static imports at top (chestActions, adventureActions, creatureActions, duelActions)
+- confermeActions.ts: 12 dynamic imports → 4 static imports at top (chestActions, adventureActions, creatureActions, teamAdventureActions)
+- All local aliases removed, direct function calls used
+- Build: npx next build — zero errors
+
 ## FU-016 — Fix: duel score integration
 - Status: DONE
 - Date: 2026-04-09

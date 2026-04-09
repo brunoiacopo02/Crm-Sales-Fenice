@@ -77,7 +77,7 @@
         "npx next build senza errori"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Fare DOPO FU-014/015/016."
     },
     {
