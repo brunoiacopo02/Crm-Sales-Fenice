@@ -40,3 +40,14 @@ Started: 2026-04-09
 - Migration executed on prod: ALL 4 tables verified via pg_tables
 - Indexes created: team_creatures_team_idx, trading_offers_from_idx, trading_offers_to_idx, duels_challenger_idx, duels_opponent_idx
 - Build: npx next build — zero errors
+
+## FU-003 — Seed 80 creature nel DB
+- Status: DONE
+- Date: 2026-04-09
+- Seed route: /api/seed-creatures/route.ts (INSERT ON CONFLICT DO NOTHING)
+- Seed script: scripts/ralph/seed-creatures-prod.js
+- Executed on prod: 80 creature seedate (35 comuni, 25 rare, 14 epiche, 6 leggendarie)
+- Ogni creatura: id, nome italiano fantasy, descrizione, rarity, element (fuoco/terra/acqua/aria/luce/ombra)
+- Bonus: comuni 2%XP/1%coin, rare 5%/3%, epiche 10%/5%, leggendarie 15%/10%
+- Immagini: placeholder (imageUrl=null), da generare con Nano Banana MCP
+- Build: npx next build — zero errors
