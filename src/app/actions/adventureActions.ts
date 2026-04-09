@@ -180,6 +180,12 @@ export async function attackBoss(userId: string, actionType: string) {
                 })
                 .where(eq(adventureProgress.userId, userId));
 
+            // Check achievements for boss count
+            try {
+                const { checkAchievements } = await import('./achievementActions');
+                checkAchievements(userId).catch(e => console.error("Achievement check boss err:", e));
+            } catch { /* ignore */ }
+
             return {
                 bossDefeated: true,
                 bossName: boss.name,

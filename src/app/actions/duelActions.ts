@@ -107,7 +107,7 @@ export async function incrementDuelScore(userId: string, metric: string, amount:
  */
 export async function completeDuel(duelId: string) {
     try {
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const [duel] = await tx.select().from(duels)
                 .where(eq(duels.id, duelId));
             if (!duel || duel.status === 'completed') return duel;
@@ -144,6 +144,16 @@ export async function completeDuel(duelId: string) {
 
             return { ...duel, status: 'completed' as const, winnerId };
         });
+
+        // Check achievements for winner
+        if (result && 'winnerId' in result && result.winnerId) {
+            try {
+                const { checkAchievements } = await import('./achievementActions');
+                checkAchievements(result.winnerId).catch(e => console.error("Achievement check duel err:", e));
+            } catch { /* ignore */ }
+        }
+
+        return result;
     } catch (error) {
         console.error("Errore completeDuel:", error);
         return null;

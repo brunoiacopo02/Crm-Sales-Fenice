@@ -65,7 +65,7 @@ export async function createTradeOffer(fromUserId: string, toUserId: string, off
  */
 export async function acceptTradeOffer(offerId: string, acceptingUserId: string) {
     try {
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const [offer] = await tx.select().from(tradingOffers)
                 .where(and(eq(tradingOffers.id, offerId), eq(tradingOffers.toUserId, acceptingUserId), eq(tradingOffers.status, 'pending')));
 
@@ -85,8 +85,19 @@ export async function acceptTradeOffer(offerId: string, acceptingUserId: string)
                 .set({ status: 'accepted' })
                 .where(eq(tradingOffers.id, offerId));
 
-            return { success: true };
+            return { success: true, fromUserId: offer.fromUserId, toUserId: offer.toUserId };
         });
+
+        // Check achievements for both users
+        if (result && 'fromUserId' in result && result.success) {
+            try {
+                const { checkAchievements } = await import('./achievementActions');
+                checkAchievements(result.fromUserId as string).catch(e => console.error("Achievement check trade err:", e));
+                checkAchievements(result.toUserId as string).catch(e => console.error("Achievement check trade err:", e));
+            } catch { /* ignore */ }
+        }
+
+        return result;
     } catch (error) {
         console.error("Errore acceptTradeOffer:", error);
         return { success: false, error: String(error) };

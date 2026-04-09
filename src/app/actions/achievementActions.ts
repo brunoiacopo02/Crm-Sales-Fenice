@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications, leadEvents } from "@/db/schema";
-import { eq, and, gte, isNotNull, sql, count, countDistinct, inArray } from "drizzle-orm";
+import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications, leadEvents, userCreatures, tradingOffers, duels } from "@/db/schema";
+import { eq, and, gte, isNotNull, sql, count, countDistinct, inArray, or } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 
@@ -150,6 +150,34 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             const totalEsiti = Number(result[0]?.totale) || 0;
             if (totalEsiti === 0) return 0;
             return Math.round((Number(result[0]?.chiusi) / totalEsiti) * 100);
+        }
+        // Universe metrics
+        case 'total_bosses_defeated': {
+            // Count stages that are multiples of 10 that have been completed (currentStage > bossStage)
+            const { adventureProgress } = await import("@/db/schema");
+            const [progress] = await db.select({ currentStage: adventureProgress.currentStage })
+                .from(adventureProgress).where(eq(adventureProgress.userId, userId));
+            if (!progress) return 0;
+            // Bosses are at stages 10, 20, 30... A boss at stage N is defeated if currentStage > N
+            return Math.floor((progress.currentStage - 1) / 10);
+        }
+        case 'total_creatures_owned': {
+            const [result] = await db.select({ c: count() }).from(userCreatures)
+                .where(eq(userCreatures.userId, userId));
+            return result?.c ?? 0;
+        }
+        case 'total_trades_completed': {
+            const [result] = await db.select({ c: count() }).from(tradingOffers)
+                .where(and(
+                    or(eq(tradingOffers.fromUserId, userId), eq(tradingOffers.toUserId, userId)),
+                    eq(tradingOffers.status, 'accepted')
+                ));
+            return result?.c ?? 0;
+        }
+        case 'total_duels_won': {
+            const [result] = await db.select({ c: count() }).from(duels)
+                .where(and(eq(duels.winnerId, userId), eq(duels.status, 'completed')));
+            return result?.c ?? 0;
         }
         default:
             return 0;

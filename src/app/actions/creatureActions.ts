@@ -53,6 +53,12 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
 
         await db.insert(userCreatures).values(userCreature);
 
+        // Check achievements for creature count
+        try {
+            const { checkAchievements } = await import('./achievementActions');
+            checkAchievements(userId).catch(e => console.error("Achievement check creature err:", e));
+        } catch { /* ignore */ }
+
         return {
             userCreatureId: userCreature.id,
             creature: picked,
