@@ -10,6 +10,7 @@ import { getScriptCompletionRate } from '@/app/actions/gdoPerformanceActions';
 import { getAllCreatureDefinitions, getUserCreatures } from '@/app/actions/creatureActions';
 import { getTeamCreatures, getTeamAdventureProgress } from '@/app/actions/teamAdventureActions';
 import { getAdventureProgress, getAllBosses } from '@/app/actions/adventureActions';
+import { getAllOffers, getGdoUsersForTrading } from '@/app/actions/tradingActions';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
 import dynamic from 'next/dynamic';
@@ -26,9 +27,10 @@ export default async function ProfiloPage() {
 
     const role = supabaseUser.user_metadata?.role;
     const isTeam = role === 'CONFERME';
+    const isGdo = role === 'GDO';
 
     try {
-        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData, scriptStats, allCreatures, ownedCreatures, adventureProgress, adventureBosses] = await Promise.all([
+        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData, scriptStats, allCreatures, ownedCreatures, adventureProgress, adventureBosses, tradingOffers, tradingGdoUsers] = await Promise.all([
             getGdoRpgProfile(supabaseUser.id).catch(e => { console.error("Profile error:", e); return null; }),
             getUserAchievements(supabaseUser.id).catch(() => ({ achievements: [] })),
             getUnlockedTitles(supabaseUser.id).catch(() => ({ titles: [], activeTitle: null })),
@@ -42,6 +44,8 @@ export default async function ProfiloPage() {
             (isTeam ? getTeamCreatures() : getUserCreatures(supabaseUser.id)).catch(() => []),
             (isTeam ? getTeamAdventureProgress() : getAdventureProgress(supabaseUser.id)).catch(() => ({ currentStage: 1, currentBossHp: 0, activeBoss: null, stageRequirement: 0 })),
             getAllBosses().catch(() => []),
+            (isGdo ? getAllOffers(supabaseUser.id).catch(() => []) : Promise.resolve([])),
+            (isGdo ? getGdoUsersForTrading(supabaseUser.id).catch(() => []) : Promise.resolve([])),
         ]);
 
         if (!profileData) {
@@ -111,6 +115,8 @@ export default async function ProfiloPage() {
                 adventureBosses={adventureBosses}
                 isTeam={isTeam}
                 userId={supabaseUser.id}
+                tradingOffers={tradingOffers}
+                tradingGdoUsers={tradingGdoUsers}
             />
         );
     } catch (e) {

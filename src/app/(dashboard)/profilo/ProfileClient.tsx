@@ -20,6 +20,7 @@ import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
 const InventarioCreatureClient = dynamic(() => import("@/app/(dashboard)/creature-inventario/InventarioCreatureClient"), { ssr: false })
 const MappaAvventuraClient = dynamic(() => import("@/app/(dashboard)/mappa-avventura/MappaAvventuraClient"), { ssr: false })
+const TradingClient = dynamic(() => import("@/app/(dashboard)/trading/TradingClient"), { ssr: false })
 import type { UnlockedTitle } from "@/app/actions/titleActions"
 
 type LifetimeStats = {
@@ -75,7 +76,7 @@ const TAB_CONFIG: { id: ProfileTab; icon: typeof Zap; gdoOnly?: boolean }[] = [
     { id: 'Scambi', icon: ArrowLeftRight, gdoOnly: true },
 ];
 
-export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats, allCreatures = [], ownedCreatures = [], adventureProgress, adventureBosses = [], isTeam = false, userId }: {
+export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats, allCreatures = [], ownedCreatures = [], adventureProgress, adventureBosses = [], isTeam = false, userId, tradingOffers = [], tradingGdoUsers = [] }: {
     profileData: any;
     achievements?: any[];
     titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
@@ -92,6 +93,8 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     adventureBosses?: any[];
     isTeam?: boolean;
     userId?: string;
+    tradingOffers?: any[];
+    tradingGdoUsers?: any[];
 }) {
 
     const {
@@ -798,16 +801,24 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 </div>
             )}
 
-            {/* ═══════════════════════════════════════════════════════
-                TAB: Scambi — placeholder for RO-009 (GDO only)
-            ═══════════════════════════════════════════════════════ */}
             {activeTab === 'Scambi' && role === 'GDO' && (
                 <div className="px-4 lg:px-8 mt-6">
-                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
-                        <ArrowLeftRight className="w-10 h-10 text-purple-400 mx-auto mb-3" />
-                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Scambi</h3>
-                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Il trading di creature — in arrivo.</p>
-                    </div>
+                    <SafeWrapper>
+                        {userId ? (
+                            <TradingClient
+                                userId={userId}
+                                myCreatures={ownedCreatures}
+                                offers={tradingOffers}
+                                gdoUsers={tradingGdoUsers}
+                            />
+                        ) : (
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                                <ArrowLeftRight className="w-10 h-10 text-purple-400 mx-auto mb-3" />
+                                <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Scambi</h3>
+                                <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Caricamento scambi...</p>
+                            </div>
+                        )}
+                    </SafeWrapper>
                 </div>
             )}
 
