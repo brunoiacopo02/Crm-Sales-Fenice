@@ -108,7 +108,7 @@ export function PipelineBoard({
         <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl border border-ash-200 shadow-card overflow-hidden">
 
             {/* STICKY HEADER & TAB BAR */}
-            <div className="sticky top-[140px] z-20 bg-white border-b border-ash-200/60 px-2 sm:px-4 pt-4 pb-3 shadow-sm">
+            <div className="bg-white border-b border-ash-200/60 px-2 sm:px-4 pt-4 pb-3 shadow-sm rounded-t-xl">
                 <div className="flex flex-wrap items-center justify-between gap-4">
 
                     {/* TABS */}
