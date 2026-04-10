@@ -86,7 +86,7 @@ export default async function DashboardPage() {
 
             <GdoDailyObjectives gdoUserId={session!.user.id} />
 
-            <StreakCounter userId={session!.user.id} />
+            <SafeWrapper><StreakCounter userId={session!.user.id} /></SafeWrapper>
 
             <SafeWrapper><ChestWidget userId={session!.user.id} /></SafeWrapper>
 

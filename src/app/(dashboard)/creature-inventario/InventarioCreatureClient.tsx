@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { SafeWrapper } from '@/components/SafeWrapper';
 import { equipCreature, fuseCreatures } from '@/app/actions/creatureActions';
@@ -97,7 +97,7 @@ const ELEMENT_COLORS: Record<string, string> = {
     ombra: 'text-violet-400',
 };
 
-function CreatureCard({
+const CreatureCard = memo(function CreatureCard({
     creature,
     copyCount,
     isEquipped,
@@ -109,8 +109,8 @@ function CreatureCard({
     creature: OwnedCreature;
     copyCount: number;
     isEquipped: boolean;
-    onEquip: () => void;
-    onFuse: () => void;
+    onEquip: (creature: OwnedCreature) => void;
+    onFuse: (creature: OwnedCreature) => void;
     isPending: boolean;
     isTeam?: boolean;
 }) {
@@ -190,8 +190,8 @@ function CreatureCard({
                 <div
                     role="button"
                     tabIndex={0}
-                    onClick={isPending ? undefined : onEquip}
-                    onKeyDown={(e) => e.key === 'Enter' && !isPending && onEquip()}
+                    onClick={isPending ? undefined : () => onEquip(creature)}
+                    onKeyDown={(e) => e.key === 'Enter' && !isPending && onEquip(creature)}
                     className={`flex-1 text-center text-xs font-semibold py-2 rounded-lg transition-all cursor-pointer ${isEquipped
                         ? 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
                         : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400'
@@ -203,8 +203,8 @@ function CreatureCard({
                     <div
                         role="button"
                         tabIndex={0}
-                        onClick={isPending ? undefined : onFuse}
-                        onKeyDown={(e) => e.key === 'Enter' && !isPending && onFuse()}
+                        onClick={isPending ? undefined : () => onFuse(creature)}
+                        onKeyDown={(e) => e.key === 'Enter' && !isPending && onFuse(creature)}
                         className={`flex-1 text-center text-xs font-semibold py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all cursor-pointer ${isPending ? 'opacity-50 cursor-wait' : ''}`}
                     >
                         <Swords className="inline h-3 w-3 mr-1" />
@@ -214,7 +214,7 @@ function CreatureCard({
             </div>
         </div>
     );
-}
+})
 
 export default function InventarioCreatureClient({ allCreatures, ownedCreatures, isTeam, userId }: Props) {
     const router = useRouter();
@@ -266,13 +266,12 @@ export default function InventarioCreatureClient({ allCreatures, ownedCreatures,
         });
     }, [bestCopies, rarityFilter, elementFilter]);
 
-    const handleEquip = (creature: OwnedCreature) => {
+    const handleEquip = useCallback((creature: OwnedCreature) => {
         startTransition(async () => {
             const id = creature.userCreatureId || creature.teamCreatureId;
             if (!id) return;
 
             if (creature.isEquipped) {
-                // Un-equip: just equip nothing (re-equip same creature toggles off)
                 if (isTeam) {
                     await equipTeamCreature(id);
                 } else {
@@ -287,9 +286,9 @@ export default function InventarioCreatureClient({ allCreatures, ownedCreatures,
             }
             router.refresh();
         });
-    };
+    }, [isTeam, userId, router]);
 
-    const handleFuse = (creature: OwnedCreature) => {
+    const handleFuse = useCallback((creature: OwnedCreature) => {
         startTransition(async () => {
             const result = isTeam
                 ? await fuseTeamCreatures(creature.creatureId)
@@ -304,7 +303,7 @@ export default function InventarioCreatureClient({ allCreatures, ownedCreatures,
             }
             router.refresh();
         });
-    };
+    }, [isTeam, userId, router]);
 
     return (
         <SafeWrapper>
@@ -426,8 +425,8 @@ export default function InventarioCreatureClient({ allCreatures, ownedCreatures,
                                         creature={creature}
                                         copyCount={creature.copyCount}
                                         isEquipped={creature.isEquipped}
-                                        onEquip={() => handleEquip(creature)}
-                                        onFuse={() => handleFuse(creature)}
+                                        onEquip={handleEquip}
+                                        onFuse={handleFuse}
                                         isPending={isPending}
                                         isTeam={isTeam}
                                     />

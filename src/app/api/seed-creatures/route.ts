@@ -95,8 +95,6 @@ const creatures = [
 
 export async function GET() {
     try {
-        console.log(`Seeding ${creatures.length} creature...`);
-
         let inserted = 0;
         for (const c of creatures) {
             const result = await db.execute(sql`
@@ -107,7 +105,6 @@ export async function GET() {
             inserted++;
         }
 
-        console.log(`Seed completato: ${inserted} creature processate`);
         return NextResponse.json({
             success: true,
             message: `Seed completato: ${creatures.length} creature (35 comuni, 25 rare, 14 epiche, 6 leggendarie)`,

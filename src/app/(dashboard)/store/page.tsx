@@ -1,7 +1,9 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
-import { ShopClient } from "@/components/ShopClient"
 import { ShoppingBag } from "lucide-react"
+import dynamic from "next/dynamic"
+
+const ShopClient = dynamic(() => import("@/components/ShopClient").then(m => ({ default: m.ShopClient })), { loading: () => <div className="animate-pulse space-y-4"><div className="h-12 bg-ash-200 rounded-lg w-1/4" /><div className="grid grid-cols-3 gap-4"><div className="h-48 bg-ash-100 rounded-xl" /><div className="h-48 bg-ash-100 rounded-xl" /><div className="h-48 bg-ash-100 rounded-xl" /></div></div> })
 
 export default async function StorePage() {
     const supabase = await createClient();

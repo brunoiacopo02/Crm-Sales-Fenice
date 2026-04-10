@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, memo } from "react"
 import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
@@ -77,7 +77,7 @@ function getFunnelRarity(funnel: string | null): FunnelRarity {
     return FUNNEL_RARITY_MAP[funnel.toUpperCase()] ?? 'bronze'
 }
 
-export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
+export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
     const [showScript, setShowScript] = useState(false)
     // Client-side time for expiry checks (avoids hydration mismatch)
     const [clientNow, setClientNow] = useState(0)
@@ -308,4 +308,4 @@ export function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProp
             </div>
         </div>
     )
-}
+})

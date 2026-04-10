@@ -3,8 +3,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Package, Lock, Coins, Sparkles } from 'lucide-react';
 import { getOrCreateActiveChests, openChest } from '@/app/actions/chestActions';
-import { ChestOpeningAnimation, type ChestRarity } from '@/components/ChestOpeningAnimation';
+import type { ChestRarity } from '@/components/ChestOpeningAnimation';
 import { SafeWrapper } from '@/components/SafeWrapper';
+import dynamic from 'next/dynamic';
+
+const ChestOpeningAnimation = dynamic(() => import('@/components/ChestOpeningAnimation').then(m => ({ default: m.ChestOpeningAnimation })), { ssr: false });
 
 // ─── Types ─────────────────────────────────────────────────────────────
 

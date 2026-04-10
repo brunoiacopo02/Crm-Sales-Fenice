@@ -16,7 +16,7 @@
         "npx next build senza errori e verificare che il bundle size sia ridotto"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "NON lazy-loadare componenti server-side. Solo client components pesanti. Usare dynamic(() => import(...), { ssr: false, loading: () => <Skeleton /> })."
     },
     {
@@ -32,7 +32,7 @@
         "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Indici compositi dove serve: (assignedToId, status), (assignedToId, recallDate). NON creare indici su colonne gia indicizzate."
     },
     {
@@ -48,7 +48,7 @@
         "npx next build senza errori"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "React.memo previene re-render quando le props non cambiano. Utile per liste lunghe (pipeline 50+ lead, inventario 80 creature)."
     },
     {
@@ -65,7 +65,7 @@
         "npx next build senza errori"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Il test e statico (build + code review). Non serve browser. Cerca: import mancanti, tipi sbagliati, componenti non esistenti, SafeWrapper mancanti."
     },
     {
@@ -81,7 +81,7 @@
         "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Attenzione a non rimuovere console.error nei catch (quelli servono per debug produzione). Attenzione ai dynamic import che non appaiono come import normali."
     },
     {
@@ -97,7 +97,7 @@
         "npx next build senza errori"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "Solo le CHIAMATE vanno filtrate per orario. Appuntamenti, conferme, presenze, chiusure non hanno orario fisso."
     },
     {
@@ -113,7 +113,7 @@
         "npx next build senza errori"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Lo ScriptWidget e gia nel drawer della LeadCard. Serve solo tracciare quando viene completato e salvarlo."
     },
     {
@@ -130,7 +130,7 @@
         "npx next build senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Le immagini badge script sono gia state generate con Gemini. Achievement usa il sistema esistente (achievementActions). Quest usa il sistema esistente (questActions)."
     },
     {
@@ -146,7 +146,7 @@
         "npx next build senza errori"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "Questo incentiva i TL a monitorare chi usa lo script e chi no."
     }
   ]

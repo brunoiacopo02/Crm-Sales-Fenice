@@ -22,3 +22,113 @@ Started: 2026-04-09
 - Immagini AI generate (22 creature + 10 boss + 4 gamification)
 - Bug fix: pooler DB, race conditions, profilo SafeWrapper, richiami note
 - Sicurezza: 13 route migrate protette, link fixati, test pages rimosse
+
+## F3-001 — Performance: lazy loading componenti pesanti (2026-04-09)
+- Dynamic import per 6 componenti pesanti: ConfermeBoard (759L), ProfileClient (698L), ShopClient (531L), InventarioCreatureClient (460L), MappaAvventuraClient (495L), TradingClient (789L)
+- Loading skeleton animati per ogni componente lazy-loaded
+- ChestOpeningAnimation (377L) lazy-loaded in ChestWidget, LootDropModal, TimedChest
+- Recharts lazy-loaded in KpiTeamDashboard (era import statico)
+- Fixed Cell import statico in KpiBoardAdvanced e KpiGdoBoard
+- CelebrationOverlay e CreatureRevealOverlay erano gia lazy (verificato)
+- Note: ssr:false non consentito in Server Components (Next.js App Router), usato solo loading skeleton
+- Build: OK
+
+## F3-002 — Performance: ottimizzare query DB con indici mancanti (2026-04-09)
+- Analyzed frequent queries: pipeline (assignedToId+status), conferme (confirmationsOutcome), recall (assignedToId+recallDate), achievements (userId), KPI (callLogs userId+createdAt)
+- Added 3 new indexes on leads: confirmations_outcome_idx, assigned_status_idx (composite), assigned_recall_idx (composite)
+- Added 2 indexes on callLogs: calllogs_user_id_idx, calllogs_user_created_at_idx (composite)
+- Added 2 indexes on leadEvents: lead_events_lead_id_idx, lead_events_user_id_idx
+- Added 1 index on userAchievements: user_achievements_user_id_idx
+- Added 2 indexes on questProgress: quest_progress_user_id_idx, quest_progress_user_date_idx (composite)
+- Added 1 index on userCreatures: user_creatures_user_id_idx
+- Total: 11 new indexes across 5 tables
+- Created migration route /api/migrate-indexes/route.ts
+- Executed migration on production DB: all 11 indexes created successfully
+- Build: OK
+
+## F3-003 — Performance: React.memo su componenti lista (2026-04-09)
+- Wrapped LeadCard with React.memo (rendered 50+ times in PipelineBoard and RecallBoard)
+- Wrapped CreatureCard with React.memo in InventarioCreatureClient (rendered in grid of 80+ creatures)
+- Wrapped BossCard with React.memo in MappaAvventuraClient (rendered per adventure section)
+- Added useCallback to handleEquip and handleFuse in InventarioCreatureClient to stabilize references
+- Changed CreatureCard onEquip/onFuse to accept creature parameter, parent passes stable callbacks directly
+- PipelineBoard/RecallBoard: setSelectedLeadId from useState is already a stable reference, no useCallback needed
+- BossCard: no callback props, only primitive/object props — memo prevents re-renders when parent state changes
+- Build: OK
+
+## F3-004 — Debug: verificare ogni pagina per ogni ruolo (2026-04-09)
+- Verified all 30 page.tsx files across 4 roles: GDO (11 pages), CONFERME (7 pages), VENDITORE (4 pages), MANAGER (16 pages)
+- Build passes cleanly with 56 static pages generated
+- All dynamic imports verified: 27 component files + 4 relative imports all resolve correctly
+- All gamification components verified for SafeWrapper coverage
+- Fixed: StreakCounter missing SafeWrapper in dashboard page.tsx, venditore/page.tsx, conferme/page.tsx
+- Fixed: DuelHistory missing SafeWrapper in profilo/ProfileClient.tsx
+- No missing imports, wrong types, or non-existent component references found
+- HotStreak was already wrapped in SafeWrapper in both dashboard and conferme pages
+- Build: OK
+
+## F3-005 — Debug: rimuovere console.log e codice morto (2026-04-09)
+- Removed 34 console.log statements from 13 migration/seed API route files
+- Kept all console.error in catch blocks (needed for production debugging)
+- Deleted 6 unused db utility/test scripts: query.ts, cleanFourthCall.ts, cleanAllLeads.ts, cleanTestLeads.ts, testFourthCall.ts, testLiveLeaderboard.ts
+- Deleted unused ActivityFeed.tsx component + activityFeedActions.ts (not imported anywhere)
+- Removed unused imports: logLeadEvent, checkLeaderboardOvertake, checkAndCompleteExpiredSprint from pipelineActions.ts
+- Removed unused import: asc from confermeActions.ts
+- Removed unused import: getEquippedSkinCss from profilo/page.tsx
+- Removed unused imports: Medal, MapPin, Calendar, Clock from classifica/page.tsx
+- No TODO/FIXME/HACK comments found in codebase
+- console.warn in googleCalendar.ts kept (legitimate operational warning)
+- Total: 700 lines of dead code removed across 25 files
+- Build: OK
+
+## F3-006 — Fix: KPI aggregate filtrate per orario lavorativo 13:30-20:00 (2026-04-09)
+- Added isWithinWorkingHours() helper: checks if timestamp falls in 13:30-20:00 Europe/Rome
+- Aggregate call metrics (totalCalls, totalAnswers, teamAnswerRate, teamCallsPerHour, totalRecalls) now filtered to working hours only
+- totalAppointments NOT filtered (appointments don't have fixed working hours)
+- Per-GDO ranking: calls/answers filtered to working hours, appointments always counted
+- Daily trend chart (settimana/mese) now filters by working hours
+- Hourly trend chart (oggi/ieri) already implicitly filtered via 13:30-20:00 time bucketing
+- FIXED_HOURS_WORKED = 6.5 unchanged (correct)
+- Removed unused imports (sql, desc) from kpiTeamActions.ts
+- Build: OK
+
+## F3-007 — Gamification: Script tracking nel CRM (2026-04-09)
+- Added scriptCompleted boolean field (default false) to callLogs in schema.ts
+- Created migration route /api/migrate-script-completion/route.ts (ALTER TABLE ADD COLUMN IF NOT EXISTS)
+- ScriptWidget.tsx: dispatches custom DOM event 'script_completed' when user navigates to step 11 (Chiusura)
+- OutcomeModal.tsx: listens for 'script_completed' event, sets local state, passes to updateLeadOutcome on submit
+- pipelineActions.ts updateLeadOutcome: accepts scriptCompleted param, saves in callLog insert
+- Created getScriptCompletionRate(userId) in gdoPerformanceActions.ts: returns totalCalls, scriptCompletedCount, completionRate %
+- Migration executed on production DB: scriptCompleted column added to callLogs
+- Build: OK
+
+## F3-008 — Gamification: Achievement e Quest per lo Script (2026-04-10)
+- Added 'total_scripts_completed' metric to measureAchievementMetric in achievementActions.ts (counts callLogs where scriptCompleted=true)
+- Added 'scripts_completed' time-scoped metric to measureMetric in questActions.ts (counts callLogs with scriptCompleted=true within date range)
+- Created 3 new achievements in 'script' category:
+  - 'Studente Modello' (ach-script-studente): 10/50/200 scripts completed (icon: BookOpen)
+  - 'Script Master' (ach-script-master): 300/500/1000 scripts completed (icon: GraduationCap)
+  - 'Maestro della Persuasione' (ach-script-persuasione): 1500/3000/5000 scripts completed (icon: Sparkles)
+- Created 2 new quests for GDO role:
+  - Daily: 'Seguace dello Script' (quest-d-script-5): 5 scripts/day, reward 10 XP + 15 coins
+  - Weekly: 'Disciplina Settimanale' (quest-w-script-20): 20 scripts/week, reward 30 XP + 50 coins
+- Created migration route /api/migrate-script-achievements/route.ts
+- Badge images already exist: script-master-badge.png and script-streak-badge.png
+- Migration executed on production DB: 3 achievements + 2 quests seeded successfully
+- Build: OK
+
+## F3-009 — Gamification: Script completion rate visibile nel profilo e KPI (2026-04-10)
+- Enhanced getScriptCompletionRate() in gdoPerformanceActions.ts: now returns scriptStreak (consecutive days with script completion, timezone Europe/Rome)
+- Created getAllGdoScriptRates() bulk function for manager view: fetches script completion rates for all active GDOs in 2 queries (efficient)
+- Added gdoId field to getManagerGdoTables() result for client-side matching
+- ProfileClient.tsx: new Script Usage card (SafeWrapper wrapped, GDO/CONFERME only) showing:
+  - Total script completati (count)
+  - % Chiamate con Script (color-coded: green >=70%, amber 40-70%, red <40%)
+  - Giorni Streak Script (consecutive days with flame icon)
+  - Progress bar "Padronanza Script" with color-coded fill
+- ManagerGdoClient.tsx: added "% Script" badge in each GDO header (alongside Lead Assegn. and % Fissaggio)
+  - Color-coded: green >=70%, amber 40-70%, red <40%
+  - Uses BookOpen icon for visual distinction
+- profilo/page.tsx: fetches getScriptCompletionRate in parallel with other data
+- manager-gdo-performance/page.tsx: fetches getAllGdoScriptRates in parallel with getManagerGdoTables
+- Build: OK

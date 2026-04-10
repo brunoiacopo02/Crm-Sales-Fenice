@@ -8,8 +8,6 @@ export async function GET() {
     }
 
     try {
-        console.log("Migrazione quest system Venditori...");
-
         // Seed VENDITORE quest templates (6 daily + 3 weekly)
         await db.execute(sql`
             INSERT INTO quests (id, title, description, type, "targetMetric", "targetValue", "rewardXp", "rewardCoins", "isActive", "role")
@@ -26,7 +24,6 @@ export async function GET() {
             ON CONFLICT (id) DO NOTHING
         `);
 
-        console.log("Migrazione quest Venditori completata!");
         return NextResponse.json({ success: true, message: "Quest Venditori: templates seeded." });
     } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);

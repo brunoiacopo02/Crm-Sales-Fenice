@@ -15,7 +15,7 @@ const Tooltip = dynamic(() => import("recharts").then((mod) => mod.Tooltip), { s
 const ResponsiveContainer = dynamic(() => import("recharts").then((mod) => mod.ResponsiveContainer), { ssr: false })
 const PieChart = dynamic(() => import("recharts").then((mod) => mod.PieChart), { ssr: false })
 const Pie = dynamic(() => import("recharts").then((mod) => mod.Pie), { ssr: false })
-import { Cell } from "recharts"
+const Cell = dynamic(() => import("recharts").then((mod) => mod.Cell), { ssr: false })
 
 export function KpiGdoBoard() {
     const { user: authUser, isLoading } = useAuth();

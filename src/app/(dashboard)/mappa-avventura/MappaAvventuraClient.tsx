@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, memo } from 'react';
 import { SafeWrapper } from '@/components/SafeWrapper';
 import {
     Compass, Lock, CheckCircle2, Swords, Shield, Sparkles, Crown,
@@ -84,7 +84,7 @@ function HpBar({ current, total, size = 'normal' }: { current: number; total: nu
     );
 }
 
-function BossCard({
+const BossCard = memo(function BossCard({
     boss,
     isActive,
     isDefeated,
@@ -201,7 +201,7 @@ function BossCard({
             )}
         </div>
     );
-}
+})
 
 function StageNode({
     stage,

@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents } from "@/db/schema"
-import { eq, asc, desc, and, or, like, between, isNull, isNotNull } from "drizzle-orm"
+import { eq, desc, and, or, like, between, isNull, isNotNull } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent, checkFreeBusy } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"

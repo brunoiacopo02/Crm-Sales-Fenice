@@ -32,7 +32,7 @@ export default async function VenditorePage() {
 
             {session.user.role === 'VENDITORE' && (
                 <>
-                    <StreakCounter userId={session.user.id} />
+                    <SafeWrapper><StreakCounter userId={session.user.id} /></SafeWrapper>
                     <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
                     <SafeWrapper><QuestPanel userId={session.user.id} /></SafeWrapper>
                 </>

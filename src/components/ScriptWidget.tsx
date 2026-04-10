@@ -259,7 +259,16 @@ export function ScriptWidget() {
     return true;
   }, [current, checkedCount, minRequired, timerDone, block]);
 
-  const goNext = () => { if (canGoNext()) setCurrent(prev => prev + 1); };
+  const goNext = () => {
+    if (canGoNext()) {
+      const nextIndex = current + 1;
+      setCurrent(nextIndex);
+      // Dispatch script_completed when reaching the last block (step 11 — Chiusura)
+      if (nextIndex === SCRIPT_BLOCKS.length - 1) {
+        window.dispatchEvent(new CustomEvent('script_completed'));
+      }
+    }
+  };
   const goPrev = () => { if (current > 0) setCurrent(prev => prev - 1); };
   const resetCall = () => {
     setCurrent(0);

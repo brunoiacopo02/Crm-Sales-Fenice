@@ -1,4 +1,4 @@
-import { getManagerGdoTables } from '@/app/actions/gdoPerformanceActions';
+import { getManagerGdoTables, getAllGdoScriptRates } from '@/app/actions/gdoPerformanceActions';
 import ManagerGdoClient from './ManagerGdoClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
@@ -19,13 +19,17 @@ export default async function ManagerGdoPerformancePage({
     const currentMonthStr = new Date().toISOString().slice(0, 7);
     const selectedMonth = searchParams.month || currentMonthStr;
 
-    const data = await getManagerGdoTables(selectedMonth);
+    const [data, scriptRates] = await Promise.all([
+        getManagerGdoTables(selectedMonth),
+        getAllGdoScriptRates().catch(() => ({})),
+    ]);
 
     return (
         <ManagerGdoClient
             initialData={data}
             selectedMonth={selectedMonth}
             role={role}
+            scriptRates={scriptRates}
         />
     );
 }

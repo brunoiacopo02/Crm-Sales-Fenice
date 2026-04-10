@@ -151,6 +151,16 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             if (totalEsiti === 0) return 0;
             return Math.round((Number(result[0]?.chiusi) / totalEsiti) * 100);
         }
+        // Script metrics
+        case 'total_scripts_completed': {
+            const result = await db.select({ value: count() })
+                .from(callLogs)
+                .where(and(
+                    eq(callLogs.userId, userId),
+                    eq(callLogs.scriptCompleted, true)
+                ));
+            return result[0]?.value ?? 0;
+        }
         // Universe metrics
         case 'total_bosses_defeated': {
             // Count stages that are multiples of 10 that have been completed (currentStage > bossStage)

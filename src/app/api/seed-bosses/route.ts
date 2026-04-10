@@ -68,8 +68,6 @@ const bosses = [
 
 export async function GET() {
     try {
-        console.log(`Seeding ${bosses.length} adventure bosses...`);
-
         for (const b of bosses) {
             await db.execute(sql`
                 INSERT INTO "adventureBosses" (id, "stageNumber", name, description, "imageUrl", "totalHp", element, "rewardCreatureId", "rewardCoins", "rewardTitle")
@@ -78,7 +76,6 @@ export async function GET() {
             `);
         }
 
-        console.log("Seed boss completato!");
         return NextResponse.json({
             success: true,
             message: `Seed completato: ${bosses.length} boss avventura (stage 10-100)`,

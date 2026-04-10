@@ -4,11 +4,14 @@ import { getUnlockedTitles } from '@/app/actions/titleActions';
 import { getStreakInfo } from '@/app/actions/streakActions';
 import { getUserQuests } from '@/app/actions/questActions';
 import { getUserLifetimeStats } from '@/app/actions/leaderboardActions';
-import { getUserInventory, getEquippedSkinCss } from '@/app/actions/shopActions';
+import { getUserInventory } from '@/app/actions/shopActions';
 import { getDuelHistory } from '@/app/actions/duelActions';
-import ProfileClient from './ProfileClient';
+import { getScriptCompletionRate } from '@/app/actions/gdoPerformanceActions';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
+import dynamic from 'next/dynamic';
+
+const ProfileClient = dynamic(() => import('./ProfileClient'), { loading: () => <div className="animate-pulse space-y-4"><div className="h-48 bg-ash-100 rounded-xl" /><div className="grid grid-cols-2 gap-4"><div className="h-32 bg-ash-100 rounded-xl" /><div className="h-32 bg-ash-100 rounded-xl" /></div><div className="h-64 bg-ash-100 rounded-xl" /></div> });
 
 export default async function ProfiloPage() {
     const supabase = await createClient();
@@ -19,7 +22,7 @@ export default async function ProfiloPage() {
     }
 
     try {
-        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData] = await Promise.all([
+        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData, scriptStats] = await Promise.all([
             getGdoRpgProfile(supabaseUser.id).catch(e => { console.error("Profile error:", e); return null; }),
             getUserAchievements(supabaseUser.id).catch(() => ({ achievements: [] })),
             getUnlockedTitles(supabaseUser.id).catch(() => ({ titles: [], activeTitle: null })),
@@ -28,6 +31,7 @@ export default async function ProfiloPage() {
             getUserLifetimeStats(supabaseUser.id).catch(() => undefined),
             getUserInventory(supabaseUser.id).catch(() => []),
             getDuelHistory(supabaseUser.id).catch(() => ({ duels: [], stats: { totalDuels: 0, wins: 0, losses: 0, winRate: 0 } })),
+            getScriptCompletionRate(supabaseUser.id).catch(() => ({ totalCalls: 0, scriptCompletedCount: 0, completionRate: 0, scriptStreak: 0 })),
         ]);
 
         if (!profileData) {
@@ -90,6 +94,7 @@ export default async function ProfiloPage() {
                     cssValue: equippedItemInfo.cssValue,
                 } : null}
                 duelHistory={duelHistoryData}
+                scriptStats={scriptStats}
             />
         );
     } catch (e) {
