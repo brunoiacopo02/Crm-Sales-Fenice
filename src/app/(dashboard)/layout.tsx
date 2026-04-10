@@ -44,7 +44,9 @@ export default async function DashboardLayout({
                     <Sidebar />
                     <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                         {showSprintBanner && <SprintBanner />}
-                        <Topbar />
+                        <div className="relative z-50">
+                            <Topbar />
+                        </div>
                         <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
                             {children}
                         </main>

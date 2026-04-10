@@ -274,7 +274,7 @@ export function Topbar() {
                     </button>
 
                     {isNotifOpen && (
-                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-elevated border border-ash-200/50 overflow-hidden z-50 animate-fade-in">
+                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-elevated border border-ash-200/50 overflow-hidden z-[100] animate-fade-in">
                             <div className="flex items-center justify-between px-4 py-3 border-b border-ash-100 bg-ash-50/50">
                                 <h3 className="font-semibold text-ash-800 text-sm">Notifiche</h3>
                                 {notifications.filter(n => n.status === 'unread').length > 0 && (
