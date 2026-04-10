@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Send, X, Briefcase, Users, CheckCircle2, Loader2 } from "lucide-react"
+import { Send, X, Briefcase, Users, CheckCircle2, Loader2, Mail } from "lucide-react"
 import { sendAgendaToLead } from "@/app/actions/activeCampaignActions"
 import { useRouter } from "next/navigation"
 
@@ -18,19 +18,20 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     const [showModal, setShowModal] = useState(false)
     const [lavora, setLavora] = useState<boolean | null>(null)
     const [haFamiglia, setHaFamiglia] = useState<boolean | null>(null)
+    const [emailOverride, setEmailOverride] = useState("")
     const [loading, setLoading] = useState(false)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
     const alreadySent = !!agendaSentAt
-    const disabled = !hasEmail
+    const needsEmail = !hasEmail
 
     const handleOpen = (e: React.MouseEvent) => {
         e.stopPropagation()
-        if (disabled) return
         setShowModal(true)
         setLavora(null)
         setHaFamiglia(null)
+        setEmailOverride("")
         setSuccessMsg(null)
         setErrorMsg(null)
     }
@@ -40,12 +41,22 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         setShowModal(false)
     }
 
+    const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
+
     const handleSubmit = async () => {
         if (lavora === null || haFamiglia === null) return
+        if (needsEmail && !isValidEmail(emailOverride)) {
+            setErrorMsg("Inserisci un'email valida")
+            return
+        }
         setLoading(true)
         setErrorMsg(null)
         try {
-            const result = await sendAgendaToLead(leadId, { lavora, haFamiglia })
+            const result = await sendAgendaToLead(leadId, {
+                lavora,
+                haFamiglia,
+                emailOverride: needsEmail ? emailOverride.trim() : undefined,
+            })
             if (result.success) {
                 setSuccessMsg(result.alreadySent ? "Agenda reinviata correttamente!" : "Agenda inviata correttamente!")
                 router.refresh()
@@ -60,23 +71,19 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         }
     }
 
-    const canSubmit = lavora !== null && haFamiglia !== null && !loading
+    const canSubmit = lavora !== null && haFamiglia !== null && !loading && (!needsEmail || isValidEmail(emailOverride))
 
     return (
         <>
             <button
                 onClick={handleOpen}
-                disabled={disabled}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${disabled
-                    ? 'border-ash-200 bg-ash-50 text-ash-400 cursor-not-allowed'
-                    : alreadySent
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                        : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${alreadySent
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
                     }`}
                 title={
-                    disabled ? "Lead senza email" :
-                        alreadySent ? `Agenda già inviata (${new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}) — clicca per reinviare` :
-                            "Invia agenda Calendly via WhatsApp"
+                    alreadySent ? `Agenda già inviata (${new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}) — clicca per reinviare` :
+                        "Invia agenda Calendly via WhatsApp"
                 }
             >
                 {alreadySent ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
@@ -122,6 +129,27 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
 
                             {!successMsg && (
                                 <>
+                                    {/* Email input — only if lead has no email */}
+                                    {needsEmail && (
+                                        <div>
+                                            <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">
+                                                <Mail className="w-3.5 h-3.5" /> Email del Lead *
+                                            </label>
+                                            <input
+                                                type="email"
+                                                value={emailOverride}
+                                                onChange={(e) => setEmailOverride(e.target.value)}
+                                                placeholder="esempio@email.com"
+                                                disabled={loading}
+                                                className="input-fenice text-sm w-full"
+                                                autoFocus
+                                            />
+                                            <div className="text-[11px] text-ash-500 mt-1">
+                                                Il lead non ha email salvata. Inserisci quella comunicata durante la chiamata — verrà salvata anche nel CRM.
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Question 1: Lavora */}
                                     <div>
                                         <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">

@@ -89,6 +89,7 @@ async function addContactToAutomation(contactId: string, automationId: string): 
 export type SendAgendaOptions = {
     lavora: boolean
     haFamiglia: boolean
+    emailOverride?: string // If lead has no email, GDO provides one at submit time
 }
 
 export type SendAgendaResult = {
@@ -115,13 +116,29 @@ export async function sendAgendaToLead(
     // Fetch lead
     const [lead] = await db.select().from(leads).where(eq(leads.id, leadId))
     if (!lead) return { success: false, error: 'Lead non trovato' }
-    if (!lead.email) return { success: false, error: 'Il lead non ha email — impossibile inviare agenda' }
+
+    // Use lead email or override provided by GDO
+    const emailToUse = lead.email || options.emailOverride
+    if (!emailToUse) {
+        return { success: false, error: 'Email mancante — richiedere email al GDO' }
+    }
+    // Basic email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToUse)) {
+        return { success: false, error: 'Formato email non valido' }
+    }
 
     try {
+        // If lead had no email and GDO provided one, save it to the lead for future use
+        if (!lead.email && options.emailOverride) {
+            await db.update(leads)
+                .set({ email: options.emailOverride })
+                .where(eq(leads.id, leadId))
+        }
+
         // 1. Find or create contact
-        let contactId = await findContactByEmail(lead.email)
+        let contactId = await findContactByEmail(emailToUse)
         if (!contactId) {
-            contactId = await createContact(lead.email, lead.phone, lead.name)
+            contactId = await createContact(emailToUse, lead.phone, lead.name)
         }
 
         // 2. Add tags
