@@ -16,6 +16,13 @@ Started: 2026-04-10
 - GdoDailyObjectives: componente che mostra chiamate/fissaggi del giorno con progress bar.
 - ChestWidget: widget bauli azione. Va RIMOSSO dalla pipeline ma il backend resta.
 
+## Completed Stories
+
+### RO-001 — Pipeline: obiettivi giornalieri sticky in alto (2026-04-10)
+- Wrapped GdoDailyObjectives in sticky container: `sticky top-0 z-10 bg-gray-50 shadow-sm`
+- Used negative margins (-mx-3 sm:-mx-6) + compensating padding to extend bg full-width
+- Component stays fixed at top when scrolling pipeline. Build green.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.

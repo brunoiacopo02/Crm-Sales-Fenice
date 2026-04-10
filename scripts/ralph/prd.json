@@ -16,7 +16,7 @@
         "npx next build senza errori"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Il GdoDailyObjectives e gia nel page.tsx. Solo aggiungere sticky positioning."
     },
     {
