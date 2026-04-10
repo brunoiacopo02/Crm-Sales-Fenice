@@ -115,7 +115,7 @@
         "npx next build senza errori"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "InventarioCreatureClient e un componente client gia pronto. Serve solo fetchare i dati nel profilo page.tsx e passarli."
     },
     {
