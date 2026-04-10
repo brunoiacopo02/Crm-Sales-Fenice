@@ -98,7 +98,7 @@
         "npx next build senza errori"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "ChestWidget non viene piu mostrato standalone. I bauli sono reward delle quest. Per ora basta spostare i componenti qui, l'integrazione bauli-quest la facciamo dopo se serve."
     },
     {

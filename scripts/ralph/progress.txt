@@ -56,6 +56,17 @@ Started: 2026-04-10
 - titleData still used in hero banner for active title display
 - Build green, no hydration issues.
 
+### RO-006 — Profilo Tab 'Quest & Sfide': quest, achievement, titoli, duelli (2026-04-10)
+- Replaced placeholder tab with actual gamification components
+- Added imports: QuestPanel, AchievementShowcase, TitleSelector, DuelHistory, DuelWidget
+- Layout order: QuestPanel (top, focus) → AchievementShowcase → TitleSelector → DuelWidget + DuelHistory
+- Each section wrapped in SafeWrapper for crash isolation
+- AchievementShowcase wrapped in gaming-themed card with Trophy icon header
+- TitleSelector wrapped in purple-themed card with Crown icon header
+- DuelWidget shows active duel (self-fetching), DuelHistory shows stats/records below
+- Conditional rendering: achievements shown only if non-empty, titles only if unlocked, duel history only if data exists
+- Build green, no hydration issues.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.
