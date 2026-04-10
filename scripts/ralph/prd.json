@@ -82,7 +82,7 @@
         "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Lo snellimento rende il tab Profilo veloce da caricare e focalizzato sui numeri."
     },
     {

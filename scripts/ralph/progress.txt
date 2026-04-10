@@ -47,6 +47,15 @@ Started: 2026-04-10
 - State managed via useState<ProfileTab> defaulting to 'Profilo'
 - Build green, no hydration issues (tabs use div with role=button, not span)
 
+### RO-005 — Profilo Tab 'Profilo': contenuto principale snellito (2026-04-10)
+- Removed from Profilo tab: DuelHistory, Quest Log, TitleSelector, AchievementShowcase
+- Moved Settings (AnimationToggle, SoundToggle) outside tabs — always visible at bottom of page
+- Kept in Profilo tab: Stats cards (6 KPI), SocialComparisonBadge, Script Usage, two-column layout (Upcoming Rewards + Streak + Equipped Cosmetics | Finanze + WeeklyBonus + Prossimi Traguardi)
+- Cleaned up unused imports: AchievementShowcase, TitleSelector, DuelHistory, unused lucide-react icons
+- Props (achievements, duelHistory, activeQuests) kept in function signature for RO-006 reuse
+- titleData still used in hero banner for active title display
+- Build green, no hydration issues.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.
