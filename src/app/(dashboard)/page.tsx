@@ -84,7 +84,9 @@ export default async function DashboardPage() {
             <SafeWrapper><SeasonalEventBanner /></SafeWrapper>
             <SafeWrapper><BossBattleBanner userId={session!.user.id} /></SafeWrapper>
 
-            <GdoDailyObjectives gdoUserId={session!.user.id} />
+            <div className="sticky top-0 z-10 bg-gray-50 -mx-3 sm:-mx-6 px-3 sm:px-6 pb-1 shadow-sm">
+                <GdoDailyObjectives gdoUserId={session!.user.id} />
+            </div>
 
             <SafeWrapper><StreakCounter userId={session!.user.id} /></SafeWrapper>
 
