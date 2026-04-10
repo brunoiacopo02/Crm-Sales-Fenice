@@ -146,7 +146,7 @@
         "npx next build senza errori"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "Questo incentiva i TL a monitorare chi usa lo script e chi no."
     }
   ]

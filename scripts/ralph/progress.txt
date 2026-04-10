@@ -116,3 +116,19 @@ Started: 2026-04-09
 - Badge images already exist: script-master-badge.png and script-streak-badge.png
 - Migration executed on production DB: 3 achievements + 2 quests seeded successfully
 - Build: OK
+
+## F3-009 — Gamification: Script completion rate visibile nel profilo e KPI (2026-04-10)
+- Enhanced getScriptCompletionRate() in gdoPerformanceActions.ts: now returns scriptStreak (consecutive days with script completion, timezone Europe/Rome)
+- Created getAllGdoScriptRates() bulk function for manager view: fetches script completion rates for all active GDOs in 2 queries (efficient)
+- Added gdoId field to getManagerGdoTables() result for client-side matching
+- ProfileClient.tsx: new Script Usage card (SafeWrapper wrapped, GDO/CONFERME only) showing:
+  - Total script completati (count)
+  - % Chiamate con Script (color-coded: green >=70%, amber 40-70%, red <40%)
+  - Giorni Streak Script (consecutive days with flame icon)
+  - Progress bar "Padronanza Script" with color-coded fill
+- ManagerGdoClient.tsx: added "% Script" badge in each GDO header (alongside Lead Assegn. and % Fissaggio)
+  - Color-coded: green >=70%, amber 40-70%, red <40%
+  - Uses BookOpen icon for visual distinction
+- profilo/page.tsx: fetches getScriptCompletionRate in parallel with other data
+- manager-gdo-performance/page.tsx: fetches getAllGdoScriptRates in parallel with getManagerGdoTables
+- Build: OK
