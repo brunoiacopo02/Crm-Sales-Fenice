@@ -5,6 +5,7 @@ import { PhoneOff, Ban, CalendarClock, Handshake } from "lucide-react"
 import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { useRouter } from "next/navigation"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
+import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
 
 type GdoQuickActionsProps = {
     leadId: string
@@ -215,13 +216,13 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
                     </h4>
                     
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Data e Ora *</label>
-                    <input
-                        type="datetime-local"
-                        value={dateStr}
-                        onChange={(e) => setDateStr(e.target.value)}
-                        className="input-fenice !text-xs !py-2 !px-2.5 mb-3"
-                        required
-                    />
+                    <div className="mb-3">
+                        {activePopover === 'appuntamento' ? (
+                            <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact />
+                        ) : (
+                            <RecallDateTimePicker value={dateStr} onChange={setDateStr} compact />
+                        )}
+                    </div>
 
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Note (Opzionale)</label>
                     <textarea

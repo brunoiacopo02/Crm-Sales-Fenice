@@ -96,6 +96,7 @@ export function Sidebar() {
                     label: "Operativo",
                     items: [
                         { name: "Dashboard Operativa", href: "/team", icon: UserCog },
+                        { name: "Appuntamenti Oggi", href: "/appuntamenti-oggi", icon: Calendar },
                         { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
                         { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                         { name: "Importa Lead", href: "/import", icon: Upload },
@@ -106,7 +107,6 @@ export function Sidebar() {
                 {
                     label: "KPI & Analytics",
                     items: [
-                        { name: "Centro KPI", href: "/kpi-hub", icon: Compass },
                         { name: "KPI Team", href: "/kpi-team", icon: LayoutDashboard },
                         { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
                         { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },

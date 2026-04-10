@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Ban, PhoneOff, CalendarClock, Handshake, X } from "lucide-react"
 import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { useRouter } from "next/navigation"
+import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
 
 type OutcomeModalProps = {
     leadId: string
@@ -168,13 +169,11 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
                                         <CalendarClock className="h-4 w-4 text-ash-400" /> Data e Ora *
                                     </label>
-                                    <input
-                                        type="datetime-local"
-                                        value={dateStr}
-                                        onChange={(e) => setDateStr(e.target.value)}
-                                        className="input-fenice text-sm"
-                                        required
-                                    />
+                                    {outcome === 'APPUNTAMENTO' ? (
+                                        <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} />
+                                    ) : (
+                                        <RecallDateTimePicker value={dateStr} onChange={setDateStr} />
+                                    )}
                                 </div>
                             )}
 
@@ -238,3 +237,4 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
         </>
     )
 }
+
