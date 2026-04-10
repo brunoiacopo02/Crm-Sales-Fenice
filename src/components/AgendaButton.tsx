@@ -182,7 +182,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                     {/* Question 2: Ha famiglia */}
                                     <div>
                                         <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">
-                                            <Users className="w-3.5 h-3.5" /> Il lead ha famiglia?
+                                            <Users className="w-3.5 h-3.5" /> Situazione familiare
                                         </label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
@@ -193,7 +193,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                                     : 'border-ash-200 bg-white text-ash-600 hover:border-ash-300'
                                                     } disabled:opacity-50`}
                                             >
-                                                Sì, ha famiglia
+                                                Ha famiglia
                                             </button>
                                             <button
                                                 onClick={() => setHaFamiglia(false)}
@@ -203,7 +203,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                                     : 'border-ash-200 bg-white text-ash-600 hover:border-ash-300'
                                                     } disabled:opacity-50`}
                                             >
-                                                No, single
+                                                Non ha figli
                                             </button>
                                         </div>
                                     </div>
