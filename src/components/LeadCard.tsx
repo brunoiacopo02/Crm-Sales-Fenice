@@ -4,6 +4,7 @@ import { useState, useEffect, memo } from "react"
 import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare, StickyNote } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
+import { AgendaButton } from "./AgendaButton"
 
 type LeadProps = {
     lead: {
@@ -20,6 +21,7 @@ type LeadProps = {
         appointmentDate?: Date | null
         lastCallNote?: string | null
         recallNote?: string | null
+        agendaSentAt?: Date | null
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -249,6 +251,13 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                         <FileText className="w-3.5 h-3.5" />
                         Script
                     </button>
+                    <AgendaButton
+                        leadId={lead.id}
+                        leadName={lead.name}
+                        leadPhone={lead.phone}
+                        hasEmail={!!lead.email}
+                        agendaSentAt={lead.agendaSentAt}
+                    />
                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
                 </div>
 

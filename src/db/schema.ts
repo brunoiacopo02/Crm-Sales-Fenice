@@ -56,6 +56,7 @@ export const leads = pgTable('leads', {
     lastCallDate: timestamp('lastCallDate', { withTimezone: true, mode: 'date' }),
     lastCallNote: text('lastCallNote'),
     recallNote: text('recallNote'),
+    agendaSentAt: timestamp('agendaSentAt', { withTimezone: true, mode: 'date' }),
     recallDate: timestamp('recallDate', { withTimezone: true, mode: 'date' }),
     appointmentDate: timestamp('appointmentDate', { withTimezone: true, mode: 'date' }),
     appointmentNote: text('appointmentNote'),
