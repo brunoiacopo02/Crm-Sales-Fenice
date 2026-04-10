@@ -89,6 +89,18 @@ Started: 2026-04-10
 - For CONFERME: isTeam=true triggers getTeamAdventureProgress() for team adventure
 - Build green, no hydration issues.
 
+### RO-009 — Profilo Tab 'Scambi': trading inline (solo GDO) (2026-04-10)
+- Added imports for getAllOffers, getGdoUsersForTrading from tradingActions in profilo/page.tsx
+- Conditionally fetch trading data only for GDO role (isGdo flag)
+- Pass tradingOffers, tradingGdoUsers as new props to ProfileClient
+- Added dynamic import of TradingClient in ProfileClient.tsx
+- Replaced Scambi tab placeholder with actual TradingClient rendering
+- TradingClient receives: userId, myCreatures (reuses ownedCreatures), offers, gdoUsers
+- Wrapped in SafeWrapper for crash isolation
+- Fallback UI shown when userId is not available
+- Tab remains conditionally visible only for GDO role (gdoOnly flag in TAB_CONFIG)
+- Build green, no hydration issues.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.

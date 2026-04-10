@@ -147,7 +147,7 @@
         "npx next build senza errori"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "Solo GDO possono scambiare. CONFERME hanno creature team (non scambiabili). Il tab non appare per CONFERME."
     },
     {
