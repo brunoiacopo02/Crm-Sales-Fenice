@@ -1,153 +1,185 @@
 {
   "project": "CRM Fenice",
-  "branchName": "ralph/fase-3-prelancio",
-  "description": "Fase 3 Pre-Lancio — Performance optimization, debug pass, KPI time filter, script gamification. NO deploy.",
+  "branchName": "ralph/riorganizzazione-ui",
+  "description": "Riorganizzazione UI — Pipeline pulita, profilo RPG come hub unico gamification con tab, obiettivi sticky, debug finale. NO deploy.",
   "userStories": [
     {
-      "id": "F3-001",
-      "title": "Performance: lazy loading componenti pesanti",
-      "description": "Usare dynamic() import per componenti pesanti che non servono al first load.",
+      "id": "RO-001",
+      "title": "Pipeline: obiettivi giornalieri sticky in alto",
+      "description": "Gli obiettivi chiamate e fissaggi devono restare fissi in alto quando il GDO scrolla la pipeline.",
       "acceptanceCriteria": [
-        "Identificare i componenti piu pesanti (>500 righe): ConfermeBoard, ProfileClient, ShopClient, InventarioCreatureClient, MappaAvventuraClient, TradingClient",
-        "Wrappare con next/dynamic e { ssr: false } dove appropriato (componenti puramente client)",
-        "Aggiungere loading skeleton per ogni componente lazy-loaded",
-        "Verificare che Recharts (grafici) sia gia lazy-loaded, se no farlo",
-        "Verificare che CelebrationOverlay, ChestOpeningAnimation, CreatureRevealOverlay siano lazy",
-        "npx next build senza errori e verificare che il bundle size sia ridotto"
+        "In src/app/(dashboard)/page.tsx: il componente GdoDailyObjectives deve avere position sticky top-0 z-10",
+        "Aggiungere bg-white (o bg-gray-50) e shadow-sm al container sticky per separarlo dal contenuto sotto",
+        "L'obiettivo deve restare visibile anche scrollando 50+ lead nella pipeline",
+        "NON modificare la logica della pipeline o dei componenti sotto",
+        "Verificare che su schermi piccoli (1366x768) non occupi troppo spazio verticale",
+        "npx next build senza errori"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "NON lazy-loadare componenti server-side. Solo client components pesanti. Usare dynamic(() => import(...), { ssr: false, loading: () => <Skeleton /> })."
+      "passes": false,
+      "notes": "Il GdoDailyObjectives e gia nel page.tsx. Solo aggiungere sticky positioning."
     },
     {
-      "id": "F3-002",
-      "title": "Performance: ottimizzare query DB con indici mancanti",
-      "description": "Verificare che tutte le query frequenti abbiano indici appropriati.",
+      "id": "RO-002",
+      "title": "Pipeline: rimuovere widget gamification dalla dashboard",
+      "description": "Rimuovere ChestWidget, DuelWidget e QuestPanel dalla pipeline GDO per tenerla pulita.",
       "acceptanceCriteria": [
-        "Analizzare le query piu frequenti: pipeline leads (per assignedToId + status), conferme (per confirmationsOutcome), recall (per recallDate), achievements (per userId)",
-        "Verificare in schema.ts che gli indici esistano per: leads.assignedToId, leads.status, leads.recallDate, leads.confirmationsOutcome, leads.appointmentDate",
-        "Aggiungere indici mancanti in schema.ts",
-        "Creare migration route /api/migrate-indexes/route.ts con CREATE INDEX IF NOT EXISTS per ogni indice",
-        "ESEGUIRE la migrazione sul DB di produzione",
+        "In src/app/(dashboard)/page.tsx: rimuovere l'import e il rendering di ChestWidget",
+        "In src/app/(dashboard)/page.tsx: rimuovere l'import e il rendering di DuelWidget",
+        "Se QuestPanel e presente nella pipeline, rimuoverlo (verra spostato nel profilo)",
+        "Mantenere SOLO: GdoDailyObjectives (sticky) + PipelineBoard + OutcomeModal + ScriptWidget",
+        "Il popup baule giornaliero random (DailyLoginReward, TimedChest) resta come popup globale nel layout — NON rimuoverlo",
         "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Indici compositi dove serve: (assignedToId, status), (assignedToId, recallDate). NON creare indici su colonne gia indicizzate."
+      "passes": false,
+      "notes": "I popup globali (DailyLoginReward, TimedChest, RewardPopup, CelebrationOverlay) sono nel layout.tsx o nei provider, NON nella pipeline page. Quelli restano."
     },
     {
-      "id": "F3-003",
-      "title": "Performance: React.memo su componenti lista",
-      "description": "Aggiungere memoization ai componenti che renderizzano in lista per evitare re-render inutili.",
+      "id": "RO-003",
+      "title": "Sidebar: rimuovere pagine gamification separate",
+      "description": "Rimuovere le voci sidebar per Inventario Creature, Mappa Avventura, Scambi Creature. Il profilo diventa l'unico punto di accesso.",
       "acceptanceCriteria": [
-        "Wrappare LeadCard con React.memo (renderizzato N volte nella pipeline)",
-        "Wrappare CreatureCard in InventarioCreatureClient con React.memo",
-        "Wrappare BossCard in MappaAvventuraClient con React.memo",
-        "Aggiungere useCallback ai handler onClick passati come props ai componenti memoizzati",
-        "NON memoizzare componenti che cambiano ad ogni render (con props dinamiche)",
+        "In src/components/Sidebar.tsx sezione GDO: rimuovere la voce 'Inventario Creature' (/creature-inventario)",
+        "Rimuovere la voce 'Mappa Avventura' (/mappa-avventura)",
+        "Rimuovere la voce 'Scambi Creature' (/trading)",
+        "In sezione CONFERME: rimuovere 'Inventario Team' (/creature-inventario) e 'Avventura Team' (/mappa-avventura)",
+        "Mantenere: Il mio Profilo, Classifica, Fenice Store",
+        "NON cancellare le pagine /creature-inventario, /mappa-avventura, /trading — restano accessibili via URL diretto ma non dalla sidebar",
         "npx next build senza errori"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "React.memo previene re-render quando le props non cambiano. Utile per liste lunghe (pipeline 50+ lead, inventario 80 creature)."
+      "passes": false,
+      "notes": "Le pagine restano nel codebase per accesso diretto. Solo la sidebar viene pulita."
     },
     {
-      "id": "F3-004",
-      "title": "Debug: verificare ogni pagina per ogni ruolo",
-      "description": "Test sistematico di ogni pagina per GDO, CONFERME, VENDITORE, MANAGER.",
+      "id": "RO-004",
+      "title": "Profilo RPG: ristrutturare con sistema a tab",
+      "description": "Trasformare il profilo in un hub con tab per organizzare tutte le sezioni gamification.",
       "acceptanceCriteria": [
-        "Per ogni pagina nel Sidebar di ogni ruolo: verificare che npx next build non dia errori",
-        "Verificare che le pagine gamification (profilo, store, classifica, creature, avventura, trading) funzionino per GDO",
-        "Verificare che le pagine Conferme (dashboard, KPI, inventario team, avventura team, chest widget) funzionino",
-        "Verificare che le pagine Manager (team, KPI, RPG monitor, targets, import, archivio) funzionino",
-        "Verificare che le pagine Venditore (dashboard, profilo, classifica, store) funzionino",
-        "Se una pagina ha errori di tipo/import, fixarla",
+        "In ProfileClient.tsx: aggiungere un tab bar sotto l'hero banner e la barra XP",
+        "Tab disponibili: 'Profilo' | 'Quest & Sfide' | 'Creature' | 'Avventura' | 'Scambi'",
+        "Per CONFERME: tab 'Scambi' non visibile (creature team non scambiabili)",
+        "Tab bar sticky sotto hero banner (position sticky) con sfondo gaming scuro",
+        "Stato tab gestito con useState, default 'Profilo'",
+        "Lo stile dei tab deve essere coerente col tema gaming dark (bordo inferiore brand-orange per tab attivo)",
         "npx next build senza errori"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Il test e statico (build + code review). Non serve browser. Cerca: import mancanti, tipi sbagliati, componenti non esistenti, SafeWrapper mancanti."
+      "passes": false,
+      "notes": "Solo la struttura tab e il routing interno. I contenuti dei tab vengono implementati nelle stories successive."
     },
     {
-      "id": "F3-005",
-      "title": "Debug: rimuovere console.log e codice morto",
-      "description": "Pulire il codebase da console.log di debug, file inutilizzati, import non usati.",
+      "id": "RO-005",
+      "title": "Profilo Tab 'Profilo': contenuto principale snellito",
+      "description": "Il tab Profilo mostra le info essenziali senza sovraccaricare.",
       "acceptanceCriteria": [
-        "Cercare e rimuovere tutti i console.log di debug (NON rimuovere console.error nei catch)",
-        "Cercare file in src/components/ e src/app/actions/ che non sono importati da nessuna parte e rimuoverli",
-        "Cercare import non usati nei file principali (pipelineActions, confermeActions, page.tsx files)",
-        "Rimuovere commenti TODO/FIXME/HACK se presenti",
-        "NON rimuovere SafeWrapper, NON rimuovere file che sembrano unused ma sono importati dinamicamente",
+        "Tab Profilo contiene: Stats card (chiamate, appuntamenti, livello, XP, streak, coins), Streak & Multiplier card, Finanze/Stipendio card, WeeklyBonusWidget, Script Usage card (da F3-009), Prossimi Premi",
+        "RIMUOVERE da questo tab: QuestPanel, AchievementShowcase, TitleSelector, DuelHistory (spostati in altri tab)",
+        "RIMUOVERE da questo tab: Settings (AnimationToggle, SoundToggle) — spostare in fondo alla pagina fuori dai tab",
+        "Layout: due colonne su desktop, una colonna su schermi piccoli",
+        "SafeWrapper su ogni card",
         "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "Attenzione a non rimuovere console.error nei catch (quelli servono per debug produzione). Attenzione ai dynamic import che non appaiono come import normali."
+      "passes": false,
+      "notes": "Lo snellimento rende il tab Profilo veloce da caricare e focalizzato sui numeri."
     },
     {
-      "id": "F3-006",
-      "title": "Fix: KPI aggregate filtrate per orario lavorativo 13:30-20:00",
-      "description": "Le KPI team contano tutte le chiamate senza filtrare l'orario di lavoro GDO.",
+      "id": "RO-006",
+      "title": "Profilo Tab 'Quest & Sfide': quest, achievement, titoli, duelli",
+      "description": "Raggruppare le sezioni interattive di gioco in un unico tab.",
       "acceptanceCriteria": [
-        "In kpiTeamActions.ts: filtrare le chiamate nel range 13:30-20:00 Europe/Rome per i conteggi aggregate",
-        "La costante FIXED_HOURS_WORKED = 6.5 e gia corretta",
-        "Aggiungere filtro orario nella query callLogs: WHERE createdAt::time >= '13:30' AND createdAt::time <= '20:00' (con timezone Europe/Rome)",
-        "Applicare lo stesso filtro anche nel calcolo chiamate/ora nel trend chart",
-        "NON modificare il conteggio appuntamenti (quelli non hanno orario fisso)",
+        "Tab 'Quest & Sfide' contiene: Quest giornaliere e settimanali (QuestPanel o inline), AchievementShowcase, TitleSelector, DuelHistory, DuelWidget (duello attivo se presente)",
+        "I bauli azione (ChestWidget) diventano reward integrati nelle quest: quando una quest viene completata e il reward include un baule, mostrare il bottone 'Apri Baule' nella quest completata",
+        "Se non ci sono duelli attivi, la sezione duelli mostra solo lo storico",
+        "Layout: quest in alto (focus), poi achievement, poi titoli, poi duelli",
+        "SafeWrapper su ogni sezione",
         "npx next build senza errori"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Solo le CHIAMATE vanno filtrate per orario. Appuntamenti, conferme, presenze, chiusure non hanno orario fisso."
+      "passes": false,
+      "notes": "ChestWidget non viene piu mostrato standalone. I bauli sono reward delle quest. Per ora basta spostare i componenti qui, l'integrazione bauli-quest la facciamo dopo se serve."
     },
     {
-      "id": "F3-007",
-      "title": "Gamification: Script tracking nel CRM",
-      "description": "Tracciare quando un GDO segue lo script durante una chiamata per collegarlo alla gamification.",
+      "id": "RO-007",
+      "title": "Profilo Tab 'Creature': inventario inline",
+      "description": "Integrare l'inventario creature direttamente nel tab del profilo.",
       "acceptanceCriteria": [
-        "Aggiungere campo scriptCompleted (boolean default false) nella tabella callLogs via migration",
-        "Aggiungere campo in schema.ts: scriptCompleted: boolean('scriptCompleted').default(false)",
-        "In ScriptWidget.tsx: quando l'utente arriva all'ultimo blocco (step 11 Chiusura), dispatchare evento 'script_completed'",
-        "In OutcomeModal o pipelineActions: quando si registra un outcome, se lo script era aperto e completato, salvare scriptCompleted=true nel callLog",
-        "Creare server action getScriptCompletionRate(userId) che ritorna % chiamate con script completato",
+        "Tab 'Creature' renderizza InventarioCreatureClient inline (stesso componente di /creature-inventario)",
+        "Passare le props corrette: allCreatures, ownedCreatures, isTeam, userId",
+        "Fetch dei dati nel server component page.tsx del profilo (getUserCreatures, getAllCreatureDefinitions)",
+        "Per CONFERME: mostra creature team (isTeam=true)",
+        "Il componente deve funzionare identicamente a come funzionava nella pagina dedicata",
+        "SafeWrapper",
         "npx next build senza errori"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "Lo ScriptWidget e gia nel drawer della LeadCard. Serve solo tracciare quando viene completato e salvarlo."
+      "passes": false,
+      "notes": "InventarioCreatureClient e un componente client gia pronto. Serve solo fetchare i dati nel profilo page.tsx e passarli."
     },
     {
-      "id": "F3-008",
-      "title": "Gamification: Achievement e Quest per lo Script",
-      "description": "Creare achievement e quest legati all'uso dello script chiamata.",
+      "id": "RO-008",
+      "title": "Profilo Tab 'Avventura': mappa inline",
+      "description": "Integrare la mappa avventura direttamente nel tab del profilo.",
       "acceptanceCriteria": [
-        "Aggiungere nuove achievement nel DB: 'Studente Modello' (10 script completati), 'Script Master' (50 script completati), 'Maestro della Persuasione' (200 script completati)",
-        "Aggiungere metrica 'total_scripts_completed' in achievementActions.ts measureAchievementMetric",
-        "Aggiungere quest giornaliera: 'Segui lo script per 5 chiamate oggi' (reward: 15 coins + 10 XP)",
-        "Aggiungere quest settimanale: 'Completa 20 script questa settimana' (reward: 50 coins + 30 XP)",
-        "Aggiungere le quest nel seed delle quest (questActions.ts o via seed route)",
-        "Le immagini badge sono gia in public/assets/gamification/script-master-badge.png e script-streak-badge.png",
+        "Tab 'Avventura' renderizza MappaAvventuraClient inline",
+        "Passare le props: progress, bosses, isTeam, userId",
+        "Fetch dei dati nel profilo page.tsx (getAdventureProgress, getAllBosses o getOrCreateTeamProfile per CONFERME)",
+        "Per CONFERME: mostra avventura team",
+        "SafeWrapper",
         "npx next build senza errori"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "Le immagini badge script sono gia state generate con Gemini. Achievement usa il sistema esistente (achievementActions). Quest usa il sistema esistente (questActions)."
+      "passes": false,
+      "notes": "Stessa logica di RO-007. MappaAvventuraClient e gia pronto."
     },
     {
-      "id": "F3-009",
-      "title": "Gamification: Script completion rate visibile nel profilo e KPI",
-      "description": "Mostrare la percentuale di uso script nel profilo GDO e nelle KPI manager.",
+      "id": "RO-009",
+      "title": "Profilo Tab 'Scambi': trading inline (solo GDO)",
+      "description": "Integrare il trading creature nel tab del profilo, visibile solo per GDO.",
       "acceptanceCriteria": [
-        "Nel ProfileClient.tsx: aggiungere card 'Script Usage' che mostra: totale script completati, % chiamate con script, streak giorni consecutivi con script",
-        "Usare getScriptCompletionRate(userId) creato in F3-007",
-        "Nel manager KPI (ManagerGdoClient o KpiTeamDashboard): aggiungere colonna '% Script' per ogni GDO",
-        "Colorare la percentuale: verde >70%, giallo 40-70%, rosso <40%",
-        "SafeWrapper sulla card",
+        "Tab 'Scambi' renderizza TradingClient inline",
+        "Tab visibile SOLO per ruolo GDO (non CONFERME, non VENDITORE)",
+        "Fetch dei dati nel profilo page.tsx (getUserCreatures, getPendingOffers, lista GDO attivi)",
+        "Il componente deve funzionare identicamente a /trading",
+        "SafeWrapper",
         "npx next build senza errori"
       ],
       "priority": 9,
-      "passes": true,
-      "notes": "Questo incentiva i TL a monitorare chi usa lo script e chi no."
+      "passes": false,
+      "notes": "Solo GDO possono scambiare. CONFERME hanno creature team (non scambiabili). Il tab non appare per CONFERME."
+    },
+    {
+      "id": "RO-010",
+      "title": "Conferme dashboard: rimuovere ChestWidget standalone",
+      "description": "Rimuovere il ChestWidget dalla dashboard Conferme, coerente con la riorganizzazione.",
+      "acceptanceCriteria": [
+        "In src/app/(dashboard)/conferme/page.tsx: rimuovere import e rendering di ChestWidget",
+        "I bauli team restano funzionanti come reward quest (il backend non cambia)",
+        "npx next build senza errori"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Coerenza: se rimuoviamo i bauli dalla pipeline GDO, li rimuoviamo anche dalla dashboard Conferme."
+    },
+    {
+      "id": "RO-011",
+      "title": "Debug e test finale post-riorganizzazione",
+      "description": "Verificare che tutto funzioni dopo la riorganizzazione.",
+      "acceptanceCriteria": [
+        "npx next build compila senza errori",
+        "Verificare che la pipeline GDO abbia SOLO: obiettivi sticky + pipeline board + outcome modal",
+        "Verificare che il profilo GDO abbia 5 tab funzionanti (Profilo, Quest, Creature, Avventura, Scambi)",
+        "Verificare che il profilo CONFERME abbia 4 tab (Profilo, Quest, Creature, Avventura — NO Scambi)",
+        "Verificare che la sidebar GDO abbia: Pipeline, Richiami, Appuntamenti, Performance, Storico Pause, Profilo, Classifica, Store",
+        "Verificare che i popup globali (DailyLoginReward, TimedChest, RewardPopup, FomoToast, UniverseToast) funzionino ancora",
+        "Verificare che le pagine /creature-inventario, /mappa-avventura, /trading siano ancora accessibili via URL",
+        "Nessun import rotto, nessun componente mancante"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Test statico + build. Verificare tutti i percorsi critici."
     }
   ]
 }
