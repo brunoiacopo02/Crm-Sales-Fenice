@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare, StickyNote } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 
@@ -79,6 +79,7 @@ function getFunnelRarity(funnel: string | null): FunnelRarity {
 
 export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
     const [showScript, setShowScript] = useState(false)
+    const [showNoteModal, setShowNoteModal] = useState(false)
     // Client-side time for expiry checks (avoids hydration mismatch)
     const [clientNow, setClientNow] = useState(0)
     useEffect(() => { setClientNow(Date.now()) }, [])
@@ -226,6 +227,16 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
 
                 {/* 4. Actions Right */}
                 <div className="flex items-center justify-end shrink-0 pl-2 gap-2">
+                    {lead.lastCallNote && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setShowNoteModal(true); }}
+                            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors animate-pulse-slow"
+                            title="Leggi note precedenti"
+                        >
+                            <StickyNote className="w-3.5 h-3.5" />
+                            Note
+                        </button>
+                    )}
                     <button
                         onClick={(e) => { e.stopPropagation(); setShowScript(true); }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-brand-orange/30 bg-brand-orange-50/50 text-brand-orange-700 hover:bg-brand-orange/10 transition-colors"
@@ -266,6 +277,40 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             </div>
                             <div className="p-5">
                                 <ScriptWidget />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Note Modal */}
+                {showNoteModal && lead.lastCallNote && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={() => setShowNoteModal(false)}>
+                        <div className="absolute inset-0 bg-black/50" />
+                        <div
+                            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="bg-gradient-to-r from-amber-50 to-amber-100 border-b border-amber-200 px-5 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <StickyNote className="h-5 w-5 text-amber-600" />
+                                    <div>
+                                        <div className="text-sm font-bold text-ash-900">Note Chiamata Precedente</div>
+                                        <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowNoteModal(false)} className="p-1.5 rounded-lg hover:bg-amber-200/50 transition-colors">
+                                    <X className="w-5 h-5 text-ash-600" />
+                                </button>
+                            </div>
+                            <div className="p-5">
+                                {lead.lastCallDate && (
+                                    <div className="text-[11px] text-ash-400 mb-2 uppercase tracking-wider font-semibold">
+                                        {new Date(lead.lastCallDate).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Rome' })}
+                                    </div>
+                                )}
+                                <div className="text-sm text-ash-800 leading-relaxed whitespace-pre-wrap">
+                                    {lead.lastCallNote}
+                                </div>
                             </div>
                         </div>
                     </div>
