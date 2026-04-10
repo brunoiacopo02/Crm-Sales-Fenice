@@ -30,6 +30,13 @@ Started: 2026-04-10
 - Kept core: GdoDailyObjectives (sticky), GdoLeadMetrics, HotStreak+PipelineBoard
 - Pipeline is now clean: objectives + metrics + pipeline board only. Build green.
 
+### RO-003 — Sidebar: rimuovere pagine gamification separate (2026-04-10)
+- Removed GDO sidebar entries: "Inventario Creature" (/creature-inventario), "Scambi Creature" (/trading), "Mappa Avventura" (/mappa-avventura)
+- Removed CONFERME sidebar entries: "Inventario Team" (/creature-inventario), "Avventura Team" (/mappa-avventura)
+- Kept: Il mio Profilo, Classifica, Fenice Store for both roles
+- Pages remain accessible via direct URL — only sidebar links removed
+- Cleaned up unused imports (Sparkles, ArrowLeftRight). Build green.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.

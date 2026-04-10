@@ -49,7 +49,7 @@
         "npx next build senza errori"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Le pagine restano nel codebase per accesso diretto. Solo la sidebar viene pulita."
     },
     {
