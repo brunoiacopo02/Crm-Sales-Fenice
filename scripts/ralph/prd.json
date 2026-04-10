@@ -32,7 +32,7 @@
         "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "I popup globali (DailyLoginReward, TimedChest, RewardPopup, CelebrationOverlay) sono nel layout.tsx o nei provider, NON nella pipeline page. Quelli restano."
     },
     {

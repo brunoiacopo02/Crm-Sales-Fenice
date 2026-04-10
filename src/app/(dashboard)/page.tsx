@@ -3,23 +3,15 @@ import { getPipelineLeads } from "@/app/actions/pipelineActions"
 import { PipelineBoard } from "@/components/PipelineBoard"
 import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
-import { StreakCounter } from "@/components/StreakCounter"
 import { SafeWrapper } from "@/components/SafeWrapper"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
-const ChestWidget = dynamic(() => import("@/components/ChestWidget").then(m => ({ default: m.ChestWidget })))
-const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const LootDropModal = dynamic(() => import("@/components/LootDropModal").then(m => ({ default: m.LootDropModal })))
 const TimedChest = dynamic(() => import("@/components/TimedChest").then(m => ({ default: m.TimedChest })))
-const BossBattleBanner = dynamic(() => import("@/components/BossBattleBanner").then(m => ({ default: m.BossBattleBanner })))
-const SeasonalEventBanner = dynamic(() => import("@/components/SeasonalEventBanner").then(m => ({ default: m.SeasonalEventBanner })))
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
 const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
-const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 const HotStreak = dynamic(() => import("@/components/HotStreak").then(m => ({ default: m.HotStreak })))
-const LevelNudge = dynamic(() => import("@/components/LevelNudge").then(m => ({ default: m.LevelNudge })))
-const DuelWidget = dynamic(() => import("@/components/DuelWidget").then(m => ({ default: m.DuelWidget })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -81,21 +73,9 @@ export default async function DashboardPage() {
                 </div>
             </div>
 
-            <SafeWrapper><SeasonalEventBanner /></SafeWrapper>
-            <SafeWrapper><BossBattleBanner userId={session!.user.id} /></SafeWrapper>
-
             <div className="sticky top-0 z-10 bg-gray-50 -mx-3 sm:-mx-6 px-3 sm:px-6 pb-1 shadow-sm">
                 <GdoDailyObjectives gdoUserId={session!.user.id} />
             </div>
-
-            <SafeWrapper><StreakCounter userId={session!.user.id} /></SafeWrapper>
-
-            <SafeWrapper><ChestWidget userId={session!.user.id} /></SafeWrapper>
-
-            <SafeWrapper><DuelWidget userId={session!.user.id} /></SafeWrapper>
-
-            <SafeWrapper><LevelNudge userId={session!.user.id} /></SafeWrapper>
-            <SafeWrapper><StreakAnxietyBanner userId={session!.user.id} /></SafeWrapper>
 
             <GdoLeadMetrics gdoUserId={session!.user.id} />
 
@@ -112,7 +92,6 @@ export default async function DashboardPage() {
                 </HotStreak>
             </SafeWrapper>
 
-            <SafeWrapper><QuestPanel userId={session!.user.id} /></SafeWrapper>
         </div>
     )
 }

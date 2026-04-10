@@ -23,6 +23,13 @@ Started: 2026-04-10
 - Used negative margins (-mx-3 sm:-mx-6) + compensating padding to extend bg full-width
 - Component stays fixed at top when scrolling pipeline. Build green.
 
+### RO-002 — Pipeline: rimuovere widget gamification dalla dashboard (2026-04-10)
+- Removed ChestWidget, DuelWidget, QuestPanel imports and renders from page.tsx
+- Also removed StreakCounter, SeasonalEventBanner, BossBattleBanner, LevelNudge, StreakAnxietyBanner
+- Kept overlay popups: CelebrationOverlay, LootDropModal, TimedChest, DailyLoginReward
+- Kept core: GdoDailyObjectives (sticky), GdoLeadMetrics, HotStreak+PipelineBoard
+- Pipeline is now clean: objectives + metrics + pipeline board only. Build green.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.
