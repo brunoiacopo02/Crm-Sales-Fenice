@@ -19,6 +19,7 @@ type LeadProps = {
         recallDate?: Date | null
         appointmentDate?: Date | null
         lastCallNote?: string | null
+        recallNote?: string | null
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -122,6 +123,9 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
 
     const rarity = getFunnelRarity(lead.funnel)
     const rarityStyle = RARITY_STYLES[rarity]
+
+    // Note shown in the card: prefer recallNote (preserved across outcomes) over lastCallNote
+    const displayNote = lead.recallNote || lead.lastCallNote || ''
 
     if (isRowLayout) {
         return (
@@ -227,7 +231,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
 
                 {/* 4. Actions Right */}
                 <div className="flex items-center justify-end shrink-0 pl-2 gap-2">
-                    {lead.lastCallNote && (
+                    {displayNote && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowNoteModal(true); }}
                             className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors animate-pulse-slow"
@@ -250,11 +254,11 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
 
                 </div>{/* end main row */}
 
-                {/* Note row — shown when lastCallNote exists */}
-                {lead.lastCallNote && (
+                {/* Note row — shown when there's any note */}
+                {displayNote && (
                     <div className="flex items-start gap-2 px-1 pt-1 border-t border-ash-100">
                         <MessageSquare className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
-                        <div className="text-xs text-ash-600 leading-relaxed line-clamp-2">{lead.lastCallNote}</div>
+                        <div className="text-xs text-ash-600 leading-relaxed line-clamp-2">{displayNote}</div>
                     </div>
                 )}
 
@@ -283,7 +287,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                 )}
 
                 {/* Note Modal */}
-                {showNoteModal && lead.lastCallNote && (
+                {showNoteModal && displayNote && (
                     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={() => setShowNoteModal(false)}>
                         <div className="absolute inset-0 bg-black/50" />
                         <div
@@ -294,7 +298,9 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                 <div className="flex items-center gap-2">
                                     <StickyNote className="h-5 w-5 text-amber-600" />
                                     <div>
-                                        <div className="text-sm font-bold text-ash-900">Note Chiamata Precedente</div>
+                                        <div className="text-sm font-bold text-ash-900">
+                                            {lead.recallNote ? 'Note Richiamo' : 'Note Chiamata Precedente'}
+                                        </div>
                                         <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
                                     </div>
                                 </div>
@@ -309,7 +315,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                     </div>
                                 )}
                                 <div className="text-sm text-ash-800 leading-relaxed whitespace-pre-wrap">
-                                    {lead.lastCallNote}
+                                    {displayNote}
                                 </div>
                             </div>
                         </div>

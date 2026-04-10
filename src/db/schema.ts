@@ -55,6 +55,7 @@ export const leads = pgTable('leads', {
     assignedToId: text('assignedToId').references(() => users.id),
     lastCallDate: timestamp('lastCallDate', { withTimezone: true, mode: 'date' }),
     lastCallNote: text('lastCallNote'),
+    recallNote: text('recallNote'),
     recallDate: timestamp('recallDate', { withTimezone: true, mode: 'date' }),
     appointmentDate: timestamp('appointmentDate', { withTimezone: true, mode: 'date' }),
     appointmentNote: text('appointmentNote'),

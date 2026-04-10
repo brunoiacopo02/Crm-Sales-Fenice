@@ -209,6 +209,15 @@ export async function updateLeadOutcome(
         appointmentCreatedAt = now
     }
 
+    // Compute recallNote: preserve original recall note unless this outcome is RICHIAMO (then update it)
+    // Clear it only when the lead transitions to a state without a recall (REJECTED, APPOINTMENT)
+    let newRecallNote = lead.recallNote
+    if (outcome === 'RICHIAMO') {
+        newRecallNote = note || null
+    } else if (outcome === 'DA_SCARTARE' || outcome === 'APPUNTAMENTO') {
+        newRecallNote = null
+    }
+
     // Update lead record (atomic version check in WHERE prevents TOCTOU race)
     const updated = await db.update(leads)
         .set({
@@ -216,6 +225,7 @@ export async function updateLeadOutcome(
             callCount: newCallCount,
             lastCallDate: now,
             lastCallNote: note,
+            recallNote: newRecallNote,
             recallDate,
             appointmentDate,
             appointmentNote: outcome === 'APPUNTAMENTO' ? note : lead.appointmentNote,
