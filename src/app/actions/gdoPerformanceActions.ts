@@ -126,6 +126,7 @@ export async function getManagerGdoTables(monthString: string) {
 
     for (const gdo of activeGdos) {
         gdoStatsMap[gdo.id] = {
+            gdoId: gdo.id,
             gdoName: gdo.displayName || `GDO ${gdo.gdoCode || gdo.id.slice(0, 4)}`,
             funnelStats: {} as Record<string, any>,
             calendarStats: {
@@ -212,6 +213,7 @@ export async function getManagerGdoTables(monthString: string) {
         ];
 
         return {
+            gdoId: gdo.gdoId,
             gdoName: gdo.gdoName,
             leadAssegnati: gdo.leadAssegnati,
             percFissaggio: gdo.leadAssegnati > 0 ? (gdo.totalStats.fissati / gdo.leadAssegnati * 100).toFixed(1) + '%' : '-',
@@ -444,25 +446,114 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
 
 /**
  * F3-007: Script completion rate for a GDO user.
- * Returns total calls, calls with script completed, and percentage.
+ * Returns total calls, calls with script completed, percentage, and consecutive-day streak.
  */
 export async function getScriptCompletionRate(userId: string) {
-    const totalResult = await db.select({ count: sql<number>`count(*)::integer` })
-        .from(callLogs)
-        .where(eq(callLogs.userId, userId));
-    const totalCalls = totalResult[0]?.count || 0;
+    const [totalResult, scriptResult, scriptDaysResult] = await Promise.all([
+        db.select({ count: sql<number>`count(*)::integer` })
+            .from(callLogs)
+            .where(eq(callLogs.userId, userId)),
+        db.select({ count: sql<number>`count(*)::integer` })
+            .from(callLogs)
+            .where(and(
+                eq(callLogs.userId, userId),
+                eq(callLogs.scriptCompleted, true)
+            )),
+        // Get distinct dates (Europe/Rome) where user completed at least one script, ordered desc
+        db.select({
+            day: sql<string>`DISTINCT DATE(${callLogs.createdAt} AT TIME ZONE 'Europe/Rome')`.as('day'),
+        })
+            .from(callLogs)
+            .where(and(
+                eq(callLogs.userId, userId),
+                eq(callLogs.scriptCompleted, true)
+            ))
+            .orderBy(sql`day DESC`),
+    ]);
 
-    const scriptResult = await db.select({ count: sql<number>`count(*)::integer` })
-        .from(callLogs)
-        .where(and(
-            eq(callLogs.userId, userId),
-            eq(callLogs.scriptCompleted, true)
-        ));
+    const totalCalls = totalResult[0]?.count || 0;
     const scriptCompletedCount = scriptResult[0]?.count || 0;
+
+    // Calculate consecutive-day streak from today backwards
+    let scriptStreak = 0;
+    if (scriptDaysResult.length > 0) {
+        const now = new Date();
+        const todayRome = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Rome' }));
+        const todayStr = todayRome.toISOString().slice(0, 10);
+        const yesterdayDate = new Date(todayRome);
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+
+        // Streak must start from today or yesterday
+        const firstDay = String(scriptDaysResult[0].day).slice(0, 10);
+        if (firstDay === todayStr || firstDay === yesterdayStr) {
+            let expectedDate = new Date(firstDay + 'T00:00:00');
+            for (const row of scriptDaysResult) {
+                const dayStr = String(row.day).slice(0, 10);
+                const dayDate = new Date(dayStr + 'T00:00:00');
+                if (dayDate.getTime() === expectedDate.getTime()) {
+                    scriptStreak++;
+                    expectedDate.setDate(expectedDate.getDate() - 1);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
 
     return {
         totalCalls,
         scriptCompletedCount,
         completionRate: totalCalls > 0 ? Math.round((scriptCompletedCount / totalCalls) * 100) : 0,
+        scriptStreak,
     };
+}
+
+/**
+ * F3-009: Bulk script completion rates for all active GDOs (used by manager view).
+ */
+export async function getAllGdoScriptRates(): Promise<Record<string, { completionRate: number; scriptCompletedCount: number }>> {
+    const activeGdos = await db.select({ id: users.id }).from(users).where(and(eq(users.role, 'GDO'), eq(users.isActive, true)));
+
+    if (activeGdos.length === 0) return {};
+
+    const gdoIds = activeGdos.map(g => g.id);
+
+    const [totalByUser, scriptByUser] = await Promise.all([
+        db.select({
+            userId: callLogs.userId,
+            count: sql<number>`count(*)::integer`.as('count'),
+        }).from(callLogs)
+            .where(sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`)
+            .groupBy(callLogs.userId),
+        db.select({
+            userId: callLogs.userId,
+            count: sql<number>`count(*)::integer`.as('count'),
+        }).from(callLogs)
+            .where(and(
+                sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`,
+                eq(callLogs.scriptCompleted, true)
+            ))
+            .groupBy(callLogs.userId),
+    ]);
+
+    const totalMap: Record<string, number> = {};
+    for (const row of totalByUser) {
+        if (row.userId) totalMap[row.userId] = row.count;
+    }
+    const scriptMap: Record<string, number> = {};
+    for (const row of scriptByUser) {
+        if (row.userId) scriptMap[row.userId] = row.count;
+    }
+
+    const result: Record<string, { completionRate: number; scriptCompletedCount: number }> = {};
+    for (const gdo of activeGdos) {
+        const total = totalMap[gdo.id] || 0;
+        const completed = scriptMap[gdo.id] || 0;
+        result[gdo.id] = {
+            completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+            scriptCompletedCount: completed,
+        };
+    }
+    return result;
 }

@@ -3,15 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GamificationTargetInput, saveGamificationRule } from '@/app/actions/gdoPerformanceActions';
-import { Target, CalendarDays, DollarSign, Award, Trophy } from 'lucide-react';
+import { Target, CalendarDays, DollarSign, Award, Trophy, BookOpen } from 'lucide-react';
 
 interface Props {
     initialData: any[]; // getManagerGdoTables result
     selectedMonth: string;
     role: string;
+    scriptRates?: Record<string, { completionRate: number; scriptCompletedCount: number }>;
 }
 
-export default function ManagerGdoClient({ initialData, selectedMonth, role }: Props) {
+export default function ManagerGdoClient({ initialData, selectedMonth, role, scriptRates = {} }: Props) {
     const router = useRouter();
     const [monthInput, setMonthInput] = useState(selectedMonth);
     const [isSaving, setIsSaving] = useState(false);
@@ -139,6 +140,18 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role }: P
                                     <div className="text-ash-400">% Fissaggio</div>
                                     <div className="font-bold text-brand-orange">{gdoData.percFissaggio ?? '-'}</div>
                                 </div>
+                                {(() => {
+                                    const rate = gdoData.gdoId ? scriptRates[gdoData.gdoId] : undefined;
+                                    const pct = rate?.completionRate ?? 0;
+                                    const colorClass = pct >= 70 ? 'text-emerald-400' : pct >= 40 ? 'text-amber-400' : 'text-red-400';
+                                    return (
+                                        <div className="flex items-center gap-1.5">
+                                            <BookOpen className="w-3.5 h-3.5 text-ash-400" />
+                                            <div className="text-ash-400">% Script</div>
+                                            <div className={`font-bold ${colorClass}`}>{rate ? `${pct}%` : '-'}</div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
 

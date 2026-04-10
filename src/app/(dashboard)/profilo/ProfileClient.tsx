@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from "next/image"
 import {
-    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award, Gift, Shield, Sword, Gem, Shirt, ChevronDown, ChevronUp
+    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award, Gift, Shield, Sword, Gem, Shirt, ChevronDown, ChevronUp, BookOpen
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
@@ -47,6 +47,13 @@ type QuestItem = {
     rewardCoins: number;
 }
 
+type ScriptStats = {
+    totalCalls: number;
+    scriptCompletedCount: number;
+    completionRate: number;
+    scriptStreak: number;
+}
+
 type EquippedItemInfo = {
     id: string;
     name: string;
@@ -54,7 +61,7 @@ type EquippedItemInfo = {
     cssValue: string;
 }
 
-export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory }: {
+export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats }: {
     profileData: any;
     achievements?: any[];
     titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
@@ -64,6 +71,7 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     equippedItems?: Array<{ id: string; name: string; description: string; cssValue: string }>;
     equippedItemInfo?: EquippedItemInfo | null;
     duelHistory?: { duels: any[]; stats: { totalDuels: number; wins: number; losses: number; winRate: number } };
+    scriptStats?: ScriptStats;
 }) {
 
     const {
@@ -353,6 +361,54 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 <SafeWrapper>
                     <SocialComparisonBadge userId={profileData.id} role={role} />
                 </SafeWrapper>
+
+                {/* Script Usage Card — F3-009 */}
+                {scriptStats && (role === 'GDO' || role === 'CONFERME') && (
+                    <SafeWrapper>
+                        <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in">
+                            <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-4 flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                    <BookOpen className="w-4 h-4 text-purple-400" />
+                                </div>
+                                Script Usage
+                            </h3>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="text-center bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-xl p-4">
+                                    <div className="text-2xl font-black text-[var(--color-gaming-text)]">{scriptStats.scriptCompletedCount}</div>
+                                    <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)] mt-1">Script Completati</div>
+                                </div>
+                                <div className="text-center bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-xl p-4">
+                                    <div className={`text-2xl font-black ${scriptStats.completionRate >= 70 ? 'text-emerald-400' : scriptStats.completionRate >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                                        {scriptStats.completionRate}%
+                                    </div>
+                                    <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)] mt-1">% Chiamate con Script</div>
+                                </div>
+                                <div className="text-center bg-gradient-to-br from-ember-500/10 to-ember-600/5 border border-ember-500/20 rounded-xl p-4">
+                                    <div className="flex items-center justify-center gap-1">
+                                        <Flame className={`w-5 h-5 ${scriptStats.scriptStreak > 0 ? 'text-ember-400' : 'text-ash-500'}`} />
+                                        <span className="text-2xl font-black text-[var(--color-gaming-text)]">{scriptStats.scriptStreak}</span>
+                                    </div>
+                                    <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-gaming-text-muted)] mt-1">Giorni Streak Script</div>
+                                </div>
+                            </div>
+                            {/* Progress bar toward mastery */}
+                            <div className="mt-4">
+                                <div className="flex items-center justify-between text-[10px] font-bold text-[var(--color-gaming-text-muted)] mb-1.5">
+                                    <span>Padronanza Script</span>
+                                    <span className={`${scriptStats.completionRate >= 70 ? 'text-emerald-400' : scriptStats.completionRate >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                                        {scriptStats.completionRate}%
+                                    </span>
+                                </div>
+                                <div className="w-full h-2 bg-[var(--color-gaming-bg-surface)] rounded-full overflow-hidden border border-[var(--color-gaming-border)]">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-700 ${scriptStats.completionRate >= 70 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' : scriptStats.completionRate >= 40 ? 'bg-gradient-to-r from-amber-500 to-amber-400' : 'bg-gradient-to-r from-red-500 to-red-400'}`}
+                                        style={{ width: `${Math.min(scriptStats.completionRate, 100)}%` }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </SafeWrapper>
+                )}
 
                 {/* TWO-COLUMN: Upcoming Rewards + Streak | Financials + Weekly */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
