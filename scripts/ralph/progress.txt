@@ -108,6 +108,21 @@ Started: 2026-04-10
 - Consistent with RO-002 (GDO dashboard cleanup)
 - Build green, no issues.
 
+### RO-011 — Debug e test finale post-riorganizzazione (2026-04-10)
+- Build: npx next build compiles successfully, no TypeScript errors
+- Pipeline GDO verified: ONLY GdoDailyObjectives (sticky) + GdoLeadMetrics + PipelineBoard + overlay popups
+- ChestWidget, DuelWidget, QuestPanel confirmed REMOVED from pipeline
+- Profile GDO: 5 tabs working (Profilo, Quest & Sfide, Creature, Avventura, Scambi)
+- Profile CONFERME: 4 tabs (Scambi hidden via gdoOnly flag) — correct
+- Sidebar GDO: Pipeline, Richiami, Appuntamenti, Performance, Storico Pause, Profilo, Classifica, Store
+- Sidebar CONFERME: Dashboard Conferme, KPI Conferme, Profilo, Classifica, Store
+- Gamification sidebar entries removed: Inventario Creature, Mappa Avventura, Scambi Creature (GDO), Inventario Team, Avventura Team (CONFERME)
+- Global popups verified: FomoToast + UniverseToast + CreatureRevealOverlay in layout.tsx; DailyLoginReward + TimedChest + CelebrationOverlay + LootDropModal in GDO page.tsx
+- Standalone pages accessible via URL: /creature-inventario, /mappa-avventura, /trading — all exist with valid imports
+- Conferme page: ChestWidget confirmed REMOVED
+- No broken imports, no missing components across all verified files
+- All SafeWrapper wrapping verified in ProfileClient and layout
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.

@@ -178,7 +178,7 @@
         "Nessun import rotto, nessun componente mancante"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "Test statico + build. Verificare tutti i percorsi critici."
     }
   ]
