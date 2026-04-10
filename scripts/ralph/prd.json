@@ -160,7 +160,7 @@
         "npx next build senza errori"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Coerenza: se rimuoviamo i bauli dalla pipeline GDO, li rimuoviamo anche dalla dashboard Conferme."
     },
     {

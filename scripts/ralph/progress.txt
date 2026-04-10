@@ -101,6 +101,13 @@ Started: 2026-04-10
 - Tab remains conditionally visible only for GDO role (gdoOnly flag in TAB_CONFIG)
 - Build green, no hydration issues.
 
+### RO-010 — Conferme dashboard: rimuovere ChestWidget standalone (2026-04-10)
+- Removed ChestWidget dynamic import from conferme/page.tsx
+- Removed ChestWidget rendering (was: `<ChestWidget userId="team-conferme" isTeam />`)
+- Team chest functionality remains intact via quest rewards (backend unchanged)
+- Consistent with RO-002 (GDO dashboard cleanup)
+- Build green, no issues.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.
