@@ -8,7 +8,8 @@ import { getUserInventory } from '@/app/actions/shopActions';
 import { getDuelHistory } from '@/app/actions/duelActions';
 import { getScriptCompletionRate } from '@/app/actions/gdoPerformanceActions';
 import { getAllCreatureDefinitions, getUserCreatures } from '@/app/actions/creatureActions';
-import { getTeamCreatures } from '@/app/actions/teamAdventureActions';
+import { getTeamCreatures, getTeamAdventureProgress } from '@/app/actions/teamAdventureActions';
+import { getAdventureProgress, getAllBosses } from '@/app/actions/adventureActions';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
 import dynamic from 'next/dynamic';
@@ -27,7 +28,7 @@ export default async function ProfiloPage() {
     const isTeam = role === 'CONFERME';
 
     try {
-        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData, scriptStats, allCreatures, ownedCreatures] = await Promise.all([
+        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData, scriptStats, allCreatures, ownedCreatures, adventureProgress, adventureBosses] = await Promise.all([
             getGdoRpgProfile(supabaseUser.id).catch(e => { console.error("Profile error:", e); return null; }),
             getUserAchievements(supabaseUser.id).catch(() => ({ achievements: [] })),
             getUnlockedTitles(supabaseUser.id).catch(() => ({ titles: [], activeTitle: null })),
@@ -39,6 +40,8 @@ export default async function ProfiloPage() {
             getScriptCompletionRate(supabaseUser.id).catch(() => ({ totalCalls: 0, scriptCompletedCount: 0, completionRate: 0, scriptStreak: 0 })),
             getAllCreatureDefinitions().catch(() => []),
             (isTeam ? getTeamCreatures() : getUserCreatures(supabaseUser.id)).catch(() => []),
+            (isTeam ? getTeamAdventureProgress() : getAdventureProgress(supabaseUser.id)).catch(() => ({ currentStage: 1, currentBossHp: 0, activeBoss: null, stageRequirement: 0 })),
+            getAllBosses().catch(() => []),
         ]);
 
         if (!profileData) {
@@ -104,6 +107,8 @@ export default async function ProfiloPage() {
                 scriptStats={scriptStats}
                 allCreatures={allCreatures}
                 ownedCreatures={ownedCreatures}
+                adventureProgress={adventureProgress}
+                adventureBosses={adventureBosses}
                 isTeam={isTeam}
                 userId={supabaseUser.id}
             />

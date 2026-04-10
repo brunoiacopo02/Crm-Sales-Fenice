@@ -19,6 +19,7 @@ import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
 const InventarioCreatureClient = dynamic(() => import("@/app/(dashboard)/creature-inventario/InventarioCreatureClient"), { ssr: false })
+const MappaAvventuraClient = dynamic(() => import("@/app/(dashboard)/mappa-avventura/MappaAvventuraClient"), { ssr: false })
 import type { UnlockedTitle } from "@/app/actions/titleActions"
 
 type LifetimeStats = {
@@ -74,7 +75,7 @@ const TAB_CONFIG: { id: ProfileTab; icon: typeof Zap; gdoOnly?: boolean }[] = [
     { id: 'Scambi', icon: ArrowLeftRight, gdoOnly: true },
 ];
 
-export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats, allCreatures = [], ownedCreatures = [], isTeam = false, userId }: {
+export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats, allCreatures = [], ownedCreatures = [], adventureProgress, adventureBosses = [], isTeam = false, userId }: {
     profileData: any;
     achievements?: any[];
     titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
@@ -87,6 +88,8 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     scriptStats?: ScriptStats;
     allCreatures?: any[];
     ownedCreatures?: any[];
+    adventureProgress?: any;
+    adventureBosses?: any[];
     isTeam?: boolean;
     userId?: string;
 }) {
@@ -772,15 +775,26 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
             )}
 
             {/* ═══════════════════════════════════════════════════════
-                TAB: Avventura — placeholder for RO-008
+                TAB: Avventura — mappa inline
             ═══════════════════════════════════════════════════════ */}
             {activeTab === 'Avventura' && (
                 <div className="px-4 lg:px-8 mt-6">
-                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
-                        <Map className="w-10 h-10 text-[var(--color-gaming-gold)] mx-auto mb-3" />
-                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Avventura</h3>
-                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">La mappa avventura — in arrivo.</p>
-                    </div>
+                    <SafeWrapper>
+                        {userId && adventureProgress ? (
+                            <MappaAvventuraClient
+                                progress={adventureProgress}
+                                bosses={adventureBosses}
+                                isTeam={isTeam}
+                                userId={userId}
+                            />
+                        ) : (
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                                <Map className="w-10 h-10 text-[var(--color-gaming-gold)] mx-auto mb-3" />
+                                <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Avventura</h3>
+                                <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Caricamento mappa...</p>
+                            </div>
+                        )}
+                    </SafeWrapper>
                 </div>
             )}
 
