@@ -18,6 +18,7 @@ import { DuelWidget } from "@/components/DuelWidget"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
+const InventarioCreatureClient = dynamic(() => import("@/app/(dashboard)/creature-inventario/InventarioCreatureClient"), { ssr: false })
 import type { UnlockedTitle } from "@/app/actions/titleActions"
 
 type LifetimeStats = {
@@ -73,7 +74,7 @@ const TAB_CONFIG: { id: ProfileTab; icon: typeof Zap; gdoOnly?: boolean }[] = [
     { id: 'Scambi', icon: ArrowLeftRight, gdoOnly: true },
 ];
 
-export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats }: {
+export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats, allCreatures = [], ownedCreatures = [], isTeam = false, userId }: {
     profileData: any;
     achievements?: any[];
     titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
@@ -84,6 +85,10 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     equippedItemInfo?: EquippedItemInfo | null;
     duelHistory?: { duels: any[]; stats: { totalDuels: number; wins: number; losses: number; winRate: number } };
     scriptStats?: ScriptStats;
+    allCreatures?: any[];
+    ownedCreatures?: any[];
+    isTeam?: boolean;
+    userId?: string;
 }) {
 
     const {
@@ -743,15 +748,26 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
             )}
 
             {/* ═══════════════════════════════════════════════════════
-                TAB: Creature — placeholder for RO-007
+                TAB: Creature — inventario inline
             ═══════════════════════════════════════════════════════ */}
             {activeTab === 'Creature' && (
                 <div className="px-4 lg:px-8 mt-6">
-                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
-                        <Bug className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Creature</h3>
-                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Il tuo inventario creature — in arrivo.</p>
-                    </div>
+                    <SafeWrapper>
+                        {userId ? (
+                            <InventarioCreatureClient
+                                allCreatures={allCreatures}
+                                ownedCreatures={ownedCreatures}
+                                isTeam={isTeam}
+                                userId={userId}
+                            />
+                        ) : (
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                                <Bug className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+                                <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Creature</h3>
+                                <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Caricamento inventario...</p>
+                            </div>
+                        )}
+                    </SafeWrapper>
                 </div>
             )}
 

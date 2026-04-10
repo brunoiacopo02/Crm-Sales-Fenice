@@ -7,6 +7,8 @@ import { getUserLifetimeStats } from '@/app/actions/leaderboardActions';
 import { getUserInventory } from '@/app/actions/shopActions';
 import { getDuelHistory } from '@/app/actions/duelActions';
 import { getScriptCompletionRate } from '@/app/actions/gdoPerformanceActions';
+import { getAllCreatureDefinitions, getUserCreatures } from '@/app/actions/creatureActions';
+import { getTeamCreatures } from '@/app/actions/teamAdventureActions';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
 import dynamic from 'next/dynamic';
@@ -21,8 +23,11 @@ export default async function ProfiloPage() {
         redirect('/login');
     }
 
+    const role = supabaseUser.user_metadata?.role;
+    const isTeam = role === 'CONFERME';
+
     try {
-        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData, scriptStats] = await Promise.all([
+        const [profileData, achievementData, titleData, streakData, questData, lifetimeStats, inventory, duelHistoryData, scriptStats, allCreatures, ownedCreatures] = await Promise.all([
             getGdoRpgProfile(supabaseUser.id).catch(e => { console.error("Profile error:", e); return null; }),
             getUserAchievements(supabaseUser.id).catch(() => ({ achievements: [] })),
             getUnlockedTitles(supabaseUser.id).catch(() => ({ titles: [], activeTitle: null })),
@@ -32,6 +37,8 @@ export default async function ProfiloPage() {
             getUserInventory(supabaseUser.id).catch(() => []),
             getDuelHistory(supabaseUser.id).catch(() => ({ duels: [], stats: { totalDuels: 0, wins: 0, losses: 0, winRate: 0 } })),
             getScriptCompletionRate(supabaseUser.id).catch(() => ({ totalCalls: 0, scriptCompletedCount: 0, completionRate: 0, scriptStreak: 0 })),
+            getAllCreatureDefinitions().catch(() => []),
+            (isTeam ? getTeamCreatures() : getUserCreatures(supabaseUser.id)).catch(() => []),
         ]);
 
         if (!profileData) {
@@ -95,6 +102,10 @@ export default async function ProfiloPage() {
                 } : null}
                 duelHistory={duelHistoryData}
                 scriptStats={scriptStats}
+                allCreatures={allCreatures}
+                ownedCreatures={ownedCreatures}
+                isTeam={isTeam}
+                userId={supabaseUser.id}
             />
         );
     } catch (e) {
