@@ -131,7 +131,7 @@
         "npx next build senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Stessa logica di RO-007. MappaAvventuraClient e gia pronto."
     },
     {

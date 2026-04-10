@@ -78,6 +78,17 @@ Started: 2026-04-10
 - For CONFERME: isTeam=true triggers getTeamCreatures() for team creature inventory
 - Build green, no hydration issues.
 
+### RO-008 — Profilo Tab 'Avventura': mappa inline (2026-04-10)
+- Added imports for getAdventureProgress, getAllBosses, getTeamAdventureProgress in profilo/page.tsx
+- Fetch adventure data in Promise.all: adventureProgress (team vs personal) + adventureBosses
+- Pass adventureProgress, adventureBosses as new props to ProfileClient
+- Added dynamic import of MappaAvventuraClient in ProfileClient.tsx
+- Replaced Avventura tab placeholder with actual MappaAvventuraClient rendering
+- Wrapped in SafeWrapper for crash isolation
+- Fallback UI shown when userId or adventureProgress not available
+- For CONFERME: isTeam=true triggers getTeamAdventureProgress() for team adventure
+- Build green, no hydration issues.
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.
