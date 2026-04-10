@@ -16,6 +16,113 @@ Started: 2026-04-10
 - GdoDailyObjectives: componente che mostra chiamate/fissaggi del giorno con progress bar.
 - ChestWidget: widget bauli azione. Va RIMOSSO dalla pipeline ma il backend resta.
 
+## Completed Stories
+
+### RO-001 — Pipeline: obiettivi giornalieri sticky in alto (2026-04-10)
+- Wrapped GdoDailyObjectives in sticky container: `sticky top-0 z-10 bg-gray-50 shadow-sm`
+- Used negative margins (-mx-3 sm:-mx-6) + compensating padding to extend bg full-width
+- Component stays fixed at top when scrolling pipeline. Build green.
+
+### RO-002 — Pipeline: rimuovere widget gamification dalla dashboard (2026-04-10)
+- Removed ChestWidget, DuelWidget, QuestPanel imports and renders from page.tsx
+- Also removed StreakCounter, SeasonalEventBanner, BossBattleBanner, LevelNudge, StreakAnxietyBanner
+- Kept overlay popups: CelebrationOverlay, LootDropModal, TimedChest, DailyLoginReward
+- Kept core: GdoDailyObjectives (sticky), GdoLeadMetrics, HotStreak+PipelineBoard
+- Pipeline is now clean: objectives + metrics + pipeline board only. Build green.
+
+### RO-003 — Sidebar: rimuovere pagine gamification separate (2026-04-10)
+- Removed GDO sidebar entries: "Inventario Creature" (/creature-inventario), "Scambi Creature" (/trading), "Mappa Avventura" (/mappa-avventura)
+- Removed CONFERME sidebar entries: "Inventario Team" (/creature-inventario), "Avventura Team" (/mappa-avventura)
+- Kept: Il mio Profilo, Classifica, Fenice Store for both roles
+- Pages remain accessible via direct URL — only sidebar links removed
+- Cleaned up unused imports (Sparkles, ArrowLeftRight). Build green.
+
+### RO-004 — Profilo RPG: ristrutturare con sistema a tab (2026-04-10)
+- Added TAB_CONFIG with 5 tabs: Profilo, Quest & Sfide, Creature, Avventura, Scambi
+- Scambi tab conditionally visible only for GDO role (gdoOnly flag)
+- Tab bar sticky (top-0 z-30) with gaming dark theme, backdrop blur, rounded container
+- Active tab styled with fire-500/brand-orange gradient bg, orange border, glow shadow
+- Existing profile content wrapped in display:none toggle for Profilo tab
+- Placeholder panels for Quest & Sfide, Creature, Avventura, Scambi with themed icons
+- State managed via useState<ProfileTab> defaulting to 'Profilo'
+- Build green, no hydration issues (tabs use div with role=button, not span)
+
+### RO-005 — Profilo Tab 'Profilo': contenuto principale snellito (2026-04-10)
+- Removed from Profilo tab: DuelHistory, Quest Log, TitleSelector, AchievementShowcase
+- Moved Settings (AnimationToggle, SoundToggle) outside tabs — always visible at bottom of page
+- Kept in Profilo tab: Stats cards (6 KPI), SocialComparisonBadge, Script Usage, two-column layout (Upcoming Rewards + Streak + Equipped Cosmetics | Finanze + WeeklyBonus + Prossimi Traguardi)
+- Cleaned up unused imports: AchievementShowcase, TitleSelector, DuelHistory, unused lucide-react icons
+- Props (achievements, duelHistory, activeQuests) kept in function signature for RO-006 reuse
+- titleData still used in hero banner for active title display
+- Build green, no hydration issues.
+
+### RO-006 — Profilo Tab 'Quest & Sfide': quest, achievement, titoli, duelli (2026-04-10)
+- Replaced placeholder tab with actual gamification components
+- Added imports: QuestPanel, AchievementShowcase, TitleSelector, DuelHistory, DuelWidget
+- Layout order: QuestPanel (top, focus) → AchievementShowcase → TitleSelector → DuelWidget + DuelHistory
+- Each section wrapped in SafeWrapper for crash isolation
+- AchievementShowcase wrapped in gaming-themed card with Trophy icon header
+- TitleSelector wrapped in purple-themed card with Crown icon header
+- DuelWidget shows active duel (self-fetching), DuelHistory shows stats/records below
+- Conditional rendering: achievements shown only if non-empty, titles only if unlocked, duel history only if data exists
+- Build green, no hydration issues.
+
+### RO-007 — Profilo Tab 'Creature': inventario inline (2026-04-10)
+- Added imports for getAllCreatureDefinitions, getUserCreatures, getTeamCreatures in profilo/page.tsx
+- Fetch creature data in Promise.all: allCreatures + ownedCreatures (team vs personal based on role)
+- Pass allCreatures, ownedCreatures, isTeam, userId as new props to ProfileClient
+- Added dynamic import of InventarioCreatureClient in ProfileClient.tsx
+- Replaced Creature tab placeholder with actual InventarioCreatureClient rendering
+- Wrapped in SafeWrapper for crash isolation
+- Fallback UI shown when userId is not available
+- For CONFERME: isTeam=true triggers getTeamCreatures() for team creature inventory
+- Build green, no hydration issues.
+
+### RO-008 — Profilo Tab 'Avventura': mappa inline (2026-04-10)
+- Added imports for getAdventureProgress, getAllBosses, getTeamAdventureProgress in profilo/page.tsx
+- Fetch adventure data in Promise.all: adventureProgress (team vs personal) + adventureBosses
+- Pass adventureProgress, adventureBosses as new props to ProfileClient
+- Added dynamic import of MappaAvventuraClient in ProfileClient.tsx
+- Replaced Avventura tab placeholder with actual MappaAvventuraClient rendering
+- Wrapped in SafeWrapper for crash isolation
+- Fallback UI shown when userId or adventureProgress not available
+- For CONFERME: isTeam=true triggers getTeamAdventureProgress() for team adventure
+- Build green, no hydration issues.
+
+### RO-009 — Profilo Tab 'Scambi': trading inline (solo GDO) (2026-04-10)
+- Added imports for getAllOffers, getGdoUsersForTrading from tradingActions in profilo/page.tsx
+- Conditionally fetch trading data only for GDO role (isGdo flag)
+- Pass tradingOffers, tradingGdoUsers as new props to ProfileClient
+- Added dynamic import of TradingClient in ProfileClient.tsx
+- Replaced Scambi tab placeholder with actual TradingClient rendering
+- TradingClient receives: userId, myCreatures (reuses ownedCreatures), offers, gdoUsers
+- Wrapped in SafeWrapper for crash isolation
+- Fallback UI shown when userId is not available
+- Tab remains conditionally visible only for GDO role (gdoOnly flag in TAB_CONFIG)
+- Build green, no hydration issues.
+
+### RO-010 — Conferme dashboard: rimuovere ChestWidget standalone (2026-04-10)
+- Removed ChestWidget dynamic import from conferme/page.tsx
+- Removed ChestWidget rendering (was: `<ChestWidget userId="team-conferme" isTeam />`)
+- Team chest functionality remains intact via quest rewards (backend unchanged)
+- Consistent with RO-002 (GDO dashboard cleanup)
+- Build green, no issues.
+
+### RO-011 — Debug e test finale post-riorganizzazione (2026-04-10)
+- Build: npx next build compiles successfully, no TypeScript errors
+- Pipeline GDO verified: ONLY GdoDailyObjectives (sticky) + GdoLeadMetrics + PipelineBoard + overlay popups
+- ChestWidget, DuelWidget, QuestPanel confirmed REMOVED from pipeline
+- Profile GDO: 5 tabs working (Profilo, Quest & Sfide, Creature, Avventura, Scambi)
+- Profile CONFERME: 4 tabs (Scambi hidden via gdoOnly flag) — correct
+- Sidebar GDO: Pipeline, Richiami, Appuntamenti, Performance, Storico Pause, Profilo, Classifica, Store
+- Sidebar CONFERME: Dashboard Conferme, KPI Conferme, Profilo, Classifica, Store
+- Gamification sidebar entries removed: Inventario Creature, Mappa Avventura, Scambi Creature (GDO), Inventario Team, Avventura Team (CONFERME)
+- Global popups verified: FomoToast + UniverseToast + CreatureRevealOverlay in layout.tsx; DailyLoginReward + TimedChest + CelebrationOverlay + LootDropModal in GDO page.tsx
+- Standalone pages accessible via URL: /creature-inventario, /mappa-avventura, /trading — all exist with valid imports
+- Conferme page: ChestWidget confirmed REMOVED
+- No broken imports, no missing components across all verified files
+- All SafeWrapper wrapping verified in ProfileClient and layout
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.

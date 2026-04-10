@@ -16,7 +16,7 @@
         "npx next build senza errori"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Il GdoDailyObjectives e gia nel page.tsx. Solo aggiungere sticky positioning."
     },
     {
@@ -32,7 +32,7 @@
         "npx next build senza errori"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "I popup globali (DailyLoginReward, TimedChest, RewardPopup, CelebrationOverlay) sono nel layout.tsx o nei provider, NON nella pipeline page. Quelli restano."
     },
     {
@@ -49,7 +49,7 @@
         "npx next build senza errori"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Le pagine restano nel codebase per accesso diretto. Solo la sidebar viene pulita."
     },
     {
@@ -66,7 +66,7 @@
         "npx next build senza errori"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Solo la struttura tab e il routing interno. I contenuti dei tab vengono implementati nelle stories successive."
     },
     {
@@ -82,7 +82,7 @@
         "npx next build senza errori"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Lo snellimento rende il tab Profilo veloce da caricare e focalizzato sui numeri."
     },
     {
@@ -98,7 +98,7 @@
         "npx next build senza errori"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "ChestWidget non viene piu mostrato standalone. I bauli sono reward delle quest. Per ora basta spostare i componenti qui, l'integrazione bauli-quest la facciamo dopo se serve."
     },
     {
@@ -115,7 +115,7 @@
         "npx next build senza errori"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "InventarioCreatureClient e un componente client gia pronto. Serve solo fetchare i dati nel profilo page.tsx e passarli."
     },
     {
@@ -131,7 +131,7 @@
         "npx next build senza errori"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Stessa logica di RO-007. MappaAvventuraClient e gia pronto."
     },
     {
@@ -147,7 +147,7 @@
         "npx next build senza errori"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "Solo GDO possono scambiare. CONFERME hanno creature team (non scambiabili). Il tab non appare per CONFERME."
     },
     {
@@ -160,7 +160,7 @@
         "npx next build senza errori"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Coerenza: se rimuoviamo i bauli dalla pipeline GDO, li rimuoviamo anche dalla dashboard Conferme."
     },
     {
@@ -178,7 +178,7 @@
         "Nessun import rotto, nessun componente mancante"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "Test statico + build. Verificare tutti i percorsi critici."
     }
   ]

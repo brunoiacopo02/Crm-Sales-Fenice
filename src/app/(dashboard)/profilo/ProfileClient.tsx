@@ -3,19 +3,24 @@
 import { useEffect, useState } from 'react';
 import Image from "next/image"
 import {
-    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award, Gift, Shield, Sword, Gem, Shirt, ChevronDown, ChevronUp, BookOpen
+    Zap, Coins, Trophy, CalendarDays, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Gift, Gem, BookOpen, Scroll, Bug, Map, ArrowLeftRight
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
-import AchievementShowcase from "@/components/AchievementShowcase"
-import TitleSelector from "@/components/TitleSelector"
 import { AnimationToggle } from "@/components/AnimationToggle"
 import { SoundToggle } from "@/components/SoundToggle"
 import { SocialComparisonBadge } from "@/components/SocialComparisonBadge"
 import { SafeWrapper } from "@/components/SafeWrapper"
+import { QuestPanel } from "@/components/QuestPanel"
+import AchievementShowcase from "@/components/AchievementShowcase"
+import TitleSelector from "@/components/TitleSelector"
 import { DuelHistory } from "@/components/DuelHistory"
+import { DuelWidget } from "@/components/DuelWidget"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
+const InventarioCreatureClient = dynamic(() => import("@/app/(dashboard)/creature-inventario/InventarioCreatureClient"), { ssr: false })
+const MappaAvventuraClient = dynamic(() => import("@/app/(dashboard)/mappa-avventura/MappaAvventuraClient"), { ssr: false })
+const TradingClient = dynamic(() => import("@/app/(dashboard)/trading/TradingClient"), { ssr: false })
 import type { UnlockedTitle } from "@/app/actions/titleActions"
 
 type LifetimeStats = {
@@ -61,7 +66,17 @@ type EquippedItemInfo = {
     cssValue: string;
 }
 
-export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats }: {
+type ProfileTab = 'Profilo' | 'Quest & Sfide' | 'Creature' | 'Avventura' | 'Scambi';
+
+const TAB_CONFIG: { id: ProfileTab; icon: typeof Zap; gdoOnly?: boolean }[] = [
+    { id: 'Profilo', icon: Users },
+    { id: 'Quest & Sfide', icon: Scroll },
+    { id: 'Creature', icon: Bug },
+    { id: 'Avventura', icon: Map },
+    { id: 'Scambi', icon: ArrowLeftRight, gdoOnly: true },
+];
+
+export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats, allCreatures = [], ownedCreatures = [], adventureProgress, adventureBosses = [], isTeam = false, userId, tradingOffers = [], tradingGdoUsers = [] }: {
     profileData: any;
     achievements?: any[];
     titleData?: { titles: UnlockedTitle[]; activeTitle: string | null };
@@ -72,6 +87,14 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     equippedItemInfo?: EquippedItemInfo | null;
     duelHistory?: { duels: any[]; stats: { totalDuels: number; wins: number; losses: number; winRate: number } };
     scriptStats?: ScriptStats;
+    allCreatures?: any[];
+    ownedCreatures?: any[];
+    adventureProgress?: any;
+    adventureBosses?: any[];
+    isTeam?: boolean;
+    userId?: string;
+    tradingOffers?: any[];
+    tradingGdoUsers?: any[];
 }) {
 
     const {
@@ -92,6 +115,9 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     const [hoveredMilestone, setHoveredMilestone] = useState<number | null>(null);
     const [showEvolutionPulse, setShowEvolutionPulse] = useState(false);
     const [showEvolutionRing, setShowEvolutionRing] = useState(false);
+    const [activeTab, setActiveTab] = useState<ProfileTab>('Profilo');
+
+    const visibleTabs = TAB_CONFIG.filter(t => !t.gdoOnly || role === 'GDO');
 
     useEffect(() => {
         const lastStage = localStorage.getItem('crm-fenice-last-stage');
@@ -329,9 +355,38 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
             </div>
 
             {/* ═══════════════════════════════════════════════════════
+                TAB BAR — Sticky navigation under hero + XP bar
+            ═══════════════════════════════════════════════════════ */}
+            <div className="sticky top-0 z-30 mx-4 lg:mx-8 mt-4">
+                <div className="bg-[var(--color-gaming-bg-deep)]/95 backdrop-blur-md border border-[var(--color-gaming-border)] rounded-2xl shadow-gaming-elevated px-2 py-1.5 flex items-center gap-1">
+                    {visibleTabs.map((tab) => {
+                        const isActive = activeTab === tab.id;
+                        const TabIcon = tab.icon;
+                        return (
+                            <div
+                                key={tab.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setActiveTab(tab.id)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id); }}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer transition-all duration-200 select-none ${
+                                    isActive
+                                        ? 'bg-gradient-to-r from-fire-500/20 to-brand-orange/15 text-brand-orange-300 border border-brand-orange/30 shadow-[0_0_12px_rgba(255,107,26,0.15)]'
+                                        : 'text-[var(--color-gaming-text-muted)] hover:text-[var(--color-gaming-text)] hover:bg-[var(--color-gaming-bg-surface)] border border-transparent'
+                                }`}
+                            >
+                                <TabIcon className={`w-4 h-4 ${isActive ? 'text-brand-orange' : ''}`} />
+                                <span className="hidden lg:inline">{tab.id}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════
                 MAIN CONTENT — Two-column RPG layout
             ═══════════════════════════════════════════════════════ */}
-            <div className="px-4 lg:px-8 mt-6 space-y-6">
+            <div className="px-4 lg:px-8 mt-6 space-y-6" style={{ display: activeTab === 'Profilo' ? undefined : 'none' }}>
 
                 {/* STAT CARDS — RPG Character Sheet */}
                 {lifetimeStats && (
@@ -638,105 +693,138 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     </div>
                 </div>
 
-                {/* ═══════════════════════════════════════════════════════
-                    DUEL HISTORY — Storico sfide
-                ═══════════════════════════════════════════════════════ */}
-                {duelHistory && duelHistory.stats.totalDuels > 0 && (
-                    <SafeWrapper><DuelHistory duels={duelHistory.duels} stats={duelHistory.stats} /></SafeWrapper>
-                )}
 
-                {/* ═══════════════════════════════════════════════════════
-                    QUEST LOG — Active quests in RPG quest journal style
-                ═══════════════════════════════════════════════════════ */}
-                {activeQuests && (activeQuests.daily.length > 0 || activeQuests.weekly.length > 0) && (
-                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in relative overflow-hidden" style={{ animationDelay: '150ms', animationFillMode: 'backwards' }}>
-                        <div className="absolute top-0 right-0 w-40 h-40 bg-ember-500/5 rounded-full blur-3xl pointer-events-none" />
-                        <div className="flex items-center justify-between mb-4 relative z-10">
-                            <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-ember-500/15 border border-ember-500/25">
-                                    <Sword className="w-4 h-4 text-ember-400" />
-                                </div>
-                                Quest Log
-                            </h3>
-                            <span className="text-[11px] font-bold text-[var(--color-gaming-text-muted)]">
-                                {activeQuests.daily.filter(q => q.completed).length}/{activeQuests.daily.length} giornaliere · {activeQuests.weekly.filter(q => q.completed).length}/{activeQuests.weekly.length} settimanali
-                            </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 relative z-10">
-                            {[...activeQuests.daily, ...activeQuests.weekly].map((quest) => {
-                                const progress = quest.targetValue > 0 ? Math.min((quest.currentValue / quest.targetValue) * 100, 100) : 0;
-                                return (
-                                    <div
-                                        key={quest.progressId}
-                                        className={`border rounded-xl p-3 flex items-center gap-3 transition-all duration-200 ${quest.completed
-                                            ? 'border-[var(--color-gaming-gold)]/30 bg-gradient-to-r from-[var(--color-gaming-gold)]/10 to-[var(--color-gaming-bg-surface)]'
-                                            : 'border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-surface)] hover:border-ember-500/30'
-                                        }`}
-                                    >
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <div className={`text-sm font-semibold truncate ${quest.completed ? 'text-[var(--color-gaming-gold)]' : 'text-[var(--color-gaming-text)]'}`}>
-                                                    {quest.title}
-                                                </div>
-                                                <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${quest.type === 'daily'
-                                                    ? 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
-                                                    : 'bg-purple-500/15 text-purple-400 border border-purple-500/25'
-                                                }`}>
-                                                    {quest.type === 'daily' ? 'D' : 'S'}
-                                                </div>
-                                            </div>
-                                            <div className="mt-1.5 flex items-center gap-2">
-                                                <div className="flex-1 h-1.5 bg-[var(--color-gaming-bg-deep)] rounded-full overflow-hidden border border-[var(--color-gaming-border)]">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all duration-700 ${quest.completed
-                                                            ? 'bg-gradient-to-r from-[var(--color-gaming-gold)] to-[var(--color-gaming-amber)]'
-                                                            : 'bg-gradient-to-r from-fire-500 to-brand-orange'
-                                                        }`}
-                                                        style={{ width: `${progress}%` }}
-                                                    />
-                                                </div>
-                                                <span className="text-[10px] font-bold text-[var(--color-gaming-text-muted)] whitespace-nowrap">
-                                                    {quest.currentValue}/{quest.targetValue}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="text-right flex-shrink-0">
-                                            <div className="text-[10px] font-bold text-ember-400">{quest.rewardXp} XP</div>
-                                            <div className="text-[10px] font-bold text-[var(--color-gaming-gold)]">{quest.rewardCoins} <Coins className="inline h-2.5 w-2.5" /></div>
-                                        </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════
+                TAB: Quest & Sfide — quests, achievements, titles, duels
+            ═══════════════════════════════════════════════════════ */}
+            {activeTab === 'Quest & Sfide' && (
+                <div className="px-4 lg:px-8 mt-6 space-y-6">
+
+                    {/* Quest Giornaliere & Settimanali — focus in alto */}
+                    <SafeWrapper>
+                        <QuestPanel userId={profileData.id} />
+                    </SafeWrapper>
+
+                    {/* Achievement Showcase */}
+                    {achievements && achievements.length > 0 && (
+                        <SafeWrapper>
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5">
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-4 flex items-center gap-2">
+                                    <div className="p-1.5 rounded-lg bg-[var(--color-gaming-gold)]/10 border border-[var(--color-gaming-gold)]/20">
+                                        <Trophy className="w-4 h-4 text-[var(--color-gaming-gold)]" />
                                     </div>
-                                );
-                            })}
-                        </div>
+                                    Achievement
+                                </h3>
+                                <AchievementShowcase achievements={achievements} />
+                            </div>
+                        </SafeWrapper>
+                    )}
+
+                    {/* Titoli Sbloccati */}
+                    {titleData && titleData.titles.length > 0 && (
+                        <SafeWrapper>
+                            <div className="border border-purple-500/20 bg-gradient-to-br from-purple-500/8 to-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5">
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-4 flex items-center gap-2">
+                                    <div className="p-1.5 rounded-lg bg-purple-500/15 border border-purple-500/25">
+                                        <Crown className="w-4 h-4 text-purple-400" />
+                                    </div>
+                                    Titoli
+                                </h3>
+                                <TitleSelector titles={titleData.titles} activeTitle={titleData.activeTitle} userId={profileData.id} />
+                            </div>
+                        </SafeWrapper>
+                    )}
+
+                    {/* Duelli — widget attivo + storico */}
+                    <div className="space-y-4">
+                        <SafeWrapper>
+                            <DuelWidget userId={profileData.id} />
+                        </SafeWrapper>
+
+                        {duelHistory && (duelHistory.duels.length > 0 || duelHistory.stats.totalDuels > 0) && (
+                            <SafeWrapper>
+                                <DuelHistory duels={duelHistory.duels} stats={duelHistory.stats} />
+                            </SafeWrapper>
+                        )}
                     </div>
-                )}
 
-                {/* ═══════════════════════════════════════════════════════
-                    TITLE SELECTOR
-                ═══════════════════════════════════════════════════════ */}
-                {titleData && (
+                </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════
+                TAB: Creature — inventario inline
+            ═══════════════════════════════════════════════════════ */}
+            {activeTab === 'Creature' && (
+                <div className="px-4 lg:px-8 mt-6">
                     <SafeWrapper>
-                        <TitleSelector
-                            titles={titleData.titles}
-                            activeTitle={titleData.activeTitle}
-                            userId={profileData.id}
-                        />
+                        {userId ? (
+                            <InventarioCreatureClient
+                                allCreatures={allCreatures}
+                                ownedCreatures={ownedCreatures}
+                                isTeam={isTeam}
+                                userId={userId}
+                            />
+                        ) : (
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                                <Bug className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+                                <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Creature</h3>
+                                <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Caricamento inventario...</p>
+                            </div>
+                        )}
                     </SafeWrapper>
-                )}
+                </div>
+            )}
 
-                {/* ═══════════════════════════════════════════════════════
-                    BADGE WALL — Achievement showcase
-                ═══════════════════════════════════════════════════════ */}
-                {achievements.length > 0 && (
+            {/* ═══════════════════════════════════════════════════════
+                TAB: Avventura — mappa inline
+            ═══════════════════════════════════════════════════════ */}
+            {activeTab === 'Avventura' && (
+                <div className="px-4 lg:px-8 mt-6">
                     <SafeWrapper>
-                        <AchievementShowcase achievements={achievements} />
+                        {userId && adventureProgress ? (
+                            <MappaAvventuraClient
+                                progress={adventureProgress}
+                                bosses={adventureBosses}
+                                isTeam={isTeam}
+                                userId={userId}
+                            />
+                        ) : (
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                                <Map className="w-10 h-10 text-[var(--color-gaming-gold)] mx-auto mb-3" />
+                                <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Avventura</h3>
+                                <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Caricamento mappa...</p>
+                            </div>
+                        )}
                     </SafeWrapper>
-                )}
+                </div>
+            )}
 
-                {/* ═══════════════════════════════════════════════════════
-                    SETTINGS — Gaming dark theme
-                ═══════════════════════════════════════════════════════ */}
-                <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
+            {activeTab === 'Scambi' && role === 'GDO' && (
+                <div className="px-4 lg:px-8 mt-6">
+                    <SafeWrapper>
+                        {userId ? (
+                            <TradingClient
+                                userId={userId}
+                                myCreatures={ownedCreatures}
+                                offers={tradingOffers}
+                                gdoUsers={tradingGdoUsers}
+                            />
+                        ) : (
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                                <ArrowLeftRight className="w-10 h-10 text-purple-400 mx-auto mb-3" />
+                                <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Scambi</h3>
+                                <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Caricamento scambi...</p>
+                            </div>
+                        )}
+                    </SafeWrapper>
+                </div>
+            )}
+
+            {/* Settings — always visible at bottom, outside tabs */}
+            <div className="px-4 lg:px-8 mt-8">
+                <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5">
                     <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
                         <div className="p-1.5 rounded-lg bg-[var(--color-gaming-bg-surface)] border border-[var(--color-gaming-border)]">
                             <Settings className="w-4 h-4 text-[var(--color-gaming-text-muted)]" />
@@ -746,8 +834,8 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     <AnimationToggle />
                     <SoundToggle />
                 </div>
-
             </div>
+
         </div>
         </SafeWrapper>
     );
