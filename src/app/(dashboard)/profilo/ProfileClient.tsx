@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from "next/image"
 import {
-    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award, Gift, Shield, Sword, Gem, Shirt, ChevronDown, ChevronUp, BookOpen
+    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award, Gift, Shield, Sword, Gem, Shirt, ChevronDown, ChevronUp, BookOpen, Scroll, Bug, Map, ArrowLeftRight
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
 import AchievementShowcase from "@/components/AchievementShowcase"
@@ -61,6 +61,16 @@ type EquippedItemInfo = {
     cssValue: string;
 }
 
+type ProfileTab = 'Profilo' | 'Quest & Sfide' | 'Creature' | 'Avventura' | 'Scambi';
+
+const TAB_CONFIG: { id: ProfileTab; icon: typeof Zap; gdoOnly?: boolean }[] = [
+    { id: 'Profilo', icon: Users },
+    { id: 'Quest & Sfide', icon: Scroll },
+    { id: 'Creature', icon: Bug },
+    { id: 'Avventura', icon: Map },
+    { id: 'Scambi', icon: ArrowLeftRight, gdoOnly: true },
+];
+
 export default function ProfileClient({ profileData, achievements = [], titleData, lifetimeStats, streakInfo, activeQuests, equippedItems = [], equippedItemInfo, duelHistory, scriptStats }: {
     profileData: any;
     achievements?: any[];
@@ -92,6 +102,9 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
     const [hoveredMilestone, setHoveredMilestone] = useState<number | null>(null);
     const [showEvolutionPulse, setShowEvolutionPulse] = useState(false);
     const [showEvolutionRing, setShowEvolutionRing] = useState(false);
+    const [activeTab, setActiveTab] = useState<ProfileTab>('Profilo');
+
+    const visibleTabs = TAB_CONFIG.filter(t => !t.gdoOnly || role === 'GDO');
 
     useEffect(() => {
         const lastStage = localStorage.getItem('crm-fenice-last-stage');
@@ -329,9 +342,38 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
             </div>
 
             {/* ═══════════════════════════════════════════════════════
+                TAB BAR — Sticky navigation under hero + XP bar
+            ═══════════════════════════════════════════════════════ */}
+            <div className="sticky top-0 z-30 mx-4 lg:mx-8 mt-4">
+                <div className="bg-[var(--color-gaming-bg-deep)]/95 backdrop-blur-md border border-[var(--color-gaming-border)] rounded-2xl shadow-gaming-elevated px-2 py-1.5 flex items-center gap-1">
+                    {visibleTabs.map((tab) => {
+                        const isActive = activeTab === tab.id;
+                        const TabIcon = tab.icon;
+                        return (
+                            <div
+                                key={tab.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setActiveTab(tab.id)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id); }}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer transition-all duration-200 select-none ${
+                                    isActive
+                                        ? 'bg-gradient-to-r from-fire-500/20 to-brand-orange/15 text-brand-orange-300 border border-brand-orange/30 shadow-[0_0_12px_rgba(255,107,26,0.15)]'
+                                        : 'text-[var(--color-gaming-text-muted)] hover:text-[var(--color-gaming-text)] hover:bg-[var(--color-gaming-bg-surface)] border border-transparent'
+                                }`}
+                            >
+                                <TabIcon className={`w-4 h-4 ${isActive ? 'text-brand-orange' : ''}`} />
+                                <span className="hidden lg:inline">{tab.id}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════
                 MAIN CONTENT — Two-column RPG layout
             ═══════════════════════════════════════════════════════ */}
-            <div className="px-4 lg:px-8 mt-6 space-y-6">
+            <div className="px-4 lg:px-8 mt-6 space-y-6" style={{ display: activeTab === 'Profilo' ? undefined : 'none' }}>
 
                 {/* STAT CARDS — RPG Character Sheet */}
                 {lifetimeStats && (
@@ -748,6 +790,59 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                 </div>
 
             </div>
+
+            {/* ═══════════════════════════════════════════════════════
+                TAB: Quest & Sfide — placeholder for RO-006
+            ═══════════════════════════════════════════════════════ */}
+            {activeTab === 'Quest & Sfide' && (
+                <div className="px-4 lg:px-8 mt-6">
+                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                        <Scroll className="w-10 h-10 text-ember-400 mx-auto mb-3" />
+                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Quest & Sfide</h3>
+                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Quest giornaliere, achievement, titoli e duelli — in arrivo.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════
+                TAB: Creature — placeholder for RO-007
+            ═══════════════════════════════════════════════════════ */}
+            {activeTab === 'Creature' && (
+                <div className="px-4 lg:px-8 mt-6">
+                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                        <Bug className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Creature</h3>
+                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Il tuo inventario creature — in arrivo.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════
+                TAB: Avventura — placeholder for RO-008
+            ═══════════════════════════════════════════════════════ */}
+            {activeTab === 'Avventura' && (
+                <div className="px-4 lg:px-8 mt-6">
+                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                        <Map className="w-10 h-10 text-[var(--color-gaming-gold)] mx-auto mb-3" />
+                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Avventura</h3>
+                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">La mappa avventura — in arrivo.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════
+                TAB: Scambi — placeholder for RO-009 (GDO only)
+            ═══════════════════════════════════════════════════════ */}
+            {activeTab === 'Scambi' && role === 'GDO' && (
+                <div className="px-4 lg:px-8 mt-6">
+                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
+                        <ArrowLeftRight className="w-10 h-10 text-purple-400 mx-auto mb-3" />
+                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Scambi</h3>
+                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Il trading di creature — in arrivo.</p>
+                    </div>
+                </div>
+            )}
+
         </div>
         </SafeWrapper>
     );
