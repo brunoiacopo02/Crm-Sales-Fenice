@@ -3,16 +3,13 @@
 import { useEffect, useState } from 'react';
 import Image from "next/image"
 import {
-    Zap, Coins, Trophy, CalendarDays, TrendingUp, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Award, Gift, Shield, Sword, Gem, Shirt, ChevronDown, ChevronUp, BookOpen, Scroll, Bug, Map, ArrowLeftRight
+    Zap, Coins, Trophy, CalendarDays, HandCoins, Target, ArrowUpCircle, Flame, Crown, Star, Sparkles, Settings, Phone, Users, Gift, Gem, BookOpen, Scroll, Bug, Map, ArrowLeftRight
 } from 'lucide-react';
 import { WeeklyBonusWidget } from "@/components/WeeklyBonusWidget"
-import AchievementShowcase from "@/components/AchievementShowcase"
-import TitleSelector from "@/components/TitleSelector"
 import { AnimationToggle } from "@/components/AnimationToggle"
 import { SoundToggle } from "@/components/SoundToggle"
 import { SocialComparisonBadge } from "@/components/SocialComparisonBadge"
 import { SafeWrapper } from "@/components/SafeWrapper"
-import { DuelHistory } from "@/components/DuelHistory"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
@@ -680,114 +677,6 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     </div>
                 </div>
 
-                {/* ═══════════════════════════════════════════════════════
-                    DUEL HISTORY — Storico sfide
-                ═══════════════════════════════════════════════════════ */}
-                {duelHistory && duelHistory.stats.totalDuels > 0 && (
-                    <SafeWrapper><DuelHistory duels={duelHistory.duels} stats={duelHistory.stats} /></SafeWrapper>
-                )}
-
-                {/* ═══════════════════════════════════════════════════════
-                    QUEST LOG — Active quests in RPG quest journal style
-                ═══════════════════════════════════════════════════════ */}
-                {activeQuests && (activeQuests.daily.length > 0 || activeQuests.weekly.length > 0) && (
-                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in relative overflow-hidden" style={{ animationDelay: '150ms', animationFillMode: 'backwards' }}>
-                        <div className="absolute top-0 right-0 w-40 h-40 bg-ember-500/5 rounded-full blur-3xl pointer-events-none" />
-                        <div className="flex items-center justify-between mb-4 relative z-10">
-                            <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-ember-500/15 border border-ember-500/25">
-                                    <Sword className="w-4 h-4 text-ember-400" />
-                                </div>
-                                Quest Log
-                            </h3>
-                            <span className="text-[11px] font-bold text-[var(--color-gaming-text-muted)]">
-                                {activeQuests.daily.filter(q => q.completed).length}/{activeQuests.daily.length} giornaliere · {activeQuests.weekly.filter(q => q.completed).length}/{activeQuests.weekly.length} settimanali
-                            </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 relative z-10">
-                            {[...activeQuests.daily, ...activeQuests.weekly].map((quest) => {
-                                const progress = quest.targetValue > 0 ? Math.min((quest.currentValue / quest.targetValue) * 100, 100) : 0;
-                                return (
-                                    <div
-                                        key={quest.progressId}
-                                        className={`border rounded-xl p-3 flex items-center gap-3 transition-all duration-200 ${quest.completed
-                                            ? 'border-[var(--color-gaming-gold)]/30 bg-gradient-to-r from-[var(--color-gaming-gold)]/10 to-[var(--color-gaming-bg-surface)]'
-                                            : 'border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-surface)] hover:border-ember-500/30'
-                                        }`}
-                                    >
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <div className={`text-sm font-semibold truncate ${quest.completed ? 'text-[var(--color-gaming-gold)]' : 'text-[var(--color-gaming-text)]'}`}>
-                                                    {quest.title}
-                                                </div>
-                                                <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${quest.type === 'daily'
-                                                    ? 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
-                                                    : 'bg-purple-500/15 text-purple-400 border border-purple-500/25'
-                                                }`}>
-                                                    {quest.type === 'daily' ? 'D' : 'S'}
-                                                </div>
-                                            </div>
-                                            <div className="mt-1.5 flex items-center gap-2">
-                                                <div className="flex-1 h-1.5 bg-[var(--color-gaming-bg-deep)] rounded-full overflow-hidden border border-[var(--color-gaming-border)]">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all duration-700 ${quest.completed
-                                                            ? 'bg-gradient-to-r from-[var(--color-gaming-gold)] to-[var(--color-gaming-amber)]'
-                                                            : 'bg-gradient-to-r from-fire-500 to-brand-orange'
-                                                        }`}
-                                                        style={{ width: `${progress}%` }}
-                                                    />
-                                                </div>
-                                                <span className="text-[10px] font-bold text-[var(--color-gaming-text-muted)] whitespace-nowrap">
-                                                    {quest.currentValue}/{quest.targetValue}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="text-right flex-shrink-0">
-                                            <div className="text-[10px] font-bold text-ember-400">{quest.rewardXp} XP</div>
-                                            <div className="text-[10px] font-bold text-[var(--color-gaming-gold)]">{quest.rewardCoins} <Coins className="inline h-2.5 w-2.5" /></div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* ═══════════════════════════════════════════════════════
-                    TITLE SELECTOR
-                ═══════════════════════════════════════════════════════ */}
-                {titleData && (
-                    <SafeWrapper>
-                        <TitleSelector
-                            titles={titleData.titles}
-                            activeTitle={titleData.activeTitle}
-                            userId={profileData.id}
-                        />
-                    </SafeWrapper>
-                )}
-
-                {/* ═══════════════════════════════════════════════════════
-                    BADGE WALL — Achievement showcase
-                ═══════════════════════════════════════════════════════ */}
-                {achievements.length > 0 && (
-                    <SafeWrapper>
-                        <AchievementShowcase achievements={achievements} />
-                    </SafeWrapper>
-                )}
-
-                {/* ═══════════════════════════════════════════════════════
-                    SETTINGS — Gaming dark theme
-                ═══════════════════════════════════════════════════════ */}
-                <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
-                    <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-[var(--color-gaming-bg-surface)] border border-[var(--color-gaming-border)]">
-                            <Settings className="w-4 h-4 text-[var(--color-gaming-text-muted)]" />
-                        </div>
-                        Impostazioni
-                    </h3>
-                    <AnimationToggle />
-                    <SoundToggle />
-                </div>
 
             </div>
 
@@ -842,6 +731,20 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                     </div>
                 </div>
             )}
+
+            {/* Settings — always visible at bottom, outside tabs */}
+            <div className="px-4 lg:px-8 mt-8">
+                <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5">
+                    <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-[var(--color-gaming-bg-surface)] border border-[var(--color-gaming-border)]">
+                            <Settings className="w-4 h-4 text-[var(--color-gaming-text-muted)]" />
+                        </div>
+                        Impostazioni
+                    </h3>
+                    <AnimationToggle />
+                    <SoundToggle />
+                </div>
+            </div>
 
         </div>
         </SafeWrapper>
