@@ -10,6 +10,11 @@ import { AnimationToggle } from "@/components/AnimationToggle"
 import { SoundToggle } from "@/components/SoundToggle"
 import { SocialComparisonBadge } from "@/components/SocialComparisonBadge"
 import { SafeWrapper } from "@/components/SafeWrapper"
+import { QuestPanel } from "@/components/QuestPanel"
+import AchievementShowcase from "@/components/AchievementShowcase"
+import TitleSelector from "@/components/TitleSelector"
+import { DuelHistory } from "@/components/DuelHistory"
+import { DuelWidget } from "@/components/DuelWidget"
 import { triggerCelebration, getAnimationsEnabled } from '@/lib/animationUtils';
 import dynamic from "next/dynamic"
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })), { ssr: false })
@@ -681,15 +686,59 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
             </div>
 
             {/* ═══════════════════════════════════════════════════════
-                TAB: Quest & Sfide — placeholder for RO-006
+                TAB: Quest & Sfide — quests, achievements, titles, duels
             ═══════════════════════════════════════════════════════ */}
             {activeTab === 'Quest & Sfide' && (
-                <div className="px-4 lg:px-8 mt-6">
-                    <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl p-10 text-center">
-                        <Scroll className="w-10 h-10 text-ember-400 mx-auto mb-3" />
-                        <h3 className="text-lg font-bold text-[var(--color-gaming-text)]">Quest & Sfide</h3>
-                        <p className="text-sm text-[var(--color-gaming-text-muted)] mt-1">Quest giornaliere, achievement, titoli e duelli — in arrivo.</p>
+                <div className="px-4 lg:px-8 mt-6 space-y-6">
+
+                    {/* Quest Giornaliere & Settimanali — focus in alto */}
+                    <SafeWrapper>
+                        <QuestPanel userId={profileData.id} />
+                    </SafeWrapper>
+
+                    {/* Achievement Showcase */}
+                    {achievements && achievements.length > 0 && (
+                        <SafeWrapper>
+                            <div className="border border-[var(--color-gaming-border)] bg-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5">
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-4 flex items-center gap-2">
+                                    <div className="p-1.5 rounded-lg bg-[var(--color-gaming-gold)]/10 border border-[var(--color-gaming-gold)]/20">
+                                        <Trophy className="w-4 h-4 text-[var(--color-gaming-gold)]" />
+                                    </div>
+                                    Achievement
+                                </h3>
+                                <AchievementShowcase achievements={achievements} />
+                            </div>
+                        </SafeWrapper>
+                    )}
+
+                    {/* Titoli Sbloccati */}
+                    {titleData && titleData.titles.length > 0 && (
+                        <SafeWrapper>
+                            <div className="border border-purple-500/20 bg-gradient-to-br from-purple-500/8 to-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5">
+                                <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-4 flex items-center gap-2">
+                                    <div className="p-1.5 rounded-lg bg-purple-500/15 border border-purple-500/25">
+                                        <Crown className="w-4 h-4 text-purple-400" />
+                                    </div>
+                                    Titoli
+                                </h3>
+                                <TitleSelector titles={titleData.titles} activeTitle={titleData.activeTitle} userId={profileData.id} />
+                            </div>
+                        </SafeWrapper>
+                    )}
+
+                    {/* Duelli — widget attivo + storico */}
+                    <div className="space-y-4">
+                        <SafeWrapper>
+                            <DuelWidget userId={profileData.id} />
+                        </SafeWrapper>
+
+                        {duelHistory && (duelHistory.duels.length > 0 || duelHistory.stats.totalDuels > 0) && (
+                            <SafeWrapper>
+                                <DuelHistory duels={duelHistory.duels} stats={duelHistory.stats} />
+                            </SafeWrapper>
+                        )}
                     </div>
+
                 </div>
             )}
 
