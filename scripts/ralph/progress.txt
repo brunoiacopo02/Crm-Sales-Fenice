@@ -37,6 +37,16 @@ Started: 2026-04-10
 - Pages remain accessible via direct URL — only sidebar links removed
 - Cleaned up unused imports (Sparkles, ArrowLeftRight). Build green.
 
+### RO-004 — Profilo RPG: ristrutturare con sistema a tab (2026-04-10)
+- Added TAB_CONFIG with 5 tabs: Profilo, Quest & Sfide, Creature, Avventura, Scambi
+- Scambi tab conditionally visible only for GDO role (gdoOnly flag)
+- Tab bar sticky (top-0 z-30) with gaming dark theme, backdrop blur, rounded container
+- Active tab styled with fire-500/brand-orange gradient bg, orange border, glow shadow
+- Existing profile content wrapped in display:none toggle for Profilo tab
+- Placeholder panels for Quest & Sfide, Creature, Avventura, Scambi with themed icons
+- State managed via useState<ProfileTab> defaulting to 'Profilo'
+- Build green, no hydration issues (tabs use div with role=button, not span)
+
 ## Obiettivo Run
 La pipeline deve essere PULITA — solo lead + obiettivi fissi.
 Tutta la gamification converge nel Profilo RPG con tab.
