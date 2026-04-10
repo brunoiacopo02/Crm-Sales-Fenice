@@ -24,7 +24,7 @@ function buildValue(date: string, hour: string, minute: string): string {
     return `${date}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
 }
 
-const APPT_HOURS = ['10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
+const APPT_HOURS = ['09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
 const RECALL_HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
 const FIVE_MIN_STEPS = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']
 
@@ -38,7 +38,7 @@ export function AppointmentDateTimePicker({ value, onChange, compact = false }: 
                 type="date"
                 value={date}
                 min={getTodayStr()}
-                onChange={(e) => onChange(buildValue(e.target.value, hour || '10', '00'))}
+                onChange={(e) => onChange(buildValue(e.target.value, hour || '09', '00'))}
                 className={inputClass}
                 required
             />
