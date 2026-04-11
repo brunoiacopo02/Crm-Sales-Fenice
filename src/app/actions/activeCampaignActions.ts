@@ -10,6 +10,7 @@ import { logLeadEvent } from "@/lib/eventLogger"
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com'
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '72ca1b215ab41d91b1f3b41682bef0f70817aeb4eac51d9e269a1484a01325ed22d2af20'
 const AC_AUTOMATION_ID = process.env.ACTIVECAMPAIGN_AGENDA_AUTOMATION_ID || '248'
+const AC_CONFERME_NOTIFY_AUTOMATION_ID = process.env.ACTIVECAMPAIGN_CONFERME_NOTIFY_ID || '319'
 
 // Tag IDs (verified via API)
 const TAG_IDS = {
@@ -180,5 +181,61 @@ export async function sendAgendaToLead(
     } catch (error: any) {
         console.error('sendAgendaToLead error:', error)
         return { success: false, error: error.message || 'Errore invio agenda' }
+    }
+}
+
+export type SendConfermeNotifyResult = {
+    success: boolean
+    error?: string
+}
+
+/**
+ * Notifica al lead via WhatsApp/Spoki che il team Conferme sta cercando
+ * di contattarlo per confermare l'appuntamento.
+ * Usato dalle Conferme dopo la prima call non risposta.
+ * Trigger: automation 319 "sms spoki1 per notifica call 1"
+ */
+export async function sendConfermeNotifyToLead(leadId: string): Promise<SendConfermeNotifyResult> {
+    // Auth check — only CONFERME role
+    const supabase = await createClient()
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+    if (!supabaseUser) return { success: false, error: 'Non autenticato' }
+
+    const role = supabaseUser.user_metadata?.role
+    if (role !== 'CONFERME' && role !== 'MANAGER' && role !== 'ADMIN') {
+        return { success: false, error: 'Solo le Conferme possono inviare questa notifica' }
+    }
+
+    // Fetch lead
+    const [lead] = await db.select().from(leads).where(eq(leads.id, leadId))
+    if (!lead) return { success: false, error: 'Lead non trovato' }
+    if (!lead.email) return { success: false, error: 'Il lead non ha email — impossibile creare contatto AC' }
+
+    try {
+        // 1. Find or create contact
+        let contactId = await findContactByEmail(lead.email)
+        if (!contactId) {
+            contactId = await createContact(lead.email, lead.phone, lead.name)
+        }
+
+        // 2. Add to notify automation
+        await addContactToAutomation(contactId, AC_CONFERME_NOTIFY_AUTOMATION_ID)
+
+        // 3. Log event
+        await logLeadEvent({
+            leadId,
+            eventType: 'AGENDA_SENT', // reuse existing event type with metadata flag
+            userId: supabaseUser.id,
+            metadata: {
+                contactId,
+                type: 'conferme_notify_call1',
+                automationId: AC_CONFERME_NOTIFY_AUTOMATION_ID,
+            },
+        })
+
+        return { success: true }
+    } catch (error: any) {
+        console.error('sendConfermeNotifyToLead error:', error)
+        return { success: false, error: error.message || 'Errore invio notifica' }
     }
 }

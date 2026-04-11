@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users } from "lucide-react"
+import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2 } from "lucide-react"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze } from "@/app/actions/confermeActions"
+import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { createClient } from "@/utils/supabase/client"
 import { format, formatDistanceToNow } from "date-fns"
@@ -83,6 +84,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
     // Quick Action States
     const [isSavingNR, setIsSavingNR] = useState(false)
+    const [isSendingNotify, setIsSendingNotify] = useState(false)
+    const [notifySentMsg, setNotifySentMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     const [now, setNow] = useState(new Date())
 
@@ -281,6 +284,24 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         }
     }
 
+    const handleSendNotify = async () => {
+        setIsSendingNotify(true);
+        setNotifySentMsg(null);
+        try {
+            const res = await sendConfermeNotifyToLead(lead.id);
+            if (res.success) {
+                setNotifySentMsg({ type: 'success', text: 'Notifica WhatsApp inviata!' });
+                setTimeout(() => setNotifySentMsg(null), 4000);
+            } else {
+                setNotifySentMsg({ type: 'error', text: res.error || 'Errore invio' });
+            }
+        } catch (e: any) {
+            setNotifySentMsg({ type: 'error', text: e.message || 'Errore invio' });
+        } finally {
+            setIsSendingNotify(false);
+        }
+    }
+
     const getLastNRDate = () => {
         if (lead.confCall3At) return new Date(lead.confCall3At);
         if (lead.confCall2At) return new Date(lead.confCall2At);
@@ -354,8 +375,25 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         Annulla NR
                                     </button>
                                 )}
+
+                                {!lead.confirmationsOutcome && (
+                                    <button
+                                        onClick={handleSendNotify}
+                                        disabled={isSendingNotify || !lead.email}
+                                        title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica al lead via WhatsApp che stiamo cercando di contattarlo"}
+                                        className="text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                    >
+                                        {isSendingNotify ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                                        Notifica WhatsApp
+                                    </button>
+                                )}
                             </div>
                         </div>
+                        {notifySentMsg && (
+                            <div className={`text-xs px-3 py-2 rounded-lg font-medium ${notifySentMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                {notifySentMsg.text}
+                            </div>
+                        )}
                     </div>
                 </fieldset>
 
