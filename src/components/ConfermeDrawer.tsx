@@ -360,13 +360,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 </button>
 
                                 {lastNR && !lead.confirmationsOutcome && (
-                                    <span className="text-xs text-ash-600 flex items-center gap-1 font-semibold bg-ash-100 px-3 py-1.5 rounded-full border border-ash-200">
-                                        <Clock className="w-3.5 h-3.5 text-brand-orange" />
-                                        {formatDistanceToNow(lastNR, { locale: it })} fa
-                                    </span>
-                                )}
-
-                                {lastNR && !lead.confirmationsOutcome && (
                                     <button
                                         onClick={handleUndoNR}
                                         disabled={isSavingNR}
@@ -403,6 +396,31 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                         {notifySentMsg && (
                             <div className={`text-xs px-3 py-2 rounded-lg font-medium ${notifySentMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                                 {notifySentMsg.text}
+                            </div>
+                        )}
+
+                        {/* NR call timestamps — exact times */}
+                        {(lead.confCall1At || lead.confCall2At || lead.confCall3At) && !lead.confirmationsOutcome && (
+                            <div className="flex items-center gap-2 flex-wrap text-xs">
+                                <span className="text-ash-500 font-semibold uppercase tracking-wider text-[10px]">Chiamate NR:</span>
+                                {lead.confCall1At && (
+                                    <span className="inline-flex items-center gap-1 bg-ash-50 border border-ash-200 px-2 py-1 rounded-md font-mono text-ash-700">
+                                        <span className="text-ash-400 text-[9px] font-bold">1°</span>
+                                        {format(new Date(lead.confCall1At), 'dd/MM HH:mm', { locale: it })}
+                                    </span>
+                                )}
+                                {lead.confCall2At && (
+                                    <span className="inline-flex items-center gap-1 bg-ash-50 border border-ash-200 px-2 py-1 rounded-md font-mono text-ash-700">
+                                        <span className="text-ash-400 text-[9px] font-bold">2°</span>
+                                        {format(new Date(lead.confCall2At), 'dd/MM HH:mm', { locale: it })}
+                                    </span>
+                                )}
+                                {lead.confCall3At && (
+                                    <span className="inline-flex items-center gap-1 bg-ember-50 border border-ember-200 px-2 py-1 rounded-md font-mono text-ember-700 font-semibold">
+                                        <span className="text-ember-400 text-[9px] font-bold">3°</span>
+                                        {format(new Date(lead.confCall3At), 'dd/MM HH:mm', { locale: it })}
+                                    </span>
+                                )}
                             </div>
                         )}
                     </div>
