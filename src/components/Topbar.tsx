@@ -208,7 +208,7 @@ export function Topbar() {
 
                         {/* Dropdown Results */}
                         {isOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-ash-200 rounded-xl shadow-elevated overflow-hidden z-50 animate-fade-in">
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-ash-200 rounded-xl shadow-elevated overflow-hidden z-[100] animate-fade-in">
                                 {isSearching ? (
                                     <div className="p-4 text-center text-sm text-ash-500">Ricerca in corso...</div>
                                 ) : results.length > 0 ? (
