@@ -284,13 +284,13 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         }
     }
 
-    const handleSendNotify = async () => {
+    const handleSendNotify = async (type: 'call1' | '3nr') => {
         setIsSendingNotify(true);
         setNotifySentMsg(null);
         try {
-            const res = await sendConfermeNotifyToLead(lead.id);
+            const res = await sendConfermeNotifyToLead(lead.id, type);
             if (res.success) {
-                setNotifySentMsg({ type: 'success', text: 'Notifica WhatsApp inviata!' });
+                setNotifySentMsg({ type: 'success', text: type === '3nr' ? 'Notifica 3 NR inviata!' : 'Notifica WhatsApp inviata!' });
                 setTimeout(() => setNotifySentMsg(null), 4000);
             } else {
                 setNotifySentMsg({ type: 'error', text: res.error || 'Errore invio' });
@@ -377,15 +377,26 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 )}
 
                                 {!lead.confirmationsOutcome && (
-                                    <button
-                                        onClick={handleSendNotify}
-                                        disabled={isSendingNotify || !lead.email}
-                                        title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica al lead via WhatsApp che stiamo cercando di contattarlo"}
-                                        className="text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                                    >
-                                        {isSendingNotify ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
-                                        Notifica WhatsApp
-                                    </button>
+                                    <>
+                                        <button
+                                            onClick={() => handleSendNotify('call1')}
+                                            disabled={isSendingNotify || !lead.email}
+                                            title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica WhatsApp dopo prima NR"}
+                                            className="text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                        >
+                                            {isSendingNotify ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                                            Notifica 1° NR
+                                        </button>
+                                        <button
+                                            onClick={() => handleSendNotify('3nr')}
+                                            disabled={isSendingNotify || !lead.email}
+                                            title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica WhatsApp dopo 3 NR"}
+                                            className="text-xs text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                        >
+                                            {isSendingNotify ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                                            Notifica 3 NR
+                                        </button>
+                                    </>
                                 )}
                             </div>
                         </div>

@@ -11,6 +11,7 @@ const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.a
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '72ca1b215ab41d91b1f3b41682bef0f70817aeb4eac51d9e269a1484a01325ed22d2af20'
 const AC_AUTOMATION_ID = process.env.ACTIVECAMPAIGN_AGENDA_AUTOMATION_ID || '248'
 const AC_CONFERME_NOTIFY_AUTOMATION_ID = process.env.ACTIVECAMPAIGN_CONFERME_NOTIFY_ID || '319'
+const AC_CONFERME_NOTIFY_3NR_AUTOMATION_ID = process.env.ACTIVECAMPAIGN_CONFERME_NOTIFY_3NR_ID || '270'
 
 // Tag IDs (verified via API)
 const TAG_IDS = {
@@ -189,13 +190,18 @@ export type SendConfermeNotifyResult = {
     error?: string
 }
 
+export type ConfermeNotifyType = 'call1' | '3nr'
+
 /**
- * Notifica al lead via WhatsApp/Spoki che il team Conferme sta cercando
- * di contattarlo per confermare l'appuntamento.
- * Usato dalle Conferme dopo la prima call non risposta.
- * Trigger: automation 319 "sms spoki1 per notifica call 1"
+ * Notifica al lead via WhatsApp/Spoki tramite automazione ActiveCampaign.
+ * - 'call1': automation 319 "sms spoki1 per notifica call 1" (dopo prima NR)
+ * - '3nr': automation 270 "conferma-appuntamento-spoki" (dopo 3 NR)
+ * Solo per ruolo CONFERME/MANAGER/ADMIN.
  */
-export async function sendConfermeNotifyToLead(leadId: string): Promise<SendConfermeNotifyResult> {
+export async function sendConfermeNotifyToLead(
+    leadId: string,
+    type: ConfermeNotifyType = 'call1'
+): Promise<SendConfermeNotifyResult> {
     // Auth check — only CONFERME role
     const supabase = await createClient()
     const { data: { user: supabaseUser } } = await supabase.auth.getUser()
@@ -211,6 +217,10 @@ export async function sendConfermeNotifyToLead(leadId: string): Promise<SendConf
     if (!lead) return { success: false, error: 'Lead non trovato' }
     if (!lead.email) return { success: false, error: 'Il lead non ha email — impossibile creare contatto AC' }
 
+    const automationId = type === '3nr'
+        ? AC_CONFERME_NOTIFY_3NR_AUTOMATION_ID
+        : AC_CONFERME_NOTIFY_AUTOMATION_ID
+
     try {
         // 1. Find or create contact
         let contactId = await findContactByEmail(lead.email)
@@ -219,7 +229,7 @@ export async function sendConfermeNotifyToLead(leadId: string): Promise<SendConf
         }
 
         // 2. Add to notify automation
-        await addContactToAutomation(contactId, AC_CONFERME_NOTIFY_AUTOMATION_ID)
+        await addContactToAutomation(contactId, automationId)
 
         // 3. Log event
         await logLeadEvent({
@@ -228,8 +238,8 @@ export async function sendConfermeNotifyToLead(leadId: string): Promise<SendConf
             userId: supabaseUser.id,
             metadata: {
                 contactId,
-                type: 'conferme_notify_call1',
-                automationId: AC_CONFERME_NOTIFY_AUTOMATION_ID,
+                type: type === '3nr' ? 'conferme_notify_3nr' : 'conferme_notify_call1',
+                automationId,
             },
         })
 
