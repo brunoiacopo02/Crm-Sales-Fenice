@@ -170,7 +170,7 @@ export function Topbar() {
     }
 
     return (
-        <header className="h-16 bg-white border-b border-ash-200/60 flex items-center justify-between px-4 lg:px-6 shadow-soft z-30">
+        <header className="relative h-16 bg-white border-b border-ash-200/60 flex items-center justify-between px-4 lg:px-6 shadow-soft z-40">
             <div className="flex items-center flex-1 min-w-0">
                 {/* Mobile hamburger */}
                 <button
