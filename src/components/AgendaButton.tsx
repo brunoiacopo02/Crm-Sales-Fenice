@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Send, X, Briefcase, Users, CheckCircle2, Loader2, Mail } from "lucide-react"
+import { Send, X, Briefcase, Users, CheckCircle2, Loader2, Mail, Sparkles } from "lucide-react"
 import { sendAgendaToLead } from "@/app/actions/activeCampaignActions"
 import { useRouter } from "next/navigation"
 
@@ -18,6 +18,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     const [showModal, setShowModal] = useState(false)
     const [lavora, setLavora] = useState<boolean | null>(null)
     const [haFamiglia, setHaFamiglia] = useState<boolean | null>(null)
+    const [offertaDelMese, setOffertaDelMese] = useState(false)
     const [emailOverride, setEmailOverride] = useState("")
     const [loading, setLoading] = useState(false)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -31,6 +32,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         setShowModal(true)
         setLavora(null)
         setHaFamiglia(null)
+        setOffertaDelMese(false)
         setEmailOverride("")
         setSuccessMsg(null)
         setErrorMsg(null)
@@ -44,7 +46,8 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
 
     const handleSubmit = async () => {
-        if (lavora === null || haFamiglia === null) return
+        // Validation: either offerta del mese OR both work/family questions answered
+        if (!offertaDelMese && (lavora === null || haFamiglia === null)) return
         if (needsEmail && !isValidEmail(emailOverride)) {
             setErrorMsg("Inserisci un'email valida")
             return
@@ -53,8 +56,9 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         setErrorMsg(null)
         try {
             const result = await sendAgendaToLead(leadId, {
-                lavora,
-                haFamiglia,
+                lavora: lavora ?? false,
+                haFamiglia: haFamiglia ?? false,
+                offertaDelMese,
                 emailOverride: needsEmail ? emailOverride.trim() : undefined,
             })
             if (result.success) {
@@ -71,7 +75,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         }
     }
 
-    const canSubmit = lavora !== null && haFamiglia !== null && !loading && (!needsEmail || isValidEmail(emailOverride))
+    const canSubmit = (offertaDelMese || (lavora !== null && haFamiglia !== null)) && !loading && (!needsEmail || isValidEmail(emailOverride))
 
     return (
         <>
@@ -150,15 +154,44 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                         </div>
                                     )}
 
+                                    {/* Offerta del Mese checkbox */}
+                                    <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${offertaDelMese
+                                        ? 'border-purple-500 bg-purple-50 shadow-sm'
+                                        : 'border-ash-200 bg-white hover:border-ash-300'
+                                        } ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={offertaDelMese}
+                                            onChange={(e) => {
+                                                setOffertaDelMese(e.target.checked)
+                                                if (e.target.checked) {
+                                                    setLavora(null)
+                                                    setHaFamiglia(null)
+                                                }
+                                            }}
+                                            disabled={loading}
+                                            className="w-4 h-4 accent-purple-600 cursor-pointer"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-1.5 text-sm font-bold text-purple-700">
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                                È offerta del mese
+                                            </div>
+                                            <div className="text-[11px] text-ash-500 mt-0.5">
+                                                Invia il video con l'offerta speciale del mese (ignora i tag Lavora/Famiglia)
+                                            </div>
+                                        </div>
+                                    </label>
+
                                     {/* Question 1: Lavora */}
-                                    <div>
+                                    <div className={offertaDelMese ? 'opacity-40' : ''}>
                                         <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">
                                             <Briefcase className="w-3.5 h-3.5" /> Il lead lavora?
                                         </label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 onClick={() => setLavora(true)}
-                                                disabled={loading}
+                                                disabled={loading || offertaDelMese}
                                                 className={`px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${lavora === true
                                                     ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
                                                     : 'border-ash-200 bg-white text-ash-600 hover:border-ash-300'
@@ -168,7 +201,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                             </button>
                                             <button
                                                 onClick={() => setLavora(false)}
-                                                disabled={loading}
+                                                disabled={loading || offertaDelMese}
                                                 className={`px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${lavora === false
                                                     ? 'border-rose-500 bg-rose-50 text-rose-700 shadow-sm'
                                                     : 'border-ash-200 bg-white text-ash-600 hover:border-ash-300'
@@ -180,14 +213,14 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                     </div>
 
                                     {/* Question 2: Ha famiglia */}
-                                    <div>
+                                    <div className={offertaDelMese ? 'opacity-40' : ''}>
                                         <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">
                                             <Users className="w-3.5 h-3.5" /> Situazione familiare
                                         </label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 onClick={() => setHaFamiglia(true)}
-                                                disabled={loading}
+                                                disabled={loading || offertaDelMese}
                                                 className={`px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${haFamiglia === true
                                                     ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
                                                     : 'border-ash-200 bg-white text-ash-600 hover:border-ash-300'
@@ -197,7 +230,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                             </button>
                                             <button
                                                 onClick={() => setHaFamiglia(false)}
-                                                disabled={loading}
+                                                disabled={loading || offertaDelMese}
                                                 className={`px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${haFamiglia === false
                                                     ? 'border-rose-500 bg-rose-50 text-rose-700 shadow-sm'
                                                     : 'border-ash-200 bg-white text-ash-600 hover:border-ash-300'

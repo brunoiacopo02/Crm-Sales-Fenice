@@ -17,6 +17,7 @@ const TAG_IDS = {
     non_lavora: 270,
     ha_famiglia: 269,
     non_ha_famiglia: 271,
+    off1: 280,
 }
 
 type AcRequestOptions = {
@@ -89,6 +90,7 @@ async function addContactToAutomation(contactId: string, automationId: string): 
 export type SendAgendaOptions = {
     lavora: boolean
     haFamiglia: boolean
+    offertaDelMese?: boolean // If true, sends OFF1 tag only (skips Lavora/Famiglia)
     emailOverride?: string // If lead has no email, GDO provides one at submit time
 }
 
@@ -142,10 +144,15 @@ export async function sendAgendaToLead(
         }
 
         // 2. Add tags
-        const workTag = options.lavora ? TAG_IDS.lavora : TAG_IDS.non_lavora
-        const familyTag = options.haFamiglia ? TAG_IDS.ha_famiglia : TAG_IDS.non_ha_famiglia
-        await addTagToContact(contactId, workTag)
-        await addTagToContact(contactId, familyTag)
+        // Special "offerta del mese" path: only OFF1 tag (mutually exclusive with normal flow)
+        if (options.offertaDelMese) {
+            await addTagToContact(contactId, TAG_IDS.off1)
+        } else {
+            const workTag = options.lavora ? TAG_IDS.lavora : TAG_IDS.non_lavora
+            const familyTag = options.haFamiglia ? TAG_IDS.ha_famiglia : TAG_IDS.non_ha_famiglia
+            await addTagToContact(contactId, workTag)
+            await addTagToContact(contactId, familyTag)
+        }
 
         // 3. Add contact to automation
         await addContactToAutomation(contactId, AC_AUTOMATION_ID)
@@ -162,8 +169,9 @@ export async function sendAgendaToLead(
             userId: supabaseUser.id,
             metadata: {
                 contactId,
-                lavora: options.lavora,
-                haFamiglia: options.haFamiglia,
+                offertaDelMese: !!options.offertaDelMese,
+                lavora: options.offertaDelMese ? null : options.lavora,
+                haFamiglia: options.offertaDelMese ? null : options.haFamiglia,
                 resend: lead.agendaSentAt !== null,
             },
         })
