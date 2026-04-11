@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { getLeadProfile, updateLeadContactInfo } from "@/app/actions/eventActions"
 import { X, CalendarCheck, Phone, Mail, User, Clock, AlertCircle, History, FileText, CheckCircle2, Pencil, Save, Loader2 } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
+import { AgendaButton } from "./AgendaButton"
 import { useAuth } from "./AuthProvider"
 import { useRouter } from "next/navigation"
 
@@ -371,11 +372,18 @@ export function ContactDrawer({
                                 <h3 className="text-sm font-bold text-brand-orange uppercase tracking-wider flex items-center justify-between">
                                     Azioni Rapide sull'Esito
                                 </h3>
-                                <div className="pt-2">
+                                <div className="pt-2 flex items-center flex-wrap gap-2">
+                                    <AgendaButton
+                                        leadId={lead.id}
+                                        leadName={lead.name}
+                                        leadPhone={lead.phone}
+                                        hasEmail={!!lead.email}
+                                        agendaSentAt={lead.agendaSentAt}
+                                    />
                                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} />
                                 </div>
                                 <div className="text-xs text-brand-orange/70 mt-2">
-                                    Clicca un pulsante per esitare il lead e fisserà automaticamente lo storico o l'appuntamento.
+                                    Clicca un pulsante per esitare il lead, fissarlo, o inviare l'agenda Calendly via WhatsApp.
                                 </div>
                             </div>
                         </div>

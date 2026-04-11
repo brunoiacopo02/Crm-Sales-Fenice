@@ -18,6 +18,7 @@ export async function getLeadProfile(leadId: string) {
             assignedToName: users.name,
             lastCallDate: leads.lastCallDate,
             lastCallNote: leads.lastCallNote,
+            agendaSentAt: leads.agendaSentAt,
             recallDate: leads.recallDate,
             appointmentDate: leads.appointmentDate,
             appointmentNote: leads.appointmentNote,
