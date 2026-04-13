@@ -32,10 +32,13 @@ function randomCoins(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// Minimum server-side cooldown between chest claims (10 minutes)
+const CHEST_COOLDOWN_MS = 10 * 60 * 1000;
+
 /**
  * Claim a timed chest reward. Rolls rarity, generates coins, updates walletCoins,
  * logs coinTransaction, and returns reward details for UI animation.
- * No DB table needed — chest state is in localStorage, only reward granting is server-side.
+ * Server-side cooldown prevents rapid repeated claims.
  */
 export async function claimTimedChestReward(userId: string): Promise<{
     success: boolean;
@@ -52,10 +55,20 @@ export async function claimTimedChestReward(userId: string): Promise<{
             walletCoins: users.walletCoins,
             streakCount: users.streakCount,
             activeTitle: users.activeTitle,
+            lastTimedChestAt: users.lastTimedChestAt,
         }).from(users).where(eq(users.id, userId));
 
         if (!user) {
             return { success: false, error: 'Utente non trovato' };
+        }
+
+        // Server-side cooldown check
+        if (user.lastTimedChestAt) {
+            const elapsed = Date.now() - new Date(user.lastTimedChestAt).getTime();
+            if (elapsed < CHEST_COOLDOWN_MS) {
+                const remainingMin = Math.ceil((CHEST_COOLDOWN_MS - elapsed) / 60000);
+                return { success: false, error: `Devi aspettare ancora ${remainingMin} minuti prima del prossimo scrigno` };
+            }
         }
 
         // Roll rarity
@@ -77,9 +90,12 @@ export async function claimTimedChestReward(userId: string): Promise<{
             bonusTitle = titles[Math.floor(Math.random() * titles.length)];
         }
 
-        // Update walletCoins
+        // Update walletCoins + lastTimedChestAt (server-side cooldown)
         const newCoins = user.walletCoins + effectiveCoins;
-        const updateFields: Record<string, unknown> = { walletCoins: newCoins };
+        const updateFields: Record<string, unknown> = {
+            walletCoins: newCoins,
+            lastTimedChestAt: new Date(),
+        };
 
         // Auto-equip legendary title if user has no active title
         if (bonusTitle && !user.activeTitle) {

@@ -40,6 +40,7 @@ export const users = pgTable('users', {
 
     // Universe: creature drop counter (triggers drop every ~25 actions)
     creatureDropCounter: integer('creatureDropCounter').default(0).notNull(),
+    lastTimedChestAt: timestamp('lastTimedChestAt', { withTimezone: true, mode: 'date' }),
 
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
