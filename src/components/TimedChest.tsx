@@ -159,6 +159,9 @@ export function TimedChest({ userId }: { userId: string }) {
     const [minimized, setMinimized] = useState(false);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const mountedRef = useRef(true);
+    // Hard synchronous guard against double-claim. Survives the brief window between
+    // click and React re-render where `loading` state hasn't propagated yet.
+    const claimingRef = useRef(false);
 
     // Load state from localStorage on mount
     useEffect(() => {
@@ -180,6 +183,19 @@ export function TimedChest({ userId }: { userId: string }) {
         } else if (loaded.phase === 'ready') {
             setUiPhase('ready');
         } else if (loaded.phase === 'claimed') {
+            // Already claimed this cycle — never show again until a new chest spawns.
+            // Reset the spawn slot but keep claimedToday so daily UX is coherent.
+            const resetState: ChestState = {
+                actionCount: 0,
+                threshold: randomBetween(MIN_ACTIONS_THRESHOLD, MAX_ACTIONS_THRESHOLD),
+                spawnedAt: null,
+                readyAt: null,
+                phase: 'hidden',
+                date: getTodayString(),
+                claimedToday: loaded.claimedToday || 0,
+            };
+            setChestState(resetState);
+            saveChestState(resetState);
             setUiPhase('hidden');
         } else {
             setUiPhase('hidden');
@@ -256,36 +272,46 @@ export function TimedChest({ userId }: { userId: string }) {
 
     // Open the chest — fetch reward first, then animate with correct rarity
     const handleOpen = useCallback(async () => {
-        if (uiPhase !== 'ready' || loading) return;
+        // Synchronous guard: blocks duplicate invocations in the same render tick
+        // (fast double-click, or the window between setLoading and React re-render).
+        if (uiPhase !== 'ready' || loading || claimingRef.current) return;
+        claimingRef.current = true;
         setLoading(true);
         setMinimized(false);
 
-        // Call server first to get rarity for animation visuals
+        // BEFORE calling server, persist a "claimed" marker to localStorage so that:
+        //   - page refresh mid-claim does NOT restore phase:'ready' and show the chest again
+        //   - another tab mounting during the call reads phase:'claimed' → hidden
+        // We keep actionCount=0 and increment claimedToday optimistically.
+        const optimisticClaimed: ChestState = {
+            ...chestState,
+            phase: 'claimed',
+            actionCount: 0,
+            spawnedAt: null,
+            readyAt: null,
+            claimedToday: (chestState.claimedToday || 0) + 1,
+            threshold: randomBetween(MIN_ACTIONS_THRESHOLD, MAX_ACTIONS_THRESHOLD),
+        };
+        setChestState(optimisticClaimed);
+        saveChestState(optimisticClaimed);
+
+        // Call server to get rarity for animation visuals
         const result = await claimTimedChestReward(userId);
 
         if (!mountedRef.current) return;
 
         if (result.success && result.reward) {
             setReward(result.reward);
-            // Now start the opening animation with known rarity
+            // Start the opening animation with known rarity
             setUiPhase('opening');
         } else {
-            // Server rejected (cooldown or error) — reset to hidden and clear localStorage
-            const resetState: ChestState = {
-                actionCount: 0,
-                threshold: randomBetween(MIN_ACTIONS_THRESHOLD, MAX_ACTIONS_THRESHOLD),
-                spawnedAt: null,
-                readyAt: null,
-                phase: 'hidden',
-                date: getTodayString(),
-                claimedToday: chestState.claimedToday,
-            };
-            setChestState(resetState);
-            saveChestState(resetState);
+            // Server rejected (cooldown, daily cap, or error) — fully hide and reset.
+            // localStorage already says 'claimed' (via optimistic update) so refresh won't re-show.
             setUiPhase('hidden');
             setLoading(false);
+            claimingRef.current = false;
         }
-    }, [uiPhase, loading, userId]);
+    }, [uiPhase, loading, userId, chestState]);
 
     // Called when ChestOpeningAnimation finishes its 3-phase sequence
     const handleAnimationComplete = useCallback(() => {
@@ -309,8 +335,11 @@ export function TimedChest({ userId }: { userId: string }) {
     const handleClose = useCallback(() => {
         setReward(null);
         setUiPhase('hidden');
+        claimingRef.current = false;
 
-        // Reset state for next cycle with new random threshold
+        // Reset state for next cycle with new random threshold.
+        // Note: claimedToday was already incremented in handleOpen optimistically,
+        // so we DON'T re-increment here (would double-count).
         const newState: ChestState = {
             actionCount: 0,
             threshold: randomBetween(MIN_ACTIONS_THRESHOLD, MAX_ACTIONS_THRESHOLD),
@@ -318,7 +347,7 @@ export function TimedChest({ userId }: { userId: string }) {
             readyAt: null,
             phase: 'hidden',
             date: getTodayString(),
-            claimedToday: (chestState.claimedToday || 0) + 1,
+            claimedToday: chestState.claimedToday || 0,
         };
         setChestState(newState);
         saveChestState(newState);

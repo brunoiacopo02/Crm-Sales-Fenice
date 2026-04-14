@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { users, coinTransactions } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, gte, like, sql } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { getStreakMultiplier } from "@/lib/streakUtils";
@@ -32,8 +32,28 @@ function randomCoins(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Minimum server-side cooldown between chest claims (10 minutes)
-const CHEST_COOLDOWN_MS = 10 * 60 * 1000;
+// Server-side anti-abuse constants
+// Cooldown between chest claims — deve essere >= della countdown client (15-30 min) per evitare
+// che un utente con localStorage manipolato possa fare claim a raffica ogni 10 min.
+const CHEST_COOLDOWN_MS = 15 * 60 * 1000; // 15 min
+// Hard cap giornaliero: il design prevede 2-4 scrigni/giorno, mettiamo 4 come limite
+const MAX_CHESTS_PER_DAY = 4;
+
+function startOfDayRome(): Date {
+    // Inizio giornata in Europe/Rome, restituito come Date UTC equivalente
+    const now = new Date();
+    const romeDateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(now).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {} as Record<string, string>);
+    // Costruisci 00:00 Europe/Rome come ISO con offset (+01:00 o +02:00 a seconda DST)
+    // Trucco: Intl con timeZoneName short -> offset
+    const offsetParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Rome', timeZoneName: 'longOffset'
+    }).formatToParts(now);
+    const offsetLabel = offsetParts.find(p => p.type === 'timeZoneName')?.value || 'GMT+01:00';
+    const offset = offsetLabel.replace('GMT', '') || '+01:00';
+    return new Date(`${romeDateStr.year}-${romeDateStr.month}-${romeDateStr.day}T00:00:00${offset}`);
+}
 
 /**
  * Claim a timed chest reward. Rolls rarity, generates coins, updates walletCoins,
@@ -69,6 +89,22 @@ export async function claimTimedChestReward(userId: string): Promise<{
                 const remainingMin = Math.ceil((CHEST_COOLDOWN_MS - elapsed) / 60000);
                 return { success: false, error: `Devi aspettare ancora ${remainingMin} minuti prima del prossimo scrigno` };
             }
+        }
+
+        // Daily cap: conta gli scrigni già rivendicati oggi (Europe/Rome) via coinTransactions
+        const dayStart = startOfDayRome();
+        const [{ count: todayCount }] = await db.select({
+            count: sql<number>`count(*)::int`
+        }).from(coinTransactions).where(
+            and(
+                eq(coinTransactions.userId, userId),
+                gte(coinTransactions.createdAt, dayStart),
+                like(coinTransactions.reason, 'Scrigno a Tempo%')
+            )
+        );
+
+        if (todayCount >= MAX_CHESTS_PER_DAY) {
+            return { success: false, error: `Hai già aperto ${MAX_CHESTS_PER_DAY} scrigni oggi. Torna domani!` };
         }
 
         // Roll rarity
