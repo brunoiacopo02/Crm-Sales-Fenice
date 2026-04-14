@@ -270,7 +270,18 @@ export function TimedChest({ userId }: { userId: string }) {
             // Now start the opening animation with known rarity
             setUiPhase('opening');
         } else {
-            // Error — reset to hidden
+            // Server rejected (cooldown or error) — reset to hidden and clear localStorage
+            const resetState: ChestState = {
+                actionCount: 0,
+                threshold: randomBetween(MIN_ACTIONS_THRESHOLD, MAX_ACTIONS_THRESHOLD),
+                spawnedAt: null,
+                readyAt: null,
+                phase: 'hidden',
+                date: getTodayString(),
+                claimedToday: chestState.claimedToday,
+            };
+            setChestState(resetState);
+            saveChestState(resetState);
             setUiPhase('hidden');
             setLoading(false);
         }
