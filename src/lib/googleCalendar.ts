@@ -48,7 +48,20 @@ export async function refreshAccessToken(userId: string) {
         refresh_token: connection.refreshToken
     });
 
-    const { credentials } = await client.refreshAccessToken();
+    let credentials;
+    try {
+        const res = await client.refreshAccessToken();
+        credentials = res.credentials;
+    } catch (e: any) {
+        // invalid_grant = refresh token revoked/expired (common in Google OAuth "Testing" mode:
+        // refresh tokens expire after 7 days). Delete the broken connection so the user can reconnect.
+        const errorMsg = e?.message || e?.response?.data?.error || '';
+        if (errorMsg.includes('invalid_grant') || e?.response?.data?.error === 'invalid_grant') {
+            console.warn(`[googleCalendar] invalid_grant for user ${userId} — deleting connection so user can reconnect`);
+            await db.delete(calendarConnections).where(eq(calendarConnections.id, connection.id));
+        }
+        throw e;
+    }
 
     if (!credentials.access_token) {
         throw new Error("Failed to refresh: no access_token returned by Google");
@@ -117,15 +130,20 @@ export async function createGoogleCalendarEvent(userId: string, eventDetails: an
     });
 
     if (!connection) {
-        console.warn(`No calendar connection for user ${userId}, skipping event creation.`);
-        return null; // The user didn't connect their calendar
+        console.warn(`[googleCalendar] No calendar connection for user ${userId}, skipping event creation.`);
+        return null;
     }
 
     let accessToken = connection.accessToken;
 
     // Check expiry
     if (connection.tokenExpiry && connection.tokenExpiry < new Date()) {
-        accessToken = await refreshAccessToken(userId) as string;
+        try {
+            accessToken = await refreshAccessToken(userId) as string;
+        } catch (e: any) {
+            console.error(`[googleCalendar] Refresh failed for user ${userId}:`, e.message);
+            return null;
+        }
     }
 
     const client = createOAuth2Client();
@@ -150,6 +168,13 @@ export async function createGoogleCalendarEvent(userId: string, eventDetails: an
                 overrides: [
                     { method: 'popup', minutes: 30 },
                 ],
+            },
+            // Google Meet conference — creates hangoutLink on the event
+            conferenceData: {
+                createRequest: {
+                    requestId: `crm-${associatedEntityId}-${Date.now()}`,
+                    conferenceSolutionKey: { type: 'hangoutsMeet' }
+                }
             }
         };
 
@@ -159,26 +184,25 @@ export async function createGoogleCalendarEvent(userId: string, eventDetails: an
 
         const res = await calendar.events.insert({
             calendarId: 'primary',
-            sendUpdates: 'all', // Forza Google a mandare la mail di invito al lead!
+            sendUpdates: 'all', // Manda mail di invito agli attendees
+            conferenceDataVersion: 1, // Required to create Meet link
             requestBody
         });
-
-        // Controlla se abbiamo il lead in db
 
         await db.insert(calendarEvents).values({
             id: crypto.randomUUID(),
             userId,
             leadId: associatedEntityId || "no_lead",
-            eventType, // "appointment", "follow_up_1", "follow_up_2"
+            eventType,
             googleEventId: res.data.id!,
             createdAt: new Date(),
             updatedAt: new Date()
         });
 
+        console.log(`[googleCalendar] Event created for user ${userId}: ${res.data.id} — Meet: ${res.data.hangoutLink || 'n/a'}`);
         return res.data;
     } catch (e: any) {
-        console.error("Error creating google calendar event", e.message);
-        // Dipende dal tipo di errore potremmo voler rimuovere la token o notificare
+        console.error(`[googleCalendar] Error creating event for user ${userId}:`, e.message, e?.response?.data || '');
         return null;
     }
 }
