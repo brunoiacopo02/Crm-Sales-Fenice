@@ -558,3 +558,21 @@ export const manualAdjustments = pgTable('manualAdjustments', {
     addedByUserId: text('addedByUserId').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
+
+// Monthly lead upload target for the "Panoramica Generale" admin dashboard.
+// baseline + live CRM count = ACT shown in the table.
+// baselineSetAt is the timestamp at which the baseline was last saved: only leads
+// created AFTER this timestamp are summed on top of the baseline (to avoid
+// double-counting leads that were already part of the baseline snapshot).
+export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
+    id: text('id').primaryKey(),
+    yearMonth: text('yearMonth').notNull().unique(), // 'YYYY-MM' (Europe/Rome)
+    targetNuovi: integer('targetNuovi').notNull(),
+    targetDatabase: integer('targetDatabase').notNull(),
+    workingDays: integer('workingDays').notNull(),
+    baselineNuovi: integer('baselineNuovi').default(0).notNull(),
+    baselineDatabase: integer('baselineDatabase').default(0).notNull(),
+    baselineSetAt: timestamp('baselineSetAt', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});

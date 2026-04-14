@@ -92,6 +92,12 @@ export function Sidebar() {
             ]
         } else {
             navGroups = [
+                ...(role === "ADMIN" ? [{
+                    label: "Admin",
+                    items: [
+                        { name: "Panoramica Generale", href: "/panoramica-generale", icon: Compass },
+                    ],
+                }] : []),
                 {
                     label: "Operativo",
                     items: [
