@@ -26,7 +26,9 @@ export default async function ProfiloPage() {
     }
 
     const role = supabaseUser.user_metadata?.role;
-    const isTeam = role === 'CONFERME';
+    // Unified gamification: CONFERME now uses individual progress like GDO/VENDITORE.
+    // isTeam is kept as a prop for legacy components but never true in the unified model.
+    const isTeam = false;
     const isGdo = role === 'GDO';
 
     try {

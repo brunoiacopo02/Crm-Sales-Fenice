@@ -21,11 +21,12 @@ export default async function CreatureInventarioPage() {
         redirect('/');
     }
 
-    const isTeam = role === 'CONFERME';
+    // Unified gamification: CONFERME now have individual creature inventories like GDO.
+    const isTeam = false;
 
     const [allCreatures, ownedCreatures] = await Promise.all([
         getAllCreatureDefinitions(),
-        isTeam ? getTeamCreatures() : getUserCreatures(supabaseUser.id),
+        getUserCreatures(supabaseUser.id),
     ]);
 
     return (

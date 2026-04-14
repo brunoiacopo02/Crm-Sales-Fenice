@@ -13,7 +13,17 @@ const GDO_CHEST_TYPES = [
     { chestType: 'platinum', requiredMetric: 'chiusure', requiredValue: 1 },
 ] as const;
 
-// Team Conferme chest definitions
+// Conferme chest definitions (individual — unified gamification).
+// Thresholds scaled down from the old team-conferme values to per-user scale.
+const CONFERME_CHEST_TYPES = [
+    { chestType: 'bronze', requiredMetric: 'conferme', requiredValue: 5 },
+    { chestType: 'silver', requiredMetric: 'presenze', requiredValue: 3 },
+    { chestType: 'gold', requiredMetric: 'chiusure', requiredValue: 2 },
+    { chestType: 'platinum', requiredMetric: 'chiusure', requiredValue: 5 },
+] as const;
+
+// Legacy team chest definitions — still used by the legacy `team-conferme` userId
+// that predates the unified per-user gamification. Kept only for backward compat.
 const TEAM_CHEST_TYPES = [
     { chestType: 'bronze', requiredMetric: 'conferme', requiredValue: 24 },
     { chestType: 'silver', requiredMetric: 'presenze', requiredValue: 15 },
@@ -33,15 +43,33 @@ const CHEST_REWARDS: Record<string, { minCoins: number; maxCoins: number }> = {
 /**
  * Get or create active chests for a user.
  * Creates one chest per type if none is active (not yet opened).
- * For team (Conferme), use a shared userId like 'team-conferme'.
+ *
+ * Chest definition set is picked by role:
+ *   - GDO → metrics: chiamate / fissaggi / presenze / chiusure
+ *   - CONFERME → metrics: conferme / presenze / chiusure (individual scale)
+ *   - legacy team userId 'team-conferme' → old team thresholds
  */
-export async function getOrCreateActiveChests(userId: string, isTeam?: boolean) {
+export async function getOrCreateActiveChests(
+    userId: string,
+    roleOrIsTeam?: 'GDO' | 'CONFERME' | 'VENDITORE' | boolean
+) {
     try {
         // Get existing unopened chests
         const existing = await db.select().from(actionChests)
             .where(and(eq(actionChests.userId, userId), isNull(actionChests.openedAt)));
 
-        const chestDefs = isTeam ? TEAM_CHEST_TYPES : GDO_CHEST_TYPES;
+        // Role-aware chest defs. Boolean accepted for backward compatibility with
+        // the old `isTeam` call sites — true means the legacy team-conferme set.
+        let chestDefs: readonly { chestType: string; requiredMetric: string; requiredValue: number }[] = GDO_CHEST_TYPES;
+        if (roleOrIsTeam === true || userId === 'team-conferme') {
+            chestDefs = TEAM_CHEST_TYPES;
+        } else if (roleOrIsTeam === 'CONFERME') {
+            chestDefs = CONFERME_CHEST_TYPES;
+        } else if (roleOrIsTeam === 'VENDITORE') {
+            // Venditori share GDO chest types for now (chiusure metric works)
+            chestDefs = GDO_CHEST_TYPES;
+        }
+
         const result = [...existing];
 
         // Create missing chest types

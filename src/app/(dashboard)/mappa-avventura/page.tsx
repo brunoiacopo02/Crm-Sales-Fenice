@@ -21,10 +21,11 @@ export default async function MappaAvventuraPage() {
         redirect('/');
     }
 
-    const isTeam = role === 'CONFERME';
+    // Unified gamification: CONFERME now has individual adventure progress like GDO.
+    const isTeam = false;
 
     const [progress, bosses] = await Promise.all([
-        isTeam ? getTeamAdventureProgress() : getAdventureProgress(supabaseUser.id),
+        getAdventureProgress(supabaseUser.id),
         getAllBosses(),
     ]);
 
