@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, boolean, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, boolean, timestamp, jsonb, index, unique } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
     id: text('id').primaryKey(),
@@ -366,6 +366,9 @@ export const userAchievements = pgTable('userAchievements', {
 }, (table) => {
     return {
         userIdIdx: index('user_achievements_user_id_idx').on(table.userId),
+        // Prevents race-condition double-unlocks (checkAchievements is called fire-and-forget from
+        // multiple server actions in parallel — without this, two concurrent calls can both insert).
+        uniqUserAchTier: unique('user_ach_tier_unique').on(table.userId, table.achievementId, table.tier),
     };
 });
 

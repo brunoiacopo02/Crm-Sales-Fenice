@@ -263,13 +263,22 @@ export async function checkAchievements(userId: string): Promise<{
                     const tierNumber = tierIdx + 1;
 
                     if (currentValue >= targetValue) {
-                        // Unlock this tier
-                        await db.insert(userAchievements).values({
+                        // Unlock this tier — onConflictDoNothing handles concurrent fire-and-forget calls
+                        // (checkAchievements is invoked in parallel from multiple server actions).
+                        const inserted = await db.insert(userAchievements).values({
                             id: crypto.randomUUID(),
                             userId,
                             achievementId: ach.id,
                             tier: tierNumber,
-                        });
+                        }).onConflictDoNothing({
+                            target: [userAchievements.userId, userAchievements.achievementId, userAchievements.tier]
+                        }).returning({ id: userAchievements.id });
+
+                        // If insert was a no-op (race: another concurrent call already unlocked), skip rewards.
+                        if (inserted.length === 0) {
+                            unlockedMap.set(ach.id, tierNumber);
+                            continue;
+                        }
 
                         // Award coins based on tier (F2-026 economy rebalance) + seasonal event multiplier
                         const tierCoinKey = tierLabels[tierNumber].toUpperCase();
