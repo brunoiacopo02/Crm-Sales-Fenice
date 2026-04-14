@@ -1,18 +1,22 @@
 'use server';
 
 import { db } from "@/db";
-import { duels, users, coinTransactions } from "@/db/schema";
-import { eq, and, or, desc, count } from "drizzle-orm";
+import { duels, users, coinTransactions, notifications } from "@/db/schema";
+import { eq, and, or, desc, count, sql } from "drizzle-orm";
 
 /**
  * Create a duel between two GDO users. Only TL/Manager can create duels.
+ *
+ * Wager model: `rewardCoins` is the STAKE each participant contributes.
+ * Both GDOs pay the stake upfront; the winner takes the full pot (stake × 2).
+ * If they tie, each gets their stake back.
  */
 export async function createDuel(
     challengerId: string,
     opponentId: string,
     metric: string, // 'fissaggi' | 'chiamate'
     durationMinutes: number,
-    rewardCoins: number,
+    rewardCoins: number, // = stake per partecipante
     creatorRole: string
 ) {
     try {
@@ -24,30 +28,129 @@ export async function createDuel(
             return { success: false, error: 'Non puoi sfidare te stesso' };
         }
 
-        const now = new Date();
-        const endTime = new Date(now.getTime() + durationMinutes * 60 * 1000);
+        if (rewardCoins <= 0) {
+            return { success: false, error: 'La posta deve essere maggiore di zero' };
+        }
 
-        const duel = {
-            id: crypto.randomUUID(),
-            challengerId,
-            opponentId,
-            metric,
-            duration: durationMinutes,
-            startTime: now,
-            endTime,
-            challengerScore: 0,
-            opponentScore: 0,
-            winnerId: null,
-            rewardCoins,
-            status: 'active',
-        };
+        const stake = rewardCoins;
 
-        await db.insert(duels).values(duel);
+        const result = await db.transaction(async (tx) => {
+            // Fetch both users and verify they have enough coins
+            const participants = await tx.select({
+                id: users.id,
+                walletCoins: users.walletCoins,
+                name: users.name,
+                displayName: users.displayName,
+            }).from(users).where(or(eq(users.id, challengerId), eq(users.id, opponentId)));
 
-        return { success: true, duelId: duel.id };
-    } catch (error) {
+            const challenger = participants.find(u => u.id === challengerId);
+            const opponent = participants.find(u => u.id === opponentId);
+
+            if (!challenger || !opponent) {
+                throw new Error('Uno dei partecipanti non esiste');
+            }
+            if (challenger.walletCoins < stake) {
+                throw new Error(`${challenger.displayName || challenger.name} non ha abbastanza monete (servono ${stake}, ne ha ${challenger.walletCoins})`);
+            }
+            if (opponent.walletCoins < stake) {
+                throw new Error(`${opponent.displayName || opponent.name} non ha abbastanza monete (servono ${stake}, ne ha ${opponent.walletCoins})`);
+            }
+
+            const now = new Date();
+            const endTime = new Date(now.getTime() + durationMinutes * 60 * 1000);
+
+            const duelId = crypto.randomUUID();
+            const challengerName = challenger.displayName || challenger.name || 'GDO';
+            const opponentName = opponent.displayName || opponent.name || 'GDO';
+
+            // Deduct stake from both participants (SQL increment is safe inside tx)
+            await tx.update(users)
+                .set({ walletCoins: sql`${users.walletCoins} - ${stake}` })
+                .where(eq(users.id, challengerId));
+            await tx.update(users)
+                .set({ walletCoins: sql`${users.walletCoins} - ${stake}` })
+                .where(eq(users.id, opponentId));
+
+            // Log both stake transactions
+            await tx.insert(coinTransactions).values([
+                {
+                    id: crypto.randomUUID(),
+                    userId: challengerId,
+                    amount: -stake,
+                    reason: `Duello: scommessa vs ${opponentName}`,
+                },
+                {
+                    id: crypto.randomUUID(),
+                    userId: opponentId,
+                    amount: -stake,
+                    reason: `Duello: scommessa vs ${challengerName}`,
+                },
+            ]);
+
+            // Create the duel
+            await tx.insert(duels).values({
+                id: duelId,
+                challengerId,
+                opponentId,
+                metric,
+                duration: durationMinutes,
+                startTime: now,
+                endTime,
+                challengerScore: 0,
+                opponentScore: 0,
+                winnerId: null,
+                rewardCoins: stake, // the stake per side; pot = stake * 2
+                status: 'active',
+            });
+
+            // Notify both participants — triggers the duel start overlay on their dashboard
+            const metricLabel = metric === 'fissaggi' ? 'Appuntamenti fissati' : metric === 'chiamate' ? 'Chiamate' : metric;
+            const pot = stake * 2;
+
+            await tx.insert(notifications).values([
+                {
+                    id: crypto.randomUUID(),
+                    recipientUserId: challengerId,
+                    type: 'duel_started',
+                    title: `⚔️ SFIDA LANCIATA: contro ${opponentName}`,
+                    body: `Hai puntato ${stake} monete. Chi farà più ${metricLabel.toLowerCase()} in ${durationMinutes} minuti vince ${pot} monete!`,
+                    metadata: {
+                        duelId,
+                        opponentId,
+                        opponentName,
+                        metric,
+                        metricLabel,
+                        durationMinutes,
+                        stake,
+                        pot,
+                    },
+                },
+                {
+                    id: crypto.randomUUID(),
+                    recipientUserId: opponentId,
+                    type: 'duel_started',
+                    title: `⚔️ SEI STATO SFIDATO: da ${challengerName}`,
+                    body: `Hai puntato ${stake} monete. Chi farà più ${metricLabel.toLowerCase()} in ${durationMinutes} minuti vince ${pot} monete!`,
+                    metadata: {
+                        duelId,
+                        opponentId: challengerId,
+                        opponentName: challengerName,
+                        metric,
+                        metricLabel,
+                        durationMinutes,
+                        stake,
+                        pot,
+                    },
+                },
+            ]);
+
+            return { duelId, stake, pot };
+        });
+
+        return { success: true, duelId: result.duelId, stake: result.stake, pot: result.pot };
+    } catch (error: any) {
         console.error("Errore createDuel:", error);
-        return { success: false, error: String(error) };
+        return { success: false, error: error?.message || String(error) };
     }
 }
 
@@ -103,7 +206,12 @@ export async function incrementDuelScore(userId: string, metric: string, amount:
 }
 
 /**
- * Complete a duel — determine winner and award coins.
+ * Complete a duel — determine winner and pay out the pot.
+ *
+ * Wager model:
+ *   - Both participants paid `stake` at createDuel. Pot = stake * 2.
+ *   - Winner: receives the full pot (stake * 2).
+ *   - Tie: refund stake to both (they each get their own money back).
  */
 export async function completeDuel(duelId: string) {
     try {
@@ -118,34 +226,102 @@ export async function completeDuel(duelId: string) {
             } else if (duel.opponentScore > duel.challengerScore) {
                 winnerId = duel.opponentId;
             }
-            // If tie, no winner (no reward)
 
-            await tx.update(duels)
+            // Mark the duel completed first (optimistic locking via status prevents double-payout)
+            const updated = await tx.update(duels)
                 .set({ status: 'completed', winnerId })
-                .where(eq(duels.id, duelId));
+                .where(and(eq(duels.id, duelId), eq(duels.status, 'active')))
+                .returning({ id: duels.id });
 
-            // Award coins to winner
-            if (winnerId && duel.rewardCoins > 0) {
-                const [winner] = await tx.select({ walletCoins: users.walletCoins }).from(users)
+            if (updated.length === 0) {
+                // Another concurrent call already completed this duel — skip payout.
+                return duel;
+            }
+
+            const stake = duel.rewardCoins; // stake per side
+            const pot = stake * 2;
+
+            if (winnerId && stake > 0) {
+                // Winner takes the full pot
+                await tx.update(users)
+                    .set({ walletCoins: sql`${users.walletCoins} + ${pot}` })
                     .where(eq(users.id, winnerId));
-                if (winner) {
-                    await tx.update(users)
-                        .set({ walletCoins: winner.walletCoins + duel.rewardCoins })
-                        .where(eq(users.id, winnerId));
 
-                    await tx.insert(coinTransactions).values({
+                await tx.insert(coinTransactions).values({
+                    id: crypto.randomUUID(),
+                    userId: winnerId,
+                    amount: pot,
+                    reason: `Duello vinto (${duel.metric}): +${pot} monete`,
+                });
+
+                // Notify winner + loser
+                const loserId = winnerId === duel.challengerId ? duel.opponentId : duel.challengerId;
+                await tx.insert(notifications).values([
+                    {
                         id: crypto.randomUUID(),
-                        userId: winnerId,
-                        amount: duel.rewardCoins,
-                        reason: `Duello vinto (${duel.metric})`,
-                    });
-                }
+                        recipientUserId: winnerId,
+                        type: 'duel_won',
+                        title: '🏆 Duello VINTO!',
+                        body: `Hai vinto il duello e incassato ${pot} monete!`,
+                        metadata: { duelId, pot, stake },
+                    },
+                    {
+                        id: crypto.randomUUID(),
+                        recipientUserId: loserId,
+                        type: 'duel_lost',
+                        title: '💀 Duello perso',
+                        body: `Hai perso il duello. Hai perso ${stake} monete.`,
+                        metadata: { duelId, stake },
+                    },
+                ]);
+            } else if (!winnerId && stake > 0) {
+                // Tie: refund stake to both participants
+                await tx.update(users)
+                    .set({ walletCoins: sql`${users.walletCoins} + ${stake}` })
+                    .where(eq(users.id, duel.challengerId));
+                await tx.update(users)
+                    .set({ walletCoins: sql`${users.walletCoins} + ${stake}` })
+                    .where(eq(users.id, duel.opponentId));
+
+                await tx.insert(coinTransactions).values([
+                    {
+                        id: crypto.randomUUID(),
+                        userId: duel.challengerId,
+                        amount: stake,
+                        reason: `Duello pareggio: rimborso scommessa`,
+                    },
+                    {
+                        id: crypto.randomUUID(),
+                        userId: duel.opponentId,
+                        amount: stake,
+                        reason: `Duello pareggio: rimborso scommessa`,
+                    },
+                ]);
+
+                await tx.insert(notifications).values([
+                    {
+                        id: crypto.randomUUID(),
+                        recipientUserId: duel.challengerId,
+                        type: 'duel_tie',
+                        title: '🤝 Duello in pareggio',
+                        body: `Pareggio! La tua scommessa di ${stake} monete ti è stata restituita.`,
+                        metadata: { duelId, stake },
+                    },
+                    {
+                        id: crypto.randomUUID(),
+                        recipientUserId: duel.opponentId,
+                        type: 'duel_tie',
+                        title: '🤝 Duello in pareggio',
+                        body: `Pareggio! La tua scommessa di ${stake} monete ti è stata restituita.`,
+                        metadata: { duelId, stake },
+                    },
+                ]);
             }
 
             return { ...duel, status: 'completed' as const, winnerId };
         });
 
-        // Check achievements for winner
+        // Check achievements for winner (outside tx to not block it)
         if (result && 'winnerId' in result && result.winnerId) {
             try {
                 const { checkAchievements } = await import('./achievementActions');

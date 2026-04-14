@@ -250,13 +250,13 @@ function DuelCreateModalInner({
                 </div>
               </div>
 
-              {/* Reward */}
+              {/* Stake */}
               <div>
                 <label
                   className="text-[10px] uppercase tracking-wider font-bold mb-1.5 block"
                   style={{ color: "#9c8f78" }}
                 >
-                  Reward (Fenice Coins)
+                  Posta per partecipante (Fenice Coins)
                 </label>
                 <input
                   type="number"
@@ -271,6 +271,15 @@ function DuelCreateModalInner({
                     border: "1px solid rgba(80, 69, 50, 0.15)",
                   }}
                 />
+                <div
+                  className="mt-2 text-[11px] leading-relaxed"
+                  style={{ color: "#b8a989" }}
+                >
+                  ⚠️ Entrambi i GDO pagheranno <b>{reward}</b> monete come scommessa.
+                  Il vincitore incassa il montepremi totale di{" "}
+                  <b style={{ color: "#ffbf00" }}>{reward * 2} monete</b>.
+                  In caso di pareggio, la scommessa viene restituita.
+                </div>
               </div>
 
               {error && (
