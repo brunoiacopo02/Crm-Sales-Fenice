@@ -415,6 +415,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
         const rows = await db.select({
             progressId: questProgress.id,
             completed: questProgress.completed,
+            currentValue: questProgress.currentValue,
             rewardXp: quests.rewardXp,
             rewardCoins: quests.rewardCoins,
             questTitle: quests.title,
@@ -434,6 +435,27 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
 
         if (!qp.completed) {
             return { success: false, error: "Quest non ancora completata" };
+        }
+
+        // Already claimed: currentValue = -1 is the sentinel set at the end of this function.
+        // Without this check, a second call would re-award XP/coins forever.
+        if (qp.currentValue === -1) {
+            return { success: false, error: "Quest già riscossa" };
+        }
+
+        // Atomic claim: mark as claimed NOW. If another concurrent call already set it to -1
+        // the WHERE clause filters out and returns 0 rows → we return without awarding.
+        const claimRes = await db.update(questProgress)
+            .set({ currentValue: -1 })
+            .where(and(
+                eq(questProgress.id, questProgressId),
+                eq(questProgress.completed, true),
+                sql`${questProgress.currentValue} != -1`
+            ))
+            .returning({ id: questProgress.id });
+
+        if (claimRes.length === 0) {
+            return { success: false, error: "Quest già riscossa" };
         }
 
         // Update streak (idempotent for same day) and get multiplier
@@ -488,11 +510,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             reason: coinReason,
         });
 
-        // Mark quest as claimed by setting currentValue to -1 (sentinel)
-        await db.update(questProgress).set({
-            currentValue: -1,
-        }).where(eq(questProgress.id, questProgressId));
-
+        // currentValue was already set to -1 above by the atomic claim step
         return { success: true };
     } catch (error) {
         console.error("Errore completeQuest:", error);
