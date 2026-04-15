@@ -485,21 +485,21 @@ export async function setSalespersonOutcome(
         }
 
         // closeAmountEur: only written when outcome === 'Chiuso' and a valid positive number is provided.
-        // Preserves the existing value otherwise (e.g. if a Conferme is amending notes only).
-        const updatePatch: Record<string, unknown> = {
+        // Uses a conditional spread so Drizzle gets a properly-typed partial update object
+        // (Record<string, unknown> at the call site was silently breaking Drizzle's value mapping).
+        const closeAmountPatch = (outcome === 'Chiuso' && typeof closeAmountEur === 'number' && closeAmountEur > 0)
+            ? { closeAmountEur }
+            : {};
+
+        const updated = await db.update(leads).set({
             salespersonOutcome: outcome,
             salespersonOutcomeNotes: notes || null,
             salespersonOutcomeAt: new Date(),
             version: oldLead.version + 1,
             updatedAt: new Date(),
-        };
-        if (outcome === 'Chiuso' && typeof closeAmountEur === 'number' && closeAmountEur > 0) {
-            updatePatch.closeAmountEur = closeAmountEur;
-        }
-
-        const updated = await db.update(leads).set(updatePatch)
-            .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
-            .returning({ id: leads.id })
+            ...closeAmountPatch,
+        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+          .returning({ id: leads.id })
 
         if (updated.length === 0) {
             return { success: false, error: 'CONCURRENCY_ERROR' }
