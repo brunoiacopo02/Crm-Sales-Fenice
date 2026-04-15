@@ -112,6 +112,7 @@ export async function getManagerGdoTables(monthString: string) {
         ),
         db.select({
             assignedToId: leads.assignedToId,
+            funnel: leads.funnel,
         }).from(leads)
             .where(and(
                 isNotNull(leads.assignedToId),
@@ -129,6 +130,8 @@ export async function getManagerGdoTables(monthString: string) {
             gdoId: gdo.id,
             gdoName: gdo.displayName || `GDO ${gdo.gdoCode || gdo.id.slice(0, 4)}`,
             funnelStats: {} as Record<string, any>,
+            // Lead assegnati al GDO per ciascun funnel (denominatore per % fissaggio per-funnel)
+            leadAssegnatiFunnel: {} as Record<string, number>,
             calendarStats: {
                 confermati: Array(weeks.length).fill(0),
                 presenziati: Array(weeks.length).fill(0),
@@ -184,22 +187,37 @@ export async function getManagerGdoTables(monthString: string) {
         }
     });
 
-    // Count leads assigned to each GDO in the month
+    // Count leads assigned to each GDO in the month (totali + per-funnel)
     for (const lead of assignedLeadsRaw) {
         if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId]) continue;
-        gdoStatsMap[lead.assignedToId].leadAssegnati++;
+        const g = gdoStatsMap[lead.assignedToId];
+        g.leadAssegnati++;
+        const f = lead.funnel || 'ALTRO';
+        g.leadAssegnatiFunnel[f] = (g.leadAssegnatiFunnel[f] || 0) + 1;
     }
 
-    // Formatting for Frontend
+    // Formatting for Frontend. Include any funnel that has either fissati > 0
+    // OR lead assegnati > 0 (so the admin sees under-performing funnels with 0% fissaggio too).
     const result = Object.values(gdoStatsMap).map(gdo => {
-        const funnelRows = Object.keys(gdo.funnelStats).map(k => {
-            const row = gdo.funnelStats[k];
+        const allFunnelNames = new Set<string>([
+            ...Object.keys(gdo.funnelStats),
+            ...Object.keys(gdo.leadAssegnatiFunnel),
+        ]);
+        const funnelRows = [...allFunnelNames].sort((a, b) => {
+            const la = gdo.leadAssegnatiFunnel[a] || 0;
+            const lb = gdo.leadAssegnatiFunnel[b] || 0;
+            return lb - la;
+        }).map(k => {
+            const row = gdo.funnelStats[k] || { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
+            const leadAssegnatiFunnel = gdo.leadAssegnatiFunnel[k] || 0;
             return {
                 funnel: k,
+                leadAssegnatiFunnel,
                 fissati: row.fissati,
                 confermati: row.confermati,
                 presenziati: row.presenziati,
                 chiusi: row.chiusi,
+                percFiss: leadAssegnatiFunnel > 0 ? (row.fissati / leadAssegnatiFunnel * 100).toFixed(1) + '%' : '-',
                 percConf: row.fissati ? (row.confermati / row.fissati * 100).toFixed(0) + '%' : '-',
                 percPres: row.confermati ? (row.presenziati / row.confermati * 100).toFixed(0) + '%' : '-',
                 percClosed: row.presenziati ? (row.chiusi / row.presenziati * 100).toFixed(0) + '%' : '-',

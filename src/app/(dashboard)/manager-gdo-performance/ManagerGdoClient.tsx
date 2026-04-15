@@ -164,6 +164,7 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                                     <thead>
                                         <tr>
                                             <th className={thClass}>Funnel</th>
+                                            <th className={thClass}>Lead</th>
                                             <th className={thClass}>Fissati</th>
                                             <th className={thClass}>Conf.</th>
                                             <th className={thClass}>Pres.</th>
@@ -174,7 +175,8 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                                         {gdoData.funnelRows.map((fr: any, i: number) => (
                                             <tr key={i} className="hover:bg-brand-orange-50/20 transition-colors duration-200">
                                                 <td className={tdLabelClass}>{fr.funnel}</td>
-                                                <td className={tdClass}>{fr.fissati}</td>
+                                                <td className={tdClass}>{fr.leadAssegnatiFunnel ?? 0}</td>
+                                                <td className={tdClass}>{fr.fissati} <div className="inline text-xs text-ash-400">({fr.percFiss ?? '-'})</div></td>
                                                 <td className={tdClass}>{fr.confermati} <div className="inline text-xs text-ash-400">({fr.percConf})</div></td>
                                                 <td className={tdClass}>{fr.presenziati} <div className="inline text-xs text-ash-400">({fr.percPres})</div></td>
                                                 <td className={tdClass}>{fr.chiusi} <div className="inline text-xs text-ash-400">({fr.percClosed})</div></td>
@@ -182,7 +184,8 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                                         ))}
                                         <tr className="bg-brand-orange-50/30 border-t-2 border-brand-orange-200/60">
                                             <td className={`${tdLabelClass} text-brand-orange-800`}>TOTALE</td>
-                                            <td className="p-3 font-bold text-ash-800">{gdoData.totalRows.fissati}</td>
+                                            <td className="p-3 font-bold text-ash-800">{gdoData.leadAssegnati ?? 0}</td>
+                                            <td className="p-3 font-bold text-ash-800">{gdoData.totalRows.fissati} <div className="inline text-xs font-normal text-ash-400">({gdoData.percFissaggio ?? '-'})</div></td>
                                             <td className="p-3 font-bold text-ash-800">{gdoData.totalRows.confermati} <div className="inline text-xs font-normal text-ash-400">({gdoData.totalRows.percConf})</div></td>
                                             <td className="p-3 font-bold text-ash-800">{gdoData.totalRows.presenziati} <div className="inline text-xs font-normal text-ash-400">({gdoData.totalRows.percPres})</div></td>
                                             <td className="p-3 font-bold text-ash-800">{gdoData.totalRows.chiusi} <div className="inline text-xs font-normal text-ash-400">({gdoData.totalRows.percClosed})</div></td>
