@@ -252,6 +252,74 @@ export async function setLeadMonthlyTarget(input: {
     }
 }
 
+/**
+ * Upsert ONLY the monthly metric targets (Fissati/Conf/Pres/Close/Fatturato)
+ * + fatturatoExtraEur override. Does not touch lead targets or baselines.
+ */
+export async function setMonthlyMetricTargets(input: {
+    yearMonth: string;
+    targetAppMonthly: number;
+    targetConfMonthly: number;
+    targetPresMonthly: number;
+    targetCloseMonthly: number;
+    targetFatturatoMonthly: number;
+    fatturatoExtraEur: number;
+}) {
+    try {
+        const admin = await requireAdmin();
+        if (!admin) return { success: false, error: 'UNAUTHORIZED' };
+
+        if (!/^\d{4}-\d{2}$/.test(input.yearMonth)) {
+            return { success: false, error: 'yearMonth deve essere YYYY-MM' };
+        }
+        if ([input.targetAppMonthly, input.targetConfMonthly, input.targetPresMonthly,
+             input.targetCloseMonthly, input.targetFatturatoMonthly].some(v => v < 0)) {
+            return { success: false, error: 'I target non possono essere negativi' };
+        }
+
+        const [existing] = await db.select().from(monthlyLeadTargets)
+            .where(eq(monthlyLeadTargets.yearMonth, input.yearMonth));
+
+        const now = new Date();
+
+        if (existing) {
+            await db.update(monthlyLeadTargets).set({
+                targetAppMonthly: input.targetAppMonthly,
+                targetConfMonthly: input.targetConfMonthly,
+                targetPresMonthly: input.targetPresMonthly,
+                targetCloseMonthly: input.targetCloseMonthly,
+                targetFatturatoMonthly: input.targetFatturatoMonthly,
+                fatturatoExtraEur: input.fatturatoExtraEur,
+                updatedAt: now,
+            }).where(eq(monthlyLeadTargets.id, existing.id));
+        } else {
+            // No lead-target row yet → create a stub with zero lead targets.
+            await db.insert(monthlyLeadTargets).values({
+                id: crypto.randomUUID(),
+                yearMonth: input.yearMonth,
+                targetNuovi: 0,
+                targetDatabase: 0,
+                workingDays: 22,
+                baselineNuovi: 0,
+                baselineDatabase: 0,
+                targetAppMonthly: input.targetAppMonthly,
+                targetConfMonthly: input.targetConfMonthly,
+                targetPresMonthly: input.targetPresMonthly,
+                targetCloseMonthly: input.targetCloseMonthly,
+                targetFatturatoMonthly: input.targetFatturatoMonthly,
+                fatturatoExtraEur: input.fatturatoExtraEur,
+                createdAt: now,
+                updatedAt: now,
+            });
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Errore setMonthlyMetricTargets:', error);
+        return { success: false, error: error?.message || String(error) };
+    }
+}
+
 /** Utility: suggest working days for a given month (for the modal prefill). */
 export async function getSuggestedWorkingDays(yearMonth: string): Promise<number> {
     try {
@@ -259,6 +327,242 @@ export async function getSuggestedWorkingDays(yearMonth: string): Promise<number
         return countWorkingDaysInMonth(year, month);
     } catch {
         return 22;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Metrics Overview ("Numeri mensili") — roll-up of APP/Conf/Pres/Close + revenue
+// ─────────────────────────────────────────────────────────────────────────
+
+export type MetricsOverviewRow = {
+    label: string;
+    actCount: number;
+    actPct: number | null;
+    targetPrevCount: number;
+    targetPrevPct: number | null;
+    targetPerDay: number;
+    today: number;
+    isCurrency?: boolean;
+};
+
+export type MetricsOverviewResult =
+    | {
+          success: true;
+          yearMonth: string;
+          workingDays: number;
+          workingDaysElapsed: number;
+          isConfigured: boolean;
+          config: {
+              targetAppMonthly: number;
+              targetConfMonthly: number;
+              targetPresMonthly: number;
+              targetCloseMonthly: number;
+              targetFatturatoMonthly: number;
+              fatturatoExtraEur: number;
+          } | null;
+          rows: MetricsOverviewRow[];
+          trattativeSuLeadPct: number | null;
+      }
+    | { success: false; error: string };
+
+/** Start/end of "today" in Europe/Rome as UTC-aligned Dates. */
+function todayBoundsRome(): { start: Date; end: Date } {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date()).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {} as Record<string, string>);
+    const y = parseInt(parts.year, 10);
+    const m = parseInt(parts.month, 10);
+    const d = parseInt(parts.day, 10);
+    // Rome is UTC+1 or UTC+2. We bracket generously to avoid DST issues.
+    const offsetParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Rome', timeZoneName: 'longOffset'
+    }).formatToParts(new Date());
+    const offsetLabel = offsetParts.find(p => p.type === 'timeZoneName')?.value || 'GMT+01:00';
+    const offset = offsetLabel.replace('GMT', '') || '+01:00';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const start = new Date(`${y}-${pad(m)}-${pad(d)}T00:00:00${offset}`);
+    const end = new Date(`${y}-${pad(m)}-${pad(d)}T23:59:59.999${offset}`);
+    return { start, end };
+}
+
+export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOverviewResult> {
+    try {
+        const admin = await requireAdmin();
+        if (!admin) return { success: false, error: 'UNAUTHORIZED' };
+
+        const ym = yearMonth || currentYearMonthRome();
+
+        // 1) Re-use funnel overview to get totals — keeps the new table perfectly
+        //    coherent with the "Funnel Overview" table above it (Bruno's requirement).
+        const funnelOverview = await getFunnelOverview(ym);
+        if (!funnelOverview.success) {
+            return { success: false, error: funnelOverview.error };
+        }
+        const { totals } = funnelOverview;
+
+        // 2) Fetch target config
+        const [cfg] = await db.select().from(monthlyLeadTargets)
+            .where(eq(monthlyLeadTargets.yearMonth, ym));
+
+        const isConfigured = !!cfg;
+
+        // 3) Working days
+        const { year, month } = parseYearMonth(ym);
+        const workingDays = cfg?.workingDays || countWorkingDaysInMonth(year, month);
+        const elapsed = countWorkingDaysElapsed(year, month, new Date());
+
+        // 4) TODAY counts — live from leads table, Europe/Rome midnight bounds
+        const { start: todayStart, end: todayEnd } = todayBoundsRome();
+
+        const [appToday, confToday, presToday, closeToday, valoreTodayRows] = await Promise.all([
+            db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                gte(leads.appointmentCreatedAt, todayStart),
+                lt(leads.appointmentCreatedAt, todayEnd),
+            )),
+            db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                gte(leads.confirmationsTimestamp, todayStart),
+                lt(leads.confirmationsTimestamp, todayEnd),
+                eq(leads.confirmationsOutcome, 'confermato'),
+            )),
+            db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                gte(leads.salespersonOutcomeAt, todayStart),
+                lt(leads.salespersonOutcomeAt, todayEnd),
+                sql`${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')`,
+            )),
+            db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                gte(leads.salespersonOutcomeAt, todayStart),
+                lt(leads.salespersonOutcomeAt, todayEnd),
+                eq(leads.salespersonOutcome, 'Chiuso'),
+            )),
+            db.select({
+                s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
+            }).from(leads).where(and(
+                gte(leads.salespersonOutcomeAt, todayStart),
+                lt(leads.salespersonOutcomeAt, todayEnd),
+                eq(leads.salespersonOutcome, 'Chiuso'),
+            )),
+        ]);
+
+        const todayApp = appToday[0]?.c || 0;
+        const todayConf = confToday[0]?.c || 0;
+        const todayPres = presToday[0]?.c || 0;
+        const todayClose = closeToday[0]?.c || 0;
+        const todayValore = Number(valoreTodayRows[0]?.s || 0);
+
+        // 5) ACT — from funnel overview totals + revenue from live CRM
+        const actLead = totals.leadCount;
+        const actApp = totals.appCount;
+        const actConf = totals.confermeCount;
+        const actPres = totals.trattativeCount;
+        const actClose = totals.closeCount;
+
+        // Fatturato ACT = live sum of closeAmountEur for closed leads in the month + manual extra
+        const [valoreMeseRow] = await db.select({
+            s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
+        }).from(leads).where(and(
+            gte(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month - 1, 1))),
+            lt(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month, 1))),
+            eq(leads.salespersonOutcome, 'Chiuso'),
+        ));
+        const actValore = Number(valoreMeseRow?.s || 0) + (cfg?.fatturatoExtraEur || 0);
+
+        // 6) Target monthly values (from config). Target proportional = monthly / workingDays * elapsed.
+        const targetAppMonthly = cfg?.targetAppMonthly || 0;
+        const targetConfMonthly = cfg?.targetConfMonthly || 0;
+        const targetPresMonthly = cfg?.targetPresMonthly || 0;
+        const targetCloseMonthly = cfg?.targetCloseMonthly || 0;
+        const targetFatturatoMonthly = cfg?.targetFatturatoMonthly || 0;
+
+        const dayFactor = workingDays > 0 ? elapsed / workingDays : 0;
+
+        const targetPrevApp = targetAppMonthly * dayFactor;
+        const targetPrevConf = targetConfMonthly * dayFactor;
+        const targetPrevPres = targetPresMonthly * dayFactor;
+        const targetPrevClose = targetCloseMonthly * dayFactor;
+        const targetPrevFatturato = targetFatturatoMonthly * dayFactor;
+
+        const targetPerDayApp = workingDays > 0 ? targetAppMonthly / workingDays : 0;
+        const targetPerDayConf = workingDays > 0 ? targetConfMonthly / workingDays : 0;
+        const targetPerDayPres = workingDays > 0 ? targetPresMonthly / workingDays : 0;
+        const targetPerDayClose = workingDays > 0 ? targetCloseMonthly / workingDays : 0;
+        const targetPerDayFatturato = workingDays > 0 ? targetFatturatoMonthly / workingDays : 0;
+
+        // Percentages (funnel cascade) — both for ACT and TARGET
+        function safeDiv(n: number, d: number): number | null {
+            return d > 0 ? (n / d) * 100 : null;
+        }
+
+        const rows: MetricsOverviewRow[] = [
+            {
+                label: 'Appuntamenti fissati',
+                actCount: actApp,
+                actPct: safeDiv(actApp, actLead),
+                targetPrevCount: Math.round(targetPrevApp),
+                targetPrevPct: safeDiv(targetPrevApp, actLead),
+                targetPerDay: targetPerDayApp,
+                today: todayApp,
+            },
+            {
+                label: 'Appuntamenti Confermati',
+                actCount: actConf,
+                actPct: safeDiv(actConf, actApp),
+                targetPrevCount: Math.round(targetPrevConf),
+                targetPrevPct: safeDiv(targetPrevConf, targetPrevApp),
+                targetPerDay: targetPerDayConf,
+                today: todayConf,
+            },
+            {
+                label: 'Trattative presenziati',
+                actCount: actPres,
+                actPct: safeDiv(actPres, actConf),
+                targetPrevCount: Math.round(targetPrevPres),
+                targetPrevPct: safeDiv(targetPrevPres, targetPrevConf),
+                targetPerDay: targetPerDayPres,
+                today: todayPres,
+            },
+            {
+                label: 'Closed',
+                actCount: actClose,
+                actPct: safeDiv(actClose, actPres),
+                targetPrevCount: Math.round(targetPrevClose),
+                targetPrevPct: safeDiv(targetPrevClose, targetPrevPres),
+                targetPerDay: targetPerDayClose,
+                today: todayClose,
+            },
+            {
+                label: 'Valore Contratti firmati',
+                actCount: actValore,
+                actPct: null,
+                targetPrevCount: Math.round(targetPrevFatturato),
+                targetPrevPct: null,
+                targetPerDay: targetPerDayFatturato,
+                today: todayValore,
+                isCurrency: true,
+            },
+        ];
+
+        const trattativeSuLeadPct = safeDiv(actPres, actLead);
+
+        return {
+            success: true,
+            yearMonth: ym,
+            workingDays,
+            workingDaysElapsed: elapsed,
+            isConfigured,
+            config: cfg ? {
+                targetAppMonthly,
+                targetConfMonthly,
+                targetPresMonthly,
+                targetCloseMonthly,
+                targetFatturatoMonthly,
+                fatturatoExtraEur: cfg.fatturatoExtraEur || 0,
+            } : null,
+            rows,
+            trattativeSuLeadPct,
+        };
+    } catch (error: any) {
+        console.error('Errore getMetricsOverview:', error);
+        return { success: false, error: error?.message || String(error) };
     }
 }
 

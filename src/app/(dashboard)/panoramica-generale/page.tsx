@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { getLeadOverview, getFunnelOverview } from "@/app/actions/panoramicaActions";
+import { getLeadOverview, getFunnelOverview, getMetricsOverview } from "@/app/actions/panoramicaActions";
 import { PanoramicaClient } from "./PanoramicaClient";
 
 export default async function PanoramicaGeneralePage() {
@@ -16,9 +16,10 @@ export default async function PanoramicaGeneralePage() {
         redirect('/');
     }
 
-    const [overview, funnelOverview] = await Promise.all([
+    const [overview, funnelOverview, metricsOverview] = await Promise.all([
         getLeadOverview(),
         getFunnelOverview(),
+        getMetricsOverview(),
     ]);
 
     return (
@@ -34,7 +35,11 @@ export default async function PanoramicaGeneralePage() {
                 </div>
             </div>
 
-            <PanoramicaClient initialData={overview} initialFunnelData={funnelOverview} />
+            <PanoramicaClient
+                initialData={overview}
+                initialFunnelData={funnelOverview}
+                initialMetricsData={metricsOverview}
+            />
         </div>
     );
 }

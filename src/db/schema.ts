@@ -573,6 +573,17 @@ export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     baselineNuovi: integer('baselineNuovi').default(0).notNull(),
     baselineDatabase: integer('baselineDatabase').default(0).notNull(),
     baselineSetAt: timestamp('baselineSetAt', { withTimezone: true, mode: 'date' }),
+    // Monthly metric targets for the "Numeri mensili" overview table.
+    // Stored as real to allow fractional targets (e.g. target presenze = 176.4).
+    // TARGET/DAY = monthly / workingDays; TARGET PREV = daily × elapsed working days.
+    targetAppMonthly: real('targetAppMonthly').default(0).notNull(),
+    targetConfMonthly: real('targetConfMonthly').default(0).notNull(),
+    targetPresMonthly: real('targetPresMonthly').default(0).notNull(),
+    targetCloseMonthly: real('targetCloseMonthly').default(0).notNull(),
+    targetFatturatoMonthly: real('targetFatturatoMonthly').default(0).notNull(),
+    // Offset added to the live CRM sum of closeAmountEur so the admin can edit ACT valore
+    // contratti manually without losing live tracking.
+    fatturatoExtraEur: real('fatturatoExtraEur').default(0).notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });

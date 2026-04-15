@@ -9,10 +9,14 @@ import {
     getSuggestedWorkingDays,
     getFunnelOverview,
     setFunnelRow,
+    getMetricsOverview,
+    setMonthlyMetricTargets,
     type LeadOverviewResult,
     type FunnelOverviewResult,
     type FunnelOverviewRow,
     type FunnelStato,
+    type MetricsOverviewResult,
+    type MetricsOverviewRow,
 } from '@/app/actions/panoramicaActions';
 
 function formatPercent(v: number | null): string {
@@ -29,23 +33,28 @@ function formatMonthLabel(ym: string): string {
 export function PanoramicaClient({
     initialData,
     initialFunnelData,
+    initialMetricsData,
 }: {
     initialData: LeadOverviewResult;
     initialFunnelData: FunnelOverviewResult;
+    initialMetricsData: MetricsOverviewResult;
 }) {
     const router = useRouter();
     const [data, setData] = useState<LeadOverviewResult>(initialData);
     const [funnelData, setFunnelData] = useState<FunnelOverviewResult>(initialFunnelData);
+    const [metricsData, setMetricsData] = useState<MetricsOverviewResult>(initialMetricsData);
     const [modalOpen, setModalOpen] = useState(false);
 
     const refresh = async () => {
         const ym = data.success ? data.yearMonth : undefined;
-        const [fresh, freshFunnel] = await Promise.all([
+        const [fresh, freshFunnel, freshMetrics] = await Promise.all([
             getLeadOverview(ym),
             getFunnelOverview(ym),
+            getMetricsOverview(ym),
         ]);
         setData(fresh);
         setFunnelData(freshFunnel);
+        setMetricsData(freshMetrics);
     };
 
     if (!data.success) {
@@ -166,6 +175,9 @@ export function PanoramicaClient({
 
             {/* Funnel table */}
             <FunnelSection data={funnelData} onRefresh={refresh} />
+
+            {/* Monthly metrics rollup */}
+            <MetricsSection data={metricsData} onRefresh={refresh} />
 
             {modalOpen && (
                 <TargetModal
@@ -587,6 +599,225 @@ function TargetModal({
                             <LabeledInput label="Baseline Nuovi" value={baselineNuovi} onChange={setBaselineNuovi} />
                             <LabeledInput label="Baseline Database" value={baselineDatabase} onChange={setBaselineDatabase} />
                         </div>
+                    </div>
+
+                    {error && (
+                        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                            {error}
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-6 py-4 border-t border-ash-200 bg-ash-50 flex items-center justify-end gap-2">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 rounded-lg text-sm font-semibold text-ash-600 hover:bg-ash-100 transition-colors"
+                    >
+                        Annulla
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={isPending}
+                        className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-brand-orange hover:brightness-110 disabled:opacity-50 transition-all"
+                    >
+                        {isPending ? 'Salvataggio...' : 'Salva'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Metrics Overview ("Numeri mensili") table
+// ──────────────────────────────────────────────────────────────────────────
+
+function fmtNum(n: number, maxDecimals = 0): string {
+    return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: maxDecimals });
+}
+
+function MetricsSection({ data, onRefresh }: { data: MetricsOverviewResult; onRefresh: () => void }) {
+    const [modalOpen, setModalOpen] = useState(false);
+
+    if (!data.success) {
+        return (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Errore caricamento tabella numeri mensili: {data.error}
+            </div>
+        );
+    }
+
+    const { yearMonth, rows, trattativeSuLeadPct, workingDays, workingDaysElapsed, isConfigured, config } = data;
+
+    return (
+        <div className="rounded-xl border border-ash-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-ash-200 bg-gradient-to-r from-ash-50 to-white">
+                <TrendingUp className="w-4 h-4 text-brand-orange" />
+                <h2 className="text-sm font-bold text-ash-800 uppercase tracking-wide">
+                    Numeri Mensili — {formatMonthLabel(yearMonth)}
+                </h2>
+                <span className="ml-auto text-[11px] text-ash-500">
+                    {workingDaysElapsed}/{workingDays} giorni lavorativi elapsed
+                </span>
+                <button
+                    onClick={() => setModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white bg-brand-orange hover:brightness-110 transition-all"
+                >
+                    <Settings className="w-3 h-3" /> {isConfigured ? 'Modifica target metriche' : 'Imposta target'}
+                </button>
+            </div>
+
+            {!isConfigured && (
+                <div className="mx-5 mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    ⚠️ Target metriche mensili non ancora impostati. Clicca <b>&quot;Imposta target&quot;</b> per configurare.
+                </div>
+            )}
+
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="bg-[#1e3a5f] text-white">
+                            <th className="px-4 py-2.5 text-left font-bold uppercase text-xs tracking-wider">Numeri mensili</th>
+                            <th colSpan={2} className="px-4 py-2.5 text-center font-bold uppercase text-xs tracking-wider border-l border-white/20">ACT</th>
+                            <th colSpan={2} className="px-4 py-2.5 text-center font-bold uppercase text-xs tracking-wider border-l border-white/20">Target Prev</th>
+                            <th className="px-4 py-2.5 text-center font-bold uppercase text-xs tracking-wider border-l border-white/20 w-[100px]">Target / Day</th>
+                            <th className="px-4 py-2.5 text-center font-bold uppercase text-xs tracking-wider border-l border-white/20 w-[80px]">Today</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row) => (
+                            <tr key={row.label} className="border-t border-ash-100 hover:bg-ash-50/30 transition-colors">
+                                <td className="px-4 py-3 text-white font-bold bg-brand-orange">{row.label}</td>
+                                <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100 font-semibold">
+                                    {row.isCurrency ? fmtEur(row.actCount) : fmtInt(row.actCount)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-ash-500 tabular-nums">
+                                    {row.actPct !== null ? fmtPct(row.actPct) : '—'}
+                                </td>
+                                <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {row.isCurrency ? fmtEur(row.targetPrevCount) : fmtInt(row.targetPrevCount)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-ash-500 tabular-nums">
+                                    {row.targetPrevPct !== null ? fmtPct(row.targetPrevPct) : '—'}
+                                </td>
+                                <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {row.isCurrency ? fmtEur(row.targetPerDay) : fmtNum(row.targetPerDay, 2)}
+                                </td>
+                                <td className={`px-4 py-3 text-right tabular-nums border-l border-ash-100 font-semibold ${row.today > 0 ? 'text-emerald-600' : 'text-ash-400'}`}>
+                                    {row.isCurrency ? fmtEur(row.today) : fmtInt(row.today)}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Trattative su lead — extra metric below the table */}
+            <div className="px-5 py-3 border-t border-ash-200 bg-ash-50/50 flex items-center gap-3 text-xs">
+                <span className="text-ash-600 font-semibold uppercase tracking-wider">Trattative su lead</span>
+                <span className="font-bold text-ash-800 tabular-nums">
+                    {trattativeSuLeadPct !== null ? fmtPct(trattativeSuLeadPct) : '—'}
+                </span>
+                <span className="text-ash-400">— % leads che sono arrivati almeno all'appuntamento presenziato</span>
+            </div>
+
+            {modalOpen && (
+                <MetricsTargetModal
+                    yearMonth={yearMonth}
+                    initialConfig={config}
+                    onClose={() => setModalOpen(false)}
+                    onSaved={() => {
+                        setModalOpen(false);
+                        onRefresh();
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+function MetricsTargetModal({
+    yearMonth,
+    initialConfig,
+    onClose,
+    onSaved,
+}: {
+    yearMonth: string;
+    initialConfig: NonNullable<Extract<MetricsOverviewResult, { success: true }>['config']> | null;
+    onClose: () => void;
+    onSaved: () => void;
+}) {
+    const [isPending, startTransition] = useTransition();
+    const [targetApp, setTargetApp] = useState<number>(initialConfig?.targetAppMonthly ?? 0);
+    const [targetConf, setTargetConf] = useState<number>(initialConfig?.targetConfMonthly ?? 0);
+    const [targetPres, setTargetPres] = useState<number>(initialConfig?.targetPresMonthly ?? 0);
+    const [targetClose, setTargetClose] = useState<number>(initialConfig?.targetCloseMonthly ?? 0);
+    const [targetFatturato, setTargetFatturato] = useState<number>(initialConfig?.targetFatturatoMonthly ?? 0);
+    const [fatturatoExtra, setFatturatoExtra] = useState<number>(initialConfig?.fatturatoExtraEur ?? 0);
+    const [error, setError] = useState('');
+
+    function handleSave() {
+        setError('');
+        if ([targetApp, targetConf, targetPres, targetClose, targetFatturato].some(v => v < 0)) {
+            setError('I target non possono essere negativi');
+            return;
+        }
+        startTransition(async () => {
+            const res = await setMonthlyMetricTargets({
+                yearMonth,
+                targetAppMonthly: targetApp,
+                targetConfMonthly: targetConf,
+                targetPresMonthly: targetPres,
+                targetCloseMonthly: targetClose,
+                targetFatturatoMonthly: targetFatturato,
+                fatturatoExtraEur: fatturatoExtra,
+            });
+            if (res.success) onSaved();
+            else setError(res.error || 'Errore salvataggio');
+        });
+    }
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+            <div
+                className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="px-6 py-4 border-b border-ash-200 bg-gradient-to-r from-brand-orange/10 to-white flex items-center justify-between">
+                    <div>
+                        <h2 className="text-base font-bold text-ash-800">Target metriche mensili</h2>
+                        <div className="text-xs text-ash-500">{formatMonthLabel(yearMonth)}</div>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg text-ash-500 hover:bg-ash-100 transition-colors">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-5">
+                    <div>
+                        <div className="text-[11px] uppercase tracking-wider text-ash-500 font-bold mb-2">Target assoluti del mese</div>
+                        <div className="text-[11px] text-ash-500 mb-3">
+                            Vengono divisi per i giorni lavorativi per ottenere il target/giorno e moltiplicati per i giorni trascorsi per il Target Prev.
+                            Le percentuali della tabella sono calcolate automaticamente.
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <LabeledInput label="Appuntamenti fissati" value={targetApp} onChange={setTargetApp} step={0.01} />
+                            <LabeledInput label="Confermati" value={targetConf} onChange={setTargetConf} step={0.01} />
+                            <LabeledInput label="Presenziati" value={targetPres} onChange={setTargetPres} step={0.01} />
+                            <LabeledInput label="Closed" value={targetClose} onChange={setTargetClose} step={0.01} />
+                            <div className="col-span-2">
+                                <LabeledInput label="Valore contratti (€)" value={targetFatturato} onChange={setTargetFatturato} step={1} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="text-[11px] uppercase tracking-wider text-ash-500 font-bold mb-1">Offset manuale valore contratti</div>
+                        <div className="text-[11px] text-ash-500 mb-2 leading-relaxed">
+                            ACT Valore Contratti = somma live dei leads chiusi nel mese + questo valore.
+                            Usalo per correzioni manuali (es. contratti firmati offline).
+                        </div>
+                        <LabeledInput label="Offset €" value={fatturatoExtra} onChange={setFatturatoExtra} step={1} />
                     </div>
 
                     {error && (
