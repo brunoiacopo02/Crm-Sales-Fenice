@@ -425,7 +425,13 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
     }
 }
 
-export async function setSalespersonOutcome(leadId: string, currentVersion: number, outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato", notes?: string) {
+export async function setSalespersonOutcome(
+    leadId: string,
+    currentVersion: number,
+    outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato",
+    notes?: string,
+    closeAmountEur?: number | null,
+) {
     try {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -478,14 +484,22 @@ export async function setSalespersonOutcome(leadId: string, currentVersion: numb
             }
         }
 
-        const updated = await db.update(leads).set({
+        // closeAmountEur: only written when outcome === 'Chiuso' and a valid positive number is provided.
+        // Preserves the existing value otherwise (e.g. if a Conferme is amending notes only).
+        const updatePatch: Record<string, unknown> = {
             salespersonOutcome: outcome,
             salespersonOutcomeNotes: notes || null,
             salespersonOutcomeAt: new Date(),
             version: oldLead.version + 1,
-            updatedAt: new Date()
-        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
-        .returning({ id: leads.id })
+            updatedAt: new Date(),
+        };
+        if (outcome === 'Chiuso' && typeof closeAmountEur === 'number' && closeAmountEur > 0) {
+            updatePatch.closeAmountEur = closeAmountEur;
+        }
+
+        const updated = await db.update(leads).set(updatePatch)
+            .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+            .returning({ id: leads.id })
 
         if (updated.length === 0) {
             return { success: false, error: 'CONCURRENCY_ERROR' }

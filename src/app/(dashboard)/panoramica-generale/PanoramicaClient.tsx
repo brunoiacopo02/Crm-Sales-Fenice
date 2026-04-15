@@ -2,12 +2,17 @@
 
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Settings, Calendar, TrendingUp, RefreshCw, X } from 'lucide-react';
+import { Settings, Calendar, TrendingUp, RefreshCw, X, AlertTriangle, AlertCircle, CheckCircle2, Pencil } from 'lucide-react';
 import {
     getLeadOverview,
     setLeadMonthlyTarget,
     getSuggestedWorkingDays,
+    getFunnelOverview,
+    setFunnelRow,
     type LeadOverviewResult,
+    type FunnelOverviewResult,
+    type FunnelOverviewRow,
+    type FunnelStato,
 } from '@/app/actions/panoramicaActions';
 
 function formatPercent(v: number | null): string {
@@ -21,15 +26,26 @@ function formatMonthLabel(ym: string): string {
     return `${names[parseInt(m, 10) - 1]} ${y}`;
 }
 
-export function PanoramicaClient({ initialData }: { initialData: LeadOverviewResult }) {
+export function PanoramicaClient({
+    initialData,
+    initialFunnelData,
+}: {
+    initialData: LeadOverviewResult;
+    initialFunnelData: FunnelOverviewResult;
+}) {
     const router = useRouter();
     const [data, setData] = useState<LeadOverviewResult>(initialData);
+    const [funnelData, setFunnelData] = useState<FunnelOverviewResult>(initialFunnelData);
     const [modalOpen, setModalOpen] = useState(false);
 
     const refresh = async () => {
         const ym = data.success ? data.yearMonth : undefined;
-        const fresh = await getLeadOverview(ym);
+        const [fresh, freshFunnel] = await Promise.all([
+            getLeadOverview(ym),
+            getFunnelOverview(ym),
+        ]);
         setData(fresh);
+        setFunnelData(freshFunnel);
     };
 
     if (!data.success) {
@@ -148,6 +164,9 @@ export function PanoramicaClient({ initialData }: { initialData: LeadOverviewRes
                 </div>
             </div>
 
+            {/* Funnel table */}
+            <FunnelSection data={funnelData} onRefresh={refresh} />
+
             {modalOpen && (
                 <TargetModal
                     yearMonth={yearMonth}
@@ -160,6 +179,303 @@ export function PanoramicaClient({ initialData }: { initialData: LeadOverviewRes
                 />
             )}
         </>
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Funnel table section
+// ──────────────────────────────────────────────────────────────────────────
+
+function StatoBadge({ stato }: { stato: FunnelStato }) {
+    if (stato === 'ALLERT') {
+        return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                <AlertTriangle className="w-3 h-3" /> ALLERT
+            </span>
+        );
+    }
+    if (stato === 'PRE_RISK') {
+        return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                <AlertCircle className="w-3 h-3" /> PRE_RISK
+            </span>
+        );
+    }
+    return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3" /> OK
+        </span>
+    );
+}
+
+function fmtPct(v: number | null): string {
+    if (v === null || v === undefined || !isFinite(v)) return '—';
+    return `${v.toFixed(2)}%`;
+}
+
+function fmtInt(n: number): string {
+    return n.toLocaleString('it-IT');
+}
+
+function fmtEur(n: number): string {
+    return n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+}
+
+function fmtRoas(n: number | null): string {
+    if (n === null || !isFinite(n)) return '—';
+    return `${n.toFixed(2)}x`;
+}
+
+function fmtDateShort(iso: string | null): string {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefresh: () => void }) {
+    const [editingRow, setEditingRow] = useState<FunnelOverviewRow | null>(null);
+
+    if (!data.success) {
+        return (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Errore caricamento tabella funnel: {data.error}
+            </div>
+        );
+    }
+
+    const { yearMonth, rows, totals } = data;
+
+    return (
+        <div className="rounded-xl border border-ash-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-ash-200 bg-gradient-to-r from-ash-50 to-white">
+                <TrendingUp className="w-4 h-4 text-brand-orange" />
+                <h2 className="text-sm font-bold text-ash-800 uppercase tracking-wide">
+                    Funnel Overview — {yearMonth}
+                </h2>
+                <span className="ml-auto text-[11px] text-ash-500">
+                    Clicca la matita per modificare manualmente una riga
+                </span>
+            </div>
+
+            <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                    <thead>
+                        <tr className="bg-[#1e3a5f] text-white">
+                            <th className="px-3 py-2.5 text-left font-bold uppercase text-[10px] tracking-wider">Funnel</th>
+                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Lead</th>
+                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">APP</th>
+                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Conferme</th>
+                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Trattative</th>
+                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Close</th>
+                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Fatturato</th>
+                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Spesa</th>
+                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">ROAS</th>
+                            <th className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Data -1%</th>
+                            <th className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Stato</th>
+                            <th className="px-2 py-2.5 border-l border-white/20 w-8"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row) => (
+                            <tr key={row.funnelName} className="border-t border-ash-100 hover:bg-ash-50/30 transition-colors">
+                                <td className="px-3 py-2 text-white font-bold bg-brand-orange">{row.funnelName}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums font-semibold border-l border-ash-100">{fmtInt(row.leadCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.appCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.appPct)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.confermeCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.confermePct)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.trattativeCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.trattativePct)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.closeCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.closePct)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{row.fatturatoEur > 0 ? fmtEur(row.fatturatoEur) : '—'}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{row.spesaEur > 0 ? fmtEur(row.spesaEur) : '—'}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100 font-semibold">{fmtRoas(row.roas)}</td>
+                                <td className="px-3 py-2 text-center text-ash-600 tabular-nums border-l border-ash-100">{fmtDateShort(row.dataPrimoSottoSoglia)}</td>
+                                <td className="px-3 py-2 text-center border-l border-ash-100"><StatoBadge stato={row.statoSegnalazione} /></td>
+                                <td className="px-2 py-2 text-center border-l border-ash-100">
+                                    <button
+                                        onClick={() => setEditingRow(row)}
+                                        className="p-1 rounded hover:bg-ash-100 text-ash-500 hover:text-brand-orange transition-colors"
+                                        title="Modifica riga"
+                                    >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colSpan={15} className="px-6 py-8 text-center text-ash-500 text-sm">
+                                    Nessun funnel trovato per questo mese.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                    {rows.length > 0 && (
+                        <tfoot>
+                            <tr className="border-t-2 border-ash-300 bg-ash-50 font-bold">
+                                <td className="px-3 py-2.5 text-ash-800">Totale</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.leadCount)}</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.appCount)}</td>
+                                <td className="px-3 py-2.5"></td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.confermeCount)}</td>
+                                <td className="px-3 py-2.5"></td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.trattativeCount)}</td>
+                                <td className="px-3 py-2.5"></td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.closeCount)}</td>
+                                <td className="px-3 py-2.5"></td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{totals.fatturatoEur > 0 ? fmtEur(totals.fatturatoEur) : '—'}</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{totals.spesaEur > 0 ? fmtEur(totals.spesaEur) : '—'}</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtRoas(totals.roas)}</td>
+                                <td className="px-3 py-2.5 border-l border-ash-100"></td>
+                                <td className="px-3 py-2.5 border-l border-ash-100"></td>
+                                <td className="px-2 py-2.5 border-l border-ash-100"></td>
+                            </tr>
+                        </tfoot>
+                    )}
+                </table>
+            </div>
+            <div className="px-5 py-2.5 bg-ash-50/50 border-t border-ash-100 text-[11px] text-ash-500">
+                ACT APP/Conferme/Trattative/Close = CRM live + delta baseline. Lead / Fatturato / Spesa sono assoluti editabili. ROAS = Fatturato ÷ Spesa. Stato auto-calcolato dalla % Close: OK se &gt; 1%, PRE_RISK appena scende sotto, ALLERT dopo 7 giorni.
+            </div>
+
+            {editingRow && (
+                <FunnelEditModal
+                    yearMonth={yearMonth}
+                    row={editingRow}
+                    onClose={() => setEditingRow(null)}
+                    onSaved={() => {
+                        setEditingRow(null);
+                        onRefresh();
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+function FunnelEditModal({
+    yearMonth,
+    row,
+    onClose,
+    onSaved,
+}: {
+    yearMonth: string;
+    row: FunnelOverviewRow;
+    onClose: () => void;
+    onSaved: () => void;
+}) {
+    const [isPending, startTransition] = useTransition();
+    const [leadCount, setLeadCount] = useState<number>(row.leadCount);
+    const [appDisplay, setAppDisplay] = useState<number>(row.appCount);
+    const [confermeDisplay, setConfermeDisplay] = useState<number>(row.confermeCount);
+    const [trattativeDisplay, setTrattativeDisplay] = useState<number>(row.trattativeCount);
+    const [closeDisplay, setCloseDisplay] = useState<number>(row.closeCount);
+    const [fatturatoEur, setFatturatoEur] = useState<number>(row.fatturatoEur);
+    const [spesaEur, setSpesaEur] = useState<number>(row.spesaEur);
+    const [error, setError] = useState('');
+
+    function handleSave() {
+        setError('');
+        if (leadCount < 0 || appDisplay < 0 || confermeDisplay < 0 || trattativeDisplay < 0 || closeDisplay < 0) {
+            setError('I valori non possono essere negativi');
+            return;
+        }
+        if (fatturatoEur < 0 || spesaEur < 0) {
+            setError('Fatturato e spesa non possono essere negativi');
+            return;
+        }
+
+        startTransition(async () => {
+            const res = await setFunnelRow({
+                yearMonth,
+                funnelName: row.funnelName,
+                leadCount,
+                appDisplay,
+                confermeDisplay,
+                trattativeDisplay,
+                closeDisplay,
+                fatturatoEur,
+                spesaEur,
+            });
+            if (res.success) onSaved();
+            else setError(res.error || 'Errore salvataggio');
+        });
+    }
+
+    const roasPreview = spesaEur > 0 ? fatturatoEur / spesaEur : null;
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+            <div
+                className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="px-6 py-4 border-b border-ash-200 bg-gradient-to-r from-brand-orange/10 to-white flex items-center justify-between">
+                    <div>
+                        <h2 className="text-base font-bold text-ash-800">Modifica riga funnel</h2>
+                        <div className="text-xs text-ash-500">{row.funnelName} — {yearMonth}</div>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg text-ash-500 hover:bg-ash-100 transition-colors">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-5">
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+                        I valori APP/Conferme/Trattative/Close che imposti sono visualizzati come <b>totale finale</b>.
+                        Il sistema calcola il delta rispetto al conteggio CRM live e mantiene il delta anche quando
+                        nuovi lead vengono esitati → il counter continua a salire automaticamente.
+                    </div>
+
+                    <div>
+                        <div className="text-[11px] uppercase tracking-wider text-ash-500 font-bold mb-2">Totali di riga</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <LabeledInput label="Lead" value={leadCount} onChange={setLeadCount} />
+                            <LabeledInput label="APP" value={appDisplay} onChange={setAppDisplay} />
+                            <LabeledInput label="Conferme" value={confermeDisplay} onChange={setConfermeDisplay} />
+                            <LabeledInput label="Trattative" value={trattativeDisplay} onChange={setTrattativeDisplay} />
+                            <LabeledInput label="Close" value={closeDisplay} onChange={setCloseDisplay} />
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="text-[11px] uppercase tracking-wider text-ash-500 font-bold mb-2">Economia funnel</div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <LabeledInput label="Fatturato (€)" value={fatturatoEur} onChange={setFatturatoEur} step={1} />
+                            <LabeledInput label="Spesa (€)" value={spesaEur} onChange={setSpesaEur} step={1} />
+                        </div>
+                        <div className="mt-2 text-[11px] text-ash-500">
+                            ROAS calcolato:{' '}
+                            <b className="text-ash-800">{roasPreview !== null && isFinite(roasPreview) ? `${roasPreview.toFixed(2)}x` : '—'}</b>
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                            {error}
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-6 py-4 border-t border-ash-200 bg-ash-50 flex items-center justify-end gap-2">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 rounded-lg text-sm font-semibold text-ash-600 hover:bg-ash-100 transition-colors"
+                    >
+                        Annulla
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={isPending}
+                        className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-brand-orange hover:brightness-110 disabled:opacity-50 transition-all"
+                    >
+                        {isPending ? 'Salvataggio...' : 'Salva'}
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }
 
@@ -300,7 +616,7 @@ function TargetModal({
     );
 }
 
-function LabeledInput({ label, value, onChange, help }: { label: string; value: number; onChange: (v: number) => void; help?: string }) {
+function LabeledInput({ label, value, onChange, help, step }: { label: string; value: number; onChange: (v: number) => void; help?: string; step?: number }) {
     return (
         <div>
             <label className="text-[10px] uppercase tracking-wider text-ash-500 font-bold block mb-1">
@@ -309,9 +625,14 @@ function LabeledInput({ label, value, onChange, help }: { label: string; value: 
             <input
                 type="number"
                 value={value}
-                onChange={(e) => onChange(parseInt(e.target.value || '0', 10))}
+                onChange={(e) => {
+                    const raw = e.target.value || '0';
+                    const parsed = step ? parseFloat(raw) : parseInt(raw, 10);
+                    onChange(isNaN(parsed) ? 0 : parsed);
+                }}
                 className="w-full px-3 py-2 rounded-lg border border-ash-200 text-sm text-ash-800 outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange/20 tabular-nums"
                 min={0}
+                step={step}
             />
             {help && <div className="mt-1 text-[10px] text-ash-400">{help}</div>}
         </div>

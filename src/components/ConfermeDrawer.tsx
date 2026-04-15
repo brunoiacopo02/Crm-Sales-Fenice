@@ -76,6 +76,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     // Salesperson outcome states
     const [spOutcome, setSpOutcome] = useState(lead?.salespersonOutcome || "")
     const [spNotes, setSpNotes] = useState(lead?.salespersonOutcomeNotes || "")
+    const [spCloseAmount, setSpCloseAmount] = useState<string>(lead?.closeAmountEur ? String(lead.closeAmountEur) : "")
     const [savingSpOutcome, setSavingSpOutcome] = useState(false)
 
     // Presence states
@@ -230,9 +231,22 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
     const handleSaveSpOutcome = async () => {
         if (!spOutcome) return alert("Seleziona esito venditore");
+        if (spOutcome === 'Chiuso') {
+            const amt = parseFloat(spCloseAmount.replace(',', '.'));
+            if (!spCloseAmount || isNaN(amt) || amt <= 0) {
+                return alert("Inserisci l'importo del contratto per una vendita chiusa");
+            }
+        }
         setSavingSpOutcome(true)
         try {
-            const result = await setSalespersonOutcome(lead.id, localVersion, spOutcome as "Chiuso" | "Non chiuso" | "Lead non presenziato", spNotes)
+            const amt = spOutcome === 'Chiuso' ? parseFloat(spCloseAmount.replace(',', '.')) : undefined;
+            const result = await setSalespersonOutcome(
+                lead.id,
+                localVersion,
+                spOutcome as "Chiuso" | "Non chiuso" | "Lead non presenziato",
+                spNotes,
+                amt,
+            )
             if (result && !result.success) {
                 alert(`Errore salvataggio esito venditore: ${result.error}`);
                 return;
@@ -637,6 +651,28 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                                 <option value="Non chiuso">❌ Non Chiuso</option>
                                                 <option value="Lead non presenziato">⏳ Lead non presenziato</option>
                                             </select>
+
+                                            {spOutcome === 'Chiuso' && (
+                                                <div>
+                                                    <label className="block text-[11px] uppercase tracking-wider font-bold text-ash-600 mb-1.5">
+                                                        Importo contratto (€)
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        inputMode="decimal"
+                                                        step="0.01"
+                                                        min={0}
+                                                        value={spCloseAmount}
+                                                        onChange={e => setSpCloseAmount(e.target.value)}
+                                                        placeholder="Es. 1500"
+                                                        className="w-full px-4 py-3 border-2 border-emerald-300 bg-emerald-50/40 rounded-xl font-bold text-ash-800 outline-none focus:border-emerald-500 shadow-sm tabular-nums"
+                                                    />
+                                                    <p className="mt-1 text-[10px] text-ash-500">
+                                                        Obbligatorio per chiusure registrate dalle Conferme. Verrà scritto
+                                                        su <code>closeAmountEur</code> del lead.
+                                                    </p>
+                                                </div>
+                                            )}
 
                                             <textarea
                                                 value={spNotes}

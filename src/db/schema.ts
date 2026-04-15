@@ -576,3 +576,38 @@ export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
+
+// Per-funnel monthly baseline table shown in "Panoramica Generale".
+// - leadCount / fatturatoEur / spesaEur are ABSOLUTE values (edited directly).
+// - appDelta / confermeDelta / trattativeDelta / closeDelta are DELTAS summed
+//   with the live CRM count for that funnel in that month. When the admin edits
+//   a displayed value, we store new_delta = new_value - current_crm_count — so
+//   subsequent CRM changes still update the counter automatically.
+// - dataPrimoSottoSoglia + statoSegnalazione track the alert state: when close%
+//   drops below 1% (strictly), the date is recorded and status becomes PRE_RISK;
+//   after 7 days without recovery, status becomes ALLERT. When close% returns
+//   above 1%, both fields reset.
+export const monthlyFunnelBaselines = pgTable('monthlyFunnelBaselines', {
+    id: text('id').primaryKey(),
+    yearMonth: text('yearMonth').notNull(), // 'YYYY-MM'
+    funnelName: text('funnelName').notNull(), // stored UPPER CASE (case-insensitive match with leads.funnel)
+    // Absolute values (no summing)
+    leadCount: integer('leadCount').default(0).notNull(),
+    // Deltas summed with live CRM counts
+    appDelta: integer('appDelta').default(0).notNull(),
+    confermeDelta: integer('confermeDelta').default(0).notNull(),
+    trattativeDelta: integer('trattativeDelta').default(0).notNull(),
+    closeDelta: integer('closeDelta').default(0).notNull(),
+    // Revenue / ad spend — manual
+    fatturatoEur: real('fatturatoEur').default(0).notNull(),
+    spesaEur: real('spesaEur').default(0).notNull(),
+    // Alert state
+    dataPrimoSottoSoglia: timestamp('dataPrimoSottoSoglia', { withTimezone: true, mode: 'date' }),
+    statoSegnalazione: text('statoSegnalazione').default('OK').notNull(), // 'OK' | 'PRE_RISK' | 'ALLERT'
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        unqYmFunnel: unique('funnel_baseline_unique').on(table.yearMonth, table.funnelName),
+    };
+});
