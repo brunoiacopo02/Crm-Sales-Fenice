@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2 } from "lucide-react"
-import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze } from "@/app/actions/confermeActions"
+import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { createClient } from "@/utils/supabase/client"
@@ -264,6 +264,15 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         }
     }
 
+    const handleActionError = (error?: string | null) => {
+        if (error?.includes('CONCURRENCY_ERROR')) {
+            onRefresh();
+            alert("Questo lead è stato aggiornato da un altro operatore. I dati sono stati ricaricati, riprova.");
+        } else {
+            alert(error || "Errore sconosciuto");
+        }
+    }
+
     const handleQuickNR = async () => {
         setIsSavingNR(true);
         try {
@@ -272,10 +281,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 setLocalVersion((v: number) => v + 1);
                 onRefresh();
             } else {
-                alert(res.error);
+                handleActionError(res.error);
             }
         } catch (e: any) {
-            alert(e.message);
+            handleActionError(e.message);
         } finally {
             setIsSavingNR(false);
         }
@@ -289,12 +298,50 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 setLocalVersion((v: number) => v + 1);
                 onRefresh();
             } else {
-                alert(res.error);
+                handleActionError(res.error);
             }
         } catch (e: any) {
-            alert(e.message);
+            handleActionError(e.message);
         } finally {
             setIsSavingNR(false);
+        }
+    }
+
+    const [isCancellingRecall, setIsCancellingRecall] = useState(false)
+
+    const handleCancelSnooze = async () => {
+        setIsCancellingRecall(true);
+        try {
+            const res = await cancelConfermeRecall(lead.id, localVersion, "snooze");
+            if (res.success) {
+                setLocalVersion((v: number) => v + 1);
+                onRefresh();
+            } else {
+                handleActionError(res.error);
+            }
+        } catch (e: any) {
+            handleActionError(e.message);
+        } finally {
+            setIsCancellingRecall(false);
+        }
+    }
+
+    const handleCancelParkRecall = async () => {
+        if (!confirm("Annullare il richiamo programmato? Il lead tornerà nella board con la data del richiamo come appuntamento.")) return;
+        setIsCancellingRecall(true);
+        try {
+            const res = await cancelConfermeRecall(lead.id, localVersion, "park");
+            if (res.success) {
+                setLocalVersion((v: number) => v + 1);
+                onRefresh();
+                onClose();
+            } else {
+                handleActionError(res.error);
+            }
+        } catch (e: any) {
+            handleActionError(e.message);
+        } finally {
+            setIsCancellingRecall(false);
         }
     }
 
@@ -407,6 +454,30 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 )}
                             </div>
                         </div>
+                        {/* Bottoni Annulla Snooze / Annulla Richiamo */}
+                        {!lead.confirmationsOutcome && (lead.confSnoozeAt || lead.confNeedsReschedule) && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {lead.confSnoozeAt && (
+                                    <button
+                                        onClick={handleCancelSnooze}
+                                        disabled={isCancellingRecall}
+                                        className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                    >
+                                        {isCancellingRecall ? "..." : "Annulla Snooze"}
+                                    </button>
+                                )}
+                                {lead.confNeedsReschedule && (
+                                    <button
+                                        onClick={handleCancelParkRecall}
+                                        disabled={isCancellingRecall}
+                                        className="text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                    >
+                                        {isCancellingRecall ? "..." : "Annulla Richiamo — Rimetti in Board"}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
                         {notifySentMsg && (
                             <div className={`text-xs px-3 py-2 rounded-lg font-medium ${notifySentMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                                 {notifySentMsg.text}
