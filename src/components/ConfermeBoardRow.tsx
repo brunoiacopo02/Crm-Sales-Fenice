@@ -43,6 +43,8 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
         return () => document.removeEventListener("mousedown", handleClickOutside)
     }, [])
 
+    const [actionBusy, setActionBusy] = useState(false)
+
     let callsMade = 0;
     if (lead.confCall1At) callsMade = 1;
     if (lead.confCall2At) callsMade = 2;
@@ -58,31 +60,49 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
         onRefresh()
     }
 
+    /** Handle concurrency errors: auto-refresh and show friendly message */
+    const handleActionError = (error?: string | null) => {
+        if (error?.includes('CONCURRENCY_ERROR')) {
+            onRefresh()
+            alert("Questo lead è stato aggiornato da un altro operatore. I dati sono stati ricaricati, riprova.")
+        } else {
+            alert(error || "Errore sconosciuto")
+        }
+    }
+
     const handleQuickNR = async (e: React.MouseEvent) => {
         e.stopPropagation()
+        if (actionBusy) return
+        setActionBusy(true)
         try {
             const res = await recordConfermeNoAnswer(lead.id, lead.version);
             if (res.success) {
                 await animateAndRefresh('pa-bounce', 200)
             } else {
-                alert(res.error);
+                handleActionError(res.error)
             }
         } catch (e: any) {
-            alert(e.message);
+            handleActionError(e.message)
+        } finally {
+            setActionBusy(false)
         }
     }
 
     const handleUndoNR = async (e: React.MouseEvent) => {
         e.stopPropagation()
+        if (actionBusy) return
+        setActionBusy(true)
         try {
             const res = await undoConfermeNoAnswer(lead.id, lead.version);
             if (res.success) {
                 await animateAndRefresh('pa-bounce', 200)
             } else {
-                alert(res.error);
+                handleActionError(res.error)
             }
         } catch (e: any) {
-            alert(e.message);
+            handleActionError(e.message)
+        } finally {
+            setActionBusy(false)
         }
     }
 
@@ -101,14 +121,14 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
             });
             if (res.success) {
                 setShowSnoozePopover(false);
-                setSnoozeNotes(""); // Resetting
+                setSnoozeNotes("");
                 setSnoozeVslSeen(false);
                 await animateAndRefresh('pa-amber-pulse', 800);
             } else {
-                alert(res.error);
+                handleActionError(res.error);
             }
         } catch (e: any) {
-            alert(e.message);
+            handleActionError(e.message);
         } finally {
             setIsSavingSnooze(false);
         }
@@ -124,20 +144,20 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
             const res = await scheduleConfermeRecall(lead.id, lead.version, {
                 recallDate: rDate,
                 vslSeen,
-                needsReschedule: true, // Always park
+                needsReschedule: true,
                 newAppointmentDate: null,
                 recallNotes
             });
 
             if (res && (!res.success)) {
-                alert(res.error || "Errore");
+                handleActionError(res.error || "Errore");
             } else {
                 setShowRecallPopover(false);
-                setRecallNotes(""); // Resetting
+                setRecallNotes("");
                 await animateAndRefresh('pa-amber-pulse', 800);
             }
         } catch (e: any) {
-            alert(e.message);
+            handleActionError(e.message);
         } finally {
             setIsSavingRecall(false);
         }
@@ -147,36 +167,42 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
 
     const handleCancelSnooze = async (e: React.MouseEvent) => {
         e.stopPropagation()
+        if (actionBusy) return
         setIsCancellingRecall(true)
+        setActionBusy(true)
         try {
             const res = await cancelConfermeRecall(lead.id, lead.version, "snooze")
             if (res.success) {
                 await animateAndRefresh('pa-bounce', 200)
             } else {
-                alert(res.error)
+                handleActionError(res.error)
             }
         } catch (e: any) {
-            alert(e.message)
+            handleActionError(e.message)
         } finally {
             setIsCancellingRecall(false)
+            setActionBusy(false)
         }
     }
 
     const handleCancelParkRecall = async (e: React.MouseEvent) => {
         e.stopPropagation()
+        if (actionBusy) return
         if (!confirm("Annullare il richiamo programmato? Il lead tornerà nella board con la data del richiamo come appuntamento.")) return
         setIsCancellingRecall(true)
+        setActionBusy(true)
         try {
             const res = await cancelConfermeRecall(lead.id, lead.version, "park")
             if (res.success) {
                 await animateAndRefresh('pa-bounce', 200)
             } else {
-                alert(res.error)
+                handleActionError(res.error)
             }
         } catch (e: any) {
-            alert(e.message)
+            handleActionError(e.message)
         } finally {
             setIsCancellingRecall(false)
+            setActionBusy(false)
         }
     }
 
@@ -287,17 +313,17 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                             {/* BOTTONE NR */}
                             <button
                                 onClick={handleQuickNR}
-                                disabled={isLocked}
+                                disabled={isLocked || actionBusy}
                                 className={`border px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card ${callsMade >= 3 ? 'bg-ember-50 hover:bg-ember-100 border-ember-300 text-ember-600 hover:text-ember-700' : 'bg-white hover:bg-ember-50 border-ash-200 hover:border-ember-300 text-ash-500 hover:text-ember-600'}`}
                             >
-                                {callsMade >= 3 ? '4° NR (Scarta)' : 'NR'}
+                                {actionBusy ? '...' : callsMade >= 3 ? '4° NR (Scarta)' : 'NR'}
                             </button>
 
                             {/* BOTTONE ANNULLA NR */}
                             {callsMade > 0 && (
                                 <button
                                     onClick={handleUndoNR}
-                                    disabled={isLocked}
+                                    disabled={isLocked || actionBusy}
                                     title="Annulla ultimo NR"
                                     className="bg-white hover:bg-amber-50 border border-ash-200 hover:border-amber-300 text-ash-500 hover:text-amber-600 px-2 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card flex items-center gap-1"
                                 >
