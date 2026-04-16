@@ -2,80 +2,243 @@
 
 import { db } from "@/db"
 import { breakSessions, users } from "@/db/schema"
-import { eq, and, desc, sql } from "drizzle-orm"
+import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { BREAK_RULES, getLocalDateRome } from "@/lib/pauseUtils"
+
+// ─── Types ────────────────────────────────────────────────────────────
 
 export type PauseSummary = {
     usedPauses: number
     totalSecondsToday: number
+    remainingSeconds: number
+    dailyExceeded: boolean
+    dailyExceededSeconds: number
     currentPause: {
         id: string
-        startTime: string // ISO string per il client
+        startTime: string
         durationSeconds: number
-        isExceeded: boolean
     } | null
 }
+
+export type PauseHistoryEntry = {
+    id: string
+    dateLocal: string
+    startTime: string
+    endTime: string | null
+    durationSeconds: number
+    status: string
+    exceededSeconds: number
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────
+
+const MAX_DAILY_SECONDS = BREAK_RULES.MAX_DAILY_MINUTES * 60
+
+function computeDailyTotal(
+    sessions: { durationSeconds: number | null; status: string; startTime: Date }[],
+    now: Date,
+): number {
+    let total = 0
+    for (const s of sessions) {
+        if (s.status === 'in_corso') {
+            total += Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
+        } else {
+            total += s.durationSeconds || 0
+        }
+    }
+    return total
+}
+
+// ─── GDO Status ───────────────────────────────────────────────────────
+
+export async function getGdoPauseStatus(gdoId: string): Promise<PauseSummary> {
+    const todayLocal = getLocalDateRome()
+
+    const todaysPauses = await db.select()
+        .from(breakSessions)
+        .where(and(
+            eq(breakSessions.gdoUserId, gdoId),
+            eq(breakSessions.dateLocal, todayLocal)
+        ))
+        .orderBy(desc(breakSessions.createdAt))
+
+    const now = new Date()
+    let usedPauses = 0
+    let currentPause: PauseSummary['currentPause'] = null
+
+    for (const p of todaysPauses) {
+        if (p.status === 'in_corso') {
+            const diffSeconds = Math.floor((now.getTime() - p.startTime.getTime()) / 1000)
+            currentPause = {
+                id: p.id,
+                startTime: p.startTime.toISOString(),
+                durationSeconds: diffSeconds,
+            }
+        } else {
+            usedPauses += 1
+        }
+    }
+
+    const totalSecondsToday = computeDailyTotal(todaysPauses, now)
+    const remainingSeconds = Math.max(0, MAX_DAILY_SECONDS - totalSecondsToday)
+    const dailyExceeded = totalSecondsToday > MAX_DAILY_SECONDS
+    const dailyExceededSeconds = dailyExceeded ? totalSecondsToday - MAX_DAILY_SECONDS : 0
+
+    return {
+        usedPauses,
+        totalSecondsToday,
+        remainingSeconds,
+        dailyExceeded,
+        dailyExceededSeconds,
+        currentPause,
+    }
+}
+
+// ─── Start / Stop ─────────────────────────────────────────────────────
+
+export async function startPause(gdoId: string) {
+    const status = await getGdoPauseStatus(gdoId)
+
+    if (status.currentPause) {
+        throw new Error("Hai già una pausa in corso.")
+    }
+
+    const todayLocal = getLocalDateRome()
+    const now = new Date()
+
+    await db.insert(breakSessions).values({
+        id: crypto.randomUUID(),
+        gdoUserId: gdoId,
+        dateLocal: todayLocal,
+        breakIndex: status.usedPauses + 1,
+        startTime: now,
+        status: 'in_corso',
+        createdAt: now,
+    })
+
+    return true
+}
+
+export async function stopPause(sessionId: string) {
+    const session = (await db.select().from(breakSessions).where(eq(breakSessions.id, sessionId)))[0]
+
+    if (!session) throw new Error("Sessione pausa non trovata.")
+    if (session.status !== 'in_corso') throw new Error("La pausa è già conclusa.")
+
+    const now = new Date()
+    const diffSeconds = Math.floor((now.getTime() - session.startTime.getTime()) / 1000)
+
+    // Compute the daily total AFTER this session ends
+    const allToday = await db.select()
+        .from(breakSessions)
+        .where(and(
+            eq(breakSessions.gdoUserId, session.gdoUserId),
+            eq(breakSessions.dateLocal, session.dateLocal),
+        ))
+
+    let otherCompletedSeconds = 0
+    for (const s of allToday) {
+        if (s.id === session.id) continue
+        if (s.status === 'in_corso') continue
+        otherCompletedSeconds += s.durationSeconds || 0
+    }
+
+    const newDailyTotal = otherCompletedSeconds + diffSeconds
+    const dailyExceeded = newDailyTotal > MAX_DAILY_SECONDS
+    const exceededSeconds = dailyExceeded ? newDailyTotal - MAX_DAILY_SECONDS : 0
+
+    await db.update(breakSessions)
+        .set({
+            endTime: now,
+            durationSeconds: diffSeconds,
+            status: dailyExceeded ? 'sforata' : 'conclusa',
+            exceededSeconds,
+        })
+        .where(eq(breakSessions.id, sessionId))
+
+    return true
+}
+
+// ─── GDO History ──────────────────────────────────────────────────────
+
+export async function getGdoPauseHistory(gdoId: string): Promise<PauseHistoryEntry[]> {
+    const now = new Date()
+    const yearMonth = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }).slice(0, 7)
+
+    const sessions = await db.select()
+        .from(breakSessions)
+        .where(and(
+            eq(breakSessions.gdoUserId, gdoId),
+            sql`${breakSessions.dateLocal} LIKE ${yearMonth + '%'}`
+        ))
+        .orderBy(desc(breakSessions.startTime))
+
+    return sessions.map(s => {
+        let finalDuration = s.durationSeconds || 0
+        if (s.status === 'in_corso') {
+            finalDuration = Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
+        }
+
+        return {
+            id: s.id,
+            dateLocal: s.dateLocal,
+            startTime: s.startTime.toISOString(),
+            endTime: s.endTime?.toISOString() ?? null,
+            durationSeconds: finalDuration,
+            status: s.status,
+            exceededSeconds: s.exceededSeconds || 0,
+        }
+    })
+}
+
+// ─── Manager Reports ──────────────────────────────────────────────────
 
 export async function getManagerPauseReport(dateLocal?: string) {
     const targetDate = dateLocal || getLocalDateRome()
 
     const sessions = await db.select({
-            id: breakSessions.id,
-            gdoUserId: breakSessions.gdoUserId,
-            userName: users.name,
-            dateLocal: breakSessions.dateLocal,
-            breakIndex: breakSessions.breakIndex,
-            startTime: breakSessions.startTime,
-            endTime: breakSessions.endTime,
-            durationSeconds: breakSessions.durationSeconds,
-            status: breakSessions.status,
-            exceededSeconds: breakSessions.exceededSeconds,
-            overrideReason: breakSessions.overrideReason,
-        })
-            .from(breakSessions)
-            .leftJoin(users, eq(breakSessions.gdoUserId, users.id))
-            .where(eq(breakSessions.dateLocal, targetDate))
-            .orderBy(desc(breakSessions.startTime))
-        
+        id: breakSessions.id,
+        gdoUserId: breakSessions.gdoUserId,
+        userName: users.name,
+        displayName: users.displayName,
+        dateLocal: breakSessions.dateLocal,
+        breakIndex: breakSessions.breakIndex,
+        startTime: breakSessions.startTime,
+        endTime: breakSessions.endTime,
+        durationSeconds: breakSessions.durationSeconds,
+        status: breakSessions.status,
+        exceededSeconds: breakSessions.exceededSeconds,
+        overrideReason: breakSessions.overrideReason,
+    })
+        .from(breakSessions)
+        .leftJoin(users, eq(breakSessions.gdoUserId, users.id))
+        .where(eq(breakSessions.dateLocal, targetDate))
+        .orderBy(desc(breakSessions.startTime))
 
-    // Aggregate KPI
+    const now = new Date()
     let totalPauses = sessions.length
     let totalSeconds = 0
     let totalExceededSeconds = 0
     let exceededCount = 0
 
-    // Build GDO specific rows
     const gdoMap = new Map<string, any>()
 
     for (const s of sessions) {
-        // Sync live status for accurate manager view
-        let finalStatus = s.status
         let finalDuration = s.durationSeconds || 0
-        let finalExceeded = s.exceededSeconds || 0
+        let finalStatus = s.status
 
         if (s.status === 'in_corso') {
-            const now = new Date()
-            const diffSeconds = Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
-            finalDuration = diffSeconds
-
-            if (diffSeconds > (BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60)) {
-                finalStatus = 'sforata'
-                finalExceeded = diffSeconds - (BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60)
-            }
+            finalDuration = Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
         }
 
         totalSeconds += finalDuration
-        if (finalStatus === 'sforata') {
-            exceededCount += 1
-            totalExceededSeconds += finalExceeded
-        }
 
         const gdoId = s.gdoUserId
         if (!gdoMap.has(gdoId)) {
             gdoMap.set(gdoId, {
                 gdoId,
-                userName: s.userName || "Utente Rimosso",
+                userName: s.displayName || s.userName || "GDO",
                 pausesUsed: 0,
                 totalSecondsDay: 0,
                 exceededCount: 0,
@@ -89,9 +252,7 @@ export async function getManagerPauseReport(dateLocal?: string) {
         const gdoRecord = gdoMap.get(gdoId)
         gdoRecord.pausesUsed += 1
         gdoRecord.totalSecondsDay += finalDuration
-        if (finalStatus === 'sforata') gdoRecord.exceededCount += 1
 
-        // Update "last state" if this session is newer (already sorted by desc above)
         if (s.startTime > gdoRecord.lastStart) {
             gdoRecord.lastStatus = finalStatus
             gdoRecord.lastStart = s.startTime
@@ -104,174 +265,152 @@ export async function getManagerPauseReport(dateLocal?: string) {
             startTime: s.startTime,
             endTime: s.endTime,
             durationSeconds: finalDuration,
-            exceededSeconds: finalExceeded,
-            overrideReason: s.overrideReason
+            exceededSeconds: s.exceededSeconds || 0,
+            overrideReason: s.overrideReason,
         })
     }
 
-    return {
-        kpi: {
-            totalPauses,
-            totalSeconds,
-            exceededCount,
-            totalExceededSeconds
-        },
-        gdoRows: Array.from(gdoMap.values())
-    }
-}
-
-export async function getGdoPauseStatus(gdoId: string): Promise<PauseSummary> {
-    const todayLocal = getLocalDateRome()
-
-    const todaysPauses = await db.select()
-            .from(breakSessions)
-            .where(
-                and(
-                    eq(breakSessions.gdoUserId, gdoId),
-                    eq(breakSessions.dateLocal, todayLocal)
-                )
-            )
-            .orderBy(desc(breakSessions.createdAt))
-        
-
-    let usedPauses = 0
-    let totalSecondsToday = 0
-    let currentPause = null
-
-    for (const p of todaysPauses) {
-        if (p.status === 'conclusa' || p.status === 'sforata') {
-            usedPauses += 1
-            totalSecondsToday += p.durationSeconds || 0
-        } else if (p.status === 'in_corso') {
-            const now = new Date()
-            const diffSeconds = Math.floor((now.getTime() - p.startTime.getTime()) / 1000)
-            const isExceeded = diffSeconds > (BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60)
-
-            // Sync up DB se è scaduta nel mentre che il client fa polling
-            if (isExceeded && p.exceededSeconds === 0) {
-                await db.update(breakSessions)
-                                    .set({ status: 'sforata', exceededSeconds: diffSeconds - (BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60) })
-                                    .where(eq(breakSessions.id, p.id))
-                    
-            }
-
-            currentPause = {
-                id: p.id,
-                startTime: p.startTime.toISOString(),
-                durationSeconds: diffSeconds,
-                isExceeded
-            }
+    // Compute daily exceeded per GDO
+    for (const [, gdoRecord] of gdoMap) {
+        if (gdoRecord.totalSecondsDay > MAX_DAILY_SECONDS) {
+            gdoRecord.exceededCount = 1
+            gdoRecord.dailyExceededSeconds = gdoRecord.totalSecondsDay - MAX_DAILY_SECONDS
+            exceededCount += 1
+            totalExceededSeconds += gdoRecord.dailyExceededSeconds
+        } else {
+            gdoRecord.dailyExceededSeconds = 0
+        }
+        // Mark lastStatus based on daily total
+        if (gdoRecord.totalSecondsDay > MAX_DAILY_SECONDS && gdoRecord.lastStatus !== 'in_corso') {
+            gdoRecord.lastStatus = 'sforata'
         }
     }
 
     return {
-        usedPauses,
-        totalSecondsToday,
-        currentPause,
+        kpi: { totalPauses, totalSeconds, exceededCount, totalExceededSeconds },
+        gdoRows: Array.from(gdoMap.values()),
     }
 }
 
-export type PauseHistoryEntry = {
-    id: string
+// ─── Weekly / Monthly aggregate reports ───────────────────────────────
+
+export type PauseReportRow = {
+    gdoId: string
+    gdoName: string
     dateLocal: string
-    startTime: string // ISO string
-    endTime: string | null
-    durationSeconds: number
-    status: string
+    pauseCount: number
+    totalSeconds: number
+    exceeded: boolean
     exceededSeconds: number
 }
 
-export async function getGdoPauseHistory(gdoId: string): Promise<PauseHistoryEntry[]> {
-    const now = new Date()
-    const yearMonth = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }).slice(0, 7) // "YYYY-MM"
+export type PauseAggregateReport = {
+    rows: PauseReportRow[]
+    summary: {
+        totalDays: number
+        totalExceededDays: number
+        totalExceededSeconds: number
+    }
+}
 
-    const sessions = await db.select()
-        .from(breakSessions)
-        .where(
-            and(
-                eq(breakSessions.gdoUserId, gdoId),
-                sql`${breakSessions.dateLocal} LIKE ${yearMonth + '%'}`
-            )
-        )
-        .orderBy(desc(breakSessions.startTime))
-
-    return sessions.map(s => {
-        let finalDuration = s.durationSeconds || 0
-        let finalStatus = s.status
-        let finalExceeded = s.exceededSeconds || 0
-
-        // Sync live in_corso sessions
-        if (s.status === 'in_corso') {
-            const diffSeconds = Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
-            finalDuration = diffSeconds
-            if (diffSeconds > BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60) {
-                finalStatus = 'sforata'
-                finalExceeded = diffSeconds - BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60
-            }
-        }
-
-        return {
-            id: s.id,
-            dateLocal: s.dateLocal,
-            startTime: s.startTime.toISOString(),
-            endTime: s.endTime?.toISOString() ?? null,
-            durationSeconds: finalDuration,
-            status: finalStatus,
-            exceededSeconds: finalExceeded,
-        }
+async function getAggregateReport(dateFrom: string, dateTo: string): Promise<PauseAggregateReport> {
+    const sessions = await db.select({
+        gdoUserId: breakSessions.gdoUserId,
+        displayName: users.displayName,
+        userName: users.name,
+        dateLocal: breakSessions.dateLocal,
+        durationSeconds: breakSessions.durationSeconds,
+        status: breakSessions.status,
+        startTime: breakSessions.startTime,
     })
-}
-
-export async function startPause(gdoId: string) {
-    const status = await getGdoPauseStatus(gdoId)
-
-    if (status.currentPause) {
-        throw new Error("Hai già una pausa in corso.")
-    }
-
-    const todayLocal = getLocalDateRome()
-    const now = new Date()
-
-    await db.insert(breakSessions).values({
-            id: crypto.randomUUID(),
-            gdoUserId: gdoId,
-            dateLocal: todayLocal,
-            breakIndex: status.usedPauses + 1,
-            startTime: now,
-            status: 'in_corso',
-            createdAt: now,
-        })
-
-    return true
-}
-
-export async function stopPause(sessionId: string) {
-    const session = (await db.select().from(breakSessions).where(eq(breakSessions.id, sessionId)))[0]
-
-    if (!session) throw new Error("Sessione pausa non trovata.")
-    if (session.status !== 'in_corso' && session.status !== 'sforata') throw new Error("La pausa è già conclusa.")
+        .from(breakSessions)
+        .leftJoin(users, eq(breakSessions.gdoUserId, users.id))
+        .where(and(
+            gte(breakSessions.dateLocal, dateFrom),
+            lte(breakSessions.dateLocal, dateTo),
+        ))
+        .orderBy(breakSessions.dateLocal, breakSessions.gdoUserId)
 
     const now = new Date()
-    const diffSeconds = Math.floor((now.getTime() - session.startTime.getTime()) / 1000)
-    const allowedSeconds = BREAK_RULES.MAX_MINUTES_PER_PAUSE * 60
+    // Group by (gdoId, dateLocal)
+    const dayMap = new Map<string, PauseReportRow>()
 
-    let finalStatus = 'conclusa'
-    let exceededSeconds = 0
-
-    if (diffSeconds > allowedSeconds) {
-        finalStatus = 'sforata'
-        exceededSeconds = diffSeconds - allowedSeconds
-    }
-
-    await db.update(breakSessions)
-            .set({
-                endTime: now,
-                durationSeconds: diffSeconds,
-                status: finalStatus,
-                exceededSeconds,
+    for (const s of sessions) {
+        const key = `${s.gdoUserId}||${s.dateLocal}`
+        if (!dayMap.has(key)) {
+            dayMap.set(key, {
+                gdoId: s.gdoUserId,
+                gdoName: s.displayName || s.userName || 'GDO',
+                dateLocal: s.dateLocal,
+                pauseCount: 0,
+                totalSeconds: 0,
+                exceeded: false,
+                exceededSeconds: 0,
             })
-            .where(eq(breakSessions.id, sessionId))
-        
+        }
+        const row = dayMap.get(key)!
+        row.pauseCount += 1
 
-    return true
+        let dur = s.durationSeconds || 0
+        if (s.status === 'in_corso') {
+            dur = Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
+        }
+        row.totalSeconds += dur
+    }
+
+    // Compute exceeded per day
+    const rows: PauseReportRow[] = []
+    let totalExceededDays = 0
+    let totalExceededSeconds = 0
+    const daysSet = new Set<string>()
+
+    for (const row of dayMap.values()) {
+        daysSet.add(row.dateLocal)
+        if (row.totalSeconds > MAX_DAILY_SECONDS) {
+            row.exceeded = true
+            row.exceededSeconds = row.totalSeconds - MAX_DAILY_SECONDS
+            totalExceededDays += 1
+            totalExceededSeconds += row.exceededSeconds
+        }
+        rows.push(row)
+    }
+
+    // Sort: exceeded first, then by date desc
+    rows.sort((a, b) => {
+        if (a.exceeded !== b.exceeded) return a.exceeded ? -1 : 1
+        if (a.dateLocal !== b.dateLocal) return b.dateLocal.localeCompare(a.dateLocal)
+        return a.gdoName.localeCompare(b.gdoName)
+    })
+
+    return {
+        rows,
+        summary: {
+            totalDays: daysSet.size,
+            totalExceededDays,
+            totalExceededSeconds,
+        },
+    }
+}
+
+export async function getWeeklyPauseReport(): Promise<PauseAggregateReport> {
+    const today = getLocalDateRome()
+    const todayDate = new Date(today + 'T00:00:00')
+    const dow = todayDate.getDay() // 0=Sun
+    const mondayOffset = dow === 0 ? 6 : dow - 1
+    const monday = new Date(todayDate.getTime() - mondayOffset * 86400000)
+    const sunday = new Date(monday.getTime() + 6 * 86400000)
+
+    const from = monday.toISOString().slice(0, 10)
+    const to = sunday.toISOString().slice(0, 10)
+
+    return getAggregateReport(from, to)
+}
+
+export async function getMonthlyPauseReport(yearMonth?: string): Promise<PauseAggregateReport> {
+    const ym = yearMonth || getLocalDateRome().slice(0, 7)
+    const from = `${ym}-01`
+    const lastDay = new Date(parseInt(ym.slice(0, 4)), parseInt(ym.slice(5, 7)), 0).getDate()
+    const to = `${ym}-${String(lastDay).padStart(2, '0')}`
+
+    return getAggregateReport(from, to)
 }

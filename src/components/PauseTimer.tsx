@@ -3,12 +3,11 @@ import { useAuth } from "@/components/AuthProvider"
 
 import { useState, useEffect, useCallback } from "react"
 import { getGdoPauseStatus, startPause, stopPause, PauseSummary } from "@/app/actions/pauseActions"
-import { Play, Square, AlertTriangle } from "lucide-react"
+import { Play, Square, AlertTriangle, Clock } from "lucide-react"
 
 export function PauseTimer() {
     const { user: authUser, isLoading: isAuthLoading } = useAuth();
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;
-    const authStatus = isAuthLoading ? "loading" : (session ? "authenticated" : "unauthenticated");
     const [status, setStatus] = useState<PauseSummary | null>(null)
     const [localSeconds, setLocalSeconds] = useState(0)
     const [isLoading, setIsLoading] = useState(true)
@@ -19,7 +18,6 @@ export function PauseTimer() {
             const data = await getGdoPauseStatus(session.user.id)
             setStatus(data)
             if (data.currentPause) {
-                // Sync local timer from DB startTime payload
                 const start = new Date(data.currentPause.startTime).getTime()
                 const now = new Date().getTime()
                 setLocalSeconds(Math.floor((now - start) / 1000))
@@ -33,16 +31,12 @@ export function PauseTimer() {
         }
     }, [session?.user?.id])
 
-    // Inizializza al mount
     useEffect(() => {
         fetchStatus()
-
-        // Polling per check remoto o multi-tab sync ogni minuto
         const intervalId = setInterval(fetchStatus, 60000)
         return () => clearInterval(intervalId)
     }, [fetchStatus])
 
-    // Tick Counter Locale
     useEffect(() => {
         if (!status?.currentPause) return
 
@@ -50,13 +44,8 @@ export function PauseTimer() {
             setLocalSeconds(prev => prev + 1)
         }, 1000)
 
-        // Se passiamo soglia 15m, spariamo un refetch x far fare al server la validazione "sforata"
-        if (localSeconds === 15 * 60) {
-            fetchStatus()
-        }
-
         return () => clearInterval(timerId)
-    }, [status?.currentPause, localSeconds, fetchStatus])
+    }, [status?.currentPause])
 
     const handleStart = async () => {
         if (!session?.user?.id) return
@@ -83,40 +72,58 @@ export function PauseTimer() {
     }
 
     const formatTime = (totalSecs: number) => {
-        const m = Math.floor(totalSecs / 60).toString().padStart(2, '0')
-        const s = (totalSecs % 60).toString().padStart(2, '0')
+        const m = Math.floor(Math.abs(totalSecs) / 60).toString().padStart(2, '0')
+        const s = (Math.abs(totalSecs) % 60).toString().padStart(2, '0')
         return `${m}:${s}`
     }
 
     if (!session?.user?.id || isLoading && !status) return <div className="animate-pulse h-8 w-24 bg-gray-200 rounded-md"></div>
 
     const isOngoing = !!status?.currentPause
-    const isExceeded = localSeconds > (15 * 60)
+    // Daily total including current pause
+    const dailyTotalWithCurrent = (status?.totalSecondsToday || 0) + (isOngoing ? localSeconds - (status?.currentPause?.durationSeconds || 0) : 0)
+    const dailyUsedDisplay = isOngoing
+        ? (status?.totalSecondsToday || 0) - (status?.currentPause?.durationSeconds || 0) + localSeconds
+        : (status?.totalSecondsToday || 0)
+    const dailyExceeded = dailyUsedDisplay > 30 * 60
+    const remainingDisplay = Math.max(0, 30 * 60 - dailyUsedDisplay)
     const canStart = !isOngoing && !!status
 
     return (
         <div className="flex items-center gap-3">
+            {/* Daily budget indicator */}
             {!isOngoing && (
                 <div className="flex flex-col items-end mr-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Pause Oggi</span>
-                    <span className="text-xs font-medium text-gray-700">{status?.usedPauses ?? 0}</span>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Budget</span>
+                    <span className={`text-xs font-mono font-medium ${dailyExceeded ? 'text-red-600' : remainingDisplay < 5 * 60 ? 'text-amber-600' : 'text-gray-700'}`}>
+                        {dailyExceeded ? `-${formatTime(dailyUsedDisplay - 30 * 60)}` : formatTime(remainingDisplay)}
+                    </span>
                 </div>
             )}
 
             {isOngoing ? (
-                <div className={`flex items-center gap-0 rounded-md border shadow-sm transition-colors ${isExceeded ? 'bg-red-50 border-red-200' : 'bg-orange-50 border-brand-orange/30'}`}>
-
-                    <div className="px-3 py-1.5 flex items-center gap-2 border-r border-inherit">
-                        {isExceeded ? <AlertTriangle className="h-4 w-4 text-red-500 animate-pulse" /> : <Play className="h-4 w-4 text-brand-orange animate-pulse" fill="currentColor" />}
-                        <span className={`text-sm font-mono font-bold w-[48px] ${isExceeded ? 'text-red-700' : 'text-brand-orange'}`}>
+                <div className={`flex items-center gap-0 rounded-md border shadow-sm transition-colors ${dailyExceeded ? 'bg-red-50 border-red-200' : 'bg-orange-50 border-brand-orange/30'}`}>
+                    <div className="px-2 py-1.5 flex items-center gap-1.5 border-r border-inherit">
+                        {dailyExceeded ? (
+                            <AlertTriangle className="h-3.5 w-3.5 text-red-500 animate-pulse" />
+                        ) : (
+                            <Play className="h-3.5 w-3.5 text-brand-orange animate-pulse" fill="currentColor" />
+                        )}
+                        <span className={`text-sm font-mono font-bold w-[48px] ${dailyExceeded ? 'text-red-700' : 'text-brand-orange'}`}>
                             {formatTime(localSeconds)}
                         </span>
+                    </div>
+
+                    {/* Remaining daily budget while paused */}
+                    <div className={`px-2 py-1.5 flex items-center gap-1 border-r border-inherit text-[10px] font-bold ${dailyExceeded ? 'text-red-600' : 'text-ash-500'}`}>
+                        <Clock className="h-3 w-3" />
+                        {dailyExceeded ? `-${formatTime(dailyUsedDisplay - 30 * 60)}` : formatTime(remainingDisplay)}
                     </div>
 
                     <button
                         onClick={handleStop}
                         disabled={isLoading}
-                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors hover:bg-white/50 ${isExceeded ? 'text-red-700 hover:text-red-800' : 'text-brand-orange hover:text-orange-700'}`}
+                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors hover:bg-white/50 ${dailyExceeded ? 'text-red-700 hover:text-red-800' : 'text-brand-orange hover:text-orange-700'}`}
                     >
                         <Square className="h-3 w-3" fill="currentColor" />
                         Termina
