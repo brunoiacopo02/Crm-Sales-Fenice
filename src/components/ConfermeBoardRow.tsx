@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2 } from "lucide-react"
-import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall } from "@/app/actions/confermeActions"
+import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw } from "lucide-react"
+import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRowClick, layoutMode = 'default' }: any) {
@@ -143,6 +143,43 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
         }
     }
 
+    const [isCancellingRecall, setIsCancellingRecall] = useState(false)
+
+    const handleCancelSnooze = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        setIsCancellingRecall(true)
+        try {
+            const res = await cancelConfermeRecall(lead.id, lead.version, "snooze")
+            if (res.success) {
+                await animateAndRefresh('pa-bounce', 200)
+            } else {
+                alert(res.error)
+            }
+        } catch (e: any) {
+            alert(e.message)
+        } finally {
+            setIsCancellingRecall(false)
+        }
+    }
+
+    const handleCancelParkRecall = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (!confirm("Annullare il richiamo programmato? Il lead tornerà nella board con la data del richiamo come appuntamento.")) return
+        setIsCancellingRecall(true)
+        try {
+            const res = await cancelConfermeRecall(lead.id, lead.version, "park")
+            if (res.success) {
+                await animateAndRefresh('pa-bounce', 200)
+            } else {
+                alert(res.error)
+            }
+        } catch (e: any) {
+            alert(e.message)
+        } finally {
+            setIsCancellingRecall(false)
+        }
+    }
+
     // Determine card accent based on state
     const isSnoozeOverdue = clientNow > 0 && lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() <= clientNow && !lead.confirmationsOutcome;
     const cardClasses = isLocked
@@ -223,6 +260,30 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
 
                     {!lead.confirmationsOutcome && (
                         <>
+                            {/* BOTTONE ANNULLA SNOOZE — visibile solo se il lead ha uno snooze attivo */}
+                            {lead.confSnoozeAt && (
+                                <button
+                                    onClick={handleCancelSnooze}
+                                    disabled={isLocked || isCancellingRecall}
+                                    title="Annulla snooze e rimetti il lead nella board"
+                                    className="bg-white hover:bg-amber-50 border border-amber-200 hover:border-amber-400 text-amber-600 hover:text-amber-700 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card flex items-center gap-1"
+                                >
+                                    <RotateCcw className="w-3 h-3" /> {isCancellingRecall ? "..." : "Annulla Snooze"}
+                                </button>
+                            )}
+
+                            {/* BOTTONE ANNULLA RICHIAMO PROGRAMMATO — visibile solo se il lead è parcheggiato */}
+                            {lead.confNeedsReschedule && (
+                                <button
+                                    onClick={handleCancelParkRecall}
+                                    disabled={isLocked || isCancellingRecall}
+                                    title="Annulla richiamo e rimetti il lead nella board"
+                                    className="bg-white hover:bg-blue-50 border border-blue-200 hover:border-blue-400 text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card flex items-center gap-1"
+                                >
+                                    <RotateCcw className="w-3 h-3" /> {isCancellingRecall ? "..." : "Annulla Richiamo"}
+                                </button>
+                            )}
+
                             {/* BOTTONE NR */}
                             <button
                                 onClick={handleQuickNR}

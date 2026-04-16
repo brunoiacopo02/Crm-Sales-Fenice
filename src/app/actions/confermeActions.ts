@@ -777,3 +777,73 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
         return { success: false, error: e.message };
     }
 }
+
+/**
+ * Cancel a Conferme recall (snooze or park) and restore the lead to
+ * its normal board position.
+ *
+ * - Snooze cancel: clears confSnoozeAt → lead reappears in its appointment hour slot.
+ * - Park cancel:   clears confNeedsReschedule, restores appointmentDate from recallDate
+ *                  → lead reappears in the pomeriggio/mattina board.
+ */
+export async function cancelConfermeRecall(
+    leadId: string,
+    currentVersion: number,
+    recallType: "snooze" | "park"
+) {
+    try {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        if (!oldLead) return { success: false, error: "Lead not found" };
+        if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
+
+        let toUpdate: any = {
+            version: oldLead.version + 1,
+            updatedAt: new Date(),
+        };
+
+        if (recallType === "snooze") {
+            toUpdate.confSnoozeAt = null;
+            toUpdate.confRecallNotes = null;
+        } else {
+            // Park cancel: restore appointmentDate from recallDate
+            if (!oldLead.recallDate) {
+                return { success: false, error: "Nessuna data di richiamo trovata per ripristinare l'appuntamento." };
+            }
+            toUpdate.confNeedsReschedule = false;
+            toUpdate.appointmentDate = oldLead.recallDate;
+            toUpdate.recallDate = null;
+            toUpdate.confRecallNotes = null;
+        }
+
+        const updated = await db.update(leads).set(toUpdate)
+            .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false, error: "CONCURRENCY_ERROR" };
+        }
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: recallType === "snooze" ? "conferme_snooze_cancelled" : "conferme_recall_cancelled",
+            userId: session.user.id,
+            timestamp: new Date(),
+            metadata: {
+                recallType,
+                restoredAppointmentDate: recallType === "park" ? oldLead.recallDate : null,
+            }
+        });
+
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
