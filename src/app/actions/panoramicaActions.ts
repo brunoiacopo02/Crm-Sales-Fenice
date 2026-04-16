@@ -414,6 +414,10 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         // 4) TODAY counts — live from leads table, Europe/Rome midnight bounds
         const { start: todayStart, end: todayEnd } = todayBoundsRome();
 
+        // TODAY counts: APP uses appointmentCreatedAt, Conferme uses confirmationsTimestamp,
+        // Presenziati/Close/Valore use appointmentDate (the date of the meeting, not when
+        // the outcome was logged — a lead esitato today for an appointment of yesterday
+        // counts as yesterday's presenziato, not today's).
         const [appToday, confToday, presToday, closeToday, valoreTodayRows] = await Promise.all([
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 gte(leads.appointmentCreatedAt, todayStart),
@@ -425,20 +429,20 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 eq(leads.confirmationsOutcome, 'confermato'),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
-                gte(leads.salespersonOutcomeAt, todayStart),
-                lt(leads.salespersonOutcomeAt, todayEnd),
+                gte(leads.appointmentDate, todayStart),
+                lt(leads.appointmentDate, todayEnd),
                 sql`${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')`,
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
-                gte(leads.salespersonOutcomeAt, todayStart),
-                lt(leads.salespersonOutcomeAt, todayEnd),
+                gte(leads.appointmentDate, todayStart),
+                lt(leads.appointmentDate, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
             )),
             db.select({
                 s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
             }).from(leads).where(and(
-                gte(leads.salespersonOutcomeAt, todayStart),
-                lt(leads.salespersonOutcomeAt, todayEnd),
+                gte(leads.appointmentDate, todayStart),
+                lt(leads.appointmentDate, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
             )),
         ]);
@@ -456,12 +460,13 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         const actPres = totals.trattativeCount;
         const actClose = totals.closeCount;
 
-        // Fatturato ACT = live sum of closeAmountEur for closed leads in the month + manual extra
+        // Fatturato ACT = live sum of closeAmountEur for closed leads whose APPOINTMENT
+        // is in the month (not when the outcome was logged) + manual extra offset.
         const [valoreMeseRow] = await db.select({
             s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
         }).from(leads).where(and(
-            gte(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month - 1, 1))),
-            lt(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month, 1))),
+            gte(leads.appointmentDate, new Date(Date.UTC(year, month - 1, 1))),
+            lt(leads.appointmentDate, new Date(Date.UTC(year, month, 1))),
             eq(leads.salespersonOutcome, 'Chiuso'),
         ));
         const actValore = Number(valoreMeseRow?.s || 0) + (cfg?.fatturatoExtraEur || 0);
