@@ -455,10 +455,12 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
 
         // 5) ACT — from funnel overview totals + revenue from live CRM
         const actLead = totals.leadCount;
-        const actApp = totals.appCount;
-        const actConf = totals.confermeCount;
-        const actPres = totals.trattativeCount;
-        const actClose = totals.closeCount;
+        // Funnel table totals + extra offsets (for when the Excel "Numeri Mensili"
+        // totals don't match the per-funnel delta sums)
+        const actApp = totals.appCount + (cfg?.appExtra || 0);
+        const actConf = totals.confermeCount + (cfg?.confermeExtra || 0);
+        const actPres = totals.trattativeCount + (cfg?.trattativeExtra || 0);
+        const actClose = totals.closeCount + (cfg?.closeExtra || 0);
 
         // Fatturato ACT = live sum of closeAmountEur for closed leads in the month.
         // Uses appointmentDate when available, falls back to salespersonOutcomeAt or createdAt

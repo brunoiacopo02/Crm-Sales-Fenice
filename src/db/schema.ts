@@ -581,8 +581,12 @@ export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     targetPresMonthly: real('targetPresMonthly').default(0).notNull(),
     targetCloseMonthly: real('targetCloseMonthly').default(0).notNull(),
     targetFatturatoMonthly: real('targetFatturatoMonthly').default(0).notNull(),
-    // Offset added to the live CRM sum of closeAmountEur so the admin can edit ACT valore
-    // contratti manually without losing live tracking.
+    // Extra offsets: difference between the Excel "Numeri Mensili" totals and the
+    // per-funnel delta sums. Added on top of funnel totals in getMetricsOverview.
+    appExtra: integer('appExtra').default(0).notNull(),
+    confermeExtra: integer('confermeExtra').default(0).notNull(),
+    trattativeExtra: integer('trattativeExtra').default(0).notNull(),
+    closeExtra: integer('closeExtra').default(0).notNull(),
     fatturatoExtraEur: real('fatturatoExtraEur').default(0).notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
