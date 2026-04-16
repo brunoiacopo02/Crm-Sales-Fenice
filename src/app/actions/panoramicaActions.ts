@@ -492,13 +492,17 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
             return d > 0 ? (n / d) * 100 : null;
         }
 
+        // Target percentages are FIXED monthly ratios: each stage's target divided
+        // by the previous stage's target. They don't vary with elapsed days or actual data.
+        const targetLeadMonthly = cfg ? cfg.targetNuovi + cfg.targetDatabase : 0;
+
         const rows: MetricsOverviewRow[] = [
             {
                 label: 'Appuntamenti fissati',
                 actCount: actApp,
                 actPct: safeDiv(actApp, actLead),
                 targetPrevCount: Math.round(targetPrevApp),
-                targetPrevPct: safeDiv(targetPrevApp, actLead),
+                targetPrevPct: safeDiv(targetAppMonthly, targetLeadMonthly),
                 targetPerDay: targetPerDayApp,
                 today: todayApp,
             },
@@ -507,7 +511,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 actCount: actConf,
                 actPct: safeDiv(actConf, actApp),
                 targetPrevCount: Math.round(targetPrevConf),
-                targetPrevPct: safeDiv(targetPrevConf, targetPrevApp),
+                targetPrevPct: safeDiv(targetConfMonthly, targetAppMonthly),
                 targetPerDay: targetPerDayConf,
                 today: todayConf,
             },
@@ -516,7 +520,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 actCount: actPres,
                 actPct: safeDiv(actPres, actConf),
                 targetPrevCount: Math.round(targetPrevPres),
-                targetPrevPct: safeDiv(targetPrevPres, targetPrevConf),
+                targetPrevPct: safeDiv(targetPresMonthly, targetConfMonthly),
                 targetPerDay: targetPerDayPres,
                 today: todayPres,
             },
@@ -525,7 +529,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 actCount: actClose,
                 actPct: safeDiv(actClose, actPres),
                 targetPrevCount: Math.round(targetPrevClose),
-                targetPrevPct: safeDiv(targetPrevClose, targetPrevPres),
+                targetPrevPct: safeDiv(targetCloseMonthly, targetPresMonthly),
                 targetPerDay: targetPerDayClose,
                 today: todayClose,
             },
