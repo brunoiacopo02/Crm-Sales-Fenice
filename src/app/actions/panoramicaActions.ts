@@ -441,8 +441,8 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
             db.select({
                 s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
             }).from(leads).where(and(
-                gte(leads.appointmentDate, todayStart),
-                lt(leads.appointmentDate, todayEnd),
+                gte(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, todayStart),
+                lt(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
             )),
         ]);
@@ -460,13 +460,14 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         const actPres = totals.trattativeCount;
         const actClose = totals.closeCount;
 
-        // Fatturato ACT = live sum of closeAmountEur for closed leads whose APPOINTMENT
-        // is in the month (not when the outcome was logged) + manual extra offset.
+        // Fatturato ACT = live sum of closeAmountEur for closed leads in the month.
+        // Uses appointmentDate when available, falls back to salespersonOutcomeAt or createdAt
+        // (some leads may have NULL appointmentDate if closed without one being set).
         const [valoreMeseRow] = await db.select({
             s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
         }).from(leads).where(and(
-            gte(leads.appointmentDate, new Date(Date.UTC(year, month - 1, 1))),
-            lt(leads.appointmentDate, new Date(Date.UTC(year, month, 1))),
+            gte(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, new Date(Date.UTC(year, month - 1, 1))),
+            lt(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, new Date(Date.UTC(year, month, 1))),
             eq(leads.salespersonOutcome, 'Chiuso'),
         ));
         const actValore = Number(valoreMeseRow?.s || 0) + (cfg?.fatturatoExtraEur || 0);
