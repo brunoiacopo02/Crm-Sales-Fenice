@@ -260,8 +260,8 @@ function AggregateView({ report, label, searchQuery, setSearchQuery, formatDurat
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
                     <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><CalendarDays className="h-6 w-6" /></div>
                     <div>
-                        <div className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Giorni lavorativi</div>
-                        <div className="text-2xl font-bold text-gray-900">{summary.totalDays}</div>
+                        <div className="text-sm font-semibold text-gray-500 uppercase tracking-wider">GDO nel periodo</div>
+                        <div className="text-2xl font-bold text-gray-900">{summary.totalGdos}</div>
                     </div>
                 </div>
                 <div className={`p-6 rounded-xl border shadow-sm flex items-center gap-4 ${summary.totalExceededDays > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
@@ -269,7 +269,7 @@ function AggregateView({ report, label, searchQuery, setSearchQuery, formatDurat
                         <AlertTriangle className="h-6 w-6" />
                     </div>
                     <div>
-                        <div className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Giorni sforati</div>
+                        <div className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Giorni sforati (totale)</div>
                         <div className="text-2xl font-bold text-gray-900">{summary.totalExceededDays}</div>
                     </div>
                 </div>
@@ -282,7 +282,7 @@ function AggregateView({ report, label, searchQuery, setSearchQuery, formatDurat
                 </div>
             </div>
 
-            {/* Report table */}
+            {/* Report table — one row per GDO with aggregated totals */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
                     <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">{label}</h3>
@@ -298,34 +298,34 @@ function AggregateView({ report, label, searchQuery, setSearchQuery, formatDurat
                         <thead className="bg-gray-50 text-gray-500 font-medium">
                             <tr>
                                 <th className="px-6 py-3 text-left uppercase tracking-wider">GDO</th>
-                                <th className="px-6 py-3 text-center uppercase tracking-wider">Data</th>
-                                <th className="px-6 py-3 text-center uppercase tracking-wider">Pause</th>
-                                <th className="px-6 py-3 text-center uppercase tracking-wider">Totale</th>
-                                <th className="px-6 py-3 text-center uppercase tracking-wider">Sforamento</th>
+                                <th className="px-6 py-3 text-center uppercase tracking-wider">Pause totali</th>
+                                <th className="px-6 py-3 text-center uppercase tracking-wider">Tempo totale</th>
+                                <th className="px-6 py-3 text-center uppercase tracking-wider">Giorni lavorati</th>
+                                <th className="px-6 py-3 text-center uppercase tracking-wider">Giorni sforati</th>
+                                <th className="px-6 py-3 text-center uppercase tracking-wider">Tempo sforato</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filtered.length === 0 ? (
-                                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">Nessun dato per il periodo.</td></tr>
+                                <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Nessun dato per il periodo.</td></tr>
                             ) : (
-                                filtered.map((row, i) => (
-                                    <tr key={`${row.gdoId}-${row.dateLocal}-${i}`} className={`hover:bg-gray-50 transition-colors ${row.exceeded ? 'bg-red-50/30' : ''}`}>
-                                        <td className="px-6 py-3 whitespace-nowrap font-medium text-gray-900">{row.gdoName}</td>
-                                        <td className="px-6 py-3 whitespace-nowrap text-center text-gray-700">
-                                            {new Date(row.dateLocal + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-                                        </td>
-                                        <td className="px-6 py-3 whitespace-nowrap text-center text-gray-700">{row.pauseCount}</td>
-                                        <td className={`px-6 py-3 whitespace-nowrap text-center font-mono ${row.exceeded ? 'text-red-700 font-bold' : 'text-gray-700'}`}>
-                                            {formatDuration(row.totalSeconds)}
-                                        </td>
-                                        <td className="px-6 py-3 whitespace-nowrap text-center">
-                                            {row.exceeded ? (
+                                filtered.map((row) => (
+                                    <tr key={row.gdoId} className={`hover:bg-gray-50 transition-colors ${row.daysExceeded > 0 ? 'bg-red-50/30' : ''}`}>
+                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{row.gdoName}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">{row.totalPauses}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center font-mono text-gray-700">{formatDuration(row.totalSeconds)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center text-gray-700">{row.daysWorked}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            {row.daysExceeded > 0 ? (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800">
-                                                    <AlertTriangle className="h-3 w-3" /> +{formatDuration(row.exceededSeconds)}
+                                                    <AlertTriangle className="h-3 w-3" /> {row.daysExceeded} {row.daysExceeded === 1 ? 'giorno' : 'giorni'}
                                                 </span>
                                             ) : (
-                                                <span className="text-emerald-600 text-xs font-bold">OK</span>
+                                                <span className="text-emerald-600 text-xs font-bold">0</span>
                                             )}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-center font-mono ${row.daysExceeded > 0 ? 'text-red-700 font-bold' : 'text-gray-400'}`}>
+                                            {row.totalExceededSeconds > 0 ? `+${formatDuration(row.totalExceededSeconds)}` : '—'}
                                         </td>
                                     </tr>
                                 ))

@@ -297,17 +297,17 @@ export async function getManagerPauseReport(dateLocal?: string) {
 export type PauseReportRow = {
     gdoId: string
     gdoName: string
-    dateLocal: string
-    pauseCount: number
+    totalPauses: number
     totalSeconds: number
-    exceeded: boolean
-    exceededSeconds: number
+    daysWorked: number
+    daysExceeded: number
+    totalExceededSeconds: number
 }
 
 export type PauseAggregateReport = {
     rows: PauseReportRow[]
     summary: {
-        totalDays: number
+        totalGdos: number
         totalExceededDays: number
         totalExceededSeconds: number
     }
@@ -329,11 +329,11 @@ async function getAggregateReport(dateFrom: string, dateTo: string): Promise<Pau
             gte(breakSessions.dateLocal, dateFrom),
             lte(breakSessions.dateLocal, dateTo),
         ))
-        .orderBy(breakSessions.dateLocal, breakSessions.gdoUserId)
 
     const now = new Date()
-    // Group by (gdoId, dateLocal)
-    const dayMap = new Map<string, PauseReportRow>()
+
+    // Step 1: group by (gdoId, dateLocal) to get daily totals
+    const dayMap = new Map<string, { gdoId: string; gdoName: string; dateLocal: string; pauseCount: number; totalSeconds: number }>()
 
     for (const s of sessions) {
         const key = `${s.gdoUserId}||${s.dateLocal}`
@@ -344,13 +344,10 @@ async function getAggregateReport(dateFrom: string, dateTo: string): Promise<Pau
                 dateLocal: s.dateLocal,
                 pauseCount: 0,
                 totalSeconds: 0,
-                exceeded: false,
-                exceededSeconds: 0,
             })
         }
         const row = dayMap.get(key)!
         row.pauseCount += 1
-
         let dur = s.durationSeconds || 0
         if (s.status === 'in_corso') {
             dur = Math.floor((now.getTime() - s.startTime.getTime()) / 1000)
@@ -358,34 +355,48 @@ async function getAggregateReport(dateFrom: string, dateTo: string): Promise<Pau
         row.totalSeconds += dur
     }
 
-    // Compute exceeded per day
-    const rows: PauseReportRow[] = []
-    let totalExceededDays = 0
-    let totalExceededSeconds = 0
-    const daysSet = new Set<string>()
+    // Step 2: aggregate per GDO (sum days, flag exceeded days)
+    const gdoMap = new Map<string, PauseReportRow>()
 
-    for (const row of dayMap.values()) {
-        daysSet.add(row.dateLocal)
-        if (row.totalSeconds > MAX_DAILY_SECONDS) {
-            row.exceeded = true
-            row.exceededSeconds = row.totalSeconds - MAX_DAILY_SECONDS
-            totalExceededDays += 1
-            totalExceededSeconds += row.exceededSeconds
+    for (const day of dayMap.values()) {
+        if (!gdoMap.has(day.gdoId)) {
+            gdoMap.set(day.gdoId, {
+                gdoId: day.gdoId,
+                gdoName: day.gdoName,
+                totalPauses: 0,
+                totalSeconds: 0,
+                daysWorked: 0,
+                daysExceeded: 0,
+                totalExceededSeconds: 0,
+            })
         }
-        rows.push(row)
+        const gdo = gdoMap.get(day.gdoId)!
+        gdo.totalPauses += day.pauseCount
+        gdo.totalSeconds += day.totalSeconds
+        gdo.daysWorked += 1
+        if (day.totalSeconds > MAX_DAILY_SECONDS) {
+            gdo.daysExceeded += 1
+            gdo.totalExceededSeconds += day.totalSeconds - MAX_DAILY_SECONDS
+        }
     }
 
-    // Sort: exceeded first, then by date desc
+    const rows = Array.from(gdoMap.values())
     rows.sort((a, b) => {
-        if (a.exceeded !== b.exceeded) return a.exceeded ? -1 : 1
-        if (a.dateLocal !== b.dateLocal) return b.dateLocal.localeCompare(a.dateLocal)
+        if (a.daysExceeded !== b.daysExceeded) return b.daysExceeded - a.daysExceeded
         return a.gdoName.localeCompare(b.gdoName)
     })
+
+    let totalExceededDays = 0
+    let totalExceededSeconds = 0
+    for (const r of rows) {
+        totalExceededDays += r.daysExceeded
+        totalExceededSeconds += r.totalExceededSeconds
+    }
 
     return {
         rows,
         summary: {
-            totalDays: daysSet.size,
+            totalGdos: rows.length,
             totalExceededDays,
             totalExceededSeconds,
         },
