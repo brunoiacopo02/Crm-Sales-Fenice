@@ -611,30 +611,23 @@ export type FunnelOverviewResult =
 type CrmCounts = { app: number; conferme: number; trattative: number; close: number };
 
 /**
- * Count CRM events per funnel for the given month. When `afterTimestamp` is
- * provided, only events (APP/conferme/trattative/close) that HAPPENED after
- * that timestamp are counted — avoiding double-counting with the baseline
- * delta which already includes earlier CRM data.
+ * Count CRM events per funnel for the given month.
+ * Counts ALL leads created in the month (excluding TEST/empty funnel).
+ * The baseline delta from the Excel is purely external and gets summed on top
+ * of these counts — no double-counting filter needed.
  */
-async function getCrmFunnelCounts(
-    yearMonth: string,
-    afterTimestamp?: Date | null,
-): Promise<Map<string, CrmCounts>> {
+async function getCrmFunnelCounts(yearMonth: string): Promise<Map<string, CrmCounts>> {
     const { year, month } = parseYearMonth(yearMonth);
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
     const monthEnd = new Date(Date.UTC(year, month, 1));
 
-    // If afterTimestamp is set, each metric only counts events AFTER it (per-event timestamp).
-    // If null/undefined, counts everything in the month (backwards compat for fresh months with no baseline).
-    const cutoff = afterTimestamp || monthStart;
-
     const rows = await db
         .select({
             funnel: sql<string>`UPPER(COALESCE(${leads.funnel}, ''))`,
-            app: sql<number>`(count(*) FILTER (WHERE (${leads.status} = 'APPOINTMENT' OR ${leads.appointmentDate} IS NOT NULL) AND COALESCE(${leads.appointmentCreatedAt}, ${leads.createdAt}) >= ${cutoff}))::int`,
-            conferme: sql<number>`(count(*) FILTER (WHERE ${leads.confirmationsOutcome} = 'confermato' AND COALESCE(${leads.confirmationsTimestamp}, ${leads.createdAt}) >= ${cutoff}))::int`,
-            trattative: sql<number>`(count(*) FILTER (WHERE ${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso') AND COALESCE(${leads.salespersonOutcomeAt}, ${leads.createdAt}) >= ${cutoff}))::int`,
-            close: sql<number>`(count(*) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso' AND COALESCE(${leads.salespersonOutcomeAt}, ${leads.createdAt}) >= ${cutoff}))::int`,
+            app: sql<number>`(count(*) FILTER (WHERE ${leads.status} = 'APPOINTMENT' OR ${leads.appointmentDate} IS NOT NULL))::int`,
+            conferme: sql<number>`(count(*) FILTER (WHERE ${leads.confirmationsOutcome} = 'confermato'))::int`,
+            trattative: sql<number>`(count(*) FILTER (WHERE ${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')))::int`,
+            close: sql<number>`(count(*) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso'))::int`,
         })
         .from(leads)
         .where(and(
@@ -734,13 +727,9 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
             .where(eq(monthlyFunnelBaselines.yearMonth, ym));
 
         // 2) Live CRM counts per funnel (uppercased, excluding TEST/empty).
-        //    Use the earliest baseline createdAt as cutoff to avoid double-counting:
-        //    the baseline delta already includes CRM data that existed at seed time.
-        const baselineSeedTime = baselines.length > 0
-            ? baselines.reduce((earliest, b) =>
-                b.createdAt < earliest ? b.createdAt : earliest, baselines[0].createdAt)
-            : null;
-        const crmMap = await getCrmFunnelCounts(ym, baselineSeedTime);
+        //    Counts ALL April leads. The baseline delta is purely external (Excel)
+        //    and gets summed on top — no double-counting filter.
+        const crmMap = await getCrmFunnelCounts(ym);
 
         // 3) Merge: include all baseline funnels, plus any CRM funnel that isn't in the baseline yet
         const allFunnels = new Set<string>();
@@ -862,15 +851,8 @@ export async function setFunnelRow(input: {
             return { success: false, error: 'Il funnel TEST è ignorato' };
         }
 
-        // Re-query current CRM count to compute deltas. Use the baseline seed time
-        // as cutoff so the delta is relative to "CRM events since baseline".
-        const allBaselines = await db.select().from(monthlyFunnelBaselines)
-            .where(eq(monthlyFunnelBaselines.yearMonth, input.yearMonth));
-        const baselineSeedTime = allBaselines.length > 0
-            ? allBaselines.reduce((earliest, b) =>
-                b.createdAt < earliest ? b.createdAt : earliest, allBaselines[0].createdAt)
-            : null;
-        const crmMap = await getCrmFunnelCounts(input.yearMonth, baselineSeedTime);
+        // Re-query current CRM count to compute deltas
+        const crmMap = await getCrmFunnelCounts(input.yearMonth);
         const crm = crmMap.get(funnelName) || { app: 0, conferme: 0, trattative: 0, close: 0 };
 
         const appDelta = Math.round(input.appDisplay - crm.app);
