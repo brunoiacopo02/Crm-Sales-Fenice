@@ -35,8 +35,9 @@ export default async function DashboardLayout({
     } catch { /* ignore skin errors */ }
     const isTheme = skinCss?.includes('skin-theme')
 
-    // Mostriamo lo sprint banner solo ai ruoli per cui la gamification è attiva o ai supervisori
+    // Gamification attiva solo per GDO, CONFERME e supervisori — disabilitata per VENDITORE
     const showSprintBanner = ['GDO', 'MANAGER', 'ADMIN'].includes(session.user.role)
+    const showGamificationOverlays = session.user.role !== 'VENDITORE'
 
     return (
         <RealtimeProvider>
@@ -51,10 +52,14 @@ export default async function DashboardLayout({
                         </main>
                     </div>
                 </div>
-                <SafeWrapper><FomoToast /></SafeWrapper>
-                <SafeWrapper><UniverseToast /></SafeWrapper>
-                <SafeWrapper><CreatureRevealOverlay /></SafeWrapper>
-                <SafeWrapper><DuelStartOverlay /></SafeWrapper>
+                {showGamificationOverlays && (
+                    <>
+                        <SafeWrapper><FomoToast /></SafeWrapper>
+                        <SafeWrapper><UniverseToast /></SafeWrapper>
+                        <SafeWrapper><CreatureRevealOverlay /></SafeWrapper>
+                        <SafeWrapper><DuelStartOverlay /></SafeWrapper>
+                    </>
+                )}
             </SidebarProvider>
         </RealtimeProvider>
     )

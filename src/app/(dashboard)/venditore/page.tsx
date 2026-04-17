@@ -1,12 +1,6 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { VenditoreDashboardClient } from "@/components/VenditoreDashboardClient"
-import { StreakCounter } from "@/components/StreakCounter"
-import { SafeWrapper } from "@/components/SafeWrapper"
-import dynamic from "next/dynamic"
-
-const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
-const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 
 export default async function VenditorePage() {
     const supabase = await createClient();
@@ -29,14 +23,6 @@ export default async function VenditorePage() {
                     </div>
                 </div>
             </div>
-
-            {session.user.role === 'VENDITORE' && (
-                <>
-                    <SafeWrapper><StreakCounter userId={session.user.id} /></SafeWrapper>
-                    <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
-                    <SafeWrapper><QuestPanel userId={session.user.id} /></SafeWrapper>
-                </>
-            )}
 
             <VenditoreDashboardClient sellerId={session.user.id} />
         </div>

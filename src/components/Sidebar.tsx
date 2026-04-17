@@ -81,9 +81,6 @@ export function Sidebar() {
     } else if (role === "VENDITORE") {
         navItems = [
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
-            { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2 },
-            { name: "Classifica", href: "/classifica", icon: Trophy },
-            { name: "Fenice Store", href: "/store", icon: Store },
         ]
     } else if (role === "ADMIN" || role === "MANAGER") {
         if (session?.user?.email === "marketing@fenice.local" || session?.user?.name === "Marketing") {
