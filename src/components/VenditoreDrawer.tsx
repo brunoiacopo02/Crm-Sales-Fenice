@@ -74,8 +74,9 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
             }
 
             onSaved()
-        } catch (error) {
-            alert("Errore durante il salvataggio")
+        } catch (error: any) {
+            console.error("VenditoreDrawer save error:", error);
+            alert(`Errore durante il salvataggio: ${error?.message || error}`)
         } finally {
             setIsSaving(false)
         }
@@ -147,6 +148,23 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                         </div>
                     )}
                 </div>
+
+                {/* Banner lead già esitato */}
+                {lead?.salespersonOutcome && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                        <div>
+                            <div className="text-sm font-bold text-blue-900">Questo lead è già stato esitato</div>
+                            <div className="text-xs text-blue-700 mt-1">
+                                Esito attuale: <strong>{lead.salespersonOutcome}</strong>
+                                {lead.closeProduct && <> — Prodotto: <strong>{lead.closeProduct}</strong></>}
+                                {lead.closeAmountEur && <> — Importo: <strong>€{lead.closeAmountEur}</strong></>}
+                                {lead.notClosedReason && <> — Motivo: <strong>{lead.notClosedReason}</strong></>}
+                            </div>
+                            <div className="text-xs text-blue-600 mt-1">Puoi comunque sovrascrivere l'esito modificando i campi sotto.</div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Form Esito */}
                 <div className="space-y-6">

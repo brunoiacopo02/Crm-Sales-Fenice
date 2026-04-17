@@ -28,7 +28,10 @@ export async function getVenditoreAppointments(sellerId: string) {
             gdoCode: users.gdoCode,
             // Recuperiamo l'ultima nota dal GDO o Conferme (approssimata con subquery se fosse SQL, qui usiamo query extra o un campo)
             appointmentNote: leads.appointmentNote,
-            // We'll also return other fields needed
+            version: leads.version,
+            closeProduct: leads.closeProduct,
+            closeAmountEur: leads.closeAmountEur,
+            notClosedReason: leads.notClosedReason,
         })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
@@ -54,7 +57,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
-    if (!session || session.user.role !== 'VENDITORE') {
+    if (!session || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(session.user.role)) {
         throw new Error("Unauthorized")
     }
 
