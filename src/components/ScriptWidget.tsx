@@ -273,6 +273,10 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
       return true;
   }, [leadId, funnel]);
 
+  // Distingue "survey escluso per funnel" dallo standalone (senza leadId):
+  // mostriamo un banner informativo SOLO nel primo caso.
+  const surveyExcludedByFunnel = !!leadId && (funnel || '').trim().toLowerCase() === EXCLUDED_FUNNEL;
+
   const block = SCRIPT_BLOCKS[current];
   const checked = checkedItems[current] || new Set<string>();
   const checkedCount = checked.size;
@@ -421,6 +425,14 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
               {leadEmail && <span className="rounded-md bg-white px-2 py-0.5 font-mono text-ash-700">{leadEmail}</span>}
               {funnel && <span className="rounded-md bg-white px-2 py-0.5 font-semibold uppercase tracking-wider text-brand-orange-700">{funnel}</span>}
               {surveySaved && <span className="rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-700">✓ Sondaggio salvato</span>}
+          </div>
+      )}
+
+      {/* Badge informativo: lead database → sondaggio NON richiesto ma script navigabile */}
+      {surveyExcludedByFunnel && (
+          <div className="mb-3 flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+              <span className="rounded-md bg-white px-2 py-0.5 font-semibold uppercase tracking-wider text-sky-700">{funnel}</span>
+              <span>Nessun sondaggio per questo funnel — prosegui liberamente con lo script.</span>
           </div>
       )}
 
