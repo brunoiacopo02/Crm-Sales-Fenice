@@ -608,9 +608,9 @@ export const gdoLeadSurveys = pgTable('gdoLeadSurveys', {
     digitalKnow: text('digitalKnow'),        // 'nulla'|'ha_visto'|'conosce'|'esperto'
     changeWithin: text('changeWithin'),      // '<30gg'|'30-90gg'|'indefinito'
     changeSince: text('changeSince'),        // '<6m'|'6-12m'|'>12m'
-    // Multi-select
-    requestReason: text('requestReason').array(),   // ['corso','valuta','info','curiosita']
-    expectation: text('expectation').array(),       // ['info','materiale_gratis','comprare','capire']
+    // Single-choice (erano multi — convertiti 2026-04-17)
+    requestReason: text('requestReason'),   // 'corso'|'valuta'|'info'|'curiosita'
+    expectation: text('expectation'),       // 'info'|'materiale_gratis'|'comprare'|'capire'
     // Completion & early-exit
     completed: boolean('completed').default(false).notNull(),
     earlyExitReason: text('earlyExitReason'), // 'no_budget'|'solo_corso_10h'|'curioso'|'altro'|null

@@ -98,20 +98,17 @@ export const GDO_SURVEY_FIELDS: GdoSurveyField[] = [
     'changeSince',
 ];
 
-// Mapping blocco script -> domande survey da mostrare sotto quel blocco.
-// Script ha 11 blocchi (index 0-10). Distribuzione scelta per naturalezza nel flow:
-// - Blocco 0/1 (apertura/gestione risposta): Età
-// - Blocco 2 (motivazione): Motivo richiesta + Aspettativa
-// - Blocco 3 (analisi problema): Occupazione + Problema principale
-// - Blocco 4 (professione): Conoscenza digitale
-// - Blocco 6 (urgenza): Cambiamento entro + Da quanto
-// I numeri di blocco sono gestiti applicativamente nel ScriptWidget.
+// Mapping blocco script (1-based, titolo N) -> domande survey mostrate sotto quel blocco.
+// Feedback Bruno 2026-04-17: l'età NON va chiesta all'inizio, la MAGGIOR PARTE delle
+// domande va nella question phase (blocco 4 — Analisi problema), dove il GDO sta
+// già sondando il contesto del lead.
+// - Blocco 2 (gestione risposta, "cos'è che ti aveva colpito?"): motivo richiesta + aspettativa
+// - Blocco 4 (analisi problema — QUESTION PHASE): età, occupazione, problema principale, conoscenza digitale
+// - Blocco 7 (urgenza obiettivo): cambiamento entro + cerca da quanto
 export const GDO_FIELDS_BY_BLOCK: Record<number, GdoSurveyField[]> = {
-    1: ['ageRange'],
     2: ['requestReason', 'expectation'],
-    3: ['occupation', 'mainProblem'],
-    4: ['digitalKnow'],
-    6: ['changeWithin', 'changeSince'],
+    4: ['ageRange', 'occupation', 'mainProblem', 'digitalKnow'],
+    7: ['changeWithin', 'changeSince'],
 };
 
 export const GDO_FIELD_LABELS: Record<GdoSurveyField, string> = {
@@ -125,11 +122,13 @@ export const GDO_FIELD_LABELS: Record<GdoSurveyField, string> = {
     changeSince: 'Da quanto cerca un cambiamento',
 };
 
+// Tutte single-choice (feedback Bruno 2026-04-17: motivo richiesta e aspettativa
+// erano multi, ora una sola risposta per domanda).
 export const GDO_FIELD_MULTI: Record<GdoSurveyField, boolean> = {
     ageRange: false,
     occupation: false,
-    requestReason: true,
-    expectation: true,
+    requestReason: false,
+    expectation: false,
     mainProblem: false,
     digitalKnow: false,
     changeWithin: false,

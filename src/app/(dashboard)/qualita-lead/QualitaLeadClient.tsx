@@ -173,8 +173,8 @@ export default function QualitaLeadClient({
                     <SectionRole title="GDO — Profilo demografico/comportamentale" color="orange">
                         <BarQ label="Età" items={gdo.ageRange} />
                         <BarQ label="Stato occupazionale" items={gdo.occupation} />
-                        <BarQ label="Motivo richiesta (multi)" items={gdo.requestReason} />
-                        <BarQ label="Cosa si aspettava (multi)" items={gdo.expectation} />
+                        <BarQ label="Motivo richiesta" items={gdo.requestReason} />
+                        <BarQ label="Cosa si aspettava" items={gdo.expectation} />
                         <BarQ label="Problema principale" items={gdo.mainProblem} />
                         <BarQ label="Conoscenza digitale" items={gdo.digitalKnow} />
                         <BarQ label="Cambiamento entro" items={gdo.changeWithin} />
@@ -205,8 +205,8 @@ export default function QualitaLeadClient({
                     <SectionRole title="Profilo demografico dei chiusi" color="emerald">
                         <BarQ label="Età" items={closedWonGdo.ageRange} />
                         <BarQ label="Stato occupazionale" items={closedWonGdo.occupation} />
-                        <BarQ label="Motivo richiesta (multi)" items={closedWonGdo.requestReason} />
-                        <BarQ label="Cosa si aspettava (multi)" items={closedWonGdo.expectation} />
+                        <BarQ label="Motivo richiesta" items={closedWonGdo.requestReason} />
+                        <BarQ label="Cosa si aspettava" items={closedWonGdo.expectation} />
                         <BarQ label="Problema principale" items={closedWonGdo.mainProblem} />
                         <BarQ label="Conoscenza digitale" items={closedWonGdo.digitalKnow} />
                         <BarQ label="Cambiamento entro" items={closedWonGdo.changeWithin} />

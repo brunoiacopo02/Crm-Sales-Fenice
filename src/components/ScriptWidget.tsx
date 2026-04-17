@@ -330,8 +330,8 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
     const payload: GdoSurveyPayload = {
         ageRange: (answers.ageRange as string) ?? null,
         occupation: (answers.occupation as string) ?? null,
-        requestReason: (answers.requestReason as string[]) ?? null,
-        expectation: (answers.expectation as string[]) ?? null,
+        requestReason: (answers.requestReason as string) ?? null,
+        expectation: (answers.expectation as string) ?? null,
         mainProblem: (answers.mainProblem as string) ?? null,
         digitalKnow: (answers.digitalKnow as string) ?? null,
         changeWithin: (answers.changeWithin as string) ?? null,
@@ -385,8 +385,8 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
       const payload: GdoSurveyPayload = {
           ageRange: (answers.ageRange as string) ?? null,
           occupation: (answers.occupation as string) ?? null,
-          requestReason: (answers.requestReason as string[]) ?? null,
-          expectation: (answers.expectation as string[]) ?? null,
+          requestReason: (answers.requestReason as string) ?? null,
+          expectation: (answers.expectation as string) ?? null,
           mainProblem: (answers.mainProblem as string) ?? null,
           digitalKnow: (answers.digitalKnow as string) ?? null,
           changeWithin: (answers.changeWithin as string) ?? null,

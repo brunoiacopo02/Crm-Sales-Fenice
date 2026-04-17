@@ -76,8 +76,8 @@ async function isLeadEligible(leadId: string): Promise<{ eligible: boolean; funn
 export interface GdoSurveyPayload {
     ageRange?: string | null;
     occupation?: string | null;
-    requestReason?: string[] | null;
-    expectation?: string[] | null;
+    requestReason?: string | null;    // single-choice dal 2026-04-17
+    expectation?: string | null;      // single-choice dal 2026-04-17
     mainProblem?: string | null;
     digitalKnow?: string | null;
     changeWithin?: string | null;

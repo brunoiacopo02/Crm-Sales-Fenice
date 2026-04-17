@@ -154,8 +154,8 @@ export async function getGdoAggregate(filters: QualitaLeadFilters): Promise<GdoA
     ] = await Promise.all([
         aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.ageRange, filters),
         aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.occupation, filters),
-        aggregateArray(gdoLeadSurveys, gdoLeadSurveys.requestReason, filters),
-        aggregateArray(gdoLeadSurveys, gdoLeadSurveys.expectation, filters),
+        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.requestReason, filters),
+        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.expectation, filters),
         aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.mainProblem, filters),
         aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.digitalKnow, filters),
         aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.changeWithin, filters),
