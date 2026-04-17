@@ -1,7 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, RotateCcw, Clock, CheckCircle2, AlertTriangle, Mic } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, RotateCcw, Clock, CheckCircle2, AlertTriangle, Mic, LogOut } from 'lucide-react';
+import { GdoSurveyInline } from './surveys/GdoSurveyInline';
+import { GdoEarlyExitDialog } from './surveys/GdoEarlyExitDialog';
+import {
+    GDO_FIELDS_BY_BLOCK,
+    GDO_FIELD_MULTI,
+    EXCLUDED_FUNNEL,
+    type GdoSurveyField,
+} from '@/lib/surveys/questions';
+import { saveGdoSurvey, type GdoSurveyPayload } from '@/app/actions/surveyActions';
 
 const SCRIPT_BLOCKS = [
   {
@@ -55,7 +64,7 @@ Hai valutato se sei disposto ad investire in un percorso di formazione?`,
   },
   {
     title: "4 — Analisi problema",
-    content: null, // Rendered as checklist
+    content: null,
     voice: "Le prime domande: tono tranquillo, amichevole — come un amico.\nLe domande centrali: tono più serio, empatico — come un dottore.\nLe ultime domande: voce bassa, lenta, PAUSE LUNGHE (3-4 sec) dopo la risposta. Il silenzio è potentissimo.\nRipeti le parole esatte del lead. Se dice 'mi sento bloccato', tu dici 'capisco, ti senti bloccato... e da quanto tempo?'",
     checklist: {
       min: 8,
@@ -213,10 +222,29 @@ Ti chiedo di leggere il nome della mia collega che appare dopo aver cliccato Inv
   },
 ];
 
-// Timer
 const TIMER_SECONDS = 4 * 60;
 
-export function ScriptWidget() {
+// Survey state shape
+type SurveyAnswers = Partial<Record<GdoSurveyField, string | string[]>>;
+
+function answerIsComplete(field: GdoSurveyField, value: string | string[] | undefined): boolean {
+    if (value == null) return false;
+    if (GDO_FIELD_MULTI[field]) return Array.isArray(value) && value.length > 0;
+    return typeof value === 'string' && value.length > 0;
+}
+
+interface ScriptWidgetProps {
+  /** Lead ID for saving survey. If absent, survey is disabled (widget works standalone). */
+  leadId?: string;
+  /** Lead funnel — if 'database' (case-insensitive), survey is skipped. */
+  funnel?: string | null;
+  /** Lead email — shown readonly in the header. */
+  leadEmail?: string | null;
+  /** Optional callback invoked when the survey is saved (used by parent to refresh UI). */
+  onSurveySaved?: () => void;
+}
+
+export function ScriptWidget({ leadId, funnel, leadEmail, onSurveySaved }: ScriptWidgetProps = {}) {
   const [current, setCurrent] = useState(0);
   const [checkedItems, setCheckedItems] = useState<Record<number, Set<string>>>({});
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -224,49 +252,103 @@ export function ScriptWidget() {
   const [showVoice, setShowVoice] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Survey state
+  const [answers, setAnswers] = useState<SurveyAnswers>({});
+  const [surveyStartedAt] = useState<number>(() => Date.now());
+  const [surveySaved, setSurveySaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [showEarlyExit, setShowEarlyExit] = useState(false);
+
+  const surveyEnabled = useMemo(() => {
+      if (!leadId) return false;
+      if ((funnel || '').trim().toLowerCase() === EXCLUDED_FUNNEL) return false;
+      return true;
+  }, [leadId, funnel]);
+
   const block = SCRIPT_BLOCKS[current];
   const checked = checkedItems[current] || new Set<string>();
   const checkedCount = checked.size;
   const minRequired = block.checklist?.min || 0;
   const timerDone = timerSeconds >= TIMER_SECONDS;
 
-  // Timer — single interval, cleanup on unmount only
+  // Timer — single interval
   useEffect(() => {
     if (!timerRunning) return;
     timerRef.current = setInterval(() => {
       setTimerSeconds(prev => {
         const next = prev + 1;
-        if (next >= TIMER_SECONDS) {
-          setTimerRunning(false);
-        }
+        if (next >= TIMER_SECONDS) setTimerRunning(false);
         return next;
       });
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timerRunning]);
 
-  // Start timer on block 2
   useEffect(() => {
-    if (current >= 1 && !timerRunning && timerSeconds === 0) {
-      setTimerRunning(true);
-    }
+    if (current >= 1 && !timerRunning && timerSeconds === 0) setTimerRunning(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
+
+  const setAnswer = useCallback((field: GdoSurveyField, next: string | string[]) => {
+      setAnswers(prev => ({ ...prev, [field]: next }));
+      setSaveError(null);
+  }, []);
+
+  const requiredFieldsForBlock = (idx: number): GdoSurveyField[] => {
+      // Block index in SCRIPT_BLOCKS is 0-based (title "1 — Apertura" = index 0).
+      // GDO_FIELDS_BY_BLOCK uses 1-based keys that map to title numbers, so:
+      return GDO_FIELDS_BY_BLOCK[idx] || [];
+  };
+
+  const blockSurveyComplete = (idx: number): boolean => {
+      if (!surveyEnabled) return true;
+      const fields = requiredFieldsForBlock(idx);
+      return fields.every(f => answerIsComplete(f, answers[f]));
+  };
 
   const canGoNext = useCallback(() => {
     if (current >= SCRIPT_BLOCKS.length - 1) return false;
     if (block.checklist && checkedCount < minRequired) return false;
     if (SCRIPT_BLOCKS[current + 1]?.requiresTimer && !timerDone) return false;
+    if (!blockSurveyComplete(current)) return false;
     return true;
-  }, [current, checkedCount, minRequired, timerDone, block]);
+  }, [current, checkedCount, minRequired, timerDone, block, answers, surveyEnabled]);
+
+  // Save survey on completion of last block
+  const tryFinalSave = useCallback(async () => {
+    if (!surveyEnabled || !leadId || surveySaved) return;
+    setSaving(true);
+    setSaveError(null);
+    const payload: GdoSurveyPayload = {
+        ageRange: (answers.ageRange as string) ?? null,
+        occupation: (answers.occupation as string) ?? null,
+        requestReason: (answers.requestReason as string[]) ?? null,
+        expectation: (answers.expectation as string[]) ?? null,
+        mainProblem: (answers.mainProblem as string) ?? null,
+        digitalKnow: (answers.digitalKnow as string) ?? null,
+        changeWithin: (answers.changeWithin as string) ?? null,
+        changeSince: (answers.changeSince as string) ?? null,
+        earlyExitReason: null,
+        fillDurationMs: Date.now() - surveyStartedAt,
+    };
+    const res = await saveGdoSurvey(leadId, payload);
+    setSaving(false);
+    if (res.success) {
+        setSurveySaved(true);
+        if (onSurveySaved) onSurveySaved();
+    } else {
+        setSaveError(res.error || "Errore salvataggio sondaggio");
+    }
+  }, [surveyEnabled, leadId, answers, surveyStartedAt, onSurveySaved, surveySaved]);
 
   const goNext = () => {
-    if (canGoNext()) {
-      const nextIndex = current + 1;
-      setCurrent(nextIndex);
-      // Dispatch script_completed when reaching the last block (step 11 — Chiusura)
-      if (nextIndex === SCRIPT_BLOCKS.length - 1) {
-        window.dispatchEvent(new CustomEvent('script_completed'));
-      }
+    if (!canGoNext()) return;
+    const nextIndex = current + 1;
+    setCurrent(nextIndex);
+    if (nextIndex === SCRIPT_BLOCKS.length - 1) {
+      window.dispatchEvent(new CustomEvent('script_completed'));
+      void tryFinalSave();
     }
   };
   const goPrev = () => { if (current > 0) setCurrent(prev => prev - 1); };
@@ -276,6 +358,9 @@ export function ScriptWidget() {
     setTimerSeconds(0);
     setTimerRunning(false);
     setShowVoice(false);
+    setAnswers({});
+    setSurveySaved(false);
+    setSaveError(null);
   };
 
   const toggleCheck = (key: string) => {
@@ -286,13 +371,51 @@ export function ScriptWidget() {
     });
   };
 
+  const handleEarlyExit = async (reason: string) => {
+      if (!surveyEnabled || !leadId) { setShowEarlyExit(false); return; }
+      setSaving(true);
+      setSaveError(null);
+      const payload: GdoSurveyPayload = {
+          ageRange: (answers.ageRange as string) ?? null,
+          occupation: (answers.occupation as string) ?? null,
+          requestReason: (answers.requestReason as string[]) ?? null,
+          expectation: (answers.expectation as string[]) ?? null,
+          mainProblem: (answers.mainProblem as string) ?? null,
+          digitalKnow: (answers.digitalKnow as string) ?? null,
+          changeWithin: (answers.changeWithin as string) ?? null,
+          changeSince: (answers.changeSince as string) ?? null,
+          earlyExitReason: reason,
+          fillDurationMs: Date.now() - surveyStartedAt,
+      };
+      const res = await saveGdoSurvey(leadId, payload);
+      setSaving(false);
+      if (res.success) {
+          setSurveySaved(true);
+          setShowEarlyExit(false);
+          if (onSurveySaved) onSurveySaved();
+      } else {
+          setSaveError(res.error || "Errore salvataggio");
+      }
+  };
+
   const remaining = Math.max(0, TIMER_SECONDS - timerSeconds);
   const timerMin = Math.floor(remaining / 60);
   const timerSec = remaining % 60;
   const progress = ((current + 1) / SCRIPT_BLOCKS.length) * 100;
 
+  const blockFields = requiredFieldsForBlock(current);
+
   return (
     <div className="w-full max-w-3xl mx-auto">
+      {/* Lead header (only if survey enabled) */}
+      {surveyEnabled && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-ash-200 bg-ash-50 px-3 py-2 text-xs">
+              {leadEmail && <span className="rounded-md bg-white px-2 py-0.5 font-mono text-ash-700">{leadEmail}</span>}
+              {funnel && <span className="rounded-md bg-white px-2 py-0.5 font-semibold uppercase tracking-wider text-brand-orange-700">{funnel}</span>}
+              {surveySaved && <span className="rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-700">✓ Sondaggio salvato</span>}
+          </div>
+      )}
+
       {/* Top bar */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -308,6 +431,11 @@ export function ScriptWidget() {
           <button onClick={() => setShowVoice(!showVoice)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${showVoice ? 'bg-brand-orange/10 border-brand-orange/30 text-brand-orange-700' : 'border-ash-200 text-ash-500 hover:bg-ash-50'}`}>
             <Mic className="w-3.5 h-3.5" /> Voce
           </button>
+          {surveyEnabled && !surveySaved && (
+              <button onClick={() => setShowEarlyExit(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">
+                <LogOut className="w-3.5 h-3.5" /> Chiudi script
+              </button>
+          )}
           <button onClick={resetCall} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
             <RotateCcw className="w-3.5 h-3.5" /> Nuova chiamata
           </button>
@@ -326,6 +454,13 @@ export function ScriptWidget() {
           <span className="font-mono text-lg tabular-nums">{timerMin}:{timerSec.toString().padStart(2, '0')}</span>
           <span className="text-xs">{timerDone ? 'Puoi procedere al pitch' : 'Timer — sblocca il pitch dopo 4 min'}</span>
         </div>
+      )}
+
+      {/* Save error */}
+      {saveError && (
+          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              {saveError}
+          </div>
       )}
 
       {/* Card */}
@@ -378,8 +513,31 @@ export function ScriptWidget() {
           ) : (
             <div className="text-[15px] leading-[1.85] text-ash-800 whitespace-pre-line">{block.content}</div>
           )}
+
+          {/* Survey questions for this block */}
+          {surveyEnabled && !surveySaved && blockFields.length > 0 && (
+              <div className="mt-4 space-y-1 border-t border-ash-100 pt-3">
+                  {blockFields.map((f) => (
+                      <GdoSurveyInline
+                          key={f}
+                          field={f}
+                          value={answers[f] ?? null}
+                          onChange={setAnswer}
+                          disabled={saving}
+                      />
+                  ))}
+              </div>
+          )}
         </div>
       </div>
+
+      {/* Early-exit dialog */}
+      <GdoEarlyExitDialog
+          open={showEarlyExit}
+          onClose={() => setShowEarlyExit(false)}
+          onConfirm={handleEarlyExit}
+          saving={saving}
+      />
     </div>
   );
 }

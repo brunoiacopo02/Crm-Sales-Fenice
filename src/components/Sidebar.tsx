@@ -13,6 +13,7 @@ import {
     FileText,
     X,
     Compass,
+    ClipboardList,
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
@@ -86,6 +87,7 @@ export function Sidebar() {
         if (session?.user?.email === "marketing@fenice.local" || session?.user?.name === "Marketing") {
             navItems = [
                 { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
+                { name: "Qualità Lead", href: "/qualita-lead", icon: ClipboardList },
             ]
         } else {
             navGroups = [
@@ -115,6 +117,7 @@ export function Sidebar() {
                         { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                         { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
                         { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
+                        { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
                         { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
                         { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
                     ],
