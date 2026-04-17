@@ -1,10 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { saveVenditoreOutcome } from "@/app/actions/venditoreActions"
+import { saveSalesSurvey, getSalesSurveyByLead } from "@/app/actions/surveyActions"
 import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
+import { VenditoreSurveyInline, type VenditoreSurveyState } from "./surveys/VenditoreSurveyInline"
+import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 
 interface VenditoreDrawerProps {
     lead: any
@@ -35,6 +38,42 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
 
     const [isSaving, setIsSaving] = useState(false)
 
+    // Sondaggio venditore (solo se outcome === "Non chiuso" e funnel != 'database')
+    const [surveyStartedAt] = useState<number>(() => Date.now())
+    const [survey, setSurvey] = useState<VenditoreSurveyState>({
+        problemSignals: [],
+        urgencySignals: [],
+        priceReaction: null,
+    })
+    const surveyRequired = useMemo(() => {
+        if (outcome !== "Non chiuso") return false
+        const f = (lead?.funnel || "").trim().toLowerCase()
+        return f !== EXCLUDED_FUNNEL
+    }, [outcome, lead?.funnel])
+    const surveyValid = useMemo(() => {
+        if (!surveyRequired) return true
+        return (
+            survey.problemSignals.length > 0 &&
+            survey.urgencySignals.length > 0 &&
+            survey.priceReaction !== null
+        )
+    }, [surveyRequired, survey])
+
+    // Prefill survey if exists (in caso di edit)
+    useEffect(() => {
+        if (!lead?.id) return
+        void (async () => {
+            const existing = await getSalesSurveyByLead(lead.id)
+            if (existing) {
+                setSurvey({
+                    problemSignals: existing.problemSignals ?? [],
+                    urgencySignals: existing.urgencySignals ?? [],
+                    priceReaction: existing.priceReaction ?? null,
+                })
+            }
+        })()
+    }, [lead?.id])
+
     // Form logic validations
     const canAddFollowUp = !followUp1Date || !followUp2Date;
 
@@ -49,6 +88,10 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
         }
         if (outcome === "Non chiuso" && !notClosedReason) {
             alert("Seleziona una motivazione valida per cui la vendita non è chiusa.")
+            return
+        }
+        if (surveyRequired && !surveyValid) {
+            alert("Compila il sondaggio lead non chiuso (tutti i 3 blocchi) prima di salvare.")
             return
         }
 
@@ -71,6 +114,20 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
+            }
+
+            // Save survey if applicable — non blocca il success del saveVenditoreOutcome.
+            if (surveyRequired && surveyValid) {
+                const sRes = await saveSalesSurvey(lead.id, {
+                    problemSignals: survey.problemSignals,
+                    urgencySignals: survey.urgencySignals,
+                    priceReaction: survey.priceReaction!,
+                    fillDurationMs: Date.now() - surveyStartedAt,
+                })
+                if (!sRes.success) {
+                    console.error("Sales survey save failed:", sRes.error)
+                    // Non bloccante: il salvataggio principale è già andato a buon fine.
+                }
             }
 
             onSaved()
@@ -278,6 +335,17 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Sondaggio lead non chiuso */}
+                            {surveyRequired && (
+                                <div className="pt-4 border-t border-orange-200">
+                                    <VenditoreSurveyInline
+                                        value={survey}
+                                        onChange={setSurvey}
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                            )}
                         </div>
                     )}
 

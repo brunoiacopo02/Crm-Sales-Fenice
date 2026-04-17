@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications, leadEvents, userCreatures, tradingOffers, duels } from "@/db/schema";
-import { eq, and, gte, isNotNull, sql, count, countDistinct, inArray, or } from "drizzle-orm";
+import { achievements, userAchievements, users, callLogs, leads, questProgress, coinTransactions, notifications, leadEvents, userCreatures, tradingOffers, duels, gdoLeadSurveys, confermeLeadSurveys } from "@/db/schema";
+import { eq, and, gte, isNotNull, isNull, sql, count, countDistinct, inArray, or } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 
@@ -187,6 +187,24 @@ export async function measureAchievementMetric(userId: string, metric: string): 
         case 'total_duels_won': {
             const [result] = await db.select({ c: count() }).from(duels)
                 .where(and(eq(duels.winnerId, userId), eq(duels.status, 'completed')));
+            return result?.c ?? 0;
+        }
+        // --- LEAD SURVEY metrics (sondaggi lead) ---
+        case 'gdo_surveys_completed': {
+            const [result] = await db.select({ c: count() }).from(gdoLeadSurveys)
+                .where(and(
+                    eq(gdoLeadSurveys.gdoUserId, userId),
+                    eq(gdoLeadSurveys.completed, true),
+                    isNull(gdoLeadSurveys.invalidatedBy),
+                ));
+            return result?.c ?? 0;
+        }
+        case 'conferme_surveys_completed': {
+            const [result] = await db.select({ c: count() }).from(confermeLeadSurveys)
+                .where(and(
+                    eq(confermeLeadSurveys.confermeUserId, userId),
+                    isNull(confermeLeadSurveys.invalidatedBy),
+                ));
             return result?.c ?? 0;
         }
         default:

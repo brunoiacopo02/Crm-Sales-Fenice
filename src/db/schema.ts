@@ -592,6 +592,85 @@ export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- LEAD SURVEYS (Sondaggi lead: GDO, Conferme, Venditore) ---
+// One survey per lead per role (unique constraint on leadId).
+// Multi-select fields stored as text[]; single-choice as text with
+// enum values enforced at application layer (see src/lib/surveys/questions.ts).
+// Filtro globale: applicabile SOLO a lead con funnel != 'database'.
+export const gdoLeadSurveys = pgTable('gdoLeadSurveys', {
+    id: text('id').primaryKey(),
+    leadId: text('leadId').notNull().unique().references(() => leads.id, { onDelete: 'cascade' }),
+    gdoUserId: text('gdoUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Single-choice
+    ageRange: text('ageRange'),              // '18-24'|'25-35'|'35-45'|'45-55'|'55+'
+    occupation: text('occupation'),          // 'disoccupato'|'studente'|'full_time'|'part_time'|'p_iva'|'pensionato'
+    mainProblem: text('mainProblem'),        // 'economico'|'insoddisfatto'|'tempo'|'competenze'
+    digitalKnow: text('digitalKnow'),        // 'nulla'|'ha_visto'|'conosce'|'esperto'
+    changeWithin: text('changeWithin'),      // '<30gg'|'30-90gg'|'indefinito'
+    changeSince: text('changeSince'),        // '<6m'|'6-12m'|'>12m'
+    // Multi-select
+    requestReason: text('requestReason').array(),   // ['corso','valuta','info','curiosita']
+    expectation: text('expectation').array(),       // ['info','materiale_gratis','comprare','capire']
+    // Completion & early-exit
+    completed: boolean('completed').default(false).notNull(),
+    earlyExitReason: text('earlyExitReason'), // 'no_budget'|'solo_corso_10h'|'curioso'|'altro'|null
+    // Anti-gaming
+    fillDurationMs: integer('fillDurationMs'),
+    suspicious: boolean('suspicious').default(false).notNull(),
+    invalidatedBy: text('invalidatedBy').references(() => users.id),
+    invalidatedAt: timestamp('invalidatedAt', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        gdoUserIdx: index('gdo_surveys_user_idx').on(table.gdoUserId),
+        createdAtIdx: index('gdo_surveys_created_idx').on(table.createdAt),
+    };
+});
+
+export const confermeLeadSurveys = pgTable('confermeLeadSurveys', {
+    id: text('id').primaryKey(),
+    leadId: text('leadId').notNull().unique().references(() => leads.id, { onDelete: 'cascade' }),
+    confermeUserId: text('confermeUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    remembersAppt: boolean('remembersAppt'),
+    watchedVideo: boolean('watchedVideo'),
+    confirmed: boolean('confirmed'),
+    whyNot: text('whyNot'),                 // 'non_risponde'|'non_interessato'|'no_soldi'|'posticipa_senza_data'|null
+    fillDurationMs: integer('fillDurationMs'),
+    suspicious: boolean('suspicious').default(false).notNull(),
+    invalidatedBy: text('invalidatedBy').references(() => users.id),
+    invalidatedAt: timestamp('invalidatedAt', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        confermeUserIdx: index('conferme_surveys_user_idx').on(table.confermeUserId),
+        createdAtIdx: index('conferme_surveys_created_idx').on(table.createdAt),
+    };
+});
+
+export const salesLeadSurveys = pgTable('salesLeadSurveys', {
+    id: text('id').primaryKey(),
+    leadId: text('leadId').notNull().unique().references(() => leads.id, { onDelete: 'cascade' }),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Multi-select
+    problemSignals: text('problemSignals').array(),   // ['problema_specifico','gia_provato','situazione_concreta','nessuna']
+    urgencySignals: text('urgencySignals').array(),   // ['entro_3m','non_sostenibile','data_certa','nessuna']
+    // Single-choice
+    priceReaction: text('priceReaction'),             // 'avanti'|'modalita_pagamento'|'alto'|'non_posso'|'evita'
+    fillDurationMs: integer('fillDurationMs'),
+    suspicious: boolean('suspicious').default(false).notNull(),
+    invalidatedBy: text('invalidatedBy').references(() => users.id),
+    invalidatedAt: timestamp('invalidatedAt', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        salesUserIdx: index('sales_surveys_user_idx').on(table.salesUserId),
+        createdAtIdx: index('sales_surveys_created_idx').on(table.createdAt),
+    };
+});
+
 // Per-funnel monthly baseline table shown in "Panoramica Generale".
 // - leadCount / fatturatoEur / spesaEur are ABSOLUTE values (edited directly).
 // - appDelta / confermeDelta / trattativeDelta / closeDelta are DELTAS summed

@@ -7,6 +7,7 @@ import { GdoQuickActions } from "./GdoQuickActions"
 import { AgendaButton } from "./AgendaButton"
 import { useAuth } from "./AuthProvider"
 import { useRouter } from "next/navigation"
+import { SurveysReadOnlyPanel } from "./surveys/SurveysReadOnlyPanel"
 
 function DrawerSkeleton() {
     return (
@@ -53,7 +54,7 @@ export function ContactDrawer({
 }) {
     const [profile, setProfile] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(false)
-    const [activeTab, setActiveTab] = useState<'details' | 'timeline'>('details')
+    const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'surveys'>('details')
     const { user: authUser } = useAuth()
     const router = useRouter()
 
@@ -223,6 +224,12 @@ export function ContactDrawer({
                         className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
                     >
                         Timeline Eventi
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('surveys')}
+                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'surveys' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
+                    >
+                        Sondaggi
                     </button>
                 </div>
 
@@ -437,6 +444,10 @@ export function ContactDrawer({
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    ) : activeTab === 'surveys' && leadId ? (
+                        <div className="animate-fade-in">
+                            <SurveysReadOnlyPanel leadId={leadId} />
                         </div>
                     ) : null}
                 </div>
