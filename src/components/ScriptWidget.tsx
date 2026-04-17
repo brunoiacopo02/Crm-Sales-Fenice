@@ -303,9 +303,10 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
   }, []);
 
   const requiredFieldsForBlock = (idx: number): GdoSurveyField[] => {
-      // Block index in SCRIPT_BLOCKS is 0-based (title "1 — Apertura" = index 0).
-      // GDO_FIELDS_BY_BLOCK uses 1-based keys that map to title numbers, so:
-      return GDO_FIELDS_BY_BLOCK[idx] || [];
+      // SCRIPT_BLOCKS è 0-based (titolo "1 — Apertura" = index 0).
+      // GDO_FIELDS_BY_BLOCK usa chiavi 1-based = numero del titolo (2, 4, 7).
+      // Conversione: idx 0-based → idx+1 chiave 1-based.
+      return GDO_FIELDS_BY_BLOCK[idx + 1] || [];
   };
 
   const blockSurveyComplete = (idx: number): boolean => {
