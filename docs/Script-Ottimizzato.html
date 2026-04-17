@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Script Fenice Academy — Ottimizzato</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f4f0;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1rem;
+    color: #1a1a18;
+    overflow-x: hidden;
+  }
+  #app { width: 100%; max-width: 820px; }
+  #top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  #counter { font-size: 13px; color: #888780; letter-spacing: 0.04em; }
+  #progress-bar { height: 3px; background: #d3d1c7; border-radius: 3px; overflow: hidden; margin-bottom: 1.5rem; }
+  #progress-fill { height: 100%; background: #e8a33a; transition: width 0.4s cubic-bezier(0.4,0,0.2,1); border-radius: 3px; }
+  #card-wrap { position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #d3d1c7; background: #ffffff; transition: height 0.35s cubic-bezier(0.4,0,0.2,1); box-shadow: 0 2px 12px rgba(0,0,0,0.06); max-width: 100%; }
+  .block-card { position: absolute; top: 0; left: 0; right: 0; padding: 1.5rem 1.5rem; opacity: 0; transform: translateX(60px); transition: opacity 0.35s ease, transform 0.35s ease; pointer-events: none; overflow-x: hidden; overflow-y: visible; word-break: break-word; overflow-wrap: anywhere; }
+  .block-card.active { opacity: 1; transform: translateX(0); pointer-events: all; position: relative; }
+  .block-card * { max-width: 100%; }
+  @media (min-width: 600px) { .block-card { padding: 2rem 2rem; } }
+  .block-title { font-size: 11px; font-weight: 700; color: #e8a33a; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.75rem; }
+  .block-text { font-size: 15.5px; line-height: 1.8; color: #1a1a18; word-break: break-word; overflow-wrap: anywhere; }
+  .voice-note { background: #fef9ee; border-left: 3px solid #e8a33a; padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 13px; color: #8a6d2f; line-height: 1.6; overflow-wrap: anywhere; word-break: break-word; }
+  .voice-note strong { color: #6b4f10; }
+  .voice-note, .warning-box, .block-text, .check-item label, .checklist-section { max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+  .warning-box { background: #fff3f3; border-left: 3px solid #e74c3c; padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 13px; color: #a33; line-height: 1.6; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
+  button.nav-btn { font-size: 14px; padding: 6px 16px; cursor: pointer; border-radius: 8px; border: 1px solid #b4b2a9; background: transparent; color: #1a1a18; transition: background 0.15s; }
+  button.nav-btn:hover { background: #f1efe8; }
+  button.nav-btn:disabled { opacity: 0.3; cursor: default; }
+  #new-call-btn { font-size: 12px; padding: 6px 16px; cursor: pointer; border-radius: 8px; border: 1px solid #e8a33a; background: #fef9ee; color: #8a6d2f; font-weight: 600; transition: background 0.15s; }
+  #new-call-btn:hover { background: #fcecc5; }
+  .checklist-section { margin-bottom: 1.25rem; }
+  .checklist-section-title { font-size: 11px; font-weight: 700; color: #e8a33a; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+  .check-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; cursor: pointer; border-radius: 6px; transition: background 0.1s; }
+  .check-item:hover { background: #f7f6f2; margin: 0 -8px; padding: 6px 8px; }
+  .check-item input[type=checkbox] { margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; accent-color: #e8a33a; cursor: pointer; }
+  .check-item label { font-size: 14px; line-height: 1.6; color: #1a1a18; cursor: pointer; word-break: break-word; }
+  .check-item.checked label { color: #b4b2a9; text-decoration: line-through; }
+  .checklist-counter { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 22px; font-weight: 600; margin-bottom: 1.5rem; padding: 12px 20px; border-radius: 10px; border: 1px solid #d3d1c7; background: #f7f6f2; color: #5f5e5a; transition: background 0.2s, border-color 0.2s, color 0.2s; }
+  .checklist-counter.ok { background: #eaf3de; border-color: #97c459; color: #3b6d11; }
+  .checklist-counter.warn { background: #faeeda; border-color: #ef9f27; color: #854f0b; }
+  #next-btn.blocked { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+  #timer-bar { display: flex; align-items: center; gap: 12px; margin-top: 1rem; padding: 10px 14px; border-radius: 8px; border: 1px solid #d3d1c7; background: #f7f6f2; font-size: 13px; color: #5f5e5a; transition: background 0.3s, border-color 0.3s; }
+  #timer-bar.running { border-color: #ef9f27; background: #faeeda; color: #854f0b; }
+  #timer-bar.done { border-color: #97c459; background: #eaf3de; color: #3b6d11; }
+  #timer-display { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 54px; }
+  #timer-label { flex: 1; font-size: 13px; line-height: 1.4; }
+  #timer-ring { width: 36px; height: 36px; flex-shrink: 0; transform: rotate(-90deg); }
+  #timer-ring circle { fill: none; stroke-width: 3.5; stroke-linecap: round; }
+  #timer-ring .bg { stroke: #d3d1c7; }
+  #timer-ring .fg { stroke: #ef9f27; stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset 1s linear, stroke 0.3s; }
+  #timer-ring.done .fg { stroke: #63991f; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top-bar">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="nav-btn" id="prev-btn" disabled>←</button>
+      <span id="counter">1 / 11</span>
+      <button class="nav-btn" id="next-btn">→</button>
+    </div>
+    <button id="new-call-btn">&#9654; Nuova chiamata</button>
+  </div>
+  <div id="progress-bar"><div id="progress-fill" style="width:9%"></div></div>
+  <div id="timer-bar" style="display:none">
+    <svg id="timer-ring" viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" id="timer-arc" cx="18" cy="18" r="15"/></svg>
+    <span id="timer-display">4:00</span>
+    <span id="timer-label">Timer chiamata — sblocca il pitch dopo 4 minuti</span>
+  </div>
+  <div id="card-wrap"></div>
+</div>
+
+<script>
+const CHECKLISTS = {
+  3: {
+    min: 8,
+    sections: [
+      { title: "Se lavora", items: [
+        "Cosa fai di lavoro? Da quanto tempo?",
+        "Part-time o full-time? Dipendente o libero professionista?",
+        "Sei soddisfatto del tuo lavoro attuale?",
+        "Cosa cambieresti se potessi?",
+        "Quanto guadagni più o meno? Ti basta per vivere come vorresti?",
+        "Hai mai pensato di avere un'entrata alternativa?",
+        "Ti ci vedi a fare questo lavoro per tutta la vita?",
+        "Ti senti valorizzato nel lavoro che fai?",
+        "Cosa hai già provato per cambiare e non ha funzionato?",
+        "Se la situazione non cambiasse nei prossimi 2 anni, ti andrebbe bene?",
+        "Come ti fa sentire tutto questo? (PAUSA — lascialo parlare)",
+        "Quanto ti costa questa situazione, non solo economicamente ma di tempo e serenità?"
+      ]},
+      { title: "Se non lavora", items: [
+        "Da quanto tempo sei disoccupato/a?",
+        "Qual è l'ultimo lavoro che hai fatto?",
+        "Cosa è successo? Finito il contratto o sei andato/a via?",
+        "Hai provato a cercare lavoro nel tradizionale? Come sta andando?",
+        "Come ti fa sentire dipendere da un'altra persona economicamente?",
+        "Hai un piano concreto per cambiare la situazione?",
+        "Se la tua situazione non cambiasse, ti andrebbe bene?",
+        "Come immagini la tua vita tra un anno se non cambi nulla?",
+        "Cosa hai già provato che non ha funzionato?",
+        "Quanto pesa questa situazione su di te quotidianamente?"
+      ]},
+      { title: "Se ha figli", items: [
+        "Con il lavoro che hai, riesci a stare con loro quanto vorresti?",
+        "Ti godi la famiglia come vorresti?",
+        "Come ti senti rispetto alla gestione economica familiare?",
+        "Cosa ti preoccupa di più per il loro futuro?",
+        "Cosa hai già provato che non ha funzionato?"
+      ]},
+      { title: "Se non ha figli", items: [
+        "Riesci a dedicare tempo a te stesso? Viaggiare? Hobby?",
+        "Ti senti in ritardo rispetto ai tuoi coetanei?",
+        "Tra 5 anni la tua situazione sarà diversa o identica?",
+        "Cosa ti trattiene dal fare un cambiamento?",
+        "Cosa hai già provato che non ha funzionato?"
+      ]}
+    ]
+  },
+  5: {
+    min: 5,
+    sections: [
+      { title: "Domande obiettivi", items: [
+        "Qual è l'obiettivo principale che vuoi raggiungere?",
+        "Hai una tempistica precisa o è 'prima o poi'?",
+        "Dove vorresti essere tra 6 mesi?",
+        "Se questa cosa funzionasse, cosa cambierebbe concretamente nella tua vita?",
+        "Cosa ti manca oggi per arrivare al tuo obiettivo?",
+        "C'è qualcosa che ti ha fermato finora?",
+        "Se non cambi nulla, dove sei tra un anno?",
+        "Che tipo di vita vuoi costruirti nei prossimi anni?",
+        "Preferisci massimizzare guadagni, tempo libero o stabilità?"
+      ]}
+    ]
+  }
+};
+
+const checkState = {};
+const TIMER_DURATION = 4 * 60;
+let timerStarted = false, timerDone = false, timerElapsed = 0, timerInterval = null;
+
+function startTimer() {
+  if (timerStarted) return;
+  timerStarted = true;
+  document.getElementById('timer-bar').style.display = 'flex';
+  document.getElementById('timer-bar').classList.add('running');
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    timerElapsed++;
+    updateTimerDisplay();
+    updateNextBtn();
+    if (timerElapsed >= TIMER_DURATION) {
+      clearInterval(timerInterval);
+      timerDone = true;
+      document.getElementById('timer-bar').classList.remove('running');
+      document.getElementById('timer-bar').classList.add('done');
+      document.getElementById('timer-ring').classList.add('done');
+      document.getElementById('timer-label').textContent = 'Tempo raggiunto — puoi procedere al pitch';
+      updateNextBtn();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const remaining = Math.max(0, TIMER_DURATION - timerElapsed);
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
+  document.getElementById('timer-display').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  const pct = Math.min(timerElapsed / TIMER_DURATION, 1);
+  const circumference = 2 * Math.PI * 15;
+  document.getElementById('timer-arc').style.strokeDasharray = circumference;
+  document.getElementById('timer-arc').style.strokeDashoffset = circumference * (1 - pct);
+}
+
+const DEFAULT_BLOCKS = [
+  { title: "1 — Apertura", text: "Buongiorno, #NOME# ?\n🗣️\nCiao #NOME#! Sono #MIO NOME#, il tutor di Fenice Academy, professioni del futuro! Come stai? Tutto bene?\n🗣️\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Sorridi mentre parli — si sente al telefono. Voce piena, dal petto, non dalla gola. Energia ALTA, entusiasmo vero. Ritmo leggermente veloce ma non frettoloso — devi sembrare una persona di valore che ha poco tempo ma è contenta di parlare con loro.</div>" },
+
+  { title: "2 — Gestione risposta", text: "<strong>Se dice: \"Tutto bene\"</strong>\nOttimo! Senti, ti chiamo perché hai lasciato i tuoi dati sulla nostra pubblicità riguardo le professioni digitali — mi ha incuriosito, volevo capire direttamente da te: cos'è che ti aveva colpito?\n\n<strong>Se dice: Più o meno / insomma / male</strong>\nCaspita, mi dispiace... spero nulla di grave.\n(PAUSA 2-3 secondi — NON riempire il silenzio, lascialo parlare)\n🗣️\nTi chiamo perché hai lasciato i tuoi dati sulla nostra pubblicità riguardo le professioni digitali — e magari è proprio il momento giusto per parlarne, no? Cosa ti aveva incuriosito?\n\n<strong>Se dice: Non ricordo</strong>\nFenice Academy! Formazione sulle professioni digitali — social media manager, copywriter, graphic designer...\n(tono leggero, come se fosse ovvio)\nTi chiamo perché hai lasciato i tuoi dati su una nostra pubblicità su Facebook o Instagram — magari era un po' di tempo fa! Tu attualmente lavori già nel digitale o fai tutt'altro?\n\nSe continua a non ricordare:\n\"Nessun problema, capita! L'importante è: ti incuriosisce il mondo digitale? Perché se sì, vale la pena di fare due chiacchiere.\"\n\n<strong>Se dice: Non ho tempo / Mi richiami</strong>\nImmaginavo tu fossi impegnato! Proprio per questo faccio chiamate da massimo 5 minuti — così sfruttiamo bene il tempo di entrambi e vediamo subito se ha senso. Okay?\n(pausa micro)\nDimmi solo velocemente: cosa ti aveva colpito delle professioni digitali?\n\nSe insiste: \"Assolutamente, ti richiamo volentieri! Dimmi quando preferisci — domani mattina o pomeriggio?\"\n\n<strong>Se dice: Mi avete già chiamato</strong>\nCerto, mi ricordo! E proprio per questo ti richiamo — in Fenice abbiamo introdotto delle novità importanti. Volevo capire se adesso possiamo venire incontro meglio alle tue esigenze. Ricordami un attimo: come mai ti stavi interessando alle professioni digitali?\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Adatta la tua energia a quella del lead. Se è entusiasta, sii entusiasta. Se è giù, abbassa un po' il volume, parla più lentamente, fai sentire che ti importa davvero. Poi risali gradualmente di energia.</div>" },
+
+  { title: "3 — Motivazione interesse", text: "<strong>Curiosità</strong>\nBeh oggi se ne fa un gran parlare, è normale essere curiosi! Aiutami a capire meglio — tu oggi lavori in questo settore o fai tutt'altro?\n\n<strong>Voglio cambiare lavoro / Seconda entrata</strong>\nInteressante... e dimmi, questa cosa la stai valutando da poco o è un pensiero che hai da un po'?\n🗣️\n(qualunque risposta → vai al blocco 4)\n\n<strong>Studente</strong>\nCosa stai studiando? A che punto sei? Lavori anche?\n(Hai valutato se sei disposto ad investire in un percorso di formazione?)\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Qui passi dall'entusiasmo alla curiosità. Parla meno e ascolta il DOPPIO. Il tuo tono dice: \"sono genuinamente interessato a te\".</div>" },
+
+  { title: "4 — Analisi problema (min. 8 domande)", text: "— ALMENO 8 DI QUESTE DOMANDE — \nOgni risposta è un'occasione per approfondire: \"E come ti fa sentire questo?\" / \"Da quanto vai avanti così?\" / \"E cosa è cambiato da allora?\"\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong>\n• Le prime 2-3 domande: <strong>tono tranquillo, amichevole</strong> — come un amico che chiede.\n• Le domande centrali: <strong>tono più serio, empatico</strong> — come un dottore che ascolta.\n• Le ultime 2-3 domande: <strong>voce bassa, lenta, pause lunghe (3-4 secondi)</strong> dopo la risposta. Il silenzio è potentissimo — il lead riempirà il vuoto e si aprirà.\n• <strong>Ripeti le parole esatte del lead.</strong> Se dice \"mi sento bloccato\", tu dici \"capisco, ti senti bloccato... e da quanto tempo?\"</div>" },
+
+  { title: "5 — Professione", text: "Tranquillo, siamo qui proprio per valutare delle alternative e capire come aiutarti grazie al mondo digitale. Tu hai già visto una professione che ti incuriosisce?\n\n<strong>Se dice: vuole farne una</strong>\n\"Il [professione] è un'ottima scelta — c'è tantissima richiesta in questo momento. Però dipende anche dai tuoi obiettivi: cosa vorresti ottenere da un lavoro nel digitale?\"\n\n<strong>Se dice: non sa cosa fare</strong>\nCapire se è più razionale/analitico o creativo, poi:\n\"Guarda, per te vedrei bene il [professione] — è perfetto per chi [match con la sua risposta]. Però la cosa più importante è capire prima i tuoi obiettivi.\"\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Torna ad energia ALTA. Quando suggerisci la professione, voce sicura, ZERO esitazione. Tu sei l'esperto, sai cosa è giusto per lui/lei.</div>" },
+
+  { title: "6 — Analisi obiettivi (min. 5 domande)", text: "\"Cosa vorresti ottenere da un lavoro nel digitale?\"\n🗣️\n\"Se funzionasse, cosa cambierebbe concretamente nella tua vita quotidiana?\"\n🗣️\n\"Hai una tempistica? Tipo 'entro 6 mesi voglio X' o è più un 'prima o poi'?\"\n🗣️\n\"Cosa ti manca oggi per arrivarci?\"\n🗣️\n\"Se non cambi nulla, dove sei tra un anno?\"\n🗣️\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Tono che SALE, entusiasta, positivo. Qui stai parlando del futuro del lead — deve sentire la differenza tra \"dove sei\" (problema, tono basso) e \"dove vuoi arrivare\" (obiettivo, tono alto). Tu sei il ponte tra i due.</div>" },
+
+  { title: "7 — Urgenza obiettivo", text: "\"È da molto che stai cercando di raggiungere questo obiettivo?\"\n\nSe risponde POCO:\n\"Ah, e come mai proprio adesso vorresti iniziare un percorso per avere [obiettivo]?\"\n\nSe risponde TANTO:\n\"Ah, e come mai non sei ancora riuscito a farlo?\"\n(PAUSA LUNGA 3-4 secondi — non dire nulla)\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Se risponde TANTO, dopo la pausa parla con voce bassa, calma, sincera — come se stessi dicendo una verità importante a un amico. Niente fretta, niente pressione. Solo sincerità.</div>" },
+
+  { title: "8 — Bridge al pitch", text: "\"Perfetto #NOME#, sono convinto che noi possiamo aiutarti a fare [OBIETTIVO] e adesso ti spiego come, ok?\"\n\n<div class='warning-box'>⚠️ NON PASSARE AL PITCH SE NON AVETE PARLATO ALMENO 4 MINUTI</div>\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Questo è il cambio di marcia. Fino ad ora ascoltavi. Adesso SEI L'ESPERTO CHE HA LA RISPOSTA. Voce che sale di energia, tono fermo, dal petto. Certezza totale — tu SAI che puoi aiutarlo.</div>" },
+
+  { title: "9 — Pitch", text: "\"Considera che noi abbiamo percorsi davvero completi, composti da 3 elementi fondamentali. Adesso riassumo molto, poi ci sentiamo in una videochiamata per vedere tutti i dettagli, okay?\"\n\n<strong>1. TEORIA</strong>\n\"Per apprendere le competenze richieste — immagino tu abbia una vita abbastanza piena, vero?\n(aspetta il sì)\nAllora le nostre lezioni sono perfette perché le guardi quando e dove vuoi.\"\n\n<strong>2. PRATICA</strong>\n\"Stage in azienda — immagino che orari fissi ti sarebbero scomodi, vero?\n(aspetta il sì)\nImmaginavo — per questo faremo lo stage da remoto e con orari flessibili.\"\n\n<strong>3. COLLEGAMENTO AL LAVORO</strong>\n(ABBASSA il volume, parla quasi sussurrando)\n\"Fenice Academy garantisce A CONTRATTO due colloqui di lavoro a fine corso.\"\n(PAUSA 2 secondi)\n(torna a volume normale)\n\"Pensi che sia facile cercare lavoro in autonomia? Proprio per questo noi te li portiamo noi.\"\n\n\"Insomma… molto completo e perfetto anche per te che parti da zero.\nPrevede una quota di iscrizione che varia dai 1.000 ai 3.000€ a seconda del corso.\nMa sai cosa penso #NOME#? Che il vero punto sia prima capire bene di cosa si tratta e se è la cosa che fa per te.\nAnzi, tu di dove sei?\"\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong>\n• Punto 1 (Teoria): voce entusiasta, positiva\n• Punto 2 (Pratica): voce rassicurante, comprensiva\n• Punto 3 (Lavoro): <strong>SUSSURRA</strong> la garanzia contratto. Poi pausa. Poi torna a volume normale. Questo contrasto rende la garanzia lavoro MEMORABILE.\n• \"Tu di dove sei?\" — tono leggero, come una domanda tra amici.</div>" },
+
+  { title: "10 — Presa appuntamento", text: "\"Okay, organizziamoci una videocall. Almeno ci diamo anche un volto…\nParlamo una mezz'ora e vediamo insieme come e se, lavorando nel digitale, puoi risolvere [PROBLEMA] e arrivare a [OBIETTIVO]. Okay?\"\n\n<strong>SE FA PROBLEMI SULLA QUOTA:</strong>\n\"Comprendo che sia una scelta importante. Proprio per questo fissiamo una videochiamata per capire prima di tutto se il digitale è adatto a te e se è ciò che vuoi fare.\"\n\nTi mando il link della mia agenda virtuale su WhatsApp — dimmi quando arriva.\n\n<div class='warning-box'>⚠️ \"SEI SICURO/A, ALLE ORE X, DI AVERE 45 MINUTI TRANQUILLI IN UN POSTO TRANQUILLO?\"</div>\n\nTi chiedo di leggere il nome della mia collega che appare dopo aver cliccato Invia.\n(legge: [NOME CONFERMA])\n\n<div class='voice-note'><strong>🎤 Come dirlo:</strong> Tono ORGANIZZATIVO — come se stessi fissando qualcosa di ovvio e naturale. Non stai chiedendo il permesso, stai organizzando. \"Organizziamoci\" non \"ti andrebbe di...\"</div>" },
+
+  { title: "11 — Chiusura", text: "<div class='voice-note'><strong>🎤 Come dirlo:</strong> Rallenta tutto. Voce bassa, calda, sicura. Come un mentore che dà le ultime indicazioni importanti. L'ultima emozione che lasci è quella che il lead ricorderà.</div>\n\n\"Perfetto. Adesso ti dico chi è [NOME CONFERMA] — prima però ti mando un video su WhatsApp di circa 20 minuti, che ti spiega chi siamo, cosa facciamo, le professioni, i pacchetti e le quote di iscrizione.\"\n\n\"È FONDAMENTALE vedere il video subito appena puoi, già stasera, così ti fai un'idea generale di tutto.\"\n(pausa — aspetta che dica ok)\n\n\"Nella giornata di [GIORNO] ti chiamerà la mia collega [NOME CONFERMA] per effettuare una PRESELEZIONE e mandarti il link per la videochiamata che faremo giorno [X] alle ore [X].\"\n\n\"Tutto chiaro?\"\n🗣️\n\n(chiusura con calore)\n\"È stato un piacere #NOME#. Ci vediamo in videochiamata — vedrai che sarà una bella chiacchierata. A presto!\"" }
+];
+
+const STORAGE_KEY = 'script_fenice_ottimizzato_v2';
+function loadBlocks() { try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch(e) {} return null; }
+function saveBlocks(b) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(b)); } catch(e) {} }
+let blocks = loadBlocks() || [...DEFAULT_BLOCKS];
+let current = 0;
+
+const wrap = document.getElementById('card-wrap');
+const counter = document.getElementById('counter');
+const fill = document.getElementById('progress-fill');
+const prevBtn = document.getElementById('prev-btn');
+const nextBtn = document.getElementById('next-btn');
+
+function buildChecklistCard(blockIdx, card) {
+  const cfg = CHECKLISTS[blockIdx];
+  if (!checkState[blockIdx]) checkState[blockIdx] = new Set();
+  const state = checkState[blockIdx];
+  card.innerHTML = `<div class="block-title">${blocks[blockIdx].title}</div>`;
+  const counterEl = document.createElement('div');
+  counterEl.className = 'checklist-counter';
+  counterEl.id = `counter-${blockIdx}`;
+  card.appendChild(counterEl);
+  updateCounter(blockIdx);
+  // Add voice note from text if present
+  const textContent = blocks[blockIdx].text;
+  const voiceMatch = textContent.match(/<div class='voice-note'>[\s\S]*?<\/div>/);
+  if (voiceMatch) {
+    const noteDiv = document.createElement('div');
+    noteDiv.innerHTML = voiceMatch[0];
+    card.appendChild(noteDiv.firstChild);
+  }
+  cfg.sections.forEach((sec, si) => {
+    const secDiv = document.createElement('div');
+    secDiv.className = 'checklist-section';
+    secDiv.innerHTML = `<div class="checklist-section-title">${sec.title}</div>`;
+    sec.items.forEach((item, ii) => {
+      const key = `${si}-${ii}`;
+      const row = document.createElement('div');
+      row.className = 'check-item' + (state.has(key) ? ' checked' : '');
+      const id = `chk-${blockIdx}-${si}-${ii}`;
+      row.innerHTML = `<input type="checkbox" id="${id}" ${state.has(key) ? 'checked' : ''}><label for="${id}">${item}</label>`;
+      row.querySelector('input').addEventListener('change', e => {
+        e.stopPropagation();
+        if (e.target.checked) { state.add(key); row.classList.add('checked'); }
+        else { state.delete(key); row.classList.remove('checked'); }
+        updateCounter(blockIdx);
+        updateNextBtn();
+      });
+      row.addEventListener('click', e => { if (e.target.tagName !== 'INPUT') row.querySelector('input').click(); });
+      secDiv.appendChild(row);
+    });
+    card.appendChild(secDiv);
+  });
+}
+
+function updateCounter(blockIdx) {
+  const cfg = CHECKLISTS[blockIdx];
+  const state = checkState[blockIdx] || new Set();
+  const el = document.getElementById(`counter-${blockIdx}`);
+  if (!el) return;
+  el.textContent = `${state.size} / ${cfg.min}`;
+  el.className = 'checklist-counter ' + (state.size >= cfg.min ? 'ok' : 'warn');
+}
+
+function isBlockLocked(currentIdx, destIdx) {
+  if (CHECKLISTS[currentIdx]) {
+    const state = checkState[currentIdx] || new Set();
+    if (state.size < CHECKLISTS[currentIdx].min) return 'checklist';
+  }
+  if (destIdx >= 8 && !timerDone) return 'timer';
+  return false;
+}
+
+function updateNextBtn() {
+  nextBtn.disabled = current === blocks.length - 1;
+  const lock = isBlockLocked(current, current + 1);
+  if (lock === 'checklist') {
+    nextBtn.classList.add('blocked');
+    nextBtn.title = `Spunta almeno ${CHECKLISTS[current].min} domande per continuare`;
+  } else if (lock === 'timer') {
+    nextBtn.classList.add('blocked');
+    const r = Math.max(0, TIMER_DURATION - timerElapsed);
+    nextBtn.title = `Attendere ancora ${Math.floor(r/60)}:${(r%60).toString().padStart(2,'0')} prima del pitch`;
+  } else {
+    nextBtn.classList.remove('blocked');
+    nextBtn.title = '';
+  }
+}
+
+function buildCards() {
+  wrap.innerHTML = '';
+  blocks.forEach((b, i) => {
+    const card = document.createElement('div');
+    card.className = 'block-card' + (i === 0 ? ' active' : '');
+    card.dataset.idx = i;
+    if (CHECKLISTS[i]) {
+      buildChecklistCard(i, card);
+    } else {
+      card.innerHTML = `<div class="block-title">${b.title}</div><div class="block-text">${b.text.replace(/\n/g, '<br>')}</div>`;
+    }
+    wrap.appendChild(card);
+  });
+  wrap.style.height = wrap.querySelector('.active').scrollHeight + 'px';
+}
+
+function goTo(idx) {
+  if (idx < 0 || idx >= blocks.length || idx === current) return;
+  const lock = isBlockLocked(current, idx);
+  if (lock && idx > current) return;
+  const cards = wrap.querySelectorAll('.block-card');
+  cards[current].classList.remove('active');
+  cards[current].style.transform = idx > current ? 'translateX(-60px)' : 'translateX(60px)';
+  current = idx;
+  cards[current].style.transform = idx > current - 1 ? 'translateX(60px)' : 'translateX(-60px)';
+  requestAnimationFrame(() => {
+    cards[current].classList.add('active');
+    wrap.style.height = cards[current].scrollHeight + 'px';
+  });
+  counter.textContent = `${current + 1} / ${blocks.length}`;
+  fill.style.width = `${((current + 1) / blocks.length) * 100}%`;
+  prevBtn.disabled = current === 0;
+  updateNextBtn();
+  if (current >= 1 && !timerStarted) startTimer();
+}
+
+prevBtn.addEventListener('click', () => goTo(current - 1));
+nextBtn.addEventListener('click', () => goTo(current + 1));
+document.getElementById('new-call-btn').addEventListener('click', () => {
+  Object.keys(checkState).forEach(k => checkState[k].clear());
+  timerStarted = false; timerDone = false; timerElapsed = 0;
+  if (timerInterval) clearInterval(timerInterval);
+  document.getElementById('timer-bar').style.display = 'none';
+  document.getElementById('timer-bar').className = '';
+  document.getElementById('timer-ring').classList.remove('done');
+  current = 0;
+  buildCards();
+  counter.textContent = `1 / ${blocks.length}`;
+  fill.style.width = '9%';
+  prevBtn.disabled = true;
+  updateNextBtn();
+});
+
+buildCards();
+updateNextBtn();
+</script>
+</body>
+</html>
