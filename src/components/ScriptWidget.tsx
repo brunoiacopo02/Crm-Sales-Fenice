@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, RotateCcw, Clock, CheckCircle2, AlertTriangle, Mic, LogOut } from 'lucide-react';
 import { GdoSurveyInline } from './surveys/GdoSurveyInline';
 import { GdoEarlyExitDialog } from './surveys/GdoEarlyExitDialog';
+import { AgendaButton } from './AgendaButton';
 import {
     GDO_FIELDS_BY_BLOCK,
     GDO_FIELD_MULTI,
@@ -240,11 +241,17 @@ interface ScriptWidgetProps {
   funnel?: string | null;
   /** Lead email — shown readonly in the header. */
   leadEmail?: string | null;
+  /** Lead name — required to render the Agenda button. */
+  leadName?: string;
+  /** Lead phone — required to render the Agenda button. */
+  leadPhone?: string;
+  /** Agenda already-sent timestamp (shows "già inviata" badge on the button). */
+  agendaSentAt?: Date | null;
   /** Optional callback invoked when the survey is saved (used by parent to refresh UI). */
   onSurveySaved?: () => void;
 }
 
-export function ScriptWidget({ leadId, funnel, leadEmail, onSurveySaved }: ScriptWidgetProps = {}) {
+export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, agendaSentAt, onSurveySaved }: ScriptWidgetProps = {}) {
   const [current, setCurrent] = useState(0);
   const [checkedItems, setCheckedItems] = useState<Record<number, Set<string>>>({});
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -431,6 +438,15 @@ export function ScriptWidget({ leadId, funnel, leadEmail, onSurveySaved }: Scrip
           <button onClick={() => setShowVoice(!showVoice)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${showVoice ? 'bg-brand-orange/10 border-brand-orange/30 text-brand-orange-700' : 'border-ash-200 text-ash-500 hover:bg-ash-50'}`}>
             <Mic className="w-3.5 h-3.5" /> Voce
           </button>
+          {leadId && leadName && leadPhone && (
+              <AgendaButton
+                  leadId={leadId}
+                  leadName={leadName}
+                  leadPhone={leadPhone}
+                  hasEmail={!!leadEmail}
+                  agendaSentAt={agendaSentAt ?? null}
+              />
+          )}
           {surveyEnabled && !surveySaved && (
               <button onClick={() => setShowEarlyExit(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">
                 <LogOut className="w-3.5 h-3.5" /> Chiudi script

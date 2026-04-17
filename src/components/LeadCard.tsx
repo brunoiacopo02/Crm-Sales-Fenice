@@ -289,7 +289,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                 </button>
                             </div>
                             <div className="p-5">
-                                <ScriptWidget leadId={lead.id} funnel={lead.funnel} leadEmail={lead.email} />
+                                <ScriptWidget
+                                    leadId={lead.id}
+                                    funnel={lead.funnel}
+                                    leadEmail={lead.email}
+                                    leadName={lead.name}
+                                    leadPhone={lead.phone}
+                                    agendaSentAt={lead.agendaSentAt ?? null}
+                                />
                             </div>
                         </div>
                     </div>
