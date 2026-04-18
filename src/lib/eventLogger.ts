@@ -24,7 +24,7 @@ export function determineLeadSection(lead: any): SectionName {
 
 type LogEventParams = {
     leadId: string
-    eventType: 'IMPORTED' | 'ASSIGNED' | 'CALL_LOGGED' | 'SECTION_MOVED' | 'DISCARDED' | 'RECALL_SET' | 'APPOINTMENT_SET' | 'AGENDA_SENT'
+    eventType: 'IMPORTED' | 'ASSIGNED' | 'CALL_LOGGED' | 'SECTION_MOVED' | 'DISCARDED' | 'RECALL_SET' | 'APPOINTMENT_SET' | 'AGENDA_SENT' | 'AC_UPDATED'
     userId?: string | null
     fromSection?: SectionName | null
     toSection?: SectionName | null

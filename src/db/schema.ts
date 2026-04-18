@@ -65,6 +65,10 @@ export const leads = pgTable('leads', {
     utmCampaign: text('utmCampaign'),
     utmContent: text('utmContent'),
     utmTerm: text('utmTerm'),
+    // ID del contatto ActiveCampaign (se source='activecampaign'). Permette
+    // lookup O(1) per gestire gli eventi update di AC che arrivano dopo il
+    // subscribe (es. Provenienza settata tardi → aggiornamento funnel).
+    acContactId: text('acContactId'),
     // Flag impostato dal webhook AC quando il telefono ricevuto è strano
     // (es. meno di 9 cifre). Nell'UI è solo un triangolino accanto al
     // numero, non una nota di testo che occupa spazio.

@@ -44,6 +44,11 @@ async function acGet(path: string): Promise<any> {
     return res.json();
 }
 
+function readFieldLocal(fieldValues: Array<{ field: string; value: string | null }>, fieldId: string): string | null {
+    const v = fieldValues.find((f) => String(f.field) === fieldId)?.value;
+    return v && String(v).trim() ? String(v).trim() : null;
+}
+
 async function recordFailure(input: {
     reason: string;
     acContactId?: string | null;
@@ -117,6 +122,7 @@ export async function POST(req: NextRequest) {
         }
 
         const contactId = rawPayload['contact[id]'] || rawPayload['contact.id'] || rawPayload['id'];
+        const eventType = rawPayload['type'] || rawPayload['event'] || 'subscribe';
         if (!contactId) {
             await recordFailure({ reason: 'Payload senza contact id', payload: rawPayload });
             return NextResponse.json({ error: 'missing contact id' }, { status: 400 });
@@ -152,16 +158,61 @@ export async function POST(req: NextRequest) {
         const rawPhone = String(contact.phone || '').trim();
         const provenienza = (fieldValues.find((f) => String(f.field) === PROVENIENZA_FIELD_ID)?.value || '').trim();
 
+        // ===== EVENTO UPDATE =====
+        // Se il contatto esiste già nel CRM (importato precedentemente da AC),
+        // lo ritroviamo via acContactId e aggiorniamo funnel/UTM se cambiati.
+        // Questo gestisce il caso: Provenienza settata DOPO il subscribe.
+        if (eventType === 'update') {
+            const [existing] = await db.select().from(leads).where(eq(leads.acContactId, contactId)).limit(1);
+            if (!existing) {
+                // Non conosciamo questo contatto: potrebbe essere stato creato fuori dal nostro flow, ignoriamo.
+                return NextResponse.json({ skipped: 'update for unknown contact', acContactId: contactId });
+            }
+
+            const utmSource = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmSource);
+            const utmMedium = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmMedium);
+            const utmCampaign = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign);
+            const utmContent = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent);
+            const utmTerm = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm);
+
+            const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
+            const changes: string[] = [];
+
+            // Aggiorno il funnel SOLO se il CRM ha 'SCONOSCIUTO' e ora AC ha un valore reale.
+            // Non sovrascrivo un funnel già valido (il manager potrebbe averlo editato).
+            if (provenienza && existing.funnel === DEFAULT_FUNNEL) {
+                updatePayload.funnel = provenienza.toUpperCase();
+                changes.push(`funnel → ${provenienza.toUpperCase()}`);
+            }
+            // UTM: popolo solo i campi ancora vuoti nel CRM
+            if (utmSource && !existing.utmSource) { updatePayload.utmSource = utmSource; changes.push('utmSource'); }
+            if (utmMedium && !existing.utmMedium) { updatePayload.utmMedium = utmMedium; changes.push('utmMedium'); }
+            if (utmCampaign && !existing.utmCampaign) { updatePayload.utmCampaign = utmCampaign; changes.push('utmCampaign'); }
+            if (utmContent && !existing.utmContent) { updatePayload.utmContent = utmContent; changes.push('utmContent'); }
+            if (utmTerm && !existing.utmTerm) { updatePayload.utmTerm = utmTerm; changes.push('utmTerm'); }
+
+            if (changes.length === 0) {
+                return NextResponse.json({ skipped: 'no updatable fields', acContactId: contactId });
+            }
+
+            await db.update(leads).set(updatePayload).where(eq(leads.id, existing.id));
+            await logLeadEvent({
+                leadId: existing.id,
+                eventType: 'AC_UPDATED',
+                metadata: { source: 'activecampaign_update', acContactId: contactId, changes },
+            });
+            return NextResponse.json({ success: true, updatedLeadId: existing.id, changes });
+        }
+
+        // ===== EVENTO SUBSCRIBE (default) =====
+        // Continua col flow esistente di creazione nuovo lead.
+
         // UTM (custom field 31-35). Salvati per uso marketing futuro, non mostrati in UI.
-        const readField = (fieldId: string): string | null => {
-            const v = fieldValues.find((f) => String(f.field) === fieldId)?.value;
-            return v && String(v).trim() ? String(v).trim() : null;
-        };
-        const utmSource = readField(UTM_FIELD_IDS.utmSource);
-        const utmMedium = readField(UTM_FIELD_IDS.utmMedium);
-        const utmCampaign = readField(UTM_FIELD_IDS.utmCampaign);
-        const utmContent = readField(UTM_FIELD_IDS.utmContent);
-        const utmTerm = readField(UTM_FIELD_IDS.utmTerm);
+        const utmSource = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmSource);
+        const utmMedium = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmMedium);
+        const utmCampaign = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign);
+        const utmContent = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent);
+        const utmTerm = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm);
 
         // Telefono: bloccante SOLO se totalmente assente. Se è troppo corto
         // o formato strano, importo comunque il lead preservando le cifre
@@ -235,6 +286,7 @@ export async function POST(req: NextRequest) {
             email,
             funnel,
             source: 'activecampaign',
+            acContactId: contactId,
             utmSource,
             utmMedium,
             utmCampaign,
