@@ -16,7 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
-import { eq, and, asc, sql, isNull, gte } from "drizzle-orm";
+import { eq, and, asc, sql, isNull, gte, desc } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
@@ -234,6 +234,29 @@ export async function POST(req: NextRequest) {
         }
 
         // ===== EVENTO SUBSCRIBE (default) =====
+        // Dedup: AC può spedire più eventi subscribe ravvicinati per lo
+        // stesso contatto (es. iscrizione a più liste, retry). Se esiste
+        // già un lead con lo stesso acContactId creato negli ultimi 10
+        // minuti, NON creiamo un duplicato. Dopo 10 min consideriamo
+        // un'eventuale re-iscrizione come caso legittimo.
+        const dedupCutoff = new Date(Date.now() - 10 * 60 * 1000);
+        const [existingRecent] = await db.select({
+            id: leads.id,
+            createdAt: leads.createdAt,
+            funnel: leads.funnel,
+        }).from(leads).where(and(
+            eq(leads.acContactId, contactId),
+            gte(leads.createdAt, dedupCutoff),
+        )).orderBy(desc(leads.createdAt)).limit(1);
+
+        if (existingRecent) {
+            return NextResponse.json({
+                skipped: 'duplicate_within_dedup_window',
+                acContactId: contactId,
+                existingLeadId: existingRecent.id,
+            });
+        }
+
         // Retry sulla Provenienza: AC può creare il contatto + triggerare
         // il webhook PRIMA di aver applicato le automazioni custom field.
         // Aspetto fino a 4 secondi totali che Provenienza compaia.
