@@ -1,24 +1,32 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2 } from "lucide-react";
+import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, ExternalLink, RotateCcw, Check } from "lucide-react";
 import {
     setGdoAcIntake,
     disableAllAcIntake,
     setupAcWebhook,
     deleteAcWebhookByUrl,
     listGdosForAcIntake,
+    listAcFailures,
+    retryAcFailure,
+    resolveAcFailure,
     type GdoAcIntakeRow,
+    type AcFailureRow,
 } from "@/app/actions/acIntakeActions";
 
 interface Props {
     initialRows: GdoAcIntakeRow[];
     initialWebhooks: Array<{ id: string; url: string; events: string[]; name: string }>;
+    initialFailures: AcFailureRow[];
 }
 
-export default function LeadAutomaticiClient({ initialRows, initialWebhooks }: Props) {
+export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures }: Props) {
     const [rows, setRows] = useState(initialRows);
     const [webhooks, setWebhooks] = useState(initialWebhooks);
+    const [failures, setFailures] = useState(initialFailures);
+    const [busyFailureId, setBusyFailureId] = useState<string | null>(null);
+    const [expandedPayloadId, setExpandedPayloadId] = useState<string | null>(null);
     const [saving, setSaving] = useState<string | null>(null);
     const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
     const [isPending, startTransition] = useTransition();
@@ -74,6 +82,31 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks }: P
         setRows(fresh);
     };
 
+    const refreshFailures = async () => {
+        const fresh = await listAcFailures(true);
+        setFailures(fresh);
+    };
+
+    const handleRetry = async (id: string) => {
+        setBusyFailureId(id);
+        const res = await retryAcFailure(id);
+        setBusyFailureId(null);
+        if (!res.success) {
+            setMsg({ type: 'err', text: `Retry fallito: ${res.error}` });
+            return;
+        }
+        setMsg({ type: 'ok', text: `Lead importato (id: ${res.leadId?.slice(0, 8)}…)` });
+        setFailures((f) => f.filter((x) => x.id !== id));
+    };
+
+    const handleResolve = async (id: string) => {
+        setBusyFailureId(id);
+        const res = await resolveAcFailure(id);
+        setBusyFailureId(null);
+        if (!res.success) { setMsg({ type: 'err', text: res.error || 'Errore' }); return; }
+        setFailures((f) => f.filter((x) => x.id !== id));
+    };
+
     const crmWebhook = webhooks.find(w => w.url.includes('/api/webhooks/activecampaign'));
 
     return (
@@ -127,6 +160,93 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks }: P
                     <div className="rounded-lg bg-ash-50 p-2 text-[11px] font-mono text-ash-600 break-all">
                         {crmWebhook.url.replace(/secret=[^&]+/, 'secret=***')}
                         <div className="mt-1 text-ash-500">Eventi: {crmWebhook.events.join(', ')}</div>
+                    </div>
+                )}
+            </section>
+
+            {/* Lead non importati */}
+            <section className="rounded-2xl border border-ash-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-ash-100 px-4 py-3">
+                    <div>
+                        <h2 className="flex items-center gap-2 text-sm font-bold text-ash-900">
+                            <AlertTriangle className="h-4 w-4 text-amber-600" /> Lead non importati
+                            {failures.length > 0 && (
+                                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">{failures.length}</span>
+                            )}
+                        </h2>
+                        <p className="text-xs text-ash-500">
+                            Contatti AC che non sono entrati nel CRM. Clicca "Riprova" per reimportare, oppure "Risolto" per nasconderli dopo averli gestiti manualmente su AC.
+                        </p>
+                    </div>
+                    <button onClick={refreshFailures} className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-xs font-medium text-ash-600 hover:bg-ash-50" title="Ricarica">
+                        <RefreshCw className="h-3 w-3" />
+                    </button>
+                </div>
+                {failures.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-ash-400">
+                        <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
+                        Nessun errore in sospeso
+                    </div>
+                ) : (
+                    <div className="divide-y divide-ash-100">
+                        {failures.map(f => (
+                            <div key={f.id} className="p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-sm font-semibold text-rose-700">{f.reason}</span>
+                                            <span className="text-[10px] text-ash-400">{new Date(f.createdAt).toLocaleString('it-IT')}</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ash-600">
+                                            {f.acContactId && <span>AC id: <code className="font-mono">{f.acContactId}</code></span>}
+                                            {f.email && <span>Email: <code className="font-mono">{f.email}</code></span>}
+                                            {f.phoneRaw && <span>Tel: <code className="font-mono">{f.phoneRaw}</code></span>}
+                                            {f.provenienza && <span>Provenienza: <strong>{f.provenienza}</strong></span>}
+                                        </div>
+                                        <button
+                                            onClick={() => setExpandedPayloadId(expandedPayloadId === f.id ? null : f.id)}
+                                            className="mt-1 text-[11px] text-ash-500 underline hover:text-ash-700"
+                                        >
+                                            {expandedPayloadId === f.id ? 'Nascondi payload' : 'Mostra payload'}
+                                        </button>
+                                        {expandedPayloadId === f.id && (
+                                            <pre className="mt-2 overflow-x-auto rounded-lg bg-ash-50 p-2 text-[10px] leading-snug text-ash-700">
+                                                {JSON.stringify(f.payload, null, 2)}
+                                            </pre>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col gap-1 shrink-0">
+                                        {f.acContactLink && (
+                                            <a
+                                                href={f.acContactLink}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center justify-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                                            >
+                                                <ExternalLink className="h-3 w-3" /> Apri AC
+                                            </a>
+                                        )}
+                                        {f.acContactId && (
+                                            <button
+                                                onClick={() => handleRetry(f.id)}
+                                                disabled={busyFailureId === f.id}
+                                                className="flex items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                            >
+                                                {busyFailureId === f.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                                Riprova
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => handleResolve(f.id)}
+                                            disabled={busyFailureId === f.id}
+                                            className="flex items-center justify-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-[11px] font-semibold text-ash-700 hover:bg-ash-50 disabled:opacity-50"
+                                        >
+                                            <Check className="h-3 w-3" /> Risolto
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </section>

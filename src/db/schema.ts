@@ -598,6 +598,28 @@ export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
+// --- ACTIVECAMPAIGN INTAKE FAILURES ---
+// Traccia i contatti AC che non sono stati importati nel CRM. Il manager
+// può esaminare i dettagli, andare a verificare su AC e segnare come
+// risolto, oppure forzare un retry via la UI /lead-automatici.
+export const acIntakeFailures = pgTable('acIntakeFailures', {
+    id: text('id').primaryKey(),
+    acContactId: text('acContactId'),
+    reason: text('reason').notNull(),
+    provenienza: text('provenienza'),
+    email: text('email'),
+    phoneRaw: text('phoneRaw'),
+    payload: jsonb('payload'),
+    resolvedAt: timestamp('resolvedAt', { withTimezone: true, mode: 'date' }),
+    resolvedBy: text('resolvedBy').references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        createdIdx: index('ac_intake_failures_created_idx').on(table.createdAt),
+        resolvedIdx: index('ac_intake_failures_resolved_idx').on(table.resolvedAt),
+    };
+});
+
 // --- LEAD SURVEYS (Sondaggi lead: GDO, Conferme, Venditore) ---
 // One survey per lead per role (unique constraint on leadId).
 // Multi-select fields stored as text[]; single-choice as text with

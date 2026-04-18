@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { users, acIntakeFailures } from "@/db/schema";
+import { eq, and, desc, isNull } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 
 async function requireManager() {
@@ -131,6 +131,90 @@ export async function setupAcWebhook(): Promise<{ success: boolean; webhookId?: 
             },
         });
         return { success: true, webhookId: created.webhook?.id, url };
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+}
+
+// ============ AC intake failures (lead non importati) ============
+
+export interface AcFailureRow {
+    id: string;
+    acContactId: string | null;
+    reason: string;
+    provenienza: string | null;
+    email: string | null;
+    phoneRaw: string | null;
+    payload: unknown;
+    resolvedAt: Date | null;
+    createdAt: Date;
+    acContactLink: string | null;
+}
+
+export async function listAcFailures(onlyUnresolved: boolean = true): Promise<AcFailureRow[]> {
+    await requireManager();
+    const rows = await db.select().from(acIntakeFailures)
+        .where(onlyUnresolved ? isNull(acIntakeFailures.resolvedAt) : undefined as any)
+        .orderBy(desc(acIntakeFailures.createdAt))
+        .limit(200);
+    return rows.map((r) => ({
+        id: r.id,
+        acContactId: r.acContactId,
+        reason: r.reason,
+        provenienza: r.provenienza,
+        email: r.email,
+        phoneRaw: r.phoneRaw,
+        payload: r.payload,
+        resolvedAt: r.resolvedAt,
+        createdAt: r.createdAt,
+        acContactLink: r.acContactId
+            ? `${AC_URL.replace('https://', 'https://').replace('.api-us1.com', '.activehosted.com')}/app/contacts/${r.acContactId}`
+            : null,
+    }));
+}
+
+export async function resolveAcFailure(id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const session = await requireManager();
+        await db.update(acIntakeFailures).set({
+            resolvedAt: new Date(),
+            resolvedBy: session.id,
+        }).where(eq(acIntakeFailures.id, id));
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+}
+
+/**
+ * Riprova a importare il contatto AC associato a una failure. Chiama di
+ * nuovo il webhook internamente; se riesce, marca la failure come risolta.
+ */
+export async function retryAcFailure(id: string): Promise<{ success: boolean; error?: string; leadId?: string }> {
+    try {
+        const session = await requireManager();
+        const [row] = await db.select().from(acIntakeFailures).where(eq(acIntakeFailures.id, id));
+        if (!row) return { success: false, error: 'Failure non trovata' };
+        if (!row.acContactId) return { success: false, error: 'Nessun contact id associato — non si può riprovare' };
+        if (!WEBHOOK_SECRET) return { success: false, error: 'Webhook secret non configurato' };
+
+        const url = `${APP_URL}/api/webhooks/activecampaign?secret=${encodeURIComponent(WEBHOOK_SECRET)}`;
+        const form = new URLSearchParams({ 'contact[id]': row.acContactId, type: 'subscribe', source: 'manual_retry' });
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form.toString(),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+            return { success: false, error: data?.error || data?.skipped || `HTTP ${res.status}` };
+        }
+        // Successo: marca come risolto
+        await db.update(acIntakeFailures).set({
+            resolvedAt: new Date(),
+            resolvedBy: session.id,
+        }).where(eq(acIntakeFailures.id, id));
+        return { success: true, leadId: data.leadId };
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) };
     }
