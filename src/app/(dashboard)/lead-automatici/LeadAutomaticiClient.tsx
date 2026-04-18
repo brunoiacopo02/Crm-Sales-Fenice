@@ -26,7 +26,6 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
     const [webhooks, setWebhooks] = useState(initialWebhooks);
     const [failures, setFailures] = useState(initialFailures);
     const [busyFailureId, setBusyFailureId] = useState<string | null>(null);
-    const [expandedPayloadId, setExpandedPayloadId] = useState<string | null>(null);
     const [saving, setSaving] = useState<string | null>(null);
     const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
     const [isPending, startTransition] = useTransition();
@@ -189,64 +188,76 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     </div>
                 ) : (
                     <div className="divide-y divide-ash-100">
-                        {failures.map(f => (
-                            <div key={f.id} className="p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-sm font-semibold text-rose-700">{f.reason}</span>
-                                            <span className="text-[10px] text-ash-400">{new Date(f.createdAt).toLocaleString('it-IT')}</span>
+                        {failures.map(f => {
+                            const fullName = [f.firstName, f.lastName].filter(Boolean).join(' ').trim();
+                            return (
+                                <div key={f.id} className="p-4 space-y-2">
+                                    {/* Motivo in linguaggio naturale */}
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                                            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                            <div className="text-sm font-semibold text-ash-900">{f.reasonHuman}</div>
                                         </div>
-                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ash-600">
-                                            {f.acContactId && <span>AC id: <code className="font-mono">{f.acContactId}</code></span>}
-                                            {f.email && <span>Email: <code className="font-mono">{f.email}</code></span>}
-                                            {f.phoneRaw && <span>Tel: <code className="font-mono">{f.phoneRaw}</code></span>}
-                                            {f.provenienza && <span>Provenienza: <strong>{f.provenienza}</strong></span>}
+                                        <span className="text-[10px] text-ash-400 shrink-0 font-mono">{new Date(f.createdAt).toLocaleString('it-IT')}</span>
+                                    </div>
+
+                                    {/* Griglia dati lead */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg bg-ash-50 p-3">
+                                        <InfoCell label="Nome" value={fullName || '—'} />
+                                        <InfoCell label="Email" value={f.email || '—'} mono />
+                                        <InfoCell label="Telefono" value={f.phoneRaw || '—'} mono highlight={f.reasonCategory === 'phone'} />
+                                        <InfoCell label="Provenienza" value={f.provenienza || '—'} />
+                                    </div>
+
+                                    {/* Azioni */}
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                        <div className="text-[11px] text-ash-500">
+                                            {f.acContactId ? <>ID AC: <code className="font-mono">{f.acContactId}</code></> : 'Nessun ID AC'}
                                         </div>
-                                        <button
-                                            onClick={() => setExpandedPayloadId(expandedPayloadId === f.id ? null : f.id)}
-                                            className="mt-1 text-[11px] text-ash-500 underline hover:text-ash-700"
-                                        >
-                                            {expandedPayloadId === f.id ? 'Nascondi payload' : 'Mostra payload'}
-                                        </button>
-                                        {expandedPayloadId === f.id && (
-                                            <pre className="mt-2 overflow-x-auto rounded-lg bg-ash-50 p-2 text-[10px] leading-snug text-ash-700">
+                                        <div className="flex gap-1.5">
+                                            {f.acContactLink && (
+                                                <a
+                                                    href={f.acContactLink}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                                                >
+                                                    <ExternalLink className="h-3 w-3" /> Apri su AC
+                                                </a>
+                                            )}
+                                            {f.acContactId && (
+                                                <button
+                                                    onClick={() => handleRetry(f.id)}
+                                                    disabled={busyFailureId === f.id}
+                                                    className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                                >
+                                                    {busyFailureId === f.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                                    Riprova
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => handleResolve(f.id)}
+                                                disabled={busyFailureId === f.id}
+                                                className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-ash-700 hover:bg-ash-50 disabled:opacity-50"
+                                            >
+                                                <Check className="h-3 w-3" /> Risolto
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Dettagli tecnici collassati */}
+                                    <details className="group">
+                                        <summary className="cursor-pointer text-[10px] text-ash-400 hover:text-ash-600">Dettagli tecnici</summary>
+                                        <div className="mt-1 space-y-1">
+                                            <div className="text-[10px] text-ash-500">Messaggio grezzo: <code className="font-mono">{f.reason}</code></div>
+                                            <pre className="overflow-x-auto rounded-md bg-ash-100 p-2 text-[10px] leading-snug text-ash-700 max-h-40">
                                                 {JSON.stringify(f.payload, null, 2)}
                                             </pre>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-col gap-1 shrink-0">
-                                        {f.acContactLink && (
-                                            <a
-                                                href={f.acContactLink}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex items-center justify-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
-                                            >
-                                                <ExternalLink className="h-3 w-3" /> Apri AC
-                                            </a>
-                                        )}
-                                        {f.acContactId && (
-                                            <button
-                                                onClick={() => handleRetry(f.id)}
-                                                disabled={busyFailureId === f.id}
-                                                className="flex items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                                            >
-                                                {busyFailureId === f.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-                                                Riprova
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => handleResolve(f.id)}
-                                            disabled={busyFailureId === f.id}
-                                            className="flex items-center justify-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-[11px] font-semibold text-ash-700 hover:bg-ash-50 disabled:opacity-50"
-                                        >
-                                            <Check className="h-3 w-3" /> Risolto
-                                        </button>
-                                    </div>
+                                        </div>
+                                    </details>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </section>
@@ -321,6 +332,20 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     Sistema attivo: {activeCount} GDO in round-robin.
                 </div>
             )}
+        </div>
+    );
+}
+
+function InfoCell({ label, value, mono, highlight }: { label: string; value: string; mono?: boolean; highlight?: boolean }) {
+    return (
+        <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-ash-500">{label}</div>
+            <div
+                className={`truncate text-xs ${mono ? 'font-mono' : 'font-medium'} ${highlight ? 'text-rose-700 font-bold' : 'text-ash-800'}`}
+                title={value}
+            >
+                {value}
+            </div>
         </div>
     );
 }

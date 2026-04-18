@@ -142,13 +142,48 @@ export interface AcFailureRow {
     id: string;
     acContactId: string | null;
     reason: string;
+    reasonHuman: string;           // testo italiano leggibile
+    reasonCategory: 'phone' | 'ac_api' | 'no_gdo' | 'missing_id' | 'not_found' | 'server' | 'other';
     provenienza: string | null;
     email: string | null;
     phoneRaw: string | null;
+    firstName: string | null;       // estratto dal payload quando fetch AC è fallito
+    lastName: string | null;
     payload: unknown;
     resolvedAt: Date | null;
     createdAt: Date;
     acContactLink: string | null;
+}
+
+function humanizeReason(reason: string): { human: string; category: AcFailureRow['reasonCategory'] } {
+    const r = reason || '';
+    if (r.startsWith('Telefono non normalizzabile')) {
+        const match = r.match(/"([^"]*)"/);
+        const num = match?.[1] ?? '';
+        return { human: `Telefono non valido o troppo corto${num ? ` ("${num}")` : ''}.`, category: 'phone' };
+    }
+    if (r === 'Telefono assente') return { human: 'Il contatto AC non ha un numero di telefono.', category: 'phone' };
+    if (r.startsWith('Errore fetch AC API')) {
+        if (r.includes('403')) return { human: 'ActiveCampaign ha rifiutato la richiesta (403). Può succedere durante un redeploy — riprova tra poco.', category: 'ac_api' };
+        if (r.includes('404')) return { human: 'Contatto non più presente su AC (404). Forse è stato cancellato.', category: 'not_found' };
+        if (r.includes('429')) return { human: 'Troppe chiamate verso AC (429). Il sistema riproverà.', category: 'ac_api' };
+        return { human: 'Errore nella chiamata verso ActiveCampaign. Riprova.', category: 'ac_api' };
+    }
+    if (r === 'Contatto non trovato su AC') return { human: 'Il contatto non esiste più su AC.', category: 'not_found' };
+    if (r === 'Payload senza contact id') return { human: 'AC ha mandato un payload senza ID contatto (spesso è un "test" inviato da AC). Puoi ignorarlo.', category: 'missing_id' };
+    if (r === 'Nessun GDO abilitato al round-robin AC') return { human: 'Nessun GDO era abilitato quando il lead è arrivato. Abilita almeno un GDO e clicca Riprova.', category: 'no_gdo' };
+    if (r.startsWith('Errore server')) return { human: 'Errore interno al CRM durante il salvataggio. Riprova o segnalalo.', category: 'server' };
+    return { human: r, category: 'other' };
+}
+
+function extractPayloadField(payload: unknown, keys: string[]): string | null {
+    if (!payload || typeof payload !== 'object') return null;
+    const p = payload as Record<string, unknown>;
+    for (const k of keys) {
+        const v = p[k];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return null;
 }
 
 export async function listAcFailures(onlyUnresolved: boolean = true): Promise<AcFailureRow[]> {
@@ -157,20 +192,27 @@ export async function listAcFailures(onlyUnresolved: boolean = true): Promise<Ac
         .where(onlyUnresolved ? isNull(acIntakeFailures.resolvedAt) : undefined as any)
         .orderBy(desc(acIntakeFailures.createdAt))
         .limit(200);
-    return rows.map((r) => ({
-        id: r.id,
-        acContactId: r.acContactId,
-        reason: r.reason,
-        provenienza: r.provenienza,
-        email: r.email,
-        phoneRaw: r.phoneRaw,
-        payload: r.payload,
-        resolvedAt: r.resolvedAt,
-        createdAt: r.createdAt,
-        acContactLink: r.acContactId
-            ? `${AC_URL.replace('https://', 'https://').replace('.api-us1.com', '.activehosted.com')}/app/contacts/${r.acContactId}`
-            : null,
-    }));
+    return rows.map((r) => {
+        const { human, category } = humanizeReason(r.reason);
+        return {
+            id: r.id,
+            acContactId: r.acContactId,
+            reason: r.reason,
+            reasonHuman: human,
+            reasonCategory: category,
+            provenienza: r.provenienza,
+            email: r.email ?? extractPayloadField(r.payload, ['contact[email]', 'contact.email']),
+            phoneRaw: r.phoneRaw ?? extractPayloadField(r.payload, ['contact[phone]', 'contact.phone']),
+            firstName: extractPayloadField(r.payload, ['contact[first_name]', 'contact[firstName]', 'contact.firstName', 'contact.first_name']),
+            lastName: extractPayloadField(r.payload, ['contact[last_name]', 'contact[lastName]', 'contact.lastName', 'contact.last_name']),
+            payload: r.payload,
+            resolvedAt: r.resolvedAt,
+            createdAt: r.createdAt,
+            acContactLink: r.acContactId
+                ? `${AC_URL.replace('.api-us1.com', '.activehosted.com')}/app/contacts/${r.acContactId}`
+                : null,
+        };
+    });
 }
 
 export async function resolveAcFailure(id: string): Promise<{ success: boolean; error?: string }> {

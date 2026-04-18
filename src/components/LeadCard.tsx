@@ -23,6 +23,7 @@ type LeadProps = {
         recallNote?: string | null
         agendaSentAt?: Date | null
         createdAt?: Date | null
+        source?: string | null
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -129,12 +130,12 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
     const rarity = getFunnelRarity(lead.funnel)
     const rarityStyle = RARITY_STYLES[rarity]
 
-    // Lead "appena arrivato" (creato < 1h fa). Solo per funnel NUOVI — i
-    // Database vengono caricati a blocchi e il badge perderebbe significato.
+    // Lead "appena arrivato" (creato < 1h fa) — segnalato SOLO per lead
+    // importati automaticamente da ActiveCampaign (source='activecampaign').
+    // Gli import CSV manuali / storici non accendono il badge.
     // Check client-side per evitare hydration mismatch.
-    const funnelUpper = (lead.funnel || '').trim().toUpperCase()
     const isJustArrived = !!(clientNow > 0 && lead.createdAt &&
-        funnelUpper !== 'DATABASE' &&
+        lead.source === 'activecampaign' &&
         (clientNow - new Date(lead.createdAt).getTime()) < ONE_HOUR_MS)
 
     // Note shown in the card: prefer recallNote (preserved across outcomes) over lastCallNote

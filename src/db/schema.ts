@@ -55,8 +55,9 @@ export const leads = pgTable('leads', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     email: text('email'),
-    phone: text('phone').unique().notNull(),
+    phone: text('phone').notNull(), // non più unique: webhook AC consente duplicati intenzionali
     funnel: text('funnel'),
+    source: text('source'), // 'activecampaign' | 'csv' | 'manual' | NULL
     status: text('status').default('NEW').notNull(),
     callCount: integer('callCount').default(0).notNull(),
     assignedToId: text('assignedToId').references(() => users.id),

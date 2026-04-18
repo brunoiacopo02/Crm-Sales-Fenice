@@ -191,6 +191,7 @@ export async function POST(req: NextRequest) {
             phone: phone!,
             email,
             funnel,
+            source: 'activecampaign',
             status: 'NEW',
             callCount: 0,
             assignedToId: assignedGdoId,
@@ -223,7 +224,14 @@ export async function POST(req: NextRequest) {
         console.error('AC webhook error:', e);
         const msg = e instanceof Error ? e.message : String(e);
         try {
-            await recordFailure({ reason: `Errore server: ${msg.substring(0, 200)}`, payload: rawPayload });
+            // Estrae dal payload i campi più utili anche quando il fetch AC è fallito
+            await recordFailure({
+                reason: `Errore server: ${msg.substring(0, 200)}`,
+                acContactId: rawPayload['contact[id]'] || rawPayload['contact.id'] || rawPayload['id'] || null,
+                email: rawPayload['contact[email]'] || rawPayload['contact.email'] || null,
+                phoneRaw: rawPayload['contact[phone]'] || rawPayload['contact.phone'] || null,
+                payload: rawPayload,
+            });
         } catch { /* best-effort */ }
         return NextResponse.json({ error: msg }, { status: 500 });
     }
