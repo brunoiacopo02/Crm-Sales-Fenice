@@ -49,6 +49,35 @@ function readFieldLocal(fieldValues: Array<{ field: string; value: string | null
     return v && String(v).trim() ? String(v).trim() : null;
 }
 
+/**
+ * Rilegge i fieldValues del contatto AC finché la Provenienza non è
+ * valorizzata, per tollerare il caso in cui AC crea il contatto (e
+ * triggera il subscribe webhook) prima di aver applicato le automazioni
+ * che settano i custom field. Max 3 tentativi × 2 secondi di attesa
+ * totale tra il primo e l'ultimo.
+ */
+async function fetchFieldValuesWithProvenienzaRetry(
+    contactId: string,
+    firstFieldValues: Array<{ field: string; value: string | null }>,
+): Promise<Array<{ field: string; value: string | null }>> {
+    const hasProvenienza = (fvs: typeof firstFieldValues): boolean =>
+        !!readFieldLocal(fvs, PROVENIENZA_FIELD_ID);
+    if (hasProvenienza(firstFieldValues)) return firstFieldValues;
+
+    let current = firstFieldValues;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+            const res = await acGet(`/contacts/${contactId}/fieldValues`);
+            current = res.fieldValues || current;
+            if (hasProvenienza(current)) return current;
+        } catch {
+            // network hiccup: tengo il valore precedente e ritento
+        }
+    }
+    return current;
+}
+
 async function recordFailure(input: {
     reason: string;
     acContactId?: string | null;
@@ -156,7 +185,7 @@ export async function POST(req: NextRequest) {
         const lastName = String(contact.lastName || '').trim();
         const email = String(contact.email || '').trim() || null;
         const rawPhone = String(contact.phone || '').trim();
-        const provenienza = (fieldValues.find((f) => String(f.field) === PROVENIENZA_FIELD_ID)?.value || '').trim();
+        let provenienza = (readFieldLocal(fieldValues, PROVENIENZA_FIELD_ID) || '').trim();
 
         // ===== EVENTO UPDATE =====
         // Se il contatto esiste già nel CRM (importato precedentemente da AC),
@@ -205,7 +234,13 @@ export async function POST(req: NextRequest) {
         }
 
         // ===== EVENTO SUBSCRIBE (default) =====
-        // Continua col flow esistente di creazione nuovo lead.
+        // Retry sulla Provenienza: AC può creare il contatto + triggerare
+        // il webhook PRIMA di aver applicato le automazioni custom field.
+        // Aspetto fino a 4 secondi totali che Provenienza compaia.
+        if (!provenienza) {
+            fieldValues = await fetchFieldValuesWithProvenienzaRetry(contactId, fieldValues);
+            provenienza = (readFieldLocal(fieldValues, PROVENIENZA_FIELD_ID) || '').trim();
+        }
 
         // UTM (custom field 31-35). Salvati per uso marketing futuro, non mostrati in UI.
         const utmSource = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmSource);
