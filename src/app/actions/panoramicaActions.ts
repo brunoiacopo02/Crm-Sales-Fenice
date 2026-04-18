@@ -738,6 +738,22 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
         const baselines = await db.select().from(monthlyFunnelBaselines)
             .where(eq(monthlyFunnelBaselines.yearMonth, ym));
 
+        // 1b) Per ogni baseline con baselineSetAt valorizzato, conta quanti
+        //     lead CRM sono stati CREATI dopo quel timestamp per quel funnel.
+        //     Questo permette all'import automatico di sommare i nuovi lead
+        //     al leadCount assoluto storico, senza doppi conteggi.
+        const newLeadsByFunnel = new Map<string, number>();
+        for (const b of baselines) {
+            if (!b.baselineSetAt) continue;
+            const [r] = await db.select({ c: sql<number>`count(*)::int` })
+                .from(leads)
+                .where(and(
+                    sql`UPPER(COALESCE(${leads.funnel}, '')) = ${b.funnelName}`,
+                    sql`${leads.createdAt} > ${b.baselineSetAt}`,
+                ));
+            newLeadsByFunnel.set(b.funnelName, Number(r?.c ?? 0));
+        }
+
         // 2) Live CRM counts per funnel (uppercased, excluding TEST/empty).
         //    Counts ALL April leads. The baseline delta is purely external (Excel)
         //    and gets summed on top — no double-counting filter.
@@ -760,9 +776,9 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
             const baseline = baselines.find(b => b.funnelName === funnelName);
             const crm = crmMap.get(funnelName) || { app: 0, conferme: 0, trattative: 0, close: 0 };
 
-            // If no baseline row exists yet, create an empty one in memory (not persisted until the admin edits).
-            // leadCount default = CRM count of the "Nuovi" category (not tracked here), so use 0 — admin must set it.
-            const leadCount = baseline?.leadCount ?? 0;
+            // leadCount = baseline assoluto (quello inserito dall'admin) + lead
+            // CRM importati DOPO baselineSetAt. Se non c'è baseline → 0.
+            const leadCount = (baseline?.leadCount ?? 0) + (newLeadsByFunnel.get(funnelName) ?? 0);
             const appCount = crm.app + (baseline?.appDelta ?? 0);
             const confermeCount = crm.conferme + (baseline?.confermeDelta ?? 0);
             const trattativeCount = crm.trattative + (baseline?.trattativeDelta ?? 0);
@@ -879,6 +895,10 @@ export async function setFunnelRow(input: {
 
         const now = new Date();
 
+        // Il valore leadCount ricevuto è il display attuale (baseline + lead
+        // CRM importati dopo baselineSetAt). Salvandolo, diventa il nuovo
+        // assoluto e resettiamo baselineSetAt a now così da ricominciare
+        // il conteggio solo sui lead creati dopo questo save.
         if (existing) {
             await db.update(monthlyFunnelBaselines).set({
                 leadCount: Math.round(input.leadCount),
@@ -888,6 +908,7 @@ export async function setFunnelRow(input: {
                 closeDelta,
                 fatturatoEur: input.fatturatoEur,
                 spesaEur: input.spesaEur,
+                baselineSetAt: now,
                 updatedAt: now,
             }).where(eq(monthlyFunnelBaselines.id, existing.id));
         } else {
@@ -903,6 +924,7 @@ export async function setFunnelRow(input: {
                 fatturatoEur: input.fatturatoEur,
                 spesaEur: input.spesaEur,
                 statoSegnalazione: 'OK',
+                baselineSetAt: now,
                 createdAt: now,
                 updatedAt: now,
             });

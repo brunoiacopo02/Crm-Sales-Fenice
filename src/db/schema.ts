@@ -698,6 +698,10 @@ export const monthlyFunnelBaselines = pgTable('monthlyFunnelBaselines', {
     // Alert state
     dataPrimoSottoSoglia: timestamp('dataPrimoSottoSoglia', { withTimezone: true, mode: 'date' }),
     statoSegnalazione: text('statoSegnalazione').default('OK').notNull(), // 'OK' | 'PRE_RISK' | 'ALLERT'
+    // Timestamp in cui la baseline leadCount è stata impostata. Solo i lead
+    // creati DOPO questa data si sommano al leadCount nel display (così
+    // l'import automatico aggiunge i nuovi lead al totale del funnel).
+    baselineSetAt: timestamp('baselineSetAt', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => {
