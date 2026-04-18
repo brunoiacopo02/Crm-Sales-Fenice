@@ -19,13 +19,22 @@ import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
 import { eq, and, asc, sql, isNull, gte } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
-import { normalizePhone, isPlausiblePhone } from "@/lib/phoneNormalize";
+import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
 
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com';
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '';
 const WEBHOOK_SECRET = process.env.ACTIVECAMPAIGN_WEBHOOK_SECRET || '';
 const PROVENIENZA_FIELD_ID = '2';
 const DEFAULT_FUNNEL = 'SCONOSCIUTO';
+
+// Custom field id su AC per gli UTM (visti via /api/3/fields).
+const UTM_FIELD_IDS = {
+    utmSource: '31',
+    utmMedium: '32',
+    utmCampaign: '33',
+    utmContent: '34',
+    utmTerm: '35',
+} as const;
 
 async function acGet(path: string): Promise<any> {
     const res = await fetch(`${AC_URL}/api/3${path}`, {
@@ -143,19 +152,50 @@ export async function POST(req: NextRequest) {
         const rawPhone = String(contact.phone || '').trim();
         const provenienza = (fieldValues.find((f) => String(f.field) === PROVENIENZA_FIELD_ID)?.value || '').trim();
 
-        // SOLO BLOCCO: telefono mancante/invalido.
-        const phone = normalizePhone(rawPhone);
-        if (!isPlausiblePhone(phone)) {
+        // UTM (custom field 31-35). Salvati per uso marketing futuro, non mostrati in UI.
+        const readField = (fieldId: string): string | null => {
+            const v = fieldValues.find((f) => String(f.field) === fieldId)?.value;
+            return v && String(v).trim() ? String(v).trim() : null;
+        };
+        const utmSource = readField(UTM_FIELD_IDS.utmSource);
+        const utmMedium = readField(UTM_FIELD_IDS.utmMedium);
+        const utmCampaign = readField(UTM_FIELD_IDS.utmCampaign);
+        const utmContent = readField(UTM_FIELD_IDS.utmContent);
+        const utmTerm = readField(UTM_FIELD_IDS.utmTerm);
+
+        // Telefono: bloccante SOLO se totalmente assente. Se è troppo corto
+        // o formato strano, importo comunque il lead preservando le cifre
+        // ricevute e aggiungo un warning nella nota del lead.
+        if (!rawPhone) {
             await recordFailure({
-                reason: rawPhone ? `Telefono non normalizzabile: "${rawPhone}"` : 'Telefono assente',
+                reason: 'Telefono assente',
                 acContactId: contactId,
                 provenienza: provenienza || null,
                 email,
-                phoneRaw: rawPhone || null,
+                phoneRaw: null,
+                payload: rawPayload,
+            });
+            return NextResponse.json({ skipped: 'missing phone' });
+        }
+
+        const phoneStrict = normalizePhoneStrict(rawPhone);
+        const phoneFinal = phoneStrict ?? normalizePhoneLenient(rawPhone);
+        if (!phoneFinal) {
+            // Caso estremo: stringa senza cifre ("---", "N/D", ecc.)
+            await recordFailure({
+                reason: `Telefono non utilizzabile (nessuna cifra): "${rawPhone}"`,
+                acContactId: contactId,
+                provenienza: provenienza || null,
+                email,
+                phoneRaw: rawPhone,
                 payload: rawPayload,
             });
             return NextResponse.json({ skipped: 'invalid phone' });
         }
+        const phoneSuspicious = !isPlausiblePhone(phoneStrict);
+        const warningNote = phoneSuspicious
+            ? `⚠️ Telefono ricevuto da AC potenzialmente incompleto: "${rawPhone}". Verifica prima di chiamare.`
+            : null;
 
         const funnel = provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
 
@@ -188,13 +228,19 @@ export async function POST(req: NextRequest) {
         await db.insert(leads).values({
             id: newLeadId,
             name: fullName,
-            phone: phone!,
+            phone: phoneFinal,
             email,
             funnel,
             source: 'activecampaign',
+            utmSource,
+            utmMedium,
+            utmCampaign,
+            utmContent,
+            utmTerm,
             status: 'NEW',
             callCount: 0,
             assignedToId: assignedGdoId,
+            lastCallNote: warningNote,
             createdAt: now,
             updatedAt: now,
         });
@@ -203,7 +249,14 @@ export async function POST(req: NextRequest) {
             leadId: newLeadId,
             eventType: 'IMPORTED',
             toSection: 'Prima Chiamata',
-            metadata: { source: 'activecampaign', acContactId: contactId, provenienza: provenienza || null, funnelFallback: !provenienza },
+            metadata: {
+                source: 'activecampaign',
+                acContactId: contactId,
+                provenienza: provenienza || null,
+                funnelFallback: !provenienza,
+                phoneSuspicious,
+                phoneRaw: phoneSuspicious ? rawPhone : undefined,
+            },
         });
         await logLeadEvent({
             leadId: newLeadId,
@@ -218,6 +271,7 @@ export async function POST(req: NextRequest) {
             leadId: newLeadId,
             funnel,
             funnelFallback: !provenienza,
+            phoneSuspicious,
             assignedTo: assignedGdoId,
         });
     } catch (e) {

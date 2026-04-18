@@ -157,10 +157,10 @@ export interface AcFailureRow {
 
 function humanizeReason(reason: string): { human: string; category: AcFailureRow['reasonCategory'] } {
     const r = reason || '';
-    if (r.startsWith('Telefono non normalizzabile')) {
+    if (r.startsWith('Telefono non normalizzabile') || r.startsWith('Telefono non utilizzabile')) {
         const match = r.match(/"([^"]*)"/);
         const num = match?.[1] ?? '';
-        return { human: `Telefono non valido o troppo corto${num ? ` ("${num}")` : ''}.`, category: 'phone' };
+        return { human: `Telefono non utilizzabile${num ? ` ("${num}")` : ''}.`, category: 'phone' };
     }
     if (r === 'Telefono assente') return { human: 'Il contatto AC non ha un numero di telefono.', category: 'phone' };
     if (r.startsWith('Errore fetch AC API')) {

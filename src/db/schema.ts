@@ -58,6 +58,13 @@ export const leads = pgTable('leads', {
     phone: text('phone').notNull(), // non più unique: webhook AC consente duplicati intenzionali
     funnel: text('funnel'),
     source: text('source'), // 'activecampaign' | 'csv' | 'manual' | NULL
+    // UTM tracking (popolato dal webhook AC dai custom field 31-35).
+    // Non mostrato in UI: riservato a future funzioni marketing analytics.
+    utmSource: text('utmSource'),
+    utmMedium: text('utmMedium'),
+    utmCampaign: text('utmCampaign'),
+    utmContent: text('utmContent'),
+    utmTerm: text('utmTerm'),
     status: text('status').default('NEW').notNull(),
     callCount: integer('callCount').default(0).notNull(),
     assignedToId: text('assignedToId').references(() => users.id),
