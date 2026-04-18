@@ -365,49 +365,64 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
 }
 
 /**
- * F2-011: Metriche conferme/presenze/chiusure per i lead di un GDO (settimana corrente lun-dom)
+ * F2-011: Metriche "I tuoi lead — questa settimana" mostrati nel widget
+ * sopra la pipeline GDO.
+ *
+ * IMPORTANTE: ogni metrica conta DA QUANDO L'AZIONE è avvenuta, non dalla
+ * data appuntamento. Es: un lead confermato oggi ma con appuntamento la
+ * settimana prossima → entra subito nel contatore "Confermati" di questa
+ * settimana. Questo per dare feedback immediato al GDO sul suo lavoro,
+ * coerente con le notifiche realtime.
  */
 export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
-    // Settimana corrente ISO-like (lunedì 00:00 → domenica 23:59:59) in Europe/Rome.
-    const romeDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }); // 'YYYY-MM-DD'
+    // Settimana corrente (lunedì 00:00 → domenica 23:59:59) in Europe/Rome.
+    const romeDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
     const [y, m, d] = romeDateStr.split('-').map(Number);
     const todayRome = new Date(y, m - 1, d);
-    const dow = todayRome.getDay(); // 0 = dom, 1 = lun ... 6 = sab
+    const dow = todayRome.getDay();
     const monOffset = dow === 0 ? -6 : 1 - dow;
     const weekStart = new Date(y, m - 1, d + monOffset, 0, 0, 0, 0);
     const weekEnd = new Date(y, m - 1, d + monOffset + 6, 23, 59, 59, 999);
 
-    const gdoLeads = await db.select({
-        confirmationsOutcome: leads.confirmationsOutcome,
-        salespersonOutcome: leads.salespersonOutcome,
-    }).from(leads).where(
-        and(
-            eq(leads.assignedToId, gdoUserId),
-            isNotNull(leads.appointmentDate),
-            gte(leads.appointmentDate, weekStart),
-            lte(leads.appointmentDate, weekEnd)
-        )
-    );
+    const inWeek = (col: any) => and(isNotNull(col), gte(col, weekStart), lte(col, weekEnd));
 
-    let fissati = 0;
-    let confermati = 0;
+    // 1) Fissati: lead del GDO con appointmentCreatedAt in settimana.
+    const [fissatiRow] = await db.select({ n: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(and(
+            eq(leads.assignedToId, gdoUserId),
+            inWeek(leads.appointmentCreatedAt)!,
+        ));
+
+    // 2) Confermati: lead del GDO con confirmationsTimestamp in settimana
+    //    e outcome='confermato'.
+    const [confermatiRow] = await db.select({ n: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(and(
+            eq(leads.assignedToId, gdoUserId),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            inWeek(leads.confirmationsTimestamp)!,
+        ));
+
+    // 3) Presenze e 4) Chiusure: outcome venditore in settimana.
+    const venditoreRows = await db.select({
+        salespersonOutcome: leads.salespersonOutcome,
+    }).from(leads).where(and(
+        eq(leads.assignedToId, gdoUserId),
+        isNotNull(leads.salespersonOutcome),
+        inWeek(leads.salespersonOutcomeAt)!,
+    ));
+
     let presenziati = 0;
     let chiusi = 0;
-
-    for (const lead of gdoLeads) {
-        fissati++;
-        const isConfermato = lead.confirmationsOutcome && lead.confirmationsOutcome.toLowerCase() !== 'scartato';
-        const isPresenziatoFlag = isPresenziato(lead.salespersonOutcome);
-        const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
-
-        if (isConfermato) confermati++;
-        if (isPresenziatoFlag) presenziati++;
-        if (isChiuso) chiusi++;
+    for (const row of venditoreRows) {
+        if (isPresenziato(row.salespersonOutcome)) presenziati++;
+        if (row.salespersonOutcome?.toLowerCase() === 'chiuso') chiusi++;
     }
 
     return {
-        fissati,
-        confermati,
+        fissati: Number(fissatiRow?.n ?? 0),
+        confermati: Number(confermatiRow?.n ?? 0),
         presenziati,
         chiusi,
         weekStart: weekStart.toISOString(),
