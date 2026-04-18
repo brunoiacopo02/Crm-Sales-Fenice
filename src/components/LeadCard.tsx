@@ -129,9 +129,12 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
     const rarity = getFunnelRarity(lead.funnel)
     const rarityStyle = RARITY_STYLES[rarity]
 
-    // Lead "appena arrivato" (creato < 1h fa). Il check avviene client-side
-    // per evitare hydration mismatch.
+    // Lead "appena arrivato" (creato < 1h fa). Solo per funnel NUOVI — i
+    // Database vengono caricati a blocchi e il badge perderebbe significato.
+    // Check client-side per evitare hydration mismatch.
+    const funnelUpper = (lead.funnel || '').trim().toUpperCase()
     const isJustArrived = !!(clientNow > 0 && lead.createdAt &&
+        funnelUpper !== 'DATABASE' &&
         (clientNow - new Date(lead.createdAt).getTime()) < ONE_HOUR_MS)
 
     // Note shown in the card: prefer recallNote (preserved across outcomes) over lastCallNote
@@ -146,12 +149,12 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                 <div className="flex-1 min-w-0 sm:min-w-[200px] flex flex-col justify-center">
                     <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2">
                         <div className="flex items-center gap-2">
+                            {lead.name}
                             {isJustArrived && (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-emerald-400 to-teal-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
-                                    <Sparkles className="h-3 w-3" /> Appena arrivato
+                                <span className="shrink-0 text-emerald-500 animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
+                                    <Sparkles className="h-4 w-4" />
                                 </span>
                             )}
-                            {lead.name}
                             {lead.status === 'APPOINTMENT' && (
                                 <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                             )}
@@ -359,13 +362,13 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
         <div data-lead-card={lead.id} className={`bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl p-4 shadow-soft ${rarityStyle.hoverGlow} transition-all duration-200 mb-3 flex flex-col relative group`}>
             <div className="flex justify-between items-start mb-2">
                 <div>
-                    <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2 flex-wrap">
+                    <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2">
+                        {lead.name}
                         {isJustArrived && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-emerald-400 to-teal-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
-                                <Sparkles className="h-3 w-3" /> Appena arrivato
+                            <span className="shrink-0 text-emerald-500 animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
+                                <Sparkles className="h-4 w-4" />
                             </span>
                         )}
-                        {lead.name}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-ash-500 mt-1 group/phone">
                         <Phone className="h-3 w-3" />
