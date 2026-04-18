@@ -365,13 +365,17 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
 }
 
 /**
- * F2-011: Metriche conferme/presenze/chiusure per i lead di un GDO (mese corrente)
+ * F2-011: Metriche conferme/presenze/chiusure per i lead di un GDO (settimana corrente lun-dom)
  */
 export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
-    const now = new Date();
-    const monthStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }).slice(0, 7);
-    const startObj = parseISO(`${monthStr}-01T00:00:00`);
-    const endObj = new Date(endOfMonth(startObj).getFullYear(), endOfMonth(startObj).getMonth(), endOfMonth(startObj).getDate(), 23, 59, 59, 999);
+    // Settimana corrente ISO-like (lunedì 00:00 → domenica 23:59:59) in Europe/Rome.
+    const romeDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }); // 'YYYY-MM-DD'
+    const [y, m, d] = romeDateStr.split('-').map(Number);
+    const todayRome = new Date(y, m - 1, d);
+    const dow = todayRome.getDay(); // 0 = dom, 1 = lun ... 6 = sab
+    const monOffset = dow === 0 ? -6 : 1 - dow;
+    const weekStart = new Date(y, m - 1, d + monOffset, 0, 0, 0, 0);
+    const weekEnd = new Date(y, m - 1, d + monOffset + 6, 23, 59, 59, 999);
 
     const gdoLeads = await db.select({
         confirmationsOutcome: leads.confirmationsOutcome,
@@ -380,8 +384,8 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         and(
             eq(leads.assignedToId, gdoUserId),
             isNotNull(leads.appointmentDate),
-            gte(leads.appointmentDate, startObj),
-            lte(leads.appointmentDate, endObj)
+            gte(leads.appointmentDate, weekStart),
+            lte(leads.appointmentDate, weekEnd)
         )
     );
 
@@ -401,7 +405,14 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         if (isChiuso) chiusi++;
     }
 
-    return { fissati, confermati, presenziati, chiusi, month: monthStr };
+    return {
+        fissati,
+        confermati,
+        presenziati,
+        chiusi,
+        weekStart: weekStart.toISOString(),
+        weekEnd: weekEnd.toISOString(),
+    };
 }
 
 /**

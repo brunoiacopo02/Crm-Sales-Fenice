@@ -13,7 +13,8 @@ interface Metrics {
     confermati: number;
     presenziati: number;
     chiusi: number;
-    month: string;
+    weekStart: string;
+    weekEnd: string;
 }
 
 export function GdoLeadMetrics({ gdoUserId }: GdoLeadMetricsProps) {
@@ -73,16 +74,19 @@ export function GdoLeadMetrics({ gdoUserId }: GdoLeadMetricsProps) {
         },
     ];
 
-    const monthLabel = new Date(metrics.month + '-01').toLocaleDateString('it-IT', {
-        month: 'long',
-        year: 'numeric',
+    const ws = new Date(metrics.weekStart);
+    const we = new Date(metrics.weekEnd);
+    const fmt = (d: Date) => d.toLocaleDateString('it-IT', {
+        day: 'numeric',
+        month: 'short',
         timeZone: 'Europe/Rome',
     });
+    const weekLabel = `${fmt(ws)} — ${fmt(we)}`;
 
     return (
         <div>
             <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-medium text-gray-500">I tuoi lead — {monthLabel}</div>
+                <div className="text-sm font-medium text-gray-500">I tuoi lead — settimana {weekLabel}</div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {cards.map((card) => {
