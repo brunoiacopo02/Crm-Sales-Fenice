@@ -179,7 +179,13 @@ export async function POST(req: NextRequest) {
         }
 
         const phoneStrict = normalizePhoneStrict(rawPhone);
-        const phoneFinal = phoneStrict ?? normalizePhoneLenient(rawPhone);
+        const phoneFinalNormalized = phoneStrict ?? normalizePhoneLenient(rawPhone);
+        // I lead importati da AC vanno salvati SENZA prefisso +39 (formato
+        // "locale" italiano). Se il numero inizia con +39 tolgo il prefisso,
+        // altrimenti (estero, senza prefisso, ecc.) lascio così com'è.
+        const phoneFinal = phoneFinalNormalized?.startsWith('+39')
+            ? phoneFinalNormalized.slice(3)
+            : phoneFinalNormalized;
         if (!phoneFinal) {
             // Caso estremo: stringa senza cifre ("---", "N/D", ecc.)
             await recordFailure({
