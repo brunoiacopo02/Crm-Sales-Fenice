@@ -67,10 +67,14 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         }).from(leads)
             .where(and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate))),
 
+        // leadAssegnati = lead assegnati al GDO nel periodo, indipendentemente
+        // dallo status. Prima filtrava solo status='NEW', perdendo tutti i
+        // lead già lavorati (IN_PROGRESS/APPOINTMENT/REJECTED) — circa il 96%
+        // del totale mensile, il numero risultava enormemente sottostimato.
         db.select({
             assignedToId: leads.assignedToId,
         }).from(leads)
-            .where(and(eq(leads.status, 'NEW'), gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)))
+            .where(and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)))
     ])
 
     const gdoDataMap = new Map<string, any>()
