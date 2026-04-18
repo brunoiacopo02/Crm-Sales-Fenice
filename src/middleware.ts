@@ -2,6 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(request: NextRequest) {
+    // I webhook esterni (ActiveCampaign, ecc.) non hanno sessione Supabase:
+    // devono passare dritti al route handler, che valida col proprio secret.
+    if (request.nextUrl.pathname.startsWith('/api/webhooks/')) {
+        return NextResponse.next({ request });
+    }
+
     let supabaseResponse = NextResponse.next({
         request,
     });
