@@ -42,6 +42,12 @@ export const users = pgTable('users', {
     creatureDropCounter: integer('creatureDropCounter').default(0).notNull(),
     lastTimedChestAt: timestamp('lastTimedChestAt', { withTimezone: true, mode: 'date' }),
 
+    // ActiveCampaign auto-intake (webhook): il manager toggle quali GDO ricevono
+    // i lead automatici in round-robin. acLastAssignedAt traccia l'ultimo lead
+    // assegnato da AC per bilanciare la distribuzione (LEAST-RECENTLY-ASSIGNED).
+    acAutoIntake: boolean('acAutoIntake').default(false).notNull(),
+    acLastAssignedAt: timestamp('acLastAssignedAt', { withTimezone: true, mode: 'date' }),
+
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 

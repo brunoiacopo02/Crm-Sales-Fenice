@@ -14,6 +14,7 @@ import {
     X,
     Compass,
     ClipboardList,
+    Zap,
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
@@ -105,6 +106,7 @@ export function Sidebar() {
                         { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
                         { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                         { name: "Importa Lead", href: "/import", icon: Upload },
+                        { name: "Lead Automatici (AC)", href: "/lead-automatici", icon: Zap },
                         { name: "Archivio Storico", href: "/archivio", icon: Database },
                         { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
                     ],
