@@ -39,7 +39,11 @@ export async function logLeadEvent(params: LogEventParams) {
         userId: params.userId || null,
         fromSection: params.fromSection || null,
         toSection: params.toSection || null,
-        metadata: params.metadata ? JSON.stringify(params.metadata) : null,
+        // metadata è jsonb: Drizzle serializza l'oggetto direttamente.
+        // Prima c'era JSON.stringify che causava doppio escape (il campo
+        // finiva come stringa JSON invece di oggetto → query ->> 'key'
+        // ritornavano null).
+        metadata: params.metadata ?? null,
         timestamp: new Date()
     })
 }
