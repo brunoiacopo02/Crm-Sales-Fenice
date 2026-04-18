@@ -69,7 +69,7 @@ export async function getPipelineLeads() {
     const pipelineLeads = await db.select()
         .from(leads)
         .where(and(...pipelineBaseConditions))
-        .orderBy(leads.createdAt)
+        .orderBy(desc(leads.createdAt))  // più recenti in cima
 
 
     const firstCall = pipelineLeads.filter(l => l.callCount === 0)

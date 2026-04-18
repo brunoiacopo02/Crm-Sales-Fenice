@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare, StickyNote } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 import { AgendaButton } from "./AgendaButton"
@@ -22,10 +22,13 @@ type LeadProps = {
         lastCallNote?: string | null
         recallNote?: string | null
         agendaSentAt?: Date | null
+        createdAt?: Date | null
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
 }
+
+const ONE_HOUR_MS = 60 * 60 * 1000
 
 // --- Funnel Rarity System (styling only) ---
 type FunnelRarity = 'gold' | 'silver' | 'bronze'
@@ -126,6 +129,11 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
     const rarity = getFunnelRarity(lead.funnel)
     const rarityStyle = RARITY_STYLES[rarity]
 
+    // Lead "appena arrivato" (creato < 1h fa). Il check avviene client-side
+    // per evitare hydration mismatch.
+    const isJustArrived = !!(clientNow > 0 && lead.createdAt &&
+        (clientNow - new Date(lead.createdAt).getTime()) < ONE_HOUR_MS)
+
     // Note shown in the card: prefer recallNote (preserved across outcomes) over lastCallNote
     const displayNote = lead.recallNote || lead.lastCallNote || ''
 
@@ -138,6 +146,11 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                 <div className="flex-1 min-w-0 sm:min-w-[200px] flex flex-col justify-center">
                     <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2">
                         <div className="flex items-center gap-2">
+                            {isJustArrived && (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-emerald-400 to-teal-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
+                                    <Sparkles className="h-3 w-3" /> Appena arrivato
+                                </span>
+                            )}
                             {lead.name}
                             {lead.status === 'APPOINTMENT' && (
                                 <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
@@ -346,7 +359,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
         <div data-lead-card={lead.id} className={`bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl p-4 shadow-soft ${rarityStyle.hoverGlow} transition-all duration-200 mb-3 flex flex-col relative group`}>
             <div className="flex justify-between items-start mb-2">
                 <div>
-                    <div className="font-bold text-ash-900 text-[15px] leading-tight">{lead.name}</div>
+                    <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2 flex-wrap">
+                        {isJustArrived && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-emerald-400 to-teal-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
+                                <Sparkles className="h-3 w-3" /> Appena arrivato
+                            </span>
+                        )}
+                        {lead.name}
+                    </div>
                     <div className="flex items-center gap-2 text-sm text-ash-500 mt-1 group/phone">
                         <Phone className="h-3 w-3" />
                         {lead.phone}
