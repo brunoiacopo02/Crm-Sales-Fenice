@@ -65,6 +65,10 @@ export const leads = pgTable('leads', {
     utmCampaign: text('utmCampaign'),
     utmContent: text('utmContent'),
     utmTerm: text('utmTerm'),
+    // Flag impostato dal webhook AC quando il telefono ricevuto è strano
+    // (es. meno di 9 cifre). Nell'UI è solo un triangolino accanto al
+    // numero, non una nota di testo che occupa spazio.
+    phoneSuspicious: boolean('phoneSuspicious').default(false).notNull(),
     status: text('status').default('NEW').notNull(),
     callCount: integer('callCount').default(0).notNull(),
     assignedToId: text('assignedToId').references(() => users.id),

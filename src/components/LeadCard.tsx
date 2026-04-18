@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 import { AgendaButton } from "./AgendaButton"
@@ -24,6 +24,7 @@ type LeadProps = {
         agendaSentAt?: Date | null
         createdAt?: Date | null
         source?: string | null
+        phoneSuspicious?: boolean | null
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -168,6 +169,12 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                         <div className="flex items-center gap-1.5 group/phone">
                             <Phone className="h-3 w-3 text-ash-400" />
                             <div className="font-medium text-ash-600">{lead.phone}</div>
+                            {lead.phoneSuspicious && (
+                                <AlertTriangle
+                                    className="h-3 w-3 text-amber-500 shrink-0"
+                                    aria-label="Telefono potenzialmente incompleto — verifica prima di chiamare"
+                                />
+                            )}
                             <button
                                 onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato!'); }}
                                 className="ml-0.5 p-1 hover:bg-brand-orange-50 text-ash-400 hover:text-brand-orange rounded-md transition-colors opacity-0 group-hover/phone:opacity-100"
@@ -374,6 +381,12 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                     <div className="flex items-center gap-2 text-sm text-ash-500 mt-1 group/phone">
                         <Phone className="h-3 w-3" />
                         {lead.phone}
+                        {lead.phoneSuspicious && (
+                            <AlertTriangle
+                                className="h-3 w-3 text-amber-500 shrink-0"
+                                aria-label="Telefono potenzialmente incompleto — verifica prima di chiamare"
+                            />
+                        )}
                         <button
                             onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato!'); }}
                             className="ml-1 p-1 hover:bg-ash-100 text-ash-400 hover:text-brand-orange rounded-md transition-colors opacity-0 group-hover/phone:opacity-100"

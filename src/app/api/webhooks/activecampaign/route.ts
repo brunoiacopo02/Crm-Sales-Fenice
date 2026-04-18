@@ -193,9 +193,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ skipped: 'invalid phone' });
         }
         const phoneSuspicious = !isPlausiblePhone(phoneStrict);
-        const warningNote = phoneSuspicious
-            ? `⚠️ Telefono ricevuto da AC potenzialmente incompleto: "${rawPhone}". Verifica prima di chiamare.`
-            : null;
 
         const funnel = provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
 
@@ -237,10 +234,10 @@ export async function POST(req: NextRequest) {
             utmCampaign,
             utmContent,
             utmTerm,
+            phoneSuspicious,
             status: 'NEW',
             callCount: 0,
             assignedToId: assignedGdoId,
-            lastCallNote: warningNote,
             createdAt: now,
             updatedAt: now,
         });
