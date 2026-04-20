@@ -63,7 +63,15 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                 targetDate = new Date(dateStr)
             }
 
-            const result = await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion, scriptCompleted)
+            // Timeout di sicurezza: se la server action non risponde entro
+            // 20s (crash, timeout edge, pool DB saturato), sblocca il loading
+            // e mostra errore leggibile invece di spinner infinito.
+            const result = await Promise.race([
+                updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion, scriptCompleted),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('timeout_20s')), 20000)
+                ),
+            ])
 
             if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
                 alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
@@ -80,7 +88,13 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
             router.refresh()
             onClose()
         } catch (e) {
-            alert("Errore nell'aggiornamento dell'esito")
+            const msg = e instanceof Error ? e.message : String(e)
+            console.error('updateLeadOutcome failed:', msg, e)
+            if (msg === 'timeout_20s') {
+                alert("Il server non risponde. Prova a ricaricare la pagina. Se il problema persiste avvisa il manager.")
+            } else {
+                alert(`Errore nell'aggiornamento dell'esito: ${msg}`)
+            }
         } finally {
             setLoading(false)
         }
