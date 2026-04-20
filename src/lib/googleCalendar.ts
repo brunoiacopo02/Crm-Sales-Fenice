@@ -189,18 +189,64 @@ export async function createGoogleCalendarEvent(userId: string, eventDetails: an
             requestBody
         });
 
+        let eventData = res.data;
+        let meetLink: string | null | undefined = eventData.hangoutLink;
+
+        // Se il Meet non è stato creato al primo colpo (Google a volte
+        // ignora la createRequest in certi edge case), ritento via patch.
+        if (!meetLink && eventData.id) {
+            try {
+                const patchRes = await calendar.events.patch({
+                    calendarId: 'primary',
+                    eventId: eventData.id,
+                    conferenceDataVersion: 1,
+                    sendUpdates: 'none',
+                    requestBody: {
+                        conferenceData: {
+                            createRequest: {
+                                requestId: `crm-retry-${associatedEntityId}-${Date.now()}`,
+                                conferenceSolutionKey: { type: 'hangoutsMeet' }
+                            }
+                        }
+                    }
+                });
+                eventData = patchRes.data;
+                meetLink = eventData.hangoutLink;
+            } catch (patchErr: any) {
+                console.warn(`[googleCalendar] Meet patch retry failed for event ${eventData.id}:`, patchErr.message);
+            }
+        }
+
+        // Se abbiamo il link, lo inietto nella description così appare
+        // nell'email di invito al lead e nell'evento calendar in modo
+        // esplicito (oltre al link "Partecipa con Google Meet" standard).
+        if (meetLink && eventData.id) {
+            try {
+                const updatedDescription = `${eventDetails.description}\n\n🎥 Link Google Meet: ${meetLink}`;
+                const patchRes = await calendar.events.patch({
+                    calendarId: 'primary',
+                    eventId: eventData.id,
+                    sendUpdates: 'all', // (re)invia invito con description aggiornata
+                    requestBody: { description: updatedDescription }
+                });
+                eventData = patchRes.data;
+            } catch (descErr: any) {
+                console.warn(`[googleCalendar] Could not inject Meet link into description:`, descErr.message);
+            }
+        }
+
         await db.insert(calendarEvents).values({
             id: crypto.randomUUID(),
             userId,
             leadId: associatedEntityId || "no_lead",
             eventType,
-            googleEventId: res.data.id!,
+            googleEventId: eventData.id!,
             createdAt: new Date(),
             updatedAt: new Date()
         });
 
-        console.log(`[googleCalendar] Event created for user ${userId}: ${res.data.id} — Meet: ${res.data.hangoutLink || 'n/a'}`);
-        return res.data;
+        console.log(`[googleCalendar] Event created for user ${userId}: ${eventData.id} — Meet: ${meetLink || 'NOT CREATED (check user Workspace config)'}`);
+        return eventData;
     } catch (e: any) {
         console.error(`[googleCalendar] Error creating event for user ${userId}:`, e.message, e?.response?.data || '');
         return null;
