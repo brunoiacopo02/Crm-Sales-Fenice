@@ -74,10 +74,10 @@ export default async function DashboardPage() {
             </div>
 
             <div className="sticky top-0 z-30 bg-gray-50 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-1 pb-2 shadow-md">
-                <GdoDailyObjectives gdoUserId={session!.user.id} />
+                <SafeWrapper><GdoDailyObjectives gdoUserId={session!.user.id} /></SafeWrapper>
             </div>
 
-            <GdoLeadMetrics gdoUserId={session!.user.id} />
+            <SafeWrapper><GdoLeadMetrics gdoUserId={session!.user.id} /></SafeWrapper>
 
             <SafeWrapper>
                 <HotStreak>
