@@ -282,25 +282,21 @@ export async function getSalesAggregate(filters: QualitaLeadFilters): Promise<Sa
 
 // ========== CSV EXPORT ==========
 
-export async function exportCsvResoconto(filters: QualitaLeadFilters): Promise<string> {
-    await requireManager();
-    const [gdo, conferme, sales] = await Promise.all([
-        getGdoAggregate(filters),
-        getConfermeAggregate(filters),
-        getSalesAggregate(filters),
-    ]);
+const esc = (s: unknown) => {
+    const v = String(s ?? "");
+    if (v.includes(",") || v.includes('"') || v.includes("\n")) return `"${v.replace(/"/g, '""')}"`;
+    return v;
+};
 
+function buildCsvSection(
+    funnelLabel: string,
+    gdo: GdoAggregate,
+    conferme: ConfermeAggregate,
+    sales: SalesAggregate,
+): string[] {
     const rows: string[] = [];
-    rows.push("ruolo,domanda,opzione,count,percentuale");
-
-    const esc = (s: unknown) => {
-        const v = String(s ?? "");
-        if (v.includes(",") || v.includes('"') || v.includes("\n")) return `"${v.replace(/"/g, '""')}"`;
-        return v;
-    };
-
     const pushDomain = (role: string, question: string, items: DomainCount[]) => {
-        for (const it of items) rows.push([esc(role), esc(question), esc(it.option), esc(it.count), esc(`${it.percent}%`)].join(","));
+        for (const it of items) rows.push([esc(funnelLabel), esc(role), esc(question), esc(it.option), esc(it.count), esc(`${it.percent}%`)].join(","));
     };
 
     pushDomain("GDO", "Età", gdo.ageRange);
@@ -312,17 +308,43 @@ export async function exportCsvResoconto(filters: QualitaLeadFilters): Promise<s
     pushDomain("GDO", "Cambiamento entro", gdo.changeWithin);
     pushDomain("GDO", "Cerca cambiamento da", gdo.changeSince);
 
-    rows.push(["Conferme", "Si ricorda appuntamento", "Sì", String(conferme.remembersApptYes), ""].join(","));
-    rows.push(["Conferme", "Si ricorda appuntamento", "No", String(conferme.remembersApptNo), ""].join(","));
-    rows.push(["Conferme", "Ha visto video", "Sì", String(conferme.watchedVideoYes), ""].join(","));
-    rows.push(["Conferme", "Ha visto video", "No", String(conferme.watchedVideoNo), ""].join(","));
-    rows.push(["Conferme", "Confermato", "Sì", String(conferme.confirmedYes), ""].join(","));
-    rows.push(["Conferme", "Confermato", "No", String(conferme.confirmedNo), ""].join(","));
+    rows.push([esc(funnelLabel), "Conferme", "Si ricorda appuntamento", "Sì", String(conferme.remembersApptYes), ""].join(","));
+    rows.push([esc(funnelLabel), "Conferme", "Si ricorda appuntamento", "No", String(conferme.remembersApptNo), ""].join(","));
+    rows.push([esc(funnelLabel), "Conferme", "Ha visto video", "Sì", String(conferme.watchedVideoYes), ""].join(","));
+    rows.push([esc(funnelLabel), "Conferme", "Ha visto video", "No", String(conferme.watchedVideoNo), ""].join(","));
+    rows.push([esc(funnelLabel), "Conferme", "Confermato", "Sì", String(conferme.confirmedYes), ""].join(","));
+    rows.push([esc(funnelLabel), "Conferme", "Confermato", "No", String(conferme.confirmedNo), ""].join(","));
     pushDomain("Conferme", "Perché no", conferme.whyNot);
 
     pushDomain("Venditore", "Segnali problema", sales.problemSignals);
     pushDomain("Venditore", "Segnali urgenza", sales.urgencySignals);
     pushDomain("Venditore", "Reazione prezzo", sales.priceReaction);
+
+    return rows;
+}
+
+export async function exportCsvResoconto(filters: QualitaLeadFilters): Promise<string> {
+    await requireManager();
+
+    // Quando l'utente non ha selezionato un funnel specifico, generiamo
+    // un resoconto per-funnel in un unico file (come scaricare ogni
+    // funnel singolarmente ma concatenato).
+    const funnelsToReport: string[] = filters.funnels.length > 0
+        ? filters.funnels.map((f) => f.toUpperCase())
+        : await getAvailableFunnels();
+
+    const header = "funnel,ruolo,domanda,opzione,count,percentuale";
+    const rows: string[] = [header];
+
+    for (const funnel of funnelsToReport) {
+        const perFunnelFilters: QualitaLeadFilters = { ...filters, funnels: [funnel] };
+        const [gdo, conferme, sales] = await Promise.all([
+            getGdoAggregate(perFunnelFilters),
+            getConfermeAggregate(perFunnelFilters),
+            getSalesAggregate(perFunnelFilters),
+        ]);
+        rows.push(...buildCsvSection(funnel, gdo, conferme, sales));
+    }
 
     return rows.join("\n");
 }
