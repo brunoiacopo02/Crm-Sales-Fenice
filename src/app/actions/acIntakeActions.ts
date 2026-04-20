@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { users, acIntakeFailures } from "@/db/schema";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { users, acIntakeFailures, leads } from "@/db/schema";
+import { eq, and, desc, isNull, gte } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 
 async function requireManager() {
@@ -260,6 +260,77 @@ export async function retryAcFailure(id: string): Promise<{ success: boolean; er
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) };
     }
+}
+
+// ============ AC intake stats (oggi / ieri / altro ieri) ============
+
+export interface AcIntakeDayStat {
+    total: number;
+    activeGdos: number;
+    avgPerGdo: number;
+}
+
+export interface AcIntakeStats {
+    today: AcIntakeDayStat;
+    yesterday: AcIntakeDayStat;
+    dayBeforeYesterday: AcIntakeDayStat;
+}
+
+/**
+ * Conta i lead importati automaticamente da AC negli ultimi 3 giorni
+ * solari (Europe/Rome): oggi, ieri, altro ieri. Per ciascun giorno
+ * restituisce total + media-per-GDO (distinti assegnatari di quel
+ * giorno). Nessuno storico persistito.
+ */
+export async function getAcIntakeStats(): Promise<AcIntakeStats> {
+    await requireManager();
+
+    const since = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+    const rows = await db.select({
+        createdAt: leads.createdAt,
+        assignedToId: leads.assignedToId,
+    }).from(leads).where(and(
+        eq(leads.source, 'activecampaign'),
+        gte(leads.createdAt, since),
+    ));
+
+    // Formatta una Date in YYYY-MM-DD nel fuso Europe/Rome.
+    const romeDateFormatter = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Rome',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const toRomeDay = (d: Date) => romeDateFormatter.format(d);
+
+    const now = new Date();
+    const todayKey = toRomeDay(now);
+    const yKey = toRomeDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const dbyKey = toRomeDay(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000));
+
+    const buckets: Record<string, { total: number; gdos: Set<string> }> = {
+        [todayKey]: { total: 0, gdos: new Set() },
+        [yKey]: { total: 0, gdos: new Set() },
+        [dbyKey]: { total: 0, gdos: new Set() },
+    };
+
+    for (const r of rows) {
+        const day = toRomeDay(new Date(r.createdAt as any));
+        const b = buckets[day];
+        if (!b) continue;
+        b.total += 1;
+        if (r.assignedToId) b.gdos.add(r.assignedToId);
+    }
+
+    const stat = (b: { total: number; gdos: Set<string> }): AcIntakeDayStat => ({
+        total: b.total,
+        activeGdos: b.gdos.size,
+        avgPerGdo: b.gdos.size > 0 ? Math.round((b.total / b.gdos.size) * 10) / 10 : 0,
+    });
+
+    return {
+        today: stat(buckets[todayKey]),
+        yesterday: stat(buckets[yKey]),
+        dayBeforeYesterday: stat(buckets[dbyKey]),
+    };
 }
 
 export async function deleteAcWebhookByUrl(): Promise<{ success: boolean; error?: string }> {

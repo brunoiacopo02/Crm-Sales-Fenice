@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
-import { listGdosForAcIntake, listAcWebhooks, listAcFailures } from "@/app/actions/acIntakeActions";
+import { listGdosForAcIntake, listAcWebhooks, listAcFailures, getAcIntakeStats } from "@/app/actions/acIntakeActions";
 import LeadAutomaticiClient from "./LeadAutomaticiClient";
 
 export default async function LeadAutomaticiPage() {
@@ -11,10 +11,11 @@ export default async function LeadAutomaticiPage() {
         redirect("/");
     }
 
-    const [rows, webhooksRes, failures] = await Promise.all([
+    const [rows, webhooksRes, failures, stats] = await Promise.all([
         listGdosForAcIntake(),
         listAcWebhooks(),
         listAcFailures(true),
+        getAcIntakeStats(),
     ]);
 
     return (
@@ -23,6 +24,7 @@ export default async function LeadAutomaticiPage() {
                 initialRows={rows}
                 initialWebhooks={webhooksRes.webhooks || []}
                 initialFailures={failures}
+                initialStats={stats}
             />
         </div>
     );

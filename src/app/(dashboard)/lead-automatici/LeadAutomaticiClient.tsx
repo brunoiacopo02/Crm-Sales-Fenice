@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, ExternalLink, RotateCcw, Check } from "lucide-react";
+import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, ExternalLink, RotateCcw, Check, TrendingUp } from "lucide-react";
 import {
     setGdoAcIntake,
     disableAllAcIntake,
@@ -11,20 +11,25 @@ import {
     listAcFailures,
     retryAcFailure,
     resolveAcFailure,
+    getAcIntakeStats,
     type GdoAcIntakeRow,
     type AcFailureRow,
+    type AcIntakeStats,
+    type AcIntakeDayStat,
 } from "@/app/actions/acIntakeActions";
 
 interface Props {
     initialRows: GdoAcIntakeRow[];
     initialWebhooks: Array<{ id: string; url: string; events: string[]; name: string }>;
     initialFailures: AcFailureRow[];
+    initialStats: AcIntakeStats;
 }
 
-export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures }: Props) {
+export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats }: Props) {
     const [rows, setRows] = useState(initialRows);
     const [webhooks, setWebhooks] = useState(initialWebhooks);
     const [failures, setFailures] = useState(initialFailures);
+    const [stats, setStats] = useState(initialStats);
     const [busyFailureId, setBusyFailureId] = useState<string | null>(null);
     const [saving, setSaving] = useState<string | null>(null);
     const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -84,6 +89,11 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
     const refreshFailures = async () => {
         const fresh = await listAcFailures(true);
         setFailures(fresh);
+    };
+
+    const refreshStats = async () => {
+        const fresh = await getAcIntakeStats();
+        setStats(fresh);
     };
 
     const handleRetry = async (id: string) => {
@@ -161,6 +171,32 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                         <div className="mt-1 text-ash-500">Eventi: {crmWebhook.events.join(', ')}</div>
                     </div>
                 )}
+            </section>
+
+            {/* Statistiche importazione */}
+            <section className="rounded-2xl border border-ash-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                    <div>
+                        <h2 className="flex items-center gap-2 text-sm font-bold text-ash-900">
+                            <TrendingUp className="h-4 w-4 text-emerald-600" /> Lead importati da AC
+                        </h2>
+                        <p className="text-xs text-ash-500">
+                            Conteggio in base al fuso Italia (mezzanotte–mezzanotte). Niente storico.
+                        </p>
+                    </div>
+                    <button
+                        onClick={refreshStats}
+                        className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-xs font-medium text-ash-600 hover:bg-ash-50"
+                        title="Aggiorna statistiche"
+                    >
+                        <RefreshCw className="h-3 w-3" />
+                    </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <StatCard label="Oggi" accent="emerald" stat={stats.today} />
+                    <StatCard label="Ieri" accent="blue" stat={stats.yesterday} />
+                    <StatCard label="Altro ieri" accent="ash" stat={stats.dayBeforeYesterday} />
+                </div>
             </section>
 
             {/* Lead non importati */}
@@ -345,6 +381,27 @@ function InfoCell({ label, value, mono, highlight }: { label: string; value: str
                 title={value}
             >
                 {value}
+            </div>
+        </div>
+    );
+}
+
+function StatCard({ label, stat, accent }: { label: string; stat: AcIntakeDayStat; accent: 'emerald' | 'blue' | 'ash' }) {
+    const palette = {
+        emerald: { border: 'border-emerald-200', bg: 'bg-emerald-50', label: 'text-emerald-700', total: 'text-emerald-900' },
+        blue: { border: 'border-blue-200', bg: 'bg-blue-50', label: 'text-blue-700', total: 'text-blue-900' },
+        ash: { border: 'border-ash-200', bg: 'bg-ash-50', label: 'text-ash-600', total: 'text-ash-900' },
+    }[accent];
+    return (
+        <div className={`rounded-xl border ${palette.border} ${palette.bg} p-3`}>
+            <div className={`text-[11px] font-bold uppercase tracking-wider ${palette.label}`}>{label}</div>
+            <div className="mt-1 flex items-baseline gap-2">
+                <span className={`text-3xl font-black ${palette.total}`}>{stat.total}</span>
+                <span className="text-[11px] text-ash-500">lead</span>
+            </div>
+            <div className="mt-1 text-[11px] text-ash-600">
+                Media a GDO: <strong className="text-ash-800">{stat.avgPerGdo}</strong>
+                {stat.activeGdos > 0 && <span className="text-ash-400"> ({stat.activeGdos} GDO)</span>}
             </div>
         </div>
     );
