@@ -379,6 +379,27 @@ export async function POST(req: NextRequest) {
 
         await db.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 
+        // Notifica al GDO: lead caldo appena arrivato, chiamalo subito.
+        // Si aggancia al sistema notifications → useRealtimeNotifications
+        // le porta in UI live via Supabase realtime.
+        const warningSuffix = phoneSuspicious ? ' ⚠️ verifica il numero' : '';
+        await db.insert(notifications).values({
+            id: crypto.randomUUID(),
+            recipientUserId: assignedGdoId,
+            type: 'ac_lead_assigned',
+            title: '🔥 Nuovo lead caldo!',
+            body: `${fullName} · ${funnel} · ${phoneFinal}${warningSuffix} — chiama ora!`,
+            metadata: {
+                leadId: newLeadId,
+                acContactId: contactId,
+                funnel,
+                name: fullName,
+                phone: phoneFinal,
+                email,
+                phoneSuspicious,
+            },
+        });
+
         return NextResponse.json({
             success: true,
             leadId: newLeadId,
