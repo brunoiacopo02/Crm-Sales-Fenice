@@ -5,7 +5,7 @@ import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, Moni
 import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
 
-export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRowClick, layoutMode = 'default' }: any) {
+export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, onRefresh, onRowClick, layoutMode = 'default' }: any) {
     const lead = item.lead
 
     // Client-side time for overdue checks (avoids hydration mismatch)
@@ -266,8 +266,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, onRefresh, onRow
                     })()}
 
                     {isLocked && (
-                        <div className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase animate-pulse border border-amber-200 ml-1 shrink-0">
-                            <Users className="w-3 h-3" /> In Lavorazione
+                        <div
+                            className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase animate-pulse border border-amber-200 ml-1 shrink-0"
+                            title={lockedByName ? `In lavorazione da ${lockedByName}` : 'In lavorazione da un altro utente'}
+                        >
+                            <Users className="w-3 h-3" /> In Lavorazione{lockedByName ? ` · ${lockedByName}` : ''}
                         </div>
                     )}
                 </div>

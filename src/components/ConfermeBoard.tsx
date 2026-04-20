@@ -231,13 +231,15 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     // --- RENDER COMPACT LEAD ROW ---
     const renderRowComponent = (item: LeadData, layoutMode: 'default' | 'snooze' | 'richiami' = 'default') => {
-        const isLocked = globalPresence.some(p => p.leadId === item.lead.id && p.user.id !== currentUser.id)
+        const lockedByEntry = globalPresence.find(p => p.leadId === item.lead.id && p.user?.id !== currentUser.id)
+        const lockedByName: string | null = lockedByEntry?.user?.displayName || lockedByEntry?.user?.name || null
         return (
             <ConfermeBoardRow
                 key={item.lead.id}
                 item={item}
                 currentUser={currentUser}
-                isLocked={isLocked}
+                isLocked={!!lockedByEntry}
+                lockedByName={lockedByName}
                 layoutMode={layoutMode}
                 onRefresh={() => fetchLeads(false)}
                 onRowClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
@@ -697,11 +699,16 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <div className="flex flex-col gap-2 items-start">
-                                                                {globalPresence.find(p => p.leadId === item.lead.id) && (
-                                                                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] uppercase tracking-widest font-bold bg-amber-100 text-amber-800 animate-pulse border border-amber-200 shadow-soft">
-                                                                        <Users className="w-3 h-3" /> In Uso
-                                                                    </span>
-                                                                )}
+                                                                {(() => {
+                                                                    const p = globalPresence.find(p => p.leadId === item.lead.id);
+                                                                    if (!p) return null;
+                                                                    const who = p.user?.displayName || p.user?.name || 'altro utente';
+                                                                    return (
+                                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] uppercase tracking-widest font-bold bg-amber-100 text-amber-800 animate-pulse border border-amber-200 shadow-soft" title={`In uso da ${who}`}>
+                                                                            <Users className="w-3 h-3" /> In uso · {who}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                                 {item.lead.confirmationsOutcome === "confermato" ? (
                                                                     <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border border-emerald-200/60 shadow-soft">
                                                                         <CheckCircle2 className="w-4 h-4 mr-1.5" /> Confermato
