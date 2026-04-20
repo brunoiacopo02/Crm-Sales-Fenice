@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { SafeWrapper } from "./SafeWrapper";
 import { getActiveDuelsForUser } from "@/app/actions/duelActions";
+import { createClient } from "@/utils/supabase/client";
 
 type DuelData = {
   id: string;
@@ -45,9 +46,21 @@ function DuelWidgetInner({ userId }: { userId: string }) {
 
   useEffect(() => {
     fetchDuels();
-    const interval = setInterval(fetchDuels, 30000);
+    // Polling ogni 5s per avere lo score sempre aggiornato durante il lavoro
+    const interval = setInterval(fetchDuels, 5000);
     return () => clearInterval(interval);
   }, [fetchDuels]);
+
+  // Realtime: refetch immediato ad ogni cambio nella tabella duels
+  useEffect(() => {
+    const supabase = createClient();
+    const ch = supabase.channel('duel_widget_' + userId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'duels' }, () => {
+        fetchDuels();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [fetchDuels, userId]);
 
   useEffect(() => {
     if (duels.length === 0) return;

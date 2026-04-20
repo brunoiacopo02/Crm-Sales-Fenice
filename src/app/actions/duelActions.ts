@@ -241,6 +241,14 @@ export async function completeDuel(duelId: string) {
             const stake = duel.rewardCoins; // stake per side
             const pot = stake * 2;
 
+            // Recupero i nomi per notifiche e digest manager
+            const [challengerUser] = await tx.select({ name: users.name, displayName: users.displayName })
+                .from(users).where(eq(users.id, duel.challengerId));
+            const [opponentUser] = await tx.select({ name: users.name, displayName: users.displayName })
+                .from(users).where(eq(users.id, duel.opponentId));
+            const challengerName = challengerUser?.displayName || challengerUser?.name || 'GDO';
+            const opponentName = opponentUser?.displayName || opponentUser?.name || 'GDO';
+
             if (winnerId && stake > 0) {
                 // Winner takes the full pot
                 await tx.update(users)
@@ -256,6 +264,8 @@ export async function completeDuel(duelId: string) {
 
                 // Notify winner + loser
                 const loserId = winnerId === duel.challengerId ? duel.opponentId : duel.challengerId;
+                const winnerName = winnerId === duel.challengerId ? challengerName : opponentName;
+                const loserName = winnerId === duel.challengerId ? opponentName : challengerName;
                 await tx.insert(notifications).values([
                     {
                         id: crypto.randomUUID(),
@@ -274,6 +284,21 @@ export async function completeDuel(duelId: string) {
                         metadata: { duelId, stake },
                     },
                 ]);
+
+                // Notifica ai Manager/Admin con il risultato finale
+                const managers = await tx.select({ id: users.id }).from(users)
+                    .where(sql`${users.role} IN ('MANAGER', 'ADMIN', 'TL')`);
+                const finalScore = `${duel.challengerScore}-${duel.opponentScore}`;
+                for (const m of managers) {
+                    await tx.insert(notifications).values({
+                        id: crypto.randomUUID(),
+                        recipientUserId: m.id,
+                        type: 'duel_completed_digest',
+                        title: `⚔️ Duello concluso: ${winnerName} vince`,
+                        body: `${challengerName} vs ${opponentName} (${duel.metric}) — risultato ${finalScore}. ${winnerName} incassa ${pot} monete, ${loserName} perde ${stake}.`,
+                        metadata: { duelId, winnerId, winnerName, loserName, metric: duel.metric, finalScore, pot, stake },
+                    });
+                }
             } else if (!winnerId && stake > 0) {
                 // Tie: refund stake to both participants
                 await tx.update(users)
@@ -316,6 +341,21 @@ export async function completeDuel(duelId: string) {
                         metadata: { duelId, stake },
                     },
                 ]);
+
+                // Notifica ai Manager/Admin anche in caso di pareggio
+                const managers = await tx.select({ id: users.id }).from(users)
+                    .where(sql`${users.role} IN ('MANAGER', 'ADMIN', 'TL')`);
+                const finalScore = `${duel.challengerScore}-${duel.opponentScore}`;
+                for (const m of managers) {
+                    await tx.insert(notifications).values({
+                        id: crypto.randomUUID(),
+                        recipientUserId: m.id,
+                        type: 'duel_completed_digest',
+                        title: `🤝 Duello concluso: pareggio`,
+                        body: `${challengerName} vs ${opponentName} (${duel.metric}) — pareggio ${finalScore}. Scommesse restituite (${stake} ciascuno).`,
+                        metadata: { duelId, winnerId: null, challengerName, opponentName, metric: duel.metric, finalScore, stake },
+                    });
+                }
             }
 
             return { ...duel, status: 'completed' as const, winnerId };
@@ -381,6 +421,56 @@ export async function getActiveDuelsForUser(userId: string) {
         return enriched.filter(Boolean);
     } catch (error) {
         console.error("Errore getActiveDuelsForUser:", error);
+        return [];
+    }
+}
+
+/**
+ * Get ALL active duels in the company, enriched with participants' names
+ * and scores. Used by the TL/Manager monitor view on /team.
+ */
+export async function getAllActiveDuelsForMonitor() {
+    try {
+        const activeDuels = await db.select().from(duels)
+            .where(eq(duels.status, 'active'));
+
+        const enriched = await Promise.all(activeDuels.map(async (duel) => {
+            // Auto-complete if expired and skip from the live list
+            if (new Date() > duel.endTime) {
+                await completeDuel(duel.id);
+                return null;
+            }
+            const [challenger] = await db.select({ name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
+                .from(users).where(eq(users.id, duel.challengerId));
+            const [opponent] = await db.select({ name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
+                .from(users).where(eq(users.id, duel.opponentId));
+
+            return {
+                id: duel.id,
+                metric: duel.metric,
+                duration: duel.duration,
+                startTime: duel.startTime,
+                endTime: duel.endTime,
+                challenger: {
+                    id: duel.challengerId,
+                    name: challenger?.displayName || challenger?.name || 'GDO',
+                    gdoCode: challenger?.gdoCode ?? null,
+                    score: duel.challengerScore,
+                },
+                opponent: {
+                    id: duel.opponentId,
+                    name: opponent?.displayName || opponent?.name || 'GDO',
+                    gdoCode: opponent?.gdoCode ?? null,
+                    score: duel.opponentScore,
+                },
+                rewardCoins: duel.rewardCoins, // stake per side
+                pot: duel.rewardCoins * 2,
+            };
+        }));
+
+        return enriched.filter(Boolean) as NonNullable<(typeof enriched)[number]>[];
+    } catch (error) {
+        console.error("Errore getAllActiveDuelsForMonitor:", error);
         return [];
     }
 }

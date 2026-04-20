@@ -12,6 +12,7 @@ const TimedChest = dynamic(() => import("@/components/TimedChest").then(m => ({ 
 const CelebrationOverlay = dynamic(() => import("@/components/CelebrationOverlay").then(m => ({ default: m.CelebrationOverlay })))
 const DailyLoginReward = dynamic(() => import("@/components/DailyLoginReward").then(m => ({ default: m.DailyLoginReward })))
 const HotStreak = dynamic(() => import("@/components/HotStreak").then(m => ({ default: m.HotStreak })))
+const DuelWidget = dynamic(() => import("@/components/DuelWidget").then(m => ({ default: m.DuelWidget })))
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -78,6 +79,8 @@ export default async function DashboardPage() {
             </div>
 
             <SafeWrapper><GdoLeadMetrics gdoUserId={session!.user.id} /></SafeWrapper>
+
+            <SafeWrapper><DuelWidget userId={session!.user.id} /></SafeWrapper>
 
             <SafeWrapper>
                 <HotStreak>

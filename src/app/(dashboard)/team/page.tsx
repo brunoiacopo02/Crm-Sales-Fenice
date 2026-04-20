@@ -8,6 +8,7 @@ import dynamic from "next/dynamic"
 import { getGdoUsersForTrading } from "@/app/actions/tradingActions"
 
 const DuelCreateModal = dynamic(() => import("@/components/DuelCreateModal").then(m => ({ default: m.DuelCreateModal })))
+const TeamDuelsMonitor = dynamic(() => import("@/components/TeamDuelsMonitor").then(m => ({ default: m.TeamDuelsMonitor })))
 
 export default async function TeamPage() {
     const supabase = await createClient();
@@ -52,6 +53,8 @@ export default async function TeamPage() {
             </div>
 
             <ManagerSprintCard managerId={session.user.id} />
+
+            <TeamDuelsMonitor />
 
             <TeamGoalAdminClient />
 
