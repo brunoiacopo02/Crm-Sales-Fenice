@@ -97,7 +97,22 @@ export function DailyLoginReward({ userId }: { userId: string }) {
         if (phase !== 'welcome') return;
         setPhase('claiming');
 
-        const result = await claimDailyLogin(userId);
+        // Se la server action throwa (timeout rete, redeploy, edge error),
+        // senza try/catch il client resta bloccato in 'claiming'. Racchiudo
+        // la call + aggiungo un timeout di safety di 15s.
+        let result: Awaited<ReturnType<typeof claimDailyLogin>>;
+        try {
+            result = await Promise.race([
+                claimDailyLogin(userId),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('timeout')), 15000)
+                ),
+            ]);
+        } catch (err) {
+            console.error('claimDailyLogin failed:', err);
+            setPhase('welcome');
+            return;
+        }
 
         if (result.success) {
             setCoinsAwarded(result.coinsAwarded);

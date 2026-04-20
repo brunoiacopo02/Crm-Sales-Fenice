@@ -314,7 +314,15 @@ export async function claimDailyLogin(userId: string): Promise<{
 
             // Award coins — use walletCoins (the visible/spendable field)
             const newCoins = user.walletCoins + bonusCoins;
-            const updateFields: Record<string, unknown> = { walletCoins: newCoins };
+            // Incremento la streak: se oggi è un giorno dopo l'ultima streak,
+            // +1; se era già oggi, lo lascio (no double-claim); se era rotta,
+            // riparto da 1 (già gestito da effectiveStreak sopra).
+            const newStreak = user.lastStreakDate === today ? user.streakCount : effectiveStreak + 1;
+            const updateFields: Record<string, unknown> = {
+                walletCoins: newCoins,
+                streakCount: newStreak,
+                lastStreakDate: today,
+            };
 
             // Auto-equip weekly bonus title if earned and user has no active title
             if (weeklyBonusTitle && !user.activeTitle) {
@@ -338,8 +346,8 @@ export async function claimDailyLogin(userId: string): Promise<{
             return {
                 success: true as const,
                 coinsAwarded: bonusCoins,
-                streakCount: effectiveStreak,
-                multiplier: getStreakMultiplier(effectiveStreak),
+                streakCount: newStreak,
+                multiplier: getStreakMultiplier(newStreak),
                 weeklyBonusTitle,
             };
         });
