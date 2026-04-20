@@ -27,6 +27,17 @@ const WEBHOOK_SECRET = process.env.ACTIVECAMPAIGN_WEBHOOK_SECRET || '';
 const PROVENIENZA_FIELD_ID = '2';
 const DEFAULT_FUNNEL = 'SCONOSCIUTO';
 
+// Liste AC da NON importare nel CRM (es. campagne di raccolta lead per
+// lanci futuri: i lead devono restare in AC finché non decidiamo di
+// contattarli). Override via env ACTIVECAMPAIGN_BLOCKED_LIST_NAMES
+// (comma-separated). Match per nome esatto, trim, case-sensitive.
+const BLOCKED_LIST_NAMES = new Set(
+    (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_NAMES || 'Lead Lancio Video Editor 2026')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+);
+
 // Custom field id su AC per gli UTM (visti via /api/3/fields).
 const UTM_FIELD_IDS = {
     utmSource: '31',
@@ -42,6 +53,32 @@ async function acGet(path: string): Promise<any> {
     });
     if (!res.ok) throw new Error(`AC API ${res.status}: ${await res.text()}`);
     return res.json();
+}
+
+// Cache in-memory degli ID delle liste bloccate. Si ripopola da AC ogni
+// 10 min per tollerare rinomine/aggiunte senza redeploy.
+let blockedListIdsCache: { ids: Set<string>; expires: number } | null = null;
+async function getBlockedListIds(): Promise<Set<string>> {
+    if (BLOCKED_LIST_NAMES.size === 0) return new Set();
+    const now = Date.now();
+    if (blockedListIdsCache && blockedListIdsCache.expires > now) {
+        return blockedListIdsCache.ids;
+    }
+    const ids = new Set<string>();
+    try {
+        const res = await acGet('/lists?limit=100');
+        const lists = Array.isArray(res.lists) ? res.lists : [];
+        for (const l of lists) {
+            const name = String(l?.name ?? '').trim();
+            if (name && BLOCKED_LIST_NAMES.has(name) && l?.id != null) {
+                ids.add(String(l.id));
+            }
+        }
+    } catch (e) {
+        console.error('[AC webhook] getBlockedListIds error:', e);
+    }
+    blockedListIdsCache = { ids, expires: now + 10 * 60 * 1000 };
+    return ids;
 }
 
 function readFieldLocal(fieldValues: Array<{ field: string; value: string | null }>, fieldId: string): string | null {
@@ -155,6 +192,22 @@ export async function POST(req: NextRequest) {
         if (!contactId) {
             await recordFailure({ reason: 'Payload senza contact id', payload: rawPayload });
             return NextResponse.json({ error: 'missing contact id' }, { status: 400 });
+        }
+
+        // Lista sorgente del subscribe: se corrisponde a una lista
+        // bloccata (es. campagna lancio futuro) skippiamo senza creare
+        // lead né failure record. Non è un errore: è intenzionale.
+        const triggerListId = rawPayload['list'] || rawPayload['list[id]'] || null;
+        if (triggerListId) {
+            const blocked = await getBlockedListIds();
+            if (blocked.has(String(triggerListId))) {
+                console.log(`[AC webhook] skip contact ${contactId} - lista bloccata ${triggerListId}`);
+                return NextResponse.json({
+                    skipped: 'blocked_list',
+                    listId: String(triggerListId),
+                    acContactId: contactId,
+                });
+            }
         }
 
         // Fetch contatto + fieldValues
