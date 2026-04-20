@@ -8,6 +8,7 @@ import { AgendaButton } from "./AgendaButton"
 import { useAuth } from "./AuthProvider"
 import { useRouter } from "next/navigation"
 import { SurveysReadOnlyPanel } from "./surveys/SurveysReadOnlyPanel"
+import { ScriptWidget } from "./ScriptWidget"
 
 function DrawerSkeleton() {
     return (
@@ -54,7 +55,7 @@ export function ContactDrawer({
 }) {
     const [profile, setProfile] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(false)
-    const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'surveys'>('details')
+    const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'surveys' | 'script'>('details')
     const { user: authUser } = useAuth()
     const router = useRouter()
 
@@ -194,9 +195,9 @@ export function ContactDrawer({
             <div className="relative w-full max-w-md flex flex-col bg-white shadow-elevated z-50 drawer-panel">
                 {/* Header - sticky */}
                 <div className="px-4 sm:px-6 py-5 drawer-header flex flex-col gap-2">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <h2 className="text-xl font-bold text-ash-900 flex items-center gap-2">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                            <h2 className="text-xl font-bold text-ash-900 flex items-center gap-2 truncate">
                                 {lead?.name || 'Caricamento...'}
                             </h2>
                             {lead?.funnel && (
@@ -205,29 +206,46 @@ export function ContactDrawer({
                                 </span>
                             )}
                         </div>
-                        <button onClick={onClose} className="p-2 -mr-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors">
-                            <X className="h-5 w-5" />
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                            {lead?.id && lead.phone && (
+                                <AgendaButton
+                                    leadId={lead.id}
+                                    leadName={lead.name || ''}
+                                    leadPhone={lead.phone}
+                                    hasEmail={!!lead.email}
+                                    agendaSentAt={lead.agendaSentAt ?? null}
+                                />
+                            )}
+                            <button onClick={onClose} className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-ash-200 bg-white px-2">
+                <div className="flex border-b border-ash-200 bg-white px-1 overflow-x-auto">
                     <button
                         onClick={() => setActiveTab('details')}
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
+                        className={`flex-1 min-w-[90px] py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'details' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
                     >
-                        Dettagli Contatto
+                        Dettagli
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('script')}
+                        className={`flex-1 min-w-[80px] py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'script' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
+                    >
+                        Script
                     </button>
                     <button
                         onClick={() => setActiveTab('timeline')}
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
+                        className={`flex-1 min-w-[80px] py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
                     >
-                        Timeline Eventi
+                        Timeline
                     </button>
                     <button
                         onClick={() => setActiveTab('surveys')}
-                        className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'surveys' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
+                        className={`flex-1 min-w-[80px] py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'surveys' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-ash-500 hover:text-ash-700'}`}
                     >
                         Sondaggi
                     </button>
@@ -448,6 +466,17 @@ export function ContactDrawer({
                     ) : activeTab === 'surveys' && leadId ? (
                         <div className="animate-fade-in">
                             <SurveysReadOnlyPanel leadId={leadId} />
+                        </div>
+                    ) : activeTab === 'script' && lead ? (
+                        <div className="animate-fade-in p-3 sm:p-4">
+                            <ScriptWidget
+                                leadId={lead.id}
+                                funnel={lead.funnel}
+                                leadEmail={lead.email}
+                                leadName={lead.name}
+                                leadPhone={lead.phone}
+                                agendaSentAt={lead.agendaSentAt ?? null}
+                            />
                         </div>
                     ) : null}
                 </div>
