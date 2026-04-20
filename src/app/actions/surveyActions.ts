@@ -281,8 +281,11 @@ export async function saveConfermeSurvey(
             }
         }
 
-        const { eligible } = await isLeadEligible(leadId);
-        if (!eligible) return { success: false, error: "Lead non idoneo" };
+        // Le Conferme raccolgono il sondaggio SU TUTTI i lead, inclusi
+        // quelli con funnel 'database'. Il contesto è post-appuntamento,
+        // ha senso raccogliere feedback indipendentemente dal funnel.
+        const [leadRow] = await db.select({ id: leads.id }).from(leads).where(eq(leads.id, leadId));
+        if (!leadRow) return { success: false, error: "Lead non trovato" };
 
         const suspicious = payload.fillDurationMs < MIN_FILL_DURATION_MS;
 

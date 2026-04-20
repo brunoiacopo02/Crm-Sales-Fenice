@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2, ClipboardList } from "lucide-react"
 import { ConfermeSurveyDialog } from "./surveys/ConfermeSurveyDialog"
-import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
@@ -435,16 +434,14 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     </button>
                                 )}
 
-                                {lead.funnel?.toLowerCase() !== EXCLUDED_FUNNEL && (
-                                    <button
-                                        onClick={() => setShowSurveyDialog(true)}
-                                        className="text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 px-3 py-1.5 rounded-full font-semibold transition-colors flex items-center gap-1.5"
-                                        title="Compila sondaggio esito appuntamento"
-                                    >
-                                        <ClipboardList className="w-3.5 h-3.5" />
-                                        Sondaggio
-                                    </button>
-                                )}
+                                <button
+                                    onClick={() => setShowSurveyDialog(true)}
+                                    className="text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 px-3 py-1.5 rounded-full font-semibold transition-colors flex items-center gap-1.5"
+                                    title="Compila sondaggio esito appuntamento"
+                                >
+                                    <ClipboardList className="w-3.5 h-3.5" />
+                                    Sondaggio
+                                </button>
 
                                 {!lead.confirmationsOutcome && (
                                     <>
