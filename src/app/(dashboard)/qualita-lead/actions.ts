@@ -9,7 +9,9 @@ import {
 } from "@/db/schema";
 import { and, eq, gte, lte, isNotNull, sql } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
-import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions";
+// Funnel da escludere dalla dashboard: sono artifici tecnici non veri
+// funnel business. Il confronto è sempre case-insensitive via UPPER().
+const UI_EXCLUDED_FUNNELS = new Set(['DATABASE', 'TEST', 'SCONOSCIUTO']);
 
 // ========== AUTH ==========
 async function requireManager() {
@@ -32,14 +34,24 @@ export interface QualitaLeadFilters {
 
 // ========== AGGREGATIONS ==========
 
-/** Distinct funnel values from leads, excluding 'database'. */
+/**
+ * Distinct funnel values usati nella UI dei filtri. Uniformati a
+ * UPPERCASE (così "org" e "ORG" si raggruppano), esclusi DATABASE /
+ * TEST / SCONOSCIUTO.
+ */
 export async function getAvailableFunnels(): Promise<string[]> {
     await requireManager();
-    const rows = await db.selectDistinct({ funnel: leads.funnel }).from(leads).where(isNotNull(leads.funnel));
-    return rows
-        .map((r) => r.funnel!)
-        .filter((f) => f.trim().toLowerCase() !== EXCLUDED_FUNNEL)
-        .sort();
+    const rows = await db.selectDistinct({
+        funnel: sql<string>`UPPER(${leads.funnel})`.as('funnel'),
+    }).from(leads).where(isNotNull(leads.funnel));
+    const unique = new Set<string>();
+    for (const r of rows) {
+        const f = (r.funnel || '').trim();
+        if (!f) continue;
+        if (UI_EXCLUDED_FUNNELS.has(f)) continue;
+        unique.add(f);
+    }
+    return Array.from(unique).sort();
 }
 
 function buildCommonConditions(filters: QualitaLeadFilters, tableCreatedAt: any) {
@@ -76,9 +88,10 @@ async function aggregateSingle(
 
     const conds = [...baseConds];
     // Always exclude lead with funnel='database'
-    conds.push(sql`LOWER(COALESCE(${leads.funnel}, '')) <> ${EXCLUDED_FUNNEL}`);
+    conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
-        conds.push(sql`${leads.funnel} = ANY(${filters.funnels})`);
+        const upper = filters.funnels.map((f) => f.toUpperCase());
+        conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) IN (${sql.join(upper.map((u) => sql`${u}`), sql`, `)})`);
     }
     if (filters.onlyClosedWon) {
         conds.push(eq(leads.salespersonOutcome, "Chiuso"));
@@ -109,9 +122,10 @@ async function aggregateArray(
     }).from(table).innerJoin(leads, eq(table.leadId, leads.id));
 
     const conds = [...baseConds];
-    conds.push(sql`LOWER(COALESCE(${leads.funnel}, '')) <> ${EXCLUDED_FUNNEL}`);
+    conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
-        conds.push(sql`${leads.funnel} = ANY(${filters.funnels})`);
+        const upper = filters.funnels.map((f) => f.toUpperCase());
+        conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) IN (${sql.join(upper.map((u) => sql`${u}`), sql`, `)})`);
     }
     if (filters.onlyClosedWon) {
         conds.push(eq(leads.salespersonOutcome, "Chiuso"));
@@ -165,8 +179,11 @@ export async function getGdoAggregate(filters: QualitaLeadFilters): Promise<GdoA
     // Totals
     const baseConds = buildCommonConditions(filters, gdoLeadSurveys.createdAt);
     baseConds.push(sql`${gdoLeadSurveys.invalidatedBy} IS NULL`);
-    baseConds.push(sql`LOWER(COALESCE(${leads.funnel}, '')) <> ${EXCLUDED_FUNNEL}`);
-    if (filters.funnels.length > 0) baseConds.push(sql`${leads.funnel} = ANY(${filters.funnels})`);
+    baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
+    if (filters.funnels.length > 0) {
+        const upper = filters.funnels.map((f) => f.toUpperCase());
+        baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) IN (${sql.join(upper.map((u) => sql`${u}`), sql`, `)})`);
+    }
     if (filters.onlyClosedWon) baseConds.push(eq(leads.salespersonOutcome, "Chiuso"));
 
     const [tot] = await db.select({
@@ -196,8 +213,11 @@ export async function getConfermeAggregate(filters: QualitaLeadFilters): Promise
 
     const baseConds = buildCommonConditions(filters, confermeLeadSurveys.createdAt);
     baseConds.push(sql`${confermeLeadSurveys.invalidatedBy} IS NULL`);
-    baseConds.push(sql`LOWER(COALESCE(${leads.funnel}, '')) <> ${EXCLUDED_FUNNEL}`);
-    if (filters.funnels.length > 0) baseConds.push(sql`${leads.funnel} = ANY(${filters.funnels})`);
+    baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
+    if (filters.funnels.length > 0) {
+        const upper = filters.funnels.map((f) => f.toUpperCase());
+        baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) IN (${sql.join(upper.map((u) => sql`${u}`), sql`, `)})`);
+    }
     if (filters.onlyClosedWon) baseConds.push(eq(leads.salespersonOutcome, "Chiuso"));
 
     const [agg] = await db.select({
@@ -236,8 +256,11 @@ export async function getSalesAggregate(filters: QualitaLeadFilters): Promise<Sa
 
     const baseConds = buildCommonConditions(filters, salesLeadSurveys.createdAt);
     baseConds.push(sql`${salesLeadSurveys.invalidatedBy} IS NULL`);
-    baseConds.push(sql`LOWER(COALESCE(${leads.funnel}, '')) <> ${EXCLUDED_FUNNEL}`);
-    if (filters.funnels.length > 0) baseConds.push(sql`${leads.funnel} = ANY(${filters.funnels})`);
+    baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
+    if (filters.funnels.length > 0) {
+        const upper = filters.funnels.map((f) => f.toUpperCase());
+        baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) IN (${sql.join(upper.map((u) => sql`${u}`), sql`, `)})`);
+    }
     if (filters.onlyClosedWon) baseConds.push(eq(leads.salespersonOutcome, "Chiuso"));
 
     const [tot] = await db.select({ total: sql<number>`count(*)::int` })
