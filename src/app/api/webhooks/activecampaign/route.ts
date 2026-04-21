@@ -287,28 +287,6 @@ export async function POST(req: NextRequest) {
         }
 
         // ===== EVENTO SUBSCRIBE (default) =====
-        // Dedup: AC può spedire più eventi subscribe ravvicinati per lo
-        // stesso contatto (es. iscrizione a più liste, retry). Se esiste
-        // già un lead con lo stesso acContactId creato negli ultimi 10
-        // minuti, NON creiamo un duplicato. Dopo 10 min consideriamo
-        // un'eventuale re-iscrizione come caso legittimo.
-        const dedupCutoff = new Date(Date.now() - 10 * 60 * 1000);
-        const [existingRecent] = await db.select({
-            id: leads.id,
-            createdAt: leads.createdAt,
-            funnel: leads.funnel,
-        }).from(leads).where(and(
-            eq(leads.acContactId, contactId),
-            gte(leads.createdAt, dedupCutoff),
-        )).orderBy(desc(leads.createdAt)).limit(1);
-
-        if (existingRecent) {
-            return NextResponse.json({
-                skipped: 'duplicate_within_dedup_window',
-                acContactId: contactId,
-                existingLeadId: existingRecent.id,
-            });
-        }
 
         // Retry sulla Provenienza: AC può creare il contatto + triggerare
         // il webhook PRIMA di aver applicato le automazioni custom field.
@@ -363,18 +341,86 @@ export async function POST(req: NextRequest) {
         const phoneSuspicious = !isPlausiblePhone(phoneStrict);
 
         const funnel = provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
+        const newLeadId = crypto.randomUUID();
+        const now = new Date();
+        const dedupCutoff = new Date(now.getTime() - 10 * 60 * 1000);
 
-        // Round-robin GDO
-        const eligible = await db.select({
-            id: users.id,
-            acLastAssignedAt: users.acLastAssignedAt,
-        }).from(users).where(and(
-            eq(users.role, 'GDO'),
-            eq(users.isActive, true),
-            eq(users.acAutoIntake, true),
-        )).orderBy(asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id));
+        // ===== SEZIONE CRITICA (transazione + advisory lock) =====
+        // Dedup + round-robin + insert + update acLastAssignedAt devono
+        // essere atomici rispetto ad altri webhook AC che riguardino lo
+        // stesso contatto o lo stesso numero. Senza lock succede che
+        // due webhook quasi simultanei per lo stesso contactId vedano
+        // entrambi "nessun duplicato" e creino due lead assegnati a GDO
+        // diversi. Il lock è per-phone (comprende il caso di AC che
+        // crea due contact entity distinte con stesso numero) e per
+        // contactId.
+        const txResult = await db.transaction(async (tx) => {
+            await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${phoneFinal}, 0))`);
+            await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${contactId}, 1))`);
 
-        if (eligible.length === 0) {
+            // Dedup: stesso contactId O stesso phone negli ultimi 10 min
+            const [existing] = await tx.select({
+                id: leads.id,
+                assignedToId: leads.assignedToId,
+            }).from(leads).where(and(
+                gte(leads.createdAt, dedupCutoff),
+                sql`(${leads.acContactId} = ${contactId} OR ${leads.phone} = ${phoneFinal})`,
+            )).orderBy(desc(leads.createdAt)).limit(1);
+
+            if (existing) {
+                return { kind: 'duplicate' as const, existingLeadId: existing.id };
+            }
+
+            // Round-robin GDO (dentro la tx: vede l'acLastAssignedAt più aggiornato)
+            const eligible = await tx.select({
+                id: users.id,
+            }).from(users).where(and(
+                eq(users.role, 'GDO'),
+                eq(users.isActive, true),
+                eq(users.acAutoIntake, true),
+            )).orderBy(asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id));
+
+            if (eligible.length === 0) {
+                return { kind: 'no_gdo' as const };
+            }
+            const assignedGdoId = eligible[0].id;
+
+            await tx.insert(leads).values({
+                id: newLeadId,
+                name: fullName,
+                phone: phoneFinal,
+                email,
+                funnel,
+                source: 'activecampaign',
+                acContactId: contactId,
+                utmSource,
+                utmMedium,
+                utmCampaign,
+                utmContent,
+                utmTerm,
+                phoneSuspicious,
+                status: 'NEW',
+                callCount: 0,
+                assignedToId: assignedGdoId,
+                createdAt: now,
+                updatedAt: now,
+            });
+
+            await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
+
+            return { kind: 'created' as const, assignedGdoId };
+        });
+
+        if (txResult.kind === 'duplicate') {
+            return NextResponse.json({
+                skipped: 'duplicate_within_dedup_window',
+                acContactId: contactId,
+                existingLeadId: txResult.existingLeadId,
+            });
+        }
+
+        if (txResult.kind === 'no_gdo') {
             await recordFailure({
                 reason: 'Nessun GDO abilitato al round-robin AC',
                 acContactId: contactId,
@@ -385,31 +431,8 @@ export async function POST(req: NextRequest) {
             });
             return NextResponse.json({ skipped: 'no active gdo' });
         }
-        const assignedGdoId = eligible[0].id;
 
-        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
-        const newLeadId = crypto.randomUUID();
-        const now = new Date();
-        await db.insert(leads).values({
-            id: newLeadId,
-            name: fullName,
-            phone: phoneFinal,
-            email,
-            funnel,
-            source: 'activecampaign',
-            acContactId: contactId,
-            utmSource,
-            utmMedium,
-            utmCampaign,
-            utmContent,
-            utmTerm,
-            phoneSuspicious,
-            status: 'NEW',
-            callCount: 0,
-            assignedToId: assignedGdoId,
-            createdAt: now,
-            updatedAt: now,
-        });
+        const assignedGdoId = txResult.assignedGdoId;
 
         await logLeadEvent({
             leadId: newLeadId,
@@ -429,8 +452,6 @@ export async function POST(req: NextRequest) {
             eventType: 'ASSIGNED',
             metadata: { assignedToUser: assignedGdoId, source: 'activecampaign' },
         });
-
-        await db.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 
         // Notifica al GDO: lead caldo appena arrivato, chiamalo subito.
         // Si aggancia al sistema notifications → useRealtimeNotifications
