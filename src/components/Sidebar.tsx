@@ -104,6 +104,7 @@ export function Sidebar() {
                         { name: "Dashboard Operativa", href: "/team", icon: UserCog },
                         { name: "Appuntamenti Oggi", href: "/appuntamenti-oggi", icon: Calendar },
                         { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
+                        { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
                         { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                         { name: "Importa Lead", href: "/import", icon: Upload },
                         { name: "Lead Automatici (AC)", href: "/lead-automatici", icon: Zap },
