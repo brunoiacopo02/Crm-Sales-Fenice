@@ -176,7 +176,12 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         });
 
         return () => {
-            supabase.removeChannel(channel);
+            // Vedi commento analogo in ConfermeDrawer: untrack esplicito
+            // evita presenze stale dopo che la view cambia/smonta.
+            (async () => {
+                try { await channel.untrack(); } catch { /* ignore */ }
+                supabase.removeChannel(channel);
+            })();
         };
     }, [viewMode, currentUser.id])
 

@@ -3,6 +3,7 @@ import { TeamRadarWidget } from "@/components/TeamRadarWidget"
 import { ConfermeDailyObjectives } from "@/components/ConfermeDailyObjectives"
 import { StreakCounter } from "@/components/StreakCounter"
 import { SafeWrapper } from "@/components/SafeWrapper"
+import { VenditoriAgendaButton } from "@/components/VenditoriAgendaButton"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
@@ -28,12 +29,15 @@ export default async function ConfermePage() {
                 <TeamRadarWidget currentUser={session.user} />
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold tracking-tight text-ash-800">
                     Dashboard Conferme
                 </h1>
-                <div className="text-sm text-ash-500 font-medium">
-                    Gestione appuntamenti centralizzata
+                <div className="flex items-center gap-3">
+                    <SafeWrapper><VenditoriAgendaButton /></SafeWrapper>
+                    <div className="text-sm text-ash-500 font-medium hidden sm:block">
+                        Gestione appuntamenti centralizzata
+                    </div>
                 </div>
             </div>
 

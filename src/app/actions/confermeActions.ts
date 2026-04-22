@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents } from "@/db/schema"
-import { eq, desc, and, or, like, between, isNull, isNotNull } from "drizzle-orm"
+import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent, checkFreeBusy } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
@@ -846,4 +846,75 @@ export async function cancelConfermeRecall(
     } catch (e: any) {
         return { success: false, error: e.message };
     }
+}
+
+/**
+ * Restituisce tutti gli appuntamenti dei venditori (lead con
+ * salespersonUserId e appointmentDate valorizzati) nell'intervallo
+ * richiesto. Raggruppato per venditore. Usato dalle Conferme per
+ * decidere a chi assegnare nuovi appuntamenti in base al carico.
+ */
+export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promise<{
+    venditori: Array<{
+        id: string;
+        name: string;
+        appointments: Array<{
+            leadId: string;
+            leadName: string;
+            leadPhone: string | null;
+            funnel: string | null;
+            appointmentDate: Date;
+            appointmentNote: string | null;
+            confirmationsOutcome: string | null;
+        }>;
+    }>;
+}> {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const role = supabaseUser?.user_metadata?.role as string | undefined;
+    if (!supabaseUser || !role || !["CONFERME", "MANAGER", "ADMIN"].includes(role)) {
+        throw new Error("Unauthorized");
+    }
+
+    const venditori = await db.select({
+        id: users.id,
+        name: users.name,
+        displayName: users.displayName,
+    }).from(users).where(and(eq(users.role, 'VENDITORE'), eq(users.isActive, true)));
+
+    const rows = await db.select({
+        id: leads.id,
+        name: leads.name,
+        phone: leads.phone,
+        funnel: leads.funnel,
+        appointmentDate: leads.appointmentDate,
+        appointmentNote: leads.appointmentNote,
+        confirmationsOutcome: leads.confirmationsOutcome,
+        salespersonUserId: leads.salespersonUserId,
+    }).from(leads).where(and(
+        isNotNull(leads.salespersonUserId),
+        isNotNull(leads.appointmentDate),
+        gte(leads.appointmentDate, startDate),
+        lte(leads.appointmentDate, endDate),
+    )).orderBy(asc(leads.appointmentDate));
+
+    return {
+        venditori: venditori
+            .map(v => ({
+                id: v.id,
+                name: v.displayName || v.name || 'Venditore',
+                appointments: rows
+                    .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
+                    .map(r => ({
+                        leadId: r.id,
+                        leadName: r.name || 'Senza nome',
+                        leadPhone: r.phone ?? null,
+                        funnel: r.funnel ?? null,
+                        appointmentDate: r.appointmentDate as Date,
+                        appointmentNote: r.appointmentNote ?? null,
+                        confirmationsOutcome: r.confirmationsOutcome ?? null,
+                    })),
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'it')),
+    };
 }

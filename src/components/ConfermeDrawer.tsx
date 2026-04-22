@@ -161,7 +161,15 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             });
 
             return () => {
-                supabase.removeChannel(channel);
+                // Untrack esplicito: senza questa chiamata la presenza
+                // "sto lavorando su questo lead" resta stale sul channel
+                // anche dopo la chiusura del drawer finché Supabase non
+                // rileva la disconnessione (decine di secondi). Gli altri
+                // conferme vedrebbero il lock fantasma.
+                (async () => {
+                    try { await channel.untrack(); } catch { /* ignore */ }
+                    supabase.removeChannel(channel);
+                })();
             }
         }
     }, [isOpen, lead?.id, lead?.version]) // update when version changes too
