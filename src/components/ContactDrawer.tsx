@@ -9,6 +9,7 @@ import { useAuth } from "./AuthProvider"
 import { useRouter } from "next/navigation"
 import { SurveysReadOnlyPanel } from "./surveys/SurveysReadOnlyPanel"
 import { ScriptWidget } from "./ScriptWidget"
+import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 
 function DrawerSkeleton() {
     return (
@@ -469,14 +470,18 @@ export function ContactDrawer({
                         </div>
                     ) : activeTab === 'script' && lead ? (
                         <div className="animate-fade-in p-3 sm:p-4">
-                            <ScriptWidget
-                                leadId={lead.id}
-                                funnel={lead.funnel}
-                                leadEmail={lead.email}
-                                leadName={lead.name}
-                                leadPhone={lead.phone}
-                                agendaSentAt={lead.agendaSentAt ?? null}
-                            />
+                            {authUser?.user_metadata?.role === 'CONFERME' ? (
+                                <ConfermeScriptWidget />
+                            ) : (
+                                <ScriptWidget
+                                    leadId={lead.id}
+                                    funnel={lead.funnel}
+                                    leadEmail={lead.email}
+                                    leadName={lead.name}
+                                    leadPhone={lead.phone}
+                                    agendaSentAt={lead.agendaSentAt ?? null}
+                                />
+                            )}
                         </div>
                     ) : null}
                 </div>

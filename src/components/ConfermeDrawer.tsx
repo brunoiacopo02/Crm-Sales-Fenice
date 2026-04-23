@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2, ClipboardList } from "lucide-react"
 import { ConfermeSurveyDialog } from "./surveys/ConfermeSurveyDialog"
+import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
@@ -557,6 +558,12 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                         Note {notes.length > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === "note" ? "bg-brand-orange text-white" : "bg-ash-200 text-ash-600"}`}>{notes.length}</span>}
                     </button>
                     <button
+                        className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "script" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-ash-500 hover:text-ash-800 hover:bg-ash-50"}`}
+                        onClick={() => setActiveTab("script")}
+                    >
+                        Script
+                    </button>
+                    <button
                         className={`flex-1 py-3.5 text-sm font-bold border-b-2 transition-colors ${activeTab === "esito" ? "border-brand-orange text-brand-orange bg-orange-50/50" : "border-transparent text-ash-500 hover:text-ash-800 hover:bg-ash-50"}`}
                         onClick={() => setActiveTab("esito")}
                     >
@@ -670,6 +677,12 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         Aggiungi Nota e Salva
                                     </button>
                                 </div>
+                            </div>
+                        )}
+
+                        {activeTab === "script" && (
+                            <div className="animate-in fade-in duration-200">
+                                <ConfermeScriptWidget />
                             </div>
                         )}
 
