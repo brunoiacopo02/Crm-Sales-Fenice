@@ -39,6 +39,21 @@ const BLOCKED_LIST_NAMES_NORMALIZED = new Set(
         .filter(Boolean),
 );
 
+// "Quarantena funnel": blocca l'ingresso automatico da AC di lead con
+// questa provenienza, anche se non sono in una lista esplicitamente
+// bloccata. Difesa aggiuntiva per evitare che lead di lancio sfuggano
+// (es. perché qualche automazione sovrascrive la lista). Gli import
+// manuali dalla UI /import non passano da questo webhook, quindi il
+// manager può sempre caricare manualmente i lead. Override via env
+// ACTIVECAMPAIGN_QUARANTINED_FUNNELS (comma-separated). Match
+// case-insensitive su provenienza normalizzata uppercase.
+const QUARANTINED_FUNNELS = new Set(
+    (process.env.ACTIVECAMPAIGN_QUARANTINED_FUNNELS || 'ORG')
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean),
+);
+
 // Custom field id su AC per gli UTM (visti via /api/3/fields).
 const UTM_FIELD_IDS = {
     utmSource: '31',
@@ -353,6 +368,19 @@ export async function POST(req: NextRequest) {
         if (!provenienza) {
             fieldValues = await fetchFieldValuesWithProvenienzaRetry(contactId, fieldValues);
             provenienza = (readFieldLocal(fieldValues, PROVENIENZA_FIELD_ID) || '').trim();
+        }
+
+        // Quarantena funnel: blocca l'ingresso automatico di lead con
+        // provenienza in quarantena (es. 'ORG' durante il lancio
+        // VideoEditor). Il manager può caricare manualmente via /import,
+        // che non passa per questo webhook.
+        if (provenienza && QUARANTINED_FUNNELS.has(provenienza.toUpperCase())) {
+            console.log(`[AC webhook] skip contact ${contactId} — funnel '${provenienza}' in quarantena`);
+            return NextResponse.json({
+                skipped: 'quarantined_funnel',
+                funnel: provenienza.toUpperCase(),
+                acContactId: contactId,
+            });
         }
 
         // UTM (custom field 31-35). Salvati per uso marketing futuro, non mostrati in UI.
