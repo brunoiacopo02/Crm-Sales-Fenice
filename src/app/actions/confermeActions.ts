@@ -123,6 +123,13 @@ export async function getConfermeAppointments(filters: {
 
         const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 
+        // Override una tantum: venerdì 2026-04-24 il sabato successivo
+        // (2026-04-25) è festa. Oggi le Conferme devono chiamare gli
+        // appuntamenti di LUNEDÌ mattina invece di sabato mattina,
+        // perché domani non si lavora. Rimuovere/aggiornare questa
+        // costante quando passa il giorno o per prossime festività.
+        const isHolidayOverrideFriday = todayStr === '04/24/2026';
+
         results = results.filter(row => {
             if (row.lead.confNeedsReschedule) return true; // Always show da definire
             if (!row.lead.appointmentDate) return false;
@@ -136,7 +143,9 @@ export async function getConfermeAppointments(filters: {
             // Calculate tomorrow/next working day string
             const nextWorkDay = new Date(now);
             if (romeDayOfWeek === 'fri') {
-                nextWorkDay.setDate(nextWorkDay.getDate() + 1); // Saturday
+                // Override festivo: il 24/04/2026 (Ven) salta sabato festivo,
+                // next work day = Lunedì (+3).
+                nextWorkDay.setDate(nextWorkDay.getDate() + (isHolidayOverrideFriday ? 3 : 1));
             } else if (romeDayOfWeek === 'sat') {
                 nextWorkDay.setDate(nextWorkDay.getDate() + 2); // Monday
             } else if (romeDayOfWeek === 'sun') {
@@ -156,6 +165,9 @@ export async function getConfermeAppointments(filters: {
                 // Friday Rule: Today 15:00-21:00, Saturday 09:00-14:00
                 if (isToday && apptHour >= 15 && apptHour <= 21) return true;
                 if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) {
+                    // Override festivo: next work day è Lunedì (normale giorno
+                    // lavorativo), nessuna eccezione 13-14 applicabile.
+                    if (isHolidayOverrideFriday) return true;
                     // Exception for 13:00 and 14:00 on Saturday
                     if (apptHour === 13 || apptHour === 14) {
                         if (!row.lead.appointmentCreatedAt) return false;
