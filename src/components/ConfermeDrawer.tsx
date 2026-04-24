@@ -146,27 +146,42 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 setActiveUsers(usersPresent);
             });
 
+            const buildTrackPayload = () => ({
+                online_at: new Date().toISOString(),
+                leadId: lead.id,
+                user: {
+                    id: currentUser.id,
+                    name: currentUser.name,
+                    displayName: currentUser.displayName,
+                },
+            });
+
             // 2. Notifica a tutti che stiamo guardando questo lead
+            let subscribed = false;
             channel.subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
-                    await channel.track({
-                        online_at: new Date().toISOString(),
-                        leadId: lead.id,
-                        user: {
-                            id: currentUser.id,
-                            name: currentUser.name,
-                            displayName: currentUser.displayName
-                        }
-                    });
+                    subscribed = true;
+                    await channel.track(buildTrackPayload());
                 }
             });
 
+            // Heartbeat + re-track on focus — vedi ConfermeBoard per la motivazione.
+            const heartbeat = setInterval(() => {
+                if (subscribed) channel.track(buildTrackPayload()).catch(() => { });
+            }, 25000);
+            const onVisibilityChange = () => {
+                if (!document.hidden && subscribed) {
+                    channel.track(buildTrackPayload()).catch(() => { });
+                }
+            };
+            document.addEventListener('visibilitychange', onVisibilityChange);
+            const onPageHide = () => { try { channel.untrack(); } catch { } };
+            window.addEventListener('pagehide', onPageHide);
+
             return () => {
-                // Untrack esplicito: senza questa chiamata la presenza
-                // "sto lavorando su questo lead" resta stale sul channel
-                // anche dopo la chiusura del drawer finché Supabase non
-                // rileva la disconnessione (decine di secondi). Gli altri
-                // conferme vedrebbero il lock fantasma.
+                clearInterval(heartbeat);
+                document.removeEventListener('visibilitychange', onVisibilityChange);
+                window.removeEventListener('pagehide', onPageHide);
                 (async () => {
                     try { await channel.untrack(); } catch { /* ignore */ }
                     supabase.removeChannel(channel);
@@ -207,6 +222,26 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setNewNote("")
         } catch (error) {
             alert("Errore inserimento nota")
+        }
+    }
+
+    const [savingUndoScarto, setSavingUndoScarto] = useState(false)
+    const handleUndoScarto = async () => {
+        if (!confirm(`Vuoi annullare lo scarto di ${lead.name}? Il lead tornerà 'da lavorare' nel Kanban.`)) return
+        setSavingUndoScarto(true)
+        try {
+            const { undoConfermeScarto } = await import('@/app/actions/confermeActions')
+            const result = await undoConfermeScarto(lead.id, localVersion)
+            if (!result.success) {
+                alert(`Errore annullamento scarto: ${result.error}`)
+                return
+            }
+            onRefresh()
+            onClose()
+        } catch (error) {
+            alert(`Errore annullamento scarto: ${error}`)
+        } finally {
+            setSavingUndoScarto(false)
         }
     }
 
@@ -688,6 +723,29 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                         {activeTab === "esito" && (
                             <div className="space-y-6 animate-in fade-in duration-200 pb-8">
+                                {/* Annulla scarto — mostrato quando il lead è già scartato */}
+                                {lead.confirmationsOutcome === "scartato" && (
+                                    <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-5 shadow-sm">
+                                        <div className="flex items-start gap-3">
+                                            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="text-sm font-extrabold text-rose-900 mb-1">Lead attualmente scartato</h3>
+                                                <p className="text-xs text-rose-700 mb-3">
+                                                    Motivo: <span className="font-semibold">{lead.confirmationsDiscardReason || "non specificato"}</span>. Se è stato scartato per errore o vuoi recuperarlo, annulla lo scarto e il lead tornerà "da lavorare".
+                                                </p>
+                                                <button
+                                                    onClick={handleUndoScarto}
+                                                    disabled={savingUndoScarto}
+                                                    type="button"
+                                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-sm transition-colors disabled:opacity-50 shadow-sm"
+                                                >
+                                                    {savingUndoScarto ? "Annullamento..." : "Annulla Scarto"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Conferme Outcome */}
                                 <div className="bg-white border text-ash-800 border-ash-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-brand-orange"></div>

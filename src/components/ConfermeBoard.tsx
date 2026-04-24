@@ -11,7 +11,6 @@ const ConfermeDrawer = dynamic(
   { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
 )
 import { ConfermeBoardRow } from "@/components/ConfermeBoardRow"
-import { GlobalAlertListener } from "@/components/GlobalAlertListener"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
 import { createClient } from "@/utils/supabase/client"
@@ -48,6 +47,13 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     })
     const [datePreset, setDatePreset] = useState("today")
 
+    // Storico date filter (giorno per giorno dei lead confermati/scartati)
+    const [storicoDateStart, setStoricoDateStart] = useState<string>(() => {
+        const d = new Date(); d.setDate(d.getDate() - 7);
+        return d.toISOString().split('T')[0];
+    })
+    const [storicoDateEnd, setStoricoDateEnd] = useState<string>(() => new Date().toISOString().split('T')[0])
+
     // Drawer state
     const [selectedLead, setSelectedLead] = useState<LeadData | null>(null)
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -59,11 +65,16 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         if (showSpinner) setLoading(true)
         try {
             if (viewMode === 'storico') {
+                const s = storicoDateStart ? new Date(storicoDateStart + 'T00:00:00') : undefined;
+                const e = storicoDateEnd ? new Date(storicoDateEnd + 'T23:59:59') : undefined;
                 const data = await getConfermeAppointments({
                     fetchMode: "all",
                     timeSlot: "tutto",
                     searchQuery,
-                    confermeStatus: "storico"
+                    confermeStatus: "storico",
+                    startDate: s,
+                    endDate: e,
+                    dateFilterField: "confirmationsTimestamp",
                 })
                 setStoricoData(data.flatList)
             } else if (viewMode === 'table') {
@@ -126,7 +137,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             fetchLeads(true)
         }, 400)
         return () => clearTimeout(timer)
-    }, [viewMode, searchQuery, dateRange])
+    }, [viewMode, searchQuery, dateRange, storicoDateStart, storicoDateEnd])
 
     // Auto-select first hour when views change
     useEffect(() => {
@@ -160,24 +171,50 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             setGlobalPresence(presenceArray);
         });
 
+        // Track payload riutilizzato: heartbeat, re-track, primo track.
+        const buildTrackPayload = () => ({
+            online_at: new Date().toISOString(),
+            leadId: null,
+            user: {
+                id: currentUser.id,
+                name: currentUser.name,
+                displayName: currentUser.displayName,
+            },
+        });
+
+        let subscribed = false;
         channel.subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-                // Broadcast that we are online on the CRM looking at the board
-                await channel.track({
-                    online_at: new Date().toISOString(),
-                    leadId: null, // Not inside a specific drawer
-                    user: {
-                        id: currentUser.id,
-                        name: currentUser.name,
-                        displayName: currentUser.displayName
-                    }
-                });
+                subscribed = true;
+                await channel.track(buildTrackPayload());
             }
         });
 
+        // Heartbeat: ogni 25s ripublica il track con nuovo online_at.
+        // Previene che Supabase/colleghi ci considerino offline per
+        // disconnessioni brevi o letargia della connessione realtime.
+        const heartbeat = setInterval(() => {
+            if (subscribed) channel.track(buildTrackPayload()).catch(() => { });
+        }, 25000);
+
+        // Re-track quando l'utente torna alla tab (tab background spesso
+        // sospende i WebSocket). Senza questo, chi torna dopo 10 minuti
+        // appare offline ai colleghi.
+        const onVisibilityChange = () => {
+            if (!document.hidden && subscribed) {
+                channel.track(buildTrackPayload()).catch(() => { });
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+
+        // Cleanup su chiusura tab/navigazione: untrack immediato.
+        const onPageHide = () => { try { channel.untrack(); } catch { } };
+        window.addEventListener('pagehide', onPageHide);
+
         return () => {
-            // Vedi commento analogo in ConfermeDrawer: untrack esplicito
-            // evita presenze stale dopo che la view cambia/smonta.
+            clearInterval(heartbeat);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            window.removeEventListener('pagehide', onPageHide);
             (async () => {
                 try { await channel.untrack(); } catch { /* ignore */ }
                 supabase.removeChannel(channel);
@@ -390,8 +427,6 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     return (
         <div className="flex flex-col min-h-[500px] relative">
-            <GlobalAlertListener currentUser={currentUser} />
-
             {/* MEGA TOGGLES NAVIGATION - Premium Segmented Control */}
             <div className="flex items-center justify-between gap-4 mb-2 sticky top-0 z-20 bg-white/80 backdrop-blur-md pt-3 pb-3 border-b border-ash-200/40">
                 <div className="flex p-1 bg-ash-100/80 rounded-xl max-w-2xl border border-ash-200/60 shadow-soft">
@@ -512,13 +547,38 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                             <div className="flex flex-col h-full bg-white rounded-2xl border border-ash-200/60 shadow-card overflow-hidden mb-8 max-w-[1400px] mx-auto w-full animate-fade-in">
                                 <div className="p-4 border-b border-ash-200/40 bg-gradient-to-r from-ash-50 to-white">
                                     <h2 className="text-lg font-black text-ash-800 uppercase tracking-wide flex items-center gap-2"><Archive className="w-5 h-5" /> Storico Conferme</h2>
-                                    <div className="flex items-center gap-2 mt-3">
+                                    <div className="flex items-center gap-3 mt-3 flex-wrap">
                                         {(['tutti', 'confermati', 'scartati'] as const).map(f => (
                                             <button key={f} onClick={() => setStoricoFilter(f)}
                                                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${storicoFilter === f ? 'bg-brand-orange text-white border-brand-orange' : 'bg-white text-ash-600 border-ash-200 hover:border-brand-orange/30'}`}>
                                                 {f === 'tutti' ? `Tutti (${storicoData.length})` : f === 'confermati' ? `Confermati (${confCount})` : `Scartati (${scarCount})`}
                                             </button>
                                         ))}
+                                        <div className="flex items-center gap-2 ml-auto">
+                                            <span className="text-[11px] font-semibold uppercase tracking-wider text-ash-500">Filtro data esito</span>
+                                            <input
+                                                type="date"
+                                                value={storicoDateStart}
+                                                onChange={e => setStoricoDateStart(e.target.value)}
+                                                className="px-2 py-1 rounded-lg border border-ash-200 text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-brand-orange/30"
+                                            />
+                                            <span className="text-ash-400 text-xs">→</span>
+                                            <input
+                                                type="date"
+                                                value={storicoDateEnd}
+                                                onChange={e => setStoricoDateEnd(e.target.value)}
+                                                className="px-2 py-1 rounded-lg border border-ash-200 text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-brand-orange/30"
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    const d = new Date(); d.setDate(d.getDate() - 7)
+                                                    setStoricoDateStart(d.toISOString().split('T')[0])
+                                                    setStoricoDateEnd(new Date().toISOString().split('T')[0])
+                                                }}
+                                                className="px-2 py-1 rounded-lg border border-ash-200 text-[11px] font-semibold text-ash-600 hover:bg-ash-50"
+                                                title="Ultimi 7 giorni"
+                                            >Reset</button>
+                                        </div>
                                     </div>
                                 </div>
 

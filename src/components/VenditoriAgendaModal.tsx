@@ -14,10 +14,14 @@ type Appointment = {
     confirmationsOutcome: string | null
 }
 
+type BusySlot = { start: Date | string; end: Date | string }
+
 type Venditore = {
     id: string
     name: string
+    hasGoogleCalendar: boolean
     appointments: Appointment[]
+    busySlots: BusySlot[]
 }
 
 const DAYS_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -74,6 +78,10 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                 venditori: res.venditori.map(v => ({
                     ...v,
                     appointments: v.appointments.map(a => ({ ...a, appointmentDate: new Date(a.appointmentDate) })),
+                    busySlots: (v.busySlots || []).map(b => ({
+                        start: new Date(b.start),
+                        end: new Date(b.end),
+                    })),
                 })),
             })
         } catch (e: any) {
@@ -206,13 +214,23 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                     <div className="text-[10px] text-ash-500">
                                                         {weekCount} app{weekCount === 1 ? '' : '.'} / sett
                                                     </div>
+                                                    {v.hasGoogleCalendar ? (
+                                                        <div className="text-[9px] text-emerald-600 font-semibold mt-0.5">
+                                                            {v.busySlots.length > 0 ? `${v.busySlots.length} impegni ext` : 'GCal · libero'}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-[9px] text-ash-400 italic mt-0.5">GCal non connesso</div>
+                                                    )}
                                                 </div>
                                                 {days.map((d, i) => {
                                                     const items = v.appointments.filter(a =>
                                                         sameDay(a.appointmentDate as Date, d),
                                                     )
+                                                    const busy = v.busySlots.filter(b =>
+                                                        sameDay(b.start as Date, d),
+                                                    )
                                                     return (
-                                                        <DayCell key={i} appointments={items} isToday={sameDay(d, today)} />
+                                                        <DayCell key={i} appointments={items} busy={busy} isToday={sameDay(d, today)} />
                                                     )
                                                 })}
                                             </div>
@@ -229,37 +247,59 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" /> Aperto</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Confermato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Scartato</span>
+                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-purple-300 border border-purple-400" /> Impegno esterno (Google Calendar)</span>
                 </div>
             </div>
         </div>
     )
 }
 
-function DayCell({ appointments, isToday }: { appointments: Appointment[]; isToday: boolean }) {
-    const bg = isToday ? 'bg-brand-orange/5' : appointments.length === 0 ? 'bg-ash-50/30' : 'bg-white'
+function DayCell({ appointments, busy, isToday }: { appointments: Appointment[]; busy: BusySlot[]; isToday: boolean }) {
+    const hasContent = appointments.length > 0 || busy.length > 0
+    const bg = isToday ? 'bg-brand-orange/5' : !hasContent ? 'bg-ash-50/30' : 'bg-white'
     return (
         <div className={`border-b border-r border-ash-200 ${bg} p-1.5 min-h-[70px] space-y-1`}>
-            {appointments.length === 0 ? (
+            {!hasContent ? (
                 <div className="text-[10px] text-ash-300 text-center pt-3 italic">—</div>
             ) : (
-                appointments.map(a => {
-                    const d = a.appointmentDate as Date
-                    const badge = outcomeBadge(a.confirmationsOutcome)
-                    return (
-                        <div
-                            key={a.leadId}
-                            className="rounded-md border border-ash-200 bg-white px-1.5 py-1 text-[10px] leading-tight hover:shadow-sm transition-shadow"
-                            title={`${a.leadName} · ${a.funnel || '-'}${a.appointmentNote ? ` · ${a.appointmentNote}` : ''}`}
-                        >
-                            <div className="flex items-center justify-between gap-1">
-                                <span className="font-mono font-bold text-ash-900">{formatHM(d)}</span>
-                                <span className={`rounded px-1 py-px text-[9px] font-bold ${badge.cls}`}>{badge.label}</span>
+                <>
+                    {appointments.map(a => {
+                        const d = a.appointmentDate as Date
+                        const badge = outcomeBadge(a.confirmationsOutcome)
+                        return (
+                            <div
+                                key={a.leadId}
+                                className="rounded-md border border-ash-200 bg-white px-1.5 py-1 text-[10px] leading-tight hover:shadow-sm transition-shadow"
+                                title={`${a.leadName} · ${a.funnel || '-'}${a.appointmentNote ? ` · ${a.appointmentNote}` : ''}`}
+                            >
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className="font-mono font-bold text-ash-900">{formatHM(d)}</span>
+                                    <span className={`rounded px-1 py-px text-[9px] font-bold ${badge.cls}`}>{badge.label}</span>
+                                </div>
+                                <div className="truncate font-semibold text-ash-800">{a.leadName}</div>
+                                {a.funnel && <div className="truncate text-ash-500 text-[9px]">{a.funnel}</div>}
                             </div>
-                            <div className="truncate font-semibold text-ash-800">{a.leadName}</div>
-                            {a.funnel && <div className="truncate text-ash-500 text-[9px]">{a.funnel}</div>}
-                        </div>
-                    )
-                })
+                        )
+                    })}
+                    {busy.map((b, i) => {
+                        const s = b.start as Date
+                        const e = b.end as Date
+                        return (
+                            <div
+                                key={`busy-${i}`}
+                                className="rounded-md border border-dashed border-purple-300 bg-purple-50 px-1.5 py-1 text-[10px] leading-tight"
+                                title={`Impegno esterno (GCal) · ${formatHM(s)} – ${formatHM(e)}`}
+                            >
+                                <div className="flex items-center gap-1">
+                                    <span className="font-mono font-bold text-purple-800">{formatHM(s)}</span>
+                                    <span className="text-purple-400">–</span>
+                                    <span className="font-mono font-bold text-purple-800">{formatHM(e)}</span>
+                                </div>
+                                <div className="truncate text-purple-600 text-[9px] italic">Impegno esterno</div>
+                            </div>
+                        )
+                    })}
+                </>
             )}
         </div>
     )

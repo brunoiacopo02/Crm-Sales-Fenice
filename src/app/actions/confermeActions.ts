@@ -3,9 +3,9 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents } from "@/db/schema"
-import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte } from "drizzle-orm"
+import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, inArray } from "drizzle-orm"
 import crypto from "crypto"
-import { createGoogleCalendarEvent, checkFreeBusy } from "@/lib/googleCalendar"
+import { createGoogleCalendarEvent, checkFreeBusy, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
 import { incrementChestProgress } from "@/app/actions/chestActions"
@@ -20,6 +20,10 @@ export async function getConfermeAppointments(filters: {
     searchQuery?: string;
     confermeStatus?: "da_lavorare" | "confermati" | "scartati" | "storico" | "tutti";
     fetchMode?: "strict_kanban" | "all";
+    /** Su quale colonna applicare il filtro startDate/endDate.
+     *  Default: appointmentDate. Per lo storico si usa confirmationsTimestamp
+     *  (il giorno in cui il lead è stato effettivamente confermato/scartato). */
+    dateFilterField?: "appointmentDate" | "confirmationsTimestamp";
 }) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -70,7 +74,8 @@ export async function getConfermeAppointments(filters: {
 
         conditions.push(or(between(leads.appointmentDate, start, end), eq(leads.confNeedsReschedule, true))!);
     } else if (filters.startDate && filters.endDate) {
-        conditions.push(between(leads.appointmentDate, filters.startDate, filters.endDate))
+        const col = filters.dateFilterField === "confirmationsTimestamp" ? leads.confirmationsTimestamp : leads.appointmentDate;
+        conditions.push(between(col, filters.startDate, filters.endDate));
     }
 
     let query = db.select({
@@ -174,10 +179,35 @@ export async function getConfermeAppointments(filters: {
         });
     }
 
-    const grouped: Record<string, typeof results> = {};
-    const daDefinire: typeof results = [];
+    // Attach ultima nota Conferme per lead (per anteprima nella riga board)
+    const leadIds = Array.from(new Set(results.map(r => r.lead.id)));
+    const notesMap = new Map<string, { text: string; createdAt: Date; authorId: string }>();
+    if (leadIds.length > 0) {
+        const allNotes = await db.select({
+            leadId: confirmationsNotes.leadId,
+            text: confirmationsNotes.text,
+            createdAt: confirmationsNotes.createdAt,
+            authorId: confirmationsNotes.authorId,
+        }).from(confirmationsNotes)
+            .where(inArray(confirmationsNotes.leadId, leadIds))
+            .orderBy(desc(confirmationsNotes.createdAt));
+        for (const n of allNotes) {
+            if (!notesMap.has(n.leadId)) {
+                notesMap.set(n.leadId, { text: n.text, createdAt: n.createdAt, authorId: n.authorId });
+            }
+        }
+    }
 
-    for (const item of results) {
+    type RowWithNote = (typeof results)[number] & { lastConfermeNote: { text: string; createdAt: Date; authorId: string } | null };
+    const withNotes: RowWithNote[] = results.map(r => ({
+        ...r,
+        lastConfermeNote: notesMap.get(r.lead.id) ?? null,
+    }));
+
+    const grouped: Record<string, RowWithNote[]> = {};
+    const daDefinire: RowWithNote[] = [];
+
+    for (const item of withNotes) {
         if (item.lead.confNeedsReschedule) {
             daDefinire.push(item);
             continue;
@@ -202,7 +232,7 @@ export async function getConfermeAppointments(filters: {
     return {
         groupedByHour: grouped,
         daDefinire: daDefinire,
-        flatList: results
+        flatList: withNotes
     };
 }
 
@@ -858,6 +888,7 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
     venditori: Array<{
         id: string;
         name: string;
+        hasGoogleCalendar: boolean;
         appointments: Array<{
             leadId: string;
             leadName: string;
@@ -867,6 +898,10 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
             appointmentNote: string | null;
             confirmationsOutcome: string | null;
         }>;
+        /** Slot occupati sul Google Calendar primario del venditore
+         *  (riunioni/impegni NON tracciati dal CRM). Vuoto se il venditore
+         *  non ha connesso Google. */
+        busySlots: Array<{ start: Date; end: Date }>;
     }>;
 }> {
     const supabase = await createClient();
@@ -898,23 +933,109 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         lte(leads.appointmentDate, endDate),
     )).orderBy(asc(leads.appointmentDate));
 
+    // Fetch busy slots da Google Calendar in parallelo per ogni venditore.
+    // Best-effort: chi non ha connesso Google torna array vuoto.
+    const busyResults = await Promise.all(
+        venditori.map(async v => {
+            try {
+                const [slots, connected] = await Promise.all([
+                    getBusySlotsForUser(v.id, startDate, endDate),
+                    hasCalendarConnection(v.id),
+                ]);
+                return { id: v.id, slots, connected };
+            } catch {
+                return { id: v.id, slots: [], connected: false };
+            }
+        }),
+    );
+    const busyByVenditore = new Map(busyResults.map(b => [b.id, b]));
+
     return {
         venditori: venditori
-            .map(v => ({
-                id: v.id,
-                name: v.displayName || v.name || 'Venditore',
-                appointments: rows
-                    .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
-                    .map(r => ({
-                        leadId: r.id,
-                        leadName: r.name || 'Senza nome',
-                        leadPhone: r.phone ?? null,
-                        funnel: r.funnel ?? null,
-                        appointmentDate: r.appointmentDate as Date,
-                        appointmentNote: r.appointmentNote ?? null,
-                        confirmationsOutcome: r.confirmationsOutcome ?? null,
-                    })),
-            }))
+            .map(v => {
+                const busy = busyByVenditore.get(v.id);
+                const apptSet = new Set(
+                    rows
+                        .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
+                        .map(r => (r.appointmentDate as Date).getTime()),
+                );
+                // Filtra gli slot busy Google che coincidono con appuntamenti CRM
+                // per evitare doppioni visivi (l'evento calendar creato dal CRM stesso).
+                const externalBusy = (busy?.slots || []).filter(
+                    s => !apptSet.has(s.start.getTime()),
+                );
+                return {
+                    id: v.id,
+                    name: v.displayName || v.name || 'Venditore',
+                    hasGoogleCalendar: busy?.connected ?? false,
+                    appointments: rows
+                        .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
+                        .map(r => ({
+                            leadId: r.id,
+                            leadName: r.name || 'Senza nome',
+                            leadPhone: r.phone ?? null,
+                            funnel: r.funnel ?? null,
+                            appointmentDate: r.appointmentDate as Date,
+                            appointmentNote: r.appointmentNote ?? null,
+                            confirmationsOutcome: r.confirmationsOutcome ?? null,
+                        })),
+                    busySlots: externalBusy,
+                };
+            })
             .sort((a, b) => a.name.localeCompare(b.name, 'it')),
     };
+}
+
+/**
+ * Annulla lo scarto di un lead: rimette il lead "da lavorare" resettando
+ * outcome, motivo, user e timestamp. Solo per lead scartati.
+ */
+export async function undoConfermeScarto(leadId: string, currentVersion: number): Promise<{ success: boolean; error?: string }> {
+    try {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        if (!oldLead) return { success: false, error: "Lead not found" };
+        if (oldLead.version !== currentVersion) {
+            return { success: false, error: "CONCURRENCY_ERROR" };
+        }
+        if (oldLead.confirmationsOutcome !== "scartato") {
+            return { success: false, error: "Il lead non è nello stato 'scartato'" };
+        }
+
+        const updated = await db.update(leads).set({
+            confirmationsOutcome: null,
+            confirmationsDiscardReason: null,
+            confirmationsUserId: null,
+            confirmationsTimestamp: null,
+            version: oldLead.version + 1,
+            updatedAt: new Date(),
+        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false, error: "CONCURRENCY_ERROR" };
+        }
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: "conferme_undo_scarto",
+            userId: session.user.id,
+            timestamp: new Date(),
+            metadata: {
+                previousDiscardReason: oldLead.confirmationsDiscardReason,
+                previousConfirmationsUserId: oldLead.confirmationsUserId,
+            },
+        });
+
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+    }
 }

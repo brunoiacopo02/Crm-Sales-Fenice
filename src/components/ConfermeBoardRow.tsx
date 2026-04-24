@@ -455,6 +455,19 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                 </div>
             )}
 
+            {/* Ultima nota Conferme (preview compatta, 1 riga truncata) */}
+            {item.lastConfermeNote && (
+                <div className="w-full mt-1 pointer-events-none">
+                    <div
+                        className="text-[11px] text-blue-700 bg-blue-50/80 py-1 px-2 rounded-md flex items-center gap-1.5 border border-blue-100/80"
+                        title={item.lastConfermeNote.text}
+                    >
+                        <span className="font-bold text-blue-800 shrink-0 uppercase tracking-wide text-[9px]">Conferme:</span>
+                        <span className="truncate flex-1">{item.lastConfermeNote.text}</span>
+                    </div>
+                </div>
+            )}
+
         </div>
     )
 }

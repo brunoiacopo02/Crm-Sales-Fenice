@@ -9,6 +9,7 @@ const FomoToast = dynamic(() => import("@/components/FomoToast").then(mod => ({ 
 const UniverseToast = dynamic(() => import("@/components/UniverseToast").then(mod => ({ default: mod.UniverseToast })))
 const CreatureRevealOverlay = dynamic(() => import("@/components/CreatureRevealOverlay").then(mod => ({ default: mod.CreatureRevealOverlay })))
 const DuelStartOverlay = dynamic(() => import("@/components/DuelStartOverlay").then(mod => ({ default: mod.DuelStartOverlay })))
+const GlobalAlertListener = dynamic(() => import("@/components/GlobalAlertListener").then(mod => ({ default: mod.GlobalAlertListener })), { ssr: false })
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
@@ -60,6 +61,8 @@ export default async function DashboardLayout({
                         <SafeWrapper><DuelStartOverlay /></SafeWrapper>
                     </>
                 )}
+                {/* Alert P2P listener: globale a tutta la dashboard, non solo alla pagina Conferme */}
+                <SafeWrapper><GlobalAlertListener currentUser={session.user} /></SafeWrapper>
             </SidebarProvider>
         </RealtimeProvider>
     )

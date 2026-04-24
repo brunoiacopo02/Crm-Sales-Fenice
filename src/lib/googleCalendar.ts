@@ -124,6 +124,60 @@ export async function checkFreeBusy(userId: string, startTime: Date, endTime: Da
     }
 }
 
+/**
+ * Ritorna gli slot occupati del calendario Google primario di un utente
+ * nell'intervallo indicato. Se l'utente non ha connesso Google Calendar,
+ * ritorna array vuoto (non è un errore). Usato per visualizzare la
+ * disponibilità reale dei venditori oltre ai soli appuntamenti CRM.
+ */
+export async function getBusySlotsForUser(
+    userId: string,
+    startTime: Date,
+    endTime: Date,
+): Promise<Array<{ start: Date; end: Date }>> {
+    const connection = await db.query.calendarConnections.findFirst({
+        where: eq(calendarConnections.userId, userId),
+    });
+    if (!connection) return [];
+
+    let accessToken = connection.accessToken;
+    if (connection.tokenExpiry && connection.tokenExpiry < new Date()) {
+        try {
+            accessToken = await refreshAccessToken(userId) as string;
+        } catch {
+            return [];
+        }
+    }
+
+    const client = createOAuth2Client();
+    client.setCredentials({ access_token: accessToken });
+    const calendar = google.calendar({ version: 'v3', auth: client });
+
+    try {
+        const res = await calendar.freebusy.query({
+            requestBody: {
+                timeMin: startTime.toISOString(),
+                timeMax: endTime.toISOString(),
+                items: [{ id: 'primary' }],
+            },
+        });
+        const busy = res.data.calendars?.['primary']?.busy || [];
+        return busy
+            .filter((b) => b.start && b.end)
+            .map((b) => ({ start: new Date(b.start!), end: new Date(b.end!) }));
+    } catch (e: any) {
+        console.error(`[googleCalendar] getBusySlotsForUser error (${userId}):`, e.message);
+        return [];
+    }
+}
+
+export async function hasCalendarConnection(userId: string): Promise<boolean> {
+    const connection = await db.query.calendarConnections.findFirst({
+        where: eq(calendarConnections.userId, userId),
+    });
+    return !!connection;
+}
+
 export async function createGoogleCalendarEvent(userId: string, eventDetails: any, associatedEntityId: string, eventType: string) {
     const connection = await db.query.calendarConnections.findFirst({
         where: eq(calendarConnections.userId, userId)
