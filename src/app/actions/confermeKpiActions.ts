@@ -24,9 +24,12 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         conditionsConfirmations.push(eq(leads.confirmationsUserId, confermeUserId))
     }
 
+    // "Fissati" per ogni cella del calendario = numero di appuntamenti
+    // che HANNO COME DATA quel giorno (basato su appointmentDate), non
+    // quelli presi/creati quel giorno. Vedi Bruno 2026-04-24.
     const conditionsFixed = [
-        gte(leads.appointmentCreatedAt, calendarStart),
-        lte(leads.appointmentCreatedAt, calendarEnd)
+        gte(leads.appointmentDate, calendarStart),
+        lte(leads.appointmentDate, calendarEnd)
     ]
 
     // Fetch confirmed & discarded leads
@@ -36,10 +39,10 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         outcome: leads.confirmationsOutcome
     }).from(leads).where(and(...conditionsConfirmations))
 
-    // Fetch fixed leads (all global, since they are fixed by GDOs for Conferme to process)
+    // Fetch fixed leads — raggruppati per appointmentDate (giorno dell'appuntamento)
     const fixedLeadsRaw = await db.select({
         id: leads.id,
-        date: leads.appointmentCreatedAt
+        date: leads.appointmentDate
     }).from(leads).where(and(...conditionsFixed))
 
     // Grouping by Day
