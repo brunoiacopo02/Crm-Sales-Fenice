@@ -16,6 +16,10 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const calendarStart = startOfWeek(start, { weekStartsOn: 1 })
     const calendarEnd = endOfWeek(end, { weekStartsOn: 1 })
 
+    // === QUERY 1: per il THROUGHPUT SETTIMANALE ===
+    // Qui 'confermati' = conferme AVVENUTE nel range (confirmationsTimestamp).
+    // Serve al tracking del target settimanale del team Conferme (quante
+    // pratiche chiude a settimana).
     const conditionsConfirmations = [
         gte(leads.confirmationsTimestamp, calendarStart),
         lte(leads.confirmationsTimestamp, calendarEnd)
@@ -24,34 +28,47 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         conditionsConfirmations.push(eq(leads.confirmationsUserId, confermeUserId))
     }
 
-    // "Fissati" per ogni cella del calendario = numero di appuntamenti
-    // che HANNO COME DATA quel giorno (basato su appointmentDate), non
-    // quelli presi/creati quel giorno. Vedi Bruno 2026-04-24.
-    const conditionsFixed = [
-        gte(leads.appointmentDate, calendarStart),
-        lte(leads.appointmentDate, calendarEnd)
-    ]
-
-    // Fetch confirmed & discarded leads
     const confirmedLeads = await db.select({
         id: leads.id,
         date: leads.confirmationsTimestamp,
         outcome: leads.confirmationsOutcome
     }).from(leads).where(and(...conditionsConfirmations))
 
-    // Fetch fixed leads — raggruppati per appointmentDate (giorno dell'appuntamento)
-    const fixedLeadsRaw = await db.select({
-        id: leads.id,
-        date: leads.appointmentDate
-    }).from(leads).where(and(...conditionsFixed))
+    // === QUERY 2: per il CALENDARIO ===
+    // La cella del giorno X mostra le metriche relative agli appuntamenti
+    // SCHEDULATI per il giorno X (indipendentemente da quando la conferma/
+    // scarto è stata registrata). Filtro su appointmentDate.
+    const conditionsCalendar = [
+        gte(leads.appointmentDate, calendarStart),
+        lte(leads.appointmentDate, calendarEnd)
+    ]
+    if (confermeUserId) {
+        // Filtrare per utente: Fissati resta globale, ma Confermati/Scartati
+        // del singolo utente tengono conto di chi ha lavorato la pratica.
+        // Qui prendiamo tutti i lead del range; poi in JS applichiamo il
+        // filtro confirmationsUserId solo per confermati/scartati.
+    }
 
-    // Grouping by Day
+    const calendarLeads = await db.select({
+        id: leads.id,
+        appointmentDate: leads.appointmentDate,
+        outcome: leads.confirmationsOutcome,
+        confirmationsUserId: leads.confirmationsUserId,
+    }).from(leads).where(and(...conditionsCalendar))
+
+    // Grouping by Day — dailyStats basato su appointmentDate
     const daysInMonth = eachDayOfInterval({ start, end })
     const dailyStats = daysInMonth.map(d => {
         const dayStr = format(d, 'yyyy-MM-dd')
-        const fixed = fixedLeadsRaw.filter(l => l.date && toRomeDateStr(new Date(l.date)) === dayStr).length
-        const confirmed = confirmedLeads.filter(l => l.date && l.outcome === 'confermato' && toRomeDateStr(new Date(l.date)) === dayStr).length
-        const discarded = confirmedLeads.filter(l => l.date && l.outcome === 'scartato' && toRomeDateStr(new Date(l.date)) === dayStr).length
+        const leadsOfDay = calendarLeads.filter(l =>
+            l.appointmentDate && toRomeDateStr(new Date(l.appointmentDate)) === dayStr,
+        )
+        const matchesUser = (l: typeof calendarLeads[number]) =>
+            !confermeUserId || l.confirmationsUserId === confermeUserId
+
+        const fixed = leadsOfDay.length
+        const confirmed = leadsOfDay.filter(l => l.outcome === 'confermato' && matchesUser(l)).length
+        const discarded = leadsOfDay.filter(l => l.outcome === 'scartato' && matchesUser(l)).length
 
         return {
             date: dayStr,
