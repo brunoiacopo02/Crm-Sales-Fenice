@@ -30,11 +30,12 @@ const DEFAULT_FUNNEL = 'SCONOSCIUTO';
 // Liste AC da NON importare nel CRM (es. campagne di raccolta lead per
 // lanci futuri: i lead devono restare in AC finché non decidiamo di
 // contattarli). Override via env ACTIVECAMPAIGN_BLOCKED_LIST_NAMES
-// (comma-separated). Match per nome esatto, trim, case-sensitive.
-const BLOCKED_LIST_NAMES = new Set(
+// (comma-separated). Match normalizzato: trim + lowercase, così
+// tolleriamo differenze di maiuscole/spazi tra UI AC e config.
+const BLOCKED_LIST_NAMES_NORMALIZED = new Set(
     (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_NAMES || 'Lead Lancio Video Editor 2026')
         .split(',')
-        .map((s) => s.trim())
+        .map((s) => s.trim().toLowerCase())
         .filter(Boolean),
 );
 
@@ -56,29 +57,60 @@ async function acGet(path: string): Promise<any> {
 }
 
 // Cache in-memory degli ID delle liste bloccate. Si ripopola da AC ogni
-// 10 min per tollerare rinomine/aggiunte senza redeploy.
+// 10 min per tollerare rinomine/aggiunte senza redeploy. Pagina fino a
+// 500 liste (5 pagine da 100) per sicurezza.
 let blockedListIdsCache: { ids: Set<string>; expires: number } | null = null;
 async function getBlockedListIds(): Promise<Set<string>> {
-    if (BLOCKED_LIST_NAMES.size === 0) return new Set();
+    if (BLOCKED_LIST_NAMES_NORMALIZED.size === 0) return new Set();
     const now = Date.now();
     if (blockedListIdsCache && blockedListIdsCache.expires > now) {
         return blockedListIdsCache.ids;
     }
     const ids = new Set<string>();
     try {
-        const res = await acGet('/lists?limit=100');
-        const lists = Array.isArray(res.lists) ? res.lists : [];
-        for (const l of lists) {
-            const name = String(l?.name ?? '').trim();
-            if (name && BLOCKED_LIST_NAMES.has(name) && l?.id != null) {
-                ids.add(String(l.id));
+        for (let offset = 0; offset < 500; offset += 100) {
+            const res = await acGet(`/lists?limit=100&offset=${offset}`);
+            const lists = Array.isArray(res.lists) ? res.lists : [];
+            if (lists.length === 0) break;
+            for (const l of lists) {
+                const nameNorm = String(l?.name ?? '').trim().toLowerCase();
+                if (nameNorm && BLOCKED_LIST_NAMES_NORMALIZED.has(nameNorm) && l?.id != null) {
+                    ids.add(String(l.id));
+                }
             }
+            if (lists.length < 100) break;
         }
+        console.log(`[AC webhook] getBlockedListIds: ${ids.size} blocked list(s) found — ids=${Array.from(ids).join(',')}`);
     } catch (e) {
         console.error('[AC webhook] getBlockedListIds error:', e);
     }
     blockedListIdsCache = { ids, expires: now + 10 * 60 * 1000 };
     return ids;
+}
+
+/**
+ * Verifica via AC API se un contatto è iscritto ad almeno una delle
+ * liste bloccate. Usato come fallback quando il payload del webhook
+ * non include il campo `list` (alcune configurazioni AC non lo
+ * mandano). Stato 1 = iscrizione attiva.
+ */
+async function isContactInBlockedList(contactId: string): Promise<{ blocked: boolean; listId: string | null }> {
+    const blocked = await getBlockedListIds();
+    if (blocked.size === 0) return { blocked: false, listId: null };
+    try {
+        const res = await acGet(`/contacts/${contactId}/contactLists`);
+        const memberships = Array.isArray(res.contactLists) ? res.contactLists : [];
+        for (const m of memberships) {
+            const listId = String(m?.list ?? '');
+            const status = String(m?.status ?? '');
+            if (listId && blocked.has(listId) && status === '1') {
+                return { blocked: true, listId };
+            }
+        }
+    } catch (e) {
+        console.error(`[AC webhook] isContactInBlockedList error for contact ${contactId}:`, e);
+    }
+    return { blocked: false, listId: null };
 }
 
 function readFieldLocal(fieldValues: Array<{ field: string; value: string | null }>, fieldId: string): string | null {
@@ -197,15 +229,42 @@ export async function POST(req: NextRequest) {
         // Lista sorgente del subscribe: se corrisponde a una lista
         // bloccata (es. campagna lancio futuro) skippiamo senza creare
         // lead né failure record. Non è un errore: è intenzionale.
+        //
+        // Strategia a 2 livelli:
+        // 1. Prima fastpath: se il payload include `list` e matcha una
+        //    lista bloccata, skippa subito senza chiamate extra.
+        // 2. Fallback: interroga /contacts/{id}/contactLists. Necessario
+        //    perché alcune configurazioni AC (o trigger indiretti tipo
+        //    automazione che aggiunge il contatto alla lista) NON
+        //    includono `list` nel payload webhook — si era visto su 2
+        //    lead della lista 'Lead Lancio Video Editor 2026' passati
+        //    al CRM il 2026-04-24 nonostante il filtro.
         const triggerListId = rawPayload['list'] || rawPayload['list[id]'] || null;
         if (triggerListId) {
             const blocked = await getBlockedListIds();
             if (blocked.has(String(triggerListId))) {
-                console.log(`[AC webhook] skip contact ${contactId} - lista bloccata ${triggerListId}`);
+                console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (payload) ${triggerListId}`);
                 return NextResponse.json({
                     skipped: 'blocked_list',
                     listId: String(triggerListId),
                     acContactId: contactId,
+                    via: 'payload',
+                });
+            }
+        }
+
+        // Fallback membership check (run sempre, sia con che senza triggerListId,
+        // perché il trigger potrebbe essere una lista non bloccata ma il
+        // contatto potrebbe essere ANCHE in una bloccata).
+        {
+            const membership = await isContactInBlockedList(contactId);
+            if (membership.blocked) {
+                console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (membership) ${membership.listId}`);
+                return NextResponse.json({
+                    skipped: 'blocked_list',
+                    listId: membership.listId,
+                    acContactId: contactId,
+                    via: 'membership',
                 });
             }
         }
