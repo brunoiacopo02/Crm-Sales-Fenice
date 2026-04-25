@@ -193,11 +193,11 @@ export default function MarketingAnalyticsClient({
                                 <thead className="bg-ash-50 text-ash-700 border-b border-ash-200">
                                     <tr>
                                         <th className="px-4 py-4 font-semibold">Funnel Globali</th>
-                                        <th className="px-4 py-4 font-semibold text-right">Lead</th>
-                                        <th className="px-4 py-4 font-semibold text-right">Lead Assegn.</th>
-                                        <th className="px-4 py-4 font-semibold text-right">App</th>
-                                        <th className="px-4 py-4 font-semibold text-right text-orange-600">% Fiss.</th>
-                                        <th className="px-4 py-4 font-semibold text-right text-ash-500">App %</th>
+                                        <th className="px-4 py-4 font-semibold text-right" title="Tutti i lead importati nel periodo, anche quelli mai assegnati a un GDO">Lead totali</th>
+                                        <th className="px-4 py-4 font-semibold text-right" title="Lead effettivamente assegnati a un GDO per il follow-up">Presi in carico</th>
+                                        <th className="px-4 py-4 font-semibold text-right" title="Appuntamenti fissati dal team">App fissati</th>
+                                        <th className="px-4 py-4 font-semibold text-right text-orange-600" title="App fissati / Lead presi in carico — efficienza del team sui lead lavorati">% Fiss su presi</th>
+                                        <th className="px-4 py-4 font-semibold text-right text-ash-500" title="App fissati / Lead totali — conversione globale (include lead non gestiti)">% Fiss su totali</th>
                                         <th className="px-4 py-4 font-semibold text-right">Conferme</th>
                                         <th className="px-4 py-4 font-semibold text-right text-ash-500">Conf %</th>
                                         <th className="px-4 py-4 font-semibold text-right">Trattative</th>
@@ -280,9 +280,9 @@ export default function MarketingAnalyticsClient({
                                                 <thead className="bg-white text-ash-500 border-b border-ash-200 text-xs uppercase">
                                                     <tr>
                                                         <th className="px-6 py-3 font-semibold">GDO</th>
-                                                        <th className="px-4 py-3 font-semibold text-right">Lead Assegn.</th>
+                                                        <th className="px-4 py-3 font-semibold text-right" title="Lead presi in carico dal singolo GDO">Presi in carico</th>
                                                         <th className="px-4 py-3 font-semibold text-right">App Fissati</th>
-                                                        <th className="px-4 py-3 font-semibold text-right">% Fiss.</th>
+                                                        <th className="px-4 py-3 font-semibold text-right" title="App fissati / Lead presi in carico">% Fiss su presi</th>
                                                         <th className="px-4 py-3 font-semibold text-right">App Confermati</th>
                                                         <th className="px-4 py-3 font-semibold text-right">% Conferma</th>
                                                         <th className="px-4 py-3 font-semibold text-right">App Presenziati</th>
