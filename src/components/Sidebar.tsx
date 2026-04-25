@@ -95,7 +95,7 @@ export function Sidebar() {
                 ...(role === "ADMIN" ? [{
                     label: "Admin",
                     items: [
-                        { name: "Panoramica Generale", href: "/panoramica-generale", icon: Compass },
+                        { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
                     ],
                 }] : []),
                 {
