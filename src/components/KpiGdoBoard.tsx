@@ -39,7 +39,7 @@ export function KpiGdoBoard() {
     const [data, setData] = useState<any>(null)
     const [targetsData, setTargetsData] = useState<any>(null)
     const [loading, setLoading] = useState(true)
-    const [sortBy, setSortBy] = useState<'productivityCoeff' | 'calls' | 'appointments' | 'apptRate'>('productivityCoeff')
+    const [sortBy, setSortBy] = useState<'productivityCoeff' | 'calls' | 'appointments' | 'apptRate' | 'confermePerc' | 'presenziatiPerc'>('productivityCoeff')
 
     useEffect(() => {
         // If session not ready or gdoFilter still not set on mount
@@ -420,6 +420,8 @@ export function KpiGdoBoard() {
                                 <option value="calls">Chiamate</option>
                                 <option value="appointments">Appuntamenti</option>
                                 <option value="apptRate">% Fissaggio</option>
+                                <option value="confermePerc">% Conferme</option>
+                                <option value="presenziatiPerc">% Presenziati</option>
                             </select>
                         </div>
                     </div>
@@ -436,6 +438,8 @@ export function KpiGdoBoard() {
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">Lead Contattati</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">Appuntamenti</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">% Fissaggio</th>
+                                    <th className="pb-2 pr-3 text-ash-500 font-semibold text-right" title="% degli appuntamenti del GDO che le Conferme hanno marcato 'confermato'">% Conferme</th>
+                                    <th className="pb-2 pr-3 text-ash-500 font-semibold text-right" title="% degli appuntamenti del GDO che il venditore ha effettivamente visto in chiamata (esclude Sparito/Lead non presenziato)">% Presenziati</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">Chiamate/Ora</th>
                                     <th className="pb-2 text-ash-500 font-semibold text-right">Coefficiente</th>
                                 </tr>
@@ -459,6 +463,18 @@ export function KpiGdoBoard() {
                                                 <td className="py-2.5 pr-3 text-right text-ash-700">{gdo.contactedLeads}</td>
                                                 <td className="py-2.5 pr-3 text-right text-emerald-700 font-semibold">{gdo.appointments}</td>
                                                 <td className="py-2.5 pr-3 text-right text-ash-700">{gdo.apptRate}%</td>
+                                                <td className="py-2.5 pr-3 text-right">
+                                                    <span className={`font-semibold ${gdo.confermePerc >= 70 ? 'text-emerald-700' : gdo.confermePerc >= 40 ? 'text-amber-600' : gdo.confermePerc > 0 ? 'text-rose-600' : 'text-ash-300'}`}>
+                                                        {gdo.appointments > 0 ? `${gdo.confermePerc}%` : '—'}
+                                                    </span>
+                                                    {gdo.appointments > 0 && <span className="text-[10px] text-ash-400 ml-1">({gdo.confirmed}/{gdo.appointments})</span>}
+                                                </td>
+                                                <td className="py-2.5 pr-3 text-right">
+                                                    <span className={`font-semibold ${gdo.presenziatiPerc >= 70 ? 'text-emerald-700' : gdo.presenziatiPerc >= 40 ? 'text-amber-600' : gdo.presenziatiPerc > 0 ? 'text-rose-600' : 'text-ash-300'}`}>
+                                                        {gdo.appointments > 0 ? `${gdo.presenziatiPerc}%` : '—'}
+                                                    </span>
+                                                    {gdo.appointments > 0 && <span className="text-[10px] text-ash-400 ml-1">({gdo.presenziati}/{gdo.appointments})</span>}
+                                                </td>
                                                 <td className="py-2.5 pr-3 text-right text-ash-700">{gdo.callsPerHour}</td>
                                                 <td className="py-2.5 text-right">
                                                     <div className="flex items-center justify-end gap-2">

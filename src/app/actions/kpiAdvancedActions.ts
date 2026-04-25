@@ -22,6 +22,22 @@ export type KpiFilters = {
     trendGranularity?: 'day' | 'hour'
 }
 
+/**
+ * discardReason che semanticamente NON è una scelta di scarto basata sul
+ * contenuto della chiamata, ma indica che il lead non ha mai risposto
+ * (numero che non esiste, non utilizzabile, ecc.). Va contato come
+ * NON_RISPOSTO ai fini del tasso risposta del GDO e ESCLUSO dai motivi
+ * di scarto, perché non è un esito qualitativo della chiamata.
+ */
+const NEVER_ANSWERED_DISCARD_REASONS = new Set<string>([
+    'numero inesistente',
+])
+
+function isNeverAnsweredLog(outcome: string | null, discardReason: string | null): boolean {
+    if (outcome !== 'DA_SCARTARE') return false
+    return !!discardReason && NEVER_ANSWERED_DISCARD_REASONS.has(discardReason)
+}
+
 /** Verifica se un timestamp cade in orario lavoro GDO 13:30-20:00 Europe/Rome */
 function isWithinWorkingHours(date: Date): boolean {
     const romeTime = date.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
@@ -48,6 +64,9 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         assignedToId: leads.assignedToId,
         recallDate: leads.recallDate,
         appointmentDate: leads.appointmentDate,
+        // Necessari per % Conferme / % Presenziati nel ranking GDO
+        confirmationsOutcome: leads.confirmationsOutcome,
+        salespersonOutcome: leads.salespersonOutcome,
     }).from(leads)
 
     // Apply lead-level filters
@@ -93,7 +112,12 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const leadIdsWithLogs = new Set(validLogs.map(l => l.leadId))
     const calledLeadsCount = leadIdsWithLogs.size
 
-    const answeredLogs = validLogs.filter(l => l.outcome !== 'NON_RISPOSTO')
+    // "Numero inesistente" trattato come NON_RISPOSTO: non conta come
+    // risposta del GDO né come scarto qualitativo. Vedi
+    // NEVER_ANSWERED_DISCARD_REASONS.
+    const answeredLogs = validLogs.filter(l =>
+        l.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(l.outcome, l.discardReason),
+    )
     const answeredLeadIds = new Set(answeredLogs.map(l => l.leadId))
     const answeredLeadsCount = answeredLeadIds.size
 
@@ -101,8 +125,10 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const appointmentLeadIds = new Set(appointmentLogs.map(l => l.leadId))
     const appointmentsSet = appointmentLeadIds.size
 
-    // 2. Motivi Scarto (Qualità Lead)
-    const discardLogs = validLogs.filter(l => l.outcome === 'DA_SCARTARE' && l.discardReason)
+    // 2. Motivi Scarto (Qualità Lead) — esclude "numero inesistente"
+    const discardLogs = validLogs.filter(l =>
+        l.outcome === 'DA_SCARTARE' && l.discardReason && !isNeverAnsweredLog(l.outcome, l.discardReason),
+    )
     const discardReasonsTracker: Record<string, number> = {}
     discardLogs.forEach(log => {
         if (log.discardReason) {
@@ -145,11 +171,23 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         const st = gdoStatsMap[uname]
         st.calls++
         st.totalContacted.add(log.leadId)
-        if (log.outcome !== 'NON_RISPOSTO') st.answers++
-        if (log.outcome === 'APPUNTAMENTO') st.appointments++
+        // Numero inesistente non conta come risposta (vedi NEVER_ANSWERED_DISCARD_REASONS)
+        if (log.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(log.outcome, log.discardReason)) st.answers++
+        if (log.outcome === 'APPUNTAMENTO') {
+            st.appointments++
+            if (!st.apptLeadIds) st.apptLeadIds = new Set<string>()
+            st.apptLeadIds.add(log.leadId)
+        }
     })
 
     const WORKING_HOURS_PER_DAY = 6.5
+
+    // Mappa leadId → outcome per il calcolo % Conferme / % Presenziati per GDO
+    const leadOutcomeMap = new Map<string, { conf: string | null; sales: string | null }>()
+    for (const l of allLeads) {
+        leadOutcomeMap.set(l.id, { conf: l.confirmationsOutcome ?? null, sales: l.salespersonOutcome ?? null })
+    }
+    const PRESENZIATI_OUTCOMES = new Set(['Chiuso', 'Non chiuso'])
 
     const gdoStats = Object.values(gdoStatsMap).map(st => {
         const responseRate = st.calls > 0 ? Math.round((st.answers / st.calls) * 100) : 0
@@ -158,6 +196,22 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         const callsPerHour = st.calls / WORKING_HOURS_PER_DAY
         // Coefficiente produttività: (chiamate/ora) * (% fissaggio / 100)
         const productivityCoeff = callsPerHour * (apptRate / 100)
+
+        // % Conferme: quanti degli app fissati sono stati confermati dalle Conferme.
+        // % Presenziati: quanti il venditore ha effettivamente visto in chiamata
+        // (Chiuso o Non chiuso, esclude Sparito / Lead non presenziato).
+        // App ancora pending (in attesa) restano al denominatore ma non al numeratore.
+        const apptLeadIds: Set<string> = st.apptLeadIds || new Set<string>()
+        let confirmed = 0
+        let presenziati = 0
+        for (const lid of apptLeadIds) {
+            const o = leadOutcomeMap.get(lid)
+            if (!o) continue
+            if (o.conf === 'confermato') confirmed++
+            if (o.sales && PRESENZIATI_OUTCOMES.has(o.sales)) presenziati++
+        }
+        const confermePerc = st.appointments > 0 ? Math.round((confirmed / st.appointments) * 100) : 0
+        const presenziatiPerc = st.appointments > 0 ? Math.round((presenziati / st.appointments) * 100) : 0
 
         return {
             name: st.name,
@@ -168,7 +222,11 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             apptRate,
             contactedLeads,
             callsPerHour: Math.round(callsPerHour * 10) / 10,
-            productivityCoeff: Math.round(productivityCoeff * 100) / 100
+            productivityCoeff: Math.round(productivityCoeff * 100) / 100,
+            confirmed,
+            confermePerc,
+            presenziati,
+            presenziatiPerc
         }
     }).sort((a, b) => b.appointments - a.appointments)
 
