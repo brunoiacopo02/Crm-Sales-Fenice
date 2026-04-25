@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { leads, users } from "@/db/schema"
 import { eq, gte, lte, and, isNotNull, asc } from "drizzle-orm"
 import { CalendarCheck, Phone, Mail, User as UserIcon, Clock } from "lucide-react"
+import { AdminCancelApptButton } from "@/components/AdminCancelApptButton"
 
 export const dynamic = 'force-dynamic'
 
@@ -125,6 +126,7 @@ export default async function AppuntamentiOggiPage() {
                                                 <th className="px-4 py-2.5 text-left text-[10px] font-bold text-ash-500 uppercase tracking-wider">Appuntamento Per</th>
                                                 <th className="px-4 py-2.5 text-left text-[10px] font-bold text-ash-500 uppercase tracking-wider">Fissato Alle</th>
                                                 <th className="px-4 py-2.5 text-left text-[10px] font-bold text-ash-500 uppercase tracking-wider">Note</th>
+                                                <th className="px-4 py-2.5 text-right text-[10px] font-bold text-ash-500 uppercase tracking-wider">Azioni</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -172,6 +174,9 @@ export default async function AppuntamentiOggiPage() {
                                                         ) : (
                                                             <span className="text-ash-300 italic">—</span>
                                                         )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <AdminCancelApptButton leadId={appt.id} leadName={appt.name || 'lead'} />
                                                     </td>
                                                 </tr>
                                             ))}

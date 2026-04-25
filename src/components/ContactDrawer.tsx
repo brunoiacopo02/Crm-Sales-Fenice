@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { getLeadProfile, updateLeadContactInfo } from "@/app/actions/eventActions"
-import { X, CalendarCheck, Phone, Mail, User, Clock, AlertCircle, History, FileText, CheckCircle2, Pencil, Save, Loader2 } from "lucide-react"
+import { X, CalendarCheck, Phone, Mail, User, Clock, AlertCircle, History, FileText, CheckCircle2, Pencil, Save, Loader2, Trash2 } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { AgendaButton } from "./AgendaButton"
 import { useAuth } from "./AuthProvider"
@@ -68,6 +68,39 @@ export function ContactDrawer({
     const [editNote, setEditNote] = useState("")
     const [isSaving, setIsSaving] = useState(false)
     const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+    const [isDeletingLead, setIsDeletingLead] = useState(false)
+
+    const isAdmin = authUser?.user_metadata?.role === 'ADMIN'
+
+    const handleDeleteLead = async () => {
+        if (!lead?.id) return
+        // Doppia conferma per ridurre rischio errori — operazione IRREVERSIBILE
+        const first = confirm(
+            `⚠️ CANCELLAZIONE DEFINITIVA\n\nStai per cancellare il lead "${lead.name || ''}" e tutti i dati collegati (chiamate, eventi, note, sondaggi).\n\nQuesta azione NON è reversibile.\n\nVuoi procedere?`,
+        )
+        if (!first) return
+        const typed = prompt(`Per confermare digita ELIMINA (maiuscolo):`)
+        if (typed !== 'ELIMINA') {
+            alert('Cancellazione annullata.')
+            return
+        }
+        setIsDeletingLead(true)
+        try {
+            const { deleteLeadCompletely } = await import("@/app/actions/appointmentActions")
+            const res = await deleteLeadCompletely(lead.id)
+            if (!res.success) {
+                alert(`Errore: ${res.error}`)
+                return
+            }
+            alert(`Lead "${res.deletedName || lead.name}" cancellato.`)
+            onClose()
+            router.refresh()
+        } catch (e: any) {
+            alert(`Errore: ${e?.message || e}`)
+        } finally {
+            setIsDeletingLead(false)
+        }
+    }
 
     const refreshProfile = () => {
         if (!leadId) return
@@ -216,6 +249,16 @@ export function ContactDrawer({
                                     hasEmail={!!lead.email}
                                     agendaSentAt={lead.agendaSentAt ?? null}
                                 />
+                            )}
+                            {isAdmin && lead?.id && (
+                                <button
+                                    onClick={handleDeleteLead}
+                                    disabled={isDeletingLead}
+                                    title="Cancella DEFINITIVAMENTE il lead (admin only)"
+                                    className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-full transition-colors disabled:opacity-50"
+                                >
+                                    {isDeletingLead ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
+                                </button>
                             )}
                             <button onClick={onClose} className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors">
                                 <X className="h-5 w-5" />
