@@ -31,6 +31,10 @@ export function KpiGdoBoard() {
     const [funnelFilter, setFunnelFilter] = useState("ALL")
     // Default: Singolo GDO loggato. Se Admin, forziamo ugualmente a ID loggato, ma permettiamo la scelta
     const [gdoFilter, setGdoFilter] = useState(session?.user?.id || "ALL")
+    // Toggle "Solo ore lavoro 13:30-20:00". Default ON per Manager/Admin
+    // (vista live team durante il turno), OFF per il singolo GDO che vede
+    // tutto il giorno per default — può attivarlo se vuole pulire i numeri.
+    const [workingHoursOnly, setWorkingHoursOnly] = useState<boolean>(isAdminOrManager)
 
     const [data, setData] = useState<any>(null)
     const [targetsData, setTargetsData] = useState<any>(null)
@@ -64,11 +68,17 @@ export function KpiGdoBoard() {
                     end.setHours(23, 59, 59, 999)
                 }
 
+                // Trend granularity: 'hour' solo per "Oggi" (1 giorno),
+                // altrimenti 'day' (più giorni → barre per giorno).
+                const trendGranularity: 'day' | 'hour' = dateRange === "0" ? 'hour' : 'day'
+
                 const filters: KpiFilters = {
                     startDate: start,
                     endDate: end,
                     funnel: funnelFilter !== "ALL" ? funnelFilter : undefined,
-                    gdoId: gdoFilter !== "ALL" ? gdoFilter : undefined
+                    gdoId: gdoFilter !== "ALL" ? gdoFilter : undefined,
+                    workingHoursOnly,
+                    trendGranularity,
                 }
 
                 const res = await getAdvancedKpi(filters)
@@ -96,7 +106,7 @@ export function KpiGdoBoard() {
         window.addEventListener('realtime_update', handleRealtimeUpdate)
 
         return () => window.removeEventListener('realtime_update', handleRealtimeUpdate)
-    }, [dateRange, customStart, customEnd, funnelFilter, gdoFilter, session?.user?.id, isAdminOrManager])
+    }, [dateRange, customStart, customEnd, funnelFilter, gdoFilter, workingHoursOnly, session?.user?.id, isAdminOrManager])
 
     if (!data && loading) {
         return (
@@ -143,12 +153,9 @@ export function KpiGdoBoard() {
 
     const responseRate = totalCalls > 0 ? Math.round((totalAnswers / totalCalls) * 100) : 0
 
-    const mockTrend = [
-        { name: 'Lun', chiamate: totalCalls > 10 ? Math.floor(totalCalls * 0.2) : 0, appuntamenti: totalAppointments > 2 ? 1 : 0 },
-        { name: 'Mar', chiamate: totalCalls > 10 ? Math.floor(totalCalls * 0.3) : Math.floor(totalCalls / 2), appuntamenti: totalAppointments > 2 ? 2 : 0 },
-        { name: 'Mer', chiamate: totalCalls > 10 ? Math.floor(totalCalls * 0.25) : 0, appuntamenti: totalAppointments > 0 ? 1 : 0 },
-        { name: 'Oggi', chiamate: totalCalls > 10 ? Math.floor(totalCalls * 0.25) : Math.ceil(totalCalls / 2), appuntamenti: totalAppointments > 2 ? totalAppointments - 3 : totalAppointments },
-    ]
+    // Chart trend: dati reali dal server. Granularity 'hour' per "Oggi",
+    // 'day' per range più lunghi. Sostituisce il vecchio mockTrend.
+    const trendChartData: Array<{ timeLabel: string; chiamate: number; appuntamenti: number }> = data.chartData || []
 
     const mockPie = [
         { name: 'Non Risposto', value: totalCalls - totalAnswers },
@@ -212,6 +219,20 @@ export function KpiGdoBoard() {
                         </select>
                     </div>
                 )}
+
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-ash-500 font-medium" title="Quando attivo, conta solo le chiamate fatte tra le 13:30 e le 20:00 Europe/Rome (turno standard). Gli appuntamenti restano sempre tutti.">
+                        Solo ore lavoro
+                    </label>
+                    <button
+                        type="button"
+                        onClick={() => setWorkingHoursOnly(v => !v)}
+                        className={`px-3 py-1.5 text-sm border rounded-lg font-semibold transition-all ${workingHoursOnly ? 'bg-brand-orange/10 border-brand-orange/40 text-brand-orange-700' : 'bg-ash-50/50 border-ash-200/60 text-ash-500'}`}
+                        title="Filtra le chiamate al solo orario lavorativo standard 13:30-20:00"
+                    >
+                        {workingHoursOnly ? '🟢 13:30-20:00' : '⚪ Tutto il giorno'}
+                    </button>
+                </div>
             </div>
 
             {/* TARGETS WIDGETS */}
@@ -325,19 +346,28 @@ export function KpiGdoBoard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 <div className="bg-white p-5 border border-ash-200/60 rounded-xl shadow-soft h-80 flex flex-col group hover:shadow-card transition-all duration-200">
-                    <h3 className="font-bold text-ash-800 border-b border-ash-200/60 pb-2 mb-4">Trend Appuntamenti VS Chiamate</h3>
+                    <h3 className="font-bold text-ash-800 border-b border-ash-200/60 pb-2 mb-4">
+                        Trend Appuntamenti VS Chiamate
+                        <span className="ml-2 text-[10px] font-normal text-ash-400 uppercase tracking-wider">
+                            {data.chartGranularity === 'hour' ? 'per ora' : 'per giorno'}
+                        </span>
+                    </h3>
                     <div className="flex-1 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={mockTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8E4E0" />
-                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#8A7F76' }} />
-                                <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#8A7F76' }} />
-                                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: '#8A7F76' }} />
-                                <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #E8E4E0', boxShadow: '0 4px 12px rgb(0 0 0 / 0.08)' }} />
-                                <Line yAxisId="left" type="monotone" dataKey="chiamate" stroke="#B09E92" strokeWidth={2} name="Totale Chiamate" dot={false} />
-                                <Line yAxisId="right" type="monotone" dataKey="appuntamenti" stroke="#4A9D5B" strokeWidth={3} name="Appuntamenti Fissati" activeDot={{ r: 6, fill: '#4A9D5B', stroke: '#fff', strokeWidth: 2 }} />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        {trendChartData.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-ash-400 text-sm">Nessun dato nel periodo</div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={trendChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8E4E0" />
+                                    <XAxis dataKey="timeLabel" tick={{ fontSize: 12, fill: '#8A7F76' }} />
+                                    <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#8A7F76' }} />
+                                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: '#8A7F76' }} />
+                                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #E8E4E0', boxShadow: '0 4px 12px rgb(0 0 0 / 0.08)' }} />
+                                    <Line yAxisId="left" type="monotone" dataKey="chiamate" stroke="#B09E92" strokeWidth={2} name="Totale Chiamate" dot={false} />
+                                    <Line yAxisId="right" type="monotone" dataKey="appuntamenti" stroke="#4A9D5B" strokeWidth={3} name="Appuntamenti Fissati" activeDot={{ r: 6, fill: '#4A9D5B', stroke: '#fff', strokeWidth: 2 }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
 

@@ -115,8 +115,8 @@ export function Sidebar() {
                 {
                     label: "KPI & Analytics",
                     items: [
-                        { name: "KPI Team", href: "/kpi-team", icon: LayoutDashboard },
                         { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
+                        { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
                         { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                         { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
                         { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },

@@ -3,6 +3,7 @@
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
 import { gte, lte, and, eq, desc } from "drizzle-orm"
+import { format } from "date-fns"
 
 import { cache } from "react"
 
@@ -11,6 +12,26 @@ export type KpiFilters = {
     endDate: Date | string
     funnel?: string
     gdoId?: string
+    /** Se true, conta solo le chiamate fatte in orario lavoro 13:30-20:00
+     *  (Europe/Rome). Gli APPUNTAMENTI restano sempre conteggiati, anche
+     *  fuori orario. Default: false (comportamento storico). */
+    workingHoursOnly?: boolean
+    /** Granularità del trend: 'day' = una barra per giorno, 'hour' = una
+     *  barra per ora 13:30-20:00. Default: 'day'. 'hour' ha senso solo
+     *  con range giornaliero (1 giorno). */
+    trendGranularity?: 'day' | 'hour'
+}
+
+/** Verifica se un timestamp cade in orario lavoro GDO 13:30-20:00 Europe/Rome */
+function isWithinWorkingHours(date: Date): boolean {
+    const romeTime = date.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
+    const [hStr, mStr] = romeTime.split(':')
+    const h = parseInt(hStr)
+    const m = parseInt(mStr)
+    if (h === 13 && m >= 30) return true
+    if (h >= 14 && h <= 19) return true
+    if (h === 20 && m === 0) return true
+    return false
 }
 
 export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
@@ -56,7 +77,17 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     // Filter logs to match only leads in `allLeads` (in case funnel filter was applied)
     const validLeadIds = new Set(allLeads.map(l => l.id))
-    const validLogs = rawLogs.filter(log => validLeadIds.has(log.leadId))
+    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId))
+
+    // Working-hours filter: se ON, le chiamate sono SOLO quelle 13:30-20:00.
+    // Gli APPUNTAMENTI restano comunque tutti conteggiati (matchando la
+    // logica di /kpi-team — l'appuntamento è un esito che sopravvive
+    // all'orario). Senza questo split, le chiamate fuori orario "sporcano"
+    // i ratio di conversione/risposta.
+    const workingHoursOnly = filters.workingHoursOnly === true
+    const validLogs = workingHoursOnly
+        ? allValidLogs.filter(l => l.outcome === 'APPUNTAMENTO' || isWithinWorkingHours(l.createdAt))
+        : allValidLogs
 
     // 1. Funnel Conversione
     const leadIdsWithLogs = new Set(validLogs.map(l => l.leadId))
@@ -146,6 +177,60 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // GDO List
     const gdoList = allUsers.filter(u => u.role === 'GDO' || u.role === 'MANAGER').map(u => ({ id: u.id, name: u.name }))
 
+    // Trend chart data (sostituisce il vecchio mockTrend lato client).
+    // Granularità 'hour' = barre 13:30 + 14-20 (orario lavoro).
+    // Granularità 'day' = una barra per giorno nel range.
+    const granularity: 'day' | 'hour' = filters.trendGranularity === 'hour' ? 'hour' : 'day'
+    const trendMap = new Map<string, { chiamate: number; appuntamenti: number }>()
+
+    if (granularity === 'hour') {
+        trendMap.set('13:30', { chiamate: 0, appuntamenti: 0 })
+        for (let h = 14; h <= 20; h++) {
+            trendMap.set(`${h}:00`, { chiamate: 0, appuntamenti: 0 })
+        }
+        for (const log of allValidLogs) {
+            const romeTime = log.createdAt.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
+            const [hStr, mStr] = romeTime.split(':')
+            const h = parseInt(hStr)
+            const m = parseInt(mStr)
+            let label: string | null = null
+            if (h === 13 && m >= 30) label = '13:30'
+            else if (h >= 14 && h <= 20) label = `${h}:00`
+            if (label && trendMap.has(label)) {
+                const entry = trendMap.get(label)!
+                entry.chiamate += 1
+                if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+            }
+        }
+    } else {
+        // Granularità giornaliera. Itera dal giorno di safeStartDate fino a safeEndDate.
+        const cursor = new Date(safeStartDate)
+        cursor.setHours(0, 0, 0, 0)
+        const endDay = new Date(safeEndDate)
+        endDay.setHours(0, 0, 0, 0)
+        while (cursor <= endDay) {
+            const label = format(cursor, 'EEE dd/MM')
+            trendMap.set(label, { chiamate: 0, appuntamenti: 0 })
+            cursor.setDate(cursor.getDate() + 1)
+        }
+        const sourceLogs = workingHoursOnly
+            ? allValidLogs.filter(l => l.outcome === 'APPUNTAMENTO' || isWithinWorkingHours(l.createdAt))
+            : allValidLogs
+        for (const log of sourceLogs) {
+            const label = format(log.createdAt, 'EEE dd/MM')
+            const entry = trendMap.get(label)
+            if (entry) {
+                entry.chiamate += 1
+                if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+            }
+        }
+    }
+
+    const chartData = Array.from(trendMap.entries()).map(([timeLabel, vals]) => ({
+        timeLabel,
+        ...vals,
+    }))
+
     return {
         funnelConversion: {
             imported: allLeads.length, // approximation based on current DB without deleting matching funnel
@@ -162,6 +247,8 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             recallUnconvertedPerc
         },
         gdoStats,
+        chartData,
+        chartGranularity: granularity,
         filtersData: {
             funnels: funnelList,
             gdos: gdoList
