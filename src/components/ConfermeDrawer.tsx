@@ -612,6 +612,63 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                         {activeTab === "dati" && (
                             <div className="space-y-5 animate-in fade-in duration-200">
+                                {/* Stato attuale esiti — visibile prima dei dati lead, link al tab Gestione Esiti per modificare */}
+                                {(lead.confirmationsOutcome || lead.salespersonOutcome) && (
+                                    <div className="rounded-xl border border-ash-200 bg-white p-4 shadow-sm">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h3 className="text-xs font-bold text-ash-500 uppercase tracking-wider">Stato attuale</h3>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.preventDefault(); setActiveTab("esito") }}
+                                                className="text-[11px] font-semibold text-brand-orange hover:underline"
+                                            >
+                                                Modifica → tab Gestione Esiti
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-ash-400 font-semibold mb-1">Esito Conferme</div>
+                                                {lead.confirmationsOutcome === 'confermato' && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="px-2 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Confermato</span>
+                                                        {lead.salespersonAssigned && <span className="text-xs text-ash-600">→ {lead.salespersonAssigned}</span>}
+                                                    </div>
+                                                )}
+                                                {lead.confirmationsOutcome === 'scartato' && (
+                                                    <div>
+                                                        <span className="px-2 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">Scartato</span>
+                                                        {lead.confirmationsDiscardReason && <div className="text-[11px] text-ash-500 mt-1">Motivo: {lead.confirmationsDiscardReason}</div>}
+                                                    </div>
+                                                )}
+                                                {!lead.confirmationsOutcome && (
+                                                    <span className="px-2 py-1 rounded-md text-xs font-semibold bg-ash-100 text-ash-600 border border-ash-200">Da lavorare</span>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-ash-400 font-semibold mb-1">Esito Vendita</div>
+                                                {lead.salespersonOutcome === 'Chiuso' && (
+                                                    <div>
+                                                        <span className="px-2 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✓ Chiuso</span>
+                                                        {lead.closeAmountEur != null && <div className="text-[11px] text-ash-500 mt-1">Importo: {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(lead.closeAmountEur))}</div>}
+                                                    </div>
+                                                )}
+                                                {lead.salespersonOutcome === 'Non chiuso' && (
+                                                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">Presenziato (non chiuso)</span>
+                                                )}
+                                                {lead.salespersonOutcome === 'Lead non presenziato' && (
+                                                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">Lead non presenziato</span>
+                                                )}
+                                                {!lead.salespersonOutcome && lead.confirmationsOutcome === 'confermato' && (
+                                                    <span className="px-2 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">In attesa</span>
+                                                )}
+                                                {!lead.salespersonOutcome && lead.confirmationsOutcome !== 'confermato' && (
+                                                    <span className="px-2 py-1 rounded-md text-xs font-semibold bg-ash-100 text-ash-500 border border-ash-200">—</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-100 flex items-center gap-3 shadow-sm">
                                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                                         <User className="w-4 h-4 text-blue-700" />

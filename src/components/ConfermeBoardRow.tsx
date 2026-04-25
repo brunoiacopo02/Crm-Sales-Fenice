@@ -229,6 +229,18 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                         {lead.name}
                         {lead.confVslSeen ? <div title="VSL Vista" className="flex items-center justify-center bg-blue-100 text-blue-600 rounded-lg p-1"><MonitorPlay className="w-3.5 h-3.5" /></div> : <div title="VSL NON Vista" className="flex items-center justify-center bg-red-100 text-red-500 rounded-lg p-1"><EyeOff className="w-3.5 h-3.5" /></div>}
                     </div>
+
+                    {/* Badge esito Conferme/Vendita — visibile subito senza aprire drawer */}
+                    {lead.confirmationsOutcome && (() => {
+                        const conf = lead.confirmationsOutcome
+                        const sales = lead.salespersonOutcome
+                        if (sales === 'Chiuso') return <span title="Esito venditore: Chiuso" className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase shrink-0">✓ Chiuso</span>
+                        if (sales === 'Non chiuso') return <span title="Esito venditore: Non chiuso (presenziato)" className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 uppercase shrink-0">Presenziato</span>
+                        if (sales === 'Lead non presenziato') return <span title="Lead non presenziato" className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 uppercase shrink-0">Sparito</span>
+                        if (conf === 'confermato') return <span title="Confermato dalle Conferme — in attesa esito venditore" className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase shrink-0">Confermato</span>
+                        if (conf === 'scartato') return <span title={`Scartato: ${lead.confirmationsDiscardReason || 'motivo non specificato'}`} className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 uppercase shrink-0">Scartato</span>
+                        return null
+                    })()}
                     <div className={`text-ash-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-ash-400" />{lead.phone}</div>
 
                     {/* GDO name + Funnel (hidden in Snooze mode to save space) */}
