@@ -1,12 +1,46 @@
 "use client"
 import { useState, useEffect } from "react"
-import { getManagerOperativaData, OperativaDataRow } from "@/app/actions/managerAdvancedActions"
-import { Activity, Clock, Users, Calendar, BarChart3, TrendingUp } from "lucide-react"
+import {
+    getManagerOperativaData,
+    getOperativaCostSettings,
+    setOperativaCplEur,
+    OperativaDataRow,
+} from "@/app/actions/managerAdvancedActions"
+import { useAuth } from "@/components/AuthProvider"
+import { Activity, Euro, Pencil, Check, X } from "lucide-react"
+
+const formatEuro = (n: number) => {
+    if (!isFinite(n) || n <= 0) return '—'
+    return '€ ' + n.toLocaleString('it-IT', { maximumFractionDigits: 0 })
+}
 
 export function ManagerOperativaBoard() {
+    const { user } = useAuth()
+    const isAdmin = (user?.user_metadata as any)?.role === 'ADMIN'
+
     const [period, setPeriod] = useState<'OGGI' | 'MESE' | 'TRIMESTRE'>('OGGI')
     const [data, setData] = useState<OperativaDataRow[]>([])
     const [loading, setLoading] = useState(true)
+
+    const [cplEur, setCplEur] = useState<number>(9)
+    const [costoOrarioGdoEur, setCostoOrarioGdoEur] = useState<number>(12.5)
+    const [cplLoaded, setCplLoaded] = useState(false)
+    const [editingCpl, setEditingCpl] = useState(false)
+    const [cplDraft, setCplDraft] = useState<string>('9')
+    const [savingCpl, setSavingCpl] = useState(false)
+    const [cplError, setCplError] = useState<string | null>(null)
+
+    useEffect(() => {
+        let isMounted = true
+        getOperativaCostSettings().then(s => {
+            if (!isMounted) return
+            setCplEur(s.cplEur)
+            setCostoOrarioGdoEur(s.costoOrarioGdoEur)
+            setCplDraft(String(s.cplEur))
+            setCplLoaded(true)
+        }).catch(() => { if (isMounted) setCplLoaded(true) })
+        return () => { isMounted = false }
+    }, [])
 
     useEffect(() => {
         let isMounted = true
@@ -21,7 +55,25 @@ export function ManagerOperativaBoard() {
             if (isMounted) setLoading(false)
         })
         return () => { isMounted = false }
-    }, [period])
+    }, [period, cplEur])
+
+    const handleSaveCpl = async () => {
+        const parsed = Number(cplDraft.replace(',', '.'))
+        if (!isFinite(parsed) || parsed < 0) {
+            setCplError('Inserisci un numero ≥ 0')
+            return
+        }
+        setSavingCpl(true)
+        setCplError(null)
+        const res = await setOperativaCplEur(parsed)
+        setSavingCpl(false)
+        if (!res.success) {
+            setCplError(res.error || 'Errore sconosciuto')
+            return
+        }
+        setCplEur(res.cplEur ?? parsed)
+        setEditingCpl(false)
+    }
 
     const calculateTotals = () => {
         const t = {
@@ -32,6 +84,7 @@ export function ManagerOperativaBoard() {
             risposte: 0,
             appuntamenti: 0,
             leadAssegnati: 0,
+            leadNuoviAssegnati: 0,
             leadGestiti: 0,
             leadDB: 0,
             leadNuovi: 0,
@@ -44,6 +97,7 @@ export function ManagerOperativaBoard() {
             t.risposte += d.risposte
             t.appuntamenti += d.appuntamenti
             t.leadAssegnati += d.leadAssegnati
+            t.leadNuoviAssegnati += d.leadNuoviAssegnati
             t.leadGestiti += d.leadGestiti
             t.leadDB += d.leadDB
             t.leadNuovi += d.leadNuovi
@@ -53,6 +107,11 @@ export function ManagerOperativaBoard() {
         const formatPercent = (a: number, b: number) => b > 0 ? (a / b * 100).toFixed(1) + '%' : '0.0%'
         const formatHourly = (a: number, h: number) => h > 0 ? (a / h).toFixed(1) : '0.0'
 
+        // Costi aggregati: stessa formula applicata sui totali (non media delle medie)
+        const costoBaseAggr = costoOrarioGdoEur * t.oreLavorate + t.leadNuoviAssegnati * cplEur
+        const costoPerAppAggr = t.appuntamenti > 0 ? costoBaseAggr / t.appuntamenti : 0
+        const costoPerContrAggr = t.contrattiChiusi > 0 ? costoBaseAggr / t.contrattiChiusi : 0
+
         return {
             ...t,
             tassoRisposta: formatPercent(t.risposte, t.chiamate),
@@ -61,10 +120,13 @@ export function ManagerOperativaBoard() {
             gestitiOra: formatHourly(t.leadGestiti, t.oreLavorate),
             fissaggioTotale: formatPercent(t.appuntamenti, t.leadGestiti),
             fissaggioNuovi: formatPercent(t.appuntamenti - (data.reduce((acc, d) => acc + (d.fissaggioDB > 0 || d.fissaggioNuovi > 0 ? d.appuntamenti * (d.fissaggioNuovi / (d.fissaggioNuovi + d.fissaggioDB || 1)) : d.appuntamenti), 0)), t.leadNuovi),
+            costoPerAppuntamentoEur: costoPerAppAggr,
+            costoPerContrattoEur: costoPerContrAggr,
         }
     }
 
     const t = calculateTotals()
+    const showCostColumns = period === 'MESE' || period === 'TRIMESTRE'
 
     return (
         <div className="bg-white rounded-xl shadow-soft border border-ash-200/60 overflow-hidden mt-8">
@@ -92,6 +154,75 @@ export function ManagerOperativaBoard() {
                     ))}
                 </div>
             </div>
+
+            {/* Pannello costi (visibile in MESE/TRIMESTRE) */}
+            {showCostColumns && cplLoaded && (
+                <div className="px-3 sm:px-6 py-3 border-b border-ash-200/60 bg-amber-50/40 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs sm:text-sm">
+                    <div className="flex items-center gap-1.5 text-ash-700">
+                        <Euro className="h-4 w-4 text-amber-600" />
+                        <span className="font-semibold">Parametri Costo:</span>
+                    </div>
+                    <div className="text-ash-600">
+                        Costo orario GDO: <span className="font-semibold text-ash-800">€ {costoOrarioGdoEur.toFixed(2)}/h</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-ash-600">
+                        <span>CPL (lead nuovi):</span>
+                        {editingCpl && isAdmin ? (
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-ash-500">€</span>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step={0.5}
+                                    value={cplDraft}
+                                    onChange={e => setCplDraft(e.target.value)}
+                                    className="w-20 px-2 py-1 border border-ash-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                    disabled={savingCpl}
+                                    autoFocus
+                                />
+                                <button
+                                    onClick={handleSaveCpl}
+                                    disabled={savingCpl}
+                                    className="p-1 rounded-md bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
+                                    title="Salva"
+                                    type="button"
+                                >
+                                    <Check className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                    onClick={() => { setEditingCpl(false); setCplDraft(String(cplEur)); setCplError(null) }}
+                                    disabled={savingCpl}
+                                    className="p-1 rounded-md bg-ash-100 text-ash-600 hover:bg-ash-200 disabled:opacity-50"
+                                    title="Annulla"
+                                    type="button"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold text-ash-800">€ {cplEur.toFixed(2)}</span>
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => { setEditingCpl(true); setCplDraft(String(cplEur)); setCplError(null) }}
+                                        className="p-1 rounded-md text-ash-400 hover:text-amber-600 hover:bg-amber-100"
+                                        title="Modifica CPL (admin)"
+                                        type="button"
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    {cplError && (
+                        <div className="text-xs text-red-600">{cplError}</div>
+                    )}
+                    <div className="text-ash-500 italic ml-auto">
+                        Formula: (€{costoOrarioGdoEur.toFixed(1)} × ore + lead nuovi × CPL) / appuntamenti o chiusure
+                    </div>
+                </div>
+            )}
 
             <div className="p-0 overflow-x-auto">
                 {loading ? (
@@ -129,6 +260,8 @@ export function ManagerOperativaBoard() {
                                     <th className="px-4 py-4 text-center">% Fiss. DB</th>
                                     <th className="px-4 py-4 text-center bg-ash-100/50 text-ash-800 font-bold">% Fiss. Totale</th>
                                     <th className="px-4 py-4 text-center text-blue-700">N° Contratti</th>
+                                    <th className="px-4 py-4 text-center bg-amber-50/60 text-amber-700" title="(€12.5 × ore + lead nuovi × CPL) / appuntamenti">Costo / App.</th>
+                                    <th className="px-4 py-4 text-center bg-amber-50/60 text-amber-700" title="(€12.5 × ore + lead nuovi × CPL) / chiusure">Costo / Contratto</th>
                                 </tr>
                             )}
                         </thead>
@@ -161,6 +294,8 @@ export function ManagerOperativaBoard() {
                                         <td className="px-4 py-4 text-center">-</td>
                                         <td className="px-4 py-4 text-center">{t.fissaggioTotale}</td>
                                         <td className="px-4 py-4 text-center text-blue-300">{t.contrattiChiusi}</td>
+                                        <td className="px-4 py-4 text-center text-amber-300">{formatEuro(t.costoPerAppuntamentoEur)}</td>
+                                        <td className="px-4 py-4 text-center text-amber-300">{formatEuro(t.costoPerContrattoEur)}</td>
                                     </>
                                 )}
                             </tr>
@@ -194,6 +329,8 @@ export function ManagerOperativaBoard() {
                                             <td className="px-4 py-4 text-center text-ash-600">{d.fissaggioDB}%</td>
                                             <td className="px-4 py-4 text-center font-bold text-ash-800 bg-ash-50/50">{d.fissaggioTotale}%</td>
                                             <td className="px-4 py-4 text-center font-bold text-blue-600">{d.contrattiChiusi}</td>
+                                            <td className="px-4 py-4 text-center font-semibold text-amber-700 bg-amber-50/30">{formatEuro(d.costoPerAppuntamentoEur)}</td>
+                                            <td className="px-4 py-4 text-center font-semibold text-amber-700 bg-amber-50/30">{formatEuro(d.costoPerContrattoEur)}</td>
                                         </>
                                     )}
                                 </tr>
@@ -201,7 +338,7 @@ export function ManagerOperativaBoard() {
 
                             {data.length === 0 && (
                                 <tr>
-                                    <td colSpan={period === 'OGGI' ? 8 : 14} className="px-6 py-8 text-center text-ash-400">
+                                    <td colSpan={period === 'OGGI' ? 8 : 16} className="px-6 py-8 text-center text-ash-400">
                                         Nessun dato registrato o operatori non attivi.
                                     </td>
                                 </tr>

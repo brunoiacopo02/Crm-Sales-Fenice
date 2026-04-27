@@ -1,4 +1,4 @@
-# HANDOFF — Stato sessione (aggiornato 2026-04-27)
+# HANDOFF — Stato sessione (aggiornato 2026-04-28)
 
 Bridge fra la sessione che si chiude e quella che parte. Leggilo **tutto**
 prima di agire. Questo file vive in `docs/HANDOFF-SESSIONE.md` ed è committato
@@ -138,7 +138,27 @@ componente è già `"use client"` e si idrata client-only comunque.
   e nel pie "Motivi Scarto". Costante `NEVER_ANSWERED_DISCARD_REASONS`
   estendibile.
 
-### 3.4 Admin tools
+### 3.4 Costi Operativi (28/04)
+
+- **Costo per Appuntamento** + **Costo per Contratto** in `ManagerOperativaBoard`
+  (tab MESE/TRIMESTRE — esclusi da OGGI per non avere metriche esplose con
+  contratti=0). Formule:
+  - `costoBase = 12.5 €/h × oreLavorate + leadNuoviAssegnati × CPL`
+  - `costoPerApp = costoBase / appuntamenti`
+  - `costoPerContratto = costoBase / contrattiChiusi`
+  - `leadNuoviAssegnati` = lead assegnati nel periodo con `funnel ≠ DATABASE`
+    (i lead DB non hanno CPL associato).
+- **CPL configurabile** via tabella `appSettings` (key/value). Default `9 €`,
+  key `operativa_cpl_eur`. Modifica inline solo per ADMIN dal pannello sopra
+  la tabella. Non serve redeploy.
+- Costo orario GDO `12.5 €/h` resta hardcoded come da formula concordata
+  (se servirà parametrizzarlo, usare la stessa tabella `appSettings`).
+- `OperativaDataRow` esteso con: `leadNuoviAssegnati`, `costoBaseEur`,
+  `costoPerAppuntamentoEur`, `costoPerContrattoEur`.
+- Server actions nuove in `managerAdvancedActions.ts`:
+  `getOperativaCostSettings()` (anyone) e `setOperativaCplEur(value)` (ADMIN).
+
+### 3.5 Admin tools
 
 - **Cancella SOLO appuntamento** (admin/manager): bottone "Cancella App" in
   `/appuntamenti-oggi`. Reset campi appointment + esiti, `callCount`

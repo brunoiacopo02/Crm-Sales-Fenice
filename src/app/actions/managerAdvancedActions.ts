@@ -1,8 +1,9 @@
 "use server"
 
 import { db } from "@/db"
-import { callLogs, leads, users } from "@/db/schema"
+import { appSettings, callLogs, leads, users } from "@/db/schema"
 import { and, eq, gte, lte } from "drizzle-orm"
+import { createClient } from "@/utils/supabase/server"
 
 export type OperativaDataRow = {
     userId: string
@@ -13,6 +14,7 @@ export type OperativaDataRow = {
     tassoRisposta: number
     appuntamenti: number
     leadAssegnati: number
+    leadNuoviAssegnati: number
     leadGestiti: number
     leadDB: number
     leadNuovi: number
@@ -22,6 +24,59 @@ export type OperativaDataRow = {
     fissaggioDB: number
     fissaggioTotale: number
     contrattiChiusi: number
+    costoBaseEur: number
+    costoPerAppuntamentoEur: number
+    costoPerContrattoEur: number
+}
+
+// Costo orario forfettario GDO (€/h). Hardcoded come da formula concordata
+// con Bruno: costo_base = 12.5 * ore_lavorate + lead_nuovi_assegnati * CPL.
+const COSTO_ORARIO_GDO_EUR = 12.5
+const APP_SETTING_KEY_CPL = 'operativa_cpl_eur'
+const DEFAULT_CPL_EUR = 9
+
+async function readCplEur(): Promise<number> {
+    try {
+        const rows = await db.select().from(appSettings).where(eq(appSettings.key, APP_SETTING_KEY_CPL))
+        if (rows.length === 0) return DEFAULT_CPL_EUR
+        const parsed = Number(rows[0].value)
+        if (!isFinite(parsed) || parsed < 0) return DEFAULT_CPL_EUR
+        return parsed
+    } catch {
+        return DEFAULT_CPL_EUR
+    }
+}
+
+export async function getOperativaCostSettings(): Promise<{ cplEur: number; costoOrarioGdoEur: number }> {
+    const cplEur = await readCplEur()
+    return { cplEur, costoOrarioGdoEur: COSTO_ORARIO_GDO_EUR }
+}
+
+export async function setOperativaCplEur(value: number): Promise<{ success: boolean; error?: string; cplEur?: number }> {
+    if (typeof value !== 'number' || !isFinite(value) || value < 0) {
+        return { success: false, error: 'Valore CPL non valido.' }
+    }
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'Non autenticato.' }
+    const role = (user.user_metadata as any)?.role
+    if (role !== 'ADMIN') return { success: false, error: 'Solo gli ADMIN possono modificare il CPL.' }
+
+    const rounded = Number(value.toFixed(2))
+    await db.insert(appSettings).values({
+        key: APP_SETTING_KEY_CPL,
+        value: String(rounded),
+        updatedBy: user.id,
+        updatedAt: new Date(),
+    }).onConflictDoUpdate({
+        target: appSettings.key,
+        set: {
+            value: String(rounded),
+            updatedBy: user.id,
+            updatedAt: new Date(),
+        },
+    })
+    return { success: true, cplEur: rounded }
 }
 
 export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMESTRE'): Promise<OperativaDataRow[]> {
@@ -45,7 +100,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
     }
 
     // Usiamo Promise.all() per queries pesanti simultanee
-    const [gdos, logsRaw, appointments, assignedLeadsRaw] = await Promise.all([
+    const [gdos, logsRaw, appointments, assignedLeadsRaw, cplEur] = await Promise.all([
         db.select({ id: users.id, name: users.name, displayName: users.displayName }).from(users).where(eq(users.role, 'GDO')),
         db.select({
             id: callLogs.id,
@@ -71,10 +126,15 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         // dallo status. Prima filtrava solo status='NEW', perdendo tutti i
         // lead già lavorati (IN_PROGRESS/APPOINTMENT/REJECTED) — circa il 96%
         // del totale mensile, il numero risultava enormemente sottostimato.
+        // Includo anche `funnel` per separare leadNuoviAssegnati (escluso DATABASE)
+        // usato nel calcolo Costo per Appuntamento / Contratto.
         db.select({
             assignedToId: leads.assignedToId,
+            funnel: leads.funnel,
         }).from(leads)
-            .where(and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)))
+            .where(and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate))),
+
+        readCplEur(),
     ])
 
     const gdoDataMap = new Map<string, any>()
@@ -89,6 +149,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             tassoRisposta: 0,
             appuntamenti: 0,
             leadAssegnati: 0,
+            leadNuoviAssegnati: 0,
             leadGestiti: 0,
             leadDB: 0,
             leadNuovi: 0,
@@ -98,6 +159,9 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             fissaggioDB: 0,
             fissaggioTotale: 0,
             contrattiChiusi: 0,
+            costoBaseEur: 0,
+            costoPerAppuntamentoEur: 0,
+            costoPerContrattoEur: 0,
             _uniqueLeadsDB: new Set<string>(),
             _uniqueLeadsNuovi: new Set<string>(),
             _uniqueLeadsTotal: new Set<string>(),
@@ -175,10 +239,17 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         }
     }
 
-    // Lead Nuovi assegnati nel periodo
+    // Lead Assegnati nel periodo. leadAssegnati = totale (incluso DATABASE),
+    // leadNuoviAssegnati = solo lead "nuovi" (funnel ≠ DATABASE) — è la base
+    // del calcolo CPL nel Costo per Appuntamento / Contratto.
     for (const lead of assignedLeadsRaw) {
         if (!lead.assignedToId || !gdoDataMap.has(lead.assignedToId)) continue
-        gdoDataMap.get(lead.assignedToId)!.leadAssegnati++
+        const row = gdoDataMap.get(lead.assignedToId)!
+        row.leadAssegnati++
+        const fnl = lead.funnel?.toUpperCase() || ''
+        if (fnl !== 'DATABASE') {
+            row.leadNuoviAssegnati++
+        }
     }
 
     // Compute Math e Protezione NaN
@@ -206,6 +277,13 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         row.fissaggioNuovi = cleanNumber(row.fissaggioNuovi)
         row.fissaggioDB = cleanNumber(row.fissaggioDB)
         row.oreLavorate = cleanNumber(row.oreLavorate)
+
+        // Costo base = 12.5 €/h × ore lavorate + lead nuovi assegnati × CPL.
+        // Il rapporto su appuntamenti / chiusure dà i due indici target.
+        const costoBase = COSTO_ORARIO_GDO_EUR * row.oreLavorate + row.leadNuoviAssegnati * cplEur
+        row.costoBaseEur = cleanNumber(costoBase)
+        row.costoPerAppuntamentoEur = cleanNumber(row.appuntamenti > 0 ? costoBase / row.appuntamenti : 0)
+        row.costoPerContrattoEur = cleanNumber(row.contrattiChiusi > 0 ? costoBase / row.contrattiChiusi : 0)
 
         delete row._uniqueLeadsTotal
         delete row._uniqueLeadsDB

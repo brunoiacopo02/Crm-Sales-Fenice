@@ -753,3 +753,13 @@ export const monthlyFunnelBaselines = pgTable('monthlyFunnelBaselines', {
         unqYmFunnel: unique('funnel_baseline_unique').on(table.yearMonth, table.funnelName),
     };
 });
+
+// Settings globali chiave-valore (override modificabili da admin senza redeploy).
+// Use case attuale: CPL per il calcolo Costo per Appuntamento / Costo per Contratto
+// nella Dashboard Operativa Aziendale. Generica per ospitare altri parametri futuri.
+export const appSettings = pgTable('appSettings', {
+    key: text('key').primaryKey(),
+    value: text('value').notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedBy: text('updatedBy'),
+});
