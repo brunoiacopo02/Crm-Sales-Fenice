@@ -1,5 +1,7 @@
 # HANDOFF — Stato sessione (aggiornato 2026-04-28)
 
+> Ultimo blocco: **Ridistribuzione lead admin** (sezione 3.6).
+
 Bridge fra la sessione che si chiude e quella che parte. Leggilo **tutto**
 prima di agire. Questo file vive in `docs/HANDOFF-SESSIONE.md` ed è committato
 nel repo: per onorare il flusso di lavoro di Bruno, **aggiornarlo come prima
@@ -157,6 +159,36 @@ componente è già `"use client"` e si idrata client-only comunque.
   `costoPerAppuntamentoEur`, `costoPerContrattoEur`.
 - Server actions nuove in `managerAdvancedActions.ts`:
   `getOperativaCostSettings()` (anyone) e `setOperativaCplEur(value)` (ADMIN).
+
+### 3.6 Ridistribuzione lead esistenti (28/04 — sessione ripresa post-crash)
+
+- Card admin-only **"Ridistribuisci lead esistenti"** in fondo a `/import`. Sposta
+  in blocco i lead "in coda" da un GDO sorgente (sommerso o assente) a uno o
+  più destinatari, **preservando tutto lo stato** (`callCount`, `recallDate`,
+  note, eventi). Cambia solo `assignedToId` + bumpa `version`.
+- **Sezioni supportate** (mappate su pipeline GDO):
+  - `'1'` Prima chiamata: `callCount=0`, no recall, status NEW/IN_PROGRESS
+  - `'2'` Seconda chiamata: `callCount=1`, no recall
+  - `'3'` Terza chiamata: `callCount=2`, no recall
+  - `'recall'` Richiami: `recallDate IS NOT NULL`
+  - Sempre escluso `status='REJECTED'` e `status='APPOINTMENT'`
+- **Filtro funnel** opzionale (chip multi-select con conteggi reali).
+- **Quanti**: tutti i match o N specifico → presi i più nuovi prima
+  (`createdAt DESC`), così se chiedi "20 dei 50 della 1ª" prendi i 20 freschi.
+- **Modalità distribuzione**: equa (round-robin) o quote custom (con fallback
+  round-robin sull'eccedenza se la somma quote < totale).
+- **Anteprima live** con bar chart per destinatario prima di confermare.
+- **Audit completo**: 1 evento `leadEvents` per lead con
+  `eventType='REASSIGNED_ADMIN'` + metadata (from/to assignee, sezione, mode,
+  funnels). 1 notifica aggregata per GDO destinatario
+  (`type='lead_assignment'`).
+- **Doppia protezione**: `assertAdmin()` server-side + guard client che nasconde
+  la card ai non-admin (anche se la pagina `/import` è accessibile a manager).
+- File:
+  - `src/app/actions/redistributeLeadsActions.ts` (4 server action: get gdos,
+    get funnel, preview, execute)
+  - `src/components/LeadRedistributionCard.tsx`
+  - `src/app/(dashboard)/import/page.tsx` (mount card)
 
 ### 3.5 Admin tools
 

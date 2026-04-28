@@ -15,6 +15,7 @@ import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, FileUp, XCircle, Ch
 import { useRouter } from "next/navigation"
 import Papa from "papaparse"
 import { AddLeadModal } from "@/components/AddLeadModal"
+import { LeadRedistributionCard } from "@/components/LeadRedistributionCard"
 
 export default function ImportPage() {
     const router = useRouter()
@@ -496,6 +497,8 @@ export default function ImportPage() {
 
                 </div>
             </div>
+
+            <LeadRedistributionCard />
         </div>
     )
 }
