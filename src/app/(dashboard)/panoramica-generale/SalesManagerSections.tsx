@@ -21,6 +21,7 @@ function formatPercent(n: number): string {
 
 export function SalesManagerSections() {
     const [vendKpi, setVendKpi] = useState<VenditoriKpiRow[] | null>(null)
+    const [vendKpiWeek, setVendKpiWeek] = useState<VenditoriKpiRow[] | null>(null)
     const [marketing, setMarketing] = useState<MarketingRow[] | null>(null)
     const [monitor, setMonitor] = useState<VenditoriMonitorData | null>(null)
     const [loading, setLoading] = useState(true)
@@ -38,12 +39,14 @@ export function SalesManagerSections() {
             const start = new Date(today); start.setHours(0, 0, 0, 0)
             const end = new Date(start); end.setDate(end.getDate() + 14); end.setHours(23, 59, 59, 999)
 
-            const [v, m, mon] = await Promise.all([
+            const [v, vWeek, m, mon] = await Promise.all([
                 getVenditoriKpi("mese"),
+                getVenditoriKpi("settimana"),
                 getMarketingStats(monthStr),
                 getVenditoriMonitor({ startDate: start, endDate: end, venditoreIds: [] }),
             ])
             setVendKpi(v)
+            setVendKpiWeek(vWeek)
             setMarketing(m)
             setMonitor(mon)
         } catch (e: any) {
@@ -76,6 +79,26 @@ export function SalesManagerSections() {
         )
         : null
     const roasGlobal = roasTotals && roasTotals.spent > 0 ? (roasTotals.fatturato / roasTotals.spent) * 100 : 0
+
+    // Aggregati settimanali team (lun-dom corrente)
+    const weekTotals = vendKpiWeek
+        ? vendKpiWeek.reduce(
+            (acc, v) => {
+                acc.chiusi += v.chiusi || 0
+                acc.fatturato += v.fatturato || 0
+                acc.nonChiusi += v.nonChiusi || 0
+                acc.sparito += v.sparito || 0
+                return acc
+            },
+            { chiusi: 0, fatturato: 0, nonChiusi: 0, sparito: 0 },
+        )
+        : null
+    const weekClosingRate = weekTotals && (weekTotals.chiusi + weekTotals.nonChiusi + weekTotals.sparito) > 0
+        ? (weekTotals.chiusi / (weekTotals.chiusi + weekTotals.nonChiusi + weekTotals.sparito)) * 100
+        : 0
+    const topVendWeek = vendKpiWeek
+        ? [...vendKpiWeek].sort((a, b) => b.fatturato - a.fatturato).find(v => v.fatturato > 0 || v.chiusi > 0)
+        : null
 
     return (
         <div className="space-y-6 mt-2">
@@ -156,6 +179,31 @@ export function SalesManagerSections() {
                             </table>
                         </div>
                     </>
+                )}
+            </section>
+
+            {/* === SETTIMANA CORRENTE — chiusure & fatturato team === */}
+            <section className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-white p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-ash-900 flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-emerald-600" /> Settimana corrente — vendite team (lun-dom)
+                    </h3>
+                    <Link href="/kpi-venditori" className="text-xs font-semibold text-brand-orange hover:underline flex items-center gap-1">
+                        Apri KPI Venditori <ExternalLink className="h-3 w-3" />
+                    </Link>
+                </div>
+
+                {loading && !vendKpiWeek ? (
+                    <SkeletonRow rows={2} />
+                ) : !weekTotals ? (
+                    <div className="text-sm text-ash-400">Nessun dato</div>
+                ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <KpiTile label="Chiusure settimana" value={String(weekTotals.chiusi)} accent={weekTotals.chiusi > 0 ? "emerald" : "ash"} />
+                        <KpiTile label="Fatturato settimana" value={formatEur(weekTotals.fatturato)} accent={weekTotals.fatturato > 0 ? "emerald" : "ash"} />
+                        <KpiTile label="Closing rate" value={formatPercent(weekClosingRate)} accent={weekClosingRate >= 30 ? "emerald" : weekClosingRate > 0 ? "ash" : "rose"} />
+                        <KpiTile label="Top venditore" value={topVendWeek ? `${topVendWeek.name} · ${formatEur(topVendWeek.fatturato)}` : "—"} accent="ash" />
+                    </div>
                 )}
             </section>
 

@@ -47,11 +47,15 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
         return `${Math.round((val / target) * 100)}%`
     }
 
+    const formatEur = (n: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0)
+
     const renderProgressBar = () => {
         if (!stats) return null
         const act = stats.weekly.confirmedAct
         const wT1 = stats.weekly.targetTier1
         const wT2 = stats.weekly.targetTier2
+        const closedWeek = stats.weekly.closedCount || 0
+        const revenueWeek = stats.weekly.revenueEur || 0
 
         return (
             <div className="bg-white rounded-2xl shadow-sm border border-ash-200 p-6 mb-6">
@@ -90,6 +94,20 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                         T1 ({wT1})
                     </span>
                     <span className="w-full text-right">T2 ({wT2})</span>
+                </div>
+
+                {/* Chiusure + Fatturato settimanali (settimana ISO corrente) */}
+                <div className="mt-5 pt-4 border-t border-ash-100 grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700/80">Chiusure settimana</div>
+                        <div className="text-2xl font-black text-emerald-700 mt-0.5">{closedWeek}</div>
+                        <div className="text-[10px] text-emerald-600/80 mt-0.5">contratti firmati lun-dom</div>
+                    </div>
+                    <div className="rounded-lg border border-ash-200 bg-ash-50/60 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-ash-600">Fatturato settimana</div>
+                        <div className="text-2xl font-black text-ash-900 mt-0.5">{formatEur(revenueWeek)}</div>
+                        <div className="text-[10px] text-ash-500 mt-0.5">somma closeAmountEur dei chiusi</div>
+                    </div>
                 </div>
 
                 {/* Storico Settimanale */}

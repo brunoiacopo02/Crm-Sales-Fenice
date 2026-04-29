@@ -135,6 +135,22 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
 
     const currentWeekData = weeklyHistory.find(w => w.isCurrent) || weeklyHistory[weeklyHistory.length - 1]
 
+    // === CHIUSURE & FATTURATO SETTIMANALI ===
+    // Calcolato sempre sulla settimana ISO corrente (lun-dom Europe/Rome),
+    // indipendentemente dal mese selezionato in UI: il widget "Progresso
+    // Settimanale" mostra il presente, non lo storico.
+    const nowWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
+    const nowWeekEnd = endOfWeek(new Date(), { weekStartsOn: 1 })
+    const closedThisWeekRows = await db.select({
+        amount: leads.closeAmountEur,
+    }).from(leads).where(and(
+        eq(leads.salespersonOutcome, 'Chiuso'),
+        gte(leads.salespersonOutcomeAt, nowWeekStart),
+        lte(leads.salespersonOutcomeAt, nowWeekEnd),
+    ))
+    const closedCountWeek = closedThisWeekRows.length
+    const revenueEurWeek = closedThisWeekRows.reduce((sum, r) => sum + (r.amount || 0), 0)
+
     const calcWorkingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
     const calcTotalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
 
@@ -205,7 +221,9 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         weekly: {
             confirmedAct: currentWeekData ? currentWeekData.act : 0,
             targetTier1: weeklyTier1Target,
-            targetTier2: weeklyTier2Target
+            targetTier2: weeklyTier2Target,
+            closedCount: closedCountWeek,
+            revenueEur: revenueEurWeek,
         }
     }
 }
