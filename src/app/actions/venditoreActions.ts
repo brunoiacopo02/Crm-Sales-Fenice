@@ -50,6 +50,12 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     notes?: string,
     closeProduct?: string,
     closeAmountEur?: number,
+    // Data effettiva di chiusura. Se passata, sovrascrive il default "now()".
+    // Serve quando il venditore registra l'esito in un giorno diverso dalla
+    // firma effettiva (es. firma sabato, registrazione lunedì): senza questo
+    // campo i KPI settimanali (chiusure/fatturato) finirebbero nella settimana
+    // sbagliata.
+    outcomeAt?: Date,
     notClosedReason?: string,
     followUp1Date?: Date | null,
     followUp2Date?: Date | null
@@ -78,7 +84,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             notClosedReason: payload.notClosedReason || null,
             followUp1Date: payload.followUp1Date || null,
             followUp2Date: payload.followUp2Date || null,
-            salespersonOutcomeAt: new Date(),
+            salespersonOutcomeAt: payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date(),
             version: oldLead.version + 1,
         })
         .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))

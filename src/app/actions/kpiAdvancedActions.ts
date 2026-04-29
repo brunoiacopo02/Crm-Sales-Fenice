@@ -360,11 +360,27 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
             lte(leads.confirmationsTimestamp, weekEnd)
         ))).length
 
+    // Chiusure Settimanali (lead originariamente assegnati a questo GDO,
+    // chiusi dal venditore nella settimana corrente — basato su
+    // salespersonOutcomeAt, che ora è editabile dal venditore)
+    const weeklyClosedRows = await db.select({ amount: leads.closeAmountEur })
+        .from(leads)
+        .where(and(
+            eq(leads.assignedToId, gdoId),
+            eq(leads.salespersonOutcome, 'Chiuso'),
+            gte(leads.salespersonOutcomeAt, weekStart),
+            lte(leads.salespersonOutcomeAt, weekEnd)
+        ))
+    const weeklyClosedCount = weeklyClosedRows.length
+    const weeklyRevenueEur = weeklyClosedRows.reduce((sum, r) => sum + (r.amount || 0), 0)
+
     const res = {
         dailyApptTarget: user.dailyApptTarget,
         todayAppointments: todayAppointmentsCount,
         weeklyConfirmedTarget: user.weeklyConfirmedTarget,
-        weeklyConfirmed: weeklyConfirmedCount
+        weeklyConfirmed: weeklyConfirmedCount,
+        weeklyClosedCount,
+        weeklyRevenueEur,
     }
 
     return res

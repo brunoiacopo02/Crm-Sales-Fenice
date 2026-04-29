@@ -237,7 +237,7 @@ export function KpiGdoBoard() {
 
             {/* TARGETS WIDGETS */}
             {targetsData && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-white p-5 rounded-xl border border-ash-200/60 shadow-soft flex items-center gap-4 relative overflow-hidden group hover:shadow-card transition-all duration-200">
                         <div className="h-full absolute left-0 top-0 w-1 bg-gradient-to-b from-brand-orange to-brand-orange-600"></div>
                         <div className="h-12 w-12 rounded-xl bg-brand-orange-50 flex items-center justify-center shrink-0">
@@ -269,11 +269,14 @@ export function KpiGdoBoard() {
                             <CalendarCheck className="h-6 w-6 text-emerald-600" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="text-xs font-bold text-ash-500 uppercase tracking-wider">Target Confermati (Settimanali)</h3>
+                            <h3 className="text-xs font-bold text-ash-500 uppercase tracking-wider" title="Appuntamenti del GDO marcati 'confermato' dal team Conferme nella settimana corrente. NON sono chiusure.">
+                                Conferme settimana
+                            </h3>
                             <div className="flex items-end gap-2 mt-1">
                                 <div className="text-3xl font-black text-brand-charcoal">{targetsData.weeklyConfirmed}</div>
                                 <div className="text-xl font-bold text-ash-400 mb-0.5">/ {targetsData.weeklyConfirmedTarget}</div>
                             </div>
+                            <div className="text-[10px] text-ash-400 mt-0.5">marcati dal team Conferme</div>
                         </div>
                         <div className="shrink-0 flex flex-col items-end">
                             <div className={`text-sm font-bold ${targetsData.weeklyConfirmed >= targetsData.weeklyConfirmedTarget ? 'text-emerald-600' : 'text-emerald-500/70'}`}>
@@ -285,6 +288,38 @@ export function KpiGdoBoard() {
                                     style={{ width: `${Math.min((targetsData.weeklyConfirmed / (targetsData.weeklyConfirmedTarget || 1)) * 100, 100)}%` }}
                                 ></div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Chiusure settimanali */}
+                    <div className="bg-white p-5 rounded-xl border border-ash-200/60 shadow-soft flex items-center gap-4 relative overflow-hidden group hover:shadow-card transition-all duration-200">
+                        <div className="h-full absolute left-0 top-0 w-1 bg-gradient-to-b from-blue-500 to-blue-700"></div>
+                        <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                            <Target className="h-6 w-6 text-blue-700" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-xs font-bold text-ash-500 uppercase tracking-wider" title="Lead originariamente assegnati a questo GDO che il venditore ha chiuso (salespersonOutcome='Chiuso') nella settimana corrente.">
+                                Chiusure settimana
+                            </h3>
+                            <div className="text-3xl font-black text-blue-700 mt-1">{targetsData.weeklyClosedCount ?? 0}</div>
+                            <div className="text-[10px] text-ash-400 mt-0.5">contratti firmati lun-dom</div>
+                        </div>
+                    </div>
+
+                    {/* Fatturato settimanale */}
+                    <div className="bg-white p-5 rounded-xl border border-ash-200/60 shadow-soft flex items-center gap-4 relative overflow-hidden group hover:shadow-card transition-all duration-200">
+                        <div className="h-full absolute left-0 top-0 w-1 bg-gradient-to-b from-gold-500 to-gold-600"></div>
+                        <div className="h-12 w-12 rounded-xl bg-gold-50 flex items-center justify-center shrink-0">
+                            <Target className="h-6 w-6 text-gold-700" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-xs font-bold text-ash-500 uppercase tracking-wider" title="Somma closeAmountEur dei lead di questo GDO chiusi nella settimana corrente.">
+                                Fatturato settimana
+                            </h3>
+                            <div className="text-2xl font-black text-gold-700 mt-1">
+                                {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(targetsData.weeklyRevenueEur ?? 0)}
+                            </div>
+                            <div className="text-[10px] text-ash-400 mt-0.5">somma chiusure GDO</div>
                         </div>
                     </div>
                 </div>

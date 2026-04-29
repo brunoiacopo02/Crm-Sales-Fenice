@@ -30,6 +30,13 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
     const [outcome, setOutcome] = useState<string>(lead?.salespersonOutcome || "")
     const [closeProduct, setCloseProduct] = useState(lead?.closeProduct || "advance")
     const [closeAmountEur, setCloseAmountEur] = useState(lead?.closeAmountEur?.toString() || "")
+    // Data effettiva di chiusura (es. firma sabato ma esito segnato lunedì).
+    // Default = oggi; il venditore può anteciparla. Formato datetime-local.
+    const [closeDate, setCloseDate] = useState<string>(
+        lead?.salespersonOutcomeAt
+            ? format(new Date(lead.salespersonOutcomeAt), "yyyy-MM-dd'T'HH:mm")
+            : format(new Date(), "yyyy-MM-dd'T'HH:mm")
+    )
     const [notClosedReason, setNotClosedReason] = useState(lead?.notClosedReason || "")
     const [notes, setNotes] = useState(lead?.salespersonOutcomeNotes || "")
 
@@ -102,6 +109,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                 notes,
                 closeProduct: outcome === "Chiuso" ? closeProduct : undefined,
                 closeAmountEur: outcome === "Chiuso" ? parseFloat(closeAmountEur) : undefined,
+                outcomeAt: outcome === "Chiuso" && closeDate ? new Date(closeDate) : undefined,
                 notClosedReason: outcome === "Non chiuso" ? notClosedReason : undefined,
                 followUp1Date: outcome === "Non chiuso" && followUp1Date ? new Date(followUp1Date) : null,
                 followUp2Date: outcome === "Non chiuso" && followUp2Date ? new Date(followUp2Date) : null,
@@ -282,6 +290,18 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                                         />
                                     </div>
                                 </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-green-900 mb-1">Data effettiva chiusura *</label>
+                                <input
+                                    type="datetime-local"
+                                    value={closeDate}
+                                    onChange={e => setCloseDate(e.target.value)}
+                                    className="w-full bg-white border border-green-200 rounded p-2 text-sm focus:ring-green-500 focus:border-green-500"
+                                />
+                                <p className="text-xs text-green-700/80 mt-1">
+                                    Default = adesso. Se il contratto è stato firmato in un altro momento (es. sabato ma esito inserito lunedì), correggi qui per non sballare i KPI settimanali.
+                                </p>
                             </div>
                         </div>
                     )}
