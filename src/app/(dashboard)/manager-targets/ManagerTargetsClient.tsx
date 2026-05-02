@@ -209,6 +209,86 @@ export default function ManagerTargetsClient({ initialData, selectedMonth, role,
                             ))}
                         </div>
 
+                        {/* === SUDDIVISIONE NUOVI vs DATABASE === */}
+                        {(() => {
+                            const nuovi = initialData.breakdownNuovi;
+                            const db = initialData.breakdownDatabase;
+                            const totale = nuovi.totale + db.totale;
+                            const pct = (n: number) => totale > 0 ? ((n / totale) * 100).toFixed(1) + '%' : '0%';
+                            const pctOf = (n: number, base: number) => base > 0 ? ((n / base) * 100).toFixed(1) + '%' : '–';
+                            return (
+                                <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft overflow-hidden">
+                                    <div className="flex flex-col space-y-1.5 p-6 bg-gradient-to-r from-ash-50 to-ash-100/50 border-b border-ash-200/60">
+                                        <h3 className="font-semibold leading-none tracking-tight text-lg text-ash-800 flex items-center gap-2">
+                                            <Activity className="h-5 w-5 text-brand-orange" />
+                                            Suddivisione Lead — Nuovi vs Database
+                                        </h3>
+                                        <div className="text-sm text-ash-500">
+                                            Provenienza dei {totale.toLocaleString('it-IT')} lead acquisiti nel mese (esclusi BLT). I &quot;Database&quot; sono i lead riassegnati dall&apos;archivio storico (funnel = <code>database</code>); i &quot;Nuovi&quot; sono tutti gli altri funnel.
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
+                                        <div className="rounded-lg border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="text-sm font-semibold text-emerald-700 uppercase tracking-wide">Lead Nuovi</div>
+                                                <div className="text-xs text-emerald-600 font-medium">{pct(nuovi.totale)}</div>
+                                            </div>
+                                            <div className="text-3xl font-bold text-emerald-700">{nuovi.totale.toLocaleString('it-IT')}</div>
+                                            <div className="text-xs text-ash-500 mt-1">funnel ≠ database (es. AC, CSV, manuali)</div>
+                                        </div>
+                                        <div className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-5">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Lead Database</div>
+                                                <div className="text-xs text-blue-600 font-medium">{pct(db.totale)}</div>
+                                            </div>
+                                            <div className="text-3xl font-bold text-blue-700">{db.totale.toLocaleString('it-IT')}</div>
+                                            <div className="text-xs text-ash-500 mt-1">funnel = database (riassegnati da archivio)</div>
+                                        </div>
+                                    </div>
+                                    <div className="overflow-x-auto border-t border-ash-100/60">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr>
+                                                    <th className={thClass}>Metrica</th>
+                                                    <th className={thClass}>Nuovi</th>
+                                                    <th className={thClass}>% su Nuovi</th>
+                                                    <th className={thClass}>Database</th>
+                                                    <th className={thClass}>% su Database</th>
+                                                    <th className={thClass}>Totale</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {[
+                                                    { label: 'Lead acquisiti', n: nuovi.totale, d: db.totale, baseN: nuovi.totale, baseD: db.totale },
+                                                    { label: 'App. Fissati', n: nuovi.fissati, d: db.fissati, baseN: nuovi.totale, baseD: db.totale },
+                                                    { label: 'App. Confermati', n: nuovi.confermati, d: db.confermati, baseN: nuovi.totale, baseD: db.totale },
+                                                    { label: 'Trattative Presenziati', n: nuovi.presenziati, d: db.presenziati, baseN: nuovi.totale, baseD: db.totale },
+                                                    { label: 'Closed', n: nuovi.closed, d: db.closed, baseN: nuovi.totale, baseD: db.totale },
+                                                ].map((row, i) => (
+                                                    <tr key={i} className="hover:bg-brand-orange-50/20 transition-colors duration-200">
+                                                        <td className={tdLabelClass}>{row.label}</td>
+                                                        <td className={tdClass}>{row.n.toLocaleString('it-IT')}</td>
+                                                        <td className={tdClass}>{row.label === 'Lead acquisiti' ? pct(row.n) : pctOf(row.n, row.baseN)}</td>
+                                                        <td className={tdClass}>{row.d.toLocaleString('it-IT')}</td>
+                                                        <td className={tdClass}>{row.label === 'Lead acquisiti' ? pct(row.d) : pctOf(row.d, row.baseD)}</td>
+                                                        <td className={tdClass}>{(row.n + row.d).toLocaleString('it-IT')}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="hover:bg-brand-orange-50/20 transition-colors duration-200 bg-ash-50/40">
+                                                    <td className={tdLabelClass}>Valore Contratti</td>
+                                                    <td className={tdClass}>{formatCurrency(nuovi.valoreContratti)}</td>
+                                                    <td className={tdClass}>–</td>
+                                                    <td className={tdClass}>{formatCurrency(db.valoreContratti)}</td>
+                                                    <td className={tdClass}>–</td>
+                                                    <td className={tdClass}>{formatCurrency(nuovi.valoreContratti + db.valoreContratti)}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {/* ALERT CRITICO */}
                         {initialData.is7DaysAlertActive && (
                             <div className="relative w-full rounded-xl border border-ember-400 bg-gradient-to-r from-ember-50 to-ember-100/50 text-ember-900 p-4 pl-11 shadow-soft animate-fade-in">

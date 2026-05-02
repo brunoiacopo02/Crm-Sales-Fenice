@@ -17,6 +17,15 @@ export interface MonthlyTargetInput {
     workingDaysOverride?: number | null;
 }
 
+export interface LeadCategoryBreakdown {
+    totale: number;
+    fissati: number;
+    confermati: number;
+    presenziati: number;
+    closed: number;
+    valoreContratti: number;
+}
+
 export interface TargetStatsResponse {
     // Info Temporali e di Sistema
     month: string;
@@ -24,6 +33,10 @@ export interface TargetStatsResponse {
     giorniLavorativiTrascorsiOggi: number;
     gdoAttivi: number;
     totaleLeadDelMese: number;
+
+    // Suddivisione Nuovi vs Database (escluso BLT)
+    breakdownNuovi: LeadCategoryBreakdown;
+    breakdownDatabase: LeadCategoryBreakdown;
 
     // Numeri Mensili - Dati
     actAppsFissati: number;
@@ -271,10 +284,23 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     let todayPresenziati = 0;
     let todayClosed = 0;
 
+    // Breakdown Nuovi vs Database (funnel === 'database' case-insensitive → Database)
+    const breakdownNuovi: LeadCategoryBreakdown = {
+        totale: 0, fissati: 0, confermati: 0, presenziati: 0, closed: 0, valoreContratti: 0,
+    };
+    const breakdownDatabase: LeadCategoryBreakdown = {
+        totale: 0, fissati: 0, confermati: 0, presenziati: 0, closed: 0, valoreContratti: 0,
+    };
+
     monthLeads.forEach(lead => {
+        const isDatabase = (lead.funnel ?? '').toLowerCase() === 'database';
+        const bucket = isDatabase ? breakdownDatabase : breakdownNuovi;
+        bucket.totale++;
+
         // App Fissati
         if (lead.appointmentDate) {
             actAppsFissati++;
+            bucket.fissati++;
             // Controlla se è stato fissato ESATTAMENTE oggi in UI
             if (lead.appointmentCreatedAt && lead.appointmentCreatedAt >= new Date(todayStart) && lead.appointmentCreatedAt <= new Date(todayEnd)) {
                 todayFissati++;
@@ -286,6 +312,7 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
 
             if (isConfirmed) {
                 actAppsConfermati++;
+                bucket.confermati++;
                 if (lead.confirmationsTimestamp && lead.confirmationsTimestamp >= new Date(todayStart) && lead.confirmationsTimestamp <= new Date(todayEnd)) {
                     todayConfermati++;
                 }
@@ -298,6 +325,7 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
 
                 if (isPresenziato) {
                     actAppsPresenziati++;
+                    bucket.presenziati++;
                     if (lead.salespersonOutcomeAt && lead.salespersonOutcomeAt >= new Date(todayStart) && lead.salespersonOutcomeAt <= new Date(todayEnd)) {
                         todayPresenziati++;
                     }
@@ -305,8 +333,10 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
                     // Chiuso
                     if (lead.salespersonOutcome === 'Chiuso') {
                         actClosed++;
+                        bucket.closed++;
                         if (lead.closeAmountEur) {
                             actValoreContratti += lead.closeAmountEur;
+                            bucket.valoreContratti += lead.closeAmountEur;
                         }
                         if (lead.salespersonOutcomeAt && lead.salespersonOutcomeAt >= new Date(todayStart) && lead.salespersonOutcomeAt <= new Date(todayEnd)) {
                             todayClosed++;
@@ -361,6 +391,9 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         giorniLavorativiTrascorsiOggi,
         gdoAttivi: gdoUsersObj.length, // ritorna vero dato ai client
         totaleLeadDelMese,
+
+        breakdownNuovi,
+        breakdownDatabase,
 
         actAppsFissati,
         actAppsConfermati,
