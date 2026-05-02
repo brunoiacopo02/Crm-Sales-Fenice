@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { leads, marketingBudgets } from "@/db/schema";
-import { and, eq, ne, isNotNull, gte, lte } from "drizzle-orm";
+import { and, eq, ne, isNotNull, gte, lte, or } from "drizzle-orm";
 
 const OFFICIAL_FUNNELS = [
     "TELEGRAM",
@@ -61,14 +61,28 @@ export async function getMarketingStats(monthString: string) {
     const startDate = toRomeStartOfDay(startDateStr);
     const endDate = toRomeEndOfDay(endDateStr);
 
-    // Get leads for the month that have a funnel != 'BLT'
+    // Each metric is attributed to the month in which the corresponding action
+    // happened — non al mese di creazione del lead. Quindi:
+    //   • Lead acquisiti      → createdAt nel mese
+    //   • App. fissati        → appointmentCreatedAt nel mese
+    //   • Conferme            → confirmationsTimestamp nel mese
+    //   • Trattative / Close  → salespersonOutcomeAt nel mese
+    // Pesco con un OR su tutte e 4 le date per non perdere lead "longitudinali"
+    // (creati a marzo ma chiusi a maggio, ecc.).
+    const inMonth = (d: Date | null | undefined): boolean =>
+        !!d && d >= startDate && d <= endDate;
+
     const allLeads = await db.select().from(leads).where(
         and(
             isNotNull(leads.funnel),
             ne(leads.funnel, 'BLT'),
             ne(leads.funnel, ''),
-            gte(leads.createdAt, startDate),
-            lte(leads.createdAt, endDate)
+            or(
+                and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
+                and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
+                and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
+                and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
+            )
         )
     );
 
@@ -96,35 +110,38 @@ export async function getMarketingStats(monthString: string) {
 
     for (const l of allLeads) {
         const rawFunnel = (l.funnel as string).toUpperCase();
+        const g = grouped[rawFunnel];
+        if (!g) continue;
 
-        // Count only if the funnel is in the official list
-        if (grouped[rawFunnel]) {
-            grouped[rawFunnel].leads++;
-            if (l.assignedToId) {
-                grouped[rawFunnel].leadAssegnati++;
-            }
+        const leadAcquisitoNelMese = inMonth(l.createdAt);
+        if (leadAcquisitoNelMese) {
+            g.leads++;
+            if (l.assignedToId) g.leadAssegnati++;
+        }
 
-            if (l.appointmentDate) {
-                grouped[rawFunnel].apps++;
+        // App fissati: data dell'azione = appointmentCreatedAt (fallback appointmentDate per dati legacy)
+        const apptSetAt = l.appointmentCreatedAt || l.appointmentDate;
+        if (l.appointmentDate && inMonth(apptSetAt)) {
+            g.apps++;
+        }
 
-                const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
-                if (isConfirmed) {
-                    grouped[rawFunnel].conferme++;
+        const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
+        // Conferme: data dell'azione = confirmationsTimestamp (fallback salespersonAssignedAt se legacy)
+        const confirmedAt = l.confirmationsTimestamp || l.salespersonAssignedAt;
+        if (l.appointmentDate && isConfirmed && inMonth(confirmedAt)) {
+            g.conferme++;
+        }
 
-                    const showUp = l.salespersonOutcome &&
-                        l.salespersonOutcome !== 'Sparito' &&
-                        l.salespersonOutcome !== 'Lead non presenziato' &&
-                        l.salespersonOutcome !== 'KO - Assente';
-
-                    if (showUp) {
-                        grouped[rawFunnel].trattative++;
-
-                        if (l.salespersonOutcome === 'Chiuso') {
-                            grouped[rawFunnel].close++;
-                            grouped[rawFunnel].fatturato += l.closeAmountEur || 0;
-                        }
-                    }
-                }
+        // Trattative / Close: data dell'azione = salespersonOutcomeAt
+        const showUp = l.salespersonOutcome &&
+            l.salespersonOutcome !== 'Sparito' &&
+            l.salespersonOutcome !== 'Lead non presenziato' &&
+            l.salespersonOutcome !== 'KO - Assente';
+        if (l.appointmentDate && isConfirmed && showUp && inMonth(l.salespersonOutcomeAt)) {
+            g.trattative++;
+            if (l.salespersonOutcome === 'Chiuso') {
+                g.close++;
+                g.fatturato += l.closeAmountEur || 0;
             }
         }
     }
@@ -190,14 +207,22 @@ export async function getMarketingStatsByGdo(monthString: string) {
     const startDate = toRomeStartOfDay(startDateStr);
     const endDate = toRomeEndOfDay(endDateStr);
 
-    // Get leads for the month that have a funnel != 'BLT'
+    // Stessa logica action-date di getMarketingStats: ogni metrica viene contata
+    // nel mese in cui è stata effettuata l'azione, non nel mese di creazione del lead.
+    const inMonth = (d: Date | null | undefined): boolean =>
+        !!d && d >= startDate && d <= endDate;
+
     const allLeads = await db.select().from(leads).where(
         and(
             isNotNull(leads.funnel),
             ne(leads.funnel, 'BLT'),
             ne(leads.funnel, ''),
-            gte(leads.createdAt, startDate),
-            lte(leads.createdAt, endDate)
+            or(
+                and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
+                and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
+                and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
+                and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
+            )
         )
     );
 
@@ -222,50 +247,52 @@ export async function getMarketingStatsByGdo(monthString: string) {
 
     for (const l of allLeads) {
         const rawFunnel = (l.funnel as string).toUpperCase();
+        if (!result[rawFunnel]) continue;
 
-        if (result[rawFunnel]) {
-            const assignedId = l.assignedToId || 'UNASSIGNED';
-            let gdoName = 'Non Assegnato';
+        const assignedId = l.assignedToId || 'UNASSIGNED';
+        let gdoName = 'Non Assegnato';
+        if (assignedId !== 'UNASSIGNED') {
+            const u = userMap.get(assignedId);
+            gdoName = u ? `${u.displayName || u.name || assignedId} ${u.gdoCode ? `(${u.gdoCode})` : ''}`.trim() : assignedId;
+        }
+        if (!result[rawFunnel][assignedId]) {
+            result[rawFunnel][assignedId] = {
+                gdoName,
+                leadAssegnati: 0,
+                appsFissati: 0,
+                appsConfermati: 0,
+                appsPresenziati: 0,
+                closed: 0,
+            };
+        }
 
-            if (assignedId !== 'UNASSIGNED') {
-                const u = userMap.get(assignedId);
-                gdoName = u ? `${u.displayName || u.name || assignedId} ${u.gdoCode ? `(${u.gdoCode})` : ''}`.trim() : assignedId;
-            }
+        const gdoStat = result[rawFunnel][assignedId];
 
-            if (!result[rawFunnel][assignedId]) {
-                result[rawFunnel][assignedId] = {
-                    gdoName,
-                    leadAssegnati: 0,
-                    appsFissati: 0,
-                    appsConfermati: 0,
-                    appsPresenziati: 0,
-                    closed: 0,
-                };
-            }
-
-            const gdoStat = result[rawFunnel][assignedId];
+        // Lead assegnati: lead creato e assegnato nel mese
+        if (inMonth(l.createdAt) && l.assignedToId) {
             gdoStat.leadAssegnati++;
+        }
 
-            if (l.appointmentDate) {
-                gdoStat.appsFissati++;
+        // App fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate)
+        const apptSetAt = l.appointmentCreatedAt || l.appointmentDate;
+        if (l.appointmentDate && inMonth(apptSetAt)) {
+            gdoStat.appsFissati++;
+        }
 
-                const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
-                if (isConfirmed) {
-                    gdoStat.appsConfermati++;
+        const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
+        const confirmedAt = l.confirmationsTimestamp || l.salespersonAssignedAt;
+        if (l.appointmentDate && isConfirmed && inMonth(confirmedAt)) {
+            gdoStat.appsConfermati++;
+        }
 
-                    const showUp = l.salespersonOutcome &&
-                        l.salespersonOutcome !== 'Sparito' &&
-                        l.salespersonOutcome !== 'Lead non presenziato' &&
-                        l.salespersonOutcome !== 'KO - Assente';
-
-                    if (showUp) {
-                        gdoStat.appsPresenziati++;
-
-                        if (l.salespersonOutcome === 'Chiuso') {
-                            gdoStat.closed++;
-                        }
-                    }
-                }
+        const showUp = l.salespersonOutcome &&
+            l.salespersonOutcome !== 'Sparito' &&
+            l.salespersonOutcome !== 'Lead non presenziato' &&
+            l.salespersonOutcome !== 'KO - Assente';
+        if (l.appointmentDate && isConfirmed && showUp && inMonth(l.salespersonOutcomeAt)) {
+            gdoStat.appsPresenziati++;
+            if (l.salespersonOutcome === 'Chiuso') {
+                gdoStat.closed++;
             }
         }
     }
