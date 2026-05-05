@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { markAlertAsRead, getMyUnreadAlerts } from "@/app/actions/alertActions"
 import { AlertOctagon, CheckCircle2 } from "lucide-react"
+import { logRealtimeStatus } from "@/lib/realtimeUtils"
 
 export function GlobalAlertListener({ currentUser }: { currentUser: any }) {
     const [alerts, setAlerts] = useState<any[]>([])
@@ -42,7 +43,7 @@ export function GlobalAlertListener({ currentUser }: { currentUser: any }) {
             }, (payload) => {
                 handleNewAlert(payload.new)
             })
-            .subscribe()
+            .subscribe(logRealtimeStatus('global-alerts'))
 
         return () => {
             supabase.removeChannel(channel)

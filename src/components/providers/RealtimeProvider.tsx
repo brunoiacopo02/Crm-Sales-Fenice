@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, createContext, useContext } from 'react
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { logRealtimeStatus } from '@/lib/realtimeUtils'
 
 type RealtimeContextType = {
     broadcastFomo: (event: string, payload: Record<string, unknown>) => void;
@@ -68,7 +69,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
                     } catch { /* silent fail */ }
                 }
             )
-            .subscribe()
+            .subscribe(logRealtimeStatus('realtime-provider-main'))
 
         channelRef.current = channel
 
@@ -83,7 +84,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
                     } catch { /* silent fail */ }
                 }
             )
-            .subscribe()
+            .subscribe(logRealtimeStatus('team-adventure'))
 
         return () => {
             supabase.removeChannel(channel)

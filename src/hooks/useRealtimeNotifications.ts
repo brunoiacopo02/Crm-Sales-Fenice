@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
+import { logRealtimeStatus } from '@/lib/realtimeUtils'
 
 export type Notification = {
     id: string
@@ -104,7 +105,7 @@ export function useRealtimeNotifications() {
                     })
                 }
             )
-            .subscribe()
+            .subscribe(logRealtimeStatus('user-notifications'))
 
         return () => {
             supabase.removeChannel(channel)
