@@ -197,20 +197,46 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
 
     const todayConfirmed = dailyStats.find(d => d.date === toRomeDateStr(new Date()))?.confirmed || 0
 
+    // === TRATTATIVE & CHIUSURE MENSILI — DATI REALI ===
+    // Conteggi attribuiti per data dell'esito venditore (salespersonOutcomeAt) nel mese.
+    const monthlyOutcomeRows = await db.select({
+        outcome: leads.salespersonOutcome,
+        outcomeAt: leads.salespersonOutcomeAt,
+        amount: leads.closeAmountEur,
+    }).from(leads).where(and(
+        isNotNull(leads.salespersonOutcomeAt),
+        gte(leads.salespersonOutcomeAt, start),
+        lte(leads.salespersonOutcomeAt, end),
+    ))
+
+    const todayStr = toRomeDateStr(new Date())
+    let actTrattative = 0
+    let actClosedMonth = 0
+    let todayTrat = 0
+    let todayClosedReal = 0
+
+    for (const r of monthlyOutcomeRows) {
+        const isPresenziato = r.outcome === 'Chiuso' || r.outcome === 'Non chiuso'
+        const isToday = !!r.outcomeAt && toRomeDateStr(new Date(r.outcomeAt)) === todayStr
+        if (isPresenziato) {
+            actTrattative++
+            if (isToday) todayTrat++
+            if (r.outcome === 'Chiuso') {
+                actClosedMonth++
+                if (isToday) todayClosedReal++
+            }
+        }
+    }
+
+    // Target Trattative/Chiusure: default proxy del target conferme finché il manager
+    // non potrà settarli in modo indipendente. Numerator (ACT) è reale.
+    const defaultTargetTrat = Math.round(tier2Target * 0.65)
+    const defaultTargetClosed = Math.round(defaultTargetTrat * 0.25)
+
     // Appuntamenti
     const rowAppuntamenti = buildRow("Appuntamenti Confermati", totalConfirmedAct, tier2Target, todayConfirmed)
-
-    // Trattative (Mocked: ~65% of Appuntamenti)
-    const mockTargetTrat = Math.round(tier2Target * 0.65)
-    const mockActTrat = Math.round(totalConfirmedAct * 0.60) // underperforming slightly
-    const todayTrat = Math.round(todayConfirmed * 0.5)
-    const rowTrattative = buildRow("Trattative Presenziate", mockActTrat, mockTargetTrat, todayTrat)
-
-    // Closed (Mocked: ~25% of Trattative)
-    const mockTargetClosed = Math.round(mockTargetTrat * 0.25)
-    const mockActClosed = Math.round(mockActTrat * 0.20)
-    const todayClosed = Math.round(todayTrat * 0.2)
-    const rowClosed = buildRow("Closed (Contratti)", mockActClosed, mockTargetClosed, todayClosed)
+    const rowTrattative = buildRow("Trattative Presenziate", actTrattative, defaultTargetTrat, todayTrat)
+    const rowClosed = buildRow("Closed (Contratti)", actClosedMonth, defaultTargetClosed, todayClosedReal)
 
     const tableData = [rowAppuntamenti, rowTrattative, rowClosed]
 
