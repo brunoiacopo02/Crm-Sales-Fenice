@@ -3,8 +3,10 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
-import { gte, lte, eq, and } from "drizzle-orm"
-import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from "date-fns"
+import { gte, lt, eq, and } from "drizzle-orm"
+import { format } from "date-fns"
+import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
+import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 export type KpiPeriod = 'oggi' | 'ieri' | 'settimana' | 'mese'
 
 /** Verifica se un timestamp cade nell'orario lavorativo GDO 13:30-20:00 Europe/Rome */
@@ -27,28 +29,30 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
         throw new Error("Accesso negato. Solo Manager e Admin possono visualizzare i KPI aggregati.")
     }
 
+    // Bounds Europe/Rome espliciti (Sprint 2.3) — pattern gte(start) AND lt(end).
     const now = new Date()
     let startDate: Date
     let endDate: Date
 
     if (period === 'oggi') {
-        startDate = startOfDay(now)
-        endDate = endOfDay(now)
+        const b = dayBoundsRome(now)
+        startDate = b.start; endDate = b.end
     } else if (period === 'ieri') {
-        startDate = startOfDay(subDays(now, 1))
-        endDate = endOfDay(subDays(now, 1))
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+        const b = dayBoundsRome(yesterday)
+        startDate = b.start; endDate = b.end
     } else if (period === 'settimana') {
-        startDate = startOfWeek(now, { weekStartsOn: 1 })
-        endDate = endOfWeek(now, { weekStartsOn: 1 })
+        const b = weekBoundsRome(now)
+        startDate = b.start; endDate = b.end
     } else {
-        startDate = startOfMonth(now)
-        endDate = endOfMonth(now)
+        const b = monthBoundsRome(currentYearMonthRome(now))
+        startDate = b.start; endDate = b.end
     }
 
     // Costruzione query con join per permettere filtro Funnel sul Lead di origine
     const baseConditions = [
         gte(callLogs.createdAt, startDate),
-        lte(callLogs.createdAt, endDate)
+        lt(callLogs.createdAt, endDate)
     ]
 
     let logsQuery = await db.select({
