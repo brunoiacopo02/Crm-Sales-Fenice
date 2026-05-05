@@ -94,7 +94,7 @@ export async function acceptTradeOffer(offerId: string, acceptingUserId: string)
                 const { checkAchievements } = await import('./achievementActions');
                 checkAchievements(result.fromUserId as string).catch(e => console.error("Achievement check trade err:", e));
                 checkAchievements(result.toUserId as string).catch(e => console.error("Achievement check trade err:", e));
-            } catch { /* ignore */ }
+            } catch (e) { console.error('[tradingActions] subtask err', e); }
         }
 
         return result;

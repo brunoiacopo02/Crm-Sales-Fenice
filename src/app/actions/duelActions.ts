@@ -366,7 +366,7 @@ export async function completeDuel(duelId: string) {
             try {
                 const { checkAchievements } = await import('./achievementActions');
                 checkAchievements(result.winnerId).catch(e => console.error("Achievement check duel err:", e));
-            } catch { /* ignore */ }
+            } catch (e) { console.error('[duelActions] subtask err', e); }
         }
 
         return result;

@@ -44,7 +44,7 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
             const { getCreatureDropBoost } = await import('@/lib/seasonalEventUtils');
             const boost = await getCreatureDropBoost();
             if (boost?.rarityBoost) isBoosted = true;
-        } catch { /* ignore */ }
+        } catch (e) { console.error('[creatureActions] subtask err', e); }
 
         const rarity = pickRarity(rarityOverride, isBoosted);
 
@@ -74,7 +74,7 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
         try {
             const { checkAchievements } = await import('./achievementActions');
             checkAchievements(userId).catch(e => console.error("Achievement check creature err:", e));
-        } catch { /* ignore */ }
+        } catch (e) { console.error('[creatureActions] subtask err', e); }
 
         return {
             userCreatureId: userCreature.id,
@@ -100,7 +100,7 @@ export async function maybeDropCreature(userId: string) {
             const { getCreatureDropBoost } = await import('@/lib/seasonalEventUtils');
             const boost = await getCreatureDropBoost();
             if (boost) threshold = boost.thresholdReduction - 1; // 14 for threshold 15
-        } catch { /* ignore */ }
+        } catch (e) { console.error('[creatureActions] subtask err', e); }
 
         // Atomic increment with threshold reset
         const result = await db.execute(sql`

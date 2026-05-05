@@ -184,7 +184,7 @@ export async function attackBoss(userId: string, actionType: string) {
             try {
                 const { checkAchievements } = await import('./achievementActions');
                 checkAchievements(userId).catch(e => console.error("Achievement check boss err:", e));
-            } catch { /* ignore */ }
+            } catch (e) { console.error('[adventureActions] subtask err', e); }
 
             return {
                 bossDefeated: true,
