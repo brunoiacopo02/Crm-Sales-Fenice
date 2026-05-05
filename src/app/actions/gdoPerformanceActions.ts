@@ -37,10 +37,8 @@ export async function saveGamificationRule(input: GamificationTargetInput) {
 }
 
 function isPresenziato(outcome: string | null) {
-    if (!outcome) return false;
-    const lower = outcome.toLowerCase();
-    // Exclude 'sparito', 'assente', 'non presenziato'
-    return !lower.includes('sparit') && !lower.includes('assent') && !lower.includes('non presenziato');
+    // Definizione canonica (Sprint 1.5): whitelist 'Chiuso' / 'Non chiuso'.
+    return outcome === 'Chiuso' || outcome === 'Non chiuso';
 }
 
 /**
@@ -154,7 +152,7 @@ export async function getManagerGdoTables(monthString: string) {
             gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
         }
 
-        const isConfermato = lead.confirmationsOutcome && lead.confirmationsOutcome.toLowerCase() !== 'scartato';
+        const isConfermato = lead.confirmationsOutcome === 'confermato';
         const isPresenziatoFlag = isPresenziato(lead.salespersonOutcome);
         const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
 
@@ -396,7 +394,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
 
     for (const lead of gdoLeads) {
         fissati++;
-        const isConfermato = lead.confirmationsOutcome && lead.confirmationsOutcome.toLowerCase() !== 'scartato';
+        const isConfermato = lead.confirmationsOutcome === 'confermato';
         const isPresenziatoFlag = isPresenziato(lead.salespersonOutcome);
         const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
 

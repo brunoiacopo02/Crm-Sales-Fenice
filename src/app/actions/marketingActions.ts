@@ -125,19 +125,17 @@ export async function getMarketingStats(monthString: string) {
             g.apps++;
         }
 
-        const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
-        // Conferme: data dell'azione = confirmationsTimestamp (fallback salespersonAssignedAt se legacy)
-        const confirmedAt = l.confirmationsTimestamp || l.salespersonAssignedAt;
-        if (l.appointmentDate && isConfirmed && inMonth(confirmedAt)) {
+        // Conferme: data dell'azione = confirmationsTimestamp.
+        // Definizione canonica = confirmationsOutcome === 'confermato' (Sprint 1.4).
+        const isConfirmed = l.confirmationsOutcome === 'confermato';
+        if (l.appointmentDate && isConfirmed && inMonth(l.confirmationsTimestamp)) {
             g.conferme++;
         }
 
-        // Trattative / Close: data dell'azione = salespersonOutcomeAt
-        const showUp = l.salespersonOutcome &&
-            l.salespersonOutcome !== 'Sparito' &&
-            l.salespersonOutcome !== 'Lead non presenziato' &&
-            l.salespersonOutcome !== 'KO - Assente';
-        if (l.appointmentDate && isConfirmed && showUp && inMonth(l.salespersonOutcomeAt)) {
+        // Trattative / Close: data dell'azione = salespersonOutcomeAt.
+        // Presenziato canonico = whitelist Chiuso/Non chiuso (Sprint 1.5).
+        const showUp = l.salespersonOutcome === 'Chiuso' || l.salespersonOutcome === 'Non chiuso';
+        if (l.appointmentDate && showUp && inMonth(l.salespersonOutcomeAt)) {
             g.trattative++;
             if (l.salespersonOutcome === 'Chiuso') {
                 g.close++;
@@ -279,17 +277,15 @@ export async function getMarketingStatsByGdo(monthString: string) {
             gdoStat.appsFissati++;
         }
 
-        const isConfirmed = (l.confirmationsOutcome && l.confirmationsOutcome.toLowerCase() !== 'scartato') || !!l.salespersonUserId;
-        const confirmedAt = l.confirmationsTimestamp || l.salespersonAssignedAt;
-        if (l.appointmentDate && isConfirmed && inMonth(confirmedAt)) {
+        // Confermato canonico = 'confermato' (Sprint 1.4).
+        const isConfirmed = l.confirmationsOutcome === 'confermato';
+        if (l.appointmentDate && isConfirmed && inMonth(l.confirmationsTimestamp)) {
             gdoStat.appsConfermati++;
         }
 
-        const showUp = l.salespersonOutcome &&
-            l.salespersonOutcome !== 'Sparito' &&
-            l.salespersonOutcome !== 'Lead non presenziato' &&
-            l.salespersonOutcome !== 'KO - Assente';
-        if (l.appointmentDate && isConfirmed && showUp && inMonth(l.salespersonOutcomeAt)) {
+        // Presenziato canonico = whitelist Chiuso/Non chiuso (Sprint 1.5).
+        const showUp = l.salespersonOutcome === 'Chiuso' || l.salespersonOutcome === 'Non chiuso';
+        if (l.appointmentDate && showUp && inMonth(l.salespersonOutcomeAt)) {
             gdoStat.appsPresenziati++;
             if (l.salespersonOutcome === 'Chiuso') {
                 gdoStat.closed++;

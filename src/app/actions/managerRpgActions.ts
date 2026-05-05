@@ -9,9 +9,8 @@ import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fn
 // ---- Helpers replicated from gdoPerformanceActions to avoid circular deps ----
 
 function isPresenziato(outcome: string | null) {
-    if (!outcome) return false;
-    const lower = outcome.toLowerCase();
-    return !lower.includes('sparit') && !lower.includes('assent') && !lower.includes('non presenziato');
+    // Definizione canonica (Sprint 1.5): whitelist 'Chiuso' / 'Non chiuso'.
+    return outcome === 'Chiuso' || outcome === 'Non chiuso';
 }
 
 function getMonthWeeks(monthStr: string) {
