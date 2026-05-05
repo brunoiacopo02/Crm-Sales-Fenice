@@ -1,5 +1,6 @@
 "use server"
 import { createClient } from "@/utils/supabase/server"
+import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
 import { leads, users, callLogs, notifications, leadEvents } from "@/db/schema"
@@ -131,6 +132,10 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             createdAt: new Date()
         })
     }
+
+    // Esito venditore (chiusura/non-chiusura/sparito) impatta tutti i KPI:
+    // /kpi-venditori, /kpi-conferme, /manager-targets, /panoramica-generale.
+    revalidatePath('/', 'layout')
 
     return { success: true, rewardData }
 }

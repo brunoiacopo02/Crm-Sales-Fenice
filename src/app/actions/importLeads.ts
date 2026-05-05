@@ -1,5 +1,6 @@
 "use server"
 import { createClient } from "@/utils/supabase/server"
+import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
 import { leads, users, assignmentSettings, importLogs } from "@/db/schema"
@@ -265,6 +266,11 @@ export async function processCsvImport(
 
     report.perGdoAssigned = recordMap
 
+    // Invalidate cache: i lead inseriti impattano tutte le pagine dashboard.
+    // Layout-level invalidation è il modo più sicuro per assicurare che KPI,
+    // pipeline GDO e classifiche mostrino i nuovi lead senza F5.
+    revalidatePath('/', 'layout')
+
     return report
 }
 
@@ -353,6 +359,8 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
         userId: adminId,
         metadata: { assignedToUser: assignedGdoId, source: 'manual' }
     })
+
+    revalidatePath('/', 'layout')
 
     return { success: true, leadId: newLeadId }
 }

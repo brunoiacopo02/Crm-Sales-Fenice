@@ -1,5 +1,6 @@
 "use server"
 import { createClient } from "@/utils/supabase/server"
+import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
 import { leads, leadEvents } from "@/db/schema"
@@ -143,6 +144,10 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             timestamp: new Date(),
             metadata: { previousState, cancelledBy: role },
         });
+
+        // Cancellare un appuntamento resetta esiti conferme/vendita: impatta
+        // /appuntamenti, /conferme, /kpi-*, /panoramica-generale, /manager-targets.
+        revalidatePath('/', 'layout');
 
         return { success: true };
     } catch (e: any) {
