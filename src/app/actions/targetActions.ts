@@ -261,15 +261,34 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
     const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).toISOString();
 
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const todayStartDate = new Date(todayStart);
+    const todayEndDate = new Date(todayEnd);
+
+    // Ogni metrica è attribuita al mese in cui è avvenuta l'azione corrispondente,
+    // NON al mese di creazione del lead. Pesco i lead con OR su tutte le date evento
+    // e poi conto per la data canonica di ogni metrica (modello marketingActions).
+    const inMonth = (d: Date | null | undefined): boolean =>
+        !!d && d >= startDate && d <= endDate;
+    const inToday = (d: Date | null | undefined): boolean =>
+        !!d && d >= todayStartDate && d <= todayEndDate;
+
     const monthLeads = await db.select().from(leads).where(
         and(
-            gte(leads.createdAt, new Date(start)),
-            lte(leads.createdAt, new Date(end)),
-            or(sql`${leads.funnel} IS NULL`, sql`${leads.funnel} != 'BLT'`)
+            or(sql`${leads.funnel} IS NULL`, sql`${leads.funnel} != 'BLT'`),
+            or(
+                and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
+                and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
+                and(gte(leads.appointmentDate, startDate), lte(leads.appointmentDate, endDate)),
+                and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
+                and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
+            )
         )
     );
 
-    const totaleLeadDelMese = monthLeads.length;
+    // Totale lead = lead CREATI nel mese (semantica corretta per "lead acquisiti")
+    const totaleLeadDelMese = monthLeads.filter(l => inMonth(l.createdAt)).length;
 
     // ACT Counters
     let actAppsFissati = 0;
@@ -295,54 +314,51 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     monthLeads.forEach(lead => {
         const isDatabase = (lead.funnel ?? '').toLowerCase() === 'database';
         const bucket = isDatabase ? breakdownDatabase : breakdownNuovi;
-        bucket.totale++;
 
-        // App Fissati
-        if (lead.appointmentDate) {
+        // Totale categoria = lead della categoria creato nel mese
+        if (inMonth(lead.createdAt)) {
+            bucket.totale++;
+        }
+
+        // App Fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy)
+        const apptSetAt = lead.appointmentCreatedAt || lead.appointmentDate;
+        if (lead.appointmentDate && inMonth(apptSetAt)) {
             actAppsFissati++;
             bucket.fissati++;
-            // Controlla se è stato fissato ESATTAMENTE oggi in UI
-            if (lead.appointmentCreatedAt && lead.appointmentCreatedAt >= new Date(todayStart) && lead.appointmentCreatedAt <= new Date(todayEnd)) {
+            if (inToday(lead.appointmentCreatedAt)) {
                 todayFissati++;
             }
+        }
 
-            // App Confermati
-            const isConfirmed = lead.confirmationsOutcome === 'confermato' ||
-                (lead.confirmationsOutcome !== 'scartato' && lead.salespersonUserId);
+        // App Confermati: data conferma nel mese (definizione canonica = 'confermato')
+        if (lead.confirmationsOutcome === 'confermato' && inMonth(lead.confirmationsTimestamp)) {
+            actAppsConfermati++;
+            bucket.confermati++;
+            if (inToday(lead.confirmationsTimestamp)) {
+                todayConfermati++;
+            }
+        }
 
-            if (isConfirmed) {
-                actAppsConfermati++;
-                bucket.confermati++;
-                if (lead.confirmationsTimestamp && lead.confirmationsTimestamp >= new Date(todayStart) && lead.confirmationsTimestamp <= new Date(todayEnd)) {
-                    todayConfermati++;
-                }
+        // Presenziati: whitelist Chiuso/Non chiuso, outcome date nel mese
+        const isPresenziato = lead.salespersonOutcome === 'Chiuso' || lead.salespersonOutcome === 'Non chiuso';
+        if (isPresenziato && inMonth(lead.salespersonOutcomeAt)) {
+            actAppsPresenziati++;
+            bucket.presenziati++;
+            if (inToday(lead.salespersonOutcomeAt)) {
+                todayPresenziati++;
+            }
+        }
 
-                // Presenziati (Show-up)
-                const isPresenziato = lead.salespersonOutcome &&
-                    lead.salespersonOutcome !== 'Sparito' &&
-                    lead.salespersonOutcome !== 'Lead non presenziato' &&
-                    lead.salespersonOutcome !== 'KO - Assente';
-
-                if (isPresenziato) {
-                    actAppsPresenziati++;
-                    bucket.presenziati++;
-                    if (lead.salespersonOutcomeAt && lead.salespersonOutcomeAt >= new Date(todayStart) && lead.salespersonOutcomeAt <= new Date(todayEnd)) {
-                        todayPresenziati++;
-                    }
-
-                    // Chiuso
-                    if (lead.salespersonOutcome === 'Chiuso') {
-                        actClosed++;
-                        bucket.closed++;
-                        if (lead.closeAmountEur) {
-                            actValoreContratti += lead.closeAmountEur;
-                            bucket.valoreContratti += lead.closeAmountEur;
-                        }
-                        if (lead.salespersonOutcomeAt && lead.salespersonOutcomeAt >= new Date(todayStart) && lead.salespersonOutcomeAt <= new Date(todayEnd)) {
-                            todayClosed++;
-                        }
-                    }
-                }
+        // Chiuso: salespersonOutcome='Chiuso', outcome date nel mese
+        if (lead.salespersonOutcome === 'Chiuso' && inMonth(lead.salespersonOutcomeAt)) {
+            actClosed++;
+            bucket.closed++;
+            if (lead.closeAmountEur) {
+                actValoreContratti += lead.closeAmountEur;
+                bucket.valoreContratti += lead.closeAmountEur;
+            }
+            if (inToday(lead.salespersonOutcomeAt)) {
+                todayClosed++;
             }
         }
     });
