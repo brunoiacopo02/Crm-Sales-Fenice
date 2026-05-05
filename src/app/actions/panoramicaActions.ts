@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { leads, monthlyLeadTargets, monthlyFunnelBaselines } from "@/db/schema";
-import { and, gte, lt, sql, eq } from "drizzle-orm";
+import { and, gte, lt, sql, eq, or } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import {
     countWorkingDaysInMonth,
@@ -624,39 +624,59 @@ type CrmCounts = { app: number; conferme: number; trattative: number; close: num
 
 /**
  * Count CRM events per funnel for the given month.
- * Counts ALL leads created in the month (excluding TEST/empty funnel).
- * The baseline delta from the Excel is purely external and gets summed on top
- * of these counts — no double-counting filter needed.
+ * Ogni metrica è attribuita al mese in cui è avvenuta l'azione corrispondente,
+ * NON al mese di creazione del lead. Stesso pattern di marketingActions
+ * (post-f8992e1): pesca i lead con OR su tutte le date evento, poi conta in
+ * ogni bucket solo se la data evento corrispondente cade nel mese.
  */
 async function getCrmFunnelCounts(yearMonth: string): Promise<Map<string, CrmCounts>> {
     const { year, month } = parseYearMonth(yearMonth);
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
     const monthEnd = new Date(Date.UTC(year, month, 1));
 
-    const rows = await db
-        .select({
-            funnel: sql<string>`UPPER(COALESCE(${leads.funnel}, ''))`,
-            app: sql<number>`(count(*) FILTER (WHERE ${leads.status} = 'APPOINTMENT' OR ${leads.appointmentDate} IS NOT NULL))::int`,
-            conferme: sql<number>`(count(*) FILTER (WHERE ${leads.confirmationsOutcome} = 'confermato'))::int`,
-            trattative: sql<number>`(count(*) FILTER (WHERE ${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')))::int`,
-            close: sql<number>`(count(*) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso'))::int`,
-        })
-        .from(leads)
-        .where(and(
-            gte(leads.createdAt, monthStart),
-            lt(leads.createdAt, monthEnd),
-            sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
-        ))
-        .groupBy(sql`UPPER(COALESCE(${leads.funnel}, ''))`);
+    const inMonth = (d: Date | null | undefined): boolean =>
+        !!d && d >= monthStart && d < monthEnd;
+
+    const rows = await db.select().from(leads).where(and(
+        sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
+        or(
+            and(gte(leads.appointmentCreatedAt, monthStart), lt(leads.appointmentCreatedAt, monthEnd)),
+            and(gte(leads.appointmentDate, monthStart), lt(leads.appointmentDate, monthEnd)),
+            and(gte(leads.confirmationsTimestamp, monthStart), lt(leads.confirmationsTimestamp, monthEnd)),
+            and(gte(leads.salespersonOutcomeAt, monthStart), lt(leads.salespersonOutcomeAt, monthEnd)),
+        ),
+    ));
 
     const map = new Map<string, CrmCounts>();
-    for (const r of rows) {
-        map.set(r.funnel, {
-            app: r.app,
-            conferme: r.conferme,
-            trattative: r.trattative,
-            close: r.close,
-        });
+    for (const l of rows) {
+        const funnel = (l.funnel ?? '').toUpperCase();
+        if (!funnel || funnel === 'TEST') continue;
+        let bucket = map.get(funnel);
+        if (!bucket) {
+            bucket = { app: 0, conferme: 0, trattative: 0, close: 0 };
+            map.set(funnel, bucket);
+        }
+
+        // App fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy).
+        const apptSetAt = l.appointmentCreatedAt || l.appointmentDate;
+        if (l.appointmentDate && inMonth(apptSetAt)) {
+            bucket.app++;
+        }
+        // Conferme: data esito Conferme nel mese.
+        if (l.confirmationsOutcome === 'confermato' && inMonth(l.confirmationsTimestamp)) {
+            bucket.conferme++;
+        }
+        // Trattative: presenziato nel mese (whitelist Chiuso/Non chiuso).
+        if (
+            (l.salespersonOutcome === 'Chiuso' || l.salespersonOutcome === 'Non chiuso')
+            && inMonth(l.salespersonOutcomeAt)
+        ) {
+            bucket.trattative++;
+        }
+        // Chiusure: chiuso nel mese.
+        if (l.salespersonOutcome === 'Chiuso' && inMonth(l.salespersonOutcomeAt)) {
+            bucket.close++;
+        }
     }
     return map;
 }
