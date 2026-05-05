@@ -205,40 +205,51 @@ export async function processCsvImport(
     const batchId = crypto.randomUUID()
     const recordMap: Record<string, number> = {}
 
+    // Loop INSERT robusto: ogni riga è isolata in try/catch così un errore su
+    // una singola riga (es. transient DB error, payload edge-case) NON blocca
+    // tutto il batch. Senza questo, con allowDuplicates=true poteva capitare
+    // che un singolo insert fallito facesse abortire l'intera import.
     for (let i = 0; i < validLeadsToInsert.length; i++) {
         const leadPayload = validLeadsToInsert[i]
         const assignedGdoId = assignmentPlan[i] || activeGdos[0].id // Fallback sicurissimo
-
         const newLeadId = crypto.randomUUID()
-        await db.insert(leads).values({
-            id: newLeadId,
-            name: leadPayload.name,
-            phone: leadPayload.phone,
-            email: leadPayload.email,
-            funnel: leadPayload.funnel,
-            status: 'NEW',
-            callCount: 0,
-            assignedToId: assignedGdoId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        })
 
-        await logLeadEvent({
-            leadId: newLeadId,
-            eventType: 'IMPORTED',
-            toSection: 'Prima Chiamata'
-        })
+        try {
+            await db.insert(leads).values({
+                id: newLeadId,
+                name: leadPayload.name,
+                phone: leadPayload.phone,
+                email: leadPayload.email,
+                funnel: leadPayload.funnel,
+                status: 'NEW',
+                callCount: 0,
+                assignedToId: assignedGdoId,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            })
 
-        // Log assegnazione originaria
-        await logLeadEvent({
-            leadId: newLeadId,
-            eventType: 'ASSIGNED',
-            userId: adminId, // Usa l'id del manager loggato o lascia null se in fallback
-            metadata: { assignedToUser: assignedGdoId }
-        })
+            await logLeadEvent({
+                leadId: newLeadId,
+                eventType: 'IMPORTED',
+                toSection: 'Prima Chiamata'
+            })
 
-        recordMap[assignedGdoId] = (recordMap[assignedGdoId] || 0) + 1
-        report.inserted++
+            await logLeadEvent({
+                leadId: newLeadId,
+                eventType: 'ASSIGNED',
+                userId: adminId,
+                metadata: { assignedToUser: assignedGdoId }
+            })
+
+            recordMap[assignedGdoId] = (recordMap[assignedGdoId] || 0) + 1
+            report.inserted++
+        } catch (insertErr: any) {
+            console.error(`[processCsvImport] insert failed row ${leadPayload.rowIndex}`, insertErr)
+            report.rejected++
+            report.errors.push(
+                `Riga ${leadPayload.rowIndex}: Errore inserimento DB - ${insertErr?.message || String(insertErr)}`
+            )
+        }
     }
 
     // Salva Log Import
