@@ -3,6 +3,8 @@ import { useAuth } from "@/components/AuthProvider"
 
 import { useState, useEffect } from "react"
 import { getAdvancedKpi, KpiFilters, getGdoTargetsProgress } from "@/app/actions/kpiAdvancedActions"
+import { dayBoundsRome, monthBoundsRome, previousYearMonth } from "@/lib/dateUtils"
+import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import dynamic from "next/dynamic"
 import { Filter, PhoneCall, Headphones, CalendarCheck, Clock, Percent, Target, TrendingUp, ArrowUpDown } from "lucide-react"
 // Lazy load Recharts heavy components
@@ -29,8 +31,12 @@ export function KpiGdoBoard() {
     const [customEnd, setCustomEnd] = useState("")
 
     const [funnelFilter, setFunnelFilter] = useState("ALL")
-    // Default: Singolo GDO loggato. Se Admin, forziamo ugualmente a ID loggato, ma permettiamo la scelta
-    const [gdoFilter, setGdoFilter] = useState(session?.user?.id || "ALL")
+    // Default GDO filter:
+    // - Manager/Admin: 'ALL' (vista team) — risolve il bug "filtro mese precedente
+    //   non restituisce dati": prima il default era l'id del manager loggato, che
+    //   non aveva mai chiamato → set vuoto.
+    // - GDO operativo: forzato al proprio id via useEffect sotto.
+    const [gdoFilter, setGdoFilter] = useState("ALL")
     // Toggle "Solo ore lavoro 13:30-20:00". Default ON per Manager/Admin
     // (vista live team durante il turno), OFF per il singolo GDO che vede
     // tutto il giorno per default — può attivarlo se vuole pulire i numeri.
@@ -42,7 +48,7 @@ export function KpiGdoBoard() {
     const [sortBy, setSortBy] = useState<'productivityCoeff' | 'calls' | 'appointments' | 'apptRate' | 'confermePerc' | 'presenziatiPerc'>('productivityCoeff')
 
     useEffect(() => {
-        // If session not ready or gdoFilter still not set on mount
+        // GDO operativo (non Admin/Manager): forza il filtro al proprio id.
         if (!session?.user?.id) return
         if (gdoFilter === "ALL" && !isAdminOrManager) {
             setGdoFilter(session.user.id)
@@ -52,20 +58,41 @@ export function KpiGdoBoard() {
         async function fetchKpi() {
             setLoading(true)
             try {
+                // Bounds Europe/Rome espliciti (Sprint 2.4) — risolve il bug
+                // "filtro mese precedente non restituisce dati" (TZ + manca preset).
                 const now = new Date()
-                let start = new Date()
-                let end = new Date()
+                let start: Date
+                let end: Date
 
                 if (dateRange === "0") {
-                    start.setHours(0, 0, 0, 0)
+                    const b = dayBoundsRome(now)
+                    start = b.start; end = b.end
                 } else if (dateRange === "7") {
-                    start.setDate(now.getDate() - 7)
+                    // Ultimi 7 giorni: da 6 giorni fa 00:00 Rome a oggi 24:00 Rome.
+                    const startDay = dayBoundsRome(new Date(now.getTime() - 6 * 86400000))
+                    const endDay = dayBoundsRome(now)
+                    start = startDay.start; end = endDay.end
                 } else if (dateRange === "30") {
-                    start.setDate(now.getDate() - 30)
+                    const startDay = dayBoundsRome(new Date(now.getTime() - 29 * 86400000))
+                    const endDay = dayBoundsRome(now)
+                    start = startDay.start; end = endDay.end
+                } else if (dateRange === "MONTH_CURRENT") {
+                    const b = monthBoundsRome(currentYearMonthRome(now))
+                    start = b.start; end = b.end
+                } else if (dateRange === "MONTH_PREV") {
+                    const prevYM = previousYearMonth(currentYearMonthRome(now))
+                    const b = monthBoundsRome(prevYM)
+                    start = b.start; end = b.end
                 } else if (dateRange === "CUSTOM" && customStart && customEnd) {
-                    start = new Date(customStart)
-                    end = new Date(customEnd)
-                    end.setHours(23, 59, 59, 999)
+                    // customStart/customEnd format: 'YYYY-MM-DD' (date input).
+                    // Interpretiamo come giornata Europe/Rome (00:00 → 24:00 esclusivo).
+                    const sb = dayBoundsRome(new Date(`${customStart}T12:00:00Z`))
+                    const eb = dayBoundsRome(new Date(`${customEnd}T12:00:00Z`))
+                    start = sb.start; end = eb.end
+                } else {
+                    // fallback (mai dovrebbe accadere)
+                    const b = dayBoundsRome(now)
+                    start = b.start; end = b.end
                 }
 
                 // Trend granularity: 'hour' solo per "Oggi" (1 giorno),
@@ -184,6 +211,8 @@ export function KpiGdoBoard() {
                         <option value="0">Oggi (Turno Corrente)</option>
                         <option value="7">Ultimi 7 Giorni</option>
                         <option value="30">Ultimi 30 Giorni</option>
+                        <option value="MONTH_CURRENT">Questo Mese</option>
+                        <option value="MONTH_PREV">Mese Precedente</option>
                         <option value="CUSTOM">Personalizzato</option>
                     </select>
                 </div>

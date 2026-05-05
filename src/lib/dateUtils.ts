@@ -95,3 +95,44 @@ export function nextYearMonth(yearMonth: string): string {
     const nextMonth = month === 12 ? 1 : month + 1;
     return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
 }
+
+/**
+ * Parsa il valore di `<input type="datetime-local">` (formato 'YYYY-MM-DDTHH:MM'
+ * oppure 'YYYY-MM-DDTHH:MM:SS') interpretandolo SEMPRE come Europe/Rome.
+ *
+ * Senza questo wrapper, `new Date(s)` su quel formato e' parsato in browser
+ * local timezone, che funziona per chi e' in Italia ma diverge per server
+ * UTC e per chi sta connettendosi da un'altra TZ. Allineamento esplicito
+ * a Europe/Rome elimina l'ambiguita' (es. chiusura registrata sabato 23:00
+ * non finisce nella settimana sbagliata).
+ */
+export function parseRomeDatetimeLocal(s: string | null | undefined): Date | null {
+    if (!s) return null;
+    // Normalizza al formato 'YYYY-MM-DDTHH:MM:SS'
+    let normalized = s.length === 16 ? `${s}:00` : s;
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized)) {
+        // formato non riconosciuto — fallback al parsing nativo
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+    }
+    // Calcola l'offset Europe/Rome per il giorno indicato (gestisce DST)
+    const dateOnly = normalized.slice(0, 10);
+    const noonProbe = new Date(`${dateOnly}T12:00:00Z`);
+    const offset = romeOffset(noonProbe);
+    return new Date(`${normalized}${offset}`);
+}
+
+/**
+ * Format inverso: prende un Date e restituisce 'YYYY-MM-DDTHH:MM' interpretato
+ * in Europe/Rome — utile per pre-popolare un `<input type="datetime-local">`.
+ */
+export function toRomeDatetimeLocal(d: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Rome',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+        hour12: false,
+    }).formatToParts(d);
+    const get = (t: string) => parts.find(p => p.type === t)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}

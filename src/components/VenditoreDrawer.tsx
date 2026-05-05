@@ -6,6 +6,7 @@ import { saveSalesSurvey, getSalesSurveyByLead } from "@/app/actions/surveyActio
 import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
+import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
 import { VenditoreSurveyInline, type VenditoreSurveyState } from "./surveys/VenditoreSurveyInline"
 import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 
@@ -31,17 +32,18 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
     const [closeProduct, setCloseProduct] = useState(lead?.closeProduct || "advance")
     const [closeAmountEur, setCloseAmountEur] = useState(lead?.closeAmountEur?.toString() || "")
     // Data effettiva di chiusura (es. firma sabato ma esito segnato lunedì).
-    // Default = oggi; il venditore può anteciparla. Formato datetime-local.
+    // Default = oggi; il venditore può anteciparla. Formato datetime-local
+    // SEMPRE interpretato come Europe/Rome (Sprint 2.4).
     const [closeDate, setCloseDate] = useState<string>(
         lead?.salespersonOutcomeAt
-            ? format(new Date(lead.salespersonOutcomeAt), "yyyy-MM-dd'T'HH:mm")
-            : format(new Date(), "yyyy-MM-dd'T'HH:mm")
+            ? toRomeDatetimeLocal(new Date(lead.salespersonOutcomeAt))
+            : toRomeDatetimeLocal(new Date())
     )
     const [notClosedReason, setNotClosedReason] = useState(lead?.notClosedReason || "")
     const [notes, setNotes] = useState(lead?.salespersonOutcomeNotes || "")
 
-    const [followUp1Date, setFollowUp1Date] = useState(lead?.followUp1Date ? format(new Date(lead.followUp1Date), "yyyy-MM-dd'T'HH:mm") : "")
-    const [followUp2Date, setFollowUp2Date] = useState(lead?.followUp2Date ? format(new Date(lead.followUp2Date), "yyyy-MM-dd'T'HH:mm") : "")
+    const [followUp1Date, setFollowUp1Date] = useState(lead?.followUp1Date ? toRomeDatetimeLocal(new Date(lead.followUp1Date)) : "")
+    const [followUp2Date, setFollowUp2Date] = useState(lead?.followUp2Date ? toRomeDatetimeLocal(new Date(lead.followUp2Date)) : "")
 
     const [isSaving, setIsSaving] = useState(false)
 
@@ -109,10 +111,12 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                 notes,
                 closeProduct: outcome === "Chiuso" ? closeProduct : undefined,
                 closeAmountEur: outcome === "Chiuso" ? parseFloat(closeAmountEur) : undefined,
-                outcomeAt: outcome === "Chiuso" && closeDate ? new Date(closeDate) : undefined,
+                // Tutti i datetime-local sono interpretati come Europe/Rome (Sprint 2.4):
+                // evita che chiusure registrate sera/notte cadano nella settimana sbagliata.
+                outcomeAt: outcome === "Chiuso" && closeDate ? (parseRomeDatetimeLocal(closeDate) || undefined) : undefined,
                 notClosedReason: outcome === "Non chiuso" ? notClosedReason : undefined,
-                followUp1Date: outcome === "Non chiuso" && followUp1Date ? new Date(followUp1Date) : null,
-                followUp2Date: outcome === "Non chiuso" && followUp2Date ? new Date(followUp2Date) : null,
+                followUp1Date: outcome === "Non chiuso" && followUp1Date ? parseRomeDatetimeLocal(followUp1Date) : null,
+                followUp2Date: outcome === "Non chiuso" && followUp2Date ? parseRomeDatetimeLocal(followUp2Date) : null,
             }, lead.version)
 
             if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
