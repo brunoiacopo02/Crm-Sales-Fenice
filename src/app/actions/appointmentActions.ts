@@ -107,7 +107,7 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             confirmationsDiscardReason: lead.confirmationsDiscardReason,
         };
 
-        await db.update(leads).set({
+        const updated = await db.update(leads).set({
             appointmentDate: null,
             appointmentNote: null,
             appointmentCreatedAt: null,
@@ -126,7 +126,14 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             status: lead.callCount > 0 ? 'IN_PROGRESS' : 'NEW',
             version: lead.version + 1,
             updatedAt: new Date(),
-        }).where(eq(leads.id, leadId));
+        }).where(and(
+            eq(leads.id, leadId),
+            eq(leads.version, lead.version),
+        )).returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false, error: 'CONCURRENCY_ERROR — il lead è stato modificato nel frattempo, ricarica e riprova' };
+        }
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),

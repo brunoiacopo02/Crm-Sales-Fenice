@@ -351,7 +351,23 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ skipped: 'no updatable fields', acContactId: contactId });
             }
 
-            await db.update(leads).set(updatePayload).where(eq(leads.id, existing.id));
+            // Optimistic concurrency: il webhook AC non deve sovrascrivere edit
+            // contemporanei del manager/GDO sul funnel/UTM. Se la version è
+            // cambiata tra la SELECT e l'UPDATE, restituiamo 409 (AC potrà
+            // ritentare, oppure il lead arrivato a mano resta autoritativo).
+            updatePayload.version = existing.version + 1;
+            const updated = await db.update(leads)
+                .set(updatePayload)
+                .where(and(eq(leads.id, existing.id), eq(leads.version, existing.version)))
+                .returning({ id: leads.id });
+
+            if (updated.length === 0) {
+                return NextResponse.json(
+                    { skipped: 'concurrency_conflict', acContactId: contactId, leadId: existing.id },
+                    { status: 409 },
+                );
+            }
+
             await logLeadEvent({
                 leadId: existing.id,
                 eventType: 'AC_UPDATED',
