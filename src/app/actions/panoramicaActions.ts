@@ -623,7 +623,7 @@ export type FunnelOverviewResult =
       }
     | { success: false; error: string };
 
-type CrmCounts = { app: number; conferme: number; trattative: number; close: number };
+type CrmCounts = { app: number; conferme: number; trattative: number; close: number; fatturato: number };
 
 /**
  * Count CRM events per funnel for the given month.
@@ -656,7 +656,7 @@ async function getCrmFunnelCounts(yearMonth: string): Promise<Map<string, CrmCou
         if (!funnel || funnel === 'TEST') continue;
         let bucket = map.get(funnel);
         if (!bucket) {
-            bucket = { app: 0, conferme: 0, trattative: 0, close: 0 };
+            bucket = { app: 0, conferme: 0, trattative: 0, close: 0, fatturato: 0 };
             map.set(funnel, bucket);
         }
 
@@ -676,9 +676,10 @@ async function getCrmFunnelCounts(yearMonth: string): Promise<Map<string, CrmCou
         ) {
             bucket.trattative++;
         }
-        // Chiusure: chiuso nel mese.
+        // Chiusure + fatturato: chiuso nel mese.
         if (l.salespersonOutcome === 'Chiuso' && inMonth(l.salespersonOutcomeAt)) {
             bucket.close++;
+            bucket.fatturato += l.closeAmountEur || 0;
         }
     }
     return map;
@@ -797,7 +798,7 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
 
         for (const funnelName of ordered) {
             const baseline = baselines.find(b => b.funnelName === funnelName);
-            const crm = crmMap.get(funnelName) || { app: 0, conferme: 0, trattative: 0, close: 0 };
+            const crm = crmMap.get(funnelName) || { app: 0, conferme: 0, trattative: 0, close: 0, fatturato: 0 };
 
             // leadCount = baseline assoluto (quello inserito dall'admin) + lead
             // CRM importati DOPO baselineSetAt. Se non c'è baseline → 0.
@@ -806,7 +807,10 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
             const confermeCount = crm.conferme + (baseline?.confermeDelta ?? 0);
             const trattativeCount = crm.trattative + (baseline?.trattativeDelta ?? 0);
             const closeCount = crm.close + (baseline?.closeDelta ?? 0);
-            const fatturatoEur = baseline?.fatturatoEur ?? 0;
+            // Fatturato: live somma chiusure CRM + eventuale extra manuale dall'admin.
+            // Stesso pattern dei count (CRM + delta). Se l'admin ha gia' inserito il
+            // totale a mano e non vuole sommare i live, lasciare fatturatoEur a 0.
+            const fatturatoEur = crm.fatturato + (baseline?.fatturatoEur ?? 0);
             const spesaEur = baseline?.spesaEur ?? 0;
 
             // Resolve alert state (side-effect: may update DB)
