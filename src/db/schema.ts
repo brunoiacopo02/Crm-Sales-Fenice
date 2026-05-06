@@ -754,6 +754,52 @@ export const monthlyFunnelBaselines = pgTable('monthlyFunnelBaselines', {
     };
 });
 
+// Portafoglio clienti post-vendita (entità separata dai leads).
+// Per ora ospita solo i clienti del corso SMM (Social Media Manager) già paganti.
+// Inserimento manuale; nessun automatismo dal funnel leads.
+// Workflow follow-up:
+//   1. Cliente aggiunto → presente in "Pacchetto Clienti" (master, sempre)
+//   2. Venditore spunta followUpMessageSent → outcome auto = 'IN_TRATTATIVA'
+//   3. Venditore traccia followUpResponded / appointmentSet
+//   4. Esito finale: outcome = 'CHIUSO' (con upsellAmountEur) | 'NON_CHIUSO'
+export const customerPortfolios = pgTable('customerPortfolios', {
+    id: text('id').primaryKey(),
+    salespersonUserId: text('salespersonUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    // Anagrafica
+    firstName: text('firstName').notNull(),
+    lastName: text('lastName').notNull(),
+    email: text('email'),
+    phone: text('phone'),
+
+    // Contratto firmato
+    course: text('course').default('SMM').notNull(), // 'SMM' (per ora unico)
+    packageType: text('packageType').notNull(), // 'ADVANCE' | 'GOLD' | 'EXCLUSIVE'
+    contractAmountEur: real('contractAmountEur').notNull(),
+    contractSignedAt: timestamp('contractSignedAt', { withTimezone: true, mode: 'date' }).notNull(),
+
+    // Follow-up workflow
+    followUpMessageSent: boolean('followUpMessageSent').default(false).notNull(),
+    followUpMessageSentAt: timestamp('followUpMessageSentAt', { withTimezone: true, mode: 'date' }),
+    followUpResponded: boolean('followUpResponded'), // null = non valutato
+    appointmentSet: boolean('appointmentSet'), // null = non valutato (include "risentito")
+
+    // Esito upsell
+    outcome: text('outcome'), // null | 'IN_TRATTATIVA' | 'CHIUSO' | 'NON_CHIUSO'
+    upsellAmountEur: real('upsellAmountEur'), // valorizzato solo se outcome='CHIUSO'
+
+    notes: text('notes'),
+
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        salespersonIdx: index('customer_portfolios_salesperson_idx').on(table.salespersonUserId),
+        outcomeIdx: index('customer_portfolios_outcome_idx').on(table.outcome),
+        signedAtIdx: index('customer_portfolios_signed_at_idx').on(table.contractSignedAt),
+    };
+});
+
 // Settings globali chiave-valore (override modificabili da admin senza redeploy).
 // Use case attuale: CPL per il calcolo Costo per Appuntamento / Costo per Contratto
 // nella Dashboard Operativa Aziendale. Generica per ospitare altri parametri futuri.

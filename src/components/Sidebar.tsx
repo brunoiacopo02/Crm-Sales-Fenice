@@ -15,6 +15,7 @@ import {
     Compass,
     ClipboardList,
     Zap,
+    Briefcase,
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
@@ -83,6 +84,7 @@ export function Sidebar() {
     } else if (role === "VENDITORE") {
         navItems = [
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
+            { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
         ]
     } else if (role === "ADMIN" || role === "MANAGER") {
         if (session?.user?.email === "marketing@fenice.local" || session?.user?.name === "Marketing") {
@@ -105,6 +107,7 @@ export function Sidebar() {
                         { name: "Appuntamenti Oggi", href: "/appuntamenti-oggi", icon: Calendar },
                         { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
+                        { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
                         { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                         { name: "Importa Lead", href: "/import", icon: Upload },
                         { name: "Lead Automatici (AC)", href: "/lead-automatici", icon: Zap },
