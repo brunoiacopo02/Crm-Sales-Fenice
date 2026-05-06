@@ -441,8 +441,10 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
             db.select({
                 s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
             }).from(leads).where(and(
-                gte(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, todayStart),
-                lt(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, todayEnd),
+                // Per coerenza con closeToday/presToday che usano appointmentDate
+                // (semantica "today = meeting di oggi") il valore today usa lo stesso campo.
+                gte(leads.appointmentDate, todayStart),
+                lt(leads.appointmentDate, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
             )),
         ]);
@@ -462,14 +464,15 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         const actPres = totals.trattativeCount + (cfg?.trattativeExtra || 0);
         const actClose = totals.closeCount + (cfg?.closeExtra || 0);
 
-        // Fatturato ACT = live sum of closeAmountEur for closed leads in the month.
-        // Uses appointmentDate when available, falls back to salespersonOutcomeAt or createdAt
-        // (some leads may have NULL appointmentDate if closed without one being set).
+        // Fatturato ACT = somma closeAmountEur dei lead chiusi nel mese.
+        // Campo data canonico = salespersonOutcomeAt (allineato a getMarketingStats
+        // del Sales Manager e a getVenditoriKpi). Prima usavamo COALESCE su 3 campi
+        // → divergeva dal Sales Manager / KPI Venditori per gli stessi mesi.
         const [valoreMeseRow] = await db.select({
             s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
         }).from(leads).where(and(
-            gte(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, new Date(Date.UTC(year, month - 1, 1))),
-            lt(sql`COALESCE(${leads.appointmentDate}, ${leads.salespersonOutcomeAt}, ${leads.createdAt})`, new Date(Date.UTC(year, month, 1))),
+            gte(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month - 1, 1))),
+            lt(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month, 1))),
             eq(leads.salespersonOutcome, 'Chiuso'),
         ));
         const actValore = Number(valoreMeseRow?.s || 0) + (cfg?.fatturatoExtraEur || 0);

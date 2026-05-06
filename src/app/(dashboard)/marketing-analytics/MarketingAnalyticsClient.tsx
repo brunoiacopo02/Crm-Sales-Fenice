@@ -33,6 +33,7 @@ type GdoStatTableRow = {
     presenziatiPerc: number;
     closed: number;
     closedPerc: number;
+    fatturato: number;
 }
 
 type FunnelGdoStats = {
@@ -261,6 +262,7 @@ export default function MarketingAnalyticsClient({
                                 const tAppsConfermati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsConfermati, 0);
                                 const tAppsPresenziati = funnelItem.gdoStats.reduce((acc, row) => acc + row.appsPresenziati, 0);
                                 const tClosed = funnelItem.gdoStats.reduce((acc, row) => acc + row.closed, 0);
+                                const tFatturato = funnelItem.gdoStats.reduce((acc, row) => acc + row.fatturato, 0);
 
                                 const tFissPerc = tLeadAssegnati > 0 ? (tAppsFissati / tLeadAssegnati) * 100 : 0;
                                 const tConfPerc = tAppsFissati > 0 ? (tAppsConfermati / tAppsFissati) * 100 : 0;
@@ -289,6 +291,7 @@ export default function MarketingAnalyticsClient({
                                                         <th className="px-4 py-3 font-semibold text-right">% Presenziati</th>
                                                         <th className="px-4 py-3 font-semibold text-right">Closed</th>
                                                         <th className="px-4 py-3 font-semibold text-right">% Closed</th>
+                                                        <th className="px-4 py-3 font-semibold text-right text-emerald-700">Fatturato</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-ash-100">
@@ -304,6 +307,7 @@ export default function MarketingAnalyticsClient({
                                                             <td className="px-4 py-3 text-right text-ash-500">{formatPercent(row.presenziatiPerc)}</td>
                                                             <td className="px-4 py-3 text-right font-semibold text-orange-700">{row.closed}</td>
                                                             <td className="px-4 py-3 text-right text-ash-500 font-medium">{formatPercent(row.closedPerc)}</td>
+                                                            <td className="px-4 py-3 text-right font-semibold text-emerald-700">{formatCurrency(row.fatturato)}</td>
                                                         </tr>
                                                     ))}
                                                     {/* TOTALE ROW */}
@@ -318,6 +322,7 @@ export default function MarketingAnalyticsClient({
                                                         <td className="px-4 py-4 text-right font-bold text-ash-700">{formatPercent(tPresPerc)}</td>
                                                         <td className="px-4 py-4 text-right font-bold text-orange-700">{tClosed}</td>
                                                         <td className="px-4 py-4 text-right font-bold text-orange-700">{formatPercent(tClosePerc)}</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-emerald-700">{formatCurrency(tFatturato)}</td>
                                                     </tr>
                                                 </tbody>
                                             </table>

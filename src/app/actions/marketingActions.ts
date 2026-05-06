@@ -236,6 +236,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
         appsConfermati: number;
         appsPresenziati: number;
         closed: number;
+        fatturato: number;
     }>> = {};
 
     // Inizializza TUTTI i funnel ufficiali a vuoto
@@ -261,6 +262,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
                 appsConfermati: 0,
                 appsPresenziati: 0,
                 closed: 0,
+                fatturato: 0,
             };
         }
 
@@ -289,6 +291,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
             gdoStat.appsPresenziati++;
             if (l.salespersonOutcome === 'Chiuso') {
                 gdoStat.closed++;
+                gdoStat.fatturato += l.closeAmountEur || 0;
             }
         }
     }
@@ -307,6 +310,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
             presenziatiPerc: number;
             closed: number;
             closedPerc: number;
+            fatturato: number;
         }[]
     }[] = [];
 
@@ -330,7 +334,8 @@ export async function getMarketingStatsByGdo(monthString: string) {
                 appsPresenziati: stat.appsPresenziati,
                 presenziatiPerc,
                 closed: stat.closed,
-                closedPerc
+                closedPerc,
+                fatturato: stat.fatturato,
             };
         });
 
