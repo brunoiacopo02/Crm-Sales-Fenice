@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import {
@@ -17,14 +17,12 @@ import {
     toggleFollowUpMessageSent,
     updateFollowUpFlags,
     setCustomerOutcome,
-    getCustomerPortfolioCounts,
     type CreateCustomerInput,
     type UpdateCustomerInput,
 } from "@/app/actions/customerPortfolioActions"
 
 type Customer = Awaited<ReturnType<typeof listCustomerPortfolios>>[number]
 type Salesperson = Awaited<ReturnType<typeof listSalespeople>>[number]
-type Counts = Awaited<ReturnType<typeof getCustomerPortfolioCounts>>
 
 type Tab = 'ALL' | 'IN_TRATTATIVA' | 'NON_CHIUSO' | 'CHIUSO'
 
@@ -59,43 +57,44 @@ export function PortafoglioClientiClient({
     isManagerView: boolean
 }) {
     const [customers, setCustomers] = useState<Customer[]>([])
-    const [counts, setCounts] = useState<Counts>({ all: 0, inTrattativa: 0, nonChiuso: 0, chiuso: 0 })
     const [salespeople, setSalespeople] = useState<Salesperson[]>([])
     const [tab, setTab] = useState<Tab>('ALL')
     const [search, setSearch] = useState('')
     const [salespersonFilter, setSalespersonFilter] = useState<string>('')
     const [isLoading, setIsLoading] = useState(true)
-    const [isPending, startTransition] = useTransition()
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [editing, setEditing] = useState<Customer | null>(null)
     const [closing, setClosing] = useState<Customer | null>(null)
     const [error, setError] = useState<string | null>(null)
 
-    const refresh = async () => {
+    const refresh = useCallback(async () => {
         setIsLoading(true)
         try {
-            const [list, c] = await Promise.all([
-                listCustomerPortfolios(salespersonFilter || undefined),
-                getCustomerPortfolioCounts(salespersonFilter || undefined),
-            ])
+            const list = await listCustomerPortfolios(salespersonFilter || undefined)
             setCustomers(list)
-            setCounts(c)
         } catch (e: any) {
             setError(e?.message || 'Errore caricamento')
         } finally {
             setIsLoading(false)
         }
-    }
+    }, [salespersonFilter])
 
     useEffect(() => {
         refresh()
-    }, [salespersonFilter])
+    }, [refresh])
 
     useEffect(() => {
         if (isManagerView) {
             listSalespeople().then(setSalespeople).catch(() => {})
         }
     }, [isManagerView])
+
+    const counts = useMemo(() => ({
+        all: customers.length,
+        inTrattativa: customers.filter(c => c.outcome === 'IN_TRATTATIVA').length,
+        nonChiuso: customers.filter(c => c.outcome === 'NON_CHIUSO').length,
+        chiuso: customers.filter(c => c.outcome === 'CHIUSO').length,
+    }), [customers])
 
     const filtered = useMemo(() => {
         let rows = customers
@@ -114,32 +113,68 @@ export function PortafoglioClientiClient({
         return rows
     }, [customers, tab, search])
 
+    // Optimistic helper: applica patch in locale subito, poi chiama il server
+    // in background. Se fallisce, ripristina lo stato precedente.
+    const applyOptimistic = useCallback(
+        (id: string, patch: (c: Customer) => Customer, action: () => Promise<unknown>) => {
+            const previous = customers
+            setCustomers(prev => prev.map(c => c.id === id ? patch(c) : c))
+            action().catch(e => {
+                setError(e?.message || 'Errore aggiornamento')
+                setCustomers(previous)
+            })
+        },
+        [customers]
+    )
+
     const handleToggleMessage = (id: string, sent: boolean) => {
-        startTransition(async () => {
-            await toggleFollowUpMessageSent(id, sent)
-            await refresh()
-        })
+        applyOptimistic(id,
+            c => ({
+                ...c,
+                followUpMessageSent: sent,
+                followUpMessageSentAt: sent ? (c.followUpMessageSentAt ?? new Date()) : null,
+                outcome: sent ? (c.outcome ?? 'IN_TRATTATIVA') : null,
+                followUpResponded: sent ? c.followUpResponded : null,
+                appointmentSet: sent ? c.appointmentSet : null,
+                upsellAmountEur: sent ? c.upsellAmountEur : null,
+            }),
+            () => toggleFollowUpMessageSent(id, sent)
+        )
     }
 
     const handleUpdateFlags = (id: string, flags: { followUpResponded?: boolean | null, appointmentSet?: boolean | null }) => {
-        startTransition(async () => {
-            await updateFollowUpFlags(id, flags)
-            await refresh()
-        })
+        applyOptimistic(id,
+            c => ({
+                ...c,
+                followUpResponded: flags.followUpResponded !== undefined ? flags.followUpResponded : c.followUpResponded,
+                appointmentSet: flags.appointmentSet !== undefined ? flags.appointmentSet : c.appointmentSet,
+            }),
+            () => updateFollowUpFlags(id, flags)
+        )
     }
 
     const handleSetOutcome = (id: string, outcome: 'IN_TRATTATIVA' | 'CHIUSO' | 'NON_CHIUSO' | null, upsellAmountEur?: number) => {
-        startTransition(async () => {
-            await setCustomerOutcome(id, outcome, upsellAmountEur)
-            await refresh()
-        })
+        applyOptimistic(id,
+            c => ({
+                ...c,
+                outcome,
+                upsellAmountEur: outcome === 'CHIUSO' ? (upsellAmountEur ?? c.upsellAmountEur) : null,
+                // Se viene impostato un outcome ma il msg non era inviato, lo
+                // marchiamo come inviato (mirror della logica server).
+                followUpMessageSent: outcome ? true : c.followUpMessageSent,
+                followUpMessageSentAt: outcome && !c.followUpMessageSentAt ? new Date() : c.followUpMessageSentAt,
+            }),
+            () => setCustomerOutcome(id, outcome, upsellAmountEur)
+        )
     }
 
     const handleDelete = (id: string) => {
         if (!confirm('Eliminare questo cliente dal portafoglio? L\'azione è irreversibile.')) return
-        startTransition(async () => {
-            await deleteCustomerPortfolio(id)
-            await refresh()
+        const previous = customers
+        setCustomers(prev => prev.filter(c => c.id !== id))
+        deleteCustomerPortfolio(id).catch(e => {
+            setError(e?.message || 'Errore eliminazione')
+            setCustomers(previous)
         })
     }
 
@@ -257,7 +292,6 @@ export function PortafoglioClientiClient({
                                             <RowActions
                                                 customer={c}
                                                 tab={tab}
-                                                disabled={isPending}
                                                 onToggleMessage={handleToggleMessage}
                                                 onUpdateFlags={handleUpdateFlags}
                                                 onSetOutcome={handleSetOutcome}
@@ -384,12 +418,11 @@ function TabButton({
 // Row actions (dynamic per tab)
 // ───────────────────────────────────────────────────────────────────────────
 function RowActions({
-    customer: c, tab, disabled,
+    customer: c, tab,
     onToggleMessage, onUpdateFlags, onSetOutcome, onOpenClose,
 }: {
     customer: Customer
     tab: Tab
-    disabled: boolean
     onToggleMessage: (id: string, sent: boolean) => void
     onUpdateFlags: (id: string, flags: { followUpResponded?: boolean | null, appointmentSet?: boolean | null }) => void
     onSetOutcome: (id: string, outcome: 'IN_TRATTATIVA' | 'CHIUSO' | 'NON_CHIUSO' | null) => void
@@ -404,7 +437,6 @@ function RowActions({
                 </span>
                 <button
                     onClick={() => onSetOutcome(c.id, 'IN_TRATTATIVA')}
-                    disabled={disabled}
                     className="text-xs px-2 py-1 text-ash-500 hover:text-ash-800 hover:bg-ash-100 rounded transition-colors"
                     title="Riapri trattativa"
                 >
@@ -419,14 +451,12 @@ function RowActions({
             <div className="flex items-center gap-2">
                 <button
                     onClick={() => onSetOutcome(c.id, 'IN_TRATTATIVA')}
-                    disabled={disabled}
                     className="text-xs px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 transition-colors"
                 >
                     Riapri trattativa
                 </button>
                 <button
                     onClick={() => onOpenClose(c)}
-                    disabled={disabled}
                     className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded border border-green-200 transition-colors"
                 >
                     Chiuso ora
@@ -441,26 +471,22 @@ function RowActions({
                 <FlagToggle
                     label="Ha risposto"
                     value={c.followUpResponded}
-                    disabled={disabled}
                     onChange={(v) => onUpdateFlags(c.id, { followUpResponded: v })}
                 />
                 <FlagToggle
                     label="App fissato"
                     value={c.appointmentSet}
-                    disabled={disabled}
                     onChange={(v) => onUpdateFlags(c.id, { appointmentSet: v })}
                 />
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => onOpenClose(c)}
-                        disabled={disabled}
                         className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded border border-green-200 transition-colors font-medium"
                     >
                         Chiuso
                     </button>
                     <button
                         onClick={() => onSetOutcome(c.id, 'NON_CHIUSO')}
-                        disabled={disabled}
                         className="text-xs px-2 py-1 bg-red-50 text-red-700 hover:bg-red-100 rounded border border-red-200 transition-colors"
                     >
                         Non chiuso
@@ -477,7 +503,6 @@ function RowActions({
                 <input
                     type="checkbox"
                     checked={c.followUpMessageSent}
-                    disabled={disabled}
                     onChange={(e) => onToggleMessage(c.id, e.target.checked)}
                     className="h-4 w-4 rounded border-ash-300 text-brand-orange focus:ring-brand-orange/40"
                 />
@@ -497,10 +522,9 @@ function RowActions({
 }
 
 // Tri-state flag toggle (null / true / false)
-function FlagToggle({ label, value, disabled, onChange }: {
+function FlagToggle({ label, value, onChange }: {
     label: string
     value: boolean | null | undefined
-    disabled: boolean
     onChange: (v: boolean | null) => void
 }) {
     const next = (current: boolean | null | undefined): boolean | null => {
@@ -518,7 +542,6 @@ function FlagToggle({ label, value, disabled, onChange }: {
     return (
         <button
             onClick={() => onChange(next(value))}
-            disabled={disabled}
             className={`text-xs px-2 py-1 rounded border ${colorClass} transition-colors hover:opacity-80`}
             title="Click per ciclare: — → Sì → No → —"
         >
