@@ -809,3 +809,32 @@ export const appSettings = pgTable('appSettings', {
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedBy: text('updatedBy'),
 });
+
+// Outbox queue per i webhook al CRM marketing esterno.
+// Ogni evento del funnel (appointment.set, appointment.outcome, deal.assigned,
+// deal.closed_won, deal.closed_lost) genera una riga qui. Il worker drainer
+// (cron + after() inline) la consuma con retry esponenziale.
+export const marketingWebhookDeliveries = pgTable('marketingWebhookDeliveries', {
+    id: text('id').primaryKey(),                                   // = eventId (UUID v4 deterministic)
+    eventType: text('eventType').notNull(),                        // 'appointment.set' | 'appointment.outcome' | 'deal.assigned' | 'deal.closed_won' | 'deal.closed_lost'
+    leadId: text('leadId').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    payload: jsonb('payload').notNull(),                           // envelope completo già pronto da firmare
+    targetUrl: text('targetUrl').notNull(),                        // URL del receiver (snapshot al momento dell'enqueue)
+
+    status: text('status').default('pending').notNull(),           // 'pending' | 'delivered' | 'failed_permanent' | 'dead'
+    attempts: integer('attempts').default(0).notNull(),
+    lastAttemptAt: timestamp('lastAttemptAt', { withTimezone: true, mode: 'date' }),
+    nextAttemptAt: timestamp('nextAttemptAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    deliveredAt: timestamp('deliveredAt', { withTimezone: true, mode: 'date' }),
+
+    lastResponseStatus: integer('lastResponseStatus'),
+    lastError: text('lastError'),                                  // troncato a 1000 char in app
+
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => {
+    return {
+        statusNextIdx: index('mkt_webhook_status_next_idx').on(t.status, t.nextAttemptAt),
+        leadIdx: index('mkt_webhook_lead_idx').on(t.leadId),
+        eventTypeIdx: index('mkt_webhook_event_type_idx').on(t.eventType),
+    };
+});
