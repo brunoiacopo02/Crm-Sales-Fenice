@@ -16,7 +16,7 @@ export async function deliverWebhook(
     secret: string
 ): Promise<DeliverResult> {
     const body = JSON.stringify(envelope);
-    const { signature, timestamp } = signPayload(body, secret);
+    const signature = signPayload(body, secret);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
@@ -29,7 +29,6 @@ export async function deliverWebhook(
                 'User-Agent': 'CrmFenice-Webhooks/1.0',
                 'X-CRM-Event-Id': envelope.eventId,
                 'X-CRM-Event-Type': envelope.eventType,
-                'X-CRM-Timestamp': timestamp,
                 'X-CRM-Signature': signature,
             },
             body,

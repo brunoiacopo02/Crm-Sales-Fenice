@@ -2,45 +2,33 @@ import crypto from 'node:crypto';
 
 const SIGNATURE_PREFIX = 'sha256=';
 
-export interface SignResult {
-    signature: string;
-    timestamp: string;
-}
-
 /**
- * HMAC-SHA256 signing scheme:
- *   stringToSign = `${timestamp}.${rawBody}`
- *   signature    = sha256=hex(hmac(secret, stringToSign))
+ * HMAC-SHA256 signing scheme concordato col CRM marketing:
+ *   signature = sha256=hex(hmac(secret, rawBody))
+ *
+ * NB: Niente prefix timestamp — il marketing fa dedup via header
+ * X-CRM-Event-Id, che è il nostro eventId deterministico.
  */
-export function signPayload(rawBody: string, secret: string, now = new Date()): SignResult {
-    const timestamp = Math.floor(now.getTime() / 1000).toString();
-    const stringToSign = `${timestamp}.${rawBody}`;
-    const hex = crypto.createHmac('sha256', secret).update(stringToSign).digest('hex');
-    return { signature: `${SIGNATURE_PREFIX}${hex}`, timestamp };
+export function signPayload(rawBody: string, secret: string): string {
+    const hex = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    return `${SIGNATURE_PREFIX}${hex}`;
 }
 
 /**
- * Verifica firma con timing-safe compare e anti-replay (default 5 min).
+ * Verifica firma con timing-safe compare. Esposto per simmetria nel caso
+ * volessimo accettare callback inbound dal marketing in futuro.
  */
 export function verifySignature(
     rawBody: string,
-    timestampHeader: string,
     signatureHeader: string,
     secret: string,
-    maxAgeSeconds = 300
 ): { valid: boolean; reason?: string } {
-    if (!timestampHeader || !signatureHeader) return { valid: false, reason: 'missing_headers' };
+    if (!signatureHeader) return { valid: false, reason: 'missing_signature' };
     if (!signatureHeader.startsWith(SIGNATURE_PREFIX)) return { valid: false, reason: 'bad_prefix' };
-
-    const ts = parseInt(timestampHeader, 10);
-    if (Number.isNaN(ts)) return { valid: false, reason: 'bad_timestamp' };
-
-    const ageSec = Math.abs(Math.floor(Date.now() / 1000) - ts);
-    if (ageSec > maxAgeSeconds) return { valid: false, reason: 'expired' };
 
     const expectedHex = crypto
         .createHmac('sha256', secret)
-        .update(`${timestampHeader}.${rawBody}`)
+        .update(rawBody)
         .digest('hex');
     const providedHex = signatureHeader.slice(SIGNATURE_PREFIX.length);
 
