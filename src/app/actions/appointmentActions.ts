@@ -6,6 +6,7 @@ import { db } from "@/db"
 import { leads, leadEvents } from "@/db/schema"
 import { eq, asc, desc, and } from "drizzle-orm"
 import crypto from "crypto"
+import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -76,6 +77,13 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
     if (updated.length === 0) {
         return { success: false, error: 'CONCURRENCY_ERROR' };
     }
+
+    // Marketing webhook: appointment rescheduled by GDO
+    await enqueueMarketingWebhook({
+        eventType: 'appointment.set',
+        leadId,
+        actorUserId: supabaseUser.id,
+    }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
 
     return { success: true };
 }

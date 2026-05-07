@@ -15,6 +15,7 @@ import { incrementChestProgress } from "@/app/actions/chestActions"
 import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { incrementDuelScore } from "@/app/actions/duelActions"
+import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
 async function checkFourthCallEligibility(gdoId: string): Promise<boolean> {
@@ -254,6 +255,13 @@ export async function updateLeadOutcome(
     }
 
     if (outcome === 'APPUNTAMENTO') {
+        // Marketing webhook: notify external CRM that an appointment was set
+        await enqueueMarketingWebhook({
+            eventType: 'appointment.set',
+            leadId,
+            actorUserId: effectiveUserId ?? null,
+        }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+
         // Gamification: award XP for appointment set
         if (effectiveUserId) {
             rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });

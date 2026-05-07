@@ -11,6 +11,7 @@ import { awardXpAndCoins } from "@/lib/gamificationEngine"
 import { incrementChestProgress } from "@/app/actions/chestActions"
 import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
 import { maybeDropCreature } from "@/app/actions/creatureActions"
+import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -289,6 +290,15 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
         throw new Error("CONCURRENCY_ERROR")
     }
 
+    // Marketing webhook: emit appointment.set only if the appointment date actually changed
+    if (oldLead.appointmentDate?.getTime() !== data.appointmentDate?.getTime()) {
+        await enqueueMarketingWebhook({
+            eventType: 'appointment.set',
+            leadId,
+            actorUserId: session.user.id,
+        }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+    }
+
     // Audit Log
     await db.insert(leadEvents).values({
         id: crypto.randomUUID(),
@@ -389,6 +399,21 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
 
         if (updated.length === 0) {
             return { success: false, error: 'CONCURRENCY_ERROR' }
+        }
+
+        // Marketing webhook: appointment outcome (and optional deal.assigned)
+        await enqueueMarketingWebhook({
+            eventType: 'appointment.outcome',
+            leadId,
+            actorUserId: session.user.id,
+        }).catch((e: unknown) => console.error("Marketing webhook (appointment.outcome) err:", e));
+
+        if (salespersonAssigned) {
+            await enqueueMarketingWebhook({
+                eventType: 'deal.assigned',
+                leadId,
+                actorUserId: session.user.id,
+            }).catch((e: unknown) => console.error("Marketing webhook (deal.assigned) err:", e));
         }
 
         // Create Calendar Event after successful DB update
@@ -557,6 +582,14 @@ export async function setSalespersonOutcome(
             return { success: false, error: 'CONCURRENCY_ERROR' }
         }
 
+        // Marketing webhook: deal closed (won/lost based on outcome)
+        const closedEventType = outcome === 'Chiuso' ? 'deal.closed_won' : 'deal.closed_lost';
+        await enqueueMarketingWebhook({
+            eventType: closedEventType,
+            leadId,
+            actorUserId: session.user.id,
+        }).catch((e: unknown) => console.error(`Marketing webhook (${closedEventType}) err:`, e));
+
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
@@ -610,6 +643,15 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
 
         if (updated.length === 0) {
             return { success: false, error: "CONCURRENCY_ERROR" }
+        }
+
+        // Marketing webhook: if auto-discarded after 4 NR, emit appointment.outcome (NON_CONFERMATO)
+        if (isAutoDiscard) {
+            await enqueueMarketingWebhook({
+                eventType: 'appointment.outcome',
+                leadId,
+                actorUserId: session.user.id,
+            }).catch((e: unknown) => console.error("Marketing webhook (appointment.outcome auto-discard) err:", e));
         }
 
         await db.insert(leadEvents).values({
@@ -739,6 +781,17 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
 
         if (updated.length === 0) {
             throw new Error("CONCURRENCY_ERROR");
+        }
+
+        // Marketing webhook: emit appointment.set when reschedule sets a new date
+        // (skip when needsReschedule clears the date — that's not a "set")
+        if (!payload.needsReschedule && payload.newAppointmentDate
+            && oldApptDate?.getTime() !== payload.newAppointmentDate.getTime()) {
+            await enqueueMarketingWebhook({
+                eventType: 'appointment.set',
+                leadId,
+                actorUserId: session.user.id,
+            }).catch((e: unknown) => console.error("Marketing webhook (appointment.set reschedule) err:", e));
         }
 
         // Handle Calendar if already confirmed and shift/removal happened

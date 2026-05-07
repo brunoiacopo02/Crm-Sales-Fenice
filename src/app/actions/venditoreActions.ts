@@ -6,6 +6,7 @@ import { db } from "@/db"
 import { leads, users, callLogs, notifications, leadEvents } from "@/db/schema"
 import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
+import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 // Gamification disabled for VENDITORE role — import removed
 
 export async function getVenditoreAppointments(sellerId: string) {
@@ -94,7 +95,14 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     if (updated.length === 0) {
         return { success: false, error: 'CONCURRENCY_ERROR' }
     }
-        
+
+    // Marketing webhook: deal closed (won/lost based on outcome)
+    const closedEventType = payload.outcome === 'Chiuso' ? 'deal.closed_won' : 'deal.closed_lost';
+    await enqueueMarketingWebhook({
+        eventType: closedEventType,
+        leadId,
+        actorUserId: session.user.id,
+    }).catch((e: unknown) => console.error(`Marketing webhook (${closedEventType}) err:`, e));
 
     // Gamification disabled for VENDITORE role
     const rewardData: any = null;
