@@ -8,6 +8,13 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next({ request });
     }
 
+    // Vercel Cron e PULL endpoint marketing usano auth via Bearer token,
+    // non Supabase session — bypass del middleware.
+    if (request.nextUrl.pathname.startsWith('/api/cron/')
+        || request.nextUrl.pathname === '/api/marketing/leads') {
+        return NextResponse.next({ request });
+    }
+
     let supabaseResponse = NextResponse.next({
         request,
     });
