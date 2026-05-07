@@ -1,0 +1,169 @@
+import crypto from 'node:crypto';
+import type { InferSelectModel } from 'drizzle-orm';
+import type { leads, users } from '@/db/schema';
+import type {
+    MarketingWebhookEnvelope,
+    MarketingEventType,
+    LeadEnvelope,
+    ActorRef,
+    AppointmentSetData,
+    AppointmentOutcomeData,
+    DealAssignedData,
+    DealClosedWonData,
+    DealClosedLostData,
+} from './types';
+
+type Lead = InferSelectModel<typeof leads>;
+type User = InferSelectModel<typeof users>;
+
+/**
+ * eventId deterministico: SHA-256 di (eventType + leadId + occurredAt-al-secondo)
+ * formattato come UUID-shape. Doppio click utente con stesso payload → stesso
+ * eventId → INSERT con ON CONFLICT DO NOTHING.
+ */
+export function deterministicEventId(
+    eventType: MarketingEventType,
+    leadId: string,
+    occurredAt: Date
+): string {
+    const seconds = Math.floor(occurredAt.getTime() / 1000);
+    const seed = `${eventType}|${leadId}|${seconds}`;
+    const hash = crypto.createHash('sha256').update(seed).digest('hex');
+    return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+function actorFromUser(u: Pick<User, 'id' | 'displayName' | 'name' | 'role'> | null | undefined): ActorRef | null {
+    if (!u) return null;
+    return {
+        userId: u.id,
+        displayName: u.displayName ?? u.name ?? null,
+        role: u.role,
+    };
+}
+
+function leadEnvelope(lead: Lead): LeadEnvelope {
+    return {
+        id: lead.id,
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        funnel: lead.funnel,
+        source: lead.source,
+        createdAt: lead.createdAt.toISOString(),
+        utm: {
+            source: lead.utmSource,
+            medium: lead.utmMedium,
+            campaign: lead.utmCampaign,
+            content: lead.utmContent,
+            term: lead.utmTerm,
+        },
+    };
+}
+
+export interface BuildContext {
+    lead: Lead;
+    actor?: Pick<User, 'id' | 'displayName' | 'name' | 'role'> | null;
+    occurredAt?: Date;
+}
+
+export function buildAppointmentSet(ctx: BuildContext): MarketingWebhookEnvelope {
+    const { lead, actor, occurredAt = new Date() } = ctx;
+    if (!lead.appointmentDate) {
+        throw new Error(`buildAppointmentSet: lead ${lead.id} has no appointmentDate`);
+    }
+    const data: AppointmentSetData = {
+        appointmentDate: lead.appointmentDate.toISOString(),
+        appointmentNote: lead.appointmentNote,
+        appointmentCreatedAt: lead.appointmentCreatedAt?.toISOString() ?? null,
+        callCount: lead.callCount,
+        setBy: actorFromUser(actor),
+    };
+    return {
+        eventId: deterministicEventId('appointment.set', lead.id, occurredAt),
+        eventType: 'appointment.set',
+        occurredAt: occurredAt.toISOString(),
+        apiVersion: '1',
+        lead: leadEnvelope(lead),
+        data,
+    };
+}
+
+function mapConfirmationsOutcome(raw: string | null): AppointmentOutcomeData['status'] {
+    if (raw === 'confermato') return 'CONFERMATO';
+    if (raw === 'scartato') return 'NON_CONFERMATO';
+    return 'DA_RIFISSARE';
+}
+
+export function buildAppointmentOutcome(ctx: BuildContext): MarketingWebhookEnvelope {
+    const { lead, actor, occurredAt = new Date() } = ctx;
+    const data: AppointmentOutcomeData = {
+        status: mapConfirmationsOutcome(lead.confirmationsOutcome),
+        rawOutcome: lead.confirmationsOutcome ?? '',
+        discardReason: lead.confirmationsDiscardReason,
+        decidedAt: (lead.confirmationsTimestamp ?? occurredAt).toISOString(),
+        appointmentDate: lead.appointmentDate?.toISOString() ?? null,
+        decidedBy: actorFromUser(actor),
+    };
+    return {
+        eventId: deterministicEventId('appointment.outcome', lead.id, occurredAt),
+        eventType: 'appointment.outcome',
+        occurredAt: occurredAt.toISOString(),
+        apiVersion: '1',
+        lead: leadEnvelope(lead),
+        data,
+    };
+}
+
+export function buildDealAssigned(ctx: BuildContext): MarketingWebhookEnvelope {
+    const { lead, actor, occurredAt = new Date() } = ctx;
+    const data: DealAssignedData = {
+        assignedAt: (lead.salespersonAssignedAt ?? occurredAt).toISOString(),
+        salesperson: actorFromUser(actor),
+    };
+    return {
+        eventId: deterministicEventId('deal.assigned', lead.id, occurredAt),
+        eventType: 'deal.assigned',
+        occurredAt: occurredAt.toISOString(),
+        apiVersion: '1',
+        lead: leadEnvelope(lead),
+        data,
+    };
+}
+
+export function buildDealClosedWon(ctx: BuildContext): MarketingWebhookEnvelope {
+    const { lead, actor, occurredAt = new Date() } = ctx;
+    const data: DealClosedWonData = {
+        closedAt: (lead.salespersonOutcomeAt ?? occurredAt).toISOString(),
+        product: lead.closeProduct,
+        amountEur: lead.closeAmountEur,
+        notes: lead.salespersonOutcomeNotes,
+        salesperson: actorFromUser(actor),
+    };
+    return {
+        eventId: deterministicEventId('deal.closed_won', lead.id, occurredAt),
+        eventType: 'deal.closed_won',
+        occurredAt: occurredAt.toISOString(),
+        apiVersion: '1',
+        lead: leadEnvelope(lead),
+        data,
+    };
+}
+
+export function buildDealClosedLost(ctx: BuildContext): MarketingWebhookEnvelope {
+    const { lead, actor, occurredAt = new Date() } = ctx;
+    const data: DealClosedLostData = {
+        closedAt: (lead.salespersonOutcomeAt ?? occurredAt).toISOString(),
+        outcome: lead.salespersonOutcome ?? '',
+        reason: lead.notClosedReason,
+        notes: lead.salespersonOutcomeNotes,
+        salesperson: actorFromUser(actor),
+    };
+    return {
+        eventId: deterministicEventId('deal.closed_lost', lead.id, occurredAt),
+        eventType: 'deal.closed_lost',
+        occurredAt: occurredAt.toISOString(),
+        apiVersion: '1',
+        lead: leadEnvelope(lead),
+        data,
+    };
+}
