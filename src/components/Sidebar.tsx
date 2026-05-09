@@ -77,6 +77,7 @@ export function Sidebar() {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
             { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
+            { name: "Analytics Staffing", href: "/conferme/analytics", icon: LayoutDashboard },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
             { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
@@ -122,6 +123,7 @@ export function Sidebar() {
                         { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
                         { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                         { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
+                        { name: "Analytics Staffing Conferme", href: "/conferme/analytics", icon: LayoutDashboard },
                         { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
                         { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
                         { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
