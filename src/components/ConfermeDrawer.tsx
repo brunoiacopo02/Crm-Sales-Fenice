@@ -458,7 +458,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 <button
                                     onClick={handleQuickNR}
                                     disabled={isSavingNR || !!lead.confirmationsOutcome}
-                                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${lead.confCall3At && !lead.confirmationsOutcome ? 'bg-ember-600 hover:bg-ember-700 text-white' : 'bg-ash-900 hover:bg-black text-white'}`}
+                                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${lead.confCall2At && !lead.confirmationsOutcome ? 'bg-ember-600 hover:bg-ember-700 text-white' : 'bg-ash-900 hover:bg-black text-white'}`}
                                 >
                                     {isSavingNR ? "..." : lead.confCall2At ? "3° NR (Scarta Auto)" : "NR (Non Risponde)"}
                                     <div className="flex gap-1 ml-1" title="Tentativi NR">
