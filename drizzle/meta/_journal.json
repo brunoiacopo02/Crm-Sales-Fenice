@@ -8,6 +8,13 @@
       "when": 1773583610112,
       "tag": "0000_magical_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778329487625,
+      "tag": "0001_conferme_call_duration",
+      "breakpoints": true
     }
   ]
 }
