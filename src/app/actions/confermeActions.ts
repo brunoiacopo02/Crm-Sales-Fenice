@@ -627,12 +627,20 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
         } else if (!oldLead.confCall2At) {
             toUpdate.confCall2At = new Date();
         } else if (!oldLead.confCall3At) {
+            // 3° NR: auto-scarta nello stesso update
             toUpdate.confCall3At = new Date();
-        } else {
-            // 4th NR: auto-discard the lead
             isAutoDiscard = true;
             toUpdate.confirmationsOutcome = 'scartato';
-            toUpdate.confirmationsDiscardReason = '4 NR consecutivi';
+            toUpdate.confirmationsDiscardReason = '3 NR consecutivi';
+            toUpdate.confirmationsUserId = session.user.id;
+            toUpdate.confirmationsTimestamp = new Date();
+        } else {
+            // Stato impossibile post-migrazione: 3 NR già registrati ma outcome ancora null.
+            // Avviene solo per lead in transizione dal vecchio sistema (4 NR).
+            // Comportamento safe: scarta come "3 NR consecutivi" senza toccare i campi data.
+            isAutoDiscard = true;
+            toUpdate.confirmationsOutcome = 'scartato';
+            toUpdate.confirmationsDiscardReason = '3 NR consecutivi';
             toUpdate.confirmationsUserId = session.user.id;
             toUpdate.confirmationsTimestamp = new Date();
         }
@@ -645,7 +653,7 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
             return { success: false, error: "CONCURRENCY_ERROR" }
         }
 
-        // Marketing webhook: if auto-discarded after 4 NR, emit appointment.outcome (NON_CONFERMATO)
+        // Marketing webhook: if auto-discarded after 3 NR, emit appointment.outcome (NON_CONFERMATO)
         if (isAutoDiscard) {
             await enqueueMarketingWebhook({
                 eventType: 'appointment.outcome',
@@ -657,11 +665,11 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
-            eventType: isAutoDiscard ? "conferme_auto_discarded_4nr" : "conferme_no_answer",
+            eventType: isAutoDiscard ? "conferme_auto_discarded_3nr" : "conferme_no_answer",
             userId: session.user.id,
             timestamp: new Date(),
             metadata: isAutoDiscard
-                ? { reason: '4 NR consecutivi', autoDiscard: true }
+                ? { reason: '3 NR consecutivi', autoDiscard: true }
                 : { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) }
         });
 
@@ -685,15 +693,31 @@ export async function undoConfermeNoAnswer(leadId: string, currentVersion: numbe
 
     let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date() };
     let fieldCleared: string | null = null;
+    let restoredFromAutoDiscard = false;
 
-    if (oldLead.confCall3At) {
+    // Se il lead è stato auto-scartato al 3° NR, l'undo deve riportarlo "in lavorazione".
+    if (oldLead.confCall3At
+        && oldLead.confirmationsOutcome === 'scartato'
+        && oldLead.confirmationsDiscardReason === '3 NR consecutivi') {
         toUpdate.confCall3At = null;
+        toUpdate.confCall3Duration = null;
+        toUpdate.confirmationsOutcome = null;
+        toUpdate.confirmationsDiscardReason = null;
+        toUpdate.confirmationsUserId = null;
+        toUpdate.confirmationsTimestamp = null;
+        fieldCleared = "confCall3At";
+        restoredFromAutoDiscard = true;
+    } else if (oldLead.confCall3At) {
+        toUpdate.confCall3At = null;
+        toUpdate.confCall3Duration = null;
         fieldCleared = "confCall3At";
     } else if (oldLead.confCall2At) {
         toUpdate.confCall2At = null;
+        toUpdate.confCall2Duration = null;
         fieldCleared = "confCall2At";
     } else if (oldLead.confCall1At) {
         toUpdate.confCall1At = null;
+        toUpdate.confCall1Duration = null;
         fieldCleared = "confCall1At";
     } else {
         return { success: false, error: "Nessun NR da annullare." };
@@ -723,7 +747,7 @@ export async function undoConfermeNoAnswer(leadId: string, currentVersion: numbe
         eventType: "conferme_nr_undone",
         userId: session.user.id,
         timestamp: new Date(),
-        metadata: { fieldCleared }
+        metadata: { fieldCleared, restoredFromAutoDiscard }
     });
 
     return { success: true };
