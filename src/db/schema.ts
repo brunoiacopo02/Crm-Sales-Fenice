@@ -90,6 +90,7 @@ export const leads = pgTable('leads', {
     confCall1At: timestamp('confCall1At', { withTimezone: true, mode: 'date' }),
     confCall2At: timestamp('confCall2At', { withTimezone: true, mode: 'date' }),
     confCall3At: timestamp('confCall3At', { withTimezone: true, mode: 'date' }),
+    // Durata in secondi delle chiamate Conferme. NULL se il timer non è stato avviato.
     confCall1Duration: integer('confCall1Duration'),
     confCall2Duration: integer('confCall2Duration'),
     confCall3Duration: integer('confCall3Duration'),
