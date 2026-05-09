@@ -4,6 +4,9 @@ import { useState, useRef, useEffect } from "react"
 import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw } from "lucide-react"
 import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
+import { ConfermeCallTimer } from "@/components/ConfermeCallTimer"
+import { consumeTimerForLead } from "@/lib/confermeCallTimer"
+import { logConfermeCallDuration } from "@/app/actions/confermeAnalyticsActions"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, onRefresh, onRowClick, layoutMode = 'default' }: any) {
     const lead = item.lead
@@ -70,11 +73,21 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
         }
     }
 
+    /** Ferma il timer per questo lead se attivo e logga la durata.
+     *  Da chiamare PRIMA della server action (NR / outcome / snooze / recall). */
+    const stopTimerAndLog = async (actionTaken: 'nr' | 'outcome' | null) => {
+        const consumed = consumeTimerForLead(lead.id);
+        if (!consumed) return;
+        await logConfermeCallDuration(lead.id, consumed.durationSeconds, { actionTaken })
+            .catch(err => console.error("logConfermeCallDuration err:", err));
+    };
+
     const handleQuickNR = async (e: React.MouseEvent) => {
         e.stopPropagation()
         if (actionBusy) return
         setActionBusy(true)
         try {
+            await stopTimerAndLog('nr');
             const res = await recordConfermeNoAnswer(lead.id, lead.version);
             if (res.success) {
                 await animateAndRefresh('pa-bounce', 200)
@@ -111,6 +124,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
         if (!snoozeTime) return alert("Seleziona un orario");
         setIsSavingSnooze(true);
         try {
+            await stopTimerAndLog('outcome');
             const [hours, minutes] = snoozeTime.split(":");
             const d = new Date();
             d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
@@ -139,6 +153,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
         if (!recallDate) return alert("Seleziona una data per il richiamo");
         setIsSavingRecall(true);
         try {
+            await stopTimerAndLog('outcome');
             const rDate = new Date(`${recallDate}T${recallTime || '00:00'}:00`);
 
             const res = await scheduleConfermeRecall(lead.id, lead.version, {
@@ -301,6 +316,8 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
 
                     {!lead.confirmationsOutcome && (
                         <>
+                            <ConfermeCallTimer leadId={lead.id} disabled={isLocked} />
+
                             {/* BOTTONE ANNULLA SNOOZE — visibile solo se il lead ha uno snooze attivo */}
                             {lead.confSnoozeAt && (
                                 <button
