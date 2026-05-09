@@ -55,13 +55,15 @@ export async function logConfermeCallDuration(
             answered = true;
         }
 
+        const roundedDuration = Math.round(durationSeconds);
+
         // Update field if slot determined
         if (slot !== null) {
             const colName =
                 slot === 1 ? 'confCall1Duration'
                 : slot === 2 ? 'confCall2Duration'
                 : 'confCall3Duration';
-            const patch: Record<string, number> = { [colName]: Math.round(durationSeconds) };
+            const patch: Record<string, number> = { [colName]: roundedDuration };
             await db.update(leads).set(patch).where(eq(leads.id, leadId));
         }
 
@@ -72,7 +74,7 @@ export async function logConfermeCallDuration(
             userId: session.user.id,
             timestamp: new Date(),
             metadata: {
-                durationSeconds: Math.round(durationSeconds),
+                durationSeconds: roundedDuration,
                 slot,
                 answered,
                 actionTaken: opts.actionTaken,
