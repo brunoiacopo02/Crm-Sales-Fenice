@@ -7,6 +7,7 @@ import { dayBoundsRome, monthBoundsRome, previousYearMonth } from "@/lib/dateUti
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import dynamic from "next/dynamic"
 import { Filter, PhoneCall, Headphones, CalendarCheck, Clock, Percent, Target, TrendingUp, ArrowUpDown } from "lucide-react"
+import { BiweeklyHistoryTable } from "@/components/BiweeklyHistoryTable"
 // Lazy load Recharts heavy components
 const LineChart = dynamic(() => import("recharts").then((mod) => mod.LineChart), { ssr: false })
 const Line = dynamic(() => import("recharts").then((mod) => mod.Line), { ssr: false })
@@ -352,6 +353,11 @@ export function KpiGdoBoard() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* STORICO BISETTIMANALE PRESENZE (solo quando si guarda un singolo GDO) */}
+            {gdoFilter !== "ALL" && (
+                <BiweeklyHistoryTable userId={gdoFilter} lookback={8} />
             )}
 
             {/* BIG CARDS ROW */}

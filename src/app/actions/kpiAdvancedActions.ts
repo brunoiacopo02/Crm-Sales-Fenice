@@ -2,8 +2,9 @@
 
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
-import { gte, lte, and, eq, desc } from "drizzle-orm"
+import { gte, lte, lt, and, eq, desc } from "drizzle-orm"
 import { format } from "date-fns"
+import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 
 import { cache } from "react"
 
@@ -165,7 +166,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         const uid = log.userId || 'Tracciato Vecchio / Sconosciuto'
         const uname = userMap.get(uid) || uid
         if (!gdoStatsMap[uname]) {
-            gdoStatsMap[uname] = { name: uname, calls: 0, answers: 0, appointments: 0, totalContacted: new Set(), firstCallTimes: [] }
+            gdoStatsMap[uname] = { name: uname, calls: 0, answers: 0, totalContacted: new Set(), apptLeadIds: new Set<string>(), firstCallTimes: [] }
         }
 
         const st = gdoStatsMap[uname]
@@ -174,8 +175,6 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         // Numero inesistente non conta come risposta (vedi NEVER_ANSWERED_DISCARD_REASONS)
         if (log.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(log.outcome, log.discardReason)) st.answers++
         if (log.outcome === 'APPUNTAMENTO') {
-            st.appointments++
-            if (!st.apptLeadIds) st.apptLeadIds = new Set<string>()
             st.apptLeadIds.add(log.leadId)
         }
     })
@@ -192,7 +191,14 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const gdoStats = Object.values(gdoStatsMap).map(st => {
         const responseRate = st.calls > 0 ? Math.round((st.answers / st.calls) * 100) : 0
         const contactedLeads = st.totalContacted.size
-        const apptRate = contactedLeads > 0 ? Math.round((st.appointments / contactedLeads) * 100) : 0
+        // Appuntamenti deduplicati per lead. Allinea numeratore (apptLeadIds)
+        // e denominatore di % Fissaggio / % Conferme / % Presenziati: prima
+        // il primo era `apptLeadIds.size` ma il secondo era `appointments`
+        // (numero di log con outcome=APPUNTAMENTO), gonfiando il denominatore
+        // ogni volta che un GDO logga 2 appuntamenti sullo stesso lead.
+        const apptLeadIds: Set<string> = st.apptLeadIds || new Set<string>()
+        const appointments = apptLeadIds.size
+        const apptRate = contactedLeads > 0 ? Math.round((appointments / contactedLeads) * 100) : 0
         const callsPerHour = st.calls / WORKING_HOURS_PER_DAY
         // Coefficiente produttività: (chiamate/ora) * (% fissaggio / 100)
         const productivityCoeff = callsPerHour * (apptRate / 100)
@@ -201,7 +207,6 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         // % Presenziati: quanti il venditore ha effettivamente visto in chiamata
         // (Chiuso o Non chiuso, esclude Sparito / Lead non presenziato).
         // App ancora pending (in attesa) restano al denominatore ma non al numeratore.
-        const apptLeadIds: Set<string> = st.apptLeadIds || new Set<string>()
         let confirmed = 0
         let presenziati = 0
         for (const lid of apptLeadIds) {
@@ -210,15 +215,15 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             if (o.conf === 'confermato') confirmed++
             if (o.sales && PRESENZIATI_OUTCOMES.has(o.sales)) presenziati++
         }
-        const confermePerc = st.appointments > 0 ? Math.round((confirmed / st.appointments) * 100) : 0
-        const presenziatiPerc = st.appointments > 0 ? Math.round((presenziati / st.appointments) * 100) : 0
+        const confermePerc = appointments > 0 ? Math.round((confirmed / appointments) * 100) : 0
+        const presenziatiPerc = appointments > 0 ? Math.round((presenziati / appointments) * 100) : 0
 
         return {
             name: st.name,
             calls: st.calls,
             answers: st.answers,
             responseRate,
-            appointments: st.appointments,
+            appointments,
             apptRate,
             contactedLeads,
             callsPerHour: Math.round(callsPerHour * 10) / 10,
@@ -323,41 +328,34 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
 
     if (!user) return null
 
-    // Compute range for Today
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date()
-    todayEnd.setHours(23, 59, 59, 999)
-
-    // Compute range for This Week (Monday to Sunday)
+    // Bounds Europe/Rome espliciti — su Vercel/UTC i `setHours()` sfasavano
+    // giorno e settimana di ~2h. `gte(start) AND lt(end)` evita off-by-one.
     const now = new Date()
-    const day = now.getDay()
-    const diffToMonday = now.getDate() - day + (day === 0 ? -6 : 1) // adjust when day is sunday
-    const weekStart = new Date(now)
-    weekStart.setDate(diffToMonday)
-    weekStart.setHours(0, 0, 0, 0)
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 6)
-    weekEnd.setHours(23, 59, 59, 999)
+    const { start: todayStart, end: todayEnd } = dayBoundsRome(now)
+    const { start: weekStart, end: weekEnd } = weekBoundsRome(now)
 
-    // Appuntamenti Odierni
-    const todayAppointmentsCount = (await db.select({ id: callLogs.id })
+    // Appuntamenti Odierni — deduplicato per leadId.
+    // Un GDO può loggare APPUNTAMENTO due volte sullo stesso lead in rari
+    // casi (richiamo + conferma): conta come UN solo appuntamento.
+    const todayApptLogs = await db.select({ leadId: callLogs.leadId })
         .from(callLogs)
         .where(and(
             eq(callLogs.userId, gdoId),
             eq(callLogs.outcome, 'APPUNTAMENTO'),
             gte(callLogs.createdAt, todayStart),
-            lte(callLogs.createdAt, todayEnd)
-        ))).length
+            lt(callLogs.createdAt, todayEnd)
+        ))
+    const todayAppointmentsCount = new Set(todayApptLogs.map(l => l.leadId)).size
 
-    // Conferme Settimanali
+    // Conferme Settimanali — filtra per `confirmationsTimestamp` (momento
+    // in cui le Conferme marcano "confermato"), non per `appointmentDate`.
     const weeklyConfirmedCount = (await db.select({ id: leads.id })
         .from(leads)
         .where(and(
             eq(leads.assignedToId, gdoId),
             eq(leads.confirmationsOutcome, 'confermato'),
             gte(leads.confirmationsTimestamp, weekStart),
-            lte(leads.confirmationsTimestamp, weekEnd)
+            lt(leads.confirmationsTimestamp, weekEnd)
         ))).length
 
     // Chiusure Settimanali (lead originariamente assegnati a questo GDO,
@@ -369,7 +367,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
             eq(leads.assignedToId, gdoId),
             eq(leads.salespersonOutcome, 'Chiuso'),
             gte(leads.salespersonOutcomeAt, weekStart),
-            lte(leads.salespersonOutcomeAt, weekEnd)
+            lt(leads.salespersonOutcomeAt, weekEnd)
         ))
     const weeklyClosedCount = weeklyClosedRows.length
     const weeklyRevenueEur = weeklyClosedRows.reduce((sum, r) => sum + (r.amount || 0), 0)

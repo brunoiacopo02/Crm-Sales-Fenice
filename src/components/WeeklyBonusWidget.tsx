@@ -13,6 +13,7 @@ interface WidgetState {
     currentWeekName: string;
     weekStart: string;
     weekEnd: string;
+    isBiweekly?: boolean;
 }
 
 export function WeeklyBonusWidget({ userId, role }: { userId: string; role?: string }) {
@@ -35,6 +36,9 @@ export function WeeklyBonusWidget({ userId, role }: { userId: string; role?: str
     }, [userId, role]);
 
     if (!state) return <div className="skeleton-card h-40" />;
+
+    const isBiweeklyGdo = state.isBiweekly === true && role !== 'CONFERME';
+    const trackerLabel = role === 'CONFERME' ? 'Tracker Settimanale Conferme' : (isBiweeklyGdo ? 'Tracker Bisettimanale GDO' : 'Tracker Settimanale GDO');
 
     const progressPerc = Math.min((state.currentPresences / state.target2) * 100, 100);
     const posTier1 = Math.min((state.target1 / state.target2) * 100, 100);
@@ -67,7 +71,7 @@ export function WeeklyBonusWidget({ userId, role }: { userId: string; role?: str
                         <div className="p-1.5 rounded-lg bg-ember-500/20">
                             <Flame className="h-5 w-5 text-ember-400" />
                         </div>
-                        <h2 className="text-xl font-bold tracking-tight text-brand-orange-300">Tracker Settimanale {role === 'CONFERME' ? 'Conferme' : 'GDO'}</h2>
+                        <h2 className="text-xl font-bold tracking-tight text-brand-orange-300">{trackerLabel}</h2>
                     </div>
                     <div className="text-sm text-ash-400 font-medium">
                         {state.currentWeekName} <span className="text-ash-500 ml-1">({state.weekStart} - {state.weekEnd})</span>

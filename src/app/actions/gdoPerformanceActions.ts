@@ -2,8 +2,10 @@
 
 import { db } from "@/db";
 import { leads, users, weeklyGamificationRules, callLogs, manualAdjustments } from "@/db/schema";
-import { eq, and, gte, lte, isNotNull, sql, or } from "drizzle-orm";
+import { eq, and, gte, lte, lt, isNotNull, sql, or } from "drizzle-orm";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
+import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
+import { countPresences } from "@/lib/presenceCounting";
 
 export interface GamificationTargetInput {
     month: string;
@@ -253,13 +255,70 @@ export async function getManagerGdoTables(monthString: string) {
 
 /**
  * FASE 2.2: Logica GDO Frontend (Widget Ultra Veloce)
+ *
+ * Per GDO il ciclo è BISETTIMANALE (ancora lun 4-mag-2026, durata 14 giorni).
+ * Le presenze sono ora filtrate per `salespersonOutcomeAt` ∈ ciclo (esito
+ * maturato nel ciclo), non più per `appointmentDate` schedulato nel ciclo.
+ *
+ * Per CONFERME il ciclo resta SETTIMANALE come prima — stesso codice
+ * di sempre, branchato sotto.
  */
 export async function getCurrentGdoGamificationState(gdoUserId: string, testTodayOverride?: Date, overrides?: { role?: string; target1Override?: number; reward1Override?: number; target2Override?: number; reward2Override?: number }) {
     const today = testTodayOverride || new Date();
+
+    if (overrides?.role === 'CONFERME') {
+        return await getConfermeWeeklyState(gdoUserId, today, overrides);
+    }
+
+    // GDO: ciclo bisettimanale
+    const cycle = getBiweeklyCycle(today);
+    const currentMonthStr = today.toISOString().slice(0, 7);
+
+    // Default GDO bisettimanale: 18 / 22 presenze → €270 / €540.
+    // Manager modifica via /manager-targets (riusa weeklyGamificationRules).
+    let target1 = 18, reward1 = 270;
+    let target2 = 22, reward2 = 540;
+
+    if (overrides?.target1Override) {
+        target1 = overrides.target1Override;
+        reward1 = overrides.reward1Override || reward1;
+        target2 = overrides.target2Override || target2;
+        reward2 = overrides.reward2Override || reward2;
+    } else {
+        const rules = await db.select().from(weeklyGamificationRules).where(eq(weeklyGamificationRules.month, currentMonthStr));
+        if (rules.length > 0) {
+            target1 = rules[0].targetTier1;
+            reward1 = rules[0].rewardTier1;
+            target2 = rules[0].targetTier2;
+            reward2 = rules[0].rewardTier2;
+        }
+    }
+
+    const { total: currentPresences } = await countPresences(gdoUserId, cycle.start, cycle.end);
+
+    return {
+        currentPresences,
+        target1,
+        reward1,
+        target2,
+        reward2,
+        currentWeekName: `Ciclo ${cycle.label}`,
+        weekStart: cycle.startDateStr,
+        weekEnd: cycle.endDateStr,
+        cycleIndex: cycle.index,
+        isBiweekly: true,
+    };
+}
+
+/** Branch settimanale CONFERME — logica invariata rispetto a prima del refactor. */
+async function getConfermeWeeklyState(
+    gdoUserId: string,
+    today: Date,
+    overrides?: { role?: string; target1Override?: number; reward1Override?: number; target2Override?: number; reward2Override?: number },
+) {
     const currentMonthStr = today.toISOString().slice(0, 7);
     const weeks = getMonthWeeks(currentMonthStr);
 
-    // Quale settimana è oggi?
     let currentWeekName = "Fuori Mese";
     let currentWeekStart = today;
     let currentWeekEnd = today;
@@ -271,7 +330,6 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
         currentWeekEnd = w.end;
     }
 
-    // Default Fallbacks
     let target1 = 10, reward1 = 135;
     let target2 = 13, reward2 = 270;
 
@@ -290,65 +348,31 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
         }
     }
 
-    // Conta le presenze/conferme SOLO in questa settimana in corso.
     let currentPresences = 0;
 
-    if (overrides?.role === 'CONFERME') {
-        // Per Conferme: conta le CHIUSURE dei lead confermati da questo operatore nella settimana
-        // (lead dove confirmationsUserId = questo operatore E salespersonOutcome = 'Chiuso')
-        const confermeLeads = await db.select().from(leads).where(
+    const confermeLeads = await db.select().from(leads).where(
+        and(
+            eq(leads.confirmationsUserId, gdoUserId),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            eq(leads.salespersonOutcome, 'Chiuso'),
+            isNotNull(leads.salespersonOutcomeAt),
+            gte(leads.salespersonOutcomeAt, currentWeekStart),
+            lte(leads.salespersonOutcomeAt, currentWeekEnd)
+        )
+    );
+    currentPresences = confermeLeads.length;
+
+    try {
+        const adjustments = await db.select().from(manualAdjustments).where(
             and(
-                eq(leads.confirmationsUserId, gdoUserId),
-                eq(leads.confirmationsOutcome, 'confermato'),
-                eq(leads.salespersonOutcome, 'Chiuso'),
-                isNotNull(leads.salespersonOutcomeAt),
-                gte(leads.salespersonOutcomeAt, currentWeekStart),
-                lte(leads.salespersonOutcomeAt, currentWeekEnd)
+                eq(manualAdjustments.userId, gdoUserId),
+                eq(manualAdjustments.type, 'chiusure'),
+                gte(manualAdjustments.createdAt, currentWeekStart),
+                lte(manualAdjustments.createdAt, currentWeekEnd)
             )
         );
-        currentPresences = confermeLeads.length;
-
-        // Aggiungi aggiustamenti manuali admin per questa settimana
-        try {
-            const adjustments = await db.select().from(manualAdjustments).where(
-                and(
-                    eq(manualAdjustments.userId, gdoUserId),
-                    eq(manualAdjustments.type, 'chiusure'),
-                    gte(manualAdjustments.createdAt, currentWeekStart),
-                    lte(manualAdjustments.createdAt, currentWeekEnd)
-                )
-            );
-            adjustments.forEach(a => { currentPresences += a.count; });
-        } catch { /* tabella non ancora migrata */ }
-    } else {
-        // Per GDO: conta le presenze effettive
-        const monthLeads = await db.select().from(leads).where(
-            and(
-                eq(leads.assignedToId, gdoUserId),
-                isNotNull(leads.appointmentDate),
-                gte(leads.appointmentDate, currentWeekStart),
-                lte(leads.appointmentDate, currentWeekEnd)
-            )
-        );
-        monthLeads.forEach(l => {
-            if (isPresenziato(l.salespersonOutcome)) {
-                currentPresences++;
-            }
-        });
-
-        // Aggiungi aggiustamenti manuali admin per questa settimana
-        try {
-            const adjustments = await db.select().from(manualAdjustments).where(
-                and(
-                    eq(manualAdjustments.userId, gdoUserId),
-                    eq(manualAdjustments.type, 'presenze'),
-                    gte(manualAdjustments.createdAt, currentWeekStart),
-                    lte(manualAdjustments.createdAt, currentWeekEnd)
-                )
-            );
-            adjustments.forEach(a => { currentPresences += a.count; });
-        } catch { /* tabella non ancora migrata */ }
-    }
+        adjustments.forEach(a => { currentPresences += a.count; });
+    } catch { /* tabella non ancora migrata */ }
 
     return {
         currentPresences,
@@ -358,7 +382,8 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
         reward2,
         currentWeekName,
         weekStart: currentWeekStart.toISOString().split('T')[0],
-        weekEnd: currentWeekEnd.toISOString().split('T')[0]
+        weekEnd: currentWeekEnd.toISOString().split('T')[0],
+        isBiweekly: false,
     };
 }
 

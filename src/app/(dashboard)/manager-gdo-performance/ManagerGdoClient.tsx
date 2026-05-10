@@ -20,10 +20,11 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
 
     const [formData, setFormData] = useState<GamificationTargetInput>({
         month: selectedMonth,
-        targetTier1: 10,
-        rewardTier1: 135,
-        targetTier2: 13,
-        rewardTier2: 270,
+        // Default GDO bisettimanali (Tier1 / Tier2)
+        targetTier1: 18,
+        rewardTier1: 270,
+        targetTier2: 22,
+        rewardTier2: 540,
     });
 
     const handleMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,9 +55,9 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight text-ash-800 flex items-center gap-2">
                         <Trophy className="h-8 w-8 text-brand-orange" />
-                        Performance GDO Settimanali
+                        Performance GDO Bisettimanali
                     </h2>
-                    <div className="text-ash-500 mt-1">Supervisione presenze e andamento progressivo per i Bonus Gamification.</div>
+                    <div className="text-ash-500 mt-1">Supervisione presenze e andamento progressivo per i Bonus Gamification (ciclo 14 giorni).</div>
                 </div>
 
                 <div className="flex items-center gap-4 bg-white/90 backdrop-blur-sm p-2 rounded-xl border border-ash-200/60 shadow-soft">
@@ -80,8 +81,8 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in">
                             <div className="grid w-full max-w-lg gap-4 border border-ash-200/60 bg-white p-6 shadow-elevated rounded-2xl">
                                 <div className="flex flex-col space-y-1.5 text-center sm:text-left">
-                                    <h2 className="text-lg font-semibold tracking-tight text-ash-800">Regole Tracker - {monthInput}</h2>
-                                    <div className="text-sm text-ash-500">Definisci i livelli settimanali (Lunedì-Domenica) per sbloccare i bonus GDO.</div>
+                                    <h2 className="text-lg font-semibold tracking-tight text-ash-800">Regole Tracker Bisettimanale - {monthInput}</h2>
+                                    <div className="text-sm text-ash-500">Definisci i livelli per ciclo bisettimanale (14 giorni, lun-dom-lun-dom) per sbloccare i bonus GDO.</div>
                                 </div>
                                 <div className="grid gap-4 py-4">
                                     <div className="grid grid-cols-2 gap-4 border border-ash-200/60 p-4 rounded-xl bg-ash-50/50">
