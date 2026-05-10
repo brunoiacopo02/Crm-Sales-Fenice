@@ -329,6 +329,8 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         avatarUrl: users.avatarUrl
     }).from(users).where(eq(users.role, 'VENDITORE'))
 
+    // Lead "confermati" assegnati al venditore nel mese — utile per
+    // bilanciare il traffico in arrivo.
     const confirmedAssignments = await db.select({
         salespersonUserId: leads.salespersonUserId,
         count: sql<number>`count(${leads.id})::integer`
@@ -340,13 +342,45 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
             lte(leads.confirmationsTimestamp, end)
         ))
         .groupBy(leads.salespersonUserId)
+    const assignedMap = new Map(confirmedAssignments.map(r => [r.salespersonUserId, r.count]))
 
-    const map = new Map(confirmedAssignments.map(r => [r.salespersonUserId, r.count]))
+    // Trattative del mese (presenziati = Chiuso + Non chiuso) attribuite per
+    // data esito venditore (salespersonOutcomeAt).
+    const trattativeRows = await db.select({
+        salespersonUserId: leads.salespersonUserId,
+        outcome: leads.salespersonOutcome,
+        amount: leads.closeAmountEur,
+    })
+        .from(leads)
+        .where(and(
+            isNotNull(leads.salespersonOutcomeAt),
+            gte(leads.salespersonOutcomeAt, start),
+            lte(leads.salespersonOutcomeAt, end),
+        ))
+    const trattativeMap = new Map<string, { trattative: number; chiusure: number; revenue: number }>()
+    for (const r of trattativeRows) {
+        if (!r.salespersonUserId) continue
+        const isPresenziato = r.outcome === 'Chiuso' || r.outcome === 'Non chiuso'
+        if (!isPresenziato) continue
+        const cur = trattativeMap.get(r.salespersonUserId) || { trattative: 0, chiusure: 0, revenue: 0 }
+        cur.trattative++
+        if (r.outcome === 'Chiuso') {
+            cur.chiusure++
+            cur.revenue += r.amount || 0
+        }
+        trattativeMap.set(r.salespersonUserId, cur)
+    }
 
-    const salesList = vendors.map(v => ({
-        ...v,
-        confirmedAssigned: map.get(v.id) || 0
-    })).sort((a, b) => b.confirmedAssigned - a.confirmedAssigned)
+    const salesList = vendors.map(v => {
+        const trat = trattativeMap.get(v.id) || { trattative: 0, chiusure: 0, revenue: 0 }
+        return {
+            ...v,
+            confirmedAssigned: assignedMap.get(v.id) || 0,
+            trattative: trat.trattative,
+            chiusure: trat.chiusure,
+            revenueEur: trat.revenue,
+        }
+    }).sort((a, b) => b.confirmedAssigned - a.confirmedAssigned)
 
     return salesList
 }
