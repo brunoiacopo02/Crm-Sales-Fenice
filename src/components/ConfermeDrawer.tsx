@@ -7,7 +7,7 @@ import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
-import { createClient } from "@/utils/supabase/client"
+import { useConfermePresence, setActivity as setPresenceActivity } from "@/lib/confermePresence"
 import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
 
@@ -84,8 +84,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const [spCloseAmount, setSpCloseAmount] = useState<string>(lead?.closeAmountEur ? String(lead.closeAmountEur) : "")
     const [savingSpOutcome, setSavingSpOutcome] = useState(false)
 
-    // Presence states
-    const [activeUsers, setActiveUsers] = useState<any[]>([])
+    // Presence states (via singleton manager).
+    const { presence: presenceList } = useConfermePresence(currentUser)
+    const activeUsers = presenceList.filter(
+        (p) => p.user.id !== currentUser.id && p.leadId && lead && p.leadId === lead.id
+    )
     const [salespeopleList, setSalespeopleList] = useState<any[]>([])
 
     // Quick Action States
@@ -127,65 +130,17 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setLoadingNotes(true)
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))
 
-            const supabase = createClient();
-            const channel = supabase.channel('conferme_realtime_board');
-
-            // 1. Invia il nostro stato di presenza "In Lavorazione" a tutti
-            channel.on('presence', { event: 'sync' }, () => {
-                const newState = channel.presenceState();
-                const usersPresent: any[] = [];
-                for (const id in newState) {
-                    const presenceArray = newState[id];
-                    presenceArray.forEach((p: any) => {
-                        // Se c'è un utente ed è diverso da noi, ed è sullo stesso lead, è un "Lock"
-                        if (p.user && p.user.id !== currentUser.id && p.leadId === lead.id) {
-                            usersPresent.push(p);
-                        }
-                    });
-                }
-                setActiveUsers(usersPresent);
-            });
-
-            const buildTrackPayload = () => ({
-                online_at: new Date().toISOString(),
+            // Annuncia ai colleghi che stiamo guardando questo lead.
+            // Il singleton gestisce il canale Supabase: niente piu dual-track.
+            setPresenceActivity({
+                state: "viewing",
                 leadId: lead.id,
-                user: {
-                    id: currentUser.id,
-                    name: currentUser.name,
-                    displayName: currentUser.displayName,
-                },
-            });
-
-            // 2. Notifica a tutti che stiamo guardando questo lead
-            let subscribed = false;
-            channel.subscribe(async (status) => {
-                if (status === 'SUBSCRIBED') {
-                    subscribed = true;
-                    await channel.track(buildTrackPayload());
-                }
-            });
-
-            // Heartbeat + re-track on focus — vedi ConfermeBoard per la motivazione.
-            const heartbeat = setInterval(() => {
-                if (subscribed) channel.track(buildTrackPayload()).catch(() => { });
-            }, 25000);
-            const onVisibilityChange = () => {
-                if (!document.hidden && subscribed) {
-                    channel.track(buildTrackPayload()).catch(() => { });
-                }
-            };
-            document.addEventListener('visibilitychange', onVisibilityChange);
-            const onPageHide = () => { try { channel.untrack(); } catch { } };
-            window.addEventListener('pagehide', onPageHide);
+                leadName: lead.name || "lead",
+            })
 
             return () => {
-                clearInterval(heartbeat);
-                document.removeEventListener('visibilitychange', onVisibilityChange);
-                window.removeEventListener('pagehide', onPageHide);
-                (async () => {
-                    try { await channel.untrack(); } catch { /* ignore */ }
-                    supabase.removeChannel(channel);
-                })();
+                // Drawer chiuso: torniamo idle (la pagina restera tracciata dal Board).
+                setPresenceActivity({ state: "idle" })
             }
         }
     }, [isOpen, lead?.id, lead?.version]) // update when version changes too
@@ -761,6 +716,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     <textarea
                                         value={newNote}
                                         onChange={e => setNewNote(e.target.value)}
+                                        onFocus={() => lead && setPresenceActivity({ state: "writing_note", leadId: lead.id, leadName: lead.name || "lead" })}
+                                        onBlur={() => lead && setPresenceActivity({ state: "viewing", leadId: lead.id, leadName: lead.name || "lead" })}
                                         placeholder="Scrivi una nuova nota qui..."
                                         className="input-fenice text-sm resize-none mb-3 rounded-xl"
                                         rows={3}

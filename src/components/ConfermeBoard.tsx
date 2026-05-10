@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise, Archive } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
 
@@ -14,6 +14,7 @@ import { ConfermeBoardRow } from "@/components/ConfermeBoardRow"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
 import { createClient } from "@/utils/supabase/client"
+import { useConfermePresence, setActivity as setPresenceActivity } from "@/lib/confermePresence"
 
 type LeadData = any;
 
@@ -58,8 +59,16 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     const [selectedLead, setSelectedLead] = useState<LeadData | null>(null)
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
-    // Presence
-    const [globalPresence, setGlobalPresence] = useState<any[]>([])
+    // Presence (singleton manager: niente piu dual-track Board/Drawer).
+    const { presence: presenceList } = useConfermePresence(currentUser)
+    // Lock per riga: presence di colleghi che hanno un leadId attivo.
+    const globalPresence = presenceList.filter(
+        (p) => p.user.id !== currentUser.id && p.leadId
+    )
+
+    // viewMode stabile per il listener postgres_changes (no re-subscribe a ogni tab).
+    const viewModeRef = useRef<ViewMode>(viewMode)
+    useEffect(() => { viewModeRef.current = viewMode }, [viewMode])
 
     const fetchLeads = async (showSpinner = true) => {
         if (showSpinner) setLoading(true)
@@ -148,79 +157,24 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
     }, [viewMode, oggiHours, domaniHours, selectedHour]);
 
+    // Postgres change listener su canale dedicato (deps stabili: nessun
+    // re-subscribe a ogni cambio tab/viewMode).
     useEffect(() => {
         const supabase = createClient();
-        const channel = supabase.channel('conferme_realtime_board');
-
-        // Listen for ANY change on the leads table (insert or update)
-        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
-            // Silently refetch when a change occurs to avoid stale data
-            if (viewMode !== 'table' && viewMode !== 'storico') fetchLeads(false);
+        const dataChannel = supabase.channel('conferme_realtime_data');
+        dataChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+            const vm = viewModeRef.current;
+            if (vm !== 'table' && vm !== 'storico') fetchLeads(false);
         });
+        dataChannel.subscribe();
+        return () => { supabase.removeChannel(dataChannel); };
+    }, [])
 
-        // Listen for presence state changes (colleagues opening a drawer)
-        channel.on('presence', { event: 'sync' }, () => {
-            const newState = channel.presenceState();
-            const presenceArray: any[] = [];
-
-            for (const id in newState) {
-                const presenceGroup = newState[id];
-                presenceGroup.forEach((p: any) => p.leadId && presenceArray.push(p));
-            }
-            // Update global presence for those locked cards
-            setGlobalPresence(presenceArray);
-        });
-
-        // Track payload riutilizzato: heartbeat, re-track, primo track.
-        const buildTrackPayload = () => ({
-            online_at: new Date().toISOString(),
-            leadId: null,
-            user: {
-                id: currentUser.id,
-                name: currentUser.name,
-                displayName: currentUser.displayName,
-            },
-        });
-
-        let subscribed = false;
-        channel.subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
-                subscribed = true;
-                await channel.track(buildTrackPayload());
-            }
-        });
-
-        // Heartbeat: ogni 25s ripublica il track con nuovo online_at.
-        // Previene che Supabase/colleghi ci considerino offline per
-        // disconnessioni brevi o letargia della connessione realtime.
-        const heartbeat = setInterval(() => {
-            if (subscribed) channel.track(buildTrackPayload()).catch(() => { });
-        }, 25000);
-
-        // Re-track quando l'utente torna alla tab (tab background spesso
-        // sospende i WebSocket). Senza questo, chi torna dopo 10 minuti
-        // appare offline ai colleghi.
-        const onVisibilityChange = () => {
-            if (!document.hidden && subscribed) {
-                channel.track(buildTrackPayload()).catch(() => { });
-            }
-        };
-        document.addEventListener('visibilitychange', onVisibilityChange);
-
-        // Cleanup su chiusura tab/navigazione: untrack immediato.
-        const onPageHide = () => { try { channel.untrack(); } catch { } };
-        window.addEventListener('pagehide', onPageHide);
-
-        return () => {
-            clearInterval(heartbeat);
-            document.removeEventListener('visibilitychange', onVisibilityChange);
-            window.removeEventListener('pagehide', onPageHide);
-            (async () => {
-                try { await channel.untrack(); } catch { /* ignore */ }
-                supabase.removeChannel(channel);
-            })();
-        };
-    }, [viewMode, currentUser.id])
+    // Annuncia 'idle' all'ingresso pagina (il Drawer poi sovrascrive con 'viewing').
+    useEffect(() => {
+        setPresenceActivity({ state: "idle" });
+        return () => { setPresenceActivity({ state: "idle" }); };
+    }, [])
 
     // --- SNOOZE WATCHER ---
     const [alertedSnoozes, setAlertedSnoozes] = useState<Set<string>>(new Set())
