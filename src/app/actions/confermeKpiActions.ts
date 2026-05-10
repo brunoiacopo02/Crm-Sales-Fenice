@@ -2,13 +2,22 @@
 
 import { db } from "@/db"
 import { leads, users, monthlyTargets } from "@/db/schema"
-import { eq, and, gte, lte, asc, sql, isNotNull } from "drizzle-orm"
+import { eq, and, gte, lte, lt, asc, sql, isNotNull } from "drizzle-orm"
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
+import { weekBoundsRome } from "@/lib/dateUtils"
 
 /** Format a Date to 'yyyy-MM-dd' in Europe/Rome timezone */
 function toRomeDateStr(date: Date): string {
     return date.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
 }
+
+/** Default Conferme bonus: T1=30 chiusure (€145), T2=38 chiusure (€290).
+ *  Module-private (i file con "use server" possono esportare solo funzioni
+ *  async). */
+const CONFERME_DEFAULT_TARGET_T1 = 30;
+const CONFERME_DEFAULT_TARGET_T2 = 38;
+const CONFERME_REWARD_T1 = 145;
+const CONFERME_REWARD_T2 = 290;
 
 export async function getConfermeKpiStats(monthDate: Date = new Date(), confermeUserId?: string) {
     const start = startOfMonth(monthDate)
@@ -89,17 +98,17 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     if (confermeUserId) {
         const userRow = await db.select().from(users).where(eq(users.id, confermeUserId)).limit(1);
         if (userRow.length > 0) {
-            weeklyTier1Target = userRow[0].confermeTargetTier1 || 19;
-            weeklyTier2Target = userRow[0].confermeTargetTier2 || 24;
+            weeklyTier1Target = userRow[0].confermeTargetTier1 || CONFERME_DEFAULT_TARGET_T1;
+            weeklyTier2Target = userRow[0].confermeTargetTier2 || CONFERME_DEFAULT_TARGET_T2;
         }
     } else {
         const allConferme = await db.select().from(users).where(eq(users.role, 'CONFERME'));
         if (allConferme.length > 0) {
-            weeklyTier1Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier1 || 19), 0);
-            weeklyTier2Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier2 || 24), 0);
+            weeklyTier1Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier1 || CONFERME_DEFAULT_TARGET_T1), 0);
+            weeklyTier2Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier2 || CONFERME_DEFAULT_TARGET_T2), 0);
         } else {
-            weeklyTier1Target = 19;
-            weeklyTier2Target = 24;
+            weeklyTier1Target = CONFERME_DEFAULT_TARGET_T1;
+            weeklyTier2Target = CONFERME_DEFAULT_TARGET_T2;
         }
     }
 
@@ -136,20 +145,72 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const currentWeekData = weeklyHistory.find(w => w.isCurrent) || weeklyHistory[weeklyHistory.length - 1]
 
     // === CHIUSURE & FATTURATO SETTIMANALI ===
-    // Calcolato sempre sulla settimana ISO corrente (lun-dom Europe/Rome),
-    // indipendentemente dal mese selezionato in UI: il widget "Progresso
-    // Settimanale" mostra il presente, non lo storico.
-    const nowWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
-    const nowWeekEnd = endOfWeek(new Date(), { weekStartsOn: 1 })
-    const closedThisWeekRows = await db.select({
-        amount: leads.closeAmountEur,
-    }).from(leads).where(and(
+    // Settimana ISO Europe/Rome (lun-dom), bounds espliciti per evitare
+    // sfasamento ~2h su Vercel/UTC. Quando si guarda un singolo Conferme,
+    // attribuiamo le chiusure al Conferme che ha confermato il lead
+    // (confirmationsUserId), così la dashboard del singolo non mostra le
+    // chiusure dell'intero team.
+    const nowWeek = weekBoundsRome(new Date())
+    const nowWeekStart = nowWeek.start
+    const nowWeekEnd = nowWeek.end
+    const closedWeekConditions = [
         eq(leads.salespersonOutcome, 'Chiuso'),
         gte(leads.salespersonOutcomeAt, nowWeekStart),
-        lte(leads.salespersonOutcomeAt, nowWeekEnd),
-    ))
+        lt(leads.salespersonOutcomeAt, nowWeekEnd),
+    ]
+    if (confermeUserId) {
+        closedWeekConditions.push(eq(leads.confirmationsUserId, confermeUserId))
+    }
+    const closedThisWeekRows = await db.select({
+        amount: leads.closeAmountEur,
+    }).from(leads).where(and(...closedWeekConditions))
     const closedCountWeek = closedThisWeekRows.length
     const revenueEurWeek = closedThisWeekRows.reduce((sum, r) => sum + (r.amount || 0), 0)
+
+    // === STORICO CHIUSURE SETTIMANALI (8 settimane chiuse precedenti) ===
+    // Stessa attribuzione: per singolo Conferme filtra confirmationsUserId.
+    // Ogni riga: chiusure, tier raggiunti, bonus maturato.
+    const closedHistory: Array<{
+        weekLabel: string
+        weekStartStr: string
+        weekEndStr: string
+        closedCount: number
+        revenueEur: number
+        tier1Reached: boolean
+        tier2Reached: boolean
+        bonusEur: number
+    }> = []
+    for (let i = 1; i <= 8; i++) {
+        const past = new Date(nowWeekStart.getTime() - i * 7 * 86400000)
+        const pw = weekBoundsRome(past)
+        const conds = [
+            eq(leads.salespersonOutcome, 'Chiuso'),
+            gte(leads.salespersonOutcomeAt, pw.start),
+            lt(leads.salespersonOutcomeAt, pw.end),
+        ]
+        if (confermeUserId) {
+            conds.push(eq(leads.confirmationsUserId, confermeUserId))
+        }
+        const rows = await db.select({ amount: leads.closeAmountEur }).from(leads).where(and(...conds))
+        const cnt = rows.length
+        const rev = rows.reduce((s, r) => s + (r.amount || 0), 0)
+        const t1 = cnt >= weeklyTier1Target
+        const t2 = cnt >= weeklyTier2Target
+        let bonus = 0
+        if (t1) bonus += CONFERME_REWARD_T1
+        if (t2) bonus += CONFERME_REWARD_T2
+        const lastDay = new Date(pw.end.getTime() - 86400000)
+        closedHistory.push({
+            weekLabel: `${format(pw.start, 'dd/MM')} - ${format(lastDay, 'dd/MM')}`,
+            weekStartStr: toRomeDateStr(pw.start),
+            weekEndStr: toRomeDateStr(lastDay),
+            closedCount: cnt,
+            revenueEur: rev,
+            tier1Reached: t1,
+            tier2Reached: t2,
+            bonusEur: bonus,
+        })
+    }
 
     const calcWorkingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
     const calcTotalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
@@ -250,7 +311,10 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             targetTier2: weeklyTier2Target,
             closedCount: closedCountWeek,
             revenueEur: revenueEurWeek,
-        }
+            rewardTier1: CONFERME_REWARD_T1,
+            rewardTier2: CONFERME_REWARD_T2,
+        },
+        closedHistory,
     }
 }
 

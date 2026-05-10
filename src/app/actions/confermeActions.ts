@@ -508,6 +508,13 @@ export async function setSalespersonOutcome(
     outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato",
     notes?: string,
     closeAmountEur?: number | null,
+    /**
+     * Data della chiusura (Date o ISO string). OBBLIGATORIA quando outcome === 'Chiuso':
+     * il lead viene contato nel ciclo / settimana corrispondente a questa data,
+     * non a `new Date()` server-side. Per outcome diversi è opzionale e
+     * default a `new Date()` (oggi).
+     */
+    closedAt?: Date | string | null,
 ) {
     try {
         const supabase = await createClient();
@@ -515,6 +522,25 @@ export async function setSalespersonOutcome(
         const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
         if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
             return { success: false, error: "Unauthorized" }
+        }
+
+        // Validazione "Chiuso": importo + data sempre obbligatori. Senza
+        // di entrambi, lo storico chiusure perde precisione (giorno errato
+        // o fatturato mancante).
+        if (outcome === 'Chiuso') {
+            if (typeof closeAmountEur !== 'number' || !(closeAmountEur > 0)) {
+                return { success: false, error: 'CLOSE_AMOUNT_REQUIRED' }
+            }
+            if (!closedAt) {
+                return { success: false, error: 'CLOSE_DATE_REQUIRED' }
+            }
+        }
+
+        const outcomeAt: Date = closedAt
+            ? (closedAt instanceof Date ? closedAt : new Date(closedAt))
+            : new Date();
+        if (Number.isNaN(outcomeAt.getTime())) {
+            return { success: false, error: 'CLOSE_DATE_INVALID' }
         }
 
         const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
@@ -571,7 +597,7 @@ export async function setSalespersonOutcome(
         const updated = await db.update(leads).set({
             salespersonOutcome: outcome,
             salespersonOutcomeNotes: notes || null,
-            salespersonOutcomeAt: new Date(),
+            salespersonOutcomeAt: outcomeAt,
             version: oldLead.version + 1,
             updatedAt: new Date(),
             ...closeAmountPatch,

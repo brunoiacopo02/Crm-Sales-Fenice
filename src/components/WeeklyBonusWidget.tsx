@@ -22,12 +22,13 @@ export function WeeklyBonusWidget({ userId, role }: { userId: string; role?: str
     useEffect(() => {
         if (!userId) return;
         if (role === 'CONFERME') {
-            // Fetch con override conferme — i target vengono passati dal rpgProfileActions
+            // Override Conferme: 30 chiusure (€145) → 38 chiusure (€290).
+            // Target settimanale, non bisettimanale (i Conferme restano weekly).
             getCurrentGdoGamificationState(userId, undefined, {
                 role: 'CONFERME',
-                target1Override: 18,
+                target1Override: 30,
                 reward1Override: 145,
-                target2Override: 21,
+                target2Override: 38,
                 reward2Override: 290,
             }).then(setState).catch(console.error);
         } else {

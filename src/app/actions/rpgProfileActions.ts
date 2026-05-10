@@ -16,12 +16,13 @@ export async function getGdoRpgProfile(userId: string) {
     // Recupero il Gamification State di questa settimana correntemente in corso
     let weekState;
     if (role === 'CONFERME') {
-        // Per Conferme: target da confermeTargetTier1/Tier2, reward fissi 145/290
+        // Per Conferme: target da confermeTargetTier1/Tier2, reward fissi 145/290.
+        // Default aggiornati a 30/38 (prima 18/21).
         weekState = await getCurrentGdoGamificationState(userId, undefined, {
             role: 'CONFERME',
-            target1Override: user.confermeTargetTier1 || 18,
+            target1Override: user.confermeTargetTier1 || 30,
             reward1Override: 145,
-            target2Override: user.confermeTargetTier2 || 21,
+            target2Override: user.confermeTargetTier2 || 38,
             reward2Override: 290,
         });
     } else {

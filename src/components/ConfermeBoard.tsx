@@ -11,6 +11,7 @@ const ConfermeDrawer = dynamic(
   { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
 )
 import { ConfermeBoardRow } from "@/components/ConfermeBoardRow"
+import { CloseLeadModal } from "@/components/CloseLeadModal"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
 import { createClient } from "@/utils/supabase/client"
@@ -58,6 +59,9 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     // Drawer state
     const [selectedLead, setSelectedLead] = useState<LeadData | null>(null)
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+
+    // Close-lead modal state (quick action "Chiuso" dallo storico)
+    const [closeModalLead, setCloseModalLead] = useState<{ id: string; version: number; name: string } | null>(null)
 
     // Presence (singleton manager: niente piu dual-track Board/Drawer).
     const { presence: presenceList } = useConfermePresence(currentUser)
@@ -492,6 +496,12 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
                             const handleSetOutcome = async (leadId: string, version: number, outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato", e: React.MouseEvent) => {
                                 e.stopPropagation();
+                                if (outcome === 'Chiuso') {
+                                    // Apri modal: importo e data sono obbligatori per Chiuso.
+                                    const item = filteredStorico.find(i => i.lead.id === leadId);
+                                    setCloseModalLead({ id: leadId, version, name: item?.lead.name || 'Lead' });
+                                    return;
+                                }
                                 const res = await setSalespersonOutcome(leadId, version, outcome);
                                 if (res.success) fetchLeads(false);
                                 else alert(res.error === 'CONCURRENCY_ERROR' ? 'Qualcun altro ha modificato questo lead. Ricarica.' : res.error || 'Errore');
@@ -780,6 +790,41 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     }}
                 />
             )}
+
+            <CloseLeadModal
+                open={!!closeModalLead}
+                leadName={closeModalLead?.name}
+                onCancel={() => setCloseModalLead(null)}
+                onSubmit={async ({ closeAmountEur, closedAtDateStr }) => {
+                    if (!closeModalLead) return;
+                    // Costruisci un Date a mezzogiorno Europe/Rome del giorno scelto
+                    // per evitare ambiguità di offset (DST) sui bordi settimana.
+                    const closedAt = new Date(`${closedAtDateStr}T12:00:00`);
+                    const res = await setSalespersonOutcome(
+                        closeModalLead.id,
+                        closeModalLead.version,
+                        'Chiuso',
+                        undefined,
+                        closeAmountEur,
+                        closedAt,
+                    );
+                    if (res.success) {
+                        setCloseModalLead(null);
+                        fetchLeads(false);
+                    } else {
+                        const msg = res.error === 'CONCURRENCY_ERROR'
+                            ? 'Qualcun altro ha modificato questo lead. Ricarica.'
+                            : res.error === 'CLOSE_AMOUNT_REQUIRED'
+                                ? 'Importo obbligatorio (> 0).'
+                                : res.error === 'CLOSE_DATE_REQUIRED'
+                                    ? 'Data chiusura obbligatoria.'
+                                    : res.error === 'CLOSE_DATE_INVALID'
+                                        ? 'Data chiusura non valida.'
+                                        : (res.error || 'Errore');
+                        throw new Error(msg);
+                    }
+                }}
+            />
         </div>
     )
 }

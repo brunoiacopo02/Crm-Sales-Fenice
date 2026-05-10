@@ -82,6 +82,15 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const [spOutcome, setSpOutcome] = useState(lead?.salespersonOutcome || "")
     const [spNotes, setSpNotes] = useState(lead?.salespersonOutcomeNotes || "")
     const [spCloseAmount, setSpCloseAmount] = useState<string>(lead?.closeAmountEur ? String(lead.closeAmountEur) : "")
+    // Data della chiusura — default oggi Europe/Rome. Il backend la usa
+    // per popolare salespersonOutcomeAt, che determina in quale settimana
+    // la chiusura conta nello storico.
+    const [spClosedAt, setSpClosedAt] = useState<string>(() => {
+        if (lead?.salespersonOutcome === 'Chiuso' && lead.salespersonOutcomeAt) {
+            return new Date(lead.salespersonOutcomeAt).toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
+        }
+        return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
+    })
     const [savingSpOutcome, setSavingSpOutcome] = useState(false)
 
     // Presence states (via singleton manager).
@@ -239,16 +248,24 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             if (!spCloseAmount || isNaN(amt) || amt <= 0) {
                 return alert("Inserisci l'importo del contratto per una vendita chiusa");
             }
+            if (!spClosedAt || !/^\d{4}-\d{2}-\d{2}$/.test(spClosedAt)) {
+                return alert("Inserisci la data della chiusura");
+            }
         }
         setSavingSpOutcome(true)
         try {
             const amt = spOutcome === 'Chiuso' ? parseFloat(spCloseAmount.replace(',', '.')) : undefined;
+            // Date a mezzogiorno Rome del giorno scelto, evita ambiguità DST
+            const closedAt = spOutcome === 'Chiuso' && spClosedAt
+                ? new Date(`${spClosedAt}T12:00:00`)
+                : undefined;
             const result = await setSalespersonOutcome(
                 lead.id,
                 localVersion,
                 spOutcome as "Chiuso" | "Non chiuso" | "Lead non presenziato",
                 spNotes,
                 amt,
+                closedAt,
             )
             if (result && !result.success) {
                 alert(`Errore salvataggio esito venditore: ${result.error}`);
@@ -830,23 +847,37 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                             </select>
 
                                             {spOutcome === 'Chiuso' && (
-                                                <div>
-                                                    <label className="block text-[11px] uppercase tracking-wider font-bold text-ash-600 mb-1.5">
-                                                        Importo contratto (€)
-                                                    </label>
-                                                    <input
-                                                        type="number"
-                                                        inputMode="decimal"
-                                                        step="0.01"
-                                                        min={0}
-                                                        value={spCloseAmount}
-                                                        onChange={e => setSpCloseAmount(e.target.value)}
-                                                        placeholder="Es. 1500"
-                                                        className="w-full px-4 py-3 border-2 border-emerald-300 bg-emerald-50/40 rounded-xl font-bold text-ash-800 outline-none focus:border-emerald-500 shadow-sm tabular-nums"
-                                                    />
-                                                    <p className="mt-1 text-[10px] text-ash-500">
-                                                        Obbligatorio per chiusure registrate dalle Conferme. Verrà scritto
-                                                        su <code>closeAmountEur</code> del lead.
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[11px] uppercase tracking-wider font-bold text-ash-600 mb-1.5">
+                                                            Importo contratto (€)
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            inputMode="decimal"
+                                                            step="0.01"
+                                                            min={0}
+                                                            value={spCloseAmount}
+                                                            onChange={e => setSpCloseAmount(e.target.value)}
+                                                            placeholder="Es. 1500"
+                                                            className="w-full px-4 py-3 border-2 border-emerald-300 bg-emerald-50/40 rounded-xl font-bold text-ash-800 outline-none focus:border-emerald-500 shadow-sm tabular-nums"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[11px] uppercase tracking-wider font-bold text-ash-600 mb-1.5">
+                                                            Data chiusura
+                                                        </label>
+                                                        <input
+                                                            type="date"
+                                                            value={spClosedAt}
+                                                            onChange={e => setSpClosedAt(e.target.value)}
+                                                            max={new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })}
+                                                            className="w-full px-4 py-3 border-2 border-emerald-300 bg-emerald-50/40 rounded-xl font-bold text-ash-800 outline-none focus:border-emerald-500 shadow-sm"
+                                                        />
+                                                    </div>
+                                                    <p className="sm:col-span-2 -mt-1 text-[10px] text-ash-500">
+                                                        Importo e data sono entrambi obbligatori. La data determina in quale
+                                                        settimana il lead viene contato nello storico chiusure.
                                                     </p>
                                                 </div>
                                             )}
