@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
 
-    let body: { dryRun?: boolean; cutoffIso?: string; targetUrl?: string } = {};
+    let body: { dryRun?: boolean; cutoffIso?: string; targetUrl?: string; chunkSize?: number } = {};
     try {
         body = await req.json();
     } catch {
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
     }
     const targetUrl = body.targetUrl ?? IMPORT_ENDPOINT;
     const dryRun = body.dryRun === true;
+    const chunkSize = Math.max(10, Math.min(500, body.chunkSize ?? 100));
 
     const secret = process.env.MARKETING_WEBHOOK_SECRET;
     if (!secret) {
@@ -129,46 +130,81 @@ export async function POST(req: Request) {
         return NextResponse.json({ delivered: false, reason: 'no_records' });
     }
 
-    // 6) Firma + POST single-shot
-    const rawBody = JSON.stringify(envelopes);
-    const signature = signPayload(rawBody, secret);
+    // 6) Firma + POST chunked (loro endpoint va in timeout su payload grandi)
+    type ChunkResult = {
+        index: number;
+        size: number;
+        bytes: number;
+        httpStatus: number | null;
+        ok: boolean;
+        response: string | null;
+        error: string | null;
+    };
+    const results: ChunkResult[] = [];
+    let totalImported = 0;
+    let totalSkipped = 0;
+    let totalDelivered = 0;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120_000);
-    let httpStatus: number | null = null;
-    let responseText: string | null = null;
-    try {
-        const res = await fetch(targetUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'User-Agent': 'CrmFenice-Backfill/1.0',
-                'X-CRM-Signature': signature,
-            },
-            body: rawBody,
-            signal: controller.signal,
-        });
-        httpStatus = res.status;
-        responseText = (await res.text()).slice(0, 4000);
-        const ok = res.status >= 200 && res.status < 300;
-        return NextResponse.json({
-            delivered: ok,
-            httpStatus,
-            sent: envelopes.length,
+    for (let i = 0; i < envelopes.length; i += chunkSize) {
+        const chunk = envelopes.slice(i, i + chunkSize);
+        const rawBody = JSON.stringify(chunk);
+        const signature = signPayload(rawBody, secret);
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60_000);
+        const chunkRes: ChunkResult = {
+            index: Math.floor(i / chunkSize),
+            size: chunk.length,
             bytes: rawBody.length,
-            response: responseText,
-            cutoff: cutoff.toISOString(),
-        }, { status: ok ? 200 : 502 });
-    } catch (e: unknown) {
-        const isTimeout = e instanceof Error && e.name === 'AbortError';
-        const message = e instanceof Error ? e.message : 'unknown_error';
-        return NextResponse.json({
-            delivered: false,
-            httpStatus,
-            error: isTimeout ? 'timeout_120s' : message,
-            sent: envelopes.length,
-        }, { status: 502 });
-    } finally {
-        clearTimeout(timer);
+            httpStatus: null,
+            ok: false,
+            response: null,
+            error: null,
+        };
+        try {
+            const res = await fetch(targetUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'CrmFenice-Backfill/1.0',
+                    'X-CRM-Signature': signature,
+                },
+                body: rawBody,
+                signal: controller.signal,
+            });
+            chunkRes.httpStatus = res.status;
+            const text = (await res.text()).slice(0, 2000);
+            chunkRes.response = text;
+            chunkRes.ok = res.status >= 200 && res.status < 300;
+            if (chunkRes.ok) {
+                totalDelivered += chunk.length;
+                try {
+                    const parsed = JSON.parse(text) as { imported?: number; skipped?: number };
+                    if (typeof parsed.imported === 'number') totalImported += parsed.imported;
+                    if (typeof parsed.skipped === 'number') totalSkipped += parsed.skipped;
+                } catch { /* ignore non-JSON ok response */ }
+            } else {
+                chunkRes.error = text;
+            }
+        } catch (e: unknown) {
+            const isTimeout = e instanceof Error && e.name === 'AbortError';
+            chunkRes.error = isTimeout ? 'timeout_60s' : (e instanceof Error ? e.message : 'unknown_error');
+        } finally {
+            clearTimeout(timer);
+        }
+        results.push(chunkRes);
     }
+
+    const allOk = results.every((r) => r.ok);
+    return NextResponse.json({
+        delivered: allOk,
+        chunks: results.length,
+        chunkSize,
+        sent: envelopes.length,
+        deliveredCount: totalDelivered,
+        imported: totalImported,
+        skipped: totalSkipped,
+        cutoff: cutoff.toISOString(),
+        results,
+    }, { status: allOk ? 200 : 502 });
 }
