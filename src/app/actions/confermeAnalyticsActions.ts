@@ -146,6 +146,9 @@ function countWorkingDays(start: Date, end: Date): number {
 export async function getConfermeAnalytics(opts: {
     periodDays: 7 | 14 | 30 | 90;
     userId?: string | null;
+    /** Numero di operatori in turno per il calcolo della capacità (override del count
+     *  automatico). Range 1..4. Se omesso, usa il count automatico di utenti CONFERME attivi. */
+    nOperatoriOverride?: number | null;
 }): Promise<ConfermeAnalyticsResult> {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -161,10 +164,16 @@ export async function getConfermeAnalytics(opts: {
     const periodStart = new Date(now.getTime() - periodDays * 86400000);
     const G = countWorkingDays(periodStart, now);
 
-    // Operatori attivi (per capacità del team).
+    // Operatori attivi in DB (per capacità del team). Eventuale override esplicito
+    // della UI vince — utile quando alcuni account CONFERME esistono ma non sono
+    // davvero in turno (es. account manager con role=CONFERME).
     const activeConferme = await db.select({ id: users.id }).from(users)
         .where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true)));
     const nOperatoriAttivi = activeConferme.length;
+    const nOperatoriEffettivi = (typeof opts.nOperatoriOverride === 'number'
+        && opts.nOperatoriOverride >= 1 && opts.nOperatoriOverride <= 4)
+        ? opts.nOperatoriOverride
+        : nOperatoriAttivi;
 
     // 1. Carico app/giorno + split mattina/pomeriggio + hourly distribution
     const appsInPeriod = await db.select({
@@ -300,7 +309,7 @@ export async function getConfermeAnalytics(opts: {
     const moltRitenta = 1 + pctSnoozeGiornata + pctParcheggiati;
     const chiamatePerGiorno = mediaAppGiorno * moltRitenta;
     const demandMin = chiamatePerGiorno * tempoMedioTotaleMin;
-    const capacityMin = 390 * Math.max(1, nOperatoriAttivi);
+    const capacityMin = 390 * Math.max(1, nOperatoriEffettivi);
     const saturation = capacityMin > 0 ? demandMin / capacityMin : 0;
     const operatorsFullDay = Math.ceil(demandMin / 390);
 
@@ -322,7 +331,7 @@ export async function getConfermeAnalytics(opts: {
         meta: {
             periodDays,
             daysWorked: G,
-            nOperatoriAttivi,
+            nOperatoriAttivi: nOperatoriEffettivi,
             userFilter,
             generatedAt: new Date().toISOString(),
         },

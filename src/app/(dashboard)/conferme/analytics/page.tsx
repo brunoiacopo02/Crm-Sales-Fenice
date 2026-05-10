@@ -15,8 +15,10 @@ const VALID_PERIODS = [7, 14, 30, 90] as const;
 type Period = typeof VALID_PERIODS[number];
 
 interface PageProps {
-    searchParams: Promise<{ period?: string; user?: string }>;
+    searchParams: Promise<{ period?: string; user?: string; ops?: string }>;
 }
+
+const DEFAULT_OPS = 2;
 
 export default async function ConfermeAnalyticsPage({ searchParams }: PageProps) {
     const supabase = await createClient();
@@ -30,9 +32,15 @@ export default async function ConfermeAnalyticsPage({ searchParams }: PageProps)
     const periodNum = parseInt(sp.period ?? "30", 10);
     const period: Period = (VALID_PERIODS as readonly number[]).includes(periodNum) ? (periodNum as Period) : 30;
     const userParam = sp.user ?? "all";
+    const opsNum = parseInt(sp.ops ?? String(DEFAULT_OPS), 10);
+    const ops = (Number.isFinite(opsNum) && opsNum >= 1 && opsNum <= 4) ? opsNum : DEFAULT_OPS;
 
     const [data, operatori] = await Promise.all([
-        getConfermeAnalytics({ periodDays: period, userId: userParam === "all" ? null : userParam }),
+        getConfermeAnalytics({
+            periodDays: period,
+            userId: userParam === "all" ? null : userParam,
+            nOperatoriOverride: ops,
+        }),
         listActiveConfermeUsers(),
     ]);
 
@@ -49,6 +57,7 @@ export default async function ConfermeAnalyticsPage({ searchParams }: PageProps)
                     operatori={operatori}
                     currentPeriod={period}
                     currentUser={userParam}
+                    currentOps={ops}
                 />
             </div>
 

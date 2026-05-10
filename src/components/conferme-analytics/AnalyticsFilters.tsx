@@ -6,6 +6,7 @@ interface Props {
     operatori: Array<{ id: string; name: string }>;
     currentPeriod: number;
     currentUser: string;
+    currentOps: number;
 }
 
 const PERIODS: Array<{ v: 7 | 14 | 30 | 90; label: string }> = [
@@ -15,7 +16,9 @@ const PERIODS: Array<{ v: 7 | 14 | 30 | 90; label: string }> = [
     { v: 90, label: "90 giorni" },
 ];
 
-export function AnalyticsFilters({ operatori, currentPeriod, currentUser }: Props) {
+const OPS_OPTIONS = [1, 2, 3, 4];
+
+export function AnalyticsFilters({ operatori, currentPeriod, currentUser, currentOps }: Props) {
     const router = useRouter();
     const params = useSearchParams();
     const [pending, startTransition] = useTransition();
@@ -45,6 +48,18 @@ export function AnalyticsFilters({ operatori, currentPeriod, currentUser }: Prop
             >
                 <option value="all">Tutti gli operatori</option>
                 {operatori.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+
+            <select
+                value={String(currentOps)}
+                onChange={(e) => update("ops", e.target.value)}
+                disabled={pending}
+                title="Numero di operatori in turno per il calcolo della capacità"
+                className="px-3 py-1.5 border border-ash-200 rounded-lg text-sm font-semibold bg-white"
+            >
+                {OPS_OPTIONS.map(n => (
+                    <option key={n} value={n}>{n} {n === 1 ? "operatore" : "operatori"} in turno</option>
+                ))}
             </select>
 
             {pending && <span className="text-xs text-ash-400">Aggiorno…</span>}
