@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { leads, users, monthlyTargets } from "@/db/schema"
-import { eq, and, gte, lte, lt, asc, sql, isNotNull } from "drizzle-orm"
+import { eq, and, gte, lte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 import { weekBoundsRome } from "@/lib/dateUtils"
 
@@ -329,56 +329,79 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         avatarUrl: users.avatarUrl
     }).from(users).where(eq(users.role, 'VENDITORE'))
 
-    // Lead "confermati" assegnati al venditore nel mese — utile per
-    // bilanciare il traffico in arrivo.
-    const confirmedAssignments = await db.select({
+    // Un solo set di lead "presenti nel mese" per ciascun venditore.
+    // Un lead conta come ATTIVO NEL MESE se:
+    //   (a) è stato confermato (assegnato al venditore) nel mese, OR
+    //   (b) il venditore l'ha esitato nel mese (salespersonOutcomeAt).
+    //
+    // Da questo set unico derivano Asgn / Tratt / Chius — garantendo
+    // sempre Asgn ≥ Tratt ≥ Chius e nessuna doppia attribuzione. Prima
+    // le due colonne usavano date sorgente diverse e potevano divergere
+    // (es. lead confermato ad aprile e chiuso a maggio: assegnato=0,
+    // trattative=1 → confusione UX).
+    const activeRows = await db.select({
+        id: leads.id,
         salespersonUserId: leads.salespersonUserId,
-        count: sql<number>`count(${leads.id})::integer`
-    })
-        .from(leads)
-        .where(and(
-            eq(leads.confirmationsOutcome, 'confermato'),
-            gte(leads.confirmationsTimestamp, start),
-            lte(leads.confirmationsTimestamp, end)
-        ))
-        .groupBy(leads.salespersonUserId)
-    const assignedMap = new Map(confirmedAssignments.map(r => [r.salespersonUserId, r.count]))
-
-    // Trattative del mese (presenziati = Chiuso + Non chiuso) attribuite per
-    // data esito venditore (salespersonOutcomeAt).
-    const trattativeRows = await db.select({
-        salespersonUserId: leads.salespersonUserId,
-        outcome: leads.salespersonOutcome,
+        confirmationsOutcome: leads.confirmationsOutcome,
+        confirmationsTimestamp: leads.confirmationsTimestamp,
+        salespersonOutcome: leads.salespersonOutcome,
+        salespersonOutcomeAt: leads.salespersonOutcomeAt,
         amount: leads.closeAmountEur,
-    })
-        .from(leads)
-        .where(and(
-            isNotNull(leads.salespersonOutcomeAt),
-            gte(leads.salespersonOutcomeAt, start),
-            lte(leads.salespersonOutcomeAt, end),
-        ))
-    const trattativeMap = new Map<string, { trattative: number; chiusure: number; revenue: number }>()
-    for (const r of trattativeRows) {
+    }).from(leads).where(and(
+        isNotNull(leads.salespersonUserId),
+        or(
+            and(
+                eq(leads.confirmationsOutcome, 'confermato'),
+                gte(leads.confirmationsTimestamp, start),
+                lte(leads.confirmationsTimestamp, end),
+            ),
+            and(
+                isNotNull(leads.salespersonOutcomeAt),
+                gte(leads.salespersonOutcomeAt, start),
+                lte(leads.salespersonOutcomeAt, end),
+            ),
+        ),
+    ))
+
+    const statsMap = new Map<string, { assigned: number; trattative: number; chiusure: number; revenue: number }>()
+    const seenLeadIds = new Map<string, Set<string>>() // sales -> leadIds (dedup difensivo)
+
+    for (const r of activeRows) {
         if (!r.salespersonUserId) continue
-        const isPresenziato = r.outcome === 'Chiuso' || r.outcome === 'Non chiuso'
-        if (!isPresenziato) continue
-        const cur = trattativeMap.get(r.salespersonUserId) || { trattative: 0, chiusure: 0, revenue: 0 }
-        cur.trattative++
-        if (r.outcome === 'Chiuso') {
-            cur.chiusure++
-            cur.revenue += r.amount || 0
+        const sid = r.salespersonUserId
+        // Dedup: un lead conta una volta sola anche se entrambe le condizioni OR matchano
+        const seen = seenLeadIds.get(sid) || new Set<string>()
+        if (seen.has(r.id)) continue
+        seen.add(r.id)
+        seenLeadIds.set(sid, seen)
+
+        const cur = statsMap.get(sid) || { assigned: 0, trattative: 0, chiusure: 0, revenue: 0 }
+        cur.assigned++
+        const isPresenziatoFlag = r.salespersonOutcome === 'Chiuso' || r.salespersonOutcome === 'Non chiuso'
+        // Trattative/chiusure: contano solo se l'esito è stato registrato NEL MESE.
+        // (un lead confermato a maggio ma chiuso a giugno → conta come Asgn maggio,
+        //  ma Tratt/Chius lo prenderà giugno.)
+        const outcomeInMonth = r.salespersonOutcomeAt
+            && new Date(r.salespersonOutcomeAt) >= start
+            && new Date(r.salespersonOutcomeAt) <= end
+        if (isPresenziatoFlag && outcomeInMonth) {
+            cur.trattative++
+            if (r.salespersonOutcome === 'Chiuso') {
+                cur.chiusure++
+                cur.revenue += r.amount || 0
+            }
         }
-        trattativeMap.set(r.salespersonUserId, cur)
+        statsMap.set(sid, cur)
     }
 
     const salesList = vendors.map(v => {
-        const trat = trattativeMap.get(v.id) || { trattative: 0, chiusure: 0, revenue: 0 }
+        const s = statsMap.get(v.id) || { assigned: 0, trattative: 0, chiusure: 0, revenue: 0 }
         return {
             ...v,
-            confirmedAssigned: assignedMap.get(v.id) || 0,
-            trattative: trat.trattative,
-            chiusure: trat.chiusure,
-            revenueEur: trat.revenue,
+            confirmedAssigned: s.assigned,
+            trattative: s.trattative,
+            chiusure: s.chiusure,
+            revenueEur: s.revenue,
         }
     }).sort((a, b) => b.confirmedAssigned - a.confirmedAssigned)
 
