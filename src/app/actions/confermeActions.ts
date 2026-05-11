@@ -1209,7 +1209,7 @@ export async function listVenditoriForAssignment() {
     return rows;
 }
 
-export async function assignWebinarLeadToSalesperson(leadId: string, salespersonId: string) {
+export async function assignWebinarLeadToSalesperson(leadId: string, salespersonId: string, newAppointmentDate?: Date) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role } } : null;
@@ -1221,7 +1221,7 @@ export async function assignWebinarLeadToSalesperson(leadId: string, salesperson
     if (!oldLead) return { success: false, error: "Lead not found" };
     if (!oldLead.isSelfBooked) return { success: false, error: "Lead is not a self-booked webinar" };
     if (oldLead.salespersonUserId) return { success: false, error: "Lead already assigned" };
-    if (!oldLead.appointmentDate) return { success: false, error: "Lead has no appointmentDate" };
+    if (!oldLead.appointmentDate && !newAppointmentDate) return { success: false, error: "Lead has no appointmentDate" };
 
     const [sp] = await db
         .select({ id: users.id, name: users.name })
@@ -1230,6 +1230,10 @@ export async function assignWebinarLeadToSalesperson(leadId: string, salesperson
         .limit(1);
     if (!sp) return { success: false, error: "Salesperson not found" };
 
+    // Decide final appointment date: caller-supplied override wins, else keep original.
+    const finalApptDate = newAppointmentDate ? new Date(newAppointmentDate) : new Date(oldLead.appointmentDate!);
+    const apptChanged = !!newAppointmentDate && oldLead.appointmentDate?.getTime() !== finalApptDate.getTime();
+
     const updated = await db.update(leads).set({
         salespersonUserId: sp.id,
         salespersonAssigned: sp.name,
@@ -1237,6 +1241,7 @@ export async function assignWebinarLeadToSalesperson(leadId: string, salesperson
         confirmationsOutcome: 'confermato',
         confirmationsUserId: session.user.id,
         confirmationsTimestamp: new Date(),
+        appointmentDate: finalApptDate,
         version: oldLead.version + 1,
         updatedAt: new Date(),
     }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version))).returning({ id: leads.id });
@@ -1244,6 +1249,14 @@ export async function assignWebinarLeadToSalesperson(leadId: string, salesperson
     if (updated.length === 0) return { success: false, error: "CONCURRENCY_ERROR" };
 
     // Marketing webhooks — stesso flusso di setConfermeOutcome.
+    // Se l'orario è stato modificato in assegnazione, emetti anche appointment.set per allineare il partner marketing.
+    if (apptChanged) {
+        await enqueueMarketingWebhook({
+            eventType: 'appointment.set',
+            leadId,
+            actorUserId: session.user.id,
+        }).catch((e: unknown) => console.error("Marketing webhook (appointment.set webinar reschedule) err:", e));
+    }
     await enqueueMarketingWebhook({
         eventType: 'appointment.outcome',
         leadId,
@@ -1256,7 +1269,7 @@ export async function assignWebinarLeadToSalesperson(leadId: string, salesperson
     }).catch((e: unknown) => console.error("Marketing webhook (deal.assigned) err:", e));
 
     // Google Calendar event nel calendario del venditore.
-    const apptDate = new Date(oldLead.appointmentDate);
+    const apptDate = finalApptDate;
     const endTime = addHours(apptDate, 1);
     await createGoogleCalendarEvent(
         sp.id,
