@@ -17,17 +17,32 @@ type Lead = InferSelectModel<typeof leads>;
 type User = InferSelectModel<typeof users>;
 
 /**
- * eventId deterministico: SHA-256 di (eventType + leadId + occurredAt-al-secondo)
- * formattato come UUID-shape. Doppio click utente con stesso payload → stesso
- * eventId → INSERT con ON CONFLICT DO NOTHING.
+ * eventId deterministico: SHA-256 di (eventType + leadId + bucket) come UUID-shape.
+ *
+ * Bucket granularity:
+ * - `appointment.set` → UTC day (YYYY-MM-DD). Re-fissaggi multipli stesso giorno
+ *   collidono sul PK outbox (ON CONFLICT DO NOTHING) → marketing riceve un solo
+ *   evento per lead per giorno. La semantica "il lead ha fissato un appuntamento
+ *   oggi" è ciò che il marketing usa per attribution; il numero di re-fissaggi è
+ *   rumore operativo.
+ * - Altri eventType → granularità al secondo. Cambi di esito legittimi (es.
+ *   appointment.outcome confermato→rifissare) devono propagarsi.
  */
 export function deterministicEventId(
     eventType: MarketingEventType,
     leadId: string,
     occurredAt: Date
 ): string {
-    const seconds = Math.floor(occurredAt.getTime() / 1000);
-    const seed = `${eventType}|${leadId}|${seconds}`;
+    let bucket: string;
+    if (eventType === 'appointment.set') {
+        const y = occurredAt.getUTCFullYear();
+        const m = String(occurredAt.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(occurredAt.getUTCDate()).padStart(2, '0');
+        bucket = `day:${y}-${m}-${d}`;
+    } else {
+        bucket = `s:${Math.floor(occurredAt.getTime() / 1000)}`;
+    }
+    const seed = `${eventType}|${leadId}|${bucket}`;
     const hash = crypto.createHash('sha256').update(seed).digest('hex');
     return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
