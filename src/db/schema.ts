@@ -73,6 +73,10 @@ export const leads = pgTable('leads', {
     // (es. meno di 9 cifre). Nell'UI è solo un triangolino accanto al
     // numero, non una nota di testo che occupa spazio.
     phoneSuspicious: boolean('phoneSuspicious').default(false).notNull(),
+    // Lead self-booked tramite landing/webinar (es. webinar Video Editing 2026-05-12).
+    // I lead self-booked appaiono in una sezione dedicata della dashboard Conferme,
+    // dove vengono assegnati direttamente a un venditore (saltando il flusso GDO).
+    isSelfBooked: boolean('isSelfBooked').default(false).notNull(),
     status: text('status').default('NEW').notNull(),
     callCount: integer('callCount').default(0).notNull(),
     assignedToId: text('assignedToId').references(() => users.id),
