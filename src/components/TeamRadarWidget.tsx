@@ -1,25 +1,38 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 import { sendInternalAlert } from "@/app/actions/alertActions"
-import { Users, Send, MessageSquarePlus, Phone, FileText, Eye } from "lucide-react"
-import { useConfermePresence, activityLabel, type ConfermePresenceEntry } from "@/lib/confermePresence"
-
-function ActivityIcon({ state }: { state?: string }) {
-    if (state === "calling") return <Phone className="w-3 h-3 text-rose-500" />
-    if (state === "writing_note") return <FileText className="w-3 h-3 text-amber-500" />
-    if (state === "viewing") return <Eye className="w-3 h-3 text-sky-500" />
-    return null
-}
+import { Users, Send, AlertTriangle, MessageSquarePlus } from "lucide-react"
 
 export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
-    const { presence } = useConfermePresence(currentUser)
-    const [selectedUser, setSelectedUser] = useState<ConfermePresenceEntry | null>(null)
+    const [activeUsers, setActiveUsers] = useState<any[]>([])
+    const [selectedUser, setSelectedUser] = useState<any | null>(null)
     const [message, setMessage] = useState("")
     const [isSending, setIsSending] = useState(false)
 
-    const colleagues = presence.filter((p) => p.user.id !== currentUser.id)
+    // Real-time radar using Supabase WebSockets
+    useEffect(() => {
+        const { createClient } = require("@/utils/supabase/client");
+        const supabase = createClient();
+        const channel = supabase.channel('conferme_realtime_board');
+
+        channel.on('presence', { event: 'sync' }, () => {
+            const newState = channel.presenceState();
+            const map = new Map();
+            for (const id in newState) {
+                newState[id].forEach((p: any) => {
+                    if (p.user && p.user.id !== currentUser.id) {
+                        map.set(p.user.id, p);
+                    }
+                });
+            }
+            setActiveUsers(Array.from(map.values()));
+        });
+
+        channel.subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [currentUser.id])
 
     const handleSend = async () => {
         if (!selectedUser || !message.trim()) return
@@ -47,51 +60,36 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1">
-                    {colleagues.length === 0 ? (
+                    {activeUsers.length === 0 ? (
                         <div className="text-[10px] text-ash-400 font-medium italic">
                             Nessun altro collega online.
                         </div>
                     ) : (
-                        colleagues.map((p) => {
-                            const a = p.activity ?? { state: "idle" as const }
-                            const label = activityLabel(a)
-                            const leadName = "leadName" in a ? a.leadName : null
-                            const isActive = a.state === "calling" || a.state === "writing_note" || a.state === "viewing"
-                            return (
-                                <div
-                                    key={p.user.id}
-                                    className={`flex items-center gap-1.5 border py-0.5 px-2 rounded-full shrink-0 group transition-colors ${isActive
-                                        ? "bg-orange-50 border-orange-200"
-                                        : "bg-ash-50 border-ash-200 hover:border-orange-200 hover:bg-orange-50"
-                                        }`}
-                                    title={leadName ? `${label} · ${leadName}` : label}
-                                >
-                                    <div className="relative flex h-1.5 w-1.5">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                                    </div>
+                        activeUsers.map((p) => (
+                            <div key={p.user.id} className="flex items-center gap-1.5 bg-ash-50 border border-ash-200 py-0.5 px-2 rounded-full shrink-0 group hover:border-orange-200 hover:bg-orange-50 transition-colors">
+                                <div className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                                </div>
+                                <div className="flex items-center gap-1">
                                     <span className="font-bold text-ash-700 text-[10px] leading-none uppercase tracking-wide">
                                         {p.user.displayName || p.user.name}
                                     </span>
-                                    <ActivityIcon state={a.state} />
-                                    <span className="text-[10px] text-ash-500 leading-none italic">
-                                        {label}
-                                    </span>
-                                    {leadName && (
-                                        <span className="text-[10px] text-ash-700 font-semibold leading-none truncate max-w-[140px] border-l border-ash-300 pl-1.5">
-                                            {leadName}
+                                    {p.leadId && (
+                                        <span className="text-[9px] text-ash-500 leading-none truncate max-w-[100px] border-l border-ash-300 pl-1">
+                                            L-{p.leadId.substring(0, 4)}
                                         </span>
                                     )}
-                                    <button
-                                        onClick={() => setSelectedUser(p)}
-                                        className="ml-0.5 text-orange-400 hover:text-orange-600 transition-colors p-0.5 rounded-full hover:bg-orange-100 opacity-0 group-hover:opacity-100"
-                                        title="Invia Avviso P2P"
-                                    >
-                                        <MessageSquarePlus className="w-3 h-3" />
-                                    </button>
                                 </div>
-                            )
-                        })
+                                <button
+                                    onClick={() => setSelectedUser(p)}
+                                    className="ml-0.5 text-orange-400 hover:text-orange-600 transition-colors p-0.5 rounded-full hover:bg-orange-100 opacity-0 group-hover:opacity-100"
+                                    title="Invia Avviso P2P"
+                                >
+                                    <MessageSquarePlus className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))
                     )}
                 </div>
             </div>
@@ -114,7 +112,7 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
 
                         <div className="flex justify-end gap-2">
                             <button
-                                onClick={() => { setSelectedUser(null); setMessage("") }}
+                                onClick={() => { setSelectedUser(null); setMessage(""); }}
                                 disabled={isSending}
                                 className="px-4 py-2 text-ash-600 hover:bg-ash-100 rounded-lg font-medium text-sm transition-colors"
                             >
