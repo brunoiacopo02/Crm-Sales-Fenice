@@ -163,20 +163,26 @@ export function WebinarAssignModal({ lead, onClose, onAssigned }: { lead: Lead; 
                     ) : (
                         <div className="space-y-3">
                             {venditori.map(v => {
-                                const slots: Array<{ start: Date; label: string; type: 'crm' | 'busy' }> = [
-                                    ...v.appointments.map(a => ({ start: new Date(a.appointmentDate), label: a.leadName, type: 'crm' as const })),
-                                    ...v.busySlots.map(b => ({ start: new Date(b.start as any), label: 'Impegno GCal', type: 'busy' as const })),
+                                // Gli appuntamenti CRM hanno durata 1h convenzionale.
+                                // Gli impegni GCal usano lo `end` reale (possono essere multi-ora).
+                                const slots: Array<{ start: Date; end: Date; label: string; type: 'crm' | 'busy' }> = [
+                                    ...v.appointments.map(a => {
+                                        const s = new Date(a.appointmentDate)
+                                        return { start: s, end: new Date(s.getTime() + 60 * 60 * 1000), label: a.leadName, type: 'crm' as const }
+                                    }),
+                                    ...v.busySlots.map(b => ({
+                                        start: new Date(b.start as any),
+                                        end: new Date(b.end as any),
+                                        label: 'Impegno GCal',
+                                        type: 'busy' as const,
+                                    })),
                                 ].sort((a, b) => a.start.getTime() - b.start.getTime())
 
                                 let conflict = false
                                 if (proposed && !isNaN(proposed.getTime())) {
                                     const pStart = proposed.getTime()
                                     const pEnd = pStart + 60 * 60 * 1000
-                                    conflict = slots.some(s => {
-                                        const sStart = s.start.getTime()
-                                        const sEnd = sStart + 60 * 60 * 1000
-                                        return sStart < pEnd && sEnd > pStart
-                                    })
+                                    conflict = slots.some(s => s.start.getTime() < pEnd && s.end.getTime() > pStart)
                                 }
 
                                 const isBusy = assigningId === v.id
@@ -208,11 +214,15 @@ export function WebinarAssignModal({ lead, onClose, onAssigned }: { lead: Lead; 
                                             <div className="text-xs text-ash-500">Nessun impegno per quel giorno.</div>
                                         ) : (
                                             <div className="flex flex-wrap gap-1.5">
-                                                {slots.map((s, i) => (
-                                                    <span key={i} className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${s.type === 'crm' ? 'bg-blue-100 text-blue-800' : 'bg-ash-100 text-ash-700'}`}>
-                                                        <Clock className="w-3 h-3" />{formatHM(s.start)} · {s.label}
-                                                    </span>
-                                                ))}
+                                                {slots.map((s, i) => {
+                                                    const sameHM = formatHM(s.start) === formatHM(s.end)
+                                                    return (
+                                                        <span key={i} className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${s.type === 'crm' ? 'bg-blue-100 text-blue-800' : 'bg-ash-100 text-ash-700'}`}>
+                                                            <Clock className="w-3 h-3" />
+                                                            {sameHM ? formatHM(s.start) : `${formatHM(s.start)}–${formatHM(s.end)}`} · {s.label}
+                                                        </span>
+                                                    )
+                                                })}
                                             </div>
                                         )}
                                     </div>
