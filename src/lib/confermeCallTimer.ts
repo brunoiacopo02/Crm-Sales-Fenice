@@ -3,6 +3,11 @@
 
 const SS_KEY = "conferme_call_timer_v1";
 
+// Timer "running" piu vecchio di questa soglia viene considerato abbandonato
+// (es. operatore ha scartato il lead senza fermarlo, poi e tornato il giorno dopo
+// e si trovava il pulsante bloccato su tutti gli altri lead per isRunningElsewhere).
+const STALE_RUNNING_MS = 60 * 60 * 1000; // 60 minuti
+
 export type TimerState =
     | { status: "idle" }
     | { status: "running"; leadId: string; startedAt: number }
@@ -14,7 +19,16 @@ export function readTimerState(): TimerState {
         const raw = window.sessionStorage.getItem(SS_KEY);
         if (!raw) return { status: "idle" };
         const parsed = JSON.parse(raw) as TimerState;
-        if (parsed.status === "running" || parsed.status === "stopped" || parsed.status === "idle") {
+        if (parsed.status === "running") {
+            const age = Date.now() - (parsed.startedAt || 0);
+            if (!Number.isFinite(parsed.startedAt) || age < 0 || age > STALE_RUNNING_MS) {
+                // Timer abbandonato: ripuliamo lo stato e ritorniamo idle.
+                window.sessionStorage.removeItem(SS_KEY);
+                return { status: "idle" };
+            }
+            return parsed;
+        }
+        if (parsed.status === "stopped" || parsed.status === "idle") {
             return parsed;
         }
         return { status: "idle" };
@@ -47,4 +61,22 @@ export function consumeTimerForLead(leadId: string): { durationSeconds: number }
     if (duration === null) return null;
     writeTimerState({ status: "idle" });
     return { durationSeconds: duration };
+}
+
+/** Helper condiviso fra ConfermeBoardRow e ConfermeDrawer: ferma il timer per
+ *  il lead (se attivo) e logga la durata. Da chiamare PRIMA della server action
+ *  (NR / outcome / snooze / recall). Silenzia errori di logging perche non
+ *  devono mai bloccare l'azione utente. */
+export async function stopTimerAndLogForLead(
+    leadId: string,
+    actionTaken: 'nr' | 'outcome' | null
+): Promise<void> {
+    const consumed = consumeTimerForLead(leadId);
+    if (!consumed) return;
+    try {
+        const { logConfermeCallDuration } = await import("@/app/actions/confermeAnalyticsActions");
+        await logConfermeCallDuration(leadId, consumed.durationSeconds, { actionTaken });
+    } catch (err) {
+        console.error("stopTimerAndLogForLead err:", err);
+    }
 }

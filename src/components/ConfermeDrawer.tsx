@@ -8,6 +8,7 @@ import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoCo
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { createClient } from "@/utils/supabase/client"
+import { stopTimerAndLogForLead } from "@/lib/confermeCallTimer"
 import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
 
@@ -267,6 +268,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
         setSavingOutcome(true)
         try {
+            // Safety: ferma il timer per QUESTO lead se ancora running.
+            // Lo facciamo PRIMA dell'azione cosi la durata viene loggata sullo
+            // slot corretto (callsMade + 1) dentro logConfermeCallDuration.
+            await stopTimerAndLogForLead(lead.id, 'outcome');
             const { setConfermeOutcome } = await import('@/app/actions/confermeActions');
             const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", discardReason, salesperson)
             if (result && !result.success) {
@@ -341,6 +346,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const handleQuickNR = async () => {
         setIsSavingNR(true);
         try {
+            // Safety: ferma il timer e logga la durata sullo slot NR appena registrato.
+            await stopTimerAndLogForLead(lead.id, 'nr');
             const res = await recordConfermeNoAnswer(lead.id, localVersion);
             if (res.success) {
                 setLocalVersion((v: number) => v + 1);
