@@ -47,3 +47,10 @@ dev.db
 *.sqlite
 *.sqlite3
 *.db
+
+.vercel
+
+# Seed launch pool artefacts (generati una tantum, non parte del codice)
+tmp-seed-batches/
+seed-launch-pool.out.sql
+seed-launch-pool.log
