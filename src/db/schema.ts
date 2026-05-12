@@ -77,6 +77,9 @@ export const leads = pgTable('leads', {
     // I lead self-booked appaiono in una sezione dedicata della dashboard Conferme,
     // dove vengono assegnati direttamente a un venditore (saltando il flusso GDO).
     isSelfBooked: boolean('isSelfBooked').default(false).notNull(),
+    // Lancio Videoeditor (maggio 2026): marca i lead pescabili dal pool del lancio.
+    // 'WEBINAR' = ha visto il webinar Zoom; 'NO_WEBINAR' = non l'ha visto; null = lead normale.
+    launchBucket: text('launchBucket'),
     status: text('status').default('NEW').notNull(),
     callCount: integer('callCount').default(0).notNull(),
     assignedToId: text('assignedToId').references(() => users.id),
