@@ -130,11 +130,12 @@ export async function assignFromLaunchPool(input: AssignFromPoolInput): Promise<
                 idsByGdo[gdo].push(ids[i])
             }
             for (const [gdoId, leadIds] of Object.entries(idsByGdo)) {
-                await tx.execute(sql`
-                    UPDATE leads
-                    SET "assignedToId" = ${gdoId}, "updatedAt" = NOW()
-                    WHERE id = ANY(${leadIds}::text[])
-                `)
+                // Usa il query builder: il template sql`${arr}::text[]` esplode l'array
+                // in N placeholder distinti (record), non in un array PG → cast fallisce.
+                await tx
+                    .update(leads)
+                    .set({ assignedToId: gdoId, updatedAt: new Date() })
+                    .where(inArray(leads.id, leadIds))
                 if (bucket === 'WEBINAR') report.perGdo[gdoId].webinar += leadIds.length
                 else report.perGdo[gdoId].noWebinar += leadIds.length
                 report.totalAssigned += leadIds.length
