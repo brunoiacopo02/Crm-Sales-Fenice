@@ -77,6 +77,12 @@ export async function getPipelineLeads() {
     const secondCall = pipelineLeads.filter(l => l.callCount === 1)
     const thirdCall = pipelineLeads.filter(l => l.callCount === 2)
 
+    // DIAG: capture every pipeline fetch with detail to investigate "lead spariscono"
+    if (isGdo) {
+        const firstCallIds = firstCall.map(l => `${l.id.slice(0,8)}/${l.launchBucket ? 'LCH' : 'std'}`).join(',')
+        console.log(`[PIPE] ${new Date().toISOString()} u=${session.user.email} 1ª=${firstCall.length} (lch=${firstCall.filter(l => l.launchBucket).length}) 2ª=${secondCall.length} ids1ª=[${firstCallIds}]`)
+    }
+
     // 2. Recalls (In arrivo & Scaduti)
     const recallBaseConditions = [
         ne(leads.status, 'REJECTED'),
