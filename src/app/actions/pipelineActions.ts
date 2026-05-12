@@ -77,14 +77,6 @@ export async function getPipelineLeads() {
     const secondCall = pipelineLeads.filter(l => l.callCount === 1)
     const thirdCall = pipelineLeads.filter(l => l.callCount === 2)
 
-    // DIAG LAUNCH POOL (temp): logga quanti lead launch passano il filtro pipeline
-    // e quanti sono in DB per questo GDO. Da rimuovere dopo il debug.
-    if (isGdo) {
-        const launchInFirstCall = firstCall.filter(l => l.launchBucket).length
-        const launchInSecondCall = secondCall.filter(l => l.launchBucket).length
-        console.log(`[PIPELINE_DIAG] uid=${userId} role=${session.user.role} email=${session.user.email} totalPipeline=${pipelineLeads.length} firstCall=${firstCall.length} (launch=${launchInFirstCall}) secondCall=${secondCall.length} (launch=${launchInSecondCall})`)
-    }
-
     // 2. Recalls (In arrivo & Scaduti)
     const recallBaseConditions = [
         ne(leads.status, 'REJECTED'),
