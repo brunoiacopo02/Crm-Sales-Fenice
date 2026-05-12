@@ -9,8 +9,6 @@ import dynamic from "next/dynamic"
 
 const ConfermeBoard = dynamic(() => import("@/components/ConfermeBoard").then(m => ({ default: m.ConfermeBoard })), { loading: () => <div className="animate-pulse space-y-3"><div className="h-10 bg-ash-200 rounded-lg w-1/3" /><div className="h-64 bg-ash-100 rounded-xl" /><div className="h-64 bg-ash-100 rounded-xl" /></div> })
 
-const WebinarSelfBookedSection = dynamic(() => import("@/components/WebinarSelfBookedSection").then(m => ({ default: m.WebinarSelfBookedSection })))
-
 const QuestPanel = dynamic(() => import("@/components/QuestPanel").then(m => ({ default: m.QuestPanel })))
 const StreakAnxietyBanner = dynamic(() => import("@/components/StreakAnxietyBanner").then(m => ({ default: m.StreakAnxietyBanner })))
 const LevelNudge = dynamic(() => import("@/components/LevelNudge").then(m => ({ default: m.LevelNudge })))
@@ -51,8 +49,6 @@ export default async function ConfermePage() {
                     <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
                 </>
             )}
-
-            <SafeWrapper><WebinarSelfBookedSection /></SafeWrapper>
 
             <SafeWrapper>
                 <HotStreak>
