@@ -192,11 +192,14 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             return result[0]?.value ?? 0;
         }
         // --- CONFERME metrics ---
+        // Le metriche di esito (fatte/scartate/presenze/chiusure) sono OBIETTIVO DI GRUPPO:
+        // contano tutta la squadra Conferme. Se Andrea chiude, vale anche per Alberto/Christel.
+        // Le chiamate restano individuali (attività personale dell'operatore).
         case 'conferme_fatte': {
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
-                    eq(leads.confirmationsUserId, userId),
+                    isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     isNotNull(leads.confirmationsTimestamp),
                     gte(leads.confirmationsTimestamp, start),
@@ -225,7 +228,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
-                    eq(leads.confirmationsUserId, userId),
+                    isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'scartato'),
                     isNotNull(leads.confirmationsTimestamp),
                     gte(leads.confirmationsTimestamp, start),
@@ -234,22 +237,10 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             return result[0]?.value ?? 0;
         }
         case 'conferme_presenze': {
-            // Lead confermati da questo operatore dove il lead si è presentato (salespersonOutcome non è 'Sparito')
-            const result = await db.select({ value: count() })
-                .from(leads)
-                .where(and(
-                    eq(leads.confirmationsUserId, userId),
-                    eq(leads.confirmationsOutcome, 'confermato'),
-                    isNotNull(leads.salespersonOutcome),
-                    isNotNull(leads.salespersonOutcomeAt),
-                    gte(leads.salespersonOutcomeAt, start),
-                    lte(leads.salespersonOutcomeAt, end)
-                ));
-            // Filter out 'Sparito' in JS since Drizzle ne() doesn't chain well with the above
             const presenze = await db.select({ outcome: leads.salespersonOutcome })
                 .from(leads)
                 .where(and(
-                    eq(leads.confirmationsUserId, userId),
+                    isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     isNotNull(leads.salespersonOutcome),
                     isNotNull(leads.salespersonOutcomeAt),
@@ -259,11 +250,10 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             return presenze.filter(l => l.outcome !== 'Sparito').length;
         }
         case 'conferme_chiusure': {
-            // Lead confermati da questo operatore e poi chiusi dal venditore
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
-                    eq(leads.confirmationsUserId, userId),
+                    isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     eq(leads.salespersonOutcome, 'Chiuso'),
                     isNotNull(leads.salespersonOutcomeAt),
