@@ -11,6 +11,7 @@ const ConfermeDrawer = dynamic(
   { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
 )
 import { ConfermeBoardRow } from "@/components/ConfermeBoardRow"
+import { ConfermeActiveTimerBanner } from "@/components/ConfermeActiveTimerBanner"
 import { CloseLeadModal } from "@/components/CloseLeadModal"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
@@ -429,8 +430,26 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         );
     }
 
+    const visibleLeadsForBanner = (() => {
+        const seen = new Map<string, { id: string; name?: string | null }>();
+        const push = (arr: any[]) => {
+            for (const x of arr) {
+                const lead = x?.lead || x;
+                if (lead && lead.id && !seen.has(lead.id)) {
+                    seen.set(lead.id, { id: lead.id, name: lead.name });
+                }
+            }
+        };
+        push(kanbanData.flatList);
+        push(kanbanData.daDefinire);
+        push(tableData);
+        push(storicoData);
+        return Array.from(seen.values());
+    })();
+
     return (
         <div className="flex flex-col min-h-[500px] relative">
+            <ConfermeActiveTimerBanner visibleLeads={visibleLeadsForBanner} />
             {/* MEGA TOGGLES NAVIGATION - Premium Segmented Control */}
             <div className="flex items-center justify-between gap-4 mb-2 sticky top-0 z-20 bg-white/80 backdrop-blur-md pt-3 pb-3 border-b border-ash-200/40">
                 <div className="flex p-1 bg-ash-100/80 rounded-xl max-w-2xl border border-ash-200/60 shadow-soft">

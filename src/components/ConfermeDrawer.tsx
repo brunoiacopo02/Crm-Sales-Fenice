@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2, ClipboardList } from "lucide-react"
 import { ConfermeSurveyDialog } from "./surveys/ConfermeSurveyDialog"
 import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
+import { ConfermeCallTimer } from "./ConfermeCallTimer"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
@@ -500,6 +501,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     >
                                         Annulla NR
                                     </button>
+                                )}
+
+                                {!lead.confirmationsOutcome && (
+                                    <ConfermeCallTimer leadId={lead.id} disabled={isSavingNR} />
                                 )}
 
                                 <button
