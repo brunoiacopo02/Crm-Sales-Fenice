@@ -91,7 +91,9 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const totalFixed = dailyStats.reduce((acc, curr) => acc + curr.fixed, 0)
     const totalConfirmedAct = dailyStats.reduce((acc, curr) => acc + curr.confirmed, 0)
 
-    // Calculate weekly and monthly targets (single query, no duplication)
+    // Target settimanali. Per la vista TEAM (no userId) usiamo i target
+    // di GRUPPO fissi (T1=30, T2=38), NON la somma dei target individuali:
+    // l'obiettivo settimanale è del team, non per operatore.
     let weeklyTier1Target = 0;
     let weeklyTier2Target = 0;
 
@@ -102,14 +104,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             weeklyTier2Target = userRow[0].confermeTargetTier2 || CONFERME_DEFAULT_TARGET_T2;
         }
     } else {
-        const allConferme = await db.select().from(users).where(eq(users.role, 'CONFERME'));
-        if (allConferme.length > 0) {
-            weeklyTier1Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier1 || CONFERME_DEFAULT_TARGET_T1), 0);
-            weeklyTier2Target = allConferme.reduce((sum, u) => sum + (u.confermeTargetTier2 || CONFERME_DEFAULT_TARGET_T2), 0);
-        } else {
-            weeklyTier1Target = CONFERME_DEFAULT_TARGET_T1;
-            weeklyTier2Target = CONFERME_DEFAULT_TARGET_T2;
-        }
+        weeklyTier1Target = CONFERME_DEFAULT_TARGET_T1;
+        weeklyTier2Target = CONFERME_DEFAULT_TARGET_T2;
     }
 
     // Monthly targets = weekly * 4
@@ -153,8 +149,13 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const nowWeek = weekBoundsRome(new Date())
     const nowWeekStart = nowWeek.start
     const nowWeekEnd = nowWeek.end
+    // Contiamo SOLO le chiusure passate per la dashboard Conferme:
+    // il lead deve essere stato confermato da un operatore Conferme.
+    // Esclude vendite dirette o import storici che non sono passati di qui.
     const closedWeekConditions = [
         eq(leads.salespersonOutcome, 'Chiuso'),
+        eq(leads.confirmationsOutcome, 'confermato'),
+        isNotNull(leads.confirmationsUserId),
         gte(leads.salespersonOutcomeAt, nowWeekStart),
         lt(leads.salespersonOutcomeAt, nowWeekEnd),
     ]
@@ -185,6 +186,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         const pw = weekBoundsRome(past)
         const conds = [
             eq(leads.salespersonOutcome, 'Chiuso'),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            isNotNull(leads.confirmationsUserId),
             gte(leads.salespersonOutcomeAt, pw.start),
             lt(leads.salespersonOutcomeAt, pw.end),
         ]
