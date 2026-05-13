@@ -478,8 +478,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 {/* Quick Actions Bar */}
                 <fieldset disabled={isLocked} className="contents border-0 p-0 m-0">
                     <div className="bg-white border-b border-ash-200 p-4 shrink-0 flex flex-col gap-3 z-10 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)]">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-between flex-wrap gap-y-2">
+                            <div className="flex items-center gap-3 flex-wrap gap-y-2 min-w-0">
                                 <button
                                     onClick={handleQuickNR}
                                     disabled={isSavingNR || !!lead.confirmationsOutcome}
