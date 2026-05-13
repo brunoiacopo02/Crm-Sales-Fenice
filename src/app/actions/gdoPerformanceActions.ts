@@ -350,9 +350,11 @@ async function getConfermeWeeklyState(
 
     let currentPresences = 0;
 
+    // Le chiusure Conferme sono OBIETTIVO DI GRUPPO: contano per tutta la squadra.
+    // Una chiusura di Andrea vale per Alberto e Christel. Nessun filtro per utente.
     const confermeLeads = await db.select().from(leads).where(
         and(
-            eq(leads.confirmationsUserId, gdoUserId),
+            isNotNull(leads.confirmationsUserId),
             eq(leads.confirmationsOutcome, 'confermato'),
             eq(leads.salespersonOutcome, 'Chiuso'),
             isNotNull(leads.salespersonOutcomeAt),
@@ -363,14 +365,18 @@ async function getConfermeWeeklyState(
     currentPresences = confermeLeads.length;
 
     try {
-        const adjustments = await db.select().from(manualAdjustments).where(
-            and(
-                eq(manualAdjustments.userId, gdoUserId),
-                eq(manualAdjustments.type, 'chiusure'),
-                gte(manualAdjustments.createdAt, currentWeekStart),
-                lte(manualAdjustments.createdAt, currentWeekEnd)
-            )
-        );
+        // Aggiustamenti manuali "chiusure" di QUALSIASI utente Conferme contano per il team.
+        const adjustments = await db.select({ count: manualAdjustments.count, userId: manualAdjustments.userId })
+            .from(manualAdjustments)
+            .innerJoin(users, eq(users.id, manualAdjustments.userId))
+            .where(
+                and(
+                    eq(users.role, 'CONFERME'),
+                    eq(manualAdjustments.type, 'chiusure'),
+                    gte(manualAdjustments.createdAt, currentWeekStart),
+                    lte(manualAdjustments.createdAt, currentWeekEnd)
+                )
+            );
         adjustments.forEach(a => { currentPresences += a.count; });
     } catch { /* tabella non ancora migrata */ }
 
