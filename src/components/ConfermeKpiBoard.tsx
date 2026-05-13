@@ -28,9 +28,10 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
 
     const isManager = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER'
 
-    const [selectedUser, setSelectedUser] = useState<string>(
-        currentUser.role === 'CONFERME' ? currentUser.id : 'ALL'
-    )
+    // Le chiusure sono OBIETTIVO DI GRUPPO: ogni Conferme vede sempre la
+    // dashboard team-wide (count cumulato + target = somma target individuali).
+    // Una chiusura di Andrea conta anche per Alberto e Christel.
+    const [selectedUser, setSelectedUser] = useState<string>('ALL')
 
     const fetchDashboardData = async () => {
         setIsLoading(true)
