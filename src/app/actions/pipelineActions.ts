@@ -70,7 +70,7 @@ export async function getPipelineLeads() {
     const pipelineLeads = await db.select()
         .from(leads)
         .where(and(...pipelineBaseConditions))
-        .orderBy(desc(leads.createdAt))  // più recenti in cima
+        .orderBy(desc(leads.createdAt), leads.id)  // più recenti in cima — `id` come tiebreaker per ordine stabile fra lead con stesso createdAt (es. bulk CSV import)
 
 
     const firstCall = pipelineLeads.filter(l => l.callCount === 0)
@@ -94,7 +94,7 @@ export async function getPipelineLeads() {
     const recallsLeads = await db.select()
         .from(leads)
         .where(and(...recallBaseConditions))
-        .orderBy(leads.recallDate)
+        .orderBy(leads.recallDate, leads.id)
 
 
     // 3. Appointments
@@ -106,7 +106,7 @@ export async function getPipelineLeads() {
     const appointmentsLeads = await db.select()
         .from(leads)
         .where(and(...apptBaseConditions))
-        .orderBy(desc(leads.appointmentCreatedAt))
+        .orderBy(desc(leads.appointmentCreatedAt), leads.id)
 
 
     // 4. Fourth Call "Recupero"
