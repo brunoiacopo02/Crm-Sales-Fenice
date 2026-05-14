@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const DEFAULT_CUTOFF_ISO = '2026-05-07T00:00:00.000Z';
-const IMPORT_ENDPOINT = 'https://dashboardmarketingvendita.vercel.app/api/crm/import-appointments';
+const IMPORT_ENDPOINT = 'https://crm.elixirgroup-europe.com/marketing/api/crm/import-appointments';
 
 /**
  * POST /api/marketing/backfill-historical
