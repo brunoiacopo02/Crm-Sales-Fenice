@@ -309,12 +309,6 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
 
     const name = input.nome?.trim() || 'Lead senza nome'
 
-    // Deduplication check
-    const logicConditions = [eq(leads.phone, phone)]
-    if (email) logicConditions.push(eq(leads.email, email))
-    const existingLead = (await db.select({ id: leads.id }).from(leads).where(or(...logicConditions)))[0]
-    if (existingLead) return { success: false, error: "Lead duplicato: telefono o email già presenti nel CRM." }
-
     // Get active GDOs and assign using stored settings (or manual override)
     const activeGdos = (await db.select().from(users).where(eq(users.role, 'GDO')))
         .filter((u: any) => u.isActive === true)
