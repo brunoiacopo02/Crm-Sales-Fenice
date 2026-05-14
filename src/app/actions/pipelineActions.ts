@@ -2,7 +2,7 @@
 import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
-import { leads, callLogs } from "@/db/schema"
+import { leads, callLogs, pipelineSnapshots } from "@/db/schema"
 import { eq, and, ne, isNull, isNotNull, lt, or, lte, desc, gte } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
@@ -95,6 +95,43 @@ export async function getPipelineLeads() {
         .from(leads)
         .where(and(...recallBaseConditions))
         .orderBy(leads.recallDate, leads.id)
+
+    // PIPELINE SNAPSHOT: scrive un record in pipelineSnapshots ogni volta che cambia
+    // la composizione delle tab per un GDO. Serve per diagnosticare "lead spariti" confrontando
+    // snapshot consecutivi (vedi project_pipeline_sort_stability).
+    if (isGdo) {
+        try {
+            const firstIds = firstCall.map(l => l.id).sort()
+            const secondIds = secondCall.map(l => l.id).sort()
+            const thirdIds = thirdCall.map(l => l.id).sort()
+            const fingerprint = crypto.createHash('sha1')
+                .update(firstIds.join(',') + '|' + secondIds.join(',') + '|' + thirdIds.join(','))
+                .digest('hex')
+
+            const lastSnap = await db.select({ fingerprint: pipelineSnapshots.fingerprint })
+                .from(pipelineSnapshots)
+                .where(eq(pipelineSnapshots.userId, userId))
+                .orderBy(desc(pipelineSnapshots.timestamp))
+                .limit(1)
+
+            if (!lastSnap[0] || lastSnap[0].fingerprint !== fingerprint) {
+                await db.insert(pipelineSnapshots).values({
+                    id: crypto.randomUUID(),
+                    userId,
+                    firstCallCount: firstCall.length,
+                    secondCallCount: secondCall.length,
+                    thirdCallCount: thirdCall.length,
+                    recallsCount: recallsLeads.length,
+                    firstCallIds: firstIds,
+                    secondCallIds: secondIds,
+                    thirdCallIds: thirdIds,
+                    fingerprint,
+                })
+            }
+        } catch (e) {
+            console.error('[pipelineSnapshot] write failed', e)
+        }
+    }
 
 
     // 3. Appointments

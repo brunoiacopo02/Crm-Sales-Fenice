@@ -336,6 +336,23 @@ export const dailyKpiSnapshots = pgTable('dailyKpiSnapshots', {
     fissaggioVariazionePerc: real('fissaggioVariazionePerc').default(0).notNull(),
 });
 
+// Snapshot per ogni fetch della pipeline GDO. Scritto solo quando il fingerprint
+// (concat ordered IDs delle 3 tab) cambia rispetto al precedente, per evitare rumore
+// da re-render. Serve a diagnosticare report di "lead spariti" confrontando snapshot consecutivi.
+export const pipelineSnapshots = pgTable('pipelineSnapshots', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull(),
+    timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
+    firstCallCount: integer('firstCallCount').notNull(),
+    secondCallCount: integer('secondCallCount').notNull(),
+    thirdCallCount: integer('thirdCallCount').notNull(),
+    recallsCount: integer('recallsCount').notNull(),
+    firstCallIds: jsonb('firstCallIds').$type<string[]>().notNull(),
+    secondCallIds: jsonb('secondCallIds').$type<string[]>().notNull(),
+    thirdCallIds: jsonb('thirdCallIds').$type<string[]>().notNull(),
+    fingerprint: text('fingerprint').notNull(),
+});
+
 export const gdoNotes = pgTable('gdoNotes', {
     id: text('id').primaryKey(),
     gdoUserId: text('gdoUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
