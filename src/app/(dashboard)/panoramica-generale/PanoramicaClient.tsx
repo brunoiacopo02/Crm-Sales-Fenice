@@ -751,12 +751,20 @@ function MetricsTargetModal({
     const [targetClose, setTargetClose] = useState<number>(initialConfig?.targetCloseMonthly ?? 0);
     const [targetFatturato, setTargetFatturato] = useState<number>(initialConfig?.targetFatturatoMonthly ?? 0);
     const [fatturatoExtra, setFatturatoExtra] = useState<number>(initialConfig?.fatturatoExtraEur ?? 0);
+    const [targetAppPct, setTargetAppPct] = useState<number>(initialConfig?.targetAppPct ?? 0);
+    const [targetConfPct, setTargetConfPct] = useState<number>(initialConfig?.targetConfPct ?? 0);
+    const [targetPresPct, setTargetPresPct] = useState<number>(initialConfig?.targetPresPct ?? 0);
+    const [targetClosePct, setTargetClosePct] = useState<number>(initialConfig?.targetClosePct ?? 0);
     const [error, setError] = useState('');
 
     function handleSave() {
         setError('');
         if ([targetApp, targetConf, targetPres, targetClose, targetFatturato].some(v => v < 0)) {
             setError('I target non possono essere negativi');
+            return;
+        }
+        if ([targetAppPct, targetConfPct, targetPresPct, targetClosePct].some(v => v < 0 || v > 100)) {
+            setError('Le percentuali devono essere tra 0 e 100');
             return;
         }
         startTransition(async () => {
@@ -768,6 +776,10 @@ function MetricsTargetModal({
                 targetCloseMonthly: targetClose,
                 targetFatturatoMonthly: targetFatturato,
                 fatturatoExtraEur: fatturatoExtra,
+                targetAppPct,
+                targetConfPct,
+                targetPresPct,
+                targetClosePct,
             });
             if (res.success) onSaved();
             else setError(res.error || 'Errore salvataggio');
@@ -792,17 +804,18 @@ function MetricsTargetModal({
 
                 <div className="px-6 py-5 space-y-5">
                     <div>
-                        <div className="text-[11px] uppercase tracking-wider text-ash-500 font-bold mb-2">Target assoluti del mese</div>
+                        <div className="text-[11px] uppercase tracking-wider text-ash-500 font-bold mb-2">Target del mese — numero + % conversione</div>
                         <div className="text-[11px] text-ash-500 mb-3">
-                            Vengono divisi per i giorni lavorativi per ottenere il target/giorno e moltiplicati per i giorni trascorsi per il Target Prev.
-                            Le percentuali della tabella sono calcolate automaticamente.
+                            Numero assoluto: usato per Target Prev (pro-rata sui giorni trascorsi) e Target/Day.
+                            % conversione: la colonna &quot;Target Prev %&quot; in tabella. Lascia a 0 per fallback automatico
+                            sulle percentuali a cascata derivate dai numeri assoluti.
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <LabeledInput label="Appuntamenti fissati" value={targetApp} onChange={setTargetApp} step={0.01} />
-                            <LabeledInput label="Confermati" value={targetConf} onChange={setTargetConf} step={0.01} />
-                            <LabeledInput label="Presenziati" value={targetPres} onChange={setTargetPres} step={0.01} />
-                            <LabeledInput label="Closed" value={targetClose} onChange={setTargetClose} step={0.01} />
-                            <div className="col-span-2">
+                        <div className="space-y-2">
+                            <PairedTargetRow label="Appuntamenti fissati" abs={targetApp} pct={targetAppPct} onAbs={setTargetApp} onPct={setTargetAppPct} />
+                            <PairedTargetRow label="Confermati" abs={targetConf} pct={targetConfPct} onAbs={setTargetConf} onPct={setTargetConfPct} />
+                            <PairedTargetRow label="Presenziati" abs={targetPres} pct={targetPresPct} onAbs={setTargetPres} onPct={setTargetPresPct} />
+                            <PairedTargetRow label="Closed" abs={targetClose} pct={targetClosePct} onAbs={setTargetClose} onPct={setTargetClosePct} />
+                            <div className="pt-1">
                                 <LabeledInput label="Valore contratti (€)" value={targetFatturato} onChange={setTargetFatturato} step={1} />
                             </div>
                         </div>
@@ -838,6 +851,54 @@ function MetricsTargetModal({
                     >
                         {isPending ? 'Salvataggio...' : 'Salva'}
                     </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PairedTargetRow({
+    label, abs, pct, onAbs, onPct,
+}: {
+    label: string;
+    abs: number;
+    pct: number;
+    onAbs: (v: number) => void;
+    onPct: (v: number) => void;
+}) {
+    return (
+        <div className="grid grid-cols-[1fr_110px_110px] items-center gap-2">
+            <label className="text-xs font-semibold text-ash-700">{label}</label>
+            <div>
+                <div className="text-[9px] uppercase tracking-wider text-ash-400 font-bold mb-0.5">N° mensile</div>
+                <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={abs}
+                    onChange={(e) => {
+                        const v = parseFloat(e.target.value || '0');
+                        onAbs(isNaN(v) ? 0 : v);
+                    }}
+                    className="w-full px-2 py-1.5 rounded-lg border border-ash-200 text-sm text-ash-800 outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange/20 tabular-nums"
+                />
+            </div>
+            <div>
+                <div className="text-[9px] uppercase tracking-wider text-ash-400 font-bold mb-0.5">% target</div>
+                <div className="relative">
+                    <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        value={pct}
+                        onChange={(e) => {
+                            const v = parseFloat(e.target.value || '0');
+                            onPct(isNaN(v) ? 0 : v);
+                        }}
+                        className="w-full pl-2 pr-6 py-1.5 rounded-lg border border-ash-200 text-sm text-ash-800 outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange/20 tabular-nums"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ash-400 pointer-events-none">%</span>
                 </div>
             </div>
         </div>

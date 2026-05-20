@@ -264,6 +264,10 @@ export async function setMonthlyMetricTargets(input: {
     targetCloseMonthly: number;
     targetFatturatoMonthly: number;
     fatturatoExtraEur: number;
+    targetAppPct: number;
+    targetConfPct: number;
+    targetPresPct: number;
+    targetClosePct: number;
 }) {
     try {
         const admin = await requireAdmin();
@@ -275,6 +279,10 @@ export async function setMonthlyMetricTargets(input: {
         if ([input.targetAppMonthly, input.targetConfMonthly, input.targetPresMonthly,
              input.targetCloseMonthly, input.targetFatturatoMonthly].some(v => v < 0)) {
             return { success: false, error: 'I target non possono essere negativi' };
+        }
+        if ([input.targetAppPct, input.targetConfPct, input.targetPresPct, input.targetClosePct]
+            .some(v => v < 0 || v > 100)) {
+            return { success: false, error: 'Le percentuali devono essere tra 0 e 100' };
         }
 
         const [existing] = await db.select().from(monthlyLeadTargets)
@@ -290,6 +298,10 @@ export async function setMonthlyMetricTargets(input: {
                 targetCloseMonthly: input.targetCloseMonthly,
                 targetFatturatoMonthly: input.targetFatturatoMonthly,
                 fatturatoExtraEur: input.fatturatoExtraEur,
+                targetAppPct: input.targetAppPct,
+                targetConfPct: input.targetConfPct,
+                targetPresPct: input.targetPresPct,
+                targetClosePct: input.targetClosePct,
                 updatedAt: now,
             }).where(eq(monthlyLeadTargets.id, existing.id));
         } else {
@@ -308,6 +320,10 @@ export async function setMonthlyMetricTargets(input: {
                 targetCloseMonthly: input.targetCloseMonthly,
                 targetFatturatoMonthly: input.targetFatturatoMonthly,
                 fatturatoExtraEur: input.fatturatoExtraEur,
+                targetAppPct: input.targetAppPct,
+                targetConfPct: input.targetConfPct,
+                targetPresPct: input.targetPresPct,
+                targetClosePct: input.targetClosePct,
                 createdAt: now,
                 updatedAt: now,
             });
@@ -359,6 +375,10 @@ export type MetricsOverviewResult =
               targetCloseMonthly: number;
               targetFatturatoMonthly: number;
               fatturatoExtraEur: number;
+              targetAppPct: number;
+              targetConfPct: number;
+              targetPresPct: number;
+              targetClosePct: number;
           } | null;
           rows: MetricsOverviewRow[];
           trattativeSuLeadPct: number | null;
@@ -506,9 +526,17 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
             return d > 0 ? (n / d) * 100 : null;
         }
 
-        // Target percentages are FIXED monthly ratios: each stage's target divided
-        // by the previous stage's target. They don't vary with elapsed days or actual data.
+        // Target percentages a cascata (fallback se non c'è valore manuale).
         const targetLeadMonthly = cfg ? cfg.targetNuovi + cfg.targetDatabase : 0;
+        // Se il manager imposta una % manuale (> 0) la usiamo, altrimenti fallback
+        // alla % a cascata calcolata dai target assoluti.
+        const pickPct = (manual: number, cascadeN: number, cascadeD: number): number | null =>
+            manual > 0 ? manual : safeDiv(cascadeN, cascadeD);
+
+        const targetAppPct = cfg?.targetAppPct || 0;
+        const targetConfPct = cfg?.targetConfPct || 0;
+        const targetPresPct = cfg?.targetPresPct || 0;
+        const targetClosePct = cfg?.targetClosePct || 0;
 
         const rows: MetricsOverviewRow[] = [
             {
@@ -516,7 +544,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 actCount: actApp,
                 actPct: safeDiv(actApp, actLead),
                 targetPrevCount: Math.round(targetPrevApp),
-                targetPrevPct: safeDiv(targetAppMonthly, targetLeadMonthly),
+                targetPrevPct: pickPct(targetAppPct, targetAppMonthly, targetLeadMonthly),
                 targetPerDay: targetPerDayApp,
                 today: todayApp,
             },
@@ -525,7 +553,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 actCount: actConf,
                 actPct: safeDiv(actConf, actApp),
                 targetPrevCount: Math.round(targetPrevConf),
-                targetPrevPct: safeDiv(targetConfMonthly, targetAppMonthly),
+                targetPrevPct: pickPct(targetConfPct, targetConfMonthly, targetAppMonthly),
                 targetPerDay: targetPerDayConf,
                 today: todayConf,
             },
@@ -534,7 +562,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 actCount: actPres,
                 actPct: safeDiv(actPres, actConf),
                 targetPrevCount: Math.round(targetPrevPres),
-                targetPrevPct: safeDiv(targetPresMonthly, targetConfMonthly),
+                targetPrevPct: pickPct(targetPresPct, targetPresMonthly, targetConfMonthly),
                 targetPerDay: targetPerDayPres,
                 today: todayPres,
             },
@@ -543,7 +571,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 actCount: actClose,
                 actPct: safeDiv(actClose, actPres),
                 targetPrevCount: Math.round(targetPrevClose),
-                targetPrevPct: safeDiv(targetCloseMonthly, targetPresMonthly),
+                targetPrevPct: pickPct(targetClosePct, targetCloseMonthly, targetPresMonthly),
                 targetPerDay: targetPerDayClose,
                 today: todayClose,
             },
@@ -574,6 +602,10 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 targetCloseMonthly,
                 targetFatturatoMonthly,
                 fatturatoExtraEur: cfg.fatturatoExtraEur || 0,
+                targetAppPct,
+                targetConfPct,
+                targetPresPct,
+                targetClosePct,
             } : null,
             rows,
             trattativeSuLeadPct,

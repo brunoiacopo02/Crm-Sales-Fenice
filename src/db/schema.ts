@@ -631,6 +631,13 @@ export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     targetPresMonthly: real('targetPresMonthly').default(0).notNull(),
     targetCloseMonthly: real('targetCloseMonthly').default(0).notNull(),
     targetFatturatoMonthly: real('targetFatturatoMonthly').default(0).notNull(),
+    // Target percentuali manuali (% conversione di tappa). Se > 0 sovrascrivono
+    // le percentuali a cascata calcolate in getMetricsOverview; se 0 fallback su
+    // cascata (targetConfMonthly / targetAppMonthly, ecc.).
+    targetAppPct: real('targetAppPct').default(0).notNull(),
+    targetConfPct: real('targetConfPct').default(0).notNull(),
+    targetPresPct: real('targetPresPct').default(0).notNull(),
+    targetClosePct: real('targetClosePct').default(0).notNull(),
     // Extra offsets: difference between the Excel "Numeri Mensili" totals and the
     // per-funnel delta sums. Added on top of funnel totals in getMetricsOverview.
     appExtra: integer('appExtra').default(0).notNull(),
