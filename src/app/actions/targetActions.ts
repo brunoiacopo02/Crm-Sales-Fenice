@@ -320,9 +320,12 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
             bucket.totale++;
         }
 
-        // App Fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy)
+        // App Fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy).
+        // Gate su apptSetAt (non su lead.appointmentDate corrente), perché il flow di reschedule
+        // delle Conferme azzera appointmentDate ma lascia appointmentCreatedAt — il fissaggio storico
+        // resta valido.
         const apptSetAt = lead.appointmentCreatedAt || lead.appointmentDate;
-        if (lead.appointmentDate && inMonth(apptSetAt)) {
+        if (apptSetAt && inMonth(apptSetAt)) {
             actAppsFissati++;
             bucket.fissati++;
             if (inToday(lead.appointmentCreatedAt)) {

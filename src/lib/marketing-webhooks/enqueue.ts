@@ -5,6 +5,7 @@ import { leads, users, marketingWebhookDeliveries } from '@/db/schema';
 import { deliverWebhook, nextAttemptDelay } from './deliver';
 import {
     buildAppointmentSet,
+    buildAppointmentRescheduled,
     buildAppointmentOutcome,
     buildDealAssigned,
     buildDealClosedWon,
@@ -17,6 +18,10 @@ export interface EnqueueInput {
     leadId: string;
     actorUserId?: string | null;
     occurredAt?: Date;
+    // Solo per appointment.rescheduled: dati del vecchio e nuovo appuntamento.
+    // Senza questi, lo switch lancia per il tipo rescheduled.
+    previousAppointmentDate?: Date;
+    newAppointmentDate?: Date;
 }
 
 /**
@@ -54,6 +59,17 @@ export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<void
     let envelope: MarketingWebhookEnvelope;
     switch (input.eventType) {
         case 'appointment.set':       envelope = buildAppointmentSet(ctx); break;
+        case 'appointment.rescheduled':
+            if (!input.previousAppointmentDate || !input.newAppointmentDate) {
+                console.error(`[marketing-webhooks] appointment.rescheduled requires previousAppointmentDate and newAppointmentDate`);
+                return;
+            }
+            envelope = buildAppointmentRescheduled({
+                ...ctx,
+                previousAppointmentDate: input.previousAppointmentDate,
+                newAppointmentDate: input.newAppointmentDate,
+            });
+            break;
         case 'appointment.outcome':   envelope = buildAppointmentOutcome(ctx); break;
         case 'deal.assigned':         envelope = buildDealAssigned(ctx); break;
         case 'deal.closed_won':       envelope = buildDealClosedWon(ctx); break;

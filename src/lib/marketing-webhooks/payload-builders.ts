@@ -7,6 +7,7 @@ import type {
     LeadEnvelope,
     ActorRef,
     AppointmentSetData,
+    AppointmentRescheduledData,
     AppointmentOutcomeData,
     DealAssignedData,
     DealClosedWonData,
@@ -45,6 +46,32 @@ export function deterministicEventId(
     const seed = `${eventType}|${leadId}|${bucket}`;
     const hash = crypto.createHash('sha256').update(seed).digest('hex');
     return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+export interface RescheduleContext {
+    lead: Lead;
+    actor?: Pick<User, 'id' | 'displayName' | 'name' | 'role'> | null;
+    occurredAt?: Date;
+    previousAppointmentDate: Date;
+    newAppointmentDate: Date;
+}
+
+export function buildAppointmentRescheduled(ctx: RescheduleContext): MarketingWebhookEnvelope {
+    const { lead, actor, occurredAt = new Date(), previousAppointmentDate, newAppointmentDate } = ctx;
+    const data: AppointmentRescheduledData = {
+        previousAppointmentDate: previousAppointmentDate.toISOString(),
+        newAppointmentDate: newAppointmentDate.toISOString(),
+        rescheduledAt: occurredAt.toISOString(),
+        rescheduledBy: actorFromUser(actor),
+    };
+    return {
+        eventId: deterministicEventId('appointment.rescheduled', lead.id, occurredAt),
+        eventType: 'appointment.rescheduled',
+        occurredAt: occurredAt.toISOString(),
+        apiVersion: '1',
+        lead: leadEnvelope(lead),
+        data,
+    };
 }
 
 function actorFromUser(u: Pick<User, 'id' | 'displayName' | 'name' | 'role'> | null | undefined): ActorRef | null {

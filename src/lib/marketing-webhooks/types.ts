@@ -3,6 +3,7 @@
 
 export type MarketingEventType =
     | 'appointment.set'
+    | 'appointment.rescheduled'
     | 'appointment.outcome'
     | 'deal.assigned'
     | 'deal.closed_won'
@@ -10,6 +11,7 @@ export type MarketingEventType =
 
 export const ALL_EVENT_TYPES: MarketingEventType[] = [
     'appointment.set',
+    'appointment.rescheduled',
     'appointment.outcome',
     'deal.assigned',
     'deal.closed_won',
@@ -55,6 +57,13 @@ export interface AppointmentSetData {
     setBy: ActorRef | null;
 }
 
+export interface AppointmentRescheduledData {
+    previousAppointmentDate: string;
+    newAppointmentDate: string;
+    rescheduledAt: string;
+    rescheduledBy: ActorRef | null;
+}
+
 export interface AppointmentOutcomeData {
     status: 'CONFERMATO' | 'NON_CONFERMATO' | 'DA_RIFISSARE';
     rawOutcome: string;
@@ -87,6 +96,7 @@ export interface DealClosedLostData {
 
 export type EventData =
     | AppointmentSetData
+    | AppointmentRescheduledData
     | AppointmentOutcomeData
     | DealAssignedData
     | DealClosedWonData

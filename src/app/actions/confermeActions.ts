@@ -292,6 +292,18 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
 
     // Marketing webhook: emit appointment.set only if the appointment date actually changed
     if (oldLead.appointmentDate?.getTime() !== data.appointmentDate?.getTime()) {
+        // Se stiamo SPOSTANDO un appuntamento esistente (entrambe le date valorizzate),
+        // emettiamo prima un appointment.rescheduled così il marketing chiude il vecchio
+        // record SET invece di creare un secondo record orfano.
+        if (oldLead.appointmentDate && data.appointmentDate) {
+            await enqueueMarketingWebhook({
+                eventType: 'appointment.rescheduled',
+                leadId,
+                actorUserId: session.user.id,
+                previousAppointmentDate: oldLead.appointmentDate,
+                newAppointmentDate: data.appointmentDate,
+            }).catch((e: unknown) => console.error("Marketing webhook (appointment.rescheduled) err:", e));
+        }
         await enqueueMarketingWebhook({
             eventType: 'appointment.set',
             leadId,
@@ -837,6 +849,17 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
         // (skip when needsReschedule clears the date — that's not a "set")
         if (!payload.needsReschedule && payload.newAppointmentDate
             && oldApptDate?.getTime() !== payload.newAppointmentDate.getTime()) {
+            // Se esiste una vecchia data (riprogrammazione vera), prima notifichiamo
+            // il rescheduled così marketing chiude il vecchio record.
+            if (oldApptDate) {
+                await enqueueMarketingWebhook({
+                    eventType: 'appointment.rescheduled',
+                    leadId,
+                    actorUserId: session.user.id,
+                    previousAppointmentDate: oldApptDate,
+                    newAppointmentDate: payload.newAppointmentDate,
+                }).catch((e: unknown) => console.error("Marketing webhook (appointment.rescheduled) err:", e));
+            }
             await enqueueMarketingWebhook({
                 eventType: 'appointment.set',
                 leadId,

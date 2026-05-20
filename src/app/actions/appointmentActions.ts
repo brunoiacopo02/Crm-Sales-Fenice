@@ -78,7 +78,18 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
         return { success: false, error: 'CONCURRENCY_ERROR' };
     }
 
-    // Marketing webhook: appointment rescheduled by GDO
+    // Marketing webhook: appointment rescheduled by GDO.
+    // Se c'era già una data precedente, prima notifichiamo il rescheduled così
+    // il marketing chiude il vecchio record SET invece di crearne uno orfano.
+    if (lead.appointmentDate && lead.appointmentDate.getTime() !== dateObj.getTime()) {
+        await enqueueMarketingWebhook({
+            eventType: 'appointment.rescheduled',
+            leadId,
+            actorUserId: supabaseUser.id,
+            previousAppointmentDate: lead.appointmentDate,
+            newAppointmentDate: dateObj,
+        }).catch((e: unknown) => console.error("Marketing webhook (appointment.rescheduled) err:", e));
+    }
     await enqueueMarketingWebhook({
         eventType: 'appointment.set',
         leadId,
