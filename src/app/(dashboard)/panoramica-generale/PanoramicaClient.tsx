@@ -644,7 +644,7 @@ function MetricsSection({ data, onRefresh }: { data: MetricsOverviewResult; onRe
         );
     }
 
-    const { yearMonth, rows, trattativeSuLeadPct, workingDays, workingDaysElapsed, isConfigured, config } = data;
+    const { yearMonth, rows, trattativeSuLeadPct, aovEur, workingDays, workingDaysElapsed, isConfigured, config } = data;
 
     return (
         <div className="rounded-xl border border-ash-200 bg-white shadow-sm overflow-hidden">
@@ -716,6 +716,15 @@ function MetricsSection({ data, onRefresh }: { data: MetricsOverviewResult; onRe
                     {trattativeSuLeadPct !== null ? fmtPct(trattativeSuLeadPct) : '—'}
                 </span>
                 <span className="text-ash-400">— % leads che sono arrivati almeno all'appuntamento presenziato</span>
+            </div>
+
+            {/* AOV — valore medio per contratto */}
+            <div className="px-5 py-3 border-t border-ash-200 bg-ash-50/50 flex items-center gap-3 text-xs">
+                <span className="text-ash-600 font-semibold uppercase tracking-wider">AOV</span>
+                <span className="font-bold text-ash-800 tabular-nums">
+                    {aovEur !== null ? fmtEur(aovEur) : '—'}
+                </span>
+                <span className="text-ash-400">— valore medio per contratto (Valore Contratti ÷ Closed)</span>
             </div>
 
             {modalOpen && (

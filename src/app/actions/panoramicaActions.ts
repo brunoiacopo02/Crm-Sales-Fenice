@@ -382,6 +382,7 @@ export type MetricsOverviewResult =
           } | null;
           rows: MetricsOverviewRow[];
           trattativeSuLeadPct: number | null;
+          aovEur: number | null;
       }
     | { success: false; error: string };
 
@@ -595,6 +596,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         ];
 
         const trattativeSuLeadPct = safeDiv(actPres, actLead);
+        const aovEur = actClose > 0 ? actValore / actClose : null;
 
         return {
             success: true,
@@ -616,6 +618,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
             } : null,
             rows,
             trattativeSuLeadPct,
+            aovEur,
         };
     } catch (error: any) {
         console.error('Errore getMetricsOverview:', error);
