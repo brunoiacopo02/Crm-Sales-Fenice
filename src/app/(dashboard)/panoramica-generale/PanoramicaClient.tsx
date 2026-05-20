@@ -173,9 +173,6 @@ export function PanoramicaClient({
                 </div>
             </div>
 
-            {/* Funnel table */}
-            <FunnelSection data={funnelData} onRefresh={refresh} />
-
             {/* Monthly metrics rollup */}
             <MetricsSection data={metricsData} onRefresh={refresh} />
 

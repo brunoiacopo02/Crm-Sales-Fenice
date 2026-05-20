@@ -414,18 +414,21 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         // 4) TODAY counts — live from leads table, Europe/Rome midnight bounds
         const { start: todayStart, end: todayEnd } = todayBoundsRome();
 
-        // TODAY counts: APP uses appointmentCreatedAt, Conferme uses confirmationsTimestamp,
-        // Presenziati/Close/Valore use appointmentDate (the date of the meeting, not when
-        // the outcome was logged — a lead esitato today for an appointment of yesterday
-        // counts as yesterday's presenziato, not today's).
+        // TODAY counts:
+        //  - APP: appointmentCreatedAt = oggi (fissaggi GDO eseguiti oggi per giorni futuri)
+        //  - Conferme: appointmentDate = oggi AND confirmationsOutcome = 'confermato'
+        //    (gli appuntamenti che il team Conferme deve sciogliere oggi)
+        //  - Presenziati/Close/Valore: appointmentDate = oggi
+        //    (il meeting è di oggi; un'esitazione fatta oggi su un meeting di ieri
+        //    conta come presenziato/chiuso di ieri).
         const [appToday, confToday, presToday, closeToday, valoreTodayRows] = await Promise.all([
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 gte(leads.appointmentCreatedAt, todayStart),
                 lt(leads.appointmentCreatedAt, todayEnd),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
-                gte(leads.confirmationsTimestamp, todayStart),
-                lt(leads.confirmationsTimestamp, todayEnd),
+                gte(leads.appointmentDate, todayStart),
+                lt(leads.appointmentDate, todayEnd),
                 eq(leads.confirmationsOutcome, 'confermato'),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(

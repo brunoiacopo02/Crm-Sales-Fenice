@@ -2,7 +2,6 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { getLeadOverview, getFunnelOverview, getMetricsOverview } from "@/app/actions/panoramicaActions";
 import { PanoramicaClient } from "./PanoramicaClient";
-import { SalesManagerSections } from "./SalesManagerSections";
 
 export default async function PanoramicaGeneralePage() {
     const supabase = await createClient();
@@ -31,7 +30,7 @@ export default async function PanoramicaGeneralePage() {
                         Sales Manager
                     </h1>
                     <p className="text-sm text-ash-500 mt-0.5">
-                        Panoramica completa: caricamento lead, funnel, performance venditori, ROAS, pipeline.
+                        Previsioni lead e numeri mensili del mese in corso.
                     </p>
                 </div>
             </div>
@@ -41,8 +40,6 @@ export default async function PanoramicaGeneralePage() {
                 initialFunnelData={funnelOverview}
                 initialMetricsData={metricsOverview}
             />
-
-            <SalesManagerSections />
         </div>
     );
 }
