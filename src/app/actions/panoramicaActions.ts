@@ -434,13 +434,14 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         // 4) TODAY counts — live from leads table, Europe/Rome midnight bounds
         const { start: todayStart, end: todayEnd } = todayBoundsRome();
 
-        // TODAY counts:
+        // TODAY counts (semantica: "cosa stiamo facendo oggi"):
         //  - APP: appointmentCreatedAt = oggi (fissaggi GDO eseguiti oggi per giorni futuri)
         //  - Conferme: appointmentDate = oggi AND confirmationsOutcome = 'confermato'
         //    (gli appuntamenti che il team Conferme deve sciogliere oggi)
-        //  - Presenziati/Close/Valore: appointmentDate = oggi
-        //    (il meeting è di oggi; un'esitazione fatta oggi su un meeting di ieri
-        //    conta come presenziato/chiuso di ieri).
+        //  - Presenziati: appointmentDate = oggi (il meeting è fisicamente di oggi)
+        //  - Close/Valore: salespersonOutcomeAt = oggi (la chiusura è stata fatta
+        //    oggi, indipendentemente da quando era l'appuntamento — il venditore
+        //    può chiudere oggi un deal il cui meeting era ieri).
         const [appToday, confToday, presToday, closeToday, valoreTodayRows] = await Promise.all([
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 gte(leads.appointmentCreatedAt, todayStart),
@@ -457,17 +458,15 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
                 sql`${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')`,
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
-                gte(leads.appointmentDate, todayStart),
-                lt(leads.appointmentDate, todayEnd),
+                gte(leads.salespersonOutcomeAt, todayStart),
+                lt(leads.salespersonOutcomeAt, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
             )),
             db.select({
                 s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
             }).from(leads).where(and(
-                // Per coerenza con closeToday/presToday che usano appointmentDate
-                // (semantica "today = meeting di oggi") il valore today usa lo stesso campo.
-                gte(leads.appointmentDate, todayStart),
-                lt(leads.appointmentDate, todayEnd),
+                gte(leads.salespersonOutcomeAt, todayStart),
+                lt(leads.salespersonOutcomeAt, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
             )),
         ]);
