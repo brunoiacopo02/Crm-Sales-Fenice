@@ -412,13 +412,18 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
 
         const ym = yearMonth || currentYearMonthRome();
 
-        // 1) Re-use funnel overview to get totals — keeps the new table perfectly
-        //    coherent with the "Funnel Overview" table above it (Bruno's requirement).
+        // 1) Re-use funnel overview to get APP/Conf/Trat/Close totals (per stage).
         const funnelOverview = await getFunnelOverview(ym);
         if (!funnelOverview.success) {
             return { success: false, error: funnelOverview.error };
         }
         const { totals } = funnelOverview;
+
+        // Il totale lead per la % ACT deve essere quello mostrato nella tabella
+        // "Caricamento Lead" sopra (baseline + lead caricati nel mese), non il
+        // conteggio funnel — così le due tabelle restano coerenti.
+        const leadOverview = await getLeadOverview(ym);
+        const actLeadFromOverview = leadOverview.success ? leadOverview.totals.actCount : 0;
 
         // 2) Fetch target config
         const [cfg] = await db.select().from(monthlyLeadTargets)
@@ -477,8 +482,11 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         const todayClose = closeToday[0]?.c || 0;
         const todayValore = Number(valoreTodayRows[0]?.s || 0);
 
-        // 5) ACT — from funnel overview totals + revenue from live CRM
-        const actLead = totals.leadCount;
+        // 5) ACT — from funnel overview totals + revenue from live CRM.
+        //    actLead = totale della tabella "Caricamento Lead" (baseline + live),
+        //    NON totals.leadCount del funnel — così la % ACT Fissati matcha
+        //    esattamente il numero che il manager vede nella tabella sopra.
+        const actLead = actLeadFromOverview;
         // Funnel table totals + extra offsets (for when the Excel "Numeri Mensili"
         // totals don't match the per-funnel delta sums)
         const actApp = totals.appCount + (cfg?.appExtra || 0);
