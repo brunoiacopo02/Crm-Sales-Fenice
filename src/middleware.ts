@@ -41,24 +41,40 @@ export async function middleware(request: NextRequest) {
     );
 
     let user = null;
+    let timedOut = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-        const { data } = await supabase.auth.getUser();
-        user = data?.user;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                timedOut = true;
+                reject(new Error('SUPABASE_AUTH_TIMEOUT'));
+            }, 3000);
+        });
+        const result = await Promise.race([supabase.auth.getUser(), timeoutPromise]);
+        user = result.data?.user;
     } catch {
-        // Supabase token refresh crash — clear bad cookies and redirect to login
+        // Two failure modes:
+        //  - timedOut === true: upstream Supabase blip (UND_ERR_CONNECT_TIMEOUT, etc).
+        //    Redirect to /login WITHOUT clearing cookies so the user is logged back in
+        //    on the next request once Supabase recovers — a transient outage must not
+        //    mass-logout everyone.
+        //  - timedOut === false: token refresh crash / parse error. Clear cookies.
         if (!request.nextUrl.pathname.startsWith('/login')) {
             const url = request.nextUrl.clone();
             url.pathname = '/login';
             const response = NextResponse.redirect(url);
-            // Clear auth cookies to force fresh login
-            request.cookies.getAll().forEach(c => {
-                if (c.name.includes('auth-token')) {
-                    response.cookies.delete(c.name);
-                }
-            });
+            if (!timedOut) {
+                request.cookies.getAll().forEach(c => {
+                    if (c.name.includes('auth-token')) {
+                        response.cookies.delete(c.name);
+                    }
+                });
+            }
             return response;
         }
         return supabaseResponse;
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
     }
 
     if (!user && !request.nextUrl.pathname.startsWith('/login')) {
