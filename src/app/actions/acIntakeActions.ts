@@ -4,15 +4,18 @@ import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
 import { eq, and, desc, isNull, gte } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
+import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 
-async function requireManager() {
+async function requireManager(): Promise<{ id: string; role: string; ctx: TenantContext }> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const role = user?.user_metadata?.role as string | undefined;
     if (!user || !role || !["MANAGER", "ADMIN"].includes(role)) {
         throw new Error("Unauthorized");
     }
-    return { id: user.id, role };
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    return { id: user.id, role, ctx };
 }
 
 // ============ UI: list + toggle ============
@@ -27,7 +30,7 @@ export interface GdoAcIntakeRow {
 }
 
 export async function listGdosForAcIntake(): Promise<GdoAcIntakeRow[]> {
-    await requireManager();
+    const { ctx } = await requireManager();
     const rows = await db.select({
         id: users.id,
         gdoCode: users.gdoCode,
@@ -36,14 +39,15 @@ export async function listGdosForAcIntake(): Promise<GdoAcIntakeRow[]> {
         isActive: users.isActive,
         acAutoIntake: users.acAutoIntake,
         acLastAssignedAt: users.acLastAssignedAt,
-    }).from(users).where(eq(users.role, 'GDO'));
+    }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')));
     return rows.sort((a, b) => (a.gdoCode ?? 9999) - (b.gdoCode ?? 9999));
 }
 
 export async function setGdoAcIntake(gdoUserId: string, enabled: boolean): Promise<{ success: boolean; error?: string }> {
     try {
-        await requireManager();
+        const { ctx } = await requireManager();
         await db.update(users).set({ acAutoIntake: enabled }).where(and(
+            eq(users.companyId, ctx.companyId),
             eq(users.id, gdoUserId),
             eq(users.role, 'GDO'),
         ));
@@ -55,8 +59,11 @@ export async function setGdoAcIntake(gdoUserId: string, enabled: boolean): Promi
 
 export async function disableAllAcIntake(): Promise<{ success: boolean; error?: string }> {
     try {
-        await requireManager();
-        await db.update(users).set({ acAutoIntake: false }).where(eq(users.role, 'GDO'));
+        const { ctx } = await requireManager();
+        await db.update(users).set({ acAutoIntake: false }).where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.role, 'GDO'),
+        ));
         return { success: true };
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -187,9 +194,12 @@ function extractPayloadField(payload: unknown, keys: string[]): string | null {
 }
 
 export async function listAcFailures(onlyUnresolved: boolean = true): Promise<AcFailureRow[]> {
-    await requireManager();
+    const { ctx } = await requireManager();
+    const whereClause = onlyUnresolved
+        ? and(eq(acIntakeFailures.companyId, ctx.companyId), isNull(acIntakeFailures.resolvedAt))
+        : eq(acIntakeFailures.companyId, ctx.companyId);
     const rows = await db.select().from(acIntakeFailures)
-        .where(onlyUnresolved ? isNull(acIntakeFailures.resolvedAt) : undefined as any)
+        .where(whereClause)
         .orderBy(desc(acIntakeFailures.createdAt))
         .limit(200);
     return rows.map((r) => {
@@ -221,7 +231,10 @@ export async function resolveAcFailure(id: string): Promise<{ success: boolean; 
         await db.update(acIntakeFailures).set({
             resolvedAt: new Date(),
             resolvedBy: session.id,
-        }).where(eq(acIntakeFailures.id, id));
+        }).where(and(
+            eq(acIntakeFailures.companyId, session.ctx.companyId),
+            eq(acIntakeFailures.id, id),
+        ));
         return { success: true };
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -235,7 +248,10 @@ export async function resolveAcFailure(id: string): Promise<{ success: boolean; 
 export async function retryAcFailure(id: string): Promise<{ success: boolean; error?: string; leadId?: string }> {
     try {
         const session = await requireManager();
-        const [row] = await db.select().from(acIntakeFailures).where(eq(acIntakeFailures.id, id));
+        const [row] = await db.select().from(acIntakeFailures).where(and(
+            eq(acIntakeFailures.companyId, session.ctx.companyId),
+            eq(acIntakeFailures.id, id),
+        ));
         if (!row) return { success: false, error: 'Failure non trovata' };
         if (!row.acContactId) return { success: false, error: 'Nessun contact id associato — non si può riprovare' };
         if (!WEBHOOK_SECRET) return { success: false, error: 'Webhook secret non configurato' };
@@ -255,7 +271,10 @@ export async function retryAcFailure(id: string): Promise<{ success: boolean; er
         await db.update(acIntakeFailures).set({
             resolvedAt: new Date(),
             resolvedBy: session.id,
-        }).where(eq(acIntakeFailures.id, id));
+        }).where(and(
+            eq(acIntakeFailures.companyId, session.ctx.companyId),
+            eq(acIntakeFailures.id, id),
+        ));
         return { success: true, leadId: data.leadId };
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -283,13 +302,14 @@ export interface AcIntakeStats {
  * giorno). Nessuno storico persistito.
  */
 export async function getAcIntakeStats(): Promise<AcIntakeStats> {
-    await requireManager();
+    const { ctx } = await requireManager();
 
     const since = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
     const rows = await db.select({
         createdAt: leads.createdAt,
         assignedToId: leads.assignedToId,
     }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
         eq(leads.source, 'activecampaign'),
         gte(leads.createdAt, since),
     ));
