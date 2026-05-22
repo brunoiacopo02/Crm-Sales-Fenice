@@ -27,6 +27,12 @@ const WEBHOOK_SECRET = process.env.ACTIVECAMPAIGN_WEBHOOK_SECRET || '';
 const PROVENIENZA_FIELD_ID = '2';
 const DEFAULT_FUNNEL = 'SCONOSCIUTO';
 
+// Tenant fisso per QUESTO endpoint: tutti i lead arrivati qui sono di Fenice.
+// L'AC account è feniceacademy0089903 → ogni subscribe genera un lead Fenice.
+// Per Serenamente esisterà un endpoint separato (/serenamente) con secret e
+// AC account distinti e companyId='serenamente' hardcoded. Vedi design doc §11.
+const FENICE_COMPANY = 'fenice';
+
 // Liste AC da NON importare nel CRM (es. campagne di raccolta lead per
 // lanci futuri: i lead devono restare in AC finché non decidiamo di
 // contattarli). Override via env ACTIVECAMPAIGN_BLOCKED_LIST_NAMES
@@ -178,6 +184,7 @@ async function recordFailure(input: {
         email: input.email ?? null,
         phoneRaw: input.phoneRaw ?? null,
         payload: input.payload,
+        companyId: FENICE_COMPANY,
     });
     await notifyManagersIfNeeded();
 }
@@ -190,13 +197,17 @@ async function recordFailure(input: {
 async function notifyManagersIfNeeded() {
     try {
         const managers = await db.select({ id: users.id }).from(users)
-            .where(sql`${users.role} IN ('MANAGER', 'ADMIN')`);
+            .where(and(
+                eq(users.companyId, FENICE_COMPANY),
+                sql`${users.role} IN ('MANAGER', 'ADMIN')`,
+            ));
         if (managers.length === 0) return;
 
         const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
         for (const m of managers) {
             const [recent] = await db.select({ id: notifications.id }).from(notifications)
                 .where(and(
+                    eq(notifications.companyId, FENICE_COMPANY),
                     eq(notifications.recipientUserId, m.id),
                     eq(notifications.type, 'ac_intake_failure_digest'),
                     gte(notifications.createdAt, tenMinAgo),
@@ -210,6 +221,7 @@ async function notifyManagersIfNeeded() {
                 title: 'Lead AC non importato',
                 body: 'Uno o più lead AC non sono stati importati. Apri Lead Automatici per vederli e decidere come gestirli.',
                 metadata: { link: '/lead-automatici' },
+                companyId: FENICE_COMPANY,
             });
         }
     } catch (e) {
@@ -319,7 +331,9 @@ export async function POST(req: NextRequest) {
         // lo ritroviamo via acContactId e aggiorniamo funnel/UTM se cambiati.
         // Questo gestisce il caso: Provenienza settata DOPO il subscribe.
         if (eventType === 'update') {
-            const [existing] = await db.select().from(leads).where(eq(leads.acContactId, contactId)).limit(1);
+            const [existing] = await db.select().from(leads)
+                .where(and(eq(leads.companyId, FENICE_COMPANY), eq(leads.acContactId, contactId)))
+                .limit(1);
             if (!existing) {
                 // Non conosciamo questo contatto: potrebbe essere stato creato fuori dal nostro flow, ignoriamo.
                 return NextResponse.json({ skipped: 'update for unknown contact', acContactId: contactId });
@@ -358,7 +372,11 @@ export async function POST(req: NextRequest) {
             updatePayload.version = existing.version + 1;
             const updated = await db.update(leads)
                 .set(updatePayload)
-                .where(and(eq(leads.id, existing.id), eq(leads.version, existing.version)))
+                .where(and(
+                    eq(leads.companyId, FENICE_COMPANY),
+                    eq(leads.id, existing.id),
+                    eq(leads.version, existing.version),
+                ))
                 .returning({ id: leads.id });
 
             if (updated.length === 0) {
@@ -372,6 +390,7 @@ export async function POST(req: NextRequest) {
                 leadId: existing.id,
                 eventType: 'AC_UPDATED',
                 metadata: { source: 'activecampaign_update', acContactId: contactId, changes },
+                companyId: FENICE_COMPANY,
             });
             return NextResponse.json({ success: true, updatedLeadId: existing.id, changes });
         }
@@ -463,10 +482,13 @@ export async function POST(req: NextRequest) {
             await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${contactId}, 1))`);
 
             // Dedup: stesso contactId O stesso phone negli ultimi 10 min
+            // (scoped al tenant: due aziende possono legittimamente avere lo
+            // stesso numero in funnel separati senza essere "duplicati").
             const [existing] = await tx.select({
                 id: leads.id,
                 assignedToId: leads.assignedToId,
             }).from(leads).where(and(
+                eq(leads.companyId, FENICE_COMPANY),
                 gte(leads.createdAt, dedupCutoff),
                 sql`(${leads.acContactId} = ${contactId} OR ${leads.phone} = ${phoneFinal})`,
             )).orderBy(desc(leads.createdAt)).limit(1);
@@ -475,10 +497,12 @@ export async function POST(req: NextRequest) {
                 return { kind: 'duplicate' as const, existingLeadId: existing.id };
             }
 
-            // Round-robin GDO (dentro la tx: vede l'acLastAssignedAt più aggiornato)
+            // Round-robin GDO Fenice (dentro la tx: vede l'acLastAssignedAt
+            // più aggiornato). I lead Fenice vanno solo ai GDO Fenice.
             const eligible = await tx.select({
                 id: users.id,
             }).from(users).where(and(
+                eq(users.companyId, FENICE_COMPANY),
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true),
                 eq(users.acAutoIntake, true),
@@ -508,6 +532,7 @@ export async function POST(req: NextRequest) {
                 assignedToId: assignedGdoId,
                 createdAt: now,
                 updatedAt: now,
+                companyId: FENICE_COMPANY,
             });
 
             await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
@@ -549,11 +574,13 @@ export async function POST(req: NextRequest) {
                 phoneSuspicious,
                 phoneRaw: phoneSuspicious ? rawPhone : undefined,
             },
+            companyId: FENICE_COMPANY,
         });
         await logLeadEvent({
             leadId: newLeadId,
             eventType: 'ASSIGNED',
             metadata: { assignedToUser: assignedGdoId, source: 'activecampaign' },
+            companyId: FENICE_COMPANY,
         });
 
         // Notifica al GDO: lead caldo appena arrivato, chiamalo subito.
@@ -575,6 +602,7 @@ export async function POST(req: NextRequest) {
                 email,
                 phoneSuspicious,
             },
+            companyId: FENICE_COMPANY,
         });
 
         return NextResponse.json({
