@@ -4,15 +4,18 @@ import { db } from "@/db"
 import { leads, users } from "@/db/schema"
 import { and, eq, isNull, isNotNull, gte, lte, or, asc, inArray } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
+import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 
-async function requireAdminOrManager() {
+async function requireAdminOrManager(): Promise<{ id: string; role: string; ctx: TenantContext }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const role = user?.user_metadata?.role as string | undefined
     if (!user || !role || !["ADMIN", "MANAGER"].includes(role)) {
         throw new Error("Unauthorized")
     }
-    return { id: user.id, role }
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    return { id: user.id, role, ctx }
 }
 
 export interface VenditoreLite {
@@ -54,12 +57,16 @@ export interface VenditoriMonitorData {
 }
 
 export async function listVenditori(): Promise<VenditoreLite[]> {
-    await requireAdminOrManager()
+    const { ctx } = await requireAdminOrManager()
     const rows = await db.select({
         id: users.id,
         name: users.name,
         displayName: users.displayName,
-    }).from(users).where(and(eq(users.role, 'VENDITORE'), eq(users.isActive, true)))
+    }).from(users).where(and(
+        eq(users.companyId, ctx.companyId),
+        eq(users.role, 'VENDITORE'),
+        eq(users.isActive, true),
+    ))
     return rows
         .map(r => ({ id: r.id, name: r.displayName || r.name || 'Venditore' }))
         .sort((a, b) => a.name.localeCompare(b.name, 'it'))
@@ -74,7 +81,7 @@ export async function getVenditoriMonitor(filters: {
     endDate: Date
     venditoreIds: string[]
 }): Promise<VenditoriMonitorData> {
-    await requireAdminOrManager()
+    const { ctx } = await requireAdminOrManager()
 
     const venditori = await listVenditori()
     const targetIds = filters.venditoreIds.length > 0
@@ -99,6 +106,7 @@ export async function getVenditoriMonitor(filters: {
         salespersonOutcome: leads.salespersonOutcome,
         appointmentNote: leads.appointmentNote,
     }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
         isNotNull(leads.appointmentDate),
         isNotNull(leads.salespersonUserId),
         inArray(leads.salespersonUserId, targetIds),
@@ -135,6 +143,7 @@ export async function getVenditoriMonitor(filters: {
         salespersonOutcome: leads.salespersonOutcome,
         salespersonOutcomeNotes: leads.salespersonOutcomeNotes,
     }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
         inArray(leads.salespersonUserId, targetIds),
         isNull(leads.salespersonOutcome),
         or(isNotNull(leads.followUp1Date), isNotNull(leads.followUp2Date))!,

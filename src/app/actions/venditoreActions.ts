@@ -7,9 +7,12 @@ import { leads, users, callLogs, notifications, leadEvents } from "@/db/schema"
 import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 // Gamification disabled for VENDITORE role — import removed
 
 export async function getVenditoreAppointments(sellerId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     // Ritorna i lead assegnati a questo venditore che hanno un appuntamento
     const assignedLeads = await db
         .select({
@@ -37,9 +40,10 @@ export async function getVenditoreAppointments(sellerId: string) {
         })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
-        .where(
-            eq(leads.salespersonUserId, sellerId)
-        )
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.salespersonUserId, sellerId),
+        ))
         .orderBy(desc(leads.appointmentDate))
         
 
@@ -69,7 +73,13 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         throw new Error("Unauthorized")
     }
 
-    const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const oldLead = (await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+    )))[0]
     if (!oldLead) throw new Error("Lead non trovato")
 
     // Optimistic locking check
@@ -89,7 +99,11 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             salespersonOutcomeAt: payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date(),
             version: oldLead.version + 1,
         })
-        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
         .returning({ id: leads.id })
 
     if (updated.length === 0) {
@@ -114,7 +128,8 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         eventType: "salesperson_outcome_set",
         userId: session.user.id,
         timestamp: new Date(),
-        metadata: payload
+        metadata: payload,
+        companyId: ctx.companyId,
     })
 
     // 2. Propagazione Notifiche Live a GDO e Conferme
@@ -137,7 +152,8 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             body: notifyBody,
             metadata: { leadId },
             status: 'unread',
-            createdAt: new Date()
+            createdAt: new Date(),
+            companyId: ctx.companyId,
         })
     }
 
