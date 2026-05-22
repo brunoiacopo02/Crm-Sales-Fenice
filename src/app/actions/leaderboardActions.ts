@@ -5,12 +5,16 @@ import { users, leads, notifications, shopItems, callLogs } from "@/db/schema"
 import { eq, and, ne, gte, lte, desc, desc as drizzleDesc, count, isNotNull, sql } from "drizzle-orm"
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
 import crypto from "crypto"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export type LeaderboardPeriod = 'today' | 'week' | 'month'
 export type LeaderboardMetric = 'appointments' | 'calls' | 'xp' | 'streak'
 export type LeaderboardRole = 'GDO' | 'CONFERME' | 'VENDITORE'
 
 export async function getLeaderboard(period: LeaderboardPeriod) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const now = new Date()
     let startDate: Date
     let endDate: Date
@@ -28,14 +32,16 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
         endDate = endOfMonth(now)
     }
 
-    // Get all gdos
-    const allGdos = await db.select().from(users).where(eq(users.role, 'GDO'))
+    // Get all gdos del tenant
+    const allGdos = await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')))
 
-    // Get all appointments in the period
+    // Get all appointments in the period (tenant-scoped)
     const periodAppointments = await db.select()
         .from(leads)
         .where(
             and(
+                eq(leads.companyId, ctx.companyId),
                 eq(leads.status, 'APPOINTMENT'),
                 gte(leads.appointmentCreatedAt, startDate),
                 lte(leads.appointmentCreatedAt, endDate)
@@ -63,8 +69,9 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
         }
     }
 
-    // Fetch skins for fast lookup
+    // Fetch skins for fast lookup (tenant-scoped: ogni company ha il suo store)
     const allSkins = await db.select().from(shopItems)
+        .where(eq(shopItems.companyId, ctx.companyId))
     const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
 
     // Build leaderboard
@@ -97,8 +104,10 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
 export async function checkLeaderboardOvertake(userId: string) {
     // This is called AFTER the appointment is saved.
     // So the new leaderboard is already reflecting the new appointment.
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
 
-    // Calculate today's leaderboard
+    // Calculate today's leaderboard (already tenant-scoped via currentTenant)
     const currentLeaderboard = await getLeaderboard('today')
 
     // Find the user who just took the appt
@@ -149,6 +158,7 @@ export async function checkLeaderboardOvertake(userId: string) {
             // from 'currentUser' to 'overtakenUser' today?
             const existingNotif = (await db.select().from(notifications).where(
                 and(
+                    eq(notifications.companyId, ctx.companyId),
                     eq(notifications.recipientUserId, overtakenId),
                     eq(notifications.type, 'leaderboard_overtaken'),
                     gte(notifications.createdAt, startOfTodayDt)
@@ -176,7 +186,8 @@ export async function checkLeaderboardOvertake(userId: string) {
                         old_rank: currentUserStats.rank + 1 // roughly
                     },
                     status: 'unread',
-                    createdAt: now
+                    createdAt: now,
+                    companyId: ctx.companyId,
                 })
             }
         }
@@ -188,6 +199,9 @@ export async function getMultiMetricLeaderboard(period: LeaderboardPeriod, metri
     if (metric === 'appointments') {
         return getLeaderboard(period);
     }
+
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
 
     const now = new Date()
     let startDate: Date
@@ -204,16 +218,19 @@ export async function getMultiMetricLeaderboard(period: LeaderboardPeriod, metri
         endDate = endOfMonth(now)
     }
 
-    const allGdos = await db.select().from(users).where(eq(users.role, 'GDO'))
+    const allGdos = await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')))
     const allSkins = await db.select().from(shopItems)
+        .where(eq(shopItems.companyId, ctx.companyId))
     const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
 
     if (metric === 'calls') {
-        // Count calls in the period per user
+        // Count calls in the period per user (tenant-scoped)
         const periodCalls = await db.select()
             .from(callLogs)
             .where(
                 and(
+                    eq(callLogs.companyId, ctx.companyId),
                     gte(callLogs.createdAt, startDate),
                     lte(callLogs.createdAt, endDate)
                 )
@@ -320,8 +337,13 @@ export async function getConfermeLeaderboard(period: LeaderboardPeriod) {
         endDate = endOfMonth(now)
     }
 
-    const allConferme = await db.select().from(users).where(eq(users.role, 'CONFERME'))
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const allConferme = await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'CONFERME')))
     const allSkins = await db.select().from(shopItems)
+        .where(eq(shopItems.companyId, ctx.companyId))
     const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
 
     // Count confirmed appointments per conferme user in the period
@@ -329,6 +351,7 @@ export async function getConfermeLeaderboard(period: LeaderboardPeriod) {
         .from(leads)
         .where(
             and(
+                eq(leads.companyId, ctx.companyId),
                 eq(leads.confirmationsOutcome, 'confermato'),
                 gte(leads.confirmationsTimestamp, startDate),
                 lte(leads.confirmationsTimestamp, endDate)
@@ -376,15 +399,21 @@ export async function getVenditoriLeaderboard(period: LeaderboardPeriod) {
         endDate = endOfMonth(now)
     }
 
-    const allVenditori = await db.select().from(users).where(eq(users.role, 'VENDITORE'))
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const allVenditori = await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'VENDITORE')))
     const allSkins = await db.select().from(shopItems)
+        .where(eq(shopItems.companyId, ctx.companyId))
     const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
 
-    // Get closed deals in the period
+    // Get closed deals in the period (tenant-scoped)
     const closedDeals = await db.select()
         .from(leads)
         .where(
             and(
+                eq(leads.companyId, ctx.companyId),
                 eq(leads.salespersonOutcome, 'Chiuso'),
                 gte(leads.salespersonOutcomeAt, startDate),
                 lte(leads.salespersonOutcomeAt, endDate)
@@ -424,13 +453,16 @@ export async function getRoleLeaderboard(period: LeaderboardPeriod, role: Leader
 
 // Get lifetime stats for a user (profile page)
 export async function getUserLifetimeStats(userId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const [callResult, apptResult, userRow] = await Promise.all([
         db.select({ value: count() })
             .from(callLogs)
-            .where(eq(callLogs.userId, userId)),
+            .where(and(eq(callLogs.companyId, ctx.companyId), eq(callLogs.userId, userId))),
         db.select({ value: count() })
             .from(leads)
             .where(and(
+                eq(leads.companyId, ctx.companyId),
                 eq(leads.assignedToId, userId),
                 isNotNull(leads.appointmentCreatedAt)
             )),
@@ -440,7 +472,7 @@ export async function getUserLifetimeStats(userId: string) {
             streakCount: users.streakCount,
             coins: users.coins,
             walletCoins: users.walletCoins,
-        }).from(users).where(eq(users.id, userId)),
+        }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId))),
     ])
 
     return {
