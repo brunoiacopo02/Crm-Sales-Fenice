@@ -5,6 +5,14 @@ import { monthlyTargets, dailyKpiSnapshots, users, leads } from '@/db/schema';
 import { eq, and, sql, gte, lte, or, inArray, isNotNull, asc } from 'drizzle-orm';
 import crypto from 'crypto';
 import { startOfMonth, endOfMonth, endOfDay, isBefore, isAfter, isSunday } from 'date-fns';
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+
+// NOTA fase 2 estesa: monthlyTargets.month e dailyKpiSnapshots.date hanno
+// ancora un UNIQUE constraint single-column ereditato dal monotenant. Quando
+// Serenamente proverà a salvare il suo target mensile lo INSERT esploderà con
+// conflict (Fenice ha già la riga 2026-XX). Va convertito in UNIQUE(month,
+// companyId) prima di abilitare i Manager Serenamente sulla pagina /target.
+// Vedi design doc §11 (Fase 2 estesa).
 
 // Tipi di utilità per i target
 export interface MonthlyTargetInput {
@@ -128,7 +136,12 @@ function getDateMetrics(monthString: string, testTodayOverride?: Date) {
  * Salva i target impostati dal manager
  */
 export async function saveMonthlyTarget(target: MonthlyTargetInput) {
-    const existing = await db.select().from(monthlyTargets).where(eq(monthlyTargets.month, target.month));
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const existing = await db.select().from(monthlyTargets).where(and(
+        eq(monthlyTargets.companyId, ctx.companyId),
+        eq(monthlyTargets.month, target.month),
+    ));
 
     if (existing.length > 0) {
         await db.update(monthlyTargets)
@@ -136,12 +149,16 @@ export async function saveMonthlyTarget(target: MonthlyTargetInput) {
                 ...target,
                 updatedAt: new Date()
             })
-            .where(eq(monthlyTargets.id, existing[0].id));
+            .where(and(
+                eq(monthlyTargets.companyId, ctx.companyId),
+                eq(monthlyTargets.id, existing[0].id),
+            ));
     } else {
         await db.insert(monthlyTargets).values({
             id: crypto.randomUUID(),
             ...target,
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            companyId: ctx.companyId,
         });
     }
     return true;
@@ -151,27 +168,35 @@ export async function saveMonthlyTarget(target: MonthlyTargetInput) {
  * Recupera l'array cronologico degli snapshot ed esegue il calcolo
  * del banner di criticità di -20% su 7 giorni.
  */
-async function processDailySnapshots(monthString: string, currentFissaggioVariazione: number, todayFormatted: string) {
-    // Verifica se oggi è già snapshotato
-    const existingToday = await db.select().from(dailyKpiSnapshots).where(eq(dailyKpiSnapshots.date, todayFormatted));
+async function processDailySnapshots(monthString: string, currentFissaggioVariazione: number, todayFormatted: string, companyId: string) {
+    // Verifica se oggi è già snapshotato (tenant-scoped)
+    const existingToday = await db.select().from(dailyKpiSnapshots).where(and(
+        eq(dailyKpiSnapshots.companyId, companyId),
+        eq(dailyKpiSnapshots.date, todayFormatted),
+    ));
     if (existingToday.length === 0) {
         await db.insert(dailyKpiSnapshots).values({
             id: crypto.randomUUID(),
             date: todayFormatted,
-            fissaggioVariazionePerc: currentFissaggioVariazione
+            fissaggioVariazionePerc: currentFissaggioVariazione,
+            companyId,
         });
     } else {
         // Aggiorniamo comunque oggi per reattività durante la giornata
         await db.update(dailyKpiSnapshots)
             .set({ fissaggioVariazionePerc: currentFissaggioVariazione })
-            .where(eq(dailyKpiSnapshots.id, existingToday[0].id));
+            .where(and(
+                eq(dailyKpiSnapshots.companyId, companyId),
+                eq(dailyKpiSnapshots.id, existingToday[0].id),
+            ));
     }
 
-    // Facciamo la query su tutti nel mese corrente
+    // Facciamo la query su tutti nel mese corrente (tenant-scoped)
     const allSnaps = await db.select()
         .from(dailyKpiSnapshots)
         .where(
             and(
+                eq(dailyKpiSnapshots.companyId, companyId),
                 gte(dailyKpiSnapshots.date, `${monthString}-01`),
                 lte(dailyKpiSnapshots.date, `${monthString}-31`)
             )
@@ -213,12 +238,18 @@ async function processDailySnapshots(monthString: string, currentFissaggioVariaz
 }
 
 export async function getManagerTargetsData(monthString: string, testTodayOverride?: Date): Promise<TargetStatsResponse> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
     const dateMetrics = getDateMetrics(monthString, testTodayOverride);
     const today = dateMetrics.today;
     const todayFormatted = today.toISOString().split('T')[0];
 
-    // 1. Setup Targets e Utenti
-    const tQuery = await db.select().from(monthlyTargets).where(eq(monthlyTargets.month, monthString));
+    // 1. Setup Targets e Utenti (tenant-scoped)
+    const tQuery = await db.select().from(monthlyTargets).where(and(
+        eq(monthlyTargets.companyId, ctx.companyId),
+        eq(monthlyTargets.month, monthString),
+    ));
     const targetData = tQuery.length > 0 ? tQuery[0] : {
         month: monthString,
         targetAppFissati: 0,
@@ -243,6 +274,7 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     const gdoUsersObj = await db.select().from(users)
         .where(
             and(
+                eq(users.companyId, ctx.companyId),
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true)
             )
@@ -276,6 +308,7 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
 
     const monthLeads = await db.select().from(leads).where(
         and(
+            eq(leads.companyId, ctx.companyId),
             or(sql`${leads.funnel} IS NULL`, sql`${leads.funnel} != 'BLT'`),
             or(
                 and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
@@ -402,7 +435,7 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     const mediaVenditePrevisteMeseGdo = ((actClosed / divisorGiorniTrascosi) * giorniLavorativiTotaliMese) / gdoAttivi;
 
     // Logica Snapshots Allarme 7 giorni (Solo se non siamo nel futuro e non siamo il 1° giorno del mese esatto senza niente)
-    const snapshotAlert = await processDailySnapshots(monthString, fissaggioVariazionePerc, todayFormatted);
+    const snapshotAlert = await processDailySnapshots(monthString, fissaggioVariazionePerc, todayFormatted, ctx.companyId);
 
     return {
         month: monthString,
