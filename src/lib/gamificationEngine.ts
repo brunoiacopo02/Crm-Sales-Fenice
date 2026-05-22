@@ -139,7 +139,15 @@ export interface RewardData {
     newLevel?: number;
 }
 
-export async function awardXpAndCoins(userId: string, actionType: keyof typeof GAME_CONSTANTS.ACTIONS, leadIdContext?: string): Promise<RewardData | null> {
+export async function awardXpAndCoins(
+    userId: string,
+    actionType: keyof typeof GAME_CONSTANTS.ACTIONS,
+    leadIdContext?: string,
+    // Tenant del chiamante. Passarlo esplicitamente (ctx.companyId dalla Server
+    // Action) per attribuire correttamente coinTransactions e leadEvents al
+    // company. Se omesso, ricade sul default DB 'fenice' per back-compat.
+    companyId?: string,
+): Promise<RewardData | null> {
     try {
         const userRows = await db.select().from(users).where(eq(users.id, userId));
         if (userRows.length === 0) return null;
@@ -199,6 +207,7 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
                 userId,
                 amount: effectiveCoins,
                 reason: `${actionType}${multInfo}`,
+                ...(companyId ? { companyId } : {}),
             });
         }
 
@@ -209,7 +218,8 @@ export async function awardXpAndCoins(userId: string, actionType: keyof typeof G
                 leadId: leadIdContext,
                 eventType: `RPG_AWARD_${actionType}`,
                 userId: userId,
-                metadata: { xpGained: effectiveXp, coinsGained: effectiveCoins, levelUp: didLevelUp, streakMult, eventMultiplier: eventMult.xp > 1 || eventMult.coins > 1 ? eventMult : undefined, creatureBonus: creatureBonus.xpBonus > 0 ? creatureBonus : undefined }
+                metadata: { xpGained: effectiveXp, coinsGained: effectiveCoins, levelUp: didLevelUp, streakMult, eventMultiplier: eventMult.xp > 1 || eventMult.coins > 1 ? eventMult : undefined, creatureBonus: creatureBonus.xpBonus > 0 ? creatureBonus : undefined },
+                ...(companyId ? { companyId } : {}),
             });
         }
 

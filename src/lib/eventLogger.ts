@@ -29,6 +29,11 @@ type LogEventParams = {
     fromSection?: SectionName | null
     toSection?: SectionName | null
     metadata?: any
+    // Tenant del lead. Passarlo esplicitamente quando il chiamante conosce già
+    // il lead (es. dopo SELECT) o il tenant attivo (ctx.companyId). Se omesso,
+    // il DB ricade sul default 'fenice' per back-compat coi callers non ancora
+    // refattorati.
+    companyId?: string
 }
 
 export async function logLeadEvent(params: LogEventParams) {
@@ -44,6 +49,7 @@ export async function logLeadEvent(params: LogEventParams) {
         // finiva come stringa JSON invece di oggetto → query ->> 'key'
         // ritornavano null).
         metadata: params.metadata ?? null,
-        timestamp: new Date()
+        timestamp: new Date(),
+        ...(params.companyId ? { companyId: params.companyId } : {}),
     })
 }
