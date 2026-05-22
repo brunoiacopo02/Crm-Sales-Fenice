@@ -1,11 +1,37 @@
 import { pgTable, text, integer, real, boolean, timestamp, jsonb, index, unique } from 'drizzle-orm/pg-core';
 
+// Multi-tenant: una riga per azienda gestita dal CRM unificato (sales + marketing).
+// Fenice è il tenant principale; Serenamente parte a vendere entro 2026-06-04;
+// FCD seedato ma inattivo. companyId è chiave di tenancy su tutti i tavoli.
+export const companies = pgTable('companies', {
+    id: text('id').primaryKey(),                                                                          // 'fenice' | 'serenamente' | 'fcd'
+    name: text('name').notNull(),
+    displayName: text('displayName').notNull(),
+    shortCode: text('shortCode').notNull(),                                                               // 'FA' | 'SE' | 'FCD'
+    currency: text('currency').default('EUR').notNull(),
+    isActive: boolean('isActive').default(true).notNull(),
+    sortOrder: integer('sortOrder').default(0).notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 export const users = pgTable('users', {
     id: text('id').primaryKey(),
     name: text('name'),
     email: text('email').unique(),
     password: text('password').notNull(),
     role: text('role').default('GDO').notNull(),
+
+    // Multi-tenant + area discrimination (sales vs marketing).
+    // companyId: tenant di appartenenza (default 'fenice' per back-compat con
+    // gli utenti esistenti). area: in quale CRM l'utente può entrare —
+    // 'sales' (default, accede al CRM tradizionale GDO/Conferme/Venditore),
+    // 'marketing' (accede solo a /marketing/*), 'both' (super-admin = Bruno).
+    // marketingRole è popolato SOLO per utenti con area 'marketing'|'both'
+    // e mappa ai 4 ruoli del CRM marketing: manager|media_buyer|copywriter|social.
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    area: text('area').default('sales').notNull(),         // 'sales' | 'marketing' | 'both'
+    marketingRole: text('marketingRole'),                  // 'manager' | 'media_buyer' | 'copywriter' | 'social' | null
 
     // GDO Profiling
     gdoCode: integer('gdoCode').unique(), // 105, 113, etc.
@@ -127,6 +153,7 @@ export const leads = pgTable('leads', {
 
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         statusIdx: index('status_idx').on(table.status),
@@ -148,6 +175,7 @@ export const callLogs = pgTable('callLogs', {
     discardReason: text('discardReason'),
     scriptCompleted: boolean('scriptCompleted').default(false),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         userIdIdx: index('calllogs_user_id_idx').on(table.userId),
@@ -167,6 +195,7 @@ export const leadEvents = pgTable('leadEvents', {
     metadata: jsonb('metadata'),
 
     timestamp: timestamp('timestamp', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         leadIdIdx: index('lead_events_lead_id_idx').on(table.leadId),
@@ -191,6 +220,7 @@ export const breakSessions = pgTable('breakSessions', {
     overrideReason: text('overrideReason'),
 
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const notifications = pgTable('notifications', {
@@ -203,6 +233,7 @@ export const notifications = pgTable('notifications', {
     status: text('status').default('unread').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     readAt: timestamp('readAt', { withTimezone: true, mode: 'date' }),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const assignmentSettings = pgTable('assignmentSettings', {
@@ -211,6 +242,7 @@ export const assignmentSettings = pgTable('assignmentSettings', {
     settings: jsonb('settings'),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedBy: text('updatedBy').notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const importLogs = pgTable('importLogs', {
@@ -221,6 +253,7 @@ export const importLogs = pgTable('importLogs', {
     invalidCount: integer('invalidCount').notNull(),
     perGdoAssigned: jsonb('perGdoAssigned'),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const sprints = pgTable('sprints', {
@@ -231,6 +264,7 @@ export const sprints = pgTable('sprints', {
     status: text('status').default('active').notNull(),
     startedByManagerId: text('startedByManagerId').references(() => users.id),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const shopItems = pgTable('shopItems', {
@@ -241,6 +275,7 @@ export const shopItems = pgTable('shopItems', {
     cssValue: text('cssValue').notNull(),
     isActive: boolean('isActive').default(true).notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const userPurchases = pgTable('userPurchases', {
@@ -248,6 +283,7 @@ export const userPurchases = pgTable('userPurchases', {
     userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
     shopItemId: text('shopItemId').notNull().references(() => shopItems.id, { onDelete: 'cascade' }),
     purchasedAt: timestamp('purchasedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const coinTransactions = pgTable('coinTransactions', {
@@ -256,6 +292,7 @@ export const coinTransactions = pgTable('coinTransactions', {
     amount: integer('amount').notNull(),
     reason: text('reason').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const confirmationsNotes = pgTable('confirmationsNotes', {
@@ -264,6 +301,7 @@ export const confirmationsNotes = pgTable('confirmationsNotes', {
     authorId: text('authorId').notNull().references(() => users.id),
     text: text('text').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const internalAlerts = pgTable('internalAlerts', {
@@ -273,6 +311,7 @@ export const internalAlerts = pgTable('internalAlerts', {
     message: text('message').notNull(),
     isRead: boolean('isRead').default(false).notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 
@@ -286,6 +325,7 @@ export const calendarConnections = pgTable('calendarConnections', {
     primaryCalendarId: text('primaryCalendarId'),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const calendarEvents = pgTable('calendarEvents', {
@@ -296,6 +336,7 @@ export const calendarEvents = pgTable('calendarEvents', {
     googleEventId: text('googleEventId'),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const teamGoals = pgTable('teamGoals', {
@@ -308,6 +349,7 @@ export const teamGoals = pgTable('teamGoals', {
     goalType: text('goalType').default('database').notNull(),
     status: text('status').default('active').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const marketingBudgets = pgTable('marketingBudgets', {
@@ -316,6 +358,7 @@ export const marketingBudgets = pgTable('marketingBudgets', {
     month: text('month').notNull(), // e.g. '2026-03'
     spentAmountEur: real('spentAmountEur').default(0).notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const monthlyTargets = pgTable('monthlyTargets', {
@@ -328,12 +371,14 @@ export const monthlyTargets = pgTable('monthlyTargets', {
     targetValoreContratti: real('targetValoreContratti').default(0).notNull(),
     workingDaysOverride: integer('workingDaysOverride'), // nullable — manager manual override
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const dailyKpiSnapshots = pgTable('dailyKpiSnapshots', {
     id: text('id').primaryKey(),
     date: text('date').notNull().unique(), // 'YYYY-MM-DD'
     fissaggioVariazionePerc: real('fissaggioVariazionePerc').default(0).notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // Snapshot per ogni fetch della pipeline GDO. Scritto solo quando il fingerprint
@@ -351,6 +396,7 @@ export const pipelineSnapshots = pgTable('pipelineSnapshots', {
     secondCallIds: jsonb('secondCallIds').$type<string[]>().notNull(),
     thirdCallIds: jsonb('thirdCallIds').$type<string[]>().notNull(),
     fingerprint: text('fingerprint').notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const gdoNotes = pgTable('gdoNotes', {
@@ -360,6 +406,7 @@ export const gdoNotes = pgTable('gdoNotes', {
     content: text('content').notNull(),
     category: text('category').notNull(), // 'formazione' | 'positivo' | 'negativo' | 'disciplinare'
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // --- QUEST SYSTEM ---
@@ -375,6 +422,7 @@ export const quests = pgTable('quests', {
     isActive: boolean('isActive').default(true).notNull(),
     role: text('role').default('GDO').notNull(), // 'GDO' | 'CONFERME' | 'VENDITORE'
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const questProgress = pgTable('questProgress', {
@@ -386,6 +434,7 @@ export const questProgress = pgTable('questProgress', {
     completedAt: timestamp('completedAt', { withTimezone: true, mode: 'date' }),
     dateScope: text('dateScope').notNull(), // 'YYYY-MM-DD' for daily, 'YYYY-Wnn' for weekly
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         userIdIdx: index('quest_progress_user_id_idx').on(table.userId),
@@ -405,6 +454,7 @@ export const achievements = pgTable('achievements', {
     tier2Target: integer('tier2Target').notNull(),
     tier3Target: integer('tier3Target').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const userAchievements = pgTable('userAchievements', {
@@ -413,6 +463,7 @@ export const userAchievements = pgTable('userAchievements', {
     achievementId: text('achievementId').notNull().references(() => achievements.id),
     tier: integer('tier').notNull(), // 1 = bronze, 2 = silver, 3 = gold
     unlockedAt: timestamp('unlockedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         userIdIdx: index('user_achievements_user_id_idx').on(table.userId),
@@ -434,6 +485,7 @@ export const lootDrops = pgTable('lootDrops', {
     opened: boolean('opened').default(false).notNull(),
     openedAt: timestamp('openedAt', { withTimezone: true, mode: 'date' }),
     droppedAt: timestamp('droppedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // --- BOSS BATTLE SYSTEM ---
@@ -451,6 +503,7 @@ export const bossBattles = pgTable('bossBattles', {
     createdBy: text('createdBy').references(() => users.id),
     defeatedAt: timestamp('defeatedAt', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const bossContributions = pgTable('bossContributions', {
@@ -460,6 +513,7 @@ export const bossContributions = pgTable('bossContributions', {
     damage: integer('damage').notNull(),
     action: text('action').notNull(), // 'appointment_set' | 'manual'
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // --- SEASONAL EVENTS ---
@@ -476,6 +530,7 @@ export const seasonalEvents = pgTable('seasonalEvents', {
     creatureDropBoost: boolean('creatureDropBoost').default(false).notNull(),
     createdBy: text('createdBy').references(() => users.id),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
@@ -486,6 +541,7 @@ export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     targetTier2: integer('targetTier2').default(13).notNull(),
     rewardTier2: real('rewardTier2').default(270).notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // --- FENICE UNIVERSE: CREATURE SYSTEM ---
@@ -510,6 +566,7 @@ export const userCreatures = pgTable('userCreatures', {
     xpFed: integer('xpFed').default(0).notNull(),
     isEquipped: boolean('isEquipped').default(false).notNull(),
     obtainedAt: timestamp('obtainedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         userIdIdx: index('user_creatures_user_id_idx').on(table.userId),
@@ -522,6 +579,7 @@ export const adventureProgress = pgTable('adventureProgress', {
     currentStage: integer('currentStage').default(1).notNull(),
     currentBossHp: integer('currentBossHp'), // nullable — NULL if not in boss fight
     lastStageCompletedAt: timestamp('lastStageCompletedAt', { withTimezone: true, mode: 'date' }),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const adventureBosses = pgTable('adventureBosses', {
@@ -535,6 +593,7 @@ export const adventureBosses = pgTable('adventureBosses', {
     rewardCreatureId: text('rewardCreatureId').references(() => creatures.id),
     rewardCoins: integer('rewardCoins').notNull(),
     rewardTitle: text('rewardTitle'),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const actionChests = pgTable('actionChests', {
@@ -548,6 +607,7 @@ export const actionChests = pgTable('actionChests', {
     openedAt: timestamp('openedAt', { withTimezone: true, mode: 'date' }),
     rewardCreatureId: text('rewardCreatureId').references(() => creatures.id),
     rewardCoins: integer('rewardCoins'),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // --- FENICE UNIVERSE: TEAM RPG (CONFERME) ---
@@ -559,6 +619,7 @@ export const teamRpgProfile = pgTable('teamRpgProfile', {
     currentStage: integer('currentStage').default(1).notNull(),
     currentBossHp: integer('currentBossHp'), // nullable
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const teamCreatures = pgTable('teamCreatures', {
@@ -570,6 +631,7 @@ export const teamCreatures = pgTable('teamCreatures', {
     isEquipped: boolean('isEquipped').default(false).notNull(),
     obtainedAt: timestamp('obtainedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     contributedByUserId: text('contributedByUserId').references(() => users.id),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // --- FENICE UNIVERSE: TRADING & DUELS ---
@@ -581,6 +643,7 @@ export const tradingOffers = pgTable('tradingOffers', {
     requestedCreatureId: text('requestedCreatureId').notNull().references(() => userCreatures.id),
     status: text('status').default('pending').notNull(), // 'pending' | 'accepted' | 'rejected'
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 export const duels = pgTable('duels', {
@@ -596,6 +659,7 @@ export const duels = pgTable('duels', {
     winnerId: text('winnerId').references(() => users.id),
     rewardCoins: integer('rewardCoins').notNull(),
     status: text('status').default('active').notNull(), // 'active' | 'completed'
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // Aggiustamenti manuali admin (presenze GDO, chiusure Conferme)
@@ -607,6 +671,7 @@ export const manualAdjustments = pgTable('manualAdjustments', {
     note: text('note'),
     addedByUserId: text('addedByUserId').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // Monthly lead upload target for the "Panoramica Generale" admin dashboard.
@@ -647,6 +712,7 @@ export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     fatturatoExtraEur: real('fatturatoExtraEur').default(0).notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // --- ACTIVECAMPAIGN INTAKE FAILURES ---
@@ -664,6 +730,7 @@ export const acIntakeFailures = pgTable('acIntakeFailures', {
     resolvedAt: timestamp('resolvedAt', { withTimezone: true, mode: 'date' }),
     resolvedBy: text('resolvedBy').references(() => users.id),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         createdIdx: index('ac_intake_failures_created_idx').on(table.createdAt),
@@ -700,6 +767,7 @@ export const gdoLeadSurveys = pgTable('gdoLeadSurveys', {
     invalidatedAt: timestamp('invalidatedAt', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         gdoUserIdx: index('gdo_surveys_user_idx').on(table.gdoUserId),
@@ -721,6 +789,7 @@ export const confermeLeadSurveys = pgTable('confermeLeadSurveys', {
     invalidatedAt: timestamp('invalidatedAt', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         confermeUserIdx: index('conferme_surveys_user_idx').on(table.confermeUserId),
@@ -743,6 +812,7 @@ export const salesLeadSurveys = pgTable('salesLeadSurveys', {
     invalidatedAt: timestamp('invalidatedAt', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         salesUserIdx: index('sales_surveys_user_idx').on(table.salesUserId),
@@ -783,6 +853,7 @@ export const monthlyFunnelBaselines = pgTable('monthlyFunnelBaselines', {
     baselineSetAt: timestamp('baselineSetAt', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         unqYmFunnel: unique('funnel_baseline_unique').on(table.yearMonth, table.funnelName),
@@ -827,6 +898,7 @@ export const customerPortfolios = pgTable('customerPortfolios', {
 
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 }, (table) => {
     return {
         salespersonIdx: index('customer_portfolios_salesperson_idx').on(table.salespersonUserId),
@@ -843,6 +915,7 @@ export const appSettings = pgTable('appSettings', {
     value: text('value').notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedBy: text('updatedBy'),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
 // Outbox queue per i webhook al CRM marketing esterno.
