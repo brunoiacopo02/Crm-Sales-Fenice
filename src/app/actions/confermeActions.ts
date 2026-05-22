@@ -12,6 +12,7 @@ import { incrementChestProgress } from "@/app/actions/chestActions"
 import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -33,7 +34,11 @@ export async function getConfermeAppointments(filters: {
         throw new Error("Unauthorized")
     }
 
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const conditions = [
+        eq(leads.companyId, ctx.companyId),
         eq(leads.status, 'APPOINTMENT')
     ]
 
@@ -212,7 +217,10 @@ export async function getConfermeAppointments(filters: {
             createdAt: confirmationsNotes.createdAt,
             authorId: confirmationsNotes.authorId,
         }).from(confirmationsNotes)
-            .where(inArray(confirmationsNotes.leadId, leadIds))
+            .where(and(
+                eq(confirmationsNotes.companyId, ctx.companyId),
+                inArray(confirmationsNotes.leadId, leadIds),
+            ))
             .orderBy(desc(confirmationsNotes.createdAt));
         for (const n of allNotes) {
             if (!notesMap.has(n.leadId)) {
@@ -267,8 +275,14 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
         throw new Error("Unauthorized")
     }
 
-    // fetch old
-    const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    // fetch old (tenant-scoped)
+    const oldLead = (await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+    )))[0]
     if (!oldLead) throw new Error("Lead not found")
 
     // Concurrency Check
@@ -283,7 +297,11 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
         appointmentNote: data.appointmentNote,
         version: oldLead.version + 1,
         updatedAt: new Date()
-    }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+    }).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+        eq(leads.version, oldLead.version),
+    ))
     .returning({ id: leads.id })
 
     if (updated.length === 0) {
@@ -321,7 +339,8 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
         metadata: {
             old: { name: oldLead.name, email: oldLead.email, appointmentDate: oldLead.appointmentDate, appointmentNote: oldLead.appointmentNote },
             new: data
-        }
+        },
+        companyId: ctx.companyId,
     })
 
     return { success: true }
@@ -333,12 +352,18 @@ export async function getConfermeNotes(leadId: string) {
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
     if (!session) throw new Error("Unauthorized")
 
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     return await db.select({
         note: confirmationsNotes,
         author: users
     }).from(confirmationsNotes)
         .leftJoin(users, eq(confirmationsNotes.authorId, users.id))
-        .where(eq(confirmationsNotes.leadId, leadId))
+        .where(and(
+            eq(confirmationsNotes.companyId, ctx.companyId),
+            eq(confirmationsNotes.leadId, leadId),
+        ))
         .orderBy(desc(confirmationsNotes.createdAt))
 
 }
@@ -351,21 +376,28 @@ export async function addConfermeNote(leadId: string, text: string) {
         throw new Error("Unauthorized")
     }
 
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const newNote = {
         id: crypto.randomUUID(),
         leadId,
         authorId: session.user.id,
         text,
-        createdAt: new Date()
+        createdAt: new Date(),
+        companyId: ctx.companyId,
     }
 
     await db.insert(confirmationsNotes).values(newNote)
     return newNote
 }
 
-async function getSalespersonName(userId?: string) {
+async function getSalespersonName(userId: string | undefined, companyId: string) {
     if (!userId) return null;
-    const user = (await db.select().from(users).where(eq(users.id, userId)))[0];
+    const user = (await db.select().from(users).where(and(
+        eq(users.companyId, companyId),
+        eq(users.id, userId),
+    )))[0];
     return user ? (user.displayName || user.name || userId) : userId;
 }
 
@@ -378,7 +410,13 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             return { success: false, error: "Unauthorized" }
         }
 
-        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0]
         if (!oldLead) return { success: false, error: "Lead not found" }
         if (oldLead.version !== currentVersion) {
             console.error(`Version mismatch - DB: ${oldLead.version}, client: ${currentVersion}`);
@@ -401,12 +439,16 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             confirmationsDiscardReason: reason || null,
             confirmationsUserId: session.user.id,
             confirmationsTimestamp: new Date(),
-            salespersonAssigned: await getSalespersonName(salespersonAssigned) || salespersonAssigned || null,
+            salespersonAssigned: await getSalespersonName(salespersonAssigned, ctx.companyId) || salespersonAssigned || null,
             salespersonUserId: salespersonAssigned || null,
             salespersonAssignedAt: salespersonAssigned ? new Date() : null,
             version: oldLead.version + 1,
             updatedAt: new Date()
-        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        }).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
         .returning({ id: leads.id })
 
         if (updated.length === 0) {
@@ -455,14 +497,15 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             eventType: "conferme_outcome_set",
             userId: session.user.id,
             timestamp: new Date(),
-            metadata: { outcome, reason, salespersonAssigned }
+            metadata: { outcome, reason, salespersonAssigned },
+            companyId: ctx.companyId,
         })
 
         // Gamification: award XP/coins to Conferme worker on confirmation.
         // Unified per-user gamification — every Conferme has their own chest/adventure/creatures.
         let rewardData = null;
         if (outcome === "confermato") {
-            rewardData = await awardXpAndCoins(session.user.id, "CONFERMATO", leadId).catch(e => { console.error("GameEngine CONFERMATO err:", e); return null; });
+            rewardData = await awardXpAndCoins(session.user.id, "CONFERMATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine CONFERMATO err:", e); return null; });
 
             // Individual progress for the Conferme user
             incrementChestProgress(session.user.id, 'conferme', 1).catch(e => console.error("Chest conferme err:", e));
@@ -478,7 +521,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
 
         // Notifiche Live (Pilota E2E)
         if (outcome === "confermato" && salespersonAssigned) {
-            const spName = await getSalespersonName(salespersonAssigned) || salespersonAssigned
+            const spName = await getSalespersonName(salespersonAssigned, ctx.companyId) || salespersonAssigned
 
             // Notifica al GDO
             if (oldLead.assignedToId) {
@@ -490,7 +533,8 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
                     body: `Ottimo lavoro! Il tuo appuntamento per ${oldLead.name} è stato confermato e assegnato a ${spName}.`,
                     metadata: { leadId },
                     status: 'unread',
-                    createdAt: new Date()
+                    createdAt: new Date(),
+                    companyId: ctx.companyId,
                 })
             }
 
@@ -503,7 +547,8 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
                 body: `Ti è stato assegnato un nuovo appuntamento confermato con ${oldLead.name}.`,
                 metadata: { leadId },
                 status: 'unread',
-                createdAt: new Date()
+                createdAt: new Date(),
+                companyId: ctx.companyId,
             })
         }
 
@@ -555,7 +600,13 @@ export async function setSalespersonOutcome(
             return { success: false, error: 'CLOSE_DATE_INVALID' }
         }
 
-        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0]
         if (!oldLead) return { success: false, error: "Lead not found" }
         if (oldLead.version !== currentVersion) return { success: false, error: `CONCURRENCY_ERROR` }
 
@@ -565,7 +616,7 @@ export async function setSalespersonOutcome(
         if (!oldLead.salespersonOutcome && oldLead.assignedToId) {
             const isConfermeRole = session.user.role === 'CONFERME';
             if (outcome === 'Chiuso') {
-                rewardData = await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId).catch(e => { console.error("GameEngine CHIUSO err:", e); return null; });
+                rewardData = await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId, ctx.companyId).catch(e => { console.error("GameEngine CHIUSO err:", e); return null; });
 
                 // Individual progress for the GDO (lead owner)
                 incrementChestProgress(oldLead.assignedToId, 'chiusure', 1).catch(e => console.error("Chest chiusure GDO err:", e));
@@ -581,7 +632,7 @@ export async function setSalespersonOutcome(
                     maybeDropCreature(session.user.id).catch(e => console.error("Creature drop chiusura CONFERME err:", e));
                 }
             } else if (outcome === 'Non chiuso') {
-                rewardData = await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId).catch(e => { console.error("GameEngine PRESENZIATO err:", e); return null; });
+                rewardData = await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine PRESENZIATO err:", e); return null; });
 
                 // Individual progress for the GDO
                 incrementChestProgress(oldLead.assignedToId, 'presenze', 1).catch(e => console.error("Chest presenze GDO err:", e));
@@ -613,7 +664,11 @@ export async function setSalespersonOutcome(
             version: oldLead.version + 1,
             updatedAt: new Date(),
             ...closeAmountPatch,
-        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        }).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
           .returning({ id: leads.id })
 
         if (updated.length === 0) {
@@ -634,7 +689,8 @@ export async function setSalespersonOutcome(
             eventType: "salesperson_outcome_set",
             userId: session.user.id,
             timestamp: new Date(),
-            metadata: { outcome, notes }
+            metadata: { outcome, notes },
+            companyId: ctx.companyId,
         })
 
         return { success: true, rewardData }
@@ -653,7 +709,13 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
             return { success: false, error: "Unauthorized" }
         }
 
-        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0];
         if (!oldLead) return { success: false, error: "Lead not found" };
         if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
 
@@ -684,7 +746,11 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
         }
 
         const updated = await db.update(leads).set(toUpdate)
-        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
         .returning({ id: leads.id });
 
         if (updated.length === 0) {
@@ -708,7 +774,8 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
             timestamp: new Date(),
             metadata: isAutoDiscard
                 ? { reason: '3 NR consecutivi', autoDiscard: true }
-                : { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) }
+                : { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) },
+            companyId: ctx.companyId,
         });
 
         return { success: true, autoDiscarded: isAutoDiscard };
@@ -725,7 +792,13 @@ export async function undoConfermeNoAnswer(leadId: string, currentVersion: numbe
         throw new Error("Unauthorized")
     }
 
-    const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const oldLead = (await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+    )))[0];
     if (!oldLead) throw new Error("Lead not found");
     if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
 
@@ -762,21 +835,32 @@ export async function undoConfermeNoAnswer(leadId: string, currentVersion: numbe
     }
 
     const updated = await db.update(leads).set(toUpdate)
-    .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+    .where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+        eq(leads.version, oldLead.version),
+    ))
     .returning({ id: leads.id });
 
     if (updated.length === 0) {
         throw new Error("CONCURRENCY_ERROR");
     }
 
-    // Remove the last conferme_no_answer event for this lead
+    // Remove the last conferme_no_answer event for this lead (tenant-scoped)
     const lastEvent = await db.select().from(leadEvents)
-        .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.eventType, "conferme_no_answer")))
+        .where(and(
+            eq(leadEvents.companyId, ctx.companyId),
+            eq(leadEvents.leadId, leadId),
+            eq(leadEvents.eventType, "conferme_no_answer"),
+        ))
         .orderBy(desc(leadEvents.timestamp))
         .limit(1);
 
     if (lastEvent.length > 0) {
-        await db.delete(leadEvents).where(eq(leadEvents.id, lastEvent[0].id));
+        await db.delete(leadEvents).where(and(
+            eq(leadEvents.companyId, ctx.companyId),
+            eq(leadEvents.id, lastEvent[0].id),
+        ));
     }
 
     await db.insert(leadEvents).values({
@@ -785,7 +869,8 @@ export async function undoConfermeNoAnswer(leadId: string, currentVersion: numbe
         eventType: "conferme_nr_undone",
         userId: session.user.id,
         timestamp: new Date(),
-        metadata: { fieldCleared, restoredFromAutoDiscard }
+        metadata: { fieldCleared, restoredFromAutoDiscard },
+        companyId: ctx.companyId,
     });
 
     return { success: true };
@@ -808,7 +893,13 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             throw new Error("Unauthorized")
         }
 
-        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0];
         if (!oldLead) throw new Error("Lead not found");
         if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
 
@@ -838,7 +929,11 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
         }
 
         const updated = await db.update(leads).set(toUpdate)
-        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
         .returning({ id: leads.id });
 
         if (updated.length === 0) {
@@ -869,13 +964,19 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
 
         // Handle Calendar if already confirmed and shift/removal happened
         if (calendarNeedsUpdate && oldLead.salespersonUserId) {
-            const calEvents = await db.select().from(calendarEvents).where(eq(calendarEvents.leadId, leadId));
+            const calEvents = await db.select().from(calendarEvents).where(and(
+                eq(calendarEvents.companyId, ctx.companyId),
+                eq(calendarEvents.leadId, leadId),
+            ));
             const evt = calEvents.find(e => e.eventType === "appointment");
 
             if (evt && evt.googleEventId) {
                 // Delete old event
                 await deleteGoogleCalendarEvent(oldLead.salespersonUserId, evt.googleEventId).catch((e: any) => console.error("GCal delete err:", e));
-                await db.delete(calendarEvents).where(eq(calendarEvents.id, evt.id));
+                await db.delete(calendarEvents).where(and(
+                    eq(calendarEvents.companyId, ctx.companyId),
+                    eq(calendarEvents.id, evt.id),
+                ));
             }
 
             // recreate if new appointment date is set
@@ -902,7 +1003,8 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             eventType: "conferme_recall_scheduled",
             userId: session.user.id,
             timestamp: new Date(),
-            metadata: { payload }
+            metadata: { payload },
+            companyId: ctx.companyId,
         });
 
         return { success: true };
@@ -920,7 +1022,13 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
             throw new Error("Unauthorized")
         }
 
-        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0];
         if (!oldLead) throw new Error("Lead not found");
         if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
 
@@ -934,7 +1042,11 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
         if (payload?.snoozeNotes !== undefined) toUpdate.confRecallNotes = payload.snoozeNotes;
 
         const updated = await db.update(leads).set(toUpdate)
-        .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
         .returning({ id: leads.id });
 
         if (updated.length === 0) {
@@ -947,7 +1059,8 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
             eventType: "conferme_snooze_set",
             userId: session.user.id,
             timestamp: new Date(),
-            metadata: { snoozeAt }
+            metadata: { snoozeAt },
+            companyId: ctx.companyId,
         });
 
         return { success: true };
@@ -977,7 +1090,13 @@ export async function cancelConfermeRecall(
             return { success: false, error: "Unauthorized" };
         }
 
-        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0];
         if (!oldLead) return { success: false, error: "Lead not found" };
         if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
 
@@ -1001,7 +1120,11 @@ export async function cancelConfermeRecall(
         }
 
         const updated = await db.update(leads).set(toUpdate)
-            .where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.id, leadId),
+                eq(leads.version, oldLead.version),
+            ))
             .returning({ id: leads.id });
 
         if (updated.length === 0) {
@@ -1017,7 +1140,8 @@ export async function cancelConfermeRecall(
             metadata: {
                 recallType,
                 restoredAppointmentDate: recallType === "park" ? oldLead.recallDate : null,
-            }
+            },
+            companyId: ctx.companyId,
         });
 
         return { success: true };
@@ -1059,11 +1183,18 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         throw new Error("Unauthorized");
     }
 
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const venditori = await db.select({
         id: users.id,
         name: users.name,
         displayName: users.displayName,
-    }).from(users).where(and(eq(users.role, 'VENDITORE'), eq(users.isActive, true)));
+    }).from(users).where(and(
+        eq(users.companyId, ctx.companyId),
+        eq(users.role, 'VENDITORE'),
+        eq(users.isActive, true),
+    ));
 
     const rows = await db.select({
         id: leads.id,
@@ -1075,6 +1206,7 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         confirmationsOutcome: leads.confirmationsOutcome,
         salespersonUserId: leads.salespersonUserId,
     }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
         isNotNull(leads.salespersonUserId),
         isNotNull(leads.appointmentDate),
         gte(leads.appointmentDate, startDate),
@@ -1147,7 +1279,13 @@ export async function undoConfermeScarto(leadId: string, currentVersion: number)
             return { success: false, error: "Unauthorized" };
         }
 
-        const oldLead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0];
         if (!oldLead) return { success: false, error: "Lead not found" };
         if (oldLead.version !== currentVersion) {
             return { success: false, error: "CONCURRENCY_ERROR" };
@@ -1163,7 +1301,11 @@ export async function undoConfermeScarto(leadId: string, currentVersion: number)
             confirmationsTimestamp: null,
             version: oldLead.version + 1,
             updatedAt: new Date(),
-        }).where(and(eq(leads.id, leadId), eq(leads.version, oldLead.version)))
+        }).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
             .returning({ id: leads.id });
 
         if (updated.length === 0) {
@@ -1180,6 +1322,7 @@ export async function undoConfermeScarto(leadId: string, currentVersion: number)
                 previousDiscardReason: oldLead.confirmationsDiscardReason,
                 previousConfirmationsUserId: oldLead.confirmationsUserId,
             },
+            companyId: ctx.companyId,
         });
 
         return { success: true };
