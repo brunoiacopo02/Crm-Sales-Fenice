@@ -4,17 +4,22 @@ import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
 import { leads, users, assignmentSettings, importLogs } from "@/db/schema"
-import { eq, or } from "drizzle-orm"
+import { and, eq, or } from "drizzle-orm"
 import crypto from "crypto"
 import { logLeadEvent } from "@/lib/eventLogger"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export type AssignmentMode = 'equal' | 'custom_quota'
 
 // Server Action for managing settings
 export async function getAssignmentSettings() {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const defaultSettings = { mode: 'equal' as AssignmentMode, settings: {} }
-    const st = (await db.select().from(assignmentSettings).limit(1))[0]
+    const st = (await db.select().from(assignmentSettings)
+        .where(eq(assignmentSettings.companyId, ctx.companyId))
+        .limit(1))[0]
     if (!st) return defaultSettings
     return {
         mode: st.mode as AssignmentMode,
@@ -23,6 +28,8 @@ export async function getAssignmentSettings() {
 }
 
 export async function getActiveGdosForImport() {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     return (await db.select({
         id: users.id,
         name: users.name,
@@ -31,7 +38,7 @@ export async function getActiveGdosForImport() {
         isActive: users.isActive
     })
         .from(users)
-        .where(eq(users.role, 'GDO')))
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
 
         // Se un account non è mai stato toccato, o è disattivato, o null per qualche bug di mapping RPC...
         // ...vogliamo che filtri SOLO quelli esplicitamente e inequivocabilmente considerati "Attivi" (true)
@@ -42,12 +49,19 @@ export async function getActiveGdosForImport() {
 }
 
 export async function saveAssignmentSettings(mode: AssignmentMode, settings: Record<string, number>) {
-    const st = (await db.select().from(assignmentSettings).limit(1))[0]
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const st = (await db.select().from(assignmentSettings)
+        .where(eq(assignmentSettings.companyId, ctx.companyId))
+        .limit(1))[0]
     const now = new Date()
     if (st) {
         await db.update(assignmentSettings)
             .set({ mode, settings, updatedAt: now, updatedBy: 'SYSTEM' })
-            .where(eq(assignmentSettings.id, st.id))
+            .where(and(
+                eq(assignmentSettings.companyId, ctx.companyId),
+                eq(assignmentSettings.id, st.id),
+            ))
 
     } else {
         await db.insert(assignmentSettings).values({
@@ -55,7 +69,8 @@ export async function saveAssignmentSettings(mode: AssignmentMode, settings: Rec
             mode,
             settings,
             updatedAt: now,
-            updatedBy: 'SYSTEM'
+            updatedBy: 'SYSTEM',
+            companyId: ctx.companyId,
         })
     }
     return true
@@ -95,8 +110,12 @@ export async function processCsvImport(
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
     const adminId = session?.user?.id || undefined
 
-    // Carica GDO Attivi (Solo quelli rigorosamente true)
-    const activeGdos = (await db.select().from(users).where(eq(users.role, 'GDO')))
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    // Carica GDO Attivi del tenant corrente (solo quelli rigorosamente true)
+    const activeGdos = (await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
         .filter((u: any) => {
             if (u.isActive === true) return true;
             return false;
@@ -158,13 +177,16 @@ export async function processCsvImport(
             }
 
             // 4. Deduplication (skippabile con allowDuplicates)
+            // Scoped al tenant: numeri/email identici in tenant diversi sono
+            // lead legittimamente separati, non duplicati.
             if (!allowDuplicates) {
                 const logicConditions = [eq(leads.phone, phone)]
                 if (email) {
                     logicConditions.push(eq(leads.email, email))
                 }
 
-                const existingLead = (await db.select().from(leads).where(or(...logicConditions)))[0]
+                const existingLead = (await db.select().from(leads)
+                    .where(and(eq(leads.companyId, ctx.companyId), or(...logicConditions))))[0]
 
                 if (existingLead || processedPhones.has(phone) || (email && processedEmails.has(email))) {
                     report.rejected++
@@ -227,19 +249,22 @@ export async function processCsvImport(
                 assignedToId: assignedGdoId,
                 createdAt: new Date(),
                 updatedAt: new Date(),
+                companyId: ctx.companyId,
             })
 
             await logLeadEvent({
                 leadId: newLeadId,
                 eventType: 'IMPORTED',
-                toSection: 'Prima Chiamata'
+                toSection: 'Prima Chiamata',
+                companyId: ctx.companyId,
             })
 
             await logLeadEvent({
                 leadId: newLeadId,
                 eventType: 'ASSIGNED',
                 userId: adminId,
-                metadata: { assignedToUser: assignedGdoId }
+                metadata: { assignedToUser: assignedGdoId },
+                companyId: ctx.companyId,
             })
 
             recordMap[assignedGdoId] = (recordMap[assignedGdoId] || 0) + 1
@@ -262,6 +287,7 @@ export async function processCsvImport(
         invalidCount: invalidCount > 0 ? invalidCount : 0,
         perGdoAssigned: recordMap,
         createdAt: new Date(),
+        companyId: ctx.companyId,
     })
 
     report.perGdoAssigned = recordMap
@@ -290,6 +316,9 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
     if (!supabaseUser) return { success: false, error: "Non autenticato" }
     const adminId = supabaseUser.id
 
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     // Validate funnel (required)
     const funnel = input.funnel?.trim()
     if (!funnel) return { success: false, error: "Il campo Funnel è obbligatorio." }
@@ -309,8 +338,9 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
 
     const name = input.nome?.trim() || 'Lead senza nome'
 
-    // Get active GDOs and assign using stored settings (or manual override)
-    const activeGdos = (await db.select().from(users).where(eq(users.role, 'GDO')))
+    // Get active GDOs del tenant e assegna usando stored settings (o override manuale)
+    const activeGdos = (await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
         .filter((u: any) => u.isActive === true)
     if (activeGdos.length === 0) return { success: false, error: "Nessun GDO attivo per l'assegnazione." }
 
@@ -338,20 +368,23 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
         assignedToId: assignedGdoId,
         createdAt: new Date(),
         updatedAt: new Date(),
+        companyId: ctx.companyId,
     })
 
     await logLeadEvent({
         leadId: newLeadId,
         eventType: 'IMPORTED',
         toSection: 'Prima Chiamata',
-        metadata: { source: 'manual' }
+        metadata: { source: 'manual' },
+        companyId: ctx.companyId,
     })
 
     await logLeadEvent({
         leadId: newLeadId,
         eventType: 'ASSIGNED',
         userId: adminId,
-        metadata: { assignedToUser: assignedGdoId, source: 'manual' }
+        metadata: { assignedToUser: assignedGdoId, source: 'manual' },
+        companyId: ctx.companyId,
     })
 
     revalidatePath('/', 'layout')
