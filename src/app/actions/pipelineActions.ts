@@ -16,9 +16,10 @@ import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { incrementDuelScore } from "@/app/actions/duelActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
-async function checkFourthCallEligibility(gdoId: string): Promise<boolean> {
+async function checkFourthCallEligibility(gdoId: string, companyId: string): Promise<boolean> {
     const sevenDaysAgo = subDays(new Date(), 7)
 
     const recentLogs = await db.select({
@@ -28,6 +29,7 @@ async function checkFourthCallEligibility(gdoId: string): Promise<boolean> {
         .from(callLogs)
         .where(
             and(
+                eq(callLogs.companyId, companyId),
                 eq(callLogs.userId, gdoId),
                 gte(callLogs.createdAt, sevenDaysAgo)
             )
@@ -53,13 +55,17 @@ export async function getPipelineLeads() {
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
     if (!session) throw new Error("Unauthorized")
 
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const isGdo = session.user.role === 'GDO'
     const userId = session.user.id
 
     const now = new Date()
 
-    // 1. Pipeline Calls (1, 2, 3)
+    // 1. Pipeline Calls (1, 2, 3) — tenant-scoped
     const pipelineBaseConditions = [
+        eq(leads.companyId, ctx.companyId),
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
         isNull(leads.recallDate),
@@ -83,8 +89,9 @@ export async function getPipelineLeads() {
         console.log(`[PIPE] ${new Date().toISOString()} u=${session.user.email} 1ª=${firstCall.length} (lch=${firstCall.filter(l => l.launchBucket).length}) 2ª=${secondCall.length} ids1ª=[${firstCallIds}]`)
     }
 
-    // 2. Recalls (In arrivo & Scaduti)
+    // 2. Recalls (In arrivo & Scaduti) — tenant-scoped
     const recallBaseConditions = [
+        eq(leads.companyId, ctx.companyId),
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
         isNotNull(leads.recallDate)
@@ -110,7 +117,10 @@ export async function getPipelineLeads() {
 
             const lastSnap = await db.select({ fingerprint: pipelineSnapshots.fingerprint })
                 .from(pipelineSnapshots)
-                .where(eq(pipelineSnapshots.userId, userId))
+                .where(and(
+                    eq(pipelineSnapshots.companyId, ctx.companyId),
+                    eq(pipelineSnapshots.userId, userId),
+                ))
                 .orderBy(desc(pipelineSnapshots.timestamp))
                 .limit(1)
 
@@ -126,6 +136,7 @@ export async function getPipelineLeads() {
                     secondCallIds: secondIds,
                     thirdCallIds: thirdIds,
                     fingerprint,
+                    companyId: ctx.companyId,
                 })
             }
         } catch (e) {
@@ -134,8 +145,9 @@ export async function getPipelineLeads() {
     }
 
 
-    // 3. Appointments
+    // 3. Appointments — tenant-scoped
     const apptBaseConditions = [
+        eq(leads.companyId, ctx.companyId),
         eq(leads.status, 'APPOINTMENT')
     ]
     if (isGdo) apptBaseConditions.push(eq(leads.assignedToId, userId))
@@ -152,12 +164,13 @@ export async function getPipelineLeads() {
     let fourthCallLeads: any[] = []
 
     if (isGdo) {
-        isFourthCallActive = await checkFourthCallEligibility(userId)
+        isFourthCallActive = await checkFourthCallEligibility(userId, ctx.companyId)
 
         if (isFourthCallActive) {
             const thirtyDaysAgo = subDays(now, 30)
 
             const fourthCallConditions = [
+                eq(leads.companyId, ctx.companyId),
                 eq(leads.status, 'REJECTED'),
                 eq(leads.callCount, 3),
                 eq(leads.discardReason, "irriperebile (3 tentativi vuoti)"),
@@ -200,7 +213,13 @@ export async function updateLeadOutcome(
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
     const effectiveUserId = userId || session?.user?.id
 
-    const lead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const lead = (await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+    )))[0]
     if (!lead) throw new Error("Lead non trovato")
 
     // Optimistic locking check
@@ -217,7 +236,7 @@ export async function updateLeadOutcome(
     let appointmentDate: Date | null = null
     let appointmentCreatedAt: Date | null = null
 
-    // Create Call Log
+    // Create Call Log (tenant-scoped)
     await db.insert(callLogs).values({
         id: crypto.randomUUID(),
         leadId,
@@ -227,6 +246,7 @@ export async function updateLeadOutcome(
         discardReason: discardReason || null,
         scriptCompleted: scriptCompleted || false,
         createdAt: now,
+        companyId: ctx.companyId,
     })
 
     if (outcome === 'DA_SCARTARE') {
@@ -278,7 +298,11 @@ export async function updateLeadOutcome(
             version: lead.version + 1,
             updatedAt: now,
         })
-        .where(and(eq(leads.id, leadId), eq(leads.version, lead.version)))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, lead.version),
+        ))
         .returning({ id: leads.id })
 
     if (updated.length === 0) {
@@ -305,9 +329,9 @@ export async function updateLeadOutcome(
             actorUserId: effectiveUserId ?? null,
         }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
 
-        // Gamification: award XP for appointment set
+        // Gamification: award XP for appointment set (tenant attribution)
         if (effectiveUserId) {
-            rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
+            rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
 
             // Fenice Universe: chest progress for fissaggi + boss attack
             incrementChestProgress(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Chest fissaggi err:", e));
