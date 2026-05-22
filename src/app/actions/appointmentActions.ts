@@ -7,16 +7,21 @@ import { leads, leadEvents } from "@/db/schema"
 import { eq, asc, desc, and } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
     if (!session) throw new Error("Unauthorized")
 
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const isGdo = session.user.role === 'GDO'
     const userId = session.user.id
 
     const conditions = [
+        eq(leads.companyId, ctx.companyId),
         eq(leads.status, 'APPOINTMENT')
     ]
     if (isGdo) conditions.push(eq(leads.assignedToId, userId))
@@ -54,8 +59,15 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     if (!supabaseUser || supabaseUser.user_metadata?.role !== 'GDO') throw new Error("Unauthorized");
 
-    // Fetch the lead first to make sure it's theirs
-    const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.assignedToId, supabaseUser.id)));
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    // Fetch the lead first to make sure it's theirs E nel suo tenant
+    const [lead] = await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+        eq(leads.assignedToId, supabaseUser.id),
+    ));
     if (!lead) throw new Error("Lead not found or unassigned");
 
     // Optimistic locking check
@@ -71,7 +83,11 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
         appointmentNote: note,
         version: lead.version + 1,
         updatedAt: new Date(),
-    }).where(and(eq(leads.id, leadId), eq(leads.version, lead.version)))
+    }).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+        eq(leads.version, lead.version),
+    ))
     .returning({ id: leads.id });
 
     if (updated.length === 0) {
@@ -114,7 +130,13 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             return { success: false, error: "Unauthorized — solo admin/manager possono cancellare appuntamenti" };
         }
 
-        const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const [lead] = await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        ));
         if (!lead) return { success: false, error: "Lead non trovato" };
 
         const previousState = {
@@ -147,6 +169,7 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             version: lead.version + 1,
             updatedAt: new Date(),
         }).where(and(
+            eq(leads.companyId, ctx.companyId),
             eq(leads.id, leadId),
             eq(leads.version, lead.version),
         )).returning({ id: leads.id });
@@ -162,6 +185,7 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             userId: user.id,
             timestamp: new Date(),
             metadata: { previousState, cancelledBy: role },
+            companyId: ctx.companyId,
         });
 
         // Cancellare un appuntamento resetta esiti conferme/vendita: impatta
@@ -189,10 +213,19 @@ export async function deleteLeadCompletely(leadId: string): Promise<{ success: b
             return { success: false, error: "Unauthorized — solo admin può cancellare lead" };
         }
 
-        const [lead] = await db.select({ name: leads.name }).from(leads).where(eq(leads.id, leadId));
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const [lead] = await db.select({ name: leads.name }).from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        ));
         if (!lead) return { success: false, error: "Lead non trovato" };
 
-        await db.delete(leads).where(eq(leads.id, leadId));
+        await db.delete(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        ));
         return { success: true, deletedName: lead.name ?? undefined };
     } catch (e: any) {
         return { success: false, error: e?.message || String(e) };
