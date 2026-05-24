@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { adventureProgress, adventureBosses, users, coinTransactions, callLogs, leadEvents, leads } from "@/db/schema";
 import { eq, and, gte, sql, count } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // Stage completion requirements (what it takes to advance 1 stage)
 // Requirements grow with stage number for ~4 month longevity
@@ -34,8 +35,11 @@ const DAMAGE_MAP: Record<string, number> = {
  */
 export async function getAdventureProgress(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         let [progress] = await db.select().from(adventureProgress)
-            .where(eq(adventureProgress.userId, userId));
+            .where(and(eq(adventureProgress.userId, userId), eq(adventureProgress.companyId, ctx.companyId)));
 
         if (!progress) {
             const newProgress = {
@@ -44,6 +48,7 @@ export async function getAdventureProgress(userId: string) {
                 currentStage: 1,
                 currentBossHp: null,
                 lastStageCompletedAt: null,
+                companyId: ctx.companyId,
             };
             await db.insert(adventureProgress).values(newProgress);
             progress = newProgress as typeof progress;
@@ -53,7 +58,10 @@ export async function getAdventureProgress(userId: string) {
         let activeBoss = null;
         if (progress.currentStage % 10 === 0) {
             const [boss] = await db.select().from(adventureBosses)
-                .where(eq(adventureBosses.stageNumber, progress.currentStage));
+                .where(and(
+                    eq(adventureBosses.stageNumber, progress.currentStage),
+                    eq(adventureBosses.companyId, ctx.companyId),
+                ));
             if (boss) {
                 activeBoss = {
                     ...boss,
@@ -79,8 +87,11 @@ export async function getAdventureProgress(userId: string) {
  */
 export async function advanceStage(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const [progress] = await db.select().from(adventureProgress)
-            .where(eq(adventureProgress.userId, userId));
+            .where(and(eq(adventureProgress.userId, userId), eq(adventureProgress.companyId, ctx.companyId)));
         if (!progress) return { success: false, error: 'No adventure progress found' };
 
         if (progress.currentStage >= 100) {
@@ -93,7 +104,10 @@ export async function advanceStage(userId: string) {
         // Check if next stage is a boss stage
         if (nextStage % 10 === 0) {
             const [boss] = await db.select().from(adventureBosses)
-                .where(eq(adventureBosses.stageNumber, nextStage));
+                .where(and(
+                    eq(adventureBosses.stageNumber, nextStage),
+                    eq(adventureBosses.companyId, ctx.companyId),
+                ));
             if (boss) {
                 bossHp = boss.totalHp;
             }
@@ -105,7 +119,7 @@ export async function advanceStage(userId: string) {
                 currentBossHp: bossHp,
                 lastStageCompletedAt: new Date(),
             })
-            .where(eq(adventureProgress.userId, userId));
+            .where(and(eq(adventureProgress.userId, userId), eq(adventureProgress.companyId, ctx.companyId)));
 
         return { success: true, newStage: nextStage, isBossStage: bossHp !== null };
     } catch (error) {
@@ -120,11 +134,14 @@ export async function advanceStage(userId: string) {
  */
 export async function attackBoss(userId: string, actionType: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const damage = DAMAGE_MAP[actionType] || 0;
         if (damage === 0) return null;
 
         const [progress] = await db.select().from(adventureProgress)
-            .where(eq(adventureProgress.userId, userId));
+            .where(and(eq(adventureProgress.userId, userId), eq(adventureProgress.companyId, ctx.companyId)));
         if (!progress) return null;
 
         // Not on a boss stage
@@ -132,7 +149,10 @@ export async function attackBoss(userId: string, actionType: string) {
         if (progress.currentBossHp === null) return null;
 
         const [boss] = await db.select().from(adventureBosses)
-            .where(eq(adventureBosses.stageNumber, progress.currentStage));
+            .where(and(
+                eq(adventureBosses.stageNumber, progress.currentStage),
+                eq(adventureBosses.companyId, ctx.companyId),
+            ));
         if (!boss) return null;
 
         const newHp = Math.max(0, progress.currentBossHp - damage);
@@ -148,17 +168,18 @@ export async function attackBoss(userId: string, actionType: string) {
             // Award coins
             if (boss.rewardCoins > 0) {
                 const [user] = await db.select({ walletCoins: users.walletCoins }).from(users)
-                    .where(eq(users.id, userId));
+                    .where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
                 if (user) {
                     await db.update(users)
                         .set({ walletCoins: user.walletCoins + boss.rewardCoins })
-                        .where(eq(users.id, userId));
+                        .where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
 
                     await db.insert(coinTransactions).values({
                         id: crypto.randomUUID(),
                         userId,
                         amount: boss.rewardCoins,
                         reason: `Boss sconfitto: ${boss.name}`,
+                        companyId: ctx.companyId,
                     });
                 }
             }
@@ -167,7 +188,7 @@ export async function attackBoss(userId: string, actionType: string) {
             if (boss.rewardTitle) {
                 await db.update(users)
                     .set({ activeTitle: boss.rewardTitle })
-                    .where(eq(users.id, userId));
+                    .where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
             }
 
             // Advance to next stage
@@ -178,7 +199,7 @@ export async function attackBoss(userId: string, actionType: string) {
                     currentBossHp: null,
                     lastStageCompletedAt: new Date(),
                 })
-                .where(eq(adventureProgress.userId, userId));
+                .where(and(eq(adventureProgress.userId, userId), eq(adventureProgress.companyId, ctx.companyId)));
 
             // Check achievements for boss count
             try {
@@ -198,7 +219,7 @@ export async function attackBoss(userId: string, actionType: string) {
             // Boss still alive
             await db.update(adventureProgress)
                 .set({ currentBossHp: newHp })
-                .where(eq(adventureProgress.userId, userId));
+                .where(and(eq(adventureProgress.userId, userId), eq(adventureProgress.companyId, ctx.companyId)));
 
             return {
                 bossDefeated: false,
@@ -218,7 +239,11 @@ export async function attackBoss(userId: string, actionType: string) {
  */
 export async function getAllBosses() {
     try {
-        return await db.select().from(adventureBosses).orderBy(adventureBosses.stageNumber);
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+        return await db.select().from(adventureBosses)
+            .where(eq(adventureBosses.companyId, ctx.companyId))
+            .orderBy(adventureBosses.stageNumber);
     } catch (error) {
         console.error("Errore getAllBosses:", error);
         return [];
@@ -230,6 +255,9 @@ export async function getAllBosses() {
  * Used by checkAndAdvanceStage to verify stage requirements.
  */
 export async function countTodayActions(userId: string, metric: string): Promise<number> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
     // Start of today in Europe/Rome timezone
     const now = new Date();
     const romeDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }); // YYYY-MM-DD
@@ -239,6 +267,7 @@ export async function countTodayActions(userId: string, metric: string): Promise
         case 'chiamate': {
             const [result] = await db.select({ c: count() }).from(callLogs)
                 .where(and(
+                    eq(callLogs.companyId, ctx.companyId),
                     eq(callLogs.userId, userId),
                     gte(callLogs.createdAt, todayStart)
                 ));
@@ -247,6 +276,7 @@ export async function countTodayActions(userId: string, metric: string): Promise
         case 'fissaggi': {
             const [result] = await db.select({ c: count() }).from(leadEvents)
                 .where(and(
+                    eq(leadEvents.companyId, ctx.companyId),
                     eq(leadEvents.userId, userId),
                     eq(leadEvents.eventType, 'APPOINTMENT_SET'),
                     gte(leadEvents.timestamp, todayStart)
@@ -256,6 +286,7 @@ export async function countTodayActions(userId: string, metric: string): Promise
         case 'conferme': {
             const [result] = await db.select({ c: count() }).from(leads)
                 .where(and(
+                    eq(leads.companyId, ctx.companyId),
                     eq(leads.assignedToId, userId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     gte(leads.confirmationsTimestamp, todayStart)
@@ -265,6 +296,7 @@ export async function countTodayActions(userId: string, metric: string): Promise
         case 'presenze': {
             const [result] = await db.select({ c: count() }).from(leads)
                 .where(and(
+                    eq(leads.companyId, ctx.companyId),
                     eq(leads.assignedToId, userId),
                     eq(leads.salespersonOutcome, 'Non chiuso'),
                     gte(leads.salespersonOutcomeAt, todayStart)
@@ -274,6 +306,7 @@ export async function countTodayActions(userId: string, metric: string): Promise
         case 'chiusure': {
             const [result] = await db.select({ c: count() }).from(leads)
                 .where(and(
+                    eq(leads.companyId, ctx.companyId),
                     eq(leads.assignedToId, userId),
                     eq(leads.salespersonOutcome, 'Chiuso'),
                     gte(leads.salespersonOutcomeAt, todayStart)
@@ -291,8 +324,11 @@ export async function countTodayActions(userId: string, metric: string): Promise
  */
 export async function checkAndAdvanceStage(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const [progress] = await db.select().from(adventureProgress)
-            .where(eq(adventureProgress.userId, userId));
+            .where(and(eq(adventureProgress.userId, userId), eq(adventureProgress.companyId, ctx.companyId)));
         if (!progress) return null;
 
         // Don't advance on boss stages — boss must be defeated

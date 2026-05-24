@@ -2,12 +2,15 @@
 
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getCurrentGdoGamificationState } from "@/app/actions/gdoPerformanceActions";
 import { getEvolutionStage, GAME_CONSTANTS, ROADMAP_REWARDS, EVOLUTION_STAGES, UNLOCKABLE_TITLES } from "@/lib/gamificationEngine";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 export async function getGdoRpgProfile(userId: string) {
-    const userRows = await db.select().from(users).where(eq(users.id, userId));
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const userRows = await db.select().from(users).where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
     if (userRows.length === 0) throw new Error("Utente non trovato");
 
     const user = userRows[0];

@@ -5,6 +5,7 @@ import { teamRpgProfile, teamCreatures, adventureBosses, creatures, users, coinT
 import { eq, and, sql } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
 import { createClient } from "@/utils/supabase/server";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 const TEAM_ID = 'team-conferme';
 
@@ -25,8 +26,11 @@ const DAMAGE_MAP: Record<string, number> = {
  */
 export async function getOrCreateTeamProfile() {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         let [profile] = await db.select().from(teamRpgProfile)
-            .where(eq(teamRpgProfile.id, TEAM_ID));
+            .where(and(eq(teamRpgProfile.id, TEAM_ID), eq(teamRpgProfile.companyId, ctx.companyId)));
 
         if (!profile) {
             const newProfile = {
@@ -37,6 +41,7 @@ export async function getOrCreateTeamProfile() {
                 currentStage: 1,
                 currentBossHp: null,
                 createdAt: new Date(),
+                companyId: ctx.companyId,
             };
             await db.insert(teamRpgProfile).values(newProfile);
             profile = newProfile as typeof profile;
@@ -46,7 +51,10 @@ export async function getOrCreateTeamProfile() {
         let activeBoss = null;
         if (profile.currentStage % 10 === 0) {
             const [boss] = await db.select().from(adventureBosses)
-                .where(eq(adventureBosses.stageNumber, profile.currentStage));
+                .where(and(
+                    eq(adventureBosses.stageNumber, profile.currentStage),
+                    eq(adventureBosses.companyId, ctx.companyId),
+                ));
             if (boss) {
                 activeBoss = {
                     ...boss,
@@ -71,6 +79,9 @@ export async function getOrCreateTeamProfile() {
  */
 export async function contributeToTeam(confermeUserId: string, xpAmount: number) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const profile = await getOrCreateTeamProfile();
         if (!profile) return null;
 
@@ -89,7 +100,7 @@ export async function contributeToTeam(confermeUserId: string, xpAmount: number)
 
         await db.update(teamRpgProfile)
             .set({ totalXp: newXp, level: newLevel })
-            .where(eq(teamRpgProfile.id, TEAM_ID));
+            .where(and(eq(teamRpgProfile.id, TEAM_ID), eq(teamRpgProfile.companyId, ctx.companyId)));
 
         return { newLevel, newXp, didLevelUp };
     } catch (error) {
@@ -103,6 +114,9 @@ export async function contributeToTeam(confermeUserId: string, xpAmount: number)
  */
 export async function teamDropCreature(confermeUserId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Random rarity (same weights as individual)
         const rarityRoll = Math.random() * 100;
         let rarity = 'common';
@@ -110,6 +124,7 @@ export async function teamDropCreature(confermeUserId: string) {
         else if (rarityRoll >= 88) rarity = 'epic';
         else if (rarityRoll >= 60) rarity = 'rare';
 
+        // `creatures` is a GLOBAL catalog — not tenant scoped.
         const pool = await db.select().from(creatures)
             .where(and(eq(creatures.rarity, rarity), eq(creatures.isActive, true)));
 
@@ -126,6 +141,7 @@ export async function teamDropCreature(confermeUserId: string) {
             isEquipped: false,
             obtainedAt: new Date(),
             contributedByUserId: confermeUserId,
+            companyId: ctx.companyId,
         };
 
         await db.insert(teamCreatures).values(teamCreature);
@@ -146,6 +162,9 @@ export async function teamDropCreature(confermeUserId: string) {
  */
 export async function getTeamCreatures() {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const rows = await db
             .select({
                 teamCreatureId: teamCreatures.id,
@@ -167,7 +186,10 @@ export async function getTeamCreatures() {
             .from(teamCreatures)
             .innerJoin(creatures, eq(teamCreatures.creatureId, creatures.id))
             .leftJoin(users, eq(teamCreatures.contributedByUserId, users.id))
-            .where(eq(teamCreatures.teamId, TEAM_ID));
+            .where(and(
+                eq(teamCreatures.teamId, TEAM_ID),
+                eq(teamCreatures.companyId, ctx.companyId),
+            ));
         return rows;
     } catch (error) {
         console.error("Errore getTeamCreatures:", error);
@@ -180,15 +202,26 @@ export async function getTeamCreatures() {
  */
 export async function equipTeamCreature(teamCreatureId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Un-equip all currently equipped
         await db.update(teamCreatures)
             .set({ isEquipped: false })
-            .where(and(eq(teamCreatures.teamId, TEAM_ID), eq(teamCreatures.isEquipped, true)));
+            .where(and(
+                eq(teamCreatures.teamId, TEAM_ID),
+                eq(teamCreatures.isEquipped, true),
+                eq(teamCreatures.companyId, ctx.companyId),
+            ));
 
         // Equip the selected one
         await db.update(teamCreatures)
             .set({ isEquipped: true })
-            .where(and(eq(teamCreatures.id, teamCreatureId), eq(teamCreatures.teamId, TEAM_ID)));
+            .where(and(
+                eq(teamCreatures.id, teamCreatureId),
+                eq(teamCreatures.teamId, TEAM_ID),
+                eq(teamCreatures.companyId, ctx.companyId),
+            ));
 
         return { success: true };
     } catch (error) {
@@ -202,8 +235,15 @@ export async function equipTeamCreature(teamCreatureId: string) {
  */
 export async function fuseTeamCreatures(creatureId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const copies = await db.select().from(teamCreatures)
-            .where(and(eq(teamCreatures.teamId, TEAM_ID), eq(teamCreatures.creatureId, creatureId)));
+            .where(and(
+                eq(teamCreatures.teamId, TEAM_ID),
+                eq(teamCreatures.creatureId, creatureId),
+                eq(teamCreatures.companyId, ctx.companyId),
+            ));
 
         if (copies.length < 3) {
             return { success: false, error: 'Servono almeno 3 copie per la fusione' };
@@ -226,12 +266,15 @@ export async function fuseTeamCreatures(creatureId: string) {
         }
 
         for (const c of toConsume) {
-            await db.delete(teamCreatures).where(eq(teamCreatures.id, c.id));
+            await db.delete(teamCreatures).where(and(
+                eq(teamCreatures.id, c.id),
+                eq(teamCreatures.companyId, ctx.companyId),
+            ));
         }
 
         await db.update(teamCreatures)
             .set({ level: keeper.level + 1 })
-            .where(eq(teamCreatures.id, keeper.id));
+            .where(and(eq(teamCreatures.id, keeper.id), eq(teamCreatures.companyId, ctx.companyId)));
 
         return { success: true, newLevel: keeper.level + 1, consumed: toConsume.length };
     } catch (error) {
@@ -252,6 +295,9 @@ export async function getTeamAdventureProgress() {
  */
 export async function teamAttackBoss(actionType: string, confermeUserId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const damage = DAMAGE_MAP[actionType] || 0;
         if (damage === 0) return null;
 
@@ -262,7 +308,10 @@ export async function teamAttackBoss(actionType: string, confermeUserId: string)
         if (profile.currentBossHp === null && !profile.activeBoss) return null;
 
         const [boss] = await db.select().from(adventureBosses)
-            .where(eq(adventureBosses.stageNumber, profile.currentStage));
+            .where(and(
+                eq(adventureBosses.stageNumber, profile.currentStage),
+                eq(adventureBosses.companyId, ctx.companyId),
+            ));
         if (!boss) return null;
 
         const currentHp = profile.currentBossHp ?? boss.totalHp;
@@ -281,7 +330,7 @@ export async function teamAttackBoss(actionType: string, confermeUserId: string)
                     currentStage: nextStage > 100 ? 100 : nextStage,
                     currentBossHp: null,
                 })
-                .where(eq(teamRpgProfile.id, TEAM_ID));
+                .where(and(eq(teamRpgProfile.id, TEAM_ID), eq(teamRpgProfile.companyId, ctx.companyId)));
 
             return {
                 bossDefeated: true,
@@ -293,12 +342,12 @@ export async function teamAttackBoss(actionType: string, confermeUserId: string)
         } else {
             await db.update(teamRpgProfile)
                 .set({ currentBossHp: newHp })
-                .where(eq(teamRpgProfile.id, TEAM_ID));
+                .where(and(eq(teamRpgProfile.id, TEAM_ID), eq(teamRpgProfile.companyId, ctx.companyId)));
 
             // Broadcast damage event for live updates
             try {
                 const [confermeUser] = await db.select({ displayName: users.displayName, name: users.name })
-                    .from(users).where(eq(users.id, confermeUserId));
+                    .from(users).where(and(eq(users.id, confermeUserId), eq(users.companyId, ctx.companyId)));
                 const userName = confermeUser?.displayName || confermeUser?.name || 'Operatore';
                 const supabase = await createClient();
                 const channel = supabase.channel('team-adventure');

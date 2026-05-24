@@ -5,23 +5,29 @@ import { achievements, userAchievements, users, callLogs, leads, questProgress, 
 import { eq, and, gte, isNotNull, isNull, sql, count, countDistinct, inArray, or } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 /**
  * Measure a lifetime metric for a user.
  * Returns the current value for a given achievement metric.
  */
 export async function measureAchievementMetric(userId: string, metric: string): Promise<number> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const companyId = ctx.companyId;
+
     switch (metric) {
         case 'total_calls': {
             const result = await db.select({ value: count() })
                 .from(callLogs)
-                .where(eq(callLogs.userId, userId));
+                .where(and(eq(callLogs.companyId, companyId), eq(callLogs.userId, userId)));
             return result[0]?.value ?? 0;
         }
         case 'total_appointments': {
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.assignedToId, userId),
                     isNotNull(leads.appointmentCreatedAt)
                 ));
@@ -30,13 +36,14 @@ export async function measureAchievementMetric(userId: string, metric: string): 
         case 'current_streak': {
             const userRows = await db.select({ streakCount: users.streakCount })
                 .from(users)
-                .where(eq(users.id, userId));
+                .where(and(eq(users.id, userId), eq(users.companyId, companyId)));
             return userRows[0]?.streakCount ?? 0;
         }
         case 'total_quests_completed': {
             const result = await db.select({ value: count() })
                 .from(questProgress)
                 .where(and(
+                    eq(questProgress.companyId, companyId),
                     eq(questProgress.userId, userId),
                     eq(questProgress.completed, true)
                 ));
@@ -45,13 +52,13 @@ export async function measureAchievementMetric(userId: string, metric: string): 
         case 'current_level': {
             const userRows = await db.select({ level: users.level })
                 .from(users)
-                .where(eq(users.id, userId));
+                .where(and(eq(users.id, userId), eq(users.companyId, companyId)));
             return userRows[0]?.level ?? 1;
         }
         case 'total_leads_contacted': {
             const result = await db.select({ value: countDistinct(callLogs.leadId) })
                 .from(callLogs)
-                .where(eq(callLogs.userId, userId));
+                .where(and(eq(callLogs.companyId, companyId), eq(callLogs.userId, userId)));
             return result[0]?.value ?? 0;
         }
         case 'total_coins_earned': {
@@ -59,7 +66,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
                 value: sql<number>`COALESCE(SUM(CASE WHEN ${coinTransactions.amount} > 0 THEN ${coinTransactions.amount} ELSE 0 END), 0)`
             })
                 .from(coinTransactions)
-                .where(eq(coinTransactions.userId, userId));
+                .where(and(eq(coinTransactions.companyId, companyId), eq(coinTransactions.userId, userId)));
             return Number(result[0]?.value) ?? 0;
         }
         // --- CONFERME achievement metrics (lifetime) ---
@@ -67,6 +74,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.confirmationsUserId, userId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     isNotNull(leads.confirmationsTimestamp)
@@ -84,6 +92,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             const result = await db.select({ value: count() })
                 .from(leadEvents)
                 .where(and(
+                    eq(leadEvents.companyId, companyId),
                     eq(leadEvents.userId, userId),
                     inArray(leadEvents.eventType, confermeEventTypes)
                 ));
@@ -94,6 +103,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.confirmationsUserId, userId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     isNotNull(leads.confSnoozeAt)
@@ -108,6 +118,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.confirmationsUserId, userId),
                     sql`${leads.confirmationsOutcome} IN ('confermato', 'scartato')`
                 ));
@@ -120,6 +131,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     eq(leads.salespersonOutcome, 'Chiuso')
                 ));
@@ -131,6 +143,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     eq(leads.salespersonOutcome, 'Chiuso')
                 ));
@@ -144,6 +157,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     isNotNull(leads.salespersonOutcome)
                 ));
@@ -156,6 +170,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             const result = await db.select({ value: count() })
                 .from(callLogs)
                 .where(and(
+                    eq(callLogs.companyId, companyId),
                     eq(callLogs.userId, userId),
                     eq(callLogs.scriptCompleted, true)
                 ));
@@ -166,19 +181,26 @@ export async function measureAchievementMetric(userId: string, metric: string): 
             // Count stages that are multiples of 10 that have been completed (currentStage > bossStage)
             const { adventureProgress } = await import("@/db/schema");
             const [progress] = await db.select({ currentStage: adventureProgress.currentStage })
-                .from(adventureProgress).where(eq(adventureProgress.userId, userId));
+                .from(adventureProgress).where(and(
+                    eq(adventureProgress.userId, userId),
+                    eq(adventureProgress.companyId, companyId),
+                ));
             if (!progress) return 0;
             // Bosses are at stages 10, 20, 30... A boss at stage N is defeated if currentStage > N
             return Math.floor((progress.currentStage - 1) / 10);
         }
         case 'total_creatures_owned': {
             const [result] = await db.select({ c: count() }).from(userCreatures)
-                .where(eq(userCreatures.userId, userId));
+                .where(and(
+                    eq(userCreatures.userId, userId),
+                    eq(userCreatures.companyId, companyId),
+                ));
             return result?.c ?? 0;
         }
         case 'total_trades_completed': {
             const [result] = await db.select({ c: count() }).from(tradingOffers)
                 .where(and(
+                    eq(tradingOffers.companyId, companyId),
                     or(eq(tradingOffers.fromUserId, userId), eq(tradingOffers.toUserId, userId)),
                     eq(tradingOffers.status, 'accepted')
                 ));
@@ -186,13 +208,18 @@ export async function measureAchievementMetric(userId: string, metric: string): 
         }
         case 'total_duels_won': {
             const [result] = await db.select({ c: count() }).from(duels)
-                .where(and(eq(duels.winnerId, userId), eq(duels.status, 'completed')));
+                .where(and(
+                    eq(duels.companyId, companyId),
+                    eq(duels.winnerId, userId),
+                    eq(duels.status, 'completed'),
+                ));
             return result?.c ?? 0;
         }
         // --- LEAD SURVEY metrics (sondaggi lead) ---
         case 'gdo_surveys_completed': {
             const [result] = await db.select({ c: count() }).from(gdoLeadSurveys)
                 .where(and(
+                    eq(gdoLeadSurveys.companyId, companyId),
                     eq(gdoLeadSurveys.gdoUserId, userId),
                     eq(gdoLeadSurveys.completed, true),
                     isNull(gdoLeadSurveys.invalidatedBy),
@@ -202,6 +229,7 @@ export async function measureAchievementMetric(userId: string, metric: string): 
         case 'conferme_surveys_completed': {
             const [result] = await db.select({ c: count() }).from(confermeLeadSurveys)
                 .where(and(
+                    eq(confermeLeadSurveys.companyId, companyId),
                     eq(confermeLeadSurveys.confermeUserId, userId),
                     isNull(confermeLeadSurveys.invalidatedBy),
                 ));
@@ -227,8 +255,12 @@ export async function checkAchievements(userId: string): Promise<{
     error?: string;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Fetch all achievement definitions
-        const allAchievements = await db.select().from(achievements);
+        const allAchievements = await db.select().from(achievements)
+            .where(eq(achievements.companyId, ctx.companyId));
 
         // Fetch user's already-unlocked achievements
         const unlockedRows = await db.select({
@@ -236,7 +268,10 @@ export async function checkAchievements(userId: string): Promise<{
             tier: userAchievements.tier,
         })
             .from(userAchievements)
-            .where(eq(userAchievements.userId, userId));
+            .where(and(
+                eq(userAchievements.companyId, ctx.companyId),
+                eq(userAchievements.userId, userId),
+            ));
 
         // Build map of achievementId -> highest unlocked tier
         const unlockedMap = new Map<string, number>();
@@ -288,6 +323,7 @@ export async function checkAchievements(userId: string): Promise<{
                             userId,
                             achievementId: ach.id,
                             tier: tierNumber,
+                            companyId: ctx.companyId,
                         }).onConflictDoNothing({
                             target: [userAchievements.userId, userAchievements.achievementId, userAchievements.tier]
                         }).returning({ id: userAchievements.id });
@@ -305,7 +341,8 @@ export async function checkAchievements(userId: string): Promise<{
                         const coinReward = Math.floor(baseCoinReward * eventMult.coins);
                         if (coinReward > 0) {
                             // Use SQL increment to avoid fetching user coins each time
-                            await db.update(users).set({ walletCoins: sql`${users.walletCoins} + ${coinReward}` }).where(eq(users.id, userId));
+                            await db.update(users).set({ walletCoins: sql`${users.walletCoins} + ${coinReward}` })
+                                .where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
                             const achReason = eventMult.coins > 1
                                 ? `Achievement ${tierLabels[tierNumber]}: ${ach.name} (x${eventMult.coins} evento)`
                                 : `Achievement ${tierLabels[tierNumber]}: ${ach.name}`;
@@ -314,6 +351,7 @@ export async function checkAchievements(userId: string): Promise<{
                                 userId,
                                 amount: coinReward,
                                 reason: achReason,
+                                companyId: ctx.companyId,
                             });
                         }
 
@@ -332,6 +370,7 @@ export async function checkAchievements(userId: string): Promise<{
                                 tierLabel: tierLabels[tierNumber],
                                 coinsAwarded: coinReward,
                             },
+                            companyId: ctx.companyId,
                         });
 
                         newlyUnlocked.push({
@@ -377,8 +416,12 @@ export async function getUserAchievements(userId: string): Promise<{
     }>;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Fetch all achievement definitions
-        const allAchievements = await db.select().from(achievements);
+        const allAchievements = await db.select().from(achievements)
+            .where(eq(achievements.companyId, ctx.companyId));
 
         // Fetch user's unlocked achievements
         const unlockedRows = await db.select({
@@ -386,7 +429,10 @@ export async function getUserAchievements(userId: string): Promise<{
             tier: userAchievements.tier,
         })
             .from(userAchievements)
-            .where(eq(userAchievements.userId, userId));
+            .where(and(
+                eq(userAchievements.companyId, ctx.companyId),
+                eq(userAchievements.userId, userId),
+            ));
 
         // Build map: achievementId -> highest tier
         const unlockedMap = new Map<string, number>();

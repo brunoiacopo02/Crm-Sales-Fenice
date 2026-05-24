@@ -6,6 +6,7 @@ import { eq, and, gte, lte, isNotNull, sql, count, countDistinct, inArray } from
 import { updateStreak } from "@/app/actions/streakActions";
 import { getStreakMultiplier } from "@/lib/streakUtils";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // --- Helpers ---
 
@@ -60,6 +61,9 @@ const WEEKLY_QUEST_COUNT = 2;
  */
 export async function generateDailyQuests(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const todayScope = getTodayRome();
         const weekScope = getWeekScopeRome();
 
@@ -68,6 +72,7 @@ export async function generateDailyQuests(userId: string): Promise<{ success: bo
             .from(questProgress)
             .innerJoin(quests, eq(questProgress.questId, quests.id))
             .where(and(
+                eq(questProgress.companyId, ctx.companyId),
                 eq(questProgress.userId, userId),
                 eq(questProgress.dateScope, todayScope),
                 eq(quests.type, 'daily')
@@ -79,16 +84,26 @@ export async function generateDailyQuests(userId: string): Promise<{ success: bo
         }
 
         // Determine user role to filter quests
-        const userRows = await db.select({ role: users.role }).from(users).where(eq(users.id, userId));
+        const userRows = await db.select({ role: users.role }).from(users).where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
         const userRole = userRows[0]?.role || 'GDO';
         const questRole = userRole === 'CONFERME' ? 'CONFERME' : userRole === 'VENDITORE' ? 'VENDITORE' : 'GDO';
 
         // Fetch all active quest templates for this role
         const dailyTemplates = await db.select().from(quests)
-            .where(and(eq(quests.type, 'daily'), eq(quests.isActive, true), eq(quests.role, questRole)));
+            .where(and(
+                eq(quests.companyId, ctx.companyId),
+                eq(quests.type, 'daily'),
+                eq(quests.isActive, true),
+                eq(quests.role, questRole),
+            ));
 
         const weeklyTemplates = await db.select().from(quests)
-            .where(and(eq(quests.type, 'weekly'), eq(quests.isActive, true), eq(quests.role, questRole)));
+            .where(and(
+                eq(quests.companyId, ctx.companyId),
+                eq(quests.type, 'weekly'),
+                eq(quests.isActive, true),
+                eq(quests.role, questRole),
+            ));
 
         // Shuffle and pick random daily quests (variable reward pattern)
         const shuffledDaily = dailyTemplates.sort(() => Math.random() - 0.5);
@@ -103,6 +118,7 @@ export async function generateDailyQuests(userId: string): Promise<{ success: bo
             completed: false,
             completedAt: null as Date | null,
             dateScope: todayScope,
+            companyId: ctx.companyId,
         }));
 
         if (dailyEntries.length > 0) {
@@ -114,6 +130,7 @@ export async function generateDailyQuests(userId: string): Promise<{ success: bo
             .from(questProgress)
             .innerJoin(quests, eq(questProgress.questId, quests.id))
             .where(and(
+                eq(questProgress.companyId, ctx.companyId),
                 eq(questProgress.userId, userId),
                 eq(questProgress.dateScope, weekScope),
                 eq(quests.type, 'weekly')
@@ -132,6 +149,7 @@ export async function generateDailyQuests(userId: string): Promise<{ success: bo
                 completed: false,
                 completedAt: null as Date | null,
                 dateScope: weekScope,
+                companyId: ctx.companyId,
             }));
 
             await db.insert(questProgress).values(weeklyEntries);
@@ -147,12 +165,13 @@ export async function generateDailyQuests(userId: string): Promise<{ success: bo
 /**
  * Measure a metric for a user in a given time range.
  */
-async function measureMetric(userId: string, metric: string, start: Date, end: Date): Promise<number> {
+async function measureMetric(userId: string, metric: string, start: Date, end: Date, companyId: string): Promise<number> {
     switch (metric) {
         case 'calls_made': {
             const result = await db.select({ value: count() })
                 .from(callLogs)
                 .where(and(
+                    eq(callLogs.companyId, companyId),
                     eq(callLogs.userId, userId),
                     gte(callLogs.createdAt, start),
                     lte(callLogs.createdAt, end)
@@ -163,6 +182,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.assignedToId, userId),
                     isNotNull(leads.appointmentCreatedAt),
                     gte(leads.appointmentCreatedAt, start),
@@ -174,6 +194,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: countDistinct(callLogs.leadId) })
                 .from(callLogs)
                 .where(and(
+                    eq(callLogs.companyId, companyId),
                     eq(callLogs.userId, userId),
                     gte(callLogs.createdAt, start),
                     lte(callLogs.createdAt, end)
@@ -184,6 +205,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(callLogs)
                 .where(and(
+                    eq(callLogs.companyId, companyId),
                     eq(callLogs.userId, userId),
                     eq(callLogs.scriptCompleted, true),
                     gte(callLogs.createdAt, start),
@@ -199,6 +221,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     isNotNull(leads.confirmationsTimestamp),
@@ -217,6 +240,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leadEvents)
                 .where(and(
+                    eq(leadEvents.companyId, companyId),
                     eq(leadEvents.userId, userId),
                     inArray(leadEvents.eventType, confermeEventTypes),
                     gte(leadEvents.timestamp, start),
@@ -228,6 +252,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'scartato'),
                     isNotNull(leads.confirmationsTimestamp),
@@ -240,6 +265,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const presenze = await db.select({ outcome: leads.salespersonOutcome })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     isNotNull(leads.salespersonOutcome),
@@ -253,6 +279,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     eq(leads.salespersonOutcome, 'Chiuso'),
@@ -267,6 +294,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     eq(leads.salespersonOutcome, 'Chiuso'),
                     isNotNull(leads.salespersonOutcomeAt),
@@ -279,6 +307,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)` })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     eq(leads.salespersonOutcome, 'Chiuso'),
                     isNotNull(leads.salespersonOutcomeAt),
@@ -291,6 +320,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     isNotNull(leads.salespersonOutcome),
                     isNotNull(leads.salespersonOutcomeAt),
@@ -303,6 +333,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             const result = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     isNotNull(leads.salespersonAssignedAt),
                     gte(leads.salespersonAssignedAt, start),
@@ -325,6 +356,9 @@ export async function checkQuestProgress(userId: string): Promise<{
     error?: string;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const todayScope = getTodayRome();
         const weekScope = getWeekScopeRome();
         const todayBounds = getDayBoundsRome(todayScope);
@@ -347,6 +381,7 @@ export async function checkQuestProgress(userId: string): Promise<{
             .from(questProgress)
             .innerJoin(quests, eq(questProgress.questId, quests.id))
             .where(and(
+                eq(questProgress.companyId, ctx.companyId),
                 eq(questProgress.userId, userId),
                 eq(questProgress.completed, false),
                 sql`(${questProgress.dateScope} = ${todayScope} OR ${questProgress.dateScope} = ${weekScope})`
@@ -360,7 +395,7 @@ export async function checkQuestProgress(userId: string): Promise<{
             const bounds = qp.questType === 'daily' ? todayBounds : weekBounds;
             const cacheKey = `${qp.targetMetric}:${qp.questType}`;
             if (!metricCache.has(cacheKey)) {
-                metricCache.set(cacheKey, await measureMetric(userId, qp.targetMetric, bounds.start, bounds.end));
+                metricCache.set(cacheKey, await measureMetric(userId, qp.targetMetric, bounds.start, bounds.end, ctx.companyId));
             }
         }
 
@@ -377,7 +412,7 @@ export async function checkQuestProgress(userId: string): Promise<{
                     completed: isNowComplete,
                     completedAt: isNowComplete ? new Date() : null,
                 })
-                .where(eq(questProgress.id, qp.progressId));
+                .where(and(eq(questProgress.id, qp.progressId), eq(questProgress.companyId, ctx.companyId)));
 
             if (isNowComplete && !qp.completed) {
                 newlyCompleted.push({
@@ -401,6 +436,9 @@ export async function checkQuestProgress(userId: string): Promise<{
  */
 export async function completeQuest(userId: string, questProgressId: string): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Fetch the quest progress with quest details
         const rows = await db.select({
             progressId: questProgress.id,
@@ -413,6 +451,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             .from(questProgress)
             .innerJoin(quests, eq(questProgress.questId, quests.id))
             .where(and(
+                eq(questProgress.companyId, ctx.companyId),
                 eq(questProgress.id, questProgressId),
                 eq(questProgress.userId, userId)
             ));
@@ -438,6 +477,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
         const claimRes = await db.update(questProgress)
             .set({ currentValue: -1 })
             .where(and(
+                eq(questProgress.companyId, ctx.companyId),
                 eq(questProgress.id, questProgressId),
                 eq(questProgress.completed, true),
                 sql`${questProgress.currentValue} != -1`
@@ -462,7 +502,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
         const effectiveCoins = Math.floor(qp.rewardCoins * totalCoinsMult);
 
         // Award XP and coins
-        const userRows = await db.select().from(users).where(eq(users.id, userId));
+        const userRows = await db.select().from(users).where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
         if (userRows.length === 0) return { success: false, error: "Utente non trovato" };
 
         const user = userRows[0];
@@ -484,7 +524,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             experience: newXp,
             level: newLevel,
             walletCoins: newWalletCoins,
-        }).where(eq(users.id, userId));
+        }).where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)));
 
         // Log coin transaction (show multipliers in reason if > 1)
         const multParts: string[] = [];
@@ -498,6 +538,7 @@ export async function completeQuest(userId: string, questProgressId: string): Pr
             userId,
             amount: effectiveCoins,
             reason: coinReason,
+            companyId: ctx.companyId,
         });
 
         // currentValue was already set to -1 above by the atomic claim step
@@ -536,6 +577,9 @@ export async function getUserQuests(userId: string): Promise<{
         completed: boolean;
     }>;
 }> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
     const todayScope = getTodayRome();
     const weekScope = getWeekScopeRome();
 
@@ -555,6 +599,7 @@ export async function getUserQuests(userId: string): Promise<{
         .from(questProgress)
         .innerJoin(quests, eq(questProgress.questId, quests.id))
         .where(and(
+            eq(questProgress.companyId, ctx.companyId),
             eq(questProgress.userId, userId),
             sql`(${questProgress.dateScope} = ${todayScope} OR ${questProgress.dateScope} = ${weekScope})`
         ));
