@@ -5,6 +5,7 @@ import { lootDrops, leads, users, coinTransactions, notifications } from "@/db/s
 import { eq, and, isNotNull, count } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 /**
  * Roll a weighted random rarity for loot drop.
@@ -43,12 +44,16 @@ export async function triggerLootDrop(userId: string): Promise<{
     error?: string;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const { TRIGGER_EVERY } = GAME_CONSTANTS.LOOT_DROP;
 
         // Count total appointments set by this user
         const result = await db.select({ value: count() })
             .from(leads)
             .where(and(
+                eq(leads.companyId, ctx.companyId),
                 eq(leads.assignedToId, userId),
                 isNotNull(leads.appointmentCreatedAt)
             ));
@@ -81,6 +86,7 @@ export async function triggerLootDrop(userId: string): Promise<{
             bonusXp: 'bonusXp' in tier ? (tier as { bonusXp: number }).bonusXp : 0,
             bonusTitle,
             opened: false,
+            companyId: ctx.companyId,
         });
 
         // Notify user about the loot drop
@@ -95,6 +101,7 @@ export async function triggerLootDrop(userId: string): Promise<{
                 rarity: tier.rarity,
                 milestone: totalAppointments,
             },
+            companyId: ctx.companyId,
         });
 
         return { success: true, lootDrop: { id: dropId, rarity: tier.rarity } };
@@ -115,6 +122,9 @@ export async function getUserPendingLootDrops(userId: string): Promise<{
     }>;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const drops = await db.select({
             id: lootDrops.id,
             rarity: lootDrops.rarity,
@@ -122,6 +132,7 @@ export async function getUserPendingLootDrops(userId: string): Promise<{
         })
             .from(lootDrops)
             .where(and(
+                eq(lootDrops.companyId, ctx.companyId),
                 eq(lootDrops.userId, userId),
                 eq(lootDrops.opened, false)
             ));
@@ -148,9 +159,13 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
     error?: string;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Fetch the loot drop
         const [drop] = await db.select().from(lootDrops)
             .where(and(
+                eq(lootDrops.companyId, ctx.companyId),
                 eq(lootDrops.id, lootDropId),
                 eq(lootDrops.userId, userId),
                 eq(lootDrops.opened, false)
@@ -164,7 +179,7 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
         await db.update(lootDrops).set({
             opened: true,
             openedAt: new Date(),
-        }).where(eq(lootDrops.id, lootDropId));
+        }).where(and(eq(lootDrops.companyId, ctx.companyId), eq(lootDrops.id, lootDropId)));
 
         // Apply seasonal event multiplier
         const eventMult = await getActiveEventMultipliers();
@@ -174,7 +189,7 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
         // Award coins — use walletCoins (the visible/spendable field)
         const userRow = (await db.select({ walletCoins: users.walletCoins, experience: users.experience, level: users.level })
             .from(users)
-            .where(eq(users.id, userId)))[0];
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId))))[0];
 
         if (userRow) {
             const newCoins = userRow.walletCoins + effectiveLootCoins;
@@ -203,13 +218,13 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
             if (drop.bonusTitle) {
                 const userFull = (await db.select({ activeTitle: users.activeTitle })
                     .from(users)
-                    .where(eq(users.id, userId)))[0];
+                    .where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId))))[0];
                 if (!userFull?.activeTitle) {
                     updateFields.activeTitle = drop.bonusTitle;
                 }
             }
 
-            await db.update(users).set(updateFields).where(eq(users.id, userId));
+            await db.update(users).set(updateFields).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
 
             // Log coin transaction
             const rarityLabel = drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1);
@@ -221,6 +236,7 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
                 userId,
                 amount: effectiveLootCoins,
                 reason: lootReason,
+                companyId: ctx.companyId,
             });
         }
 

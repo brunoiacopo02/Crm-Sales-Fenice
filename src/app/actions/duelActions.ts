@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { duels, users, coinTransactions, notifications } from "@/db/schema";
 import { eq, and, or, desc, count, sql } from "drizzle-orm";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 /**
  * Create a duel between two GDO users. Only TL/Manager can create duels.
@@ -20,6 +21,9 @@ export async function createDuel(
     creatorRole: string
 ) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         if (creatorRole !== 'MANAGER' && creatorRole !== 'ADMIN' && creatorRole !== 'TL') {
             return { success: false, error: 'Solo TL/Manager possono creare duelli' };
         }
@@ -41,7 +45,10 @@ export async function createDuel(
                 walletCoins: users.walletCoins,
                 name: users.name,
                 displayName: users.displayName,
-            }).from(users).where(or(eq(users.id, challengerId), eq(users.id, opponentId)));
+            }).from(users).where(and(
+                eq(users.companyId, ctx.companyId),
+                or(eq(users.id, challengerId), eq(users.id, opponentId)),
+            ));
 
             const challenger = participants.find(u => u.id === challengerId);
             const opponent = participants.find(u => u.id === opponentId);
@@ -66,10 +73,10 @@ export async function createDuel(
             // Deduct stake from both participants (SQL increment is safe inside tx)
             await tx.update(users)
                 .set({ walletCoins: sql`${users.walletCoins} - ${stake}` })
-                .where(eq(users.id, challengerId));
+                .where(and(eq(users.companyId, ctx.companyId), eq(users.id, challengerId)));
             await tx.update(users)
                 .set({ walletCoins: sql`${users.walletCoins} - ${stake}` })
-                .where(eq(users.id, opponentId));
+                .where(and(eq(users.companyId, ctx.companyId), eq(users.id, opponentId)));
 
             // Log both stake transactions
             await tx.insert(coinTransactions).values([
@@ -78,12 +85,14 @@ export async function createDuel(
                     userId: challengerId,
                     amount: -stake,
                     reason: `Duello: scommessa vs ${opponentName}`,
+                    companyId: ctx.companyId,
                 },
                 {
                     id: crypto.randomUUID(),
                     userId: opponentId,
                     amount: -stake,
                     reason: `Duello: scommessa vs ${challengerName}`,
+                    companyId: ctx.companyId,
                 },
             ]);
 
@@ -101,6 +110,7 @@ export async function createDuel(
                 winnerId: null,
                 rewardCoins: stake, // the stake per side; pot = stake * 2
                 status: 'active',
+                companyId: ctx.companyId,
             });
 
             // Notify both participants — triggers the duel start overlay on their dashboard
@@ -124,6 +134,7 @@ export async function createDuel(
                         stake,
                         pot,
                     },
+                    companyId: ctx.companyId,
                 },
                 {
                     id: crypto.randomUUID(),
@@ -141,6 +152,7 @@ export async function createDuel(
                         stake,
                         pot,
                     },
+                    companyId: ctx.companyId,
                 },
             ]);
 
@@ -159,8 +171,11 @@ export async function createDuel(
  */
 export async function getDuelStatus(duelId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const [duel] = await db.select().from(duels)
-            .where(eq(duels.id, duelId));
+            .where(and(eq(duels.companyId, ctx.companyId), eq(duels.id, duelId)));
         if (!duel) return null;
 
         // Auto-complete if expired
@@ -180,9 +195,16 @@ export async function getDuelStatus(duelId: string) {
  */
 export async function incrementDuelScore(userId: string, metric: string, amount: number = 1) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Find active duels for this user matching the metric
         const activeDuels = await db.select().from(duels)
-            .where(and(eq(duels.status, 'active'), eq(duels.metric, metric)));
+            .where(and(
+                eq(duels.companyId, ctx.companyId),
+                eq(duels.status, 'active'),
+                eq(duels.metric, metric),
+            ));
 
         for (const duel of activeDuels) {
             if (new Date() > duel.endTime) {
@@ -193,11 +215,11 @@ export async function incrementDuelScore(userId: string, metric: string, amount:
             if (duel.challengerId === userId) {
                 await db.update(duels)
                     .set({ challengerScore: duel.challengerScore + amount })
-                    .where(eq(duels.id, duel.id));
+                    .where(and(eq(duels.companyId, ctx.companyId), eq(duels.id, duel.id)));
             } else if (duel.opponentId === userId) {
                 await db.update(duels)
                     .set({ opponentScore: duel.opponentScore + amount })
-                    .where(eq(duels.id, duel.id));
+                    .where(and(eq(duels.companyId, ctx.companyId), eq(duels.id, duel.id)));
             }
         }
     } catch (error) {
@@ -215,9 +237,12 @@ export async function incrementDuelScore(userId: string, metric: string, amount:
  */
 export async function completeDuel(duelId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const result = await db.transaction(async (tx) => {
             const [duel] = await tx.select().from(duels)
-                .where(eq(duels.id, duelId));
+                .where(and(eq(duels.companyId, ctx.companyId), eq(duels.id, duelId)));
             if (!duel || duel.status === 'completed') return duel;
 
             let winnerId: string | null = null;
@@ -230,7 +255,11 @@ export async function completeDuel(duelId: string) {
             // Mark the duel completed first (optimistic locking via status prevents double-payout)
             const updated = await tx.update(duels)
                 .set({ status: 'completed', winnerId })
-                .where(and(eq(duels.id, duelId), eq(duels.status, 'active')))
+                .where(and(
+                    eq(duels.companyId, ctx.companyId),
+                    eq(duels.id, duelId),
+                    eq(duels.status, 'active'),
+                ))
                 .returning({ id: duels.id });
 
             if (updated.length === 0) {
@@ -243,9 +272,9 @@ export async function completeDuel(duelId: string) {
 
             // Recupero i nomi per notifiche e digest manager
             const [challengerUser] = await tx.select({ name: users.name, displayName: users.displayName })
-                .from(users).where(eq(users.id, duel.challengerId));
+                .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.challengerId)));
             const [opponentUser] = await tx.select({ name: users.name, displayName: users.displayName })
-                .from(users).where(eq(users.id, duel.opponentId));
+                .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.opponentId)));
             const challengerName = challengerUser?.displayName || challengerUser?.name || 'GDO';
             const opponentName = opponentUser?.displayName || opponentUser?.name || 'GDO';
 
@@ -253,13 +282,14 @@ export async function completeDuel(duelId: string) {
                 // Winner takes the full pot
                 await tx.update(users)
                     .set({ walletCoins: sql`${users.walletCoins} + ${pot}` })
-                    .where(eq(users.id, winnerId));
+                    .where(and(eq(users.companyId, ctx.companyId), eq(users.id, winnerId)));
 
                 await tx.insert(coinTransactions).values({
                     id: crypto.randomUUID(),
                     userId: winnerId,
                     amount: pot,
                     reason: `Duello vinto (${duel.metric}): +${pot} monete`,
+                    companyId: ctx.companyId,
                 });
 
                 // Notify winner + loser
@@ -274,6 +304,7 @@ export async function completeDuel(duelId: string) {
                         title: '🏆 Duello VINTO!',
                         body: `Hai vinto il duello e incassato ${pot} monete!`,
                         metadata: { duelId, pot, stake },
+                        companyId: ctx.companyId,
                     },
                     {
                         id: crypto.randomUUID(),
@@ -282,12 +313,16 @@ export async function completeDuel(duelId: string) {
                         title: '💀 Duello perso',
                         body: `Hai perso il duello. Hai perso ${stake} monete.`,
                         metadata: { duelId, stake },
+                        companyId: ctx.companyId,
                     },
                 ]);
 
                 // Notifica ai Manager/Admin con il risultato finale
                 const managers = await tx.select({ id: users.id }).from(users)
-                    .where(sql`${users.role} IN ('MANAGER', 'ADMIN', 'TL')`);
+                    .where(and(
+                        eq(users.companyId, ctx.companyId),
+                        sql`${users.role} IN ('MANAGER', 'ADMIN', 'TL')`,
+                    ));
                 const finalScore = `${duel.challengerScore}-${duel.opponentScore}`;
                 for (const m of managers) {
                     await tx.insert(notifications).values({
@@ -297,16 +332,17 @@ export async function completeDuel(duelId: string) {
                         title: `⚔️ Duello concluso: ${winnerName} vince`,
                         body: `${challengerName} vs ${opponentName} (${duel.metric}) — risultato ${finalScore}. ${winnerName} incassa ${pot} monete, ${loserName} perde ${stake}.`,
                         metadata: { duelId, winnerId, winnerName, loserName, metric: duel.metric, finalScore, pot, stake },
+                        companyId: ctx.companyId,
                     });
                 }
             } else if (!winnerId && stake > 0) {
                 // Tie: refund stake to both participants
                 await tx.update(users)
                     .set({ walletCoins: sql`${users.walletCoins} + ${stake}` })
-                    .where(eq(users.id, duel.challengerId));
+                    .where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.challengerId)));
                 await tx.update(users)
                     .set({ walletCoins: sql`${users.walletCoins} + ${stake}` })
-                    .where(eq(users.id, duel.opponentId));
+                    .where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.opponentId)));
 
                 await tx.insert(coinTransactions).values([
                     {
@@ -314,12 +350,14 @@ export async function completeDuel(duelId: string) {
                         userId: duel.challengerId,
                         amount: stake,
                         reason: `Duello pareggio: rimborso scommessa`,
+                        companyId: ctx.companyId,
                     },
                     {
                         id: crypto.randomUUID(),
                         userId: duel.opponentId,
                         amount: stake,
                         reason: `Duello pareggio: rimborso scommessa`,
+                        companyId: ctx.companyId,
                     },
                 ]);
 
@@ -331,6 +369,7 @@ export async function completeDuel(duelId: string) {
                         title: '🤝 Duello in pareggio',
                         body: `Pareggio! La tua scommessa di ${stake} monete ti è stata restituita.`,
                         metadata: { duelId, stake },
+                        companyId: ctx.companyId,
                     },
                     {
                         id: crypto.randomUUID(),
@@ -339,12 +378,16 @@ export async function completeDuel(duelId: string) {
                         title: '🤝 Duello in pareggio',
                         body: `Pareggio! La tua scommessa di ${stake} monete ti è stata restituita.`,
                         metadata: { duelId, stake },
+                        companyId: ctx.companyId,
                     },
                 ]);
 
                 // Notifica ai Manager/Admin anche in caso di pareggio
                 const managers = await tx.select({ id: users.id }).from(users)
-                    .where(sql`${users.role} IN ('MANAGER', 'ADMIN', 'TL')`);
+                    .where(and(
+                        eq(users.companyId, ctx.companyId),
+                        sql`${users.role} IN ('MANAGER', 'ADMIN', 'TL')`,
+                    ));
                 const finalScore = `${duel.challengerScore}-${duel.opponentScore}`;
                 for (const m of managers) {
                     await tx.insert(notifications).values({
@@ -354,6 +397,7 @@ export async function completeDuel(duelId: string) {
                         title: `🤝 Duello concluso: pareggio`,
                         body: `${challengerName} vs ${opponentName} (${duel.metric}) — pareggio ${finalScore}. Scommesse restituite (${stake} ciascuno).`,
                         metadata: { duelId, winnerId: null, challengerName, opponentName, metric: duel.metric, finalScore, stake },
+                        companyId: ctx.companyId,
                     });
                 }
             }
@@ -381,8 +425,11 @@ export async function completeDuel(duelId: string) {
  */
 export async function getActiveDuels() {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         return await db.select().from(duels)
-            .where(eq(duels.status, 'active'));
+            .where(and(eq(duels.companyId, ctx.companyId), eq(duels.status, 'active')));
     } catch (error) {
         console.error("Errore getActiveDuels:", error);
         return [];
@@ -394,8 +441,12 @@ export async function getActiveDuels() {
  */
 export async function getActiveDuelsForUser(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const activeDuels = await db.select().from(duels)
             .where(and(
+                eq(duels.companyId, ctx.companyId),
                 eq(duels.status, 'active'),
                 or(eq(duels.challengerId, userId), eq(duels.opponentId, userId))
             ));
@@ -407,9 +458,9 @@ export async function getActiveDuelsForUser(userId: string) {
                 return null;
             }
             const [challenger] = await db.select({ name: users.name, displayName: users.displayName })
-                .from(users).where(eq(users.id, duel.challengerId));
+                .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.challengerId)));
             const [opponent] = await db.select({ name: users.name, displayName: users.displayName })
-                .from(users).where(eq(users.id, duel.opponentId));
+                .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.opponentId)));
 
             return {
                 ...duel,
@@ -431,8 +482,11 @@ export async function getActiveDuelsForUser(userId: string) {
  */
 export async function getAllActiveDuelsForMonitor() {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const activeDuels = await db.select().from(duels)
-            .where(eq(duels.status, 'active'));
+            .where(and(eq(duels.companyId, ctx.companyId), eq(duels.status, 'active')));
 
         const enriched = await Promise.all(activeDuels.map(async (duel) => {
             // Auto-complete if expired and skip from the live list
@@ -441,9 +495,9 @@ export async function getAllActiveDuelsForMonitor() {
                 return null;
             }
             const [challenger] = await db.select({ name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
-                .from(users).where(eq(users.id, duel.challengerId));
+                .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.challengerId)));
             const [opponent] = await db.select({ name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
-                .from(users).where(eq(users.id, duel.opponentId));
+                .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, duel.opponentId)));
 
             return {
                 id: duel.id,
@@ -480,8 +534,12 @@ export async function getAllActiveDuelsForMonitor() {
  */
 export async function getDuelHistory(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const completedDuels = await db.select().from(duels)
             .where(and(
+                eq(duels.companyId, ctx.companyId),
                 eq(duels.status, 'completed'),
                 or(eq(duels.challengerId, userId), eq(duels.opponentId, userId))
             ))
@@ -493,7 +551,7 @@ export async function getDuelHistory(userId: string) {
             const isChallenger = duel.challengerId === userId;
             const opponentId = isChallenger ? duel.opponentId : duel.challengerId;
             const [opponent] = await db.select({ name: users.name, displayName: users.displayName })
-                .from(users).where(eq(users.id, opponentId));
+                .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, opponentId)));
 
             const myScore = isChallenger ? duel.challengerScore : duel.opponentScore;
             const theirScore = isChallenger ? duel.opponentScore : duel.challengerScore;

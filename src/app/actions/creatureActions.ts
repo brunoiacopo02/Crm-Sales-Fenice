@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { creatures, userCreatures, coinTransactions, users } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // Rarity drop weights (normal)
 const RARITY_WEIGHTS = [
@@ -35,9 +36,15 @@ function pickRarity(override?: string, boosted?: boolean): string {
 /**
  * Drop a random creature to user's inventory.
  * Picks a random creature of the selected rarity and adds it to userCreatures.
+ *
+ * NOTE: `creatures` is a GLOBAL catalog table (no companyId). `userCreatures`
+ * is per-tenant and inserted with the caller's companyId.
  */
 export async function dropCreature(userId: string, rarityOverride?: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Check seasonal event creature drop boost
         let isBoosted = false;
         try {
@@ -48,7 +55,7 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
 
         const rarity = pickRarity(rarityOverride, isBoosted);
 
-        // Get all creatures of this rarity
+        // Get all creatures of this rarity (GLOBAL catalog — no companyId filter)
         const pool = await db.select().from(creatures)
             .where(and(eq(creatures.rarity, rarity), eq(creatures.isActive, true)));
 
@@ -57,7 +64,7 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
         // Pick random creature from pool
         const picked = pool[Math.floor(Math.random() * pool.length)];
 
-        // Insert into userCreatures
+        // Insert into userCreatures (tenant-scoped)
         const userCreature = {
             id: crypto.randomUUID(),
             userId,
@@ -66,6 +73,7 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
             xpFed: 0,
             isEquipped: false,
             obtainedAt: new Date(),
+            companyId: ctx.companyId,
         };
 
         await db.insert(userCreatures).values(userCreature);
@@ -94,6 +102,9 @@ export async function dropCreature(userId: string, rarityOverride?: string) {
  */
 export async function maybeDropCreature(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Check if seasonal event reduces drop threshold
         let threshold = 24;
         try {
@@ -102,14 +113,15 @@ export async function maybeDropCreature(userId: string) {
             if (boost) threshold = boost.thresholdReduction - 1; // 14 for threshold 15
         } catch (e) { console.error('[creatureActions] subtask err', e); }
 
-        // Atomic increment with threshold reset
+        // Atomic increment with threshold reset (scoped by companyId so cross-tenant
+        // userId collisions are impossible — though `users.id` is globally unique).
         const result = await db.execute(sql`
             UPDATE users
             SET "creatureDropCounter" = CASE
                 WHEN "creatureDropCounter" >= ${threshold} THEN 0
                 ELSE "creatureDropCounter" + 1
             END
-            WHERE id = ${userId}
+            WHERE id = ${userId} AND "companyId" = ${ctx.companyId}
             RETURNING "creatureDropCounter"
         `);
 
@@ -133,6 +145,9 @@ export async function maybeDropCreature(userId: string) {
  */
 export async function getUserCreatures(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const rows = await db
             .select({
                 userCreatureId: userCreatures.id,
@@ -152,7 +167,10 @@ export async function getUserCreatures(userId: string) {
             })
             .from(userCreatures)
             .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
-            .where(eq(userCreatures.userId, userId));
+            .where(and(
+                eq(userCreatures.companyId, ctx.companyId),
+                eq(userCreatures.userId, userId),
+            ));
 
         return rows;
     } catch (error) {
@@ -166,15 +184,26 @@ export async function getUserCreatures(userId: string) {
  */
 export async function equipCreature(userId: string, userCreatureId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Un-equip all currently equipped
         await db.update(userCreatures)
             .set({ isEquipped: false })
-            .where(and(eq(userCreatures.userId, userId), eq(userCreatures.isEquipped, true)));
+            .where(and(
+                eq(userCreatures.companyId, ctx.companyId),
+                eq(userCreatures.userId, userId),
+                eq(userCreatures.isEquipped, true),
+            ));
 
         // Equip the selected one
         await db.update(userCreatures)
             .set({ isEquipped: true })
-            .where(and(eq(userCreatures.id, userCreatureId), eq(userCreatures.userId, userId)));
+            .where(and(
+                eq(userCreatures.companyId, ctx.companyId),
+                eq(userCreatures.id, userCreatureId),
+                eq(userCreatures.userId, userId),
+            ));
 
         return { success: true };
     } catch (error) {
@@ -190,10 +219,17 @@ export async function equipCreature(userId: string, userCreatureId: string) {
  */
 export async function fuseCreatures(userId: string, creatureId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         return await db.transaction(async (tx) => {
             // Get all copies of this creature owned by user
             const copies = await tx.select().from(userCreatures)
-                .where(and(eq(userCreatures.userId, userId), eq(userCreatures.creatureId, creatureId)));
+                .where(and(
+                    eq(userCreatures.companyId, ctx.companyId),
+                    eq(userCreatures.userId, userId),
+                    eq(userCreatures.creatureId, creatureId),
+                ));
 
             if (copies.length < 3) {
                 return { success: false, error: 'Servono almeno 3 copie per la fusione' };
@@ -220,13 +256,19 @@ export async function fuseCreatures(userId: string, creatureId: string) {
 
             // Delete the consumed copies
             for (const c of toConsume) {
-                await tx.delete(userCreatures).where(eq(userCreatures.id, c.id));
+                await tx.delete(userCreatures).where(and(
+                    eq(userCreatures.companyId, ctx.companyId),
+                    eq(userCreatures.id, c.id),
+                ));
             }
 
             // Level up the keeper
             await tx.update(userCreatures)
                 .set({ level: keeper.level + 1 })
-                .where(eq(userCreatures.id, keeper.id));
+                .where(and(
+                    eq(userCreatures.companyId, ctx.companyId),
+                    eq(userCreatures.id, keeper.id),
+                ));
 
             return {
                 success: true,
@@ -242,9 +284,13 @@ export async function fuseCreatures(userId: string, creatureId: string) {
 
 /**
  * Get all creature definitions (for collection counter).
+ * NOTE: `creatures` is a GLOBAL catalog — no companyId filter.
  */
 export async function getAllCreatureDefinitions() {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         return await db.select().from(creatures).where(eq(creatures.isActive, true));
     } catch (error) {
         console.error("Errore getAllCreatureDefinitions:", error);
@@ -258,6 +304,9 @@ export async function getAllCreatureDefinitions() {
  */
 export async function getEquippedCreatureBonus(userId: string): Promise<{ xpBonus: number; coinBonus: number }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const rows = await db
             .select({
                 level: userCreatures.level,
@@ -266,7 +315,11 @@ export async function getEquippedCreatureBonus(userId: string): Promise<{ xpBonu
             })
             .from(userCreatures)
             .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
-            .where(and(eq(userCreatures.userId, userId), eq(userCreatures.isEquipped, true)))
+            .where(and(
+                eq(userCreatures.companyId, ctx.companyId),
+                eq(userCreatures.userId, userId),
+                eq(userCreatures.isEquipped, true),
+            ))
             .limit(1);
 
         if (rows.length === 0) return { xpBonus: 0, coinBonus: 0 };

@@ -5,6 +5,7 @@ import { bossBattles, bossContributions, users, coinTransactions, notifications 
 import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { GAME_CONSTANTS } from '@/lib/gamificationEngine';
 import { getActiveEventMultipliers } from '@/lib/seasonalEventUtils';
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 
 /**
  * Create a new boss battle (Manager only).
@@ -20,6 +21,9 @@ export async function createBossBattle(params: {
     createdBy: string;
 }) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const id = crypto.randomUUID();
         await db.insert(bossBattles).values({
             id,
@@ -33,6 +37,7 @@ export async function createBossBattle(params: {
             endTime: params.endTime,
             status: 'active',
             createdBy: params.createdBy,
+            companyId: ctx.companyId,
         });
         return { success: true, id };
     } catch (error: any) {
@@ -46,10 +51,16 @@ export async function createBossBattle(params: {
  */
 export async function getActiveBossBattle() {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const now = new Date();
         const battles = await db.select()
             .from(bossBattles)
-            .where(eq(bossBattles.status, 'active'))
+            .where(and(
+                eq(bossBattles.companyId, ctx.companyId),
+                eq(bossBattles.status, 'active'),
+            ))
             .orderBy(desc(bossBattles.startTime))
             .limit(1);
 
@@ -61,7 +72,10 @@ export async function getActiveBossBattle() {
         if (now > battle.endTime) {
             await db.update(bossBattles)
                 .set({ status: 'expired' })
-                .where(eq(bossBattles.id, battle.id));
+                .where(and(
+                    eq(bossBattles.companyId, ctx.companyId),
+                    eq(bossBattles.id, battle.id),
+                ));
             return null;
         }
 
@@ -74,7 +88,10 @@ export async function getActiveBossBattle() {
         })
             .from(bossContributions)
             .innerJoin(users, eq(bossContributions.userId, users.id))
-            .where(eq(bossContributions.battleId, battle.id))
+            .where(and(
+                eq(bossContributions.companyId, ctx.companyId),
+                eq(bossContributions.battleId, battle.id),
+            ))
             .groupBy(bossContributions.userId, users.name, users.displayName)
             .orderBy(sql`SUM(${bossContributions.damage}) DESC`)
             .limit(5);
@@ -83,7 +100,10 @@ export async function getActiveBossBattle() {
             count: sql<number>`COUNT(DISTINCT ${bossContributions.userId})::int`,
         })
             .from(bossContributions)
-            .where(eq(bossContributions.battleId, battle.id));
+            .where(and(
+                eq(bossContributions.companyId, ctx.companyId),
+                eq(bossContributions.battleId, battle.id),
+            ));
 
         return {
             ...battle,
@@ -106,10 +126,16 @@ export async function getActiveBossBattle() {
  */
 export async function contributeToBoss(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Find active battle
         const battles = await db.select()
             .from(bossBattles)
-            .where(eq(bossBattles.status, 'active'))
+            .where(and(
+                eq(bossBattles.companyId, ctx.companyId),
+                eq(bossBattles.status, 'active'),
+            ))
             .orderBy(desc(bossBattles.startTime))
             .limit(1);
 
@@ -122,7 +148,10 @@ export async function contributeToBoss(userId: string) {
         if (now > battle.endTime) {
             await db.update(bossBattles)
                 .set({ status: 'expired' })
-                .where(eq(bossBattles.id, battle.id));
+                .where(and(
+                    eq(bossBattles.companyId, ctx.companyId),
+                    eq(bossBattles.id, battle.id),
+                ));
             return { success: false, expired: true };
         }
 
@@ -135,17 +164,21 @@ export async function contributeToBoss(userId: string) {
             userId,
             damage,
             action: 'appointment_set',
+            companyId: ctx.companyId,
         });
 
         // Reduce HP
         const newHp = Math.max(0, battle.currentHp - damage);
         await db.update(bossBattles)
             .set({ currentHp: newHp })
-            .where(eq(bossBattles.id, battle.id));
+            .where(and(
+                eq(bossBattles.companyId, ctx.companyId),
+                eq(bossBattles.id, battle.id),
+            ));
 
         // Check if boss is defeated
         if (newHp <= 0) {
-            await defeatBoss(battle.id, battle.rewardCoins, battle.rewardXp);
+            await defeatBoss(battle.id, battle.rewardCoins, battle.rewardXp, ctx.companyId);
         }
 
         return { success: true, damage, newHp, defeated: newHp <= 0 };
@@ -158,22 +191,31 @@ export async function contributeToBoss(userId: string) {
 /**
  * When boss is defeated, reward all contributing GDOs.
  */
-async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: number) {
+async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: number, companyId: string) {
     try {
         // Mark as defeated
         await db.update(bossBattles)
             .set({ status: 'defeated', defeatedAt: new Date() })
-            .where(eq(bossBattles.id, battleId));
+            .where(and(
+                eq(bossBattles.companyId, companyId),
+                eq(bossBattles.id, battleId),
+            ));
 
         // Get all distinct contributors
         const contributors = await db.select({
             userId: bossContributions.userId,
         })
             .from(bossContributions)
-            .where(eq(bossContributions.battleId, battleId))
+            .where(and(
+                eq(bossContributions.companyId, companyId),
+                eq(bossContributions.battleId, battleId),
+            ))
             .groupBy(bossContributions.userId);
 
-        const battle = (await db.select().from(bossBattles).where(eq(bossBattles.id, battleId)))[0];
+        const battle = (await db.select().from(bossBattles).where(and(
+            eq(bossBattles.companyId, companyId),
+            eq(bossBattles.id, battleId),
+        )))[0];
 
         // Apply seasonal event multipliers to boss rewards
         const eventMult = await getActiveEventMultipliers();
@@ -189,7 +231,10 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
                     walletCoins: sql`${users.walletCoins} + ${effectiveCoins}`,
                     experience: sql`${users.experience} + ${effectiveXp}`,
                 })
-                .where(inArray(users.id, contributorIds));
+                .where(and(
+                    eq(users.companyId, companyId),
+                    inArray(users.id, contributorIds),
+                ));
 
             const bossReason = eventMult.coins > 1
                 ? `Boss sconfitto: ${battle?.title || 'Boss Battle'} (x${eventMult.coins} evento)`
@@ -202,6 +247,7 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
                     userId: uid,
                     amount: effectiveCoins,
                     reason: bossReason,
+                    companyId,
                 }))
             );
 
@@ -214,6 +260,7 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
                     title: 'Boss Sconfitto! 🎉',
                     body: `Il team ha sconfitto "${battle?.title}"! Hai guadagnato ${effectiveCoins} coins e ${effectiveXp} XP!`,
                     metadata: { battleId, rewardCoins: effectiveCoins, rewardXp: effectiveXp, bossTitle: battle?.title },
+                    companyId,
                 }))
             );
         }
@@ -227,12 +274,16 @@ async function defeatBoss(battleId: string, rewardCoins: number, rewardXp: numbe
  */
 export async function getUserBossContribution(userId: string, battleId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const result = await db.select({
             totalDamage: sql<number>`COALESCE(SUM(${bossContributions.damage}), 0)::int`,
             hitCount: sql<number>`COUNT(*)::int`,
         })
             .from(bossContributions)
             .where(and(
+                eq(bossContributions.companyId, ctx.companyId),
                 eq(bossContributions.battleId, battleId),
                 eq(bossContributions.userId, userId),
             ));

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { actionChests, coinTransactions, users } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // GDO chest definitions (individual)
 const GDO_CHEST_TYPES = [
@@ -54,9 +55,16 @@ export async function getOrCreateActiveChests(
     roleOrIsTeam?: 'GDO' | 'CONFERME' | 'VENDITORE' | boolean
 ) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Get existing unopened chests
         const existing = await db.select().from(actionChests)
-            .where(and(eq(actionChests.userId, userId), isNull(actionChests.openedAt)));
+            .where(and(
+                eq(actionChests.companyId, ctx.companyId),
+                eq(actionChests.userId, userId),
+                isNull(actionChests.openedAt),
+            ));
 
         // Role-aware chest defs. Boolean accepted for backward compatibility with
         // the old `isTeam` call sites — true means the legacy team-conferme set.
@@ -87,6 +95,7 @@ export async function getOrCreateActiveChests(
                     openedAt: null,
                     rewardCreatureId: null,
                     rewardCoins: null,
+                    companyId: ctx.companyId,
                 };
                 await db.insert(actionChests).values(newChest);
                 result.push(newChest as typeof existing[0]);
@@ -106,9 +115,13 @@ export async function getOrCreateActiveChests(
  */
 export async function incrementChestProgress(userId: string, metric: string, amount: number = 1) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Find active (unopened) chests matching this metric
         const chests = await db.select().from(actionChests)
             .where(and(
+                eq(actionChests.companyId, ctx.companyId),
                 eq(actionChests.userId, userId),
                 eq(actionChests.requiredMetric, metric),
                 isNull(actionChests.openedAt),
@@ -121,7 +134,7 @@ export async function incrementChestProgress(userId: string, metric: string, amo
 
             await db.update(actionChests)
                 .set({ currentValue: newValue, isReady })
-                .where(eq(actionChests.id, chest.id));
+                .where(and(eq(actionChests.companyId, ctx.companyId), eq(actionChests.id, chest.id)));
         }
     } catch (error) {
         console.error("Errore incrementChestProgress:", error);
@@ -133,12 +146,19 @@ export async function incrementChestProgress(userId: string, metric: string, amo
  */
 export async function openChest(userId: string, chestId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Drop creature outside transaction (uses its own db calls)
         let creatureDrop: Awaited<ReturnType<typeof dropCreature>> = null;
 
         return await db.transaction(async (tx) => {
             const [chest] = await tx.select().from(actionChests)
-                .where(and(eq(actionChests.id, chestId), eq(actionChests.userId, userId)));
+                .where(and(
+                    eq(actionChests.companyId, ctx.companyId),
+                    eq(actionChests.id, chestId),
+                    eq(actionChests.userId, userId),
+                ));
 
             if (!chest) return { success: false, error: 'Baule non trovato' };
             if (!chest.isReady) return { success: false, error: 'Baule non ancora pronto' };
@@ -158,16 +178,16 @@ export async function openChest(userId: string, chestId: string) {
                     rewardCoins,
                     rewardCreatureId: creatureDrop?.creature?.id || null,
                 })
-                .where(eq(actionChests.id, chestId));
+                .where(and(eq(actionChests.companyId, ctx.companyId), eq(actionChests.id, chestId)));
 
             // Award coins to user's wallet
             const [user] = await tx.select({ walletCoins: users.walletCoins }).from(users)
-                .where(eq(users.id, userId));
+                .where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
 
             if (user) {
                 await tx.update(users)
                     .set({ walletCoins: user.walletCoins + rewardCoins })
-                    .where(eq(users.id, userId));
+                    .where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
 
                 // Log coin transaction
                 await tx.insert(coinTransactions).values({
@@ -175,6 +195,7 @@ export async function openChest(userId: string, chestId: string) {
                     userId,
                     amount: rewardCoins,
                     reason: `Baule ${chest.chestType} aperto`,
+                    companyId: ctx.companyId,
                 });
             }
 
@@ -194,6 +215,7 @@ export async function openChest(userId: string, chestId: string) {
                     openedAt: null,
                     rewardCreatureId: null,
                     rewardCoins: null,
+                    companyId: ctx.companyId,
                 });
             }
 
@@ -214,8 +236,11 @@ export async function openChest(userId: string, chestId: string) {
  */
 export async function getUserChests(userId: string) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         return await db.select().from(actionChests)
-            .where(eq(actionChests.userId, userId));
+            .where(and(eq(actionChests.companyId, ctx.companyId), eq(actionChests.userId, userId)));
     } catch (error) {
         console.error("Errore getUserChests:", error);
         return [];

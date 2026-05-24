@@ -6,6 +6,7 @@ import { eq, and, gte, like, sql } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { getStreakMultiplier } from "@/lib/streakUtils";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 /**
  * Chest rarity tiers — same weights as LOOT_DROP but independent config for timed chests.
@@ -70,13 +71,16 @@ export async function claimTimedChestReward(userId: string): Promise<{
     error?: string;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         // Fetch user
         const [user] = await db.select({
             walletCoins: users.walletCoins,
             streakCount: users.streakCount,
             activeTitle: users.activeTitle,
             lastTimedChestAt: users.lastTimedChestAt,
-        }).from(users).where(eq(users.id, userId));
+        }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
 
         if (!user) {
             return { success: false, error: 'Utente non trovato' };
@@ -97,6 +101,7 @@ export async function claimTimedChestReward(userId: string): Promise<{
             count: sql<number>`count(*)::int`
         }).from(coinTransactions).where(
             and(
+                eq(coinTransactions.companyId, ctx.companyId),
                 eq(coinTransactions.userId, userId),
                 gte(coinTransactions.createdAt, dayStart),
                 like(coinTransactions.reason, 'Scrigno a Tempo%')
@@ -138,7 +143,7 @@ export async function claimTimedChestReward(userId: string): Promise<{
             updateFields.activeTitle = bonusTitle;
         }
 
-        await db.update(users).set(updateFields).where(eq(users.id, userId));
+        await db.update(users).set(updateFields).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
 
         // Log coin transaction
         const rarityLabel = tier.rarity.charAt(0).toUpperCase() + tier.rarity.slice(1);
@@ -152,6 +157,7 @@ export async function claimTimedChestReward(userId: string): Promise<{
             userId,
             amount: effectiveCoins,
             reason: `Scrigno a Tempo ${rarityLabel}${multSuffix}`,
+            companyId: ctx.companyId,
         });
 
         return {
