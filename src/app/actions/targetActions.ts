@@ -7,13 +7,6 @@ import crypto from 'crypto';
 import { startOfMonth, endOfMonth, endOfDay, isBefore, isAfter, isSunday } from 'date-fns';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 
-// NOTA fase 2 estesa: monthlyTargets.month e dailyKpiSnapshots.date hanno
-// ancora un UNIQUE constraint single-column ereditato dal monotenant. Quando
-// Serenamente proverà a salvare il suo target mensile lo INSERT esploderà con
-// conflict (Fenice ha già la riga 2026-XX). Va convertito in UNIQUE(month,
-// companyId) prima di abilitare i Manager Serenamente sulla pagina /target.
-// Vedi design doc §11 (Fase 2 estesa).
-
 // Tipi di utilità per i target
 export interface MonthlyTargetInput {
     month: string;

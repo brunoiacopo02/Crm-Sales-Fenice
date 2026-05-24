@@ -363,7 +363,7 @@ export const marketingBudgets = pgTable('marketingBudgets', {
 
 export const monthlyTargets = pgTable('monthlyTargets', {
     id: text('id').primaryKey(),
-    month: text('month').notNull().unique(), // e.g. '2026-03'
+    month: text('month').notNull(), // e.g. '2026-03'
     targetAppFissati: integer('targetAppFissati').default(0).notNull(),
     targetAppConfermati: integer('targetAppConfermati').default(0).notNull(),
     targetTrattative: integer('targetTrattative').default(0).notNull(),
@@ -372,14 +372,18 @@ export const monthlyTargets = pgTable('monthlyTargets', {
     workingDaysOverride: integer('workingDaysOverride'), // nullable — manager manual override
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
-});
+}, (t) => ({
+    monthCompanyUnique: unique('monthlyTargets_month_companyId_unique').on(t.month, t.companyId),
+}));
 
 export const dailyKpiSnapshots = pgTable('dailyKpiSnapshots', {
     id: text('id').primaryKey(),
-    date: text('date').notNull().unique(), // 'YYYY-MM-DD'
+    date: text('date').notNull(), // 'YYYY-MM-DD'
     fissaggioVariazionePerc: real('fissaggioVariazionePerc').default(0).notNull(),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
-});
+}, (t) => ({
+    dateCompanyUnique: unique('dailyKpiSnapshots_date_companyId_unique').on(t.date, t.companyId),
+}));
 
 // Snapshot per ogni fetch della pipeline GDO. Scritto solo quando il fingerprint
 // (concat ordered IDs delle 3 tab) cambia rispetto al precedente, per evitare rumore
