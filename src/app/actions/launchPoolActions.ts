@@ -2,13 +2,14 @@
 
 import { db } from "@/db"
 import { leads } from "@/db/schema"
-import { and, isNull, isNotNull, sql } from "drizzle-orm"
+import { and, eq, isNull, isNotNull, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { users } from "@/db/schema"
 import { inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { logLeadEvent } from "@/lib/eventLogger"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export type LaunchPoolStatus = {
     webinarAvailable: number
@@ -16,13 +17,19 @@ export type LaunchPoolStatus = {
 }
 
 export async function getLaunchPoolStatus(): Promise<LaunchPoolStatus> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const rows = await db
         .select({
             bucket: leads.launchBucket,
             count: sql<number>`count(*)::int`
         })
         .from(leads)
-        .where(and(isNotNull(leads.launchBucket), isNull(leads.assignedToId)))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            isNotNull(leads.launchBucket),
+            isNull(leads.assignedToId),
+        ))
         .groupBy(leads.launchBucket)
 
     let webinar = 0
@@ -50,6 +57,8 @@ export type AssignFromPoolReport = {
 }
 
 export async function assignFromLaunchPool(input: AssignFromPoolInput): Promise<AssignFromPoolReport> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const report: AssignFromPoolReport = {
         ok: false,
         errors: [],
@@ -70,7 +79,10 @@ export async function assignFromLaunchPool(input: AssignFromPoolInput): Promise<
     }
 
     // Verifica GDO selezionati attivi
-    const selectedGdos = (await db.select().from(users).where(inArray(users.id, input.gdoIds)))
+    const selectedGdos = (await db.select().from(users).where(and(
+        eq(users.companyId, ctx.companyId),
+        inArray(users.id, input.gdoIds),
+    )))
         .filter((u: any) => u.role === 'GDO' && u.isActive === true)
     if (selectedGdos.length === 0) {
         report.errors.push("Nessuno dei GDO selezionati è attivo.")
@@ -100,6 +112,7 @@ export async function assignFromLaunchPool(input: AssignFromPoolInput): Promise<
                 SELECT id FROM leads
                 WHERE "launchBucket" = ${bucket}
                   AND "assignedToId" IS NULL
+                  AND "companyId" = ${ctx.companyId}
                 ORDER BY "createdAt" ASC
                 LIMIT ${n}
                 FOR UPDATE SKIP LOCKED
@@ -135,7 +148,10 @@ export async function assignFromLaunchPool(input: AssignFromPoolInput): Promise<
                 await tx
                     .update(leads)
                     .set({ assignedToId: gdoId, updatedAt: new Date() })
-                    .where(inArray(leads.id, leadIds))
+                    .where(and(
+                        eq(leads.companyId, ctx.companyId),
+                        inArray(leads.id, leadIds),
+                    ))
                 if (bucket === 'WEBINAR') report.perGdo[gdoId].webinar += leadIds.length
                 else report.perGdo[gdoId].noWebinar += leadIds.length
                 report.totalAssigned += leadIds.length
@@ -150,14 +166,18 @@ export async function assignFromLaunchPool(input: AssignFromPoolInput): Promise<
         const assignedRows = await db
             .select({ id: leads.id, assignedToId: leads.assignedToId })
             .from(leads)
-            .where(inArray(leads.id, ids))
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                inArray(leads.id, ids),
+            ))
 
         for (const row of assignedRows) {
             await logLeadEvent({
                 leadId: row.id,
                 eventType: 'ASSIGNED',
                 userId: adminId,
-                metadata: { source: 'launch_pool', bucket, assignedToUser: row.assignedToId }
+                metadata: { source: 'launch_pool', bucket, assignedToUser: row.assignedToId },
+                companyId: ctx.companyId,
             })
         }
     }

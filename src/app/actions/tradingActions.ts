@@ -3,12 +3,15 @@
 import { db } from "@/db";
 import { tradingOffers, userCreatures, creatures, users } from "@/db/schema";
 import { eq, and, or, ne, desc } from "drizzle-orm";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 /**
  * Create a trade offer between two GDO users.
  * Leggendarie and equipped creatures are NOT tradable.
  */
 export async function createTradeOffer(fromUserId: string, toUserId: string, offeredCreatureId: string, requestedCreatureId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         // Validate offered creature belongs to sender and is tradable
         const [offered] = await db
@@ -19,7 +22,11 @@ export async function createTradeOffer(fromUserId: string, toUserId: string, off
             })
             .from(userCreatures)
             .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
-            .where(and(eq(userCreatures.id, offeredCreatureId), eq(userCreatures.userId, fromUserId)));
+            .where(and(
+                eq(userCreatures.companyId, ctx.companyId),
+                eq(userCreatures.id, offeredCreatureId),
+                eq(userCreatures.userId, fromUserId),
+            ));
 
         if (!offered) return { success: false, error: 'Creatura offerta non trovata nel tuo inventario' };
         if (offered.isEquipped) return { success: false, error: 'Non puoi scambiare una creatura equipaggiata' };
@@ -34,7 +41,11 @@ export async function createTradeOffer(fromUserId: string, toUserId: string, off
             })
             .from(userCreatures)
             .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
-            .where(and(eq(userCreatures.id, requestedCreatureId), eq(userCreatures.userId, toUserId)));
+            .where(and(
+                eq(userCreatures.companyId, ctx.companyId),
+                eq(userCreatures.id, requestedCreatureId),
+                eq(userCreatures.userId, toUserId),
+            ));
 
         if (!requested) return { success: false, error: 'Creatura richiesta non trovata nell\'inventario del destinatario' };
         if (requested.isEquipped) return { success: false, error: 'La creatura richiesta e equipaggiata' };
@@ -49,6 +60,7 @@ export async function createTradeOffer(fromUserId: string, toUserId: string, off
             requestedCreatureId,
             status: 'pending',
             createdAt: new Date(),
+            companyId: ctx.companyId,
         };
 
         await db.insert(tradingOffers).values(offer);
@@ -64,26 +76,42 @@ export async function createTradeOffer(fromUserId: string, toUserId: string, off
  * Accept a trade offer — swap creature ownership.
  */
 export async function acceptTradeOffer(offerId: string, acceptingUserId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         const result = await db.transaction(async (tx) => {
             const [offer] = await tx.select().from(tradingOffers)
-                .where(and(eq(tradingOffers.id, offerId), eq(tradingOffers.toUserId, acceptingUserId), eq(tradingOffers.status, 'pending')));
+                .where(and(
+                    eq(tradingOffers.companyId, ctx.companyId),
+                    eq(tradingOffers.id, offerId),
+                    eq(tradingOffers.toUserId, acceptingUserId),
+                    eq(tradingOffers.status, 'pending'),
+                ));
 
             if (!offer) return { success: false, error: 'Offerta non trovata o non piu valida' };
 
             // Swap ownership: offered creature goes to recipient, requested goes to sender
             await tx.update(userCreatures)
                 .set({ userId: offer.toUserId })
-                .where(eq(userCreatures.id, offer.offeredCreatureId));
+                .where(and(
+                    eq(userCreatures.companyId, ctx.companyId),
+                    eq(userCreatures.id, offer.offeredCreatureId),
+                ));
 
             await tx.update(userCreatures)
                 .set({ userId: offer.fromUserId })
-                .where(eq(userCreatures.id, offer.requestedCreatureId));
+                .where(and(
+                    eq(userCreatures.companyId, ctx.companyId),
+                    eq(userCreatures.id, offer.requestedCreatureId),
+                ));
 
             // Mark offer as accepted
             await tx.update(tradingOffers)
                 .set({ status: 'accepted' })
-                .where(eq(tradingOffers.id, offerId));
+                .where(and(
+                    eq(tradingOffers.companyId, ctx.companyId),
+                    eq(tradingOffers.id, offerId),
+                ));
 
             return { success: true, fromUserId: offer.fromUserId, toUserId: offer.toUserId };
         });
@@ -108,15 +136,25 @@ export async function acceptTradeOffer(offerId: string, acceptingUserId: string)
  * Reject a trade offer.
  */
 export async function rejectTradeOffer(offerId: string, rejectingUserId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         const [offer] = await db.select().from(tradingOffers)
-            .where(and(eq(tradingOffers.id, offerId), eq(tradingOffers.toUserId, rejectingUserId), eq(tradingOffers.status, 'pending')));
+            .where(and(
+                eq(tradingOffers.companyId, ctx.companyId),
+                eq(tradingOffers.id, offerId),
+                eq(tradingOffers.toUserId, rejectingUserId),
+                eq(tradingOffers.status, 'pending'),
+            ));
 
         if (!offer) return { success: false, error: 'Offerta non trovata' };
 
         await db.update(tradingOffers)
             .set({ status: 'rejected' })
-            .where(eq(tradingOffers.id, offerId));
+            .where(and(
+                eq(tradingOffers.companyId, ctx.companyId),
+                eq(tradingOffers.id, offerId),
+            ));
 
         return { success: true };
     } catch (error) {
@@ -129,9 +167,12 @@ export async function rejectTradeOffer(offerId: string, rejectingUserId: string)
  * Get pending trade offers for a user (both sent and received).
  */
 export async function getPendingOffers(userId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         const offers = await db.select().from(tradingOffers)
             .where(and(
+                eq(tradingOffers.companyId, ctx.companyId),
                 or(eq(tradingOffers.fromUserId, userId), eq(tradingOffers.toUserId, userId)),
                 eq(tradingOffers.status, 'pending')
             ));
@@ -147,6 +188,8 @@ export async function getPendingOffers(userId: string) {
  * Get all GDO users except the current one (for trade partner selection).
  */
 export async function getGdoUsersForTrading(currentUserId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         return await db.select({
             id: users.id,
@@ -154,7 +197,12 @@ export async function getGdoUsersForTrading(currentUserId: string) {
             displayName: users.displayName,
             gdoCode: users.gdoCode,
         }).from(users)
-            .where(and(eq(users.role, 'GDO'), eq(users.isActive, true), ne(users.id, currentUserId)));
+            .where(and(
+                eq(users.companyId, ctx.companyId),
+                eq(users.role, 'GDO'),
+                eq(users.isActive, true),
+                ne(users.id, currentUserId),
+            ));
     } catch (error) {
         console.error("Errore getGdoUsersForTrading:", error);
         return [];
@@ -165,6 +213,8 @@ export async function getGdoUsersForTrading(currentUserId: string) {
  * Get tradable creatures of another user (not equipped, not legendary).
  */
 export async function getOtherUserCreatures(userId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         return await db.select({
             userCreatureId: userCreatures.id,
@@ -178,6 +228,7 @@ export async function getOtherUserCreatures(userId: string) {
         }).from(userCreatures)
             .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
             .where(and(
+                eq(userCreatures.companyId, ctx.companyId),
                 eq(userCreatures.userId, userId),
                 eq(userCreatures.isEquipped, false),
                 ne(creatures.rarity, 'legendary')
@@ -192,9 +243,14 @@ export async function getOtherUserCreatures(userId: string) {
  * Get all offers for a user (all statuses) with creature info.
  */
 export async function getAllOffers(userId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         const offers = await db.select().from(tradingOffers)
-            .where(or(eq(tradingOffers.fromUserId, userId), eq(tradingOffers.toUserId, userId)))
+            .where(and(
+                eq(tradingOffers.companyId, ctx.companyId),
+                or(eq(tradingOffers.fromUserId, userId), eq(tradingOffers.toUserId, userId)),
+            ))
             .orderBy(desc(tradingOffers.createdAt));
 
         // Enrich with creature and user info
@@ -203,18 +259,30 @@ export async function getAllOffers(userId: string) {
                 name: creatures.name, rarity: creatures.rarity, element: creatures.element, level: userCreatures.level,
             }).from(userCreatures)
                 .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
-                .where(eq(userCreatures.id, offer.offeredCreatureId));
+                .where(and(
+                    eq(userCreatures.companyId, ctx.companyId),
+                    eq(userCreatures.id, offer.offeredCreatureId),
+                ));
 
             const [requestedUC] = await db.select({
                 name: creatures.name, rarity: creatures.rarity, element: creatures.element, level: userCreatures.level,
             }).from(userCreatures)
                 .innerJoin(creatures, eq(userCreatures.creatureId, creatures.id))
-                .where(eq(userCreatures.id, offer.requestedCreatureId));
+                .where(and(
+                    eq(userCreatures.companyId, ctx.companyId),
+                    eq(userCreatures.id, offer.requestedCreatureId),
+                ));
 
             const [fromUser] = await db.select({ name: users.name, displayName: users.displayName })
-                .from(users).where(eq(users.id, offer.fromUserId));
+                .from(users).where(and(
+                    eq(users.companyId, ctx.companyId),
+                    eq(users.id, offer.fromUserId),
+                ));
             const [toUser] = await db.select({ name: users.name, displayName: users.displayName })
-                .from(users).where(eq(users.id, offer.toUserId));
+                .from(users).where(and(
+                    eq(users.companyId, ctx.companyId),
+                    eq(users.id, offer.toUserId),
+                ));
 
             return {
                 ...offer,

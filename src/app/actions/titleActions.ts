@@ -5,6 +5,7 @@ import { users, lootDrops } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { UNLOCKABLE_TITLES, GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { measureAchievementMetric } from "@/app/actions/achievementActions";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 export type UnlockedTitle = {
     id: string;
@@ -24,11 +25,13 @@ export async function getUnlockedTitles(userId: string): Promise<{
     titles: UnlockedTitle[];
     activeTitle: string | null;
 }> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         // Get user's active title
         const userRow = (await db.select({ activeTitle: users.activeTitle })
             .from(users)
-            .where(eq(users.id, userId)))[0];
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId))))[0];
 
         // Measure each unique metric once
         const uniqueMetrics = [...new Set(UNLOCKABLE_TITLES.map(t => t.metric))];
@@ -54,6 +57,7 @@ export async function getUnlockedTitles(userId: string): Promise<{
         })
             .from(lootDrops)
             .where(and(
+                eq(lootDrops.companyId, ctx.companyId),
                 eq(lootDrops.userId, userId),
                 eq(lootDrops.opened, true),
             ));
@@ -95,10 +99,12 @@ export async function setActiveTitle(userId: string, titleName: string | null): 
     success: boolean;
     error?: string;
 }> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     try {
         if (titleName === null) {
             // Unequip title
-            await db.update(users).set({ activeTitle: null }).where(eq(users.id, userId));
+            await db.update(users).set({ activeTitle: null }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
             return { success: true };
         }
 
@@ -110,7 +116,7 @@ export async function setActiveTitle(userId: string, titleName: string | null): 
             return { success: false, error: 'Titolo non sbloccato' };
         }
 
-        await db.update(users).set({ activeTitle: titleName }).where(eq(users.id, userId));
+        await db.update(users).set({ activeTitle: titleName }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
         return { success: true };
     } catch (error) {
         console.error("Errore setActiveTitle:", error);

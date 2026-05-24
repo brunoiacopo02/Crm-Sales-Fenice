@@ -2,6 +2,7 @@
 
 import { getLeaderboard, getConfermeLeaderboard, getVenditoriLeaderboard } from "./leaderboardActions"
 import type { LeaderboardRole } from "./leaderboardActions"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export type SocialComparisonTier = 'gold' | 'silver' | 'bronze' | 'neutral'
 
@@ -15,6 +16,8 @@ export type SocialComparisonData = {
 }
 
 export async function getSocialComparison(userId: string, role: LeaderboardRole): Promise<SocialComparisonData | null> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     // Get today's leaderboard for the user's role
     let leaderboard: Array<{ userId: string; rank: number; appointmentCount?: number; metricValue?: number }>
 

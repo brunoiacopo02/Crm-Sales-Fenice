@@ -5,6 +5,7 @@ import { users, questProgress, quests, coinTransactions, leads, weeklyGamificati
 import { eq, and, inArray, sql, gte, lte, isNotNull } from "drizzle-orm";
 import { getEvolutionStage, GAME_CONSTANTS, ROADMAP_REWARDS, EVOLUTION_STAGES, UNLOCKABLE_TITLES } from "@/lib/gamificationEngine";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // ---- Helpers replicated from gdoPerformanceActions to avoid circular deps ----
 
@@ -41,7 +42,8 @@ function getMonthWeeks(monthStr: string) {
  */
 async function batchComputeRpgProfiles(
     activeUsers: (typeof users.$inferSelect)[],
-    includeRole: boolean
+    includeRole: boolean,
+    companyId: string,
 ) {
     if (activeUsers.length === 0) return [];
 
@@ -66,7 +68,10 @@ async function batchComputeRpgProfiles(
 
     // --- 1. Gamification rules (one query, same for all GDO users) ---
     const rules = await db.select().from(weeklyGamificationRules)
-        .where(eq(weeklyGamificationRules.month, currentMonthStr));
+        .where(and(
+            eq(weeklyGamificationRules.companyId, companyId),
+            eq(weeklyGamificationRules.month, currentMonthStr),
+        ));
     let gdoTarget1 = 10, gdoReward1 = 135, gdoTarget2 = 13, gdoReward2 = 270;
     if (rules.length > 0) {
         gdoTarget1 = rules[0].targetTier1;
@@ -84,6 +89,7 @@ async function batchComputeRpgProfiles(
                 salespersonOutcome: leads.salespersonOutcome,
             }).from(leads).where(
                 and(
+                    eq(leads.companyId, companyId),
                     inArray(leads.assignedToId, gdoUserIds),
                     isNotNull(leads.appointmentDate),
                     gte(leads.appointmentDate, currentWeekStart),
@@ -96,6 +102,7 @@ async function batchComputeRpgProfiles(
                 confirmationsUserId: leads.confirmationsUserId,
             }).from(leads).where(
                 and(
+                    eq(leads.companyId, companyId),
                     inArray(leads.confirmationsUserId, confermeUserIds),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     eq(leads.salespersonOutcome, 'Chiuso'),
@@ -116,6 +123,7 @@ async function batchComputeRpgProfiles(
             count: manualAdjustments.count,
         }).from(manualAdjustments).where(
             and(
+                eq(manualAdjustments.companyId, companyId),
                 inArray(manualAdjustments.userId, userIds),
                 gte(manualAdjustments.createdAt, currentWeekStart),
                 lte(manualAdjustments.createdAt, currentWeekEnd)
@@ -271,26 +279,33 @@ async function batchComputeRpgProfiles(
 }
 
 export async function fetchAllGdoRpgProfiles() {
-    const allUsers = await db.select().from(users).where(eq(users.role, 'GDO'));
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const allUsers = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')));
     const activeUsers = allUsers.filter(u => u.isActive);
-    return batchComputeRpgProfiles(activeUsers, false);
+    return batchComputeRpgProfiles(activeUsers, false, ctx.companyId);
 }
 
 /**
  * Fetch RPG profiles for ALL gamification roles (GDO + CONFERME).
  */
 export async function fetchAllTeamRpgProfiles() {
-    const allUsers = await db.select().from(users).where(
-        inArray(users.role, ['GDO', 'CONFERME'])
-    );
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const allUsers = await db.select().from(users).where(and(
+        eq(users.companyId, ctx.companyId),
+        inArray(users.role, ['GDO', 'CONFERME']),
+    ));
     const activeUsers = allUsers.filter(u => u.isActive);
-    return batchComputeRpgProfiles(activeUsers, true);
+    return batchComputeRpgProfiles(activeUsers, true, ctx.companyId);
 }
 
 /**
  * Get team gamification overview stats for TL monitor.
  */
 export async function getTeamGamificationOverview() {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const todayScope = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
 
     // Get all active GDO + CONFERME users
@@ -303,6 +318,7 @@ export async function getTeamGamificationOverview() {
         level: users.level,
     }).from(users).where(
         and(
+            eq(users.companyId, ctx.companyId),
             inArray(users.role, ['GDO', 'CONFERME']),
             eq(users.isActive, true)
         )
@@ -316,6 +332,7 @@ export async function getTeamGamificationOverview() {
         .from(questProgress)
         .where(
             and(
+                eq(questProgress.companyId, ctx.companyId),
                 eq(questProgress.completed, true),
                 eq(questProgress.dateScope, todayScope),
                 inArray(questProgress.userId, teamUsers.map(u => u.id))
@@ -362,30 +379,39 @@ export async function getTeamGamificationOverview() {
 }
 
 export async function updateGdoBaseSalary(userId: string, newSalary: number) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     if (newSalary < 0) throw new Error("Salario non valido");
-    await db.update(users).set({ baseSalaryEur: newSalary }).where(eq(users.id, userId));
+    await db.update(users).set({ baseSalaryEur: newSalary }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
 }
 
 export async function addGdoCoins(userId: string, amount: number) {
-    const u = await db.select().from(users).where(eq(users.id, userId));
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const u = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
     if (u.length > 0) {
-        await db.update(users).set({ walletCoins: sql`${users.walletCoins} + ${amount}` }).where(eq(users.id, userId));
+        await db.update(users).set({ walletCoins: sql`${users.walletCoins} + ${amount}` }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
         // Log the transaction
         await db.insert(coinTransactions).values({
             id: crypto.randomUUID(),
             userId,
             amount,
             reason: `Bonus manuale dal TL`,
+            companyId: ctx.companyId,
         });
     }
 }
 
 export async function updateVenditoreSalesTarget(userId: string, salesTargetEur: number) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     if (salesTargetEur < 0) throw new Error("Target non valido");
-    await db.update(users).set({ salesTargetEur }).where(eq(users.id, userId));
+    await db.update(users).set({ salesTargetEur }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
 }
 
 export async function getVenditoriWithTargets() {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const venditori = await db.select({
         id: users.id,
         name: users.name,
@@ -393,6 +419,6 @@ export async function getVenditoriWithTargets() {
         email: users.email,
         isActive: users.isActive,
         salesTargetEur: users.salesTargetEur,
-    }).from(users).where(eq(users.role, 'VENDITORE'));
+    }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'VENDITORE')));
     return venditori.filter(v => v.isActive);
 }

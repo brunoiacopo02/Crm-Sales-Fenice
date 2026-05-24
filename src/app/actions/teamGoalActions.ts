@@ -7,6 +7,7 @@ import { eq, and, gte, lt, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { differenceInDays } from "date-fns"
 import { revalidatePath } from "next/cache"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export async function createTeamGoal(data: {
     title: string,
@@ -15,6 +16,8 @@ export async function createTeamGoal(data: {
     rewardCoins: number,
     goalType: 'database' | 'generico'
 }) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -30,21 +33,28 @@ export async function createTeamGoal(data: {
             rewardCoins: data.rewardCoins,
             goalType: data.goalType,
             status: 'active',
-            createdAt: new Date()
+            createdAt: new Date(),
+            companyId: ctx.companyId,
         })
 
     revalidatePath("/team")
 }
 
 export async function getActiveTeamGoals() {
-    return await db.select().from(teamGoals).where(eq(teamGoals.status, 'active'))
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    return await db.select().from(teamGoals).where(and(eq(teamGoals.companyId, ctx.companyId), eq(teamGoals.status, 'active')))
 }
 
 export async function getAllTeamGoals() {
-    return await db.select().from(teamGoals)
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    return await db.select().from(teamGoals).where(eq(teamGoals.companyId, ctx.companyId))
 }
 
 export async function deleteTeamGoal(goalId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -52,16 +62,18 @@ export async function deleteTeamGoal(goalId: string) {
         throw new Error("Unauthorized")
     }
 
-    await db.delete(teamGoals).where(eq(teamGoals.id, goalId))
+    await db.delete(teamGoals).where(and(eq(teamGoals.companyId, ctx.companyId), eq(teamGoals.id, goalId)))
     revalidatePath("/team")
 }
 
 export async function evaluateTeamGoals(leadId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const activeGoals = await getActiveTeamGoals()
 
     if (activeGoals.length === 0) return
 
-    const lead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0]
+    const lead = (await db.select().from(leads).where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId))))[0]
     if (!lead) return
 
     const now = new Date()
@@ -93,7 +105,7 @@ export async function evaluateTeamGoals(leadId: string) {
                     currentCount: goal.currentCount,
                     status: 'completed'
                 })
-                .where(and(eq(teamGoals.id, goal.id), eq(teamGoals.status, 'active')))
+                .where(and(eq(teamGoals.companyId, ctx.companyId), eq(teamGoals.id, goal.id), eq(teamGoals.status, 'active')))
                 .returning({ id: teamGoals.id })
 
             if (updated.length === 0) {
@@ -105,29 +117,30 @@ export async function evaluateTeamGoals(leadId: string) {
                 .set({
                     currentCount: goal.currentCount,
                 })
-                .where(eq(teamGoals.id, goal.id))
+                .where(and(eq(teamGoals.companyId, ctx.companyId), eq(teamGoals.id, goal.id)))
         }
 
         if (isCompleted) {
             // Premiazione Corale!
             // Trova tutti i GDO attivi
             // Trova tutti i GDO attivi (risolve grattacapi con i boolean di SQLite)
-            const allGdos = await db.select().from(users).where(eq(users.role, 'GDO'))
+            const allGdos = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')))
             const activeGdos = allGdos.filter(g => g.isActive === true || (g.isActive as any) === 1)
 
             for (const gdo of activeGdos) {
                 // Accredita Coin
                 await db.update(users)
                                     .set({ walletCoins: sql`${users.walletCoins} + ${goal.rewardCoins}` })
-                                    .where(eq(users.id, gdo.id))
-                    
+                                    .where(and(eq(users.companyId, ctx.companyId), eq(users.id, gdo.id)))
+
 
                 await db.insert(coinTransactions).values({
                                     id: crypto.randomUUID(),
                                     userId: gdo.id,
                                     amount: goal.rewardCoins,
                                     reason: 'TEAM_GOAL_WON',
-                                    createdAt: now
+                                    createdAt: now,
+                                    companyId: ctx.companyId,
                                 })
 
                 // Notifica
@@ -139,7 +152,8 @@ export async function evaluateTeamGoals(leadId: string) {
                                     body: `Il team ha completato l'obiettivo "${goal.title}" e hai ricevuto ${goal.rewardCoins} Fenice Coin nel tuo wallet!`,
                                     metadata: { goalId: goal.id },
                                     status: 'unread',
-                                    createdAt: now
+                                    createdAt: now,
+                                    companyId: ctx.companyId,
                                 })
             }
         }
