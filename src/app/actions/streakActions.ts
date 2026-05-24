@@ -2,10 +2,11 @@
 
 import { db } from "@/db";
 import { users, coinTransactions, notifications } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getStreakMultiplier, getStreakTierLabel, getNextStreakMilestone } from "@/lib/streakUtils";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // --- Helpers ---
 
@@ -47,10 +48,16 @@ export async function getStreakInfo(userId: string): Promise<{
     isActiveToday: boolean;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const userRows = await db.select({
             streakCount: users.streakCount,
             lastStreakDate: users.lastStreakDate,
-        }).from(users).where(eq(users.id, userId));
+        }).from(users).where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.id, userId),
+        ));
 
         if (userRows.length === 0) {
             return { streakCount: 0, multiplier: 1, tierLabel: 'x1', nextMilestone: { daysToNext: 3, nextMultiplier: 1.5 }, isActiveToday: false };
@@ -90,10 +97,16 @@ export async function getStreakInfo(userId: string): Promise<{
  */
 export async function updateStreak(userId: string): Promise<{ streakCount: number; multiplier: number }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const userRows = await db.select({
             streakCount: users.streakCount,
             lastStreakDate: users.lastStreakDate,
-        }).from(users).where(eq(users.id, userId));
+        }).from(users).where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.id, userId),
+        ));
 
         if (userRows.length === 0) return { streakCount: 0, multiplier: 1 };
 
@@ -124,16 +137,25 @@ export async function updateStreak(userId: string): Promise<{ streakCount: numbe
         await db.update(users).set({
             streakCount: newStreak,
             lastStreakDate: today,
-        }).where(eq(users.id, userId));
+        }).where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.id, userId),
+        ));
 
         // Streak milestone reward: 50 coins every 7 days (F2-026) + seasonal event multiplier
         const { COINS: milestoneCoinReward, INTERVAL: milestoneInterval } = GAME_CONSTANTS.STREAK_MILESTONE;
         if (newStreak > 0 && newStreak % milestoneInterval === 0) {
-            const userRow = (await db.select({ walletCoins: users.walletCoins }).from(users).where(eq(users.id, userId)))[0];
+            const userRow = (await db.select({ walletCoins: users.walletCoins }).from(users).where(and(
+                eq(users.companyId, ctx.companyId),
+                eq(users.id, userId),
+            )))[0];
             if (userRow) {
                 const eventMult = await getActiveEventMultipliers();
                 const effectiveMilestoneCoins = Math.floor(milestoneCoinReward * eventMult.coins);
-                await db.update(users).set({ walletCoins: userRow.walletCoins + effectiveMilestoneCoins }).where(eq(users.id, userId));
+                await db.update(users).set({ walletCoins: userRow.walletCoins + effectiveMilestoneCoins }).where(and(
+                    eq(users.companyId, ctx.companyId),
+                    eq(users.id, userId),
+                ));
                 const milestoneReason = eventMult.coins > 1
                     ? `Streak milestone: ${newStreak} giorni! (x${eventMult.coins} evento)`
                     : `Streak milestone: ${newStreak} giorni!`;
@@ -142,6 +164,7 @@ export async function updateStreak(userId: string): Promise<{ streakCount: numbe
                     userId,
                     amount: effectiveMilestoneCoins,
                     reason: milestoneReason,
+                    companyId: ctx.companyId,
                 });
                 await db.insert(notifications).values({
                     id: crypto.randomUUID(),
@@ -150,6 +173,7 @@ export async function updateStreak(userId: string): Promise<{ streakCount: numbe
                     title: `Streak ${newStreak} giorni!`,
                     body: `Hai raggiunto ${newStreak} giorni di streak consecutivi! +${effectiveMilestoneCoins} coins bonus.`,
                     metadata: { streakCount: newStreak, coinsAwarded: effectiveMilestoneCoins },
+                    companyId: ctx.companyId,
                 });
             }
         }

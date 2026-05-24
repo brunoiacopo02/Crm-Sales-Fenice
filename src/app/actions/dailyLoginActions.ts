@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users, coinTransactions } from "@/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { getStreakMultiplier } from "@/lib/streakUtils";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // --- Constants ---
 
@@ -65,12 +66,18 @@ export async function checkDailyLoginStatus(userId: string): Promise<{
     consecutiveDaysClaimed: number;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const userRows = await db.select({
             streakCount: users.streakCount,
             lastStreakDate: users.lastStreakDate,
             name: users.name,
             displayName: users.displayName,
-        }).from(users).where(eq(users.id, userId));
+        }).from(users).where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.id, userId),
+        ));
 
         if (userRows.length === 0) {
             return { alreadyClaimed: true, streakCount: 0, bonusCoins: 0, userName: '', calendar: [], allPriorDaysClaimed: false, consecutiveDaysClaimed: 0 };
@@ -85,6 +92,7 @@ export async function checkDailyLoginStatus(userId: string): Promise<{
             .from(coinTransactions)
             .where(
                 and(
+                    eq(coinTransactions.companyId, ctx.companyId),
                     eq(coinTransactions.userId, userId),
                     eq(coinTransactions.reason, 'Daily login bonus'),
                     gte(coinTransactions.createdAt, todayStart)
@@ -118,6 +126,7 @@ export async function checkDailyLoginStatus(userId: string): Promise<{
             createdAt: coinTransactions.createdAt,
         }).from(coinTransactions).where(
             and(
+                eq(coinTransactions.companyId, ctx.companyId),
                 eq(coinTransactions.userId, userId),
                 eq(coinTransactions.reason, 'Daily login bonus'),
                 gte(coinTransactions.createdAt, weekStart),
@@ -195,6 +204,9 @@ export async function claimDailyLogin(userId: string): Promise<{
     weeklyBonusTitle: boolean;
 }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const todayStart = getTodayStartUTC();
 
         // Quick pre-check outside transaction (fast path for already-claimed)
@@ -202,6 +214,7 @@ export async function claimDailyLogin(userId: string): Promise<{
             .from(coinTransactions)
             .where(
                 and(
+                    eq(coinTransactions.companyId, ctx.companyId),
                     eq(coinTransactions.userId, userId),
                     eq(coinTransactions.reason, 'Daily login bonus'),
                     gte(coinTransactions.createdAt, todayStart)
@@ -211,7 +224,10 @@ export async function claimDailyLogin(userId: string): Promise<{
         if (existingClaims.length > 0) {
             const userRow = await db.select({
                 streakCount: users.streakCount,
-            }).from(users).where(eq(users.id, userId));
+            }).from(users).where(and(
+                eq(users.companyId, ctx.companyId),
+                eq(users.id, userId),
+            ));
             const streak = userRow[0]?.streakCount ?? 0;
             return { success: true, coinsAwarded: 0, streakCount: streak, multiplier: getStreakMultiplier(streak), weeklyBonusTitle: false };
         }
@@ -223,6 +239,7 @@ export async function claimDailyLogin(userId: string): Promise<{
                 .from(coinTransactions)
                 .where(
                     and(
+                        eq(coinTransactions.companyId, ctx.companyId),
                         eq(coinTransactions.userId, userId),
                         eq(coinTransactions.reason, 'Daily login bonus'),
                         gte(coinTransactions.createdAt, todayStart)
@@ -232,7 +249,10 @@ export async function claimDailyLogin(userId: string): Promise<{
             if (claimsInTx.length > 0) {
                 const userRow = await tx.select({
                     streakCount: users.streakCount,
-                }).from(users).where(eq(users.id, userId));
+                }).from(users).where(and(
+                    eq(users.companyId, ctx.companyId),
+                    eq(users.id, userId),
+                ));
                 const streak = userRow[0]?.streakCount ?? 0;
                 return { success: true as const, coinsAwarded: 0, streakCount: streak, multiplier: getStreakMultiplier(streak), weeklyBonusTitle: false };
             }
@@ -243,7 +263,10 @@ export async function claimDailyLogin(userId: string): Promise<{
                 lastStreakDate: users.lastStreakDate,
                 walletCoins: users.walletCoins,
                 activeTitle: users.activeTitle,
-            }).from(users).where(eq(users.id, userId));
+            }).from(users).where(and(
+                eq(users.companyId, ctx.companyId),
+                eq(users.id, userId),
+            ));
 
             if (userRows.length === 0) {
                 return { success: false as const, coinsAwarded: 0, streakCount: 0, multiplier: 1, weeklyBonusTitle: false };
@@ -283,6 +306,7 @@ export async function claimDailyLogin(userId: string): Promise<{
                     createdAt: coinTransactions.createdAt,
                 }).from(coinTransactions).where(
                     and(
+                        eq(coinTransactions.companyId, ctx.companyId),
                         eq(coinTransactions.userId, userId),
                         eq(coinTransactions.reason, 'Daily login bonus'),
                         gte(coinTransactions.createdAt, weekStart),
@@ -329,7 +353,10 @@ export async function claimDailyLogin(userId: string): Promise<{
                 updateFields.activeTitle = WEEKLY_BONUS_TITLE;
             }
 
-            await tx.update(users).set(updateFields).where(eq(users.id, userId));
+            await tx.update(users).set(updateFields).where(and(
+                eq(users.companyId, ctx.companyId),
+                eq(users.id, userId),
+            ));
 
             // Log transaction
             const reason = weeklyBonusTitle
@@ -341,6 +368,7 @@ export async function claimDailyLogin(userId: string): Promise<{
                 userId,
                 amount: bonusCoins,
                 reason,
+                companyId: ctx.companyId,
             });
 
             return {

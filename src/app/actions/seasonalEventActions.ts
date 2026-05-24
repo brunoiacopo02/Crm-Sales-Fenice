@@ -3,6 +3,7 @@
 import { db } from '@/db';
 import { seasonalEvents } from '@/db/schema';
 import { and, eq, lte, gte } from 'drizzle-orm';
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 
 /**
  * Get the currently active seasonal event (if any).
@@ -19,10 +20,14 @@ export async function getActiveEvent(): Promise<{
     coinsMultiplier: number;
 } | null> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const now = new Date();
         const rows = await db.select()
             .from(seasonalEvents)
             .where(and(
+                eq(seasonalEvents.companyId, ctx.companyId),
                 eq(seasonalEvents.isActive, true),
                 lte(seasonalEvents.startDate, now),
                 gte(seasonalEvents.endDate, now)
@@ -62,6 +67,9 @@ export async function createSeasonalEvent(params: {
     createdBy: string;
 }): Promise<{ success: boolean; error?: string; eventId?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         const eventId = crypto.randomUUID();
 
         await db.insert(seasonalEvents).values({
@@ -74,6 +82,7 @@ export async function createSeasonalEvent(params: {
             xpMultiplier: params.xpMultiplier,
             coinsMultiplier: params.coinsMultiplier,
             createdBy: params.createdBy,
+            companyId: ctx.companyId,
         });
 
         return { success: true, eventId };
@@ -88,9 +97,15 @@ export async function createSeasonalEvent(params: {
  */
 export async function deactivateSeasonalEvent(eventId: string): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+
         await db.update(seasonalEvents)
             .set({ isActive: false })
-            .where(eq(seasonalEvents.id, eventId));
+            .where(and(
+                eq(seasonalEvents.companyId, ctx.companyId),
+                eq(seasonalEvents.id, eventId),
+            ));
 
         return { success: true };
     } catch (error) {

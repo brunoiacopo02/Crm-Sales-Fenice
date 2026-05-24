@@ -7,16 +7,26 @@ import { addMinutes, isAfter, differenceInMinutes } from "date-fns"
 import crypto from "crypto"
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine"
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export async function getActiveSprint() {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     return (await db.select()
             .from(sprints)
-            .where(eq(sprints.status, 'active'))
+            .where(and(
+                eq(sprints.companyId, ctx.companyId),
+                eq(sprints.status, 'active'),
+            ))
             .orderBy(desc(sprints.createdAt)))
         [0] || null
 }
 
 export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: boolean = false) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const activeSprint = await getActiveSprint()
     if (!activeSprint) return null
 
@@ -59,7 +69,10 @@ export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: bool
             // Single UPDATE for all winners using SQL increment
             await db.update(users)
                 .set({ walletCoins: sql`COALESCE(${users.walletCoins}, 0) + ${sprintRewardCoins}` })
-                .where(inArray(users.id, winners))
+                .where(and(
+                    eq(users.companyId, ctx.companyId),
+                    inArray(users.id, winners),
+                ))
 
             const sprintReason = eventMult.coins > 1
                 ? `SPRINT_WON (${sprintDurationMin}min, x${eventMult.coins} evento)`
@@ -72,7 +85,8 @@ export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: bool
                     userId: winnerId,
                     amount: sprintRewardCoins,
                     reason: sprintReason,
-                    createdAt: now
+                    createdAt: now,
+                    companyId: ctx.companyId,
                 }))
             )
         }
@@ -83,8 +97,11 @@ export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: bool
                         status: 'completed',
                         actualEndTime: now
                     })
-                    .where(eq(sprints.id, activeSprint.id))
-            
+                    .where(and(
+                        eq(sprints.companyId, ctx.companyId),
+                        eq(sprints.id, activeSprint.id),
+                    ))
+
 
         return { closed: true, sprint: activeSprint, winners }
     }
@@ -93,6 +110,9 @@ export async function checkAndCompleteExpiredSprint(calledByAdminOrManager: bool
 }
 
 export async function startSprint(durationMinutes: number, managerId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const active = await getActiveSprint()
     if (active) throw new Error("Uno Sprint è già in corso.")
 
@@ -106,14 +126,21 @@ export async function startSprint(durationMinutes: number, managerId: string) {
             endTime: endTime,
             status: 'active',
             startedByManagerId: managerId,
-            createdAt: now
+            createdAt: now,
+            companyId: ctx.companyId,
         })
 
     return sprintId
 }
 
 export async function stopSprintForce(sprintId: string) {
-    const active = (await db.select().from(sprints).where(eq(sprints.id, sprintId)))[0]
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const active = (await db.select().from(sprints).where(and(
+        eq(sprints.companyId, ctx.companyId),
+        eq(sprints.id, sprintId),
+    )))[0]
     if (!active || active.status !== 'active') return
 
     // Evaluate logic right away
@@ -121,30 +148,39 @@ export async function stopSprintForce(sprintId: string) {
 }
 
 export async function getSprintLeaderboard(sprintId?: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
 
     // Find sprint
     let sprintWindow = await getActiveSprint()
     if (sprintId) {
-        sprintWindow = (await db.select().from(sprints).where(eq(sprints.id, sprintId)))[0] || null
+        sprintWindow = (await db.select().from(sprints).where(and(
+            eq(sprints.companyId, ctx.companyId),
+            eq(sprints.id, sprintId),
+        )))[0] || null
     }
 
     if (!sprintWindow) return []
 
     // Get all gdos
-    const allGdos = await db.select().from(users).where(eq(users.role, 'GDO'))
+    const allGdos = await db.select().from(users).where(and(
+        eq(users.companyId, ctx.companyId),
+        eq(users.role, 'GDO'),
+    ))
 
     // Get all appointments created within this sprint explicitly
     const sprintApps = await db.select()
             .from(leads)
             .where(
                 and(
+                    eq(leads.companyId, ctx.companyId),
                     eq(leads.status, 'APPOINTMENT'),
                     gte(leads.appointmentCreatedAt, sprintWindow.startTime),
                     // We use now() if active, or actualEndTime/endTime if closed
                     lte(leads.appointmentCreatedAt, sprintWindow.actualEndTime || sprintWindow.endTime)
                 )
             )
-        
+
 
     const counts = new Map<string, number>()
 
@@ -175,15 +211,27 @@ export async function getSprintLeaderboard(sprintId?: string) {
 }
 
 export async function getUserWalletCoins(userId: string) {
-    const user = await (await db.select({ walletCoins: users.walletCoins }).from(users).where(eq(users.id, userId)))[0]
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const user = await (await db.select({ walletCoins: users.walletCoins }).from(users).where(and(
+        eq(users.companyId, ctx.companyId),
+        eq(users.id, userId),
+    )))[0]
     return user?.walletCoins || 0
 }
 
 export async function getUserLevelProgress(userId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
     const user = await (await db.select({
         level: users.level,
         experience: users.experience,
-    }).from(users).where(eq(users.id, userId)))[0]
+    }).from(users).where(and(
+        eq(users.companyId, ctx.companyId),
+        eq(users.id, userId),
+    )))[0]
     if (!user) return null
     const targetXp = GAME_CONSTANTS.calculateTargetXp(user.level)
     return {

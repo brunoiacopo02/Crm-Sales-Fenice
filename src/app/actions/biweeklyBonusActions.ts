@@ -7,9 +7,10 @@
 
 import { db } from "@/db";
 import { weeklyGamificationRules } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getBiweeklyCycle, getBiweeklyCycleByIndex, getRecentClosedCycles, type BiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 export interface BiweeklyCycleSummary {
     cycleIndex: number;
@@ -35,8 +36,11 @@ const DEFAULT_TARGET2 = 22;
 const DEFAULT_REWARD1 = 270;
 const DEFAULT_REWARD2 = 540;
 
-async function loadRuleForMonth(yearMonth: string): Promise<{ target1: number; target2: number; reward1: number; reward2: number }> {
-    const rules = await db.select().from(weeklyGamificationRules).where(eq(weeklyGamificationRules.month, yearMonth));
+async function loadRuleForMonth(yearMonth: string, companyId: string): Promise<{ target1: number; target2: number; reward1: number; reward2: number }> {
+    const rules = await db.select().from(weeklyGamificationRules).where(and(
+        eq(weeklyGamificationRules.companyId, companyId),
+        eq(weeklyGamificationRules.month, yearMonth),
+    ));
     if (rules.length > 0) {
         return {
             target1: rules[0].targetTier1,
@@ -52,8 +56,8 @@ function yearMonthFromCycle(c: BiweeklyCycle): string {
     return c.startDateStr.slice(0, 7);
 }
 
-async function summarizeCycle(userId: string, cycle: BiweeklyCycle, isCurrent: boolean): Promise<BiweeklyCycleSummary> {
-    const rule = await loadRuleForMonth(yearMonthFromCycle(cycle));
+async function summarizeCycle(userId: string, cycle: BiweeklyCycle, isCurrent: boolean, companyId: string): Promise<BiweeklyCycleSummary> {
+    const rule = await loadRuleForMonth(yearMonthFromCycle(cycle), companyId);
     const { total: presences } = await countPresences(userId, cycle.start, cycle.end);
     const tier1Reached = presences >= rule.target1;
     const tier2Reached = presences >= rule.target2;
@@ -83,20 +87,26 @@ async function summarizeCycle(userId: string, cycle: BiweeklyCycle, isCurrent: b
  * Ordinato dal più recente al più vecchio.
  */
 export async function getBiweeklyHistory(userId: string, lookback = 8): Promise<BiweeklyCycleSummary[]> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
     const now = new Date();
     const current = getBiweeklyCycle(now);
     const closed = getRecentClosedCycles(lookback, now);
 
     const summaries = await Promise.all([
-        summarizeCycle(userId, current, true),
-        ...closed.map(c => summarizeCycle(userId, c, false)),
+        summarizeCycle(userId, current, true, ctx.companyId),
+        ...closed.map(c => summarizeCycle(userId, c, false, ctx.companyId)),
     ]);
     return summaries;
 }
 
 /** Singolo ciclo per indice — utility per debug/test. */
 export async function getBiweeklyCycleSummary(userId: string, cycleIndex: number): Promise<BiweeklyCycleSummary> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
     const cycle = getBiweeklyCycleByIndex(cycleIndex);
     const currentIndex = getBiweeklyCycle(new Date()).index;
-    return summarizeCycle(userId, cycle, cycleIndex === currentIndex);
+    return summarizeCycle(userId, cycle, cycleIndex === currentIndex, ctx.companyId);
 }
