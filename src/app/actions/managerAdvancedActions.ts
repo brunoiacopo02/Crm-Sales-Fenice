@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { appSettings, callLogs, leads, users } from "@/db/schema"
 import { and, eq, gte, lte } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export type OperativaDataRow = {
     userId: string
@@ -37,6 +38,7 @@ const DEFAULT_CPL_EUR = 9
 
 async function readCplEur(): Promise<number> {
     try {
+        // appSettings is a global table (not in scoped list), no companyId filter
         const rows = await db.select().from(appSettings).where(eq(appSettings.key, APP_SETTING_KEY_CPL))
         if (rows.length === 0) return DEFAULT_CPL_EUR
         const parsed = Number(rows[0].value)
@@ -48,11 +50,15 @@ async function readCplEur(): Promise<number> {
 }
 
 export async function getOperativaCostSettings(): Promise<{ cplEur: number; costoOrarioGdoEur: number }> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const cplEur = await readCplEur()
     return { cplEur, costoOrarioGdoEur: COSTO_ORARIO_GDO_EUR }
 }
 
 export async function setOperativaCplEur(value: number): Promise<{ success: boolean; error?: string; cplEur?: number }> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     if (typeof value !== 'number' || !isFinite(value) || value < 0) {
         return { success: false, error: 'Valore CPL non valido.' }
     }
@@ -80,6 +86,8 @@ export async function setOperativaCplEur(value: number): Promise<{ success: bool
 }
 
 export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMESTRE'): Promise<OperativaDataRow[]> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const now = new Date()
     let startDate = new Date()
     let endDate = new Date()
@@ -101,7 +109,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
 
     // Usiamo Promise.all() per queries pesanti simultanee
     const [gdos, logsRaw, appointments, assignedLeadsRaw, cplEur] = await Promise.all([
-        db.select({ id: users.id, name: users.name, displayName: users.displayName }).from(users).where(eq(users.role, 'GDO')),
+        db.select({ id: users.id, name: users.name, displayName: users.displayName }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId))),
         db.select({
             id: callLogs.id,
             userId: callLogs.userId,
@@ -111,7 +119,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             leadFunnel: leads.funnel,
         }).from(callLogs)
             .leftJoin(leads, eq(callLogs.leadId, leads.id))
-            .where(and(gte(callLogs.createdAt, startDate), lte(callLogs.createdAt, endDate))),
+            .where(and(gte(callLogs.createdAt, startDate), lte(callLogs.createdAt, endDate), eq(callLogs.companyId, ctx.companyId))),
 
         db.select({
             id: leads.id,
@@ -120,7 +128,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             salespersonOutcome: leads.salespersonOutcome,
             confirmationsOutcome: leads.confirmationsOutcome,
         }).from(leads)
-            .where(and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate))),
+            .where(and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate), eq(leads.companyId, ctx.companyId))),
 
         // leadAssegnati = lead assegnati al GDO nel periodo, indipendentemente
         // dallo status. Prima filtrava solo status='NEW', perdendo tutti i
@@ -132,7 +140,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
         }).from(leads)
-            .where(and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate))),
+            .where(and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate), eq(leads.companyId, ctx.companyId))),
 
         readCplEur(),
     ])

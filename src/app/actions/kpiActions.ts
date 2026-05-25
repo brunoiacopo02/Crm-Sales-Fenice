@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server"
 import { db } from "@/db"
 import { callLogs, leads } from "@/db/schema"
 import { eq, gte, lte, and, sql } from "drizzle-orm"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 export type KpiData = {
     totalCalls: number
     totalAnswers: number
@@ -14,6 +15,8 @@ export type KpiData = {
 }
 
 export async function getDailyKpi(dateStr?: string): Promise<KpiData> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -33,6 +36,7 @@ export async function getDailyKpi(dateStr?: string): Promise<KpiData> {
     endOfDay.setHours(23, 59, 59, 999)
 
     const conditions = [
+        eq(callLogs.companyId, ctx.companyId),
         gte(callLogs.createdAt, startOfDay),
         lte(callLogs.createdAt, endOfDay)
     ]

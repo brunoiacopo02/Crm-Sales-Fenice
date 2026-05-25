@@ -7,6 +7,7 @@ import { gte, lt, eq, and } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 export type KpiPeriod = 'oggi' | 'ieri' | 'settimana' | 'mese'
 
 /** Verifica se un timestamp cade nell'orario lavorativo GDO 13:30-20:00 Europe/Rome */
@@ -22,6 +23,8 @@ function isWithinWorkingHours(date: Date): boolean {
 }
 
 export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -51,6 +54,7 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
 
     // Costruzione query con join per permettere filtro Funnel sul Lead di origine
     const baseConditions = [
+        eq(callLogs.companyId, ctx.companyId),
         gte(callLogs.createdAt, startDate),
         lt(callLogs.createdAt, endDate)
     ]
@@ -73,7 +77,7 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     }
 
     // Recupero Mappatura Utenti
-    const allUsers = await db.select().from(users).where(eq(users.role, 'GDO'))
+    const allUsers = await db.select().from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
     const userMap = new Map(allUsers.map(u => [u.id, u]))
 
     // 1. CALCOLO AGGREGATI TOTALI TEAM

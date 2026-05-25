@@ -5,6 +5,7 @@ import { leads, users, monthlyTargets } from "@/db/schema"
 import { eq, and, gte, lte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 import { weekBoundsRome } from "@/lib/dateUtils"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 
 /** Format a Date to 'yyyy-MM-dd' in Europe/Rome timezone */
 function toRomeDateStr(date: Date): string {
@@ -20,6 +21,8 @@ const CONFERME_REWARD_T1 = 145;
 const CONFERME_REWARD_T2 = 290;
 
 export async function getConfermeKpiStats(monthDate: Date = new Date(), confermeUserId?: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const start = startOfMonth(monthDate)
     const end = endOfMonth(monthDate)
     const calendarStart = startOfWeek(start, { weekStartsOn: 1 })
@@ -30,6 +33,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     // Serve al tracking del target settimanale del team Conferme (quante
     // pratiche chiude a settimana).
     const conditionsConfirmations = [
+        eq(leads.companyId, ctx.companyId),
         gte(leads.confirmationsTimestamp, calendarStart),
         lte(leads.confirmationsTimestamp, calendarEnd)
     ]
@@ -48,6 +52,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     // SCHEDULATI per il giorno X (indipendentemente da quando la conferma/
     // scarto è stata registrata). Filtro su appointmentDate.
     const conditionsCalendar = [
+        eq(leads.companyId, ctx.companyId),
         gte(leads.appointmentDate, calendarStart),
         lte(leads.appointmentDate, calendarEnd)
     ]
@@ -98,7 +103,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     let weeklyTier2Target = 0;
 
     if (confermeUserId) {
-        const userRow = await db.select().from(users).where(eq(users.id, confermeUserId)).limit(1);
+        const userRow = await db.select().from(users).where(and(eq(users.id, confermeUserId), eq(users.companyId, ctx.companyId))).limit(1);
         if (userRow.length > 0) {
             weeklyTier1Target = userRow[0].confermeTargetTier1 || CONFERME_DEFAULT_TARGET_T1;
             weeklyTier2Target = userRow[0].confermeTargetTier2 || CONFERME_DEFAULT_TARGET_T2;
@@ -153,6 +158,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     // il lead deve essere stato confermato da un operatore Conferme.
     // Esclude vendite dirette o import storici che non sono passati di qui.
     const closedWeekConditions = [
+        eq(leads.companyId, ctx.companyId),
         eq(leads.salespersonOutcome, 'Chiuso'),
         eq(leads.confirmationsOutcome, 'confermato'),
         isNotNull(leads.confirmationsUserId),
@@ -185,6 +191,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         const past = new Date(nowWeekStart.getTime() - i * 7 * 86400000)
         const pw = weekBoundsRome(past)
         const conds = [
+            eq(leads.companyId, ctx.companyId),
             eq(leads.salespersonOutcome, 'Chiuso'),
             eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.confirmationsUserId),
@@ -220,7 +227,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
 
     // Check for manager override of working days
     const monthStr = format(start, 'yyyy-MM')
-    const mtQuery = await db.select().from(monthlyTargets).where(eq(monthlyTargets.month, monthStr))
+    const mtQuery = await db.select().from(monthlyTargets).where(and(eq(monthlyTargets.month, monthStr), eq(monthlyTargets.companyId, ctx.companyId)))
     const overrideVal = mtQuery.length > 0 ? mtQuery[0].workingDaysOverride : null
     const totalWorkingDays = (overrideVal != null && overrideVal > 0) ? overrideVal : calcTotalWorkingDays
     const workingDaysPassed = Math.min(calcWorkingDaysPassed, totalWorkingDays)
@@ -268,6 +275,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         outcomeAt: leads.salespersonOutcomeAt,
         amount: leads.closeAmountEur,
     }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
         isNotNull(leads.salespersonOutcomeAt),
         gte(leads.salespersonOutcomeAt, start),
         lte(leads.salespersonOutcomeAt, end),
@@ -322,6 +330,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
 }
 
 export async function getConfermeSalesList(monthDate: Date = new Date()) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const start = startOfMonth(monthDate)
     const end = endOfMonth(monthDate)
 
@@ -330,7 +340,7 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         displayName: users.displayName,
         name: users.name,
         avatarUrl: users.avatarUrl
-    }).from(users).where(eq(users.role, 'VENDITORE'))
+    }).from(users).where(and(eq(users.role, 'VENDITORE'), eq(users.companyId, ctx.companyId)))
 
     // Un solo set di lead "presenti nel mese" per ciascun venditore.
     // Un lead conta come ATTIVO NEL MESE se:
@@ -351,6 +361,7 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         salespersonOutcomeAt: leads.salespersonOutcomeAt,
         amount: leads.closeAmountEur,
     }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
         isNotNull(leads.salespersonUserId),
         or(
             and(
@@ -415,6 +426,8 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
  * F2-012: Obiettivi giornalieri Conferme — confermati oggi vs target
  */
 export async function getConfermeDailyObjectives(confermeUserId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const now = new Date()
     const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
     const [yearStr, monthStr, dayStr] = todayStr.split('-')

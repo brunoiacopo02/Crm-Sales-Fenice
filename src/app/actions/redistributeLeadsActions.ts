@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { leads, leadEvents, users, notifications } from "@/db/schema"
 import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import crypto from "crypto"
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -76,9 +77,10 @@ async function assertAdmin() {
     return { ok: true as const, userId: user.id }
 }
 
-export async function getRedistributionFunnels(sourceGdoId: string, section: RedistributionSection): Promise<{ funnel: string; count: number }[]> {
+async function getRedistributionFunnelsInternal(sourceGdoId: string, section: RedistributionSection, companyId: string): Promise<{ funnel: string; count: number }[]> {
     if (!sourceGdoId) return []
     const conditions = [
+        eq(leads.companyId, companyId),
         eq(leads.assignedToId, sourceGdoId),
         ...buildSectionConditions(section),
     ]
@@ -92,19 +94,27 @@ export async function getRedistributionFunnels(sourceGdoId: string, section: Red
         .sort((a, b) => b.count - a.count)
 }
 
+export async function getRedistributionFunnels(sourceGdoId: string, section: RedistributionSection): Promise<{ funnel: string; count: number }[]> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    return getRedistributionFunnelsInternal(sourceGdoId, section, ctx.companyId)
+}
+
 export async function getRedistributionPreview(input: Omit<RedistributionInput, 'targetGdoIds' | 'mode' | 'customQuotas'> & {
     targetGdoIds: string[]
     mode: RedistributionMode
     customQuotas?: Record<string, number>
 }): Promise<RedistributionPreviewResult> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     if (!input.sourceGdoId || !input.section || !Array.isArray(input.targetGdoIds)) {
         return { totalMatching: 0, totalToMove: 0, perTarget: [], funnelsAvailable: [] }
     }
 
     const sectionConds = buildSectionConditions(input.section)
-    const baseConds = [eq(leads.assignedToId, input.sourceGdoId), ...sectionConds]
+    const baseConds = [eq(leads.companyId, ctx.companyId), eq(leads.assignedToId, input.sourceGdoId), ...sectionConds]
 
-    const funnelsAvailable = await getRedistributionFunnels(input.sourceGdoId, input.section)
+    const funnelsAvailable = await getRedistributionFunnelsInternal(input.sourceGdoId, input.section, ctx.companyId)
 
     // Conteggio totale (con eventuale filtro funnel applicato)
     const allConds = [...baseConds]
@@ -134,7 +144,7 @@ export async function getRedistributionPreview(input: Omit<RedistributionInput, 
     const targetUsers = await db
         .select({ id: users.id, name: users.name, displayName: users.displayName })
         .from(users)
-        .where(eq(users.role, 'GDO'))
+        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
     const targetMap = new Map(targetUsers.map(u => [u.id, u.displayName || u.name || 'GDO']))
 
     const perTarget: RedistributionPreviewRow[] = input.targetGdoIds.map(id => ({
@@ -176,6 +186,8 @@ export async function getRedistributionPreview(input: Omit<RedistributionInput, 
 }
 
 export async function executeLeadRedistribution(input: RedistributionInput): Promise<RedistributionExecuteResult> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const auth = await assertAdmin()
     if (!auth.ok) return { success: false, error: auth.error }
 
@@ -184,7 +196,7 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
     if (input.targetGdoIds.includes(input.sourceGdoId)) return { success: false, error: 'Il GDO sorgente non può essere anche destinatario.' }
 
     const sectionConds = buildSectionConditions(input.section)
-    const baseConds = [eq(leads.assignedToId, input.sourceGdoId), ...sectionConds]
+    const baseConds = [eq(leads.companyId, ctx.companyId), eq(leads.assignedToId, input.sourceGdoId), ...sectionConds]
 
     if (input.funnels && input.funnels.length > 0) {
         const hasNullSentinel = input.funnels.includes('(vuoto)')
@@ -252,7 +264,7 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
     const targetUsers = await db
         .select({ id: users.id, name: users.name, displayName: users.displayName })
         .from(users)
-        .where(eq(users.role, 'GDO'))
+        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
     const targetMap = new Map(targetUsers.map(u => [u.id, u.displayName || u.name || 'GDO']))
 
     const perTargetCount: Record<string, number> = {}
@@ -328,10 +340,12 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
 }
 
 export async function getActiveGdosForRedistribution(): Promise<{ id: string; name: string; displayName: string | null; isActive: boolean }[]> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const rows = await db
         .select({ id: users.id, name: users.name, displayName: users.displayName, isActive: users.isActive })
         .from(users)
-        .where(eq(users.role, 'GDO'))
+        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
     return rows.map(r => ({
         id: r.id,
         name: r.name || '',

@@ -5,6 +5,7 @@ import { callLogs, leads, users } from "@/db/schema"
 import { gte, lte, lt, and, eq, desc } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 
 import { cache } from "react"
 
@@ -52,6 +53,8 @@ function isWithinWorkingHours(date: Date): boolean {
 }
 
 export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     // We fetch everything and process in JS for maximum flexibility given SQLite limits on complex joins
     // Or we can use Drizzle. Given the scale, fetching filtered leads and logs is fine.
 
@@ -71,7 +74,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     }).from(leads)
 
     // Apply lead-level filters
-    const leadConditions = []
+    const leadConditions: any[] = [eq(leads.companyId, ctx.companyId)]
     if (filters.funnel) leadConditions.push(eq(leads.funnel, filters.funnel))
     if (filters.gdoId) leadConditions.push(eq(leads.assignedToId, filters.gdoId))
 
@@ -79,7 +82,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // For simplicity, let's just fetch all leads and filter their LOGS by date range,
     // OR filter leads created within the period for the import stats.
 
-    let allLeads = await (leadConditions.length > 0 ? leadsQuery.where(and(...leadConditions)) : leadsQuery)
+    let allLeads = await leadsQuery.where(and(...leadConditions))
 
     // Sicurezza Type: converti stringhe ISO in oggetti Date, dato che Next.js 
     // serializza in JSON senza conservare i prototipi passando ai Server Action.
@@ -88,6 +91,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     // Now fetch logs within the date range
     let logConditions = [
+        eq(callLogs.companyId, ctx.companyId),
         gte(callLogs.createdAt, safeStartDate),
         lte(callLogs.createdAt, safeEndDate)
     ]
@@ -159,7 +163,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // 4. Performance GDO
     const gdoStatsMap: Record<string, any> = {}
 
-    const allUsers = await db.select().from(users)
+    const allUsers = await db.select().from(users).where(eq(users.companyId, ctx.companyId))
     const userMap = new Map(allUsers.map(u => [u.id, u.name]))
 
     validLogs.forEach(log => {
@@ -320,11 +324,13 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 })
 
 export const getGdoTargetsProgress = async (gdoId: string) => {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     // Fetch targets from user
     const user = (await db.select({
         dailyApptTarget: users.dailyApptTarget,
         weeklyConfirmedTarget: users.weeklyConfirmedTarget
-    }).from(users).where(eq(users.id, gdoId)))[0]
+    }).from(users).where(and(eq(users.id, gdoId), eq(users.companyId, ctx.companyId))))[0]
 
     if (!user) return null
 
@@ -340,6 +346,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const todayApptLogs = await db.select({ leadId: callLogs.leadId })
         .from(callLogs)
         .where(and(
+            eq(callLogs.companyId, ctx.companyId),
             eq(callLogs.userId, gdoId),
             eq(callLogs.outcome, 'APPUNTAMENTO'),
             gte(callLogs.createdAt, todayStart),
@@ -352,6 +359,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const weeklyConfirmedCount = (await db.select({ id: leads.id })
         .from(leads)
         .where(and(
+            eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoId),
             eq(leads.confirmationsOutcome, 'confermato'),
             gte(leads.confirmationsTimestamp, weekStart),
@@ -364,6 +372,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const weeklyClosedRows = await db.select({ amount: leads.closeAmountEur })
         .from(leads)
         .where(and(
+            eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoId),
             eq(leads.salespersonOutcome, 'Chiuso'),
             gte(leads.salespersonOutcomeAt, weekStart),
