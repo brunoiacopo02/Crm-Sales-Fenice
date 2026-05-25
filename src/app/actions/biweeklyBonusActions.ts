@@ -58,7 +58,7 @@ function yearMonthFromCycle(c: BiweeklyCycle): string {
 
 async function summarizeCycle(userId: string, cycle: BiweeklyCycle, isCurrent: boolean, companyId: string): Promise<BiweeklyCycleSummary> {
     const rule = await loadRuleForMonth(yearMonthFromCycle(cycle), companyId);
-    const { total: presences } = await countPresences(userId, cycle.start, cycle.end);
+    const { total: presences } = await countPresences(userId, cycle.start, cycle.end, companyId);
     const tier1Reached = presences >= rule.target1;
     const tier2Reached = presences >= rule.target2;
     // Bonus cumulato come da business rule: T1 sblocca reward1, T2 sblocca anche reward2.

@@ -6,6 +6,7 @@ import { eq, and, gte, lte, lt, isNotNull, sql, or } from "drizzle-orm";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
+import { currentTenant } from "@/lib/tenancy";
 
 export interface GamificationTargetInput {
     month: string;
@@ -264,6 +265,7 @@ export async function getManagerGdoTables(monthString: string) {
  * di sempre, branchato sotto.
  */
 export async function getCurrentGdoGamificationState(gdoUserId: string, testTodayOverride?: Date, overrides?: { role?: string; target1Override?: number; reward1Override?: number; target2Override?: number; reward2Override?: number }) {
+    const ctx = await currentTenant();
     const today = testTodayOverride || new Date();
 
     if (overrides?.role === 'CONFERME') {
@@ -294,7 +296,7 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
         }
     }
 
-    const { total: currentPresences } = await countPresences(gdoUserId, cycle.start, cycle.end);
+    const { total: currentPresences } = await countPresences(gdoUserId, cycle.start, cycle.end, ctx.companyId);
 
     return {
         currentPresences,

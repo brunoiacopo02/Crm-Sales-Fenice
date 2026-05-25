@@ -31,15 +31,17 @@ export interface PresenceCount {
 
 /**
  * Conta presenze di un GDO nel range `[start, end)`.
- * `end` è exclusive.
+ * `end` è exclusive. Scope: solo lead/aggiustamenti del tenant `companyId`.
  */
 export async function countPresences(
     userId: string,
     start: Date,
     end: Date,
+    companyId: string,
 ): Promise<PresenceCount> {
     const [leadsRows, adjustments] = await Promise.all([
         db.select({ id: leads.id }).from(leads).where(and(
+            eq(leads.companyId, companyId),
             eq(leads.assignedToId, userId),
             inArray(leads.salespersonOutcome, PRESENCE_OUTCOMES as unknown as string[]),
             isNotNull(leads.salespersonOutcomeAt),
@@ -47,6 +49,7 @@ export async function countPresences(
             lt(leads.salespersonOutcomeAt, end),
         )),
         db.select({ count: manualAdjustments.count }).from(manualAdjustments).where(and(
+            eq(manualAdjustments.companyId, companyId),
             eq(manualAdjustments.userId, userId),
             eq(manualAdjustments.type, 'presenze'),
             gte(manualAdjustments.createdAt, start),
