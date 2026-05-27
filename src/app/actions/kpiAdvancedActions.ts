@@ -1,10 +1,11 @@
 "use server"
 
 import { db } from "@/db"
-import { callLogs, leads, users } from "@/db/schema"
-import { gte, lte, lt, and, eq, desc } from "drizzle-orm"
+import { callLogs, leads, users, leadEvents } from "@/db/schema"
+import { gte, lte, lt, and, eq, desc, inArray, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
+import { workingDaysBetween } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 
 import { cache } from "react"
@@ -391,4 +392,189 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     }
 
     return res
+}
+
+export type GdoThroughputRow = {
+    gdoId: string
+    gdoName: string
+    avgCallsPerLead: number | null
+    callsPerDay: number
+    dailyCapacity: number | null
+    closures: number
+    closedLeadsCount: number
+}
+
+export type GdoThroughputMetrics = {
+    perGdo: GdoThroughputRow[]
+    teamTotals: Omit<GdoThroughputRow, 'gdoId' | 'gdoName'>
+}
+
+/**
+ * Throughput per GDO sulla finestra rolling 30 giorni Europe/Rome.
+ *
+ * Metriche:
+ * - avgCallsPerLead = SUM(callCount sui lead chiusi nella finestra) / COUNT(lead chiusi)
+ *   Un lead è "chiuso" se ha un leadEvent APPOINTMENT_SET o DISCARDED nella finestra.
+ * - callsPerDay = COUNT(callLogs nella finestra) / workingDaysBetween(start, end)
+ * - dailyCapacity = round(callsPerDay / avgCallsPerLead) — metrica primaria
+ * - closures = COUNT(lead con salespersonOutcome='Chiuso' e salespersonOutcomeAt nella finestra)
+ *   (stesso pattern di getGdoTargetsProgress.weeklyClosedRows)
+ *
+ * Tutti i numeri sono tenant-scoped (companyId = ctx.companyId).
+ */
+export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    // Finestra: ultimi 30 giorni Europe/Rome, dall'inizio del giorno 29 giorni fa fino a now.
+    const now = new Date()
+    const startBound = dayBoundsRome(new Date(now.getTime() - 29 * 86400000)).start
+    const end = now
+    const workingDays = Math.max(1, workingDaysBetween(startBound, end))
+
+    // --- Query 1: utenti GDO attivi del tenant ---
+    const gdoUsers = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
+        .from(users)
+        .where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.role, 'GDO')
+        ))
+
+    // --- Query 2: lead chiusi nella finestra (per GDO, dedup per leadId) ---
+    // Prendiamo TUTTI i leadEvents APPOINTMENT_SET / DISCARDED nella finestra
+    // joinati col lead, escludendo self-booked. Poi dedup in JS prendendo
+    // l'ULTIMO evento terminale per ogni leadId (caso: APPOINTMENT_SET poi
+    // DISCARDED → conta una sola volta).
+    const terminalEvents = await db.select({
+        leadId: leadEvents.leadId,
+        eventType: leadEvents.eventType,
+        timestamp: leadEvents.timestamp,
+        assignedToId: leads.assignedToId,
+        callCount: leads.callCount,
+    })
+        .from(leadEvents)
+        .innerJoin(leads, eq(leads.id, leadEvents.leadId))
+        .where(and(
+            eq(leadEvents.companyId, ctx.companyId),
+            eq(leads.companyId, ctx.companyId),
+            inArray(leadEvents.eventType, ['APPOINTMENT_SET', 'DISCARDED']),
+            gte(leadEvents.timestamp, startBound),
+            lt(leadEvents.timestamp, end),
+            isNotNull(leads.assignedToId),
+            eq(leads.isSelfBooked, false),
+        ))
+        .orderBy(desc(leadEvents.timestamp))
+
+    // Dedup: per ogni leadId, tieni il primo (= più recente per ORDER BY desc).
+    const closedByLead = new Map<string, { assignedToId: string; callCount: number }>()
+    for (const row of terminalEvents) {
+        if (!row.assignedToId) continue
+        if (closedByLead.has(row.leadId)) continue
+        closedByLead.set(row.leadId, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
+    }
+
+    // Aggrega per GDO.
+    const closedByGdo = new Map<string, { sumCalls: number; count: number }>()
+    for (const v of closedByLead.values()) {
+        const cur = closedByGdo.get(v.assignedToId) ?? { sumCalls: 0, count: 0 }
+        cur.sumCalls += v.callCount
+        cur.count += 1
+        closedByGdo.set(v.assignedToId, cur)
+    }
+
+    // --- Query 3: chiamate nella finestra (per GDO) ---
+    const callsAgg = await db.select({
+        userId: callLogs.userId,
+        cnt: sql<number>`count(*)::int`,
+    })
+        .from(callLogs)
+        .where(and(
+            eq(callLogs.companyId, ctx.companyId),
+            isNotNull(callLogs.userId),
+            gte(callLogs.createdAt, startBound),
+            lt(callLogs.createdAt, end),
+        ))
+        .groupBy(callLogs.userId)
+
+    const callsByGdo = new Map<string, number>()
+    for (const r of callsAgg) {
+        if (r.userId) callsByGdo.set(r.userId, Number(r.cnt))
+    }
+
+    // --- Query 4: chiusure nella finestra (per GDO) — stesso pattern di getGdoTargetsProgress ---
+    const closuresAgg = await db.select({
+        assignedToId: leads.assignedToId,
+        cnt: sql<number>`count(*)::int`,
+    })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            isNotNull(leads.assignedToId),
+            eq(leads.salespersonOutcome, 'Chiuso'),
+            gte(leads.salespersonOutcomeAt, startBound),
+            lt(leads.salespersonOutcomeAt, end),
+        ))
+        .groupBy(leads.assignedToId)
+
+    const closuresByGdo = new Map<string, number>()
+    for (const r of closuresAgg) {
+        if (r.assignedToId) closuresByGdo.set(r.assignedToId, Number(r.cnt))
+    }
+
+    // --- Compose per-GDO rows ---
+    const perGdo: GdoThroughputRow[] = gdoUsers.map(u => {
+        const closed = closedByGdo.get(u.id)
+        const closedCount = closed?.count ?? 0
+        const sumCalls = closed?.sumCalls ?? 0
+
+        const avgCallsPerLead = closedCount > 0
+            ? Math.round((sumCalls / closedCount) * 10) / 10
+            : null
+
+        const totalCalls = callsByGdo.get(u.id) ?? 0
+        const callsPerDay = Math.round((totalCalls / workingDays) * 10) / 10
+
+        const dailyCapacity = (avgCallsPerLead && avgCallsPerLead > 0)
+            ? Math.round(callsPerDay / avgCallsPerLead)
+            : null
+
+        return {
+            gdoId: u.id,
+            gdoName: u.displayName ?? u.name ?? u.id,
+            avgCallsPerLead,
+            callsPerDay,
+            dailyCapacity,
+            closures: closuresByGdo.get(u.id) ?? 0,
+            closedLeadsCount: closedCount,
+        }
+    })
+
+    // --- Team totals: somma/somma, non media-di-medie ---
+    let teamSumCalls = 0
+    let teamClosedCount = 0
+    for (const v of closedByLead.values()) {
+        teamSumCalls += v.callCount
+        teamClosedCount += 1
+    }
+    const teamTotalCalls = Array.from(callsByGdo.values()).reduce((a, b) => a + b, 0)
+    const teamClosures = Array.from(closuresByGdo.values()).reduce((a, b) => a + b, 0)
+
+    const teamAvgCallsPerLead = teamClosedCount > 0
+        ? Math.round((teamSumCalls / teamClosedCount) * 10) / 10
+        : null
+    const teamCallsPerDay = Math.round((teamTotalCalls / workingDays) * 10) / 10
+    const teamDailyCapacity = (teamAvgCallsPerLead && teamAvgCallsPerLead > 0)
+        ? Math.round(teamCallsPerDay / teamAvgCallsPerLead)
+        : null
+
+    return {
+        perGdo,
+        teamTotals: {
+            avgCallsPerLead: teamAvgCallsPerLead,
+            callsPerDay: teamCallsPerDay,
+            dailyCapacity: teamDailyCapacity,
+            closures: teamClosures,
+            closedLeadsCount: teamClosedCount,
+        }
+    }
 }
