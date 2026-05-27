@@ -383,6 +383,68 @@ export function KpiGdoBoard() {
                 <BiweeklyHistoryTable userId={gdoFilter} lookback={8} />
             )}
 
+            {/* THROUGHPUT HEADLINE — sezione dedicata alla metrica primaria "lead gestibili/giorno". */}
+            {/* Rolling 30 giorni, indipendente dal selettore di periodo in alto. */}
+            {throughput?.teamTotals && isAdminOrManager && (
+                <div className="bg-gradient-to-br from-amber-50 via-white to-amber-50/50 p-6 rounded-2xl border-2 border-amber-200 shadow-card">
+                    <div className="flex items-start gap-8 flex-col lg:flex-row">
+                        {/* HEADLINE NUMBER */}
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                                    <TrendingUp className="h-6 w-6 text-amber-700" />
+                                </div>
+                                <h2 className="text-base font-bold text-amber-900 uppercase tracking-wider">
+                                    Lead gestibili al giorno
+                                </h2>
+                            </div>
+                            <div className="text-6xl font-black text-amber-800 leading-none mt-2">
+                                {throughput.teamTotals.dailyCapacity ?? '—'}
+                            </div>
+                            <div className="text-sm text-ash-600 mt-3 font-medium">
+                                Capacità teorica del team — rolling 30 giorni
+                            </div>
+                            <div className="text-xs text-ash-500 mt-2 leading-relaxed">
+                                <span className="font-semibold text-ash-700">{throughput.teamTotals.callsPerDay}</span> chiamate/giorno ÷ <span className="font-semibold text-ash-700">{throughput.teamTotals.avgCallsPerLead ?? '—'}</span> chiamate medie per lead = <span className="font-semibold text-amber-700">{throughput.teamTotals.dailyCapacity ?? '—'} lead/giorno</span>
+                            </div>
+                            <div className="text-[11px] text-ash-400 mt-1">
+                                Calcolato su {throughput.teamTotals.closedLeadsCount.toLocaleString('it-IT')} lead chiusi (appuntamento o scartato) negli ultimi 30 giorni
+                            </div>
+                        </div>
+
+                        {/* TOP GDO RANKING */}
+                        <div className="flex-1 lg:max-w-md w-full">
+                            <div className="text-xs font-bold text-ash-500 uppercase tracking-wider mb-3">
+                                Top GDO per capacità
+                            </div>
+                            <div className="space-y-2">
+                                {(() => {
+                                    const ranked = [...throughput.perGdo]
+                                        .filter(r => r.dailyCapacity != null && r.dailyCapacity > 0)
+                                        .sort((a, b) => (b.dailyCapacity ?? 0) - (a.dailyCapacity ?? 0))
+                                    if (ranked.length === 0) {
+                                        return <div className="text-sm text-ash-400 italic">Nessun GDO con dati sufficienti</div>
+                                    }
+                                    const max = ranked[0].dailyCapacity ?? 1
+                                    return ranked.slice(0, 5).map((r) => {
+                                        const widthPct = ((r.dailyCapacity ?? 0) / max) * 100
+                                        return (
+                                            <div key={r.gdoId} className="flex items-center gap-3">
+                                                <div className="text-xs text-ash-700 w-32 truncate font-medium">{r.gdoName}</div>
+                                                <div className="flex-1 bg-ash-100 rounded-full h-2.5 overflow-hidden">
+                                                    <div className="h-full bg-gradient-to-r from-amber-400 to-amber-600 rounded-full" style={{ width: `${widthPct}%` }} />
+                                                </div>
+                                                <div className="text-sm font-bold text-amber-700 w-8 text-right">{r.dailyCapacity}</div>
+                                            </div>
+                                        )
+                                    })
+                                })()}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* BIG CARDS ROW */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="bg-white p-5 rounded-xl border border-ash-200/60 shadow-soft flex flex-col items-center justify-center text-center group hover:shadow-card transition-all duration-200">
