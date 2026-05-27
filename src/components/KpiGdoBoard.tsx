@@ -523,6 +523,9 @@ export function KpiGdoBoard() {
                         Formula: (Chiamate / 6.5h) × (% Fissaggio / 100) — Ore lavorate fisse: 6.5h (13:30-20:00)
                     </div>
                     <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                        <div className="text-xs text-ash-500 mb-2">
+                            Le colonne <span className="text-amber-700 font-medium">Media call/Lead, Call/Giorno, Lead/Giorno, Chiusi</span> sono calcolate su rolling 30 giorni, indipendenti dal filtro di periodo.
+                        </div>
                         <table className="w-full text-xs sm:text-sm">
                             <thead>
                                 <tr className="border-b border-ash-200/60 text-left">
@@ -657,6 +660,35 @@ export function KpiGdoBoard() {
                                         )
                                     })
                                 }
+                                {throughput?.teamTotals && (
+                                    <tr className="bg-ash-50 font-semibold border-t-2 border-ash-200">
+                                        <td className="py-2.5 pr-3 text-ash-700">—</td>{/* # */}
+                                        <td className="py-2.5 pr-3 text-ash-700">Team</td>
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* Chiamate */}
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">
+                                            {throughput.teamTotals.avgCallsPerLead ?? '—'}
+                                        </td>
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">
+                                            {throughput.teamTotals.callsPerDay}
+                                        </td>
+                                        <td className="py-2.5 pr-3 text-right bg-amber-100/60 text-amber-900 font-bold">
+                                            {throughput.teamTotals.dailyCapacity ?? '—'}
+                                            <div className="text-[10px] text-ash-500 font-normal mt-0.5">
+                                                {throughput.teamTotals.closedLeadsCount} lead chiusi
+                                            </div>
+                                        </td>
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* Lead Contattati */}
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* Appuntamenti */}
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* % Fissaggio */}
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* % Conferme */}
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* % Presenziati */}
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* Chiamate/Ora */}
+                                        <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* Coefficiente */}
+                                        <td className="py-2.5 pr-3 text-right text-emerald-700 font-bold">
+                                            {throughput.teamTotals.closures}
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
