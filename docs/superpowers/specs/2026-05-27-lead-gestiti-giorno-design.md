@@ -69,13 +69,12 @@ Nuova action `getGdoThroughputMetrics30d()` in `src/app/actions/kpiAdvancedActio
 ### 3.2 Query SQL (eseguite in parallelo dentro la action)
 
 **Query A — Lead chiusi nella finestra, per GDO**
-- Sorgente primaria: `leadEvents` con `eventType = 'STATUS_CHANGED'` e `metadata->>'toStatus' IN ('APPOINTMENT','DISCARDED')`, `timestamp` nella finestra, joined con `leads`.
-- Sorgente di fallback (decisa in implementazione dopo ispezione di `eventLogger.ts`):
-  - APPOINTMENT → `leads.appointmentCreatedAt` nella finestra
-  - DISCARDED → `leads.updatedAt` nella finestra AND `leads.status = 'DISCARDED'` AND `leads.discardReason IS NOT NULL`
+- Sorgente: `leadEvents` con `eventType IN ('APPOINTMENT_SET', 'DISCARDED')` (nomi eventi reali, vedi `src/lib/eventLogger.ts:27`) e `timestamp` nella finestra, joined con `leads`.
+- Nota terminologica codebase: l'**evento** si chiama `'DISCARDED'` ma lo **status** del lead corrispondente è `'REJECTED'` (disallineamento storico). Usiamo l'evento.
+- De-duplicazione: un lead può avere sia un `APPOINTMENT_SET` sia un successivo `DISCARDED` (es. appuntamento poi annullato e scartato). Prendiamo l'**ultimo** evento terminale per lead via `DISTINCT ON (leadId)` con `ORDER BY timestamp DESC`, così il lead conta una sola volta.
 - Filtri: `companyId = tenant`, `assignedToId IS NOT NULL`, `isSelfBooked = false`.
-- Group by `assignedToId`.
-- Per ogni gruppo: `SUM(callCount)` e `COUNT(*)`.
+- Group by `leads.assignedToId`.
+- Per ogni gruppo: `SUM(leads.callCount)` e `COUNT(*)`.
 
 **Query B — Chiamate nella finestra, per GDO**
 - `callLogs` con `userId = gdoId`, `companyId = tenant`, `createdAt` nella finestra.
@@ -83,8 +82,13 @@ Nuova action `getGdoThroughputMetrics30d()` in `src/app/actions/kpiAdvancedActio
 - `COUNT(*)`.
 
 **Query C — Chiusure attribuite al GDO**
-- Riuso esatto della logica già usata nella card aggregata "somma chiusure GDO" in `KpiGdoBoard` (riga 352).
-- Tipicamente: `leads` con `closeAmountEur IS NOT NULL`, `salespersonOutcomeAt` nella finestra, `assignedToId IS NOT NULL`, `companyId = tenant`.
+- Stesso pattern già esistente in `kpiAdvancedActions.ts:372-382` (`getGdoTargetsProgress` → `weeklyClosedRows`):
+  ```
+  leads WHERE companyId=tenant
+    AND assignedToId IS NOT NULL
+    AND salespersonOutcome='Chiuso'
+    AND salespersonOutcomeAt IN finestra
+  ```
 - Group by `assignedToId`, `COUNT(*)`.
 
 **Composizione**:
@@ -102,7 +106,7 @@ Nuova action `getGdoThroughputMetrics30d()` in `src/app/actions/kpiAdvancedActio
 ## 4. Definizioni precise
 
 ### `avgCallsPerLead`
-- Insieme `L`: lead dove `assignedToId = gdoId`, `companyId = tenant`, entrato in stato terminale (`APPOINTMENT` o `DISCARDED`) nella finestra, `isSelfBooked = false`.
+- Insieme `L`: lead dove `assignedToId = gdoId`, `companyId = tenant`, con almeno un `leadEvent` di tipo `APPOINTMENT_SET` o `DISCARDED` nella finestra (vedi §3.2 Query A), `isSelfBooked = false`.
 - `avgCallsPerLead = SUM(L.callCount) / COUNT(L)`, arrotondato a 1 decimale.
 - Se `COUNT(L) = 0` → `null`.
 
@@ -175,7 +179,7 @@ Sopra la tabella, label `text-xs text-ash-500`:
 | Lead riassegnati nel tempo | Attribuzione al `leads.assignedToId` corrente. Coerente con la card aggregata esistente. |
 | Lead vecchi (90+ gg) chiusi nella finestra | Inclusi. Il `callCount` alto riflette il costo reale di chiusura. Voluto. |
 | Lead `isSelfBooked = true` | Esclusi (bypassano flusso GDO). |
-| `leadEvents.STATUS_CHANGED` non sempre tracciato | Fallback su `appointmentCreatedAt` / `updatedAt + status` (vedi §3.2). Decisione finale in implementazione dopo ispezione di `eventLogger.ts`. |
+| Eventi `APPOINTMENT_SET`/`DISCARDED` mancanti per lead vecchi | Usato `leadEvents` come unica sorgente (semplicità). Lead pre-instrumentazione con stato terminale ma senza evento nella finestra non entrano nel calcolo. Accettabile: la finestra è rolling 30gg, gli eventi sono tracciati stabilmente dall'inizio del 2026. |
 | `workingDaysBetween = 0` | `callsPerDay = 0`. |
 | `avgCallsPerLead = 0` (impossibile se denominatore non zero) | Trattato come `null`. |
 | GDO senza chiamate ma con lead chiusi (residui) | `callsPerDay = 0` → `dailyCapacity = 0`. |
