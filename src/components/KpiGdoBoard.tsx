@@ -383,9 +383,22 @@ export function KpiGdoBoard() {
                 <BiweeklyHistoryTable userId={gdoFilter} lookback={8} />
             )}
 
-            {/* THROUGHPUT HEADLINE — sezione dedicata alla metrica primaria "lead gestibili/giorno". */}
+            {/* THROUGHPUT HEADLINE — sezione dedicata alla metrica primaria "lead gestibili/giorno per singolo GDO". */}
             {/* Rolling 30 giorni, indipendente dal selettore di periodo in alto. */}
-            {throughput?.teamTotals && isAdminOrManager && (
+            {throughput?.teamTotals && isAdminOrManager && (() => {
+                // Media della capacità giornaliera tra i SOLI GDO attivi (capacity > 0).
+                // Bruno: "voglio la media per un singolo giorno per gdo, ad esempio un gdo medio gestisce 45 lead al giorno"
+                const activeGdos = throughput.perGdo.filter(r => r.dailyCapacity != null && r.dailyCapacity > 0)
+                const avgPerGdo = activeGdos.length > 0
+                    ? Math.round(activeGdos.reduce((s, r) => s + (r.dailyCapacity ?? 0), 0) / activeGdos.length)
+                    : null
+                const avgCallsPerLeadAcrossActive = activeGdos.length > 0
+                    ? Math.round((activeGdos.reduce((s, r) => s + (r.avgCallsPerLead ?? 0), 0) / activeGdos.length) * 10) / 10
+                    : null
+                const avgCallsPerDayAcrossActive = activeGdos.length > 0
+                    ? Math.round((activeGdos.reduce((s, r) => s + r.callsPerDay, 0) / activeGdos.length) * 10) / 10
+                    : null
+                return (
                 <div className="bg-gradient-to-br from-amber-50 via-white to-amber-50/50 p-6 rounded-2xl border-2 border-amber-200 shadow-card">
                     <div className="flex items-start gap-8 flex-col lg:flex-row">
                         {/* HEADLINE NUMBER */}
@@ -395,20 +408,20 @@ export function KpiGdoBoard() {
                                     <TrendingUp className="h-6 w-6 text-amber-700" />
                                 </div>
                                 <h2 className="text-base font-bold text-amber-900 uppercase tracking-wider">
-                                    Lead gestibili al giorno
+                                    Lead gestibili al giorno per GDO
                                 </h2>
                             </div>
                             <div className="text-6xl font-black text-amber-800 leading-none mt-2">
-                                {throughput.teamTotals.dailyCapacity ?? '—'}
+                                {avgPerGdo ?? '—'}
                             </div>
                             <div className="text-sm text-ash-600 mt-3 font-medium">
-                                Capacità teorica del team — rolling 30 giorni
+                                Capacità media di un singolo GDO — rolling 30 giorni
                             </div>
                             <div className="text-xs text-ash-500 mt-2 leading-relaxed">
-                                <span className="font-semibold text-ash-700">{throughput.teamTotals.callsPerDay}</span> chiamate/giorno ÷ <span className="font-semibold text-ash-700">{throughput.teamTotals.avgCallsPerLead ?? '—'}</span> chiamate medie per lead = <span className="font-semibold text-amber-700">{throughput.teamTotals.dailyCapacity ?? '—'} lead/giorno</span>
+                                <span className="font-semibold text-ash-700">{avgCallsPerDayAcrossActive ?? '—'}</span> chiamate/giorno ÷ <span className="font-semibold text-ash-700">{avgCallsPerLeadAcrossActive ?? '—'}</span> chiamate medie per lead = <span className="font-semibold text-amber-700">{avgPerGdo ?? '—'} lead/giorno</span>
                             </div>
                             <div className="text-[11px] text-ash-400 mt-1">
-                                Calcolato su {throughput.teamTotals.closedLeadsCount.toLocaleString('it-IT')} lead chiusi (appuntamento o scartato) negli ultimi 30 giorni
+                                Media calcolata su <span className="font-semibold">{activeGdos.length}</span> GDO attivi · {throughput.teamTotals.closedLeadsCount.toLocaleString('it-IT')} lead chiusi totali negli ultimi 30 giorni
                             </div>
                         </div>
 
@@ -443,7 +456,8 @@ export function KpiGdoBoard() {
                         </div>
                     </div>
                 </div>
-            )}
+                )
+            })()}
 
             {/* BIG CARDS ROW */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
