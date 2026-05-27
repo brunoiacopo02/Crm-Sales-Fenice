@@ -685,7 +685,7 @@ export function KpiGdoBoard() {
                                                                         <div className={`font-bold ${cls}`}>
                                                                             {tp.dailyCapacity}
                                                                             <div className="text-[10px] text-ash-400 font-normal mt-0.5">
-                                                                                {tp.closedLeadsCount} lead chiusi
+                                                                                {tp.activeDays} gg · {tp.closedLeadsCount} lead
                                                                             </div>
                                                                         </div>
                                                                     )
@@ -750,7 +750,7 @@ export function KpiGdoBoard() {
                                         <td className="py-2.5 pr-3 text-right bg-amber-100/60 text-amber-900 font-bold">
                                             {throughput.teamTotals.dailyCapacity ?? '—'}
                                             <div className="text-[10px] text-ash-500 font-normal mt-0.5">
-                                                {throughput.teamTotals.closedLeadsCount} lead chiusi
+                                                {throughput.teamTotals.activeDays} gg · {throughput.teamTotals.closedLeadsCount} lead
                                             </div>
                                         </td>
                                         <td className="py-2.5 pr-3 text-right text-ash-700">—</td>{/* Lead Contattati */}

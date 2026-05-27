@@ -5,7 +5,6 @@ import { callLogs, leads, users } from "@/db/schema"
 import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
-import { workingDaysBetween } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 
 import { cache } from "react"
@@ -398,16 +397,25 @@ export type GdoThroughputRow = {
     gdoId: string
     gdoName: string
     avgCallsPerLead: number | null
-    callsPerDay: number
+    callsPerDay: number          // media chiamate sui SOLI giorni attivi
     dailyCapacity: number | null
     closures: number
     closedLeadsCount: number
+    activeDays: number           // giorni in cui il GDO ha esitato >= 20 lead distinti
 }
 
 export type GdoThroughputMetrics = {
     perGdo: GdoThroughputRow[]
     teamTotals: Omit<GdoThroughputRow, 'gdoId' | 'gdoName'>
 }
+
+/**
+ * Soglia per considerare "attivo" un giorno lavorativo di un GDO:
+ * numero minimo di lead distinti su cui ha registrato almeno una chiamata.
+ * Bruno (2026-05-27): "per capire se un gdo è stato inattivo basta che guardi
+ * se quel gdo ha esitato almeno 20 lead durante il giorno".
+ */
+const MIN_LEADS_FOR_ACTIVE_DAY = 20
 
 /**
  * Throughput per GDO sulla finestra rolling 30 giorni Europe/Rome.
@@ -418,7 +426,10 @@ export type GdoThroughputMetrics = {
  *   oppure REJECTED (updatedAt in finestra). Gli eventType dedicati APPOINTMENT_SET/
  *   DISCARDED nella tabella leadEvents non vengono scritti dal codice reale, quindi
  *   usiamo i timestamp su leads come sorgente di verità.
- * - callsPerDay = COUNT(callLogs nella finestra) / workingDaysBetween(start, end)
+ * - callsPerDay = SOMMA chiamate nei giorni attivi / NUMERO giorni attivi del GDO.
+ *   Un giorno è "attivo" se il GDO ha esitato almeno MIN_LEADS_FOR_ACTIVE_DAY lead
+ *   distinti quel giorno. I giorni di inattività (ferie, malattia, GDO non
+ *   ancora operativo, GDO che ha smesso di lavorare) NON entrano nel divisore.
  * - dailyCapacity = round(callsPerDay / avgCallsPerLead) — metrica primaria
  * - closures = COUNT(lead con salespersonOutcome='Chiuso' e salespersonOutcomeAt nella finestra)
  *   (stesso pattern di getGdoTargetsProgress.weeklyClosedRows)
@@ -433,7 +444,6 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const now = new Date()
     const startBound = dayBoundsRome(new Date(now.getTime() - 29 * 86400000)).start
     const end = now
-    const workingDays = Math.max(1, workingDaysBetween(startBound, end))
 
     // --- Query 1: utenti GDO attivi del tenant ---
     const gdoUsers = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
@@ -496,10 +506,12 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
         closedByGdo.set(v.assignedToId, cur)
     }
 
-    // --- Query 3: chiamate nella finestra (per GDO) ---
-    const callsAgg = await db.select({
+    // --- Query 3: chiamate nella finestra (raw, per calcolare giorni attivi per GDO) ---
+    // Fetch leggero: solo le 3 colonne necessarie. A scala (~30k righe/30gg) è ok in JS.
+    const allCalls = await db.select({
+        leadId: callLogs.leadId,
         userId: callLogs.userId,
-        cnt: sql<number>`count(*)::int`,
+        createdAt: callLogs.createdAt,
     })
         .from(callLogs)
         .where(and(
@@ -508,11 +520,43 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             gte(callLogs.createdAt, startBound),
             lt(callLogs.createdAt, end),
         ))
-        .groupBy(callLogs.userId)
 
-    const callsByGdo = new Map<string, number>()
-    for (const r of callsAgg) {
-        if (r.userId) callsByGdo.set(r.userId, Number(r.cnt))
+    // Day key in Europe/Rome timezone (YYYY-MM-DD) per raggruppare correttamente
+    // i log fatti dopo la mezzanotte locale ma prima della mezzanotte UTC.
+    const dayKeyRome = (d: Date): string => {
+        return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Europe/Rome',
+            year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(d)
+    }
+
+    // userId → dayKey → { distinctLeads, totalCalls }
+    type DayBucket = { distinctLeads: Set<string>, totalCalls: number }
+    const perUserDay = new Map<string, Map<string, DayBucket>>()
+    for (const c of allCalls) {
+        if (!c.userId) continue
+        const day = dayKeyRome(c.createdAt)
+        let userMap = perUserDay.get(c.userId)
+        if (!userMap) { userMap = new Map(); perUserDay.set(c.userId, userMap) }
+        let bucket = userMap.get(day)
+        if (!bucket) { bucket = { distinctLeads: new Set(), totalCalls: 0 }; userMap.set(day, bucket) }
+        bucket.distinctLeads.add(c.leadId)
+        bucket.totalCalls += 1
+    }
+
+    // Per ogni GDO: contiamo i giorni "attivi" (>= MIN_LEADS_FOR_ACTIVE_DAY lead esitati)
+    // e sommiamo le chiamate fatte SOLO in quei giorni.
+    const activityByGdo = new Map<string, { activeDays: number, callsOnActiveDays: number }>()
+    for (const [userId, days] of perUserDay.entries()) {
+        let activeDays = 0
+        let callsOnActiveDays = 0
+        for (const bucket of days.values()) {
+            if (bucket.distinctLeads.size >= MIN_LEADS_FOR_ACTIVE_DAY) {
+                activeDays += 1
+                callsOnActiveDays += bucket.totalCalls
+            }
+        }
+        activityByGdo.set(userId, { activeDays, callsOnActiveDays })
     }
 
     // --- Query 4: chiusure nella finestra (per GDO) — stesso pattern di getGdoTargetsProgress ---
@@ -545,10 +589,14 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             ? Math.round((sumCalls / closedCount) * 10) / 10
             : null
 
-        const totalCalls = callsByGdo.get(u.id) ?? 0
-        const callsPerDay = Math.round((totalCalls / workingDays) * 10) / 10
+        const activity = activityByGdo.get(u.id) ?? { activeDays: 0, callsOnActiveDays: 0 }
+        const callsPerDay = activity.activeDays > 0
+            ? Math.round((activity.callsOnActiveDays / activity.activeDays) * 10) / 10
+            : 0
 
-        const dailyCapacity = (avgCallsPerLead && avgCallsPerLead > 0)
+        // Se il GDO non ha avuto NESSUN giorno attivo, è considerato inattivo:
+        // niente capacità giornaliera (è null, escluso dalla media headline).
+        const dailyCapacity = (avgCallsPerLead && avgCallsPerLead > 0 && activity.activeDays > 0)
             ? Math.round(callsPerDay / avgCallsPerLead)
             : null
 
@@ -560,24 +608,36 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             dailyCapacity,
             closures: closuresByGdo.get(u.id) ?? 0,
             closedLeadsCount: closedCount,
+            activeDays: activity.activeDays,
         }
     })
 
-    // --- Team totals: somma/somma, non media-di-medie ---
+    // --- Team totals: somma/somma sui SOLI giorni-GDO attivi ---
+    // Concettualmente: "in una giornata di lavoro media di un GDO attivo, quante
+    // chiamate fa il team?". Non è la somma assoluta delle chiamate / workingDays
+    // (che sarebbe diluita dai GDO inattivi).
     let teamSumCalls = 0
     let teamClosedCount = 0
     for (const v of closedByLead.values()) {
         teamSumCalls += v.callCount
         teamClosedCount += 1
     }
-    const teamTotalCalls = Array.from(callsByGdo.values()).reduce((a, b) => a + b, 0)
     const teamClosures = Array.from(closuresByGdo.values()).reduce((a, b) => a + b, 0)
+
+    let teamActiveDays = 0
+    let teamCallsOnActiveDays = 0
+    for (const a of activityByGdo.values()) {
+        teamActiveDays += a.activeDays
+        teamCallsOnActiveDays += a.callsOnActiveDays
+    }
 
     const teamAvgCallsPerLead = teamClosedCount > 0
         ? Math.round((teamSumCalls / teamClosedCount) * 10) / 10
         : null
-    const teamCallsPerDay = Math.round((teamTotalCalls / workingDays) * 10) / 10
-    const teamDailyCapacity = (teamAvgCallsPerLead && teamAvgCallsPerLead > 0)
+    const teamCallsPerDay = teamActiveDays > 0
+        ? Math.round((teamCallsOnActiveDays / teamActiveDays) * 10) / 10
+        : 0
+    const teamDailyCapacity = (teamAvgCallsPerLead && teamAvgCallsPerLead > 0 && teamActiveDays > 0)
         ? Math.round(teamCallsPerDay / teamAvgCallsPerLead)
         : null
 
@@ -589,6 +649,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             dailyCapacity: teamDailyCapacity,
             closures: teamClosures,
             closedLeadsCount: teamClosedCount,
+            activeDays: teamActiveDays,
         }
     }
 }

@@ -14,21 +14,20 @@ import 'dotenv/config'
 
 import { db } from "../src/db"
 import { callLogs, leads, users } from "../src/db/schema"
-import { gte, lt, and, eq, isNotNull, sql } from "drizzle-orm"
+import { gte, lt, and, eq, isNotNull } from "drizzle-orm"
 import { dayBoundsRome } from "../src/lib/dateUtils"
-import { workingDaysBetween } from "../src/lib/workingDaysUtils"
 
 const TENANT_ID = process.env.DEBUG_TENANT_ID || 'fenice'
+const MIN_LEADS_FOR_ACTIVE_DAY = 20
 
 async function main() {
     const now = new Date()
     const startBound = dayBoundsRome(new Date(now.getTime() - 29 * 86400000)).start
     const end = now
-    const workingDays = Math.max(1, workingDaysBetween(startBound, end))
 
     console.log(`Tenant: ${TENANT_ID}`)
     console.log(`Finestra: ${startBound.toISOString()} → ${end.toISOString()}`)
-    console.log(`Giorni lavorativi: ${workingDays}`)
+    console.log(`Soglia giorno attivo: >= ${MIN_LEADS_FOR_ACTIVE_DAY} lead esitati`)
     console.log('')
 
     const gdoUsers = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
@@ -83,9 +82,11 @@ async function main() {
         closedByGdo.set(v.assignedToId, cur)
     }
 
-    const callsAgg = await db.select({
+    // Fetch raw callLogs per calcolare giorni attivi (>= MIN_LEADS_FOR_ACTIVE_DAY lead distinti).
+    const allCalls = await db.select({
+        leadId: callLogs.leadId,
         userId: callLogs.userId,
-        cnt: sql<number>`count(*)::int`,
+        createdAt: callLogs.createdAt,
     })
         .from(callLogs)
         .where(and(
@@ -94,39 +95,73 @@ async function main() {
             gte(callLogs.createdAt, startBound),
             lt(callLogs.createdAt, end),
         ))
-        .groupBy(callLogs.userId)
 
-    const callsByGdo = new Map<string, number>()
-    for (const r of callsAgg) if (r.userId) callsByGdo.set(r.userId, Number(r.cnt))
+    const dayKeyRome = (d: Date): string =>
+        new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
 
-    console.log('| GDO | call/lead | call/giorno | lead/giorno | closed sample |')
-    console.log('|-----|-----------|-------------|-------------|---------------|')
+    type DayBucket = { distinctLeads: Set<string>, totalCalls: number }
+    const perUserDay = new Map<string, Map<string, DayBucket>>()
+    for (const c of allCalls) {
+        if (!c.userId) continue
+        const day = dayKeyRome(c.createdAt)
+        let userMap = perUserDay.get(c.userId)
+        if (!userMap) { userMap = new Map(); perUserDay.set(c.userId, userMap) }
+        let b = userMap.get(day)
+        if (!b) { b = { distinctLeads: new Set(), totalCalls: 0 }; userMap.set(day, b) }
+        b.distinctLeads.add(c.leadId)
+        b.totalCalls += 1
+    }
+
+    const activityByGdo = new Map<string, { activeDays: number, callsOnActiveDays: number }>()
+    for (const [userId, days] of perUserDay.entries()) {
+        let activeDays = 0, callsOnActiveDays = 0
+        for (const bucket of days.values()) {
+            if (bucket.distinctLeads.size >= MIN_LEADS_FOR_ACTIVE_DAY) {
+                activeDays += 1
+                callsOnActiveDays += bucket.totalCalls
+            }
+        }
+        activityByGdo.set(userId, { activeDays, callsOnActiveDays })
+    }
+
+    console.log('| GDO                  | call/lead | call/giorno | lead/giorno | active days | closed |')
+    console.log('|----------------------|-----------|-------------|-------------|-------------|--------|')
     for (const u of gdoUsers) {
         const cl = closedByGdo.get(u.id)
         const closedCount = cl?.count ?? 0
         const sumCalls = cl?.sumCalls ?? 0
         const avg = closedCount > 0 ? Math.round((sumCalls / closedCount) * 10) / 10 : null
-        const totalCalls = callsByGdo.get(u.id) ?? 0
-        const callsPerDay = Math.round((totalCalls / workingDays) * 10) / 10
-        const cap = (avg && avg > 0) ? Math.round(callsPerDay / avg) : null
-        console.log(`| ${(u.displayName ?? u.name ?? u.id).padEnd(20)} | ${String(avg ?? '—').padStart(8)} | ${String(callsPerDay).padStart(10)} | ${String(cap ?? '—').padStart(10)} | ${closedCount} |`)
+        const activity = activityByGdo.get(u.id) ?? { activeDays: 0, callsOnActiveDays: 0 }
+        const callsPerDay = activity.activeDays > 0
+            ? Math.round((activity.callsOnActiveDays / activity.activeDays) * 10) / 10
+            : 0
+        const cap = (avg && avg > 0 && activity.activeDays > 0)
+            ? Math.round(callsPerDay / avg)
+            : null
+        console.log(`| ${(u.displayName ?? u.name ?? u.id).padEnd(20)} | ${String(avg ?? '—').padStart(9)} | ${String(callsPerDay).padStart(11)} | ${String(cap ?? '—').padStart(11)} | ${String(activity.activeDays).padStart(11)} | ${String(closedCount).padStart(6)} |`)
 
         // Inline assertions sugli edge case.
         if (closedCount === 0 && avg !== null) throw new Error(`[ASSERT] ${u.id}: avg should be null when closedCount=0`)
+        if (activity.activeDays === 0 && cap !== null) throw new Error(`[ASSERT] ${u.id}: cap should be null when activeDays=0`)
         if ((avg === null || avg === 0) && cap !== null) throw new Error(`[ASSERT] ${u.id}: cap should be null when avg null/0`)
-        if (totalCalls === 0 && callsPerDay !== 0) throw new Error(`[ASSERT] ${u.id}: callsPerDay should be 0 when totalCalls=0`)
     }
 
-    // Team total consistency
-    let teamSumCalls = 0, teamClosed = 0
-    for (const v of closedByLead.values()) { teamSumCalls += v.callCount; teamClosed += 1 }
-    const teamAvg = teamClosed > 0 ? teamSumCalls / teamClosed : null
-    const sumOfPerGdoSumCalls = Array.from(closedByGdo.values()).reduce((a, b) => a + b.sumCalls, 0)
-    const sumOfPerGdoClosed = Array.from(closedByGdo.values()).reduce((a, b) => a + b.count, 0)
-    if (sumOfPerGdoSumCalls !== teamSumCalls) throw new Error(`[ASSERT] team sumCalls mismatch: perGdo=${sumOfPerGdoSumCalls} vs total=${teamSumCalls}`)
-    if (sumOfPerGdoClosed !== teamClosed) throw new Error(`[ASSERT] team closedCount mismatch: perGdo=${sumOfPerGdoClosed} vs total=${teamClosed}`)
+    // Headline: media per singolo GDO attivo
+    const activeRows = gdoUsers.map(u => {
+        const cl = closedByGdo.get(u.id)
+        const avg = (cl?.count ?? 0) > 0 ? (cl!.sumCalls / cl!.count) : null
+        const a = activityByGdo.get(u.id) ?? { activeDays: 0, callsOnActiveDays: 0 }
+        const cpd = a.activeDays > 0 ? a.callsOnActiveDays / a.activeDays : 0
+        const cap = (avg && avg > 0 && a.activeDays > 0) ? cpd / avg : null
+        return { name: u.displayName ?? u.name ?? u.id, cap, activeDays: a.activeDays }
+    }).filter(r => r.cap != null && r.cap > 0)
+    const avgPerGdo = activeRows.length > 0
+        ? Math.round(activeRows.reduce((s, r) => s + (r.cap ?? 0), 0) / activeRows.length)
+        : null
+
     console.log('')
-    console.log(`Team avg call/lead: ${teamAvg !== null ? Math.round(teamAvg * 10) / 10 : '—'}  (${teamClosed} lead chiusi)`)
+    console.log(`Headline: un GDO medio gestisce ${avgPerGdo ?? '—'} lead al giorno`)
+    console.log(`  (media su ${activeRows.length} GDO attivi: ${activeRows.map(r => `${r.name}=${Math.round(r.cap!)}`).join(', ')})`)
     console.log('✓ All assertions passed')
 }
 
