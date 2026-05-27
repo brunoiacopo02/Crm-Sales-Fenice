@@ -212,6 +212,8 @@ export function KpiGdoBoard() {
 
     const throughputByGdo = new Map(throughput?.perGdo.map(r => [r.gdoId, r]) ?? [])
     const getThroughput = (gdoId: string) => throughputByGdo.get(gdoId) ?? null
+    // Mappa name→id per risolvere gdoStats (keyed by name) → throughput (keyed by userId)
+    const gdoNameToId = new Map<string, string>((data?.filtersData?.gdos ?? []).map((g: any) => [g.name, g.id]))
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -526,6 +528,18 @@ export function KpiGdoBoard() {
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold">#</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold">GDO</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">Chiamate</th>
+                                    <th className="text-right py-2 pr-3 text-xs font-bold text-ash-500 uppercase tracking-wider"
+                                        title="Media chiamate fatte a ogni lead prima che venga fissato appuntamento o scartato. Rolling 30 giorni.">
+                                        Media call/Lead
+                                    </th>
+                                    <th className="text-right py-2 pr-3 text-xs font-bold text-ash-500 uppercase tracking-wider"
+                                        title="Media chiamate al giorno (giorni lavorativi). Rolling 30 giorni.">
+                                        Call/Giorno
+                                    </th>
+                                    <th className="text-right py-2 pr-3 text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50"
+                                        title="Capacità teorica: chiamate al giorno ÷ media chiamate per lead. Quanti lead questo GDO può portare in stato terminale al giorno. Rolling 30 giorni.">
+                                        <span className="inline-flex items-center gap-1"><TrendingUp className="h-3 w-3" />Lead/Giorno</span>
+                                    </th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">Lead Contattati</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">Appuntamenti</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">% Fissaggio</th>
@@ -533,6 +547,10 @@ export function KpiGdoBoard() {
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right" title="% degli appuntamenti del GDO che il venditore ha effettivamente visto in chiamata (esclude Sparito/Lead non presenziato)">% Presenziati</th>
                                     <th className="pb-2 pr-3 text-ash-500 font-semibold text-right">Chiamate/Ora</th>
                                     <th className="pb-2 text-ash-500 font-semibold text-right">Coefficiente</th>
+                                    <th className="text-right py-2 pr-3 text-xs font-bold text-ash-500 uppercase tracking-wider"
+                                        title="Chiusure attribuite al GDO che ha fissato l'appuntamento. Rolling 30 giorni.">
+                                        Chiusi
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -551,6 +569,42 @@ export function KpiGdoBoard() {
                                                     {gdo.name}
                                                 </td>
                                                 <td className="py-2.5 pr-3 text-right text-ash-700">{gdo.calls}</td>
+                                                {(() => {
+                                                    const tp = getThroughput(gdoNameToId.get(gdo.name) ?? '')
+                                                    return (
+                                                        <>
+                                                            <td className="py-2.5 pr-3 text-right">
+                                                                {throughputLoading ? <span className="text-ash-300">…</span>
+                                                                 : tp?.avgCallsPerLead != null ? <span className="font-semibold text-ash-700">{tp.avgCallsPerLead}</span>
+                                                                 : <span className="text-ash-300">—</span>}
+                                                            </td>
+                                                            <td className="py-2.5 pr-3 text-right">
+                                                                {throughputLoading ? <span className="text-ash-300">…</span>
+                                                                 : tp != null ? <span className="font-semibold text-ash-700">{tp.callsPerDay}</span>
+                                                                 : <span className="text-ash-300">—</span>}
+                                                            </td>
+                                                            <td className="py-2.5 pr-3 text-right bg-amber-50/60">
+                                                                {throughputLoading ? <span className="text-ash-300">…</span> : (() => {
+                                                                    if (!tp || tp.dailyCapacity == null) return <span className="text-ash-300">—</span>
+                                                                    const team = throughput?.teamTotals.dailyCapacity ?? null
+                                                                    const cls = team == null
+                                                                        ? 'text-ash-700'
+                                                                        : tp.dailyCapacity >= team * 1.1 ? 'text-emerald-700'
+                                                                        : tp.dailyCapacity <= team * 0.7 ? 'text-rose-600'
+                                                                        : 'text-ash-700'
+                                                                    return (
+                                                                        <div className={`font-bold ${cls}`}>
+                                                                            {tp.dailyCapacity}
+                                                                            <div className="text-[10px] text-ash-400 font-normal mt-0.5">
+                                                                                {tp.closedLeadsCount} lead chiusi
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                })()}
+                                                            </td>
+                                                        </>
+                                                    )
+                                                })()}
                                                 <td className="py-2.5 pr-3 text-right text-ash-700">{gdo.contactedLeads}</td>
                                                 <td className="py-2.5 pr-3 text-right text-emerald-700 font-semibold">{gdo.appointments}</td>
                                                 <td className="py-2.5 pr-3 text-right text-ash-700">{gdo.apptRate}%</td>
@@ -579,6 +633,15 @@ export function KpiGdoBoard() {
                                                             {gdo.productivityCoeff.toFixed(2)}
                                                         </div>
                                                     </div>
+                                                </td>
+                                                <td className="py-2.5 pr-3 text-right">
+                                                    {throughputLoading ? <span className="text-ash-300">…</span>
+                                                     : (() => {
+                                                        const tp = getThroughput(gdoNameToId.get(gdo.name) ?? '')
+                                                        return tp != null
+                                                            ? <span className="font-semibold text-emerald-700">{tp.closures}</span>
+                                                            : <span className="text-ash-300">—</span>
+                                                     })()}
                                                 </td>
                                             </tr>
                                         )
