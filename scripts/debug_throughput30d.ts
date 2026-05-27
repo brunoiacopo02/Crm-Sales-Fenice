@@ -13,8 +13,8 @@ import 'dotenv/config'
 // Soluzione semplice: re-implementiamo la query con tenant hardcoded da env var.
 
 import { db } from "../src/db"
-import { callLogs, leads, users, leadEvents } from "../src/db/schema"
-import { gte, lt, and, eq, desc, inArray, isNotNull, sql } from "drizzle-orm"
+import { callLogs, leads, users } from "../src/db/schema"
+import { gte, lt, and, eq, isNotNull, sql } from "drizzle-orm"
 import { dayBoundsRome } from "../src/lib/dateUtils"
 import { workingDaysBetween } from "../src/lib/workingDaysUtils"
 
@@ -35,30 +35,44 @@ async function main() {
         .from(users)
         .where(and(eq(users.companyId, TENANT_ID), eq(users.role, 'GDO')))
 
-    const terminalEvents = await db.select({
-        leadId: leadEvents.leadId,
-        timestamp: leadEvents.timestamp,
+    // Lead in stato APPOINTMENT con appointmentCreatedAt nella finestra.
+    const appointmentLeads = await db.select({
+        id: leads.id,
         assignedToId: leads.assignedToId,
         callCount: leads.callCount,
     })
-        .from(leadEvents)
-        .innerJoin(leads, eq(leads.id, leadEvents.leadId))
+        .from(leads)
         .where(and(
-            eq(leadEvents.companyId, TENANT_ID),
             eq(leads.companyId, TENANT_ID),
-            inArray(leadEvents.eventType, ['APPOINTMENT_SET', 'DISCARDED']),
-            gte(leadEvents.timestamp, startBound),
-            lt(leadEvents.timestamp, end),
+            eq(leads.status, 'APPOINTMENT'),
             isNotNull(leads.assignedToId),
+            isNotNull(leads.appointmentCreatedAt),
+            gte(leads.appointmentCreatedAt, startBound),
+            lt(leads.appointmentCreatedAt, end),
             eq(leads.isSelfBooked, false),
         ))
-        .orderBy(desc(leadEvents.timestamp))
+
+    // Lead in stato REJECTED con updatedAt (proxy del momento scarto) nella finestra.
+    const rejectedLeads = await db.select({
+        id: leads.id,
+        assignedToId: leads.assignedToId,
+        callCount: leads.callCount,
+    })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, TENANT_ID),
+            eq(leads.status, 'REJECTED'),
+            isNotNull(leads.assignedToId),
+            gte(leads.updatedAt, startBound),
+            lt(leads.updatedAt, end),
+            eq(leads.isSelfBooked, false),
+        ))
 
     const closedByLead = new Map<string, { assignedToId: string; callCount: number }>()
-    for (const row of terminalEvents) {
+    for (const row of [...appointmentLeads, ...rejectedLeads]) {
         if (!row.assignedToId) continue
-        if (closedByLead.has(row.leadId)) continue
-        closedByLead.set(row.leadId, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
+        if (closedByLead.has(row.id)) continue
+        closedByLead.set(row.id, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
     }
 
     const closedByGdo = new Map<string, { sumCalls: number; count: number }>()

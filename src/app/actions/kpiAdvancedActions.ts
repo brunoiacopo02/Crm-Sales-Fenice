@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { callLogs, leads, users, leadEvents } from "@/db/schema"
-import { gte, lte, lt, and, eq, desc, inArray, isNotNull, sql } from "drizzle-orm"
+import { callLogs, leads, users } from "@/db/schema"
+import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { workingDaysBetween } from "@/lib/workingDaysUtils"
@@ -414,7 +414,10 @@ export type GdoThroughputMetrics = {
  *
  * Metriche:
  * - avgCallsPerLead = SUM(callCount sui lead chiusi nella finestra) / COUNT(lead chiusi)
- *   Un lead è "chiuso" se ha un leadEvent APPOINTMENT_SET o DISCARDED nella finestra.
+ *   Un lead è "chiuso" se il suo status è APPOINTMENT (appointmentCreatedAt in finestra)
+ *   oppure REJECTED (updatedAt in finestra). Gli eventType dedicati APPOINTMENT_SET/
+ *   DISCARDED nella tabella leadEvents non vengono scritti dal codice reale, quindi
+ *   usiamo i timestamp su leads come sorgente di verità.
  * - callsPerDay = COUNT(callLogs nella finestra) / workingDaysBetween(start, end)
  * - dailyCapacity = round(callsPerDay / avgCallsPerLead) — metrica primaria
  * - closures = COUNT(lead con salespersonOutcome='Chiuso' e salespersonOutcomeAt nella finestra)
@@ -440,37 +443,48 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             eq(users.role, 'GDO')
         ))
 
-    // --- Query 2: lead chiusi nella finestra (per GDO, dedup per leadId) ---
-    // Prendiamo TUTTI i leadEvents APPOINTMENT_SET / DISCARDED nella finestra
-    // joinati col lead, escludendo self-booked. Poi dedup in JS prendendo
-    // l'ULTIMO evento terminale per ogni leadId (caso: APPOINTMENT_SET poi
-    // DISCARDED → conta una sola volta).
-    const terminalEvents = await db.select({
-        leadId: leadEvents.leadId,
-        eventType: leadEvents.eventType,
-        timestamp: leadEvents.timestamp,
+    // --- Query 2: lead chiusi nella finestra (per GDO) ---
+    // Un lead è "chiuso" quando ha raggiunto uno stato terminale:
+    //   APPOINTMENT  → appointmentCreatedAt cade nella finestra
+    //   REJECTED     → updatedAt cade nella finestra (proxy del momento di scarto)
+    // Niente self-booked, niente lead non assegnati. La dedup per leadId è gratis
+    // perché il filtro per status mette ogni lead in al più una delle due query.
+    const appointmentLeads = await db.select({
+        id: leads.id,
         assignedToId: leads.assignedToId,
         callCount: leads.callCount,
     })
-        .from(leadEvents)
-        .innerJoin(leads, eq(leads.id, leadEvents.leadId))
+        .from(leads)
         .where(and(
-            eq(leadEvents.companyId, ctx.companyId),
             eq(leads.companyId, ctx.companyId),
-            inArray(leadEvents.eventType, ['APPOINTMENT_SET', 'DISCARDED']),
-            gte(leadEvents.timestamp, startBound),
-            lt(leadEvents.timestamp, end),
+            eq(leads.status, 'APPOINTMENT'),
             isNotNull(leads.assignedToId),
+            isNotNull(leads.appointmentCreatedAt),
+            gte(leads.appointmentCreatedAt, startBound),
+            lt(leads.appointmentCreatedAt, end),
             eq(leads.isSelfBooked, false),
         ))
-        .orderBy(desc(leadEvents.timestamp))
 
-    // Dedup: per ogni leadId, tieni il primo (= più recente per ORDER BY desc).
+    const rejectedLeads = await db.select({
+        id: leads.id,
+        assignedToId: leads.assignedToId,
+        callCount: leads.callCount,
+    })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.status, 'REJECTED'),
+            isNotNull(leads.assignedToId),
+            gte(leads.updatedAt, startBound),
+            lt(leads.updatedAt, end),
+            eq(leads.isSelfBooked, false),
+        ))
+
     const closedByLead = new Map<string, { assignedToId: string; callCount: number }>()
-    for (const row of terminalEvents) {
+    for (const row of [...appointmentLeads, ...rejectedLeads]) {
         if (!row.assignedToId) continue
-        if (closedByLead.has(row.leadId)) continue
-        closedByLead.set(row.leadId, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
+        if (closedByLead.has(row.id)) continue
+        closedByLead.set(row.id, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
     }
 
     // Aggrega per GDO.
