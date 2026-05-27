@@ -2,7 +2,7 @@
 import { useAuth } from "@/components/AuthProvider"
 
 import { useState, useEffect } from "react"
-import { getAdvancedKpi, KpiFilters, getGdoTargetsProgress } from "@/app/actions/kpiAdvancedActions"
+import { getAdvancedKpi, KpiFilters, getGdoTargetsProgress, getGdoThroughputMetrics30d, type GdoThroughputMetrics } from "@/app/actions/kpiAdvancedActions"
 import { dayBoundsRome, monthBoundsRome, previousYearMonth } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import dynamic from "next/dynamic"
@@ -46,6 +46,8 @@ export function KpiGdoBoard() {
     const [data, setData] = useState<any>(null)
     const [targetsData, setTargetsData] = useState<any>(null)
     const [loading, setLoading] = useState(true)
+    const [throughput, setThroughput] = useState<GdoThroughputMetrics | null>(null)
+    const [throughputLoading, setThroughputLoading] = useState(true)
     const [sortBy, setSortBy] = useState<'productivityCoeff' | 'calls' | 'appointments' | 'apptRate' | 'confermePerc' | 'presenziatiPerc'>('productivityCoeff')
 
     useEffect(() => {
@@ -136,6 +138,22 @@ export function KpiGdoBoard() {
         return () => window.removeEventListener('realtime_update', handleRealtimeUpdate)
     }, [dateRange, customStart, customEnd, funnelFilter, gdoFilter, workingHoursOnly, session?.user?.id, isAdminOrManager])
 
+    // Throughput rolling 30gg — finestra fissa, NON dipende da dateRange/funnelFilter.
+    // Si refetch solo al mount e quando cambia gdoFilter (per consistenza visiva
+    // con la riga selezionata, anche se i numeri sono tenant-wide).
+    useEffect(() => {
+        if (!session?.user?.id) return
+        if (!isAdminOrManager) return // Solo manager/admin vedono questa metrica
+        let cancelled = false
+        setThroughputLoading(true)
+        getGdoThroughputMetrics30d()
+            .then(data => { if (!cancelled) setThroughput(data) })
+            .catch(err => { console.error('[throughput30d] fetch failed', err); if (!cancelled) setThroughput(null) })
+            .finally(() => { if (!cancelled) setThroughputLoading(false) })
+        return () => { cancelled = true }
+        // Volutamente NIENTE dateRange/funnelFilter qui — la metrica è rolling 30gg fisso.
+    }, [session?.user?.id, isAdminOrManager])
+
     if (!data && loading) {
         return (
             <div className="space-y-6 max-w-7xl mx-auto animate-pulse">
@@ -191,6 +209,9 @@ export function KpiGdoBoard() {
         { name: 'Appuntamenti', value: totalAppointments },
     ]
     const PIE_COLORS = ['#E8523F', '#C9A13C', '#4A9D5B']
+
+    const throughputByGdo = new Map(throughput?.perGdo.map(r => [r.gdoId, r]) ?? [])
+    const getThroughput = (gdoId: string) => throughputByGdo.get(gdoId) ?? null
 
     return (
         <div className="space-y-6 animate-fade-in">
