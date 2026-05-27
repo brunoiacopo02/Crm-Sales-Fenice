@@ -48,7 +48,7 @@ export function KpiGdoBoard() {
     const [loading, setLoading] = useState(true)
     const [throughput, setThroughput] = useState<GdoThroughputMetrics | null>(null)
     const [throughputLoading, setThroughputLoading] = useState(true)
-    const [sortBy, setSortBy] = useState<'productivityCoeff' | 'calls' | 'appointments' | 'apptRate' | 'confermePerc' | 'presenziatiPerc'>('productivityCoeff')
+    const [sortBy, setSortBy] = useState<'dailyCapacity' | 'productivityCoeff' | 'calls' | 'appointments' | 'apptRate' | 'confermePerc' | 'presenziatiPerc'>('dailyCapacity')
 
     useEffect(() => {
         // GDO operativo (non Admin/Manager): forza il filtro al proprio id.
@@ -509,6 +509,7 @@ export function KpiGdoBoard() {
                                 onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
                                 className="px-2 py-1 text-xs border border-ash-200/60 rounded-lg bg-ash-50/50 text-ash-700 focus:ring-2 focus:ring-brand-orange/30"
                             >
+                                <option value="dailyCapacity">Lead/Giorno (cap.)</option>
                                 <option value="productivityCoeff">Coefficiente</option>
                                 <option value="calls">Chiamate</option>
                                 <option value="appointments">Appuntamenti</option>
@@ -555,7 +556,16 @@ export function KpiGdoBoard() {
                             </thead>
                             <tbody>
                                 {[...data.gdoStats]
-                                    .sort((a: any, b: any) => b[sortBy] - a[sortBy])
+                                    .sort((a: any, b: any) => {
+                                        if (sortBy === 'dailyCapacity') {
+                                            const aTp = getThroughput(gdoNameToId.get(a.name) ?? '')
+                                            const bTp = getThroughput(gdoNameToId.get(b.name) ?? '')
+                                            const av = aTp?.dailyCapacity ?? -1
+                                            const bv = bTp?.dailyCapacity ?? -1
+                                            return bv - av
+                                        }
+                                        return b[sortBy] - a[sortBy]
+                                    })
                                     .map((gdo: any, idx: number) => {
                                         const isTop = idx === 0 && data.gdoStats.length > 1
                                         return (
