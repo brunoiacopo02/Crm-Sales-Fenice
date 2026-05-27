@@ -100,6 +100,50 @@ export function countWorkingDaysElapsed(year: number, month: number, asOf: Date)
     return count;
 }
 
+/**
+ * Count working days in [start, end] inclusive — Europe/Rome calendar.
+ * Sundays off + Italian national holidays (incluso Pasquetta).
+ * `start` and `end` are absolute timestamps; the date in Europe/Rome is what counts.
+ */
+export function workingDaysBetween(start: Date, end: Date): number {
+    if (end.getTime() < start.getTime()) return 0;
+
+    // Convert to Europe/Rome calendar dates (YYYY-MM-DD strings) to avoid TZ drift.
+    const toRomeDate = (d: Date): { y: number; m: number; day: number } => {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {} as Record<string, string>);
+        return { y: parseInt(parts.year, 10), m: parseInt(parts.month, 10), day: parseInt(parts.day, 10) };
+    };
+
+    const a = toRomeDate(start);
+    const b = toRomeDate(end);
+
+    // Build a calendar cursor in UTC matching Rome local date — same trick used elsewhere in this file.
+    const cursor = new Date(Date.UTC(a.y, a.m - 1, a.day));
+    const endDate = new Date(Date.UTC(b.y, b.m - 1, b.day));
+
+    let count = 0;
+    const holidaysByYear = new Map<number, Set<string>>();
+
+    while (cursor.getTime() <= endDate.getTime()) {
+        const y = cursor.getUTCFullYear();
+        const m = cursor.getUTCMonth() + 1;
+        const d = cursor.getUTCDate();
+        const dow = cursor.getUTCDay(); // 0 = Sunday
+
+        if (dow !== 0) {
+            if (!holidaysByYear.has(y)) holidaysByYear.set(y, getItalianHolidays(y));
+            const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            if (!holidaysByYear.get(y)!.has(iso)) count++;
+        }
+
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    return count;
+}
+
 /** Current yearMonth ('YYYY-MM') in Europe/Rome timezone. */
 export function currentYearMonthRome(now: Date = new Date()): string {
     const parts = new Intl.DateTimeFormat('en-CA', {
