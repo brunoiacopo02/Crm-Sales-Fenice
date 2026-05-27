@@ -201,21 +201,24 @@ Niente cache server-side in v1. `KpiGdoBoard` già refetch su filter change; il 
 
 ## 8. Test
 
-### 8.1 Automatici (`src/app/actions/__tests__/kpiAdvancedActions.throughput.test.ts`)
+### 8.1 Type safety & lint (automatici, già nel progetto)
 
-Fixture su DB di test (no mock — pattern del progetto: integration test su DB reale).
+Il progetto **non ha un framework di test unit/integration installato** (no jest/vitest in `package.json`). I check automatici disponibili sono:
+- `npm run lint` — ESLint deve passare clean.
+- `npm run build` — TypeScript + Next.js build deve passare clean.
 
-Casi:
-1. GDO con dati nominali → valori corretti per le 4 metriche.
-2. GDO con 0 lead chiusi, 50 chiamate → `avgCallsPerLead = null`, `dailyCapacity = null`.
-3. GDO con 0 chiamate, 3 lead chiusi → `callsPerDay = 0`, `dailyCapacity = 0`.
-4. Lead `isSelfBooked = true` esclusi dal denominatore.
-5. Tenant isolation: lead di altro `companyId` non entrano.
-6. Team totals = somma/somma (test esplicito; fallirebbe se uno facesse media-di-medie).
-7. Lead chiuso 31gg fa → escluso.
-8. Chiusure attribuite al GDO corretto.
+Setup di un framework di test non è in scope (sarebbe un'iniziativa cross-progetto separata).
 
-### 8.2 Verifica UI manuale
+### 8.2 Sanity helper script (one-shot)
+
+Per validare la logica della nuova action senza framework, creo `scripts/debug/verify-throughput-30d.ts` che:
+- Carica `.env`, chiama `getGdoThroughputMetrics30d()` direttamente.
+- Stampa la tabella per-GDO + team totals in console.
+- Aggiunge **inline assertions** sui casi edge: avgCallsPerLead null quando 0 lead chiusi, dailyCapacity null se denom 0, team somma/somma coerente.
+- Eseguibile con `npx tsx scripts/debug/verify-throughput-30d.ts` (`tsx` già in devDependencies).
+- Non è un test framework, è uno script diagnostico ad-hoc — pattern già usato altrove in `scripts/debug/`.
+
+### 8.3 Verifica UI manuale
 
 - `/kpi-gdo` come manager: 4 colonne nuove nell'ordine corretto.
 - `Lead/Giorno (cap.)` è sort default.
@@ -224,7 +227,7 @@ Casi:
 - Tabella responsive (scroll orizzontale, non rotture).
 - Cambiare selettore periodo Oggi/7gg/Mese **non** modifica le 4 colonne nuove (banner visibile).
 
-### 8.3 Smoke check produzione
+### 8.4 Smoke check produzione
 
 Post-deploy: confronto manuale dei valori di 2-3 GDO noti con i loro `lastCallNote` recenti per sanity check. Anomalie (media < 1.5 o > 15) → indagare prima di chiudere il task.
 
