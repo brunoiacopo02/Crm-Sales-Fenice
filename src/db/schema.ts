@@ -1,4 +1,5 @@
-import { pgTable, text, integer, real, boolean, timestamp, jsonb, index, unique } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, bigint, real, boolean, timestamp, jsonb, index, unique, primaryKey, date, numeric, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // Multi-tenant: una riga per azienda gestita dal CRM unificato (sales + marketing).
 // Fenice è il tenant principale; Serenamente parte a vendere entro 2026-06-04;
@@ -952,3 +953,242 @@ export const marketingWebhookDeliveries = pgTable('marketingWebhookDeliveries', 
         eventTypeIdx: index('mkt_webhook_event_type_idx').on(t.eventType),
     };
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MARKETING TABLES (ex crm-marketing repo, assorbito 2026-05-29)
+// Schema portato da docs/merge-marketing-schema.md. Convenzioni:
+//   - Tutte le marketing table hanno companyId FK su companies con onUpdate cascade.
+//   - DB column names in snake_case per compat col loro raw SQL legacy (se servisse).
+//   - Fix applicati durante port (vedi schema doc §"PK rewrites needed"):
+//     * marketing_targets PK → (companyId, id) con id default 1
+//     * ad_scripts PK → (companyId, ad_name_normalized) (era cross-tenant collision)
+//     * ac_sync_state PK → (companyId) single-row
+//   - Numeric: numeric(14,4) per cost metrics, numeric(10,2) per €.
+//   - Counter: bigint per impressions/clicks/leads_meta.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Funnel config per-tenant (Meta account, AC list, provenienza patterns).
+// Sostituisce la vecchia hardcoded src/lib/funnels.ts.
+export const companyFunnels = pgTable('company_funnels', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    id: text('id').notNull(),                                                // slug funnel ('telegram', 'corso10ore', etc.)
+    name: text('name').notNull(),
+    metaAccount: text('meta_account'),                                       // act_XXXX Meta ad-account id
+    metaKeyword: text('meta_keyword'),                                       // keyword filtro Meta ads
+    acList: text('ac_list'),                                                 // ActiveCampaign list name
+    acSalesTagId: text('ac_sales_tag_id'),
+    acProvenienzaPatterns: jsonb('ac_provenienza_patterns').$type<string[]>().notNull().default([]),
+    color: text('color').default('bg-slate-500').notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.id] }),
+}));
+
+// EAV cache per metriche ActiveCampaign. Una riga per (company, funnel, day, metric).
+// Today (Europe/Rome) NON è mai cached, solo le righe per giorni passati.
+export const acDailyMetrics = pgTable('ac_daily_metrics', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    funnelId: text('funnel_id').notNull(),
+    date: date('date').notNull(),                                            // YYYY-MM-DD
+    metric: text('metric').notNull(),                                        // 'leads' | 'leads_by_ad'
+    payload: jsonb('payload').notNull(),                                     // shape dipende da metric
+    fetchedAt: timestamp('fetched_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.funnelId, t.date, t.metric] }),
+    companyFunnelDateIdx: index('ac_daily_metrics_company_funnel_date_idx').on(t.companyId, t.funnelId, t.date),
+}));
+
+// Mirror per-contact dei record ActiveCampaign. Popolato da ac-sync cron.
+export const acContacts = pgTable('ac_contacts', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    contactId: text('contact_id').notNull(),                                 // AC contact id
+    email: text('email'),
+    firstName: text('first_name'),
+    lastName: text('last_name'),
+    phone: text('phone'),
+    cdate: timestamp('cdate', { withTimezone: true, mode: 'date' }).notNull(),   // AC created
+    udate: timestamp('udate', { withTimezone: true, mode: 'date' }),             // AC updated
+    funnelId: text('funnel_id'),                                             // resolved da provenienza
+    provenienzaRaw: text('provenienza_raw'),                                 // custom field AC id=2
+    utmSource: text('utm_source'),
+    utmMedium: text('utm_medium'),
+    utmCampaign: text('utm_campaign'),
+    utmTerm: text('utm_term'),                                               // ad_name
+    utmContent: text('utm_content'),
+    isCliente: boolean('is_cliente').default(false).notNull(),               // tag id=35 'Cliente'
+    contractDate: date('contract_date'),                                     // earliest cdate del Cliente tag
+    contractValue: numeric('contract_value', { precision: 12, scale: 2 }),  // custom field id=43
+    syncedAt: timestamp('synced_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    manuallyExcluded: boolean('manually_excluded').default(false).notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.contactId] }),
+}));
+
+// Cursore sync incrementale AC. Una riga per company.
+export const acSyncState = pgTable('ac_sync_state', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    key: text('key').notNull(),                                              // attualmente solo 'last_synced_at'
+    value: text('value').notNull(),                                          // ISO timestamp
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.key] }),                      // widened da single-col per future keys
+}));
+
+// Per-ad per-day Meta Ads insights cache.
+export const adsDailyInsights = pgTable('ads_daily_insights', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    adId: text('ad_id').notNull(),
+    date: date('date').notNull(),
+    accountId: text('account_id').notNull(),                                 // act_XXXX
+    funnelId: text('funnel_id').notNull(),
+    campaignName: text('campaign_name'),
+    adsetName: text('adset_name'),
+    adName: text('ad_name'),
+    spend: numeric('spend', { precision: 14, scale: 4 }).notNull(),
+    impressions: bigint('impressions', { mode: 'number' }).notNull(),
+    clicks: bigint('clicks', { mode: 'number' }).notNull(),
+    cpm: numeric('cpm', { precision: 14, scale: 4 }).notNull(),
+    ctr: numeric('ctr', { precision: 14, scale: 4 }).notNull(),
+    cpc: numeric('cpc', { precision: 14, scale: 4 }).notNull(),
+    leadsMeta: integer('leads_meta').notNull(),
+    effectiveStatus: text('effective_status'),
+    postUrl: text('post_url'),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.adId, t.date] }),
+    companyFunnelDateIdx: index('ads_daily_insights_company_funnel_date_idx').on(t.companyId, t.funnelId, t.date),
+}));
+
+// Marker "fetched" — conferma che per (company, funnel, date) i dati Meta sono
+// stati pull-ati, anche se zero ads. Distingue "nessun ad" da "non ancora sincronizzato".
+export const adsDailyFetches = pgTable('ads_daily_fetches', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    funnelId: text('funnel_id').notNull(),
+    date: date('date').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.funnelId, t.date] }),
+}));
+
+// Spend account-level Meta (no keyword filter). Cattura brand/test ads fuori funnel.
+export const metaAccountDaily = pgTable('meta_account_daily', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    accountId: text('account_id').notNull(),                                 // act_XXXX
+    date: date('date').notNull(),
+    spend: numeric('spend', { precision: 14, scale: 4 }).notNull(),
+    impressions: bigint('impressions', { mode: 'number' }).notNull(),
+    clicks: bigint('clicks', { mode: 'number' }).notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.accountId, t.date] }),
+}));
+
+// Target dashboard (CAC, AOV, lead targets, ROAS).
+// NOTA fix port: id era hardcoded a 1 + PK su (id) col rischio collision cross-tenant.
+// PK ora (companyId, id) con id default 1 — una row per company.
+// I lead_target_* funnel-specific sono Fenice-only legacy; in futuro refactor
+// in child table marketing_funnel_targets (companyId, funnelId, leadTarget).
+export const marketingTargets = pgTable('marketing_targets', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    id: integer('id').default(1).notNull(),                                  // hardcoded 1 — single row per company
+    aov: numeric('aov', { precision: 10, scale: 2 }).notNull(),
+    cac: numeric('cac', { precision: 10, scale: 2 }).notNull(),
+    costApp: numeric('cost_app', { precision: 10, scale: 2 }).notNull(),
+    costConf: numeric('cost_conf', { precision: 10, scale: 2 }).notNull(),
+    leadTargetTotal: integer('lead_target_total'),
+    leadTargetTelegram: integer('lead_target_telegram'),                     // legacy Fenice-specific
+    leadTargetCorso10ore: integer('lead_target_corso10ore'),                 // legacy Fenice-specific
+    leadTargetJobsimulator: integer('lead_target_jobsimulator'),             // legacy Fenice-specific
+    roasTarget: numeric('roas_target', { precision: 10, scale: 2 }),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.id] }),
+}));
+
+// Script creative per-ad.
+// NOTA fix port: PK era (ad_name_normalized) cross-tenant — ora (companyId, ad_name_normalized).
+export const adScripts = pgTable('ad_scripts', {
+    companyId: text('company_id').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    adNameNormalized: text('ad_name_normalized').notNull(),                  // canonical key (lowercased)
+    adName: text('ad_name').notNull(),                                       // display name
+    script: text('script').notNull(),                                        // long-form text
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.companyId, t.adNameNormalized] }),
+}));
+
+// ─── CRM event log + read models (per ora mantenuti per back-compat marketing UI) ───
+// Decisione design doc §5: opzione (B) — mantenere read model proiettato in-process.
+// In Fase 3+ riscrivere reader marketing su leads/leadEvents diretti, eliminare crm_appointments/crm_deals.
+
+// Audit log immutabile webhook CRM. PK = event_id (idempotency).
+export const crmEvents = pgTable('crm_events', {
+    eventId: text('event_id').primaryKey(),
+    eventType: text('event_type').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('company_id').notNull().references(() => companies.id),
+    leadId: text('lead_id'),
+    payload: jsonb('payload').notNull(),
+}, (t) => ({
+    companyOccurredIdx: index('crm_events_company_occurred_idx').on(t.companyId, t.occurredAt.desc()),
+    leadIdx: index('crm_events_lead_idx').on(t.leadId),
+    typeIdx: index('crm_events_type_idx').on(t.eventType),
+}));
+
+// Read model per appointment.set + appointment.outcome.
+export const crmAppointments = pgTable('crm_appointments', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    companyId: text('company_id').notNull().references(() => companies.id),
+    leadId: text('lead_id').notNull(),
+    appointmentDate: date('appointment_date').notNull(),
+    funnel: text('funnel'),
+    utmTerm: text('utm_term'),
+    status: text('status').default('SET').notNull(),
+    leadName: text('lead_name'),
+    leadEmail: text('lead_email'),
+    leadPhone: text('lead_phone'),
+    setEventId: text('set_event_id').references(() => crmEvents.eventId),
+    outcomeEventId: text('outcome_event_id').references(() => crmEvents.eventId),
+    setAt: timestamp('set_at', { withTimezone: true, mode: 'date' }),
+    outcomeAt: timestamp('outcome_at', { withTimezone: true, mode: 'date' }),
+    rawOutcome: text('raw_outcome'),
+    manuallyExcluded: boolean('manually_excluded').default(false).notNull(),
+    utmSource: text('utm_source'),
+    utmMedium: text('utm_medium'),
+    utmCampaign: text('utm_campaign'),
+    utmContent: text('utm_content'),
+}, (t) => ({
+    companyLeadDateUnique: unique('crm_appointments_company_lead_date_unique').on(t.companyId, t.leadId, t.appointmentDate),
+    companyDateIdx: index('crm_appointments_company_date_idx').on(t.companyId, t.appointmentDate),
+    companyFunnelDateIdx: index('crm_appointments_company_funnel_date_idx').on(t.companyId, t.funnel, t.appointmentDate),
+    statusIdx: index('crm_appointments_status_idx').on(t.companyId, t.status, t.appointmentDate),
+}));
+
+// Read model per deal.closed_won + deal.closed_lost.
+export const crmDeals = pgTable('crm_deals', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    companyId: text('company_id').notNull().references(() => companies.id),
+    leadId: text('lead_id').notNull(),
+    eventId: text('event_id').notNull().references(() => crmEvents.eventId),
+    status: text('status').notNull(),                                        // 'WON' | 'LOST'
+    closedAt: timestamp('closed_at', { withTimezone: true, mode: 'date' }).notNull(),
+    closedDate: date('closed_date').notNull(),
+    funnel: text('funnel'),
+    utmTerm: text('utm_term'),
+    product: text('product'),
+    amountEur: numeric('amount_eur', { precision: 10, scale: 2 }),
+    salespersonId: text('salesperson_id'),
+    salespersonName: text('salesperson_name'),
+    manuallyExcluded: boolean('manually_excluded').default(false).notNull(),
+    utmSource: text('utm_source'),
+    utmMedium: text('utm_medium'),
+    utmCampaign: text('utm_campaign'),
+    utmContent: text('utm_content'),
+}, (t) => ({
+    companyEventUnique: unique('crm_deals_company_event_unique').on(t.companyId, t.eventId),
+    companyClosedIdx: index('crm_deals_company_closed_idx').on(t.companyId, t.closedDate),
+    companyFunnelClosedIdx: index('crm_deals_company_funnel_closed_idx').on(t.companyId, t.funnel, t.closedDate),
+    companySalespersonIdx: index('crm_deals_company_salesperson_idx').on(t.companyId, t.salespersonId),
+}));
+
