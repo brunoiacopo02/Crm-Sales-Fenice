@@ -3,6 +3,7 @@
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
 import { eq, isNotNull, and, inArray } from "drizzle-orm"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export type DiscardedLeadPayload = {
     id: string
@@ -15,9 +16,12 @@ export type DiscardedLeadPayload = {
 }
 
 export async function getDiscardedLeadsForMarketing() {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     // We only care about leads that are REJECTED and have an email
     const rejectedLeads = await db.select().from(leads).where(
             and(
+                eq(leads.companyId, ctx.companyId),
                 eq(leads.status, 'REJECTED'),
                 isNotNull(leads.email)
             )
@@ -30,13 +34,14 @@ export async function getDiscardedLeadsForMarketing() {
     // Find the latest callLog for each of these leads that resulted in 'DA_SCARTARE'
     const logs = await db.select().from(callLogs).where(
             and(
+                eq(callLogs.companyId, ctx.companyId),
                 eq(callLogs.outcome, 'DA_SCARTARE'),
                 inArray(callLogs.leadId, rejectedLeadIds)
             )
         )
 
     // Map logs to users for the 'discardedBy'
-    const allUsers = await db.select().from(users)
+    const allUsers = await db.select().from(users).where(eq(users.companyId, ctx.companyId))
     const userMap = new Map(allUsers.map(u => [u.id, u.name || u.email]))
 
     // Assemble payload

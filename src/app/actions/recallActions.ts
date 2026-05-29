@@ -4,7 +4,10 @@ import { createClient } from "@/utils/supabase/server"
 import { db } from "@/db"
 import { leads } from "@/db/schema"
 import { eq, and, ne, isNotNull, asc, lte, or } from "drizzle-orm"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 export async function getRecallLeads() {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -20,6 +23,7 @@ export async function getRecallLeads() {
     // 2. Have a recallDate set
 
     const conditions = [
+        eq(leads.companyId, ctx.companyId),
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
         isNotNull(leads.recallDate)

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { gdoNotes, users } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 export type GdoNoteCategory = 'formazione' | 'positivo' | 'negativo' | 'disciplinare';
 
@@ -26,6 +27,8 @@ export interface GdoUserForNotes {
 }
 
 export async function getGdoUsersForNotes(): Promise<GdoUserForNotes[]> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const allGdos = await db.select({
         id: users.id,
         name: users.name,
@@ -35,7 +38,7 @@ export async function getGdoUsersForNotes(): Promise<GdoUserForNotes[]> {
         isActive: users.isActive,
     })
         .from(users)
-        .where(eq(users.role, 'GDO'));
+        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)));
 
     return allGdos
         .filter(u => u.isActive === true)
@@ -49,6 +52,8 @@ export async function createGdoNote(
     category: GdoNoteCategory
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         if (!content.trim()) {
             return { success: false, error: "Il contenuto della nota non può essere vuoto" };
         }
@@ -64,6 +69,7 @@ export async function createGdoNote(
             authorUserId,
             content: content.trim(),
             category,
+            companyId: ctx.companyId,
         });
 
         return { success: true };
@@ -74,6 +80,8 @@ export async function createGdoNote(
 }
 
 export async function getGdoNotes(gdoUserId: string): Promise<GdoNote[]> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const rows = await db
         .select({
             id: gdoNotes.id,
@@ -86,7 +94,7 @@ export async function getGdoNotes(gdoUserId: string): Promise<GdoNote[]> {
         })
         .from(gdoNotes)
         .leftJoin(users, eq(gdoNotes.authorUserId, users.id))
-        .where(eq(gdoNotes.gdoUserId, gdoUserId))
+        .where(and(eq(gdoNotes.gdoUserId, gdoUserId), eq(gdoNotes.companyId, ctx.companyId)))
         .orderBy(desc(gdoNotes.createdAt));
 
     return rows.map(r => ({
@@ -100,9 +108,11 @@ export async function deleteGdoNote(
     authorUserId: string
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const result = await db
             .delete(gdoNotes)
-            .where(and(eq(gdoNotes.id, noteId), eq(gdoNotes.authorUserId, authorUserId)))
+            .where(and(eq(gdoNotes.id, noteId), eq(gdoNotes.authorUserId, authorUserId), eq(gdoNotes.companyId, ctx.companyId)))
             .returning();
 
         if (result.length === 0) {

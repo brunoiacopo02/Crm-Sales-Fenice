@@ -2,15 +2,18 @@
 
 import { db } from "@/db"
 import { users } from "@/db/schema"
-import { eq, inArray } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import crypto from "crypto"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 // Codici GDO richiesti da specifiche
 const GDO_CODES = [105, 113, 114, 115, 116, 117, 118, 119]
 
 export async function seedGdoAccounts() {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     // 1. Controlla quali esistono già per evitare duplicati ciecamente
-    const existingUsers = await db.select({ gdoCode: users.gdoCode }).from(users).where(eq(users.role, 'GDO'))
+    const existingUsers = await db.select({ gdoCode: users.gdoCode }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
     const existingCodes = new Set(existingUsers.map(u => u.gdoCode).filter(Boolean))
 
     const newAccounts = []
@@ -34,6 +37,7 @@ export async function seedGdoAccounts() {
                 displayName: `GDO ${code}`,
                 isActive: true,
                 createdAt: new Date(),
+                companyId: ctx.companyId,
             })
 
             newAccounts.push({
@@ -55,6 +59,8 @@ export async function seedGdoAccounts() {
 }
 
 export async function getTeamAccounts() {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     return await db.select({
         id: users.id,
         name: users.name,
@@ -70,46 +76,52 @@ export async function getTeamAccounts() {
         role: users.role,
     })
         .from(users)
-        .where(inArray(users.role, ['GDO', 'VENDITORE', 'CONFERME']))
+        .where(and(inArray(users.role, ['GDO', 'VENDITORE', 'CONFERME']), eq(users.companyId, ctx.companyId)))
         .orderBy(users.role, users.gdoCode)
 
 }
 
 export async function updateGdoProfile(userId: string, data: { displayName?: string, avatarUrl?: string, isActive?: boolean }) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     await db.update(users)
         .set({
             ...data,
         })
-        .where(eq(users.id, userId))
+        .where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)))
 
 
     return { success: true }
 }
 
 export async function updateGdoTargets(dailyApptTarget: number, weeklyConfirmedTarget: number, scope: 'ALL' | string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     if (scope === 'ALL') {
         await db.update(users)
             .set({ dailyApptTarget, weeklyConfirmedTarget })
-            .where(eq(users.role, 'GDO'))
+            .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
 
     } else {
         await db.update(users)
             .set({ dailyApptTarget, weeklyConfirmedTarget })
-            .where(eq(users.id, scope))
+            .where(and(eq(users.id, scope), eq(users.companyId, ctx.companyId)))
 
     }
     return { success: true }
 }
 
 export async function updateConfermeTargets(confermeTargetTier1: number, confermeTargetTier2: number, confermeExtraTier1: number, confermeExtraTier2: number, scope: 'ALL' | string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     if (scope === 'ALL') {
         await db.update(users)
             .set({ confermeTargetTier1, confermeTargetTier2, confermeExtraTier1, confermeExtraTier2 })
-            .where(eq(users.role, 'CONFERME'))
+            .where(and(eq(users.role, 'CONFERME'), eq(users.companyId, ctx.companyId)))
     } else {
         await db.update(users)
             .set({ confermeTargetTier1, confermeTargetTier2, confermeExtraTier1, confermeExtraTier2 })
-            .where(eq(users.id, scope))
+            .where(and(eq(users.id, scope), eq(users.companyId, ctx.companyId)))
     }
     return { success: true }
 }

@@ -4,8 +4,11 @@ import { db } from "@/db"
 import { leads, leadEvents, users } from "@/db/schema"
 import { eq, desc, and } from "drizzle-orm"
 import crypto from "crypto"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export async function getLeadProfile(leadId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
     const lead = (await db.select({
             id: leads.id,
             name: leads.name,
@@ -30,7 +33,7 @@ export async function getLeadProfile(leadId: string) {
         })
             .from(leads)
             .leftJoin(users, eq(leads.assignedToId, users.id))
-            .where(eq(leads.id, leadId)))
+            .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId))))
         [0]
 
     if (!lead) return null
@@ -47,7 +50,7 @@ export async function getLeadProfile(leadId: string) {
         })
             .from(leadEvents)
             .leftJoin(users, eq(leadEvents.userId, users.id))
-            .where(eq(leadEvents.leadId, leadId))
+            .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.companyId, ctx.companyId)))
             .orderBy(desc(leadEvents.timestamp))
         
 
@@ -71,6 +74,8 @@ export async function updateLeadContactInfo(
     }
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
         const name = data.name.trim()
         const phone = data.phone.trim()
         const email = data.email.trim()
@@ -87,7 +92,7 @@ export async function updateLeadContactInfo(
             version: currentVersion + 1,
             updatedAt: new Date(),
         }).where(
-            and(eq(leads.id, leadId), eq(leads.version, currentVersion))
+            and(eq(leads.id, leadId), eq(leads.version, currentVersion), eq(leads.companyId, ctx.companyId))
         ).returning({ id: leads.id })
 
         if (updated.length === 0) {
@@ -100,6 +105,7 @@ export async function updateLeadContactInfo(
             eventType: "contact_info_edited",
             metadata: JSON.stringify({ note: "Dati contatto aggiornati dal ContactDrawer" }),
             timestamp: new Date(),
+            companyId: ctx.companyId,
         })
 
         return { success: true }

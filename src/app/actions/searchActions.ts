@@ -2,7 +2,8 @@
 
 import { db } from "@/db"
 import { leads } from "@/db/schema"
-import { or, like, desc } from "drizzle-orm"
+import { and, eq, or, like, desc } from "drizzle-orm"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 export type SearchResult = {
     id: string
@@ -15,16 +16,21 @@ export type SearchResult = {
 
 export async function searchLeads(query: string): Promise<SearchResult[]> {
     if (!query || query.trim().length < 2) return []
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
 
     const searchTerm = `%${query.trim()}%`
 
     const results = await db.select()
             .from(leads)
             .where(
-                or(
-                    like(leads.name, searchTerm),
-                    like(leads.phone, searchTerm),
-                    like(leads.email, searchTerm)
+                and(
+                    eq(leads.companyId, ctx.companyId),
+                    or(
+                        like(leads.name, searchTerm),
+                        like(leads.phone, searchTerm),
+                        like(leads.email, searchTerm)
+                    )
                 )
             )
             .orderBy(desc(leads.updatedAt))

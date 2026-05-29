@@ -5,17 +5,22 @@ import { internalAlerts, users } from "@/db/schema"
 import { eq, and, lt, or, desc, isNull } from "drizzle-orm"
 import crypto from "crypto"
 import { createClient } from "@/utils/supabase/server"
+import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
-// Cleanup function to clear old alerts
+// Cleanup function to clear old alerts (tenant-scoped)
 export async function cleanOldAlerts() {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
     await db.delete(internalAlerts)
-        .where(lt(internalAlerts.createdAt, yesterday));
+        .where(and(eq(internalAlerts.companyId, ctx.companyId), lt(internalAlerts.createdAt, yesterday)));
 }
 
 export async function sendInternalAlert(receiverId: string | null, message: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Unauthorized" };
@@ -28,24 +33,29 @@ export async function sendInternalAlert(receiverId: string | null, message: stri
         senderId: user.id,
         receiverId: receiverId,
         message: message,
+        companyId: ctx.companyId,
     });
 
     return { success: true };
 }
 
 export async function markAlertAsRead(alertId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Unauthorized" };
 
     await db.update(internalAlerts)
         .set({ isRead: true })
-        .where(eq(internalAlerts.id, alertId));
+        .where(and(eq(internalAlerts.id, alertId), eq(internalAlerts.companyId, ctx.companyId)));
 
     return { success: true };
 }
 
 export async function getMyUnreadAlerts() {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
@@ -64,6 +74,7 @@ export async function getMyUnreadAlerts() {
         .from(internalAlerts)
         .leftJoin(users, eq(internalAlerts.senderId, users.id))
         .where(and(
+            eq(internalAlerts.companyId, ctx.companyId),
             eq(internalAlerts.isRead, false),
             or(
                 eq(internalAlerts.receiverId, user.id),
@@ -76,6 +87,8 @@ export async function getMyUnreadAlerts() {
 }
 
 export async function getMyBroadcastAlerts() {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
@@ -95,6 +108,7 @@ export async function getMyBroadcastAlerts() {
         .from(internalAlerts)
         .leftJoin(users, eq(internalAlerts.senderId, users.id))
         .where(and(
+            eq(internalAlerts.companyId, ctx.companyId),
             eq(internalAlerts.isRead, false),
             isNull(internalAlerts.receiverId)
         ))
