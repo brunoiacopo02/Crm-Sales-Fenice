@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/marketing-webhooks-drain",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/marketing/cron/sync-ac-contacts",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/marketing/cron/refresh-meta",
+      "schedule": "30 2 * * *"
     }
   ]
 }
