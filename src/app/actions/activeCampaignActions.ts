@@ -2,9 +2,10 @@
 
 import { db } from "@/db"
 import { leads } from "@/db/schema"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { logLeadEvent } from "@/lib/eventLogger"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 
 // ActiveCampaign configuration
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com'
@@ -112,13 +113,14 @@ export async function sendAgendaToLead(
     leadId: string,
     options: SendAgendaOptions
 ): Promise<SendAgendaResult> {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     // Auth check
     const supabase = await createClient()
     const { data: { user: supabaseUser } } = await supabase.auth.getUser()
     if (!supabaseUser) return { success: false, error: 'Non autenticato' }
 
     // Fetch lead
-    const [lead] = await db.select().from(leads).where(eq(leads.id, leadId))
+    const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
     if (!lead) return { success: false, error: 'Lead non trovato' }
 
     // Use lead email or override provided by GDO
@@ -136,7 +138,7 @@ export async function sendAgendaToLead(
         if (!lead.email && options.emailOverride) {
             await db.update(leads)
                 .set({ email: options.emailOverride })
-                .where(eq(leads.id, leadId))
+                .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
         }
 
         // 1. Find or create contact
@@ -162,7 +164,7 @@ export async function sendAgendaToLead(
         // 4. Update lead with timestamp
         await db.update(leads)
             .set({ agendaSentAt: new Date() })
-            .where(eq(leads.id, leadId))
+            .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
 
         // 5. Log event
         await logLeadEvent({
@@ -202,6 +204,7 @@ export async function sendConfermeNotifyToLead(
     leadId: string,
     type: ConfermeNotifyType = 'call1'
 ): Promise<SendConfermeNotifyResult> {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     // Auth check — only CONFERME role
     const supabase = await createClient()
     const { data: { user: supabaseUser } } = await supabase.auth.getUser()
@@ -213,7 +216,7 @@ export async function sendConfermeNotifyToLead(
     }
 
     // Fetch lead
-    const [lead] = await db.select().from(leads).where(eq(leads.id, leadId))
+    const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
     if (!lead) return { success: false, error: 'Lead non trovato' }
     if (!lead.email) return { success: false, error: 'Il lead non ha email — impossibile creare contatto AC' }
 

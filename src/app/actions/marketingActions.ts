@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { leads, marketingBudgets } from "@/db/schema";
 import { and, eq, ne, isNotNull, gte, lte, or } from "drizzle-orm";
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 
 const OFFICIAL_FUNNELS = [
     "TELEGRAM",
@@ -56,6 +57,8 @@ function getMonthBounds(monthString: string): { startDateStr: string; endDateStr
 }
 
 export async function getMarketingStats(monthString: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     // monthString format: "YYYY-MM"
     const { startDateStr, endDateStr } = getMonthBounds(monthString);
     const startDate = toRomeStartOfDay(startDateStr);
@@ -74,6 +77,7 @@ export async function getMarketingStats(monthString: string) {
 
     const allLeads = await db.select().from(leads).where(
         and(
+            eq(leads.companyId, ctx.companyId),
             isNotNull(leads.funnel),
             ne(leads.funnel, 'BLT'),
             ne(leads.funnel, ''),
@@ -88,7 +92,10 @@ export async function getMarketingStats(monthString: string) {
 
     // Get budgets for the month
     const budgets = await db.select().from(marketingBudgets).where(
-        eq(marketingBudgets.month, monthString)
+        and(
+            eq(marketingBudgets.companyId, ctx.companyId),
+            eq(marketingBudgets.month, monthString)
+        )
     );
 
     // Grouping
@@ -177,8 +184,12 @@ export async function getMarketingStats(monthString: string) {
 }
 
 export async function saveMarketingBudget(funnel: string, month: string, spentAmountEur: number) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
     const existing = await db.select().from(marketingBudgets).where(
         and(
+            eq(marketingBudgets.companyId, ctx.companyId),
             eq(marketingBudgets.funnel, funnel),
             eq(marketingBudgets.month, month)
         )
@@ -187,10 +198,14 @@ export async function saveMarketingBudget(funnel: string, month: string, spentAm
     if (existing.length > 0) {
         await db.update(marketingBudgets)
             .set({ spentAmountEur, updatedAt: new Date() })
-            .where(eq(marketingBudgets.id, existing[0].id));
+            .where(and(
+                eq(marketingBudgets.companyId, ctx.companyId),
+                eq(marketingBudgets.id, existing[0].id)
+            ));
     } else {
         await db.insert(marketingBudgets).values({
             id: crypto.randomUUID(),
+            companyId: ctx.companyId,
             funnel,
             month,
             spentAmountEur,
@@ -201,6 +216,8 @@ export async function saveMarketingBudget(funnel: string, month: string, spentAm
 }
 
 export async function getMarketingStatsByGdo(monthString: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const { startDateStr, endDateStr } = getMonthBounds(monthString);
     const startDate = toRomeStartOfDay(startDateStr);
     const endDate = toRomeEndOfDay(endDateStr);
@@ -212,6 +229,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
 
     const allLeads = await db.select().from(leads).where(
         and(
+            eq(leads.companyId, ctx.companyId),
             isNotNull(leads.funnel),
             ne(leads.funnel, 'BLT'),
             ne(leads.funnel, ''),
@@ -226,7 +244,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
 
     // Fetch all relevant users for quick reference
     const { users } = await import("@/db/schema");
-    const allUsers = await db.select({ id: users.id, displayName: users.displayName, name: users.name, gdoCode: users.gdoCode }).from(users);
+    const allUsers = await db.select({ id: users.id, displayName: users.displayName, name: users.name, gdoCode: users.gdoCode }).from(users).where(eq(users.companyId, ctx.companyId));
     const userMap = new Map(allUsers.map(u => [u.id, u]));
 
     const result: Record<string, Record<string, {

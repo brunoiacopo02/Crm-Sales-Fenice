@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { leads, users } from "@/db/schema";
 import { and, desc, eq, gte, lte, or, sql, getTableColumns } from "drizzle-orm";
 import { aliasedTable } from "drizzle-orm";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 export type ArchiveFilters = {
     fromDate?: string;
@@ -67,7 +68,9 @@ export async function getArchiveLeads({
     exportAll?: boolean;
 }) {
     try {
-        const conditions = [];
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+        const conditions = [eq(leads.companyId, ctx.companyId)];
 
         // 1. Date Range Filter — convert user dates from Rome timezone to UTC
         if (fromDate) {
@@ -99,7 +102,7 @@ export async function getArchiveLeads({
             }
         }
 
-        const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
+        const whereCondition = and(...conditions);
 
         const gdoUser = aliasedTable(users, 'gdoUser');
         const salesUser = aliasedTable(users, 'salesUser');

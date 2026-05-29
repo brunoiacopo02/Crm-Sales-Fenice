@@ -5,6 +5,7 @@ import { breakSessions, users } from "@/db/schema"
 import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { BREAK_RULES, getLocalDateRome } from "@/lib/pauseUtils"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -53,11 +54,13 @@ function computeDailyTotal(
 // ─── GDO Status ───────────────────────────────────────────────────────
 
 export async function getGdoPauseStatus(gdoId: string): Promise<PauseSummary> {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const todayLocal = getLocalDateRome()
 
     const todaysPauses = await db.select()
         .from(breakSessions)
         .where(and(
+            eq(breakSessions.companyId, ctx.companyId),
             eq(breakSessions.gdoUserId, gdoId),
             eq(breakSessions.dateLocal, todayLocal)
         ))
@@ -98,6 +101,7 @@ export async function getGdoPauseStatus(gdoId: string): Promise<PauseSummary> {
 // ─── Start / Stop ─────────────────────────────────────────────────────
 
 export async function startPause(gdoId: string) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const status = await getGdoPauseStatus(gdoId)
 
     if (status.currentPause) {
@@ -115,13 +119,18 @@ export async function startPause(gdoId: string) {
         startTime: now,
         status: 'in_corso',
         createdAt: now,
+        companyId: ctx.companyId,
     })
 
     return true
 }
 
 export async function stopPause(sessionId: string) {
-    const session = (await db.select().from(breakSessions).where(eq(breakSessions.id, sessionId)))[0]
+    const ctx = await currentTenant(); assertSalesArea(ctx);
+    const session = (await db.select().from(breakSessions).where(and(
+        eq(breakSessions.companyId, ctx.companyId),
+        eq(breakSessions.id, sessionId)
+    )))[0]
 
     if (!session) throw new Error("Sessione pausa non trovata.")
     if (session.status !== 'in_corso') throw new Error("La pausa è già conclusa.")
@@ -133,6 +142,7 @@ export async function stopPause(sessionId: string) {
     const allToday = await db.select()
         .from(breakSessions)
         .where(and(
+            eq(breakSessions.companyId, ctx.companyId),
             eq(breakSessions.gdoUserId, session.gdoUserId),
             eq(breakSessions.dateLocal, session.dateLocal),
         ))
@@ -155,7 +165,10 @@ export async function stopPause(sessionId: string) {
             status: dailyExceeded ? 'sforata' : 'conclusa',
             exceededSeconds,
         })
-        .where(eq(breakSessions.id, sessionId))
+        .where(and(
+            eq(breakSessions.companyId, ctx.companyId),
+            eq(breakSessions.id, sessionId)
+        ))
 
     return true
 }
@@ -163,12 +176,14 @@ export async function stopPause(sessionId: string) {
 // ─── GDO History ──────────────────────────────────────────────────────
 
 export async function getGdoPauseHistory(gdoId: string): Promise<PauseHistoryEntry[]> {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const now = new Date()
     const yearMonth = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }).slice(0, 7)
 
     const sessions = await db.select()
         .from(breakSessions)
         .where(and(
+            eq(breakSessions.companyId, ctx.companyId),
             eq(breakSessions.gdoUserId, gdoId),
             sql`${breakSessions.dateLocal} LIKE ${yearMonth + '%'}`
         ))
@@ -195,6 +210,7 @@ export async function getGdoPauseHistory(gdoId: string): Promise<PauseHistoryEnt
 // ─── Manager Reports ──────────────────────────────────────────────────
 
 export async function getManagerPauseReport(dateLocal?: string) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const targetDate = dateLocal || getLocalDateRome()
 
     const sessions = await db.select({
@@ -213,7 +229,10 @@ export async function getManagerPauseReport(dateLocal?: string) {
     })
         .from(breakSessions)
         .leftJoin(users, eq(breakSessions.gdoUserId, users.id))
-        .where(eq(breakSessions.dateLocal, targetDate))
+        .where(and(
+            eq(breakSessions.companyId, ctx.companyId),
+            eq(breakSessions.dateLocal, targetDate)
+        ))
         .orderBy(desc(breakSessions.startTime))
 
     const now = new Date()
@@ -313,7 +332,7 @@ export type PauseAggregateReport = {
     }
 }
 
-async function getAggregateReport(dateFrom: string, dateTo: string): Promise<PauseAggregateReport> {
+async function getAggregateReport(dateFrom: string, dateTo: string, companyId: string): Promise<PauseAggregateReport> {
     const sessions = await db.select({
         gdoUserId: breakSessions.gdoUserId,
         displayName: users.displayName,
@@ -326,6 +345,7 @@ async function getAggregateReport(dateFrom: string, dateTo: string): Promise<Pau
         .from(breakSessions)
         .leftJoin(users, eq(breakSessions.gdoUserId, users.id))
         .where(and(
+            eq(breakSessions.companyId, companyId),
             gte(breakSessions.dateLocal, dateFrom),
             lte(breakSessions.dateLocal, dateTo),
         ))
@@ -404,6 +424,7 @@ async function getAggregateReport(dateFrom: string, dateTo: string): Promise<Pau
 }
 
 export async function getWeeklyPauseReport(): Promise<PauseAggregateReport> {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const today = getLocalDateRome()
     const todayDate = new Date(today + 'T00:00:00')
     const dow = todayDate.getDay() // 0=Sun
@@ -414,14 +435,15 @@ export async function getWeeklyPauseReport(): Promise<PauseAggregateReport> {
     const from = monday.toISOString().slice(0, 10)
     const to = sunday.toISOString().slice(0, 10)
 
-    return getAggregateReport(from, to)
+    return getAggregateReport(from, to, ctx.companyId)
 }
 
 export async function getMonthlyPauseReport(yearMonth?: string): Promise<PauseAggregateReport> {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const ym = yearMonth || getLocalDateRome().slice(0, 7)
     const from = `${ym}-01`
     const lastDay = new Date(parseInt(ym.slice(0, 4)), parseInt(ym.slice(5, 7)), 0).getDate()
     const to = `${ym}-${String(lastDay).padStart(2, '0')}`
 
-    return getAggregateReport(from, to)
+    return getAggregateReport(from, to, ctx.companyId)
 }
