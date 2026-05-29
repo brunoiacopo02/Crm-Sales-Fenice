@@ -6,7 +6,7 @@ import { eq, and, gte, lte, lt, isNotNull, sql, or } from "drizzle-orm";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
-import { currentTenant } from "@/lib/tenancy";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 export interface GamificationTargetInput {
     month: string;
@@ -17,10 +17,13 @@ export interface GamificationTargetInput {
 }
 
 export async function saveGamificationRule(input: GamificationTargetInput) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     await db.insert(weeklyGamificationRules)
         .values({
             id: crypto.randomUUID(),
             month: input.month,
+            companyId: ctx.companyId,
             targetTier1: input.targetTier1,
             rewardTier1: input.rewardTier1,
             targetTier2: input.targetTier2,
@@ -28,7 +31,7 @@ export async function saveGamificationRule(input: GamificationTargetInput) {
             updatedAt: new Date()
         })
         .onConflictDoUpdate({
-            target: weeklyGamificationRules.month,
+            target: [weeklyGamificationRules.month, weeklyGamificationRules.companyId],
             set: {
                 targetTier1: input.targetTier1,
                 rewardTier1: input.rewardTier1,
@@ -93,11 +96,13 @@ function getMonthWeeks(monthStr: string) {
  * FASE 2.1: Logica backend Tabellare e Calendario (Manager)
  */
 export async function getManagerGdoTables(monthString: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     // Tutti id e dati base GDO
-    const allUsers = await db.select().from(users).where(eq(users.role, 'GDO'));
+    const allUsers = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')));
     const activeGdos = allUsers.filter(u => u.isActive);
 
-    // Tutti gli appuntamenti fissati questo mese (verranno splittati per data di appuntamento, 
+    // Tutti gli appuntamenti fissati questo mese (verranno splittati per data di appuntamento,
     // ma la select la facciamo su tutto, o per appointmentDate compreso in questo mese per evitare di prenderli tutti)
     // Meglio prendere tutti i lead e poi filtrare in memoria.
     const startObj = parseISO(`${monthString}-01T00:00:00`);
@@ -106,6 +111,7 @@ export async function getManagerGdoTables(monthString: string) {
     const [monthLeads, assignedLeadsRaw] = await Promise.all([
         db.select().from(leads).where(
             and(
+                eq(leads.companyId, ctx.companyId),
                 isNotNull(leads.appointmentDate),
                 gte(leads.appointmentDate, startObj),
                 lte(leads.appointmentDate, endObj)
@@ -116,6 +122,7 @@ export async function getManagerGdoTables(monthString: string) {
             funnel: leads.funnel,
         }).from(leads)
             .where(and(
+                eq(leads.companyId, ctx.companyId),
                 isNotNull(leads.assignedToId),
                 gte(leads.createdAt, startObj),
                 lte(leads.createdAt, endObj)
@@ -269,7 +276,7 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
     const today = testTodayOverride || new Date();
 
     if (overrides?.role === 'CONFERME') {
-        return await getConfermeWeeklyState(gdoUserId, today, overrides);
+        return await getConfermeWeeklyState(gdoUserId, today, ctx.companyId, overrides);
     }
 
     // GDO: ciclo bisettimanale
@@ -287,7 +294,7 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
         target2 = overrides.target2Override || target2;
         reward2 = overrides.reward2Override || reward2;
     } else {
-        const rules = await db.select().from(weeklyGamificationRules).where(eq(weeklyGamificationRules.month, currentMonthStr));
+        const rules = await db.select().from(weeklyGamificationRules).where(and(eq(weeklyGamificationRules.companyId, ctx.companyId), eq(weeklyGamificationRules.month, currentMonthStr)));
         if (rules.length > 0) {
             target1 = rules[0].targetTier1;
             reward1 = rules[0].rewardTier1;
@@ -316,6 +323,7 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
 async function getConfermeWeeklyState(
     gdoUserId: string,
     today: Date,
+    companyId: string,
     overrides?: { role?: string; target1Override?: number; reward1Override?: number; target2Override?: number; reward2Override?: number },
 ) {
     const currentMonthStr = today.toISOString().slice(0, 7);
@@ -341,7 +349,7 @@ async function getConfermeWeeklyState(
         target2 = overrides.target2Override || 21;
         reward2 = overrides.reward2Override || 290;
     } else {
-        const rules = await db.select().from(weeklyGamificationRules).where(eq(weeklyGamificationRules.month, currentMonthStr));
+        const rules = await db.select().from(weeklyGamificationRules).where(and(eq(weeklyGamificationRules.companyId, companyId), eq(weeklyGamificationRules.month, currentMonthStr)));
         if (rules.length > 0) {
             target1 = rules[0].targetTier1;
             reward1 = rules[0].rewardTier1;
@@ -356,6 +364,7 @@ async function getConfermeWeeklyState(
     // Una chiusura di Andrea vale per Alberto e Christel. Nessun filtro per utente.
     const confermeLeads = await db.select().from(leads).where(
         and(
+            eq(leads.companyId, companyId),
             isNotNull(leads.confirmationsUserId),
             eq(leads.confirmationsOutcome, 'confermato'),
             eq(leads.salespersonOutcome, 'Chiuso'),
@@ -373,6 +382,8 @@ async function getConfermeWeeklyState(
             .innerJoin(users, eq(users.id, manualAdjustments.userId))
             .where(
                 and(
+                    eq(users.companyId, companyId),
+                    eq(manualAdjustments.companyId, companyId),
                     eq(users.role, 'CONFERME'),
                     eq(manualAdjustments.type, 'chiusure'),
                     gte(manualAdjustments.createdAt, currentWeekStart),
@@ -399,6 +410,8 @@ async function getConfermeWeeklyState(
  * F2-011: Metriche conferme/presenze/chiusure per i lead di un GDO (settimana corrente lun-dom)
  */
 export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     // Settimana corrente ISO-like (lunedì 00:00 → domenica 23:59:59) in Europe/Rome.
     const romeDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }); // 'YYYY-MM-DD'
     const [y, m, d] = romeDateStr.split('-').map(Number);
@@ -413,6 +426,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         salespersonOutcome: leads.salespersonOutcome,
     }).from(leads).where(
         and(
+            eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoUserId),
             isNotNull(leads.appointmentDate),
             gte(leads.appointmentDate, weekStart),
@@ -450,6 +464,8 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
  * F2-012: Obiettivi giornalieri GDO — chiamate e fissaggi di oggi
  */
 export async function getGdoDailyObjectives(gdoUserId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const now = new Date();
     const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
     const [yearStr, monthStr, dayStr] = todayStr.split('-');
@@ -462,13 +478,14 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
 
     // Get user's dailyApptTarget
     const userRow = await db.select({ dailyApptTarget: users.dailyApptTarget })
-        .from(users).where(eq(users.id, gdoUserId)).limit(1);
+        .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, gdoUserId))).limit(1);
     const dailyApptTarget = userRow[0]?.dailyApptTarget || 2;
 
     // Count today's calls from callLogs
     const callResult = await db.select({ count: sql<number>`count(*)::integer` })
         .from(callLogs)
         .where(and(
+            eq(callLogs.companyId, ctx.companyId),
             eq(callLogs.userId, gdoUserId),
             gte(callLogs.createdAt, todayStart),
             lte(callLogs.createdAt, todayEnd)
@@ -479,6 +496,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
     const apptResult = await db.select({ count: sql<number>`count(*)::integer` })
         .from(leads)
         .where(and(
+            eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoUserId),
             isNotNull(leads.appointmentCreatedAt),
             gte(leads.appointmentCreatedAt, todayStart),
@@ -490,6 +508,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
     const pipelineResult = await db.select({ count: sql<number>`count(*)::integer` })
         .from(leads)
         .where(and(
+            eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoUserId),
             or(eq(leads.status, 'NEW'), eq(leads.status, 'IN_PROGRESS'))
         ));
@@ -509,13 +528,16 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
  * Returns total calls, calls with script completed, percentage, and consecutive-day streak.
  */
 export async function getScriptCompletionRate(userId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const [totalResult, scriptResult, scriptDaysResult] = await Promise.all([
         db.select({ count: sql<number>`count(*)::integer` })
             .from(callLogs)
-            .where(eq(callLogs.userId, userId)),
+            .where(and(eq(callLogs.companyId, ctx.companyId), eq(callLogs.userId, userId))),
         db.select({ count: sql<number>`count(*)::integer` })
             .from(callLogs)
             .where(and(
+                eq(callLogs.companyId, ctx.companyId),
                 eq(callLogs.userId, userId),
                 eq(callLogs.scriptCompleted, true)
             )),
@@ -525,6 +547,7 @@ export async function getScriptCompletionRate(userId: string) {
         })
             .from(callLogs)
             .where(and(
+                eq(callLogs.companyId, ctx.companyId),
                 eq(callLogs.userId, userId),
                 eq(callLogs.scriptCompleted, true)
             ))
@@ -573,7 +596,9 @@ export async function getScriptCompletionRate(userId: string) {
  * F3-009: Bulk script completion rates for all active GDOs (used by manager view).
  */
 export async function getAllGdoScriptRates(): Promise<Record<string, { completionRate: number; scriptCompletedCount: number }>> {
-    const activeGdos = await db.select({ id: users.id }).from(users).where(and(eq(users.role, 'GDO'), eq(users.isActive, true)));
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const activeGdos = await db.select({ id: users.id }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
 
     if (activeGdos.length === 0) return {};
 
@@ -584,13 +609,17 @@ export async function getAllGdoScriptRates(): Promise<Record<string, { completio
             userId: callLogs.userId,
             count: sql<number>`count(*)::integer`.as('count'),
         }).from(callLogs)
-            .where(sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`)
+            .where(and(
+                eq(callLogs.companyId, ctx.companyId),
+                sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`
+            ))
             .groupBy(callLogs.userId),
         db.select({
             userId: callLogs.userId,
             count: sql<number>`count(*)::integer`.as('count'),
         }).from(callLogs)
             .where(and(
+                eq(callLogs.companyId, ctx.companyId),
                 sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`,
                 eq(callLogs.scriptCompleted, true)
             ))

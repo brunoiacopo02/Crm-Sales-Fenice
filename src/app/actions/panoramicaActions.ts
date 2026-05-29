@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { leads, monthlyLeadTargets, monthlyFunnelBaselines } from "@/db/schema";
 import { and, gte, lt, sql, eq, or } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import {
     countWorkingDaysInMonth,
     countWorkingDaysElapsed,
@@ -57,6 +58,8 @@ export type LeadOverviewResult = {
  */
 export async function getLeadOverview(yearMonth?: string): Promise<LeadOverviewResult> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
@@ -70,7 +73,10 @@ export async function getLeadOverview(yearMonth?: string): Promise<LeadOverviewR
 
         // Load config for this month
         const [cfg] = await db.select().from(monthlyLeadTargets)
-            .where(eq(monthlyLeadTargets.yearMonth, ym));
+            .where(and(
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.yearMonth, ym),
+            ));
 
         // Count leads added in this month, by category.
         // Category = 'DB' if funnel (lowercased) = 'database', else 'Nuovi'.
@@ -83,6 +89,7 @@ export async function getLeadOverview(yearMonth?: string): Promise<LeadOverviewR
             })
             .from(leads)
             .where(and(
+                eq(leads.companyId, ctx.companyId),
                 gte(leads.createdAt, monthStart),
                 lt(leads.createdAt, monthEnd)
             ))
@@ -205,6 +212,8 @@ export async function setLeadMonthlyTarget(input: {
     baselineDatabase: number;
 }) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
@@ -216,7 +225,10 @@ export async function setLeadMonthlyTarget(input: {
         }
 
         const [existing] = await db.select().from(monthlyLeadTargets)
-            .where(eq(monthlyLeadTargets.yearMonth, input.yearMonth));
+            .where(and(
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.yearMonth, input.yearMonth),
+            ));
 
         const now = new Date();
 
@@ -229,10 +241,14 @@ export async function setLeadMonthlyTarget(input: {
                 baselineDatabase: input.baselineDatabase,
                 baselineSetAt: now,
                 updatedAt: now,
-            }).where(eq(monthlyLeadTargets.id, existing.id));
+            }).where(and(
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.id, existing.id),
+            ));
         } else {
             await db.insert(monthlyLeadTargets).values({
                 id: crypto.randomUUID(),
+                companyId: ctx.companyId,
                 yearMonth: input.yearMonth,
                 targetNuovi: input.targetNuovi,
                 targetDatabase: input.targetDatabase,
@@ -270,6 +286,8 @@ export async function setMonthlyMetricTargets(input: {
     targetClosePct: number;
 }) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
@@ -286,7 +304,10 @@ export async function setMonthlyMetricTargets(input: {
         }
 
         const [existing] = await db.select().from(monthlyLeadTargets)
-            .where(eq(monthlyLeadTargets.yearMonth, input.yearMonth));
+            .where(and(
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.yearMonth, input.yearMonth),
+            ));
 
         const now = new Date();
 
@@ -303,11 +324,15 @@ export async function setMonthlyMetricTargets(input: {
                 targetPresPct: input.targetPresPct,
                 targetClosePct: input.targetClosePct,
                 updatedAt: now,
-            }).where(eq(monthlyLeadTargets.id, existing.id));
+            }).where(and(
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.id, existing.id),
+            ));
         } else {
             // No lead-target row yet → create a stub with zero lead targets.
             await db.insert(monthlyLeadTargets).values({
                 id: crypto.randomUUID(),
+                companyId: ctx.companyId,
                 yearMonth: input.yearMonth,
                 targetNuovi: 0,
                 targetDatabase: 0,
@@ -408,6 +433,8 @@ function todayBoundsRome(): { start: Date; end: Date } {
 
 export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOverviewResult> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
@@ -428,7 +455,10 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
 
         // 2) Fetch target config
         const [cfg] = await db.select().from(monthlyLeadTargets)
-            .where(eq(monthlyLeadTargets.yearMonth, ym));
+            .where(and(
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.yearMonth, ym),
+            ));
 
         const isConfigured = !!cfg;
 
@@ -450,20 +480,24 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         //    può chiudere oggi un deal il cui meeting era ieri).
         const [appToday, confToday, presToday, closeToday, valoreTodayRows] = await Promise.all([
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                eq(leads.companyId, ctx.companyId),
                 gte(leads.appointmentCreatedAt, todayStart),
                 lt(leads.appointmentCreatedAt, todayEnd),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                eq(leads.companyId, ctx.companyId),
                 gte(leads.appointmentDate, todayStart),
                 lt(leads.appointmentDate, todayEnd),
                 eq(leads.confirmationsOutcome, 'confermato'),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                eq(leads.companyId, ctx.companyId),
                 gte(leads.appointmentDate, todayStart),
                 lt(leads.appointmentDate, todayEnd),
                 sql`${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')`,
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+                eq(leads.companyId, ctx.companyId),
                 gte(leads.salespersonOutcomeAt, todayStart),
                 lt(leads.salespersonOutcomeAt, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
@@ -471,6 +505,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
             db.select({
                 s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
             }).from(leads).where(and(
+                eq(leads.companyId, ctx.companyId),
                 gte(leads.salespersonOutcomeAt, todayStart),
                 lt(leads.salespersonOutcomeAt, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
@@ -502,6 +537,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         const [valoreMeseRow] = await db.select({
             s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
         }).from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
             gte(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month - 1, 1))),
             lt(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month, 1))),
             eq(leads.salespersonOutcome, 'Chiuso'),
@@ -677,7 +713,7 @@ type CrmCounts = { app: number; conferme: number; trattative: number; close: num
  * (post-f8992e1): pesca i lead con OR su tutte le date evento, poi conta in
  * ogni bucket solo se la data evento corrispondente cade nel mese.
  */
-async function getCrmFunnelCounts(yearMonth: string): Promise<Map<string, CrmCounts>> {
+async function getCrmFunnelCounts(yearMonth: string, companyId: string): Promise<Map<string, CrmCounts>> {
     const { year, month } = parseYearMonth(yearMonth);
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
     const monthEnd = new Date(Date.UTC(year, month, 1));
@@ -686,6 +722,7 @@ async function getCrmFunnelCounts(yearMonth: string): Promise<Map<string, CrmCou
         !!d && d >= monthStart && d < monthEnd;
 
     const rows = await db.select().from(leads).where(and(
+        eq(leads.companyId, companyId),
         sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
         or(
             and(gte(leads.appointmentCreatedAt, monthStart), lt(leads.appointmentCreatedAt, monthEnd)),
@@ -738,6 +775,7 @@ async function getCrmFunnelCounts(yearMonth: string): Promise<Map<string, CrmCou
 async function resolveAlertState(
     row: typeof monthlyFunnelBaselines.$inferSelect,
     closeCount: number,
+    companyId: string,
 ): Promise<{ dataPrimoSottoSoglia: Date | null; statoSegnalazione: FunnelStato }> {
     const now = new Date();
     // Close% denominator = leadCount (the absolute "fixed" value per Bruno)
@@ -750,7 +788,10 @@ async function resolveAlertState(
                 dataPrimoSottoSoglia: null,
                 statoSegnalazione: 'OK',
                 updatedAt: now,
-            }).where(eq(monthlyFunnelBaselines.id, row.id));
+            }).where(and(
+                eq(monthlyFunnelBaselines.companyId, companyId),
+                eq(monthlyFunnelBaselines.id, row.id),
+            ));
         }
         return { dataPrimoSottoSoglia: null, statoSegnalazione: 'OK' };
     }
@@ -762,7 +803,10 @@ async function resolveAlertState(
                 dataPrimoSottoSoglia: null,
                 statoSegnalazione: 'OK',
                 updatedAt: now,
-            }).where(eq(monthlyFunnelBaselines.id, row.id));
+            }).where(and(
+                eq(monthlyFunnelBaselines.companyId, companyId),
+                eq(monthlyFunnelBaselines.id, row.id),
+            ));
         }
         return { dataPrimoSottoSoglia: null, statoSegnalazione: 'OK' };
     }
@@ -776,7 +820,10 @@ async function resolveAlertState(
             dataPrimoSottoSoglia: now,
             statoSegnalazione: newState,
             updatedAt: now,
-        }).where(eq(monthlyFunnelBaselines.id, row.id));
+        }).where(and(
+            eq(monthlyFunnelBaselines.companyId, companyId),
+            eq(monthlyFunnelBaselines.id, row.id),
+        ));
         return { dataPrimoSottoSoglia: now, statoSegnalazione: newState };
     }
 
@@ -787,7 +834,10 @@ async function resolveAlertState(
         await db.update(monthlyFunnelBaselines).set({
             statoSegnalazione: newState,
             updatedAt: now,
-        }).where(eq(monthlyFunnelBaselines.id, row.id));
+        }).where(and(
+            eq(monthlyFunnelBaselines.companyId, companyId),
+            eq(monthlyFunnelBaselines.id, row.id),
+        ));
     }
     return { dataPrimoSottoSoglia: storedDate, statoSegnalazione: newState };
 }
@@ -798,6 +848,8 @@ function pct(num: number, den: number): number | null {
 
 export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverviewResult> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
@@ -805,7 +857,10 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
 
         // 1) Load baseline rows for the month
         const baselines = await db.select().from(monthlyFunnelBaselines)
-            .where(eq(monthlyFunnelBaselines.yearMonth, ym));
+            .where(and(
+                eq(monthlyFunnelBaselines.companyId, ctx.companyId),
+                eq(monthlyFunnelBaselines.yearMonth, ym),
+            ));
 
         // 1b) Per ogni baseline con baselineSetAt valorizzato, conta quanti
         //     lead CRM sono stati CREATI dopo quel timestamp per quel funnel.
@@ -817,6 +872,7 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
             const [r] = await db.select({ c: sql<number>`count(*)::int` })
                 .from(leads)
                 .where(and(
+                    eq(leads.companyId, ctx.companyId),
                     sql`UPPER(COALESCE(${leads.funnel}, '')) = ${b.funnelName}`,
                     sql`${leads.createdAt} > ${b.baselineSetAt}`,
                 ));
@@ -826,7 +882,7 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
         // 2) Live CRM counts per funnel (uppercased, excluding TEST/empty).
         //    Counts ALL April leads. The baseline delta is purely external (Excel)
         //    and gets summed on top — no double-counting filter.
-        const crmMap = await getCrmFunnelCounts(ym);
+        const crmMap = await getCrmFunnelCounts(ym, ctx.companyId);
 
         // 3) Merge: include all baseline funnels, plus any CRM funnel that isn't in the baseline yet
         const allFunnels = new Set<string>();
@@ -862,7 +918,7 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
             let dataPrimoSottoSoglia: string | null = null;
             let statoSegnalazione: FunnelStato = 'OK';
             if (baseline) {
-                const resolved = await resolveAlertState(baseline, closeCount);
+                const resolved = await resolveAlertState(baseline, closeCount, ctx.companyId);
                 dataPrimoSottoSoglia = resolved.dataPrimoSottoSoglia ? resolved.dataPrimoSottoSoglia.toISOString() : null;
                 statoSegnalazione = resolved.statoSegnalazione;
             }
@@ -936,6 +992,8 @@ export async function setFunnelRow(input: {
     spesaEur: number;
 }) {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
@@ -952,7 +1010,7 @@ export async function setFunnelRow(input: {
         }
 
         // Re-query current CRM count to compute deltas
-        const crmMap = await getCrmFunnelCounts(input.yearMonth);
+        const crmMap = await getCrmFunnelCounts(input.yearMonth, ctx.companyId);
         const crm = crmMap.get(funnelName) || { app: 0, conferme: 0, trattative: 0, close: 0 };
 
         const appDelta = Math.round(input.appDisplay - crm.app);
@@ -961,6 +1019,7 @@ export async function setFunnelRow(input: {
         const closeDelta = Math.round(input.closeDisplay - crm.close);
 
         const [existing] = await db.select().from(monthlyFunnelBaselines).where(and(
+            eq(monthlyFunnelBaselines.companyId, ctx.companyId),
             eq(monthlyFunnelBaselines.yearMonth, input.yearMonth),
             eq(monthlyFunnelBaselines.funnelName, funnelName),
         ));
@@ -982,10 +1041,14 @@ export async function setFunnelRow(input: {
                 spesaEur: input.spesaEur,
                 baselineSetAt: now,
                 updatedAt: now,
-            }).where(eq(monthlyFunnelBaselines.id, existing.id));
+            }).where(and(
+                eq(monthlyFunnelBaselines.companyId, ctx.companyId),
+                eq(monthlyFunnelBaselines.id, existing.id),
+            ));
         } else {
             await db.insert(monthlyFunnelBaselines).values({
                 id: crypto.randomUUID(),
+                companyId: ctx.companyId,
                 yearMonth: input.yearMonth,
                 funnelName,
                 leadCount: Math.round(input.leadCount),

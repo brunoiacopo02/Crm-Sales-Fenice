@@ -539,14 +539,16 @@ export const seasonalEvents = pgTable('seasonalEvents', {
 
 export const weeklyGamificationRules = pgTable('weeklyGamificationRules', {
     id: text('id').primaryKey(),
-    month: text('month').notNull().unique(), // e.g. '2026-03'
+    month: text('month').notNull(), // e.g. '2026-03'
     targetTier1: integer('targetTier1').default(10).notNull(),
     rewardTier1: real('rewardTier1').default(135).notNull(),
     targetTier2: integer('targetTier2').default(13).notNull(),
     rewardTier2: real('rewardTier2').default(270).notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
-});
+}, (t) => ({
+    monthCompanyUnique: unique('weeklyGamificationRules_month_companyId_unique').on(t.month, t.companyId),
+}));
 
 // --- FENICE UNIVERSE: CREATURE SYSTEM ---
 export const creatures = pgTable('creatures', {
