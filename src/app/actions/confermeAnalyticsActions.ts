@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { leads, leadEvents, users } from "@/db/schema"
 import { eq, and, gte, lte, isNotNull, inArray } from "drizzle-orm"
 import crypto from "crypto"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 
 /**
  * Persiste la durata di una chiamata Conferme.
@@ -20,6 +21,8 @@ export async function logConfermeCallDuration(
     opts: { actionTaken: 'nr' | 'outcome' | null }
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
         const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role } } : null;
@@ -31,7 +34,7 @@ export async function logConfermeCallDuration(
             return { success: false, error: "Invalid duration" };
         }
 
-        const lead = (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
+        const lead = (await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId))))[0];
         if (!lead) return { success: false, error: "Lead not found" };
 
         const callsMade =
@@ -64,7 +67,7 @@ export async function logConfermeCallDuration(
                 : slot === 2 ? 'confCall2Duration'
                 : 'confCall3Duration';
             const patch: Record<string, number> = { [colName]: roundedDuration };
-            await db.update(leads).set(patch).where(eq(leads.id, leadId));
+            await db.update(leads).set(patch).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)));
         }
 
         await db.insert(leadEvents).values({
@@ -73,6 +76,7 @@ export async function logConfermeCallDuration(
             eventType: "conferme_call_logged",
             userId: session.user.id,
             timestamp: new Date(),
+            companyId: ctx.companyId,
             metadata: {
                 durationSeconds: roundedDuration,
                 slot,
@@ -150,6 +154,8 @@ export async function getConfermeAnalytics(opts: {
      *  automatico). Range 1..4. Se omesso, usa il count automatico di utenti CONFERME attivi. */
     nOperatoriOverride?: number | null;
 }): Promise<ConfermeAnalyticsResult> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const role = supabaseUser?.user_metadata?.role as string | undefined;
@@ -168,7 +174,7 @@ export async function getConfermeAnalytics(opts: {
     // della UI vince — utile quando alcuni account CONFERME esistono ma non sono
     // davvero in turno (es. account manager con role=CONFERME).
     const activeConferme = await db.select({ id: users.id }).from(users)
-        .where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true)));
+        .where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true), eq(users.companyId, ctx.companyId)));
     const nOperatoriAttivi = activeConferme.length;
     const nOperatoriEffettivi = (typeof opts.nOperatoriOverride === 'number'
         && opts.nOperatoriOverride >= 1 && opts.nOperatoriOverride <= 4)
@@ -180,6 +186,7 @@ export async function getConfermeAnalytics(opts: {
         id: leads.id,
         appointmentDate: leads.appointmentDate,
     }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
         isNotNull(leads.appointmentDate),
         gte(leads.appointmentDate, periodStart),
         lte(leads.appointmentDate, now),
@@ -207,6 +214,7 @@ export async function getConfermeAnalytics(opts: {
 
     // 2. Tempo medio chiamata (da leadEvents.conferme_call_logged)
     const callEventConditions = [
+        eq(leadEvents.companyId, ctx.companyId),
         eq(leadEvents.eventType, 'conferme_call_logged'),
         gte(leadEvents.timestamp, periodStart),
         lte(leadEvents.timestamp, now),
@@ -232,6 +240,7 @@ export async function getConfermeAnalytics(opts: {
 
     // 3. % risposta per tentativo (lead con confirmationsTimestamp ∈ P)
     const outcomeConditions = [
+        eq(leads.companyId, ctx.companyId),
         isNotNull(leads.confirmationsTimestamp),
         gte(leads.confirmationsTimestamp, periodStart),
         lte(leads.confirmationsTimestamp, now),
@@ -263,6 +272,7 @@ export async function getConfermeAnalytics(opts: {
 
     // 4. Recall: % snooze giornata + % parcheggiati altri giorni
     const recallEventConditions = [
+        eq(leadEvents.companyId, ctx.companyId),
         gte(leadEvents.timestamp, periodStart),
         lte(leadEvents.timestamp, now),
         inArray(leadEvents.eventType, ['conferme_snooze_set', 'conferme_recall_scheduled', 'conferme_no_answer', 'conferme_outcome_set', 'conferme_call_logged']),
@@ -340,6 +350,8 @@ export async function getConfermeAnalytics(opts: {
 
 /** Lista operatori Conferme attivi per popolare il filtro UI. */
 export async function listActiveConfermeUsers(): Promise<Array<{ id: string; name: string }>> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const role = supabaseUser?.user_metadata?.role as string | undefined;
@@ -350,7 +362,7 @@ export async function listActiveConfermeUsers(): Promise<Array<{ id: string; nam
         id: users.id,
         name: users.name,
         displayName: users.displayName,
-    }).from(users).where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true)));
+    }).from(users).where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true), eq(users.companyId, ctx.companyId)));
     return rows.map(r => ({ id: r.id, name: r.displayName || r.name || 'Conferme' }))
         .sort((a, b) => a.name.localeCompare(b.name, 'it'));
 }

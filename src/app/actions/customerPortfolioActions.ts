@@ -5,6 +5,7 @@ import { db } from "@/db"
 import { customerPortfolios, users } from "@/db/schema"
 import { eq, and, desc, asc, sql } from "drizzle-orm"
 import crypto from "crypto"
+import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 
 type SessionUser = { id: string; role: string; email?: string; name?: string }
 
@@ -42,10 +43,11 @@ function canEditCustomer(session: { user: SessionUser }, customerSalespersonUser
  * - MANAGER/ADMIN: tutti (con possibilità di filtrare via salespersonUserIdFilter)
  */
 export async function listCustomerPortfolios(salespersonUserIdFilter?: string) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session) throw new Error("Unauthorized")
 
-    const conditions = []
+    const conditions = [eq(customerPortfolios.companyId, ctx.companyId)]
     if (session.user.role === 'VENDITORE') {
         conditions.push(eq(customerPortfolios.salespersonUserId, session.user.id))
     } else if (isManager(session.user.role)) {
@@ -82,7 +84,7 @@ export async function listCustomerPortfolios(salespersonUserIdFilter?: string) {
         })
         .from(customerPortfolios)
         .leftJoin(users, eq(customerPortfolios.salespersonUserId, users.id))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .where(and(...conditions))
         .orderBy(desc(customerPortfolios.contractSignedAt))
 
     return rows
@@ -92,6 +94,7 @@ export async function listCustomerPortfolios(salespersonUserIdFilter?: string) {
  * Lista venditori (per dropdown form). Solo manager/admin.
  */
 export async function listSalespeople() {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session || !isManager(session.user.role)) throw new Error("Unauthorized")
 
@@ -103,7 +106,7 @@ export async function listSalespeople() {
             email: users.email,
         })
         .from(users)
-        .where(and(eq(users.role, 'VENDITORE'), eq(users.isActive, true)))
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'VENDITORE'), eq(users.isActive, true)))
         .orderBy(asc(users.displayName))
 
     return rows
@@ -126,6 +129,7 @@ export type CreateCustomerInput = {
 }
 
 export async function createCustomerPortfolio(input: CreateCustomerInput) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session || !isManager(session.user.role)) throw new Error("Unauthorized")
 
@@ -143,7 +147,7 @@ export async function createCustomerPortfolio(input: CreateCustomerInput) {
     }
 
     // Verify salesperson exists and is VENDITORE
-    const sp = (await db.select().from(users).where(eq(users.id, input.salespersonUserId)))[0]
+    const sp = (await db.select().from(users).where(and(eq(users.id, input.salespersonUserId), eq(users.companyId, ctx.companyId))))[0]
     if (!sp || sp.role !== 'VENDITORE') {
         return { success: false, error: 'Venditore non valido' }
     }
@@ -151,6 +155,7 @@ export async function createCustomerPortfolio(input: CreateCustomerInput) {
     const id = crypto.randomUUID()
     await db.insert(customerPortfolios).values({
         id,
+        companyId: ctx.companyId,
         salespersonUserId: input.salespersonUserId,
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
@@ -187,10 +192,11 @@ export type UpdateCustomerInput = {
 }
 
 export async function updateCustomerPortfolio(input: UpdateCustomerInput) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session || !isManager(session.user.role)) throw new Error("Unauthorized")
 
-    const existing = (await db.select().from(customerPortfolios).where(eq(customerPortfolios.id, input.id)))[0]
+    const existing = (await db.select().from(customerPortfolios).where(and(eq(customerPortfolios.id, input.id), eq(customerPortfolios.companyId, ctx.companyId))))[0]
     if (!existing) return { success: false, error: 'Cliente non trovato' }
 
     const patch: Record<string, unknown> = { updatedAt: new Date() }
@@ -209,7 +215,7 @@ export async function updateCustomerPortfolio(input: UpdateCustomerInput) {
     if (input.salespersonUserId !== undefined) patch.salespersonUserId = input.salespersonUserId
     if (input.notes !== undefined) patch.notes = input.notes?.trim() || null
 
-    await db.update(customerPortfolios).set(patch).where(eq(customerPortfolios.id, input.id))
+    await db.update(customerPortfolios).set(patch).where(and(eq(customerPortfolios.id, input.id), eq(customerPortfolios.companyId, ctx.companyId)))
 
     revalidatePath('/portafoglio-clienti')
     return { success: true }
@@ -226,10 +232,11 @@ export async function updateCustomerPortfolio(input: UpdateCustomerInput) {
  * Quando passa da true → false: resetta i campi follow-up dipendenti.
  */
 export async function toggleFollowUpMessageSent(customerId: string, sent: boolean) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session) throw new Error("Unauthorized")
 
-    const existing = (await db.select().from(customerPortfolios).where(eq(customerPortfolios.id, customerId)))[0]
+    const existing = (await db.select().from(customerPortfolios).where(and(eq(customerPortfolios.id, customerId), eq(customerPortfolios.companyId, ctx.companyId))))[0]
     if (!existing) return { success: false, error: 'Cliente non trovato' }
     if (!canEditCustomer(session, existing.salespersonUserId)) throw new Error("Unauthorized")
 
@@ -252,7 +259,7 @@ export async function toggleFollowUpMessageSent(customerId: string, sent: boolea
         patch.upsellAmountEur = null
     }
 
-    await db.update(customerPortfolios).set(patch).where(eq(customerPortfolios.id, customerId))
+    await db.update(customerPortfolios).set(patch).where(and(eq(customerPortfolios.id, customerId), eq(customerPortfolios.companyId, ctx.companyId)))
 
     revalidatePath('/portafoglio-clienti')
     return { success: true }
@@ -266,10 +273,11 @@ export async function updateFollowUpFlags(customerId: string, flags: {
     followUpResponded?: boolean | null
     appointmentSet?: boolean | null
 }) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session) throw new Error("Unauthorized")
 
-    const existing = (await db.select().from(customerPortfolios).where(eq(customerPortfolios.id, customerId)))[0]
+    const existing = (await db.select().from(customerPortfolios).where(and(eq(customerPortfolios.id, customerId), eq(customerPortfolios.companyId, ctx.companyId))))[0]
     if (!existing) return { success: false, error: 'Cliente non trovato' }
     if (!canEditCustomer(session, existing.salespersonUserId)) throw new Error("Unauthorized")
 
@@ -277,7 +285,7 @@ export async function updateFollowUpFlags(customerId: string, flags: {
     if (flags.followUpResponded !== undefined) patch.followUpResponded = flags.followUpResponded
     if (flags.appointmentSet !== undefined) patch.appointmentSet = flags.appointmentSet
 
-    await db.update(customerPortfolios).set(patch).where(eq(customerPortfolios.id, customerId))
+    await db.update(customerPortfolios).set(patch).where(and(eq(customerPortfolios.id, customerId), eq(customerPortfolios.companyId, ctx.companyId)))
 
     revalidatePath('/portafoglio-clienti')
     return { success: true }
@@ -293,10 +301,11 @@ export async function updateFollowUpFlags(customerId: string, flags: {
  * Nota: il record resta SEMPRE in "Pacchetto Clienti" (master).
  */
 export async function setCustomerOutcome(customerId: string, outcome: 'IN_TRATTATIVA' | 'CHIUSO' | 'NON_CHIUSO' | null, upsellAmountEur?: number | null) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session) throw new Error("Unauthorized")
 
-    const existing = (await db.select().from(customerPortfolios).where(eq(customerPortfolios.id, customerId)))[0]
+    const existing = (await db.select().from(customerPortfolios).where(and(eq(customerPortfolios.id, customerId), eq(customerPortfolios.companyId, ctx.companyId))))[0]
     if (!existing) return { success: false, error: 'Cliente non trovato' }
     if (!canEditCustomer(session, existing.salespersonUserId)) throw new Error("Unauthorized")
 
@@ -320,7 +329,7 @@ export async function setCustomerOutcome(customerId: string, outcome: 'IN_TRATTA
         patch.followUpMessageSentAt = new Date()
     }
 
-    await db.update(customerPortfolios).set(patch).where(eq(customerPortfolios.id, customerId))
+    await db.update(customerPortfolios).set(patch).where(and(eq(customerPortfolios.id, customerId), eq(customerPortfolios.companyId, ctx.companyId)))
 
     revalidatePath('/portafoglio-clienti')
     return { success: true }
@@ -331,10 +340,11 @@ export async function setCustomerOutcome(customerId: string, outcome: 'IN_TRATTA
 // ───────────────────────────────────────────────────────────────────────────
 
 export async function deleteCustomerPortfolio(customerId: string) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session || !isManager(session.user.role)) throw new Error("Unauthorized")
 
-    await db.delete(customerPortfolios).where(eq(customerPortfolios.id, customerId))
+    await db.delete(customerPortfolios).where(and(eq(customerPortfolios.id, customerId), eq(customerPortfolios.companyId, ctx.companyId)))
 
     revalidatePath('/portafoglio-clienti')
     return { success: true }
@@ -345,10 +355,11 @@ export async function deleteCustomerPortfolio(customerId: string) {
 // ───────────────────────────────────────────────────────────────────────────
 
 export async function getCustomerPortfolioCounts(salespersonUserIdFilter?: string) {
+    const ctx = await currentTenant(); assertSalesArea(ctx);
     const session = await getSession()
     if (!session) throw new Error("Unauthorized")
 
-    const conditions = []
+    const conditions = [eq(customerPortfolios.companyId, ctx.companyId)]
     if (session.user.role === 'VENDITORE') {
         conditions.push(eq(customerPortfolios.salespersonUserId, session.user.id))
     } else if (isManager(session.user.role)) {
@@ -359,7 +370,7 @@ export async function getCustomerPortfolioCounts(salespersonUserIdFilter?: strin
         throw new Error("Unauthorized")
     }
 
-    const baseWhere = conditions.length > 0 ? and(...conditions) : undefined
+    const baseWhere = and(...conditions)
 
     const [totalRow] = await db
         .select({ c: sql<number>`count(*)::int` })

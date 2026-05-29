@@ -14,6 +14,7 @@ import { createClient } from "@/utils/supabase/server";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { checkAchievements } from "@/app/actions/achievementActions";
+import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import {
     GDO_SURVEY_COMPLETE_COINS,
     GDO_SURVEY_COMPLETE_XP,
@@ -64,8 +65,8 @@ async function requireRole(allowed: string[]) {
     return session;
 }
 
-async function isLeadEligible(leadId: string): Promise<{ eligible: boolean; funnel: string | null }> {
-    const [row] = await db.select({ funnel: leads.funnel }).from(leads).where(eq(leads.id, leadId));
+async function isLeadEligible(leadId: string, companyId: string): Promise<{ eligible: boolean; funnel: string | null }> {
+    const [row] = await db.select({ funnel: leads.funnel }).from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, companyId)));
     if (!row) return { eligible: false, funnel: null };
     const funnelLower = (row.funnel || "").trim().toLowerCase();
     return { eligible: funnelLower !== EXCLUDED_FUNNEL, funnel: row.funnel };
@@ -119,7 +120,7 @@ function validateGdoPayload(p: GdoSurveyPayload): string | null {
     return null;
 }
 
-async function detectSuspicious(gdoUserId: string, fillMs: number, payload: GdoSurveyPayload): Promise<boolean> {
+async function detectSuspicious(gdoUserId: string, fillMs: number, payload: GdoSurveyPayload, companyId: string): Promise<boolean> {
     if (fillMs < MIN_FILL_DURATION_MS) return true;
     // Cluster: >=CLUSTER_COUNT_THRESHOLD surveys in last CLUSTER_WINDOW_MS
     const since = new Date(Date.now() - CLUSTER_WINDOW_MS);
@@ -133,7 +134,7 @@ async function detectSuspicious(gdoUserId: string, fillMs: number, payload: GdoS
             changeSince: gdoLeadSurveys.changeSince,
         })
         .from(gdoLeadSurveys)
-        .where(and(eq(gdoLeadSurveys.gdoUserId, gdoUserId), sql`${gdoLeadSurveys.createdAt} > ${since}`))
+        .where(and(eq(gdoLeadSurveys.gdoUserId, gdoUserId), eq(gdoLeadSurveys.companyId, companyId), sql`${gdoLeadSurveys.createdAt} > ${since}`))
         .orderBy(desc(gdoLeadSurveys.createdAt))
         .limit(CLUSTER_COUNT_THRESHOLD);
     if (recent.length >= CLUSTER_COUNT_THRESHOLD) return true;
@@ -153,27 +154,30 @@ export async function saveGdoSurvey(
     payload: GdoSurveyPayload,
 ): Promise<{ success: boolean; error?: string; suspicious?: boolean; rewards?: { coins: number; xp: number } }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const session = await requireRole(["GDO", "MANAGER", "ADMIN"]);
 
         const err = validateGdoPayload(payload);
         if (err) return { success: false, error: err };
 
-        const { eligible } = await isLeadEligible(leadId);
+        const { eligible } = await isLeadEligible(leadId, ctx.companyId);
         if (!eligible) return { success: false, error: "Lead non idoneo (funnel escluso o inesistente)" };
 
         const completed = payload.earlyExitReason ? false : isGdoPayloadComplete(payload);
 
         // Only do anti-gaming detection on full saves (not partial early-exits)
-        const suspicious = completed ? await detectSuspicious(session.id, payload.fillDurationMs, payload) : false;
+        const suspicious = completed ? await detectSuspicious(session.id, payload.fillDurationMs, payload, ctx.companyId) : false;
 
         // Upsert: unique(leadId) allows at most one GDO survey per lead.
-        const existing = await db.select({ id: gdoLeadSurveys.id }).from(gdoLeadSurveys).where(eq(gdoLeadSurveys.leadId, leadId));
+        const existing = await db.select({ id: gdoLeadSurveys.id }).from(gdoLeadSurveys).where(and(eq(gdoLeadSurveys.leadId, leadId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
 
         if (existing.length === 0) {
             await db.insert(gdoLeadSurveys).values({
                 id: crypto.randomUUID(),
                 leadId,
                 gdoUserId: session.id,
+                companyId: ctx.companyId,
                 ageRange: payload.ageRange ?? null,
                 occupation: payload.occupation ?? null,
                 requestReason: payload.requestReason ?? null,
@@ -202,7 +206,7 @@ export async function saveGdoSurvey(
                 fillDurationMs: payload.fillDurationMs,
                 suspicious,
                 updatedAt: new Date(),
-            }).where(eq(gdoLeadSurveys.leadId, leadId));
+            }).where(and(eq(gdoLeadSurveys.leadId, leadId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
         }
 
         // Grant rewards only on non-suspicious saves.
@@ -217,10 +221,11 @@ export async function saveGdoSurvey(
                         walletCoins: sql`${users.walletCoins} + ${rewardCoins}`,
                         experience: sql`${users.experience} + ${rewardXp}`,
                     })
-                    .where(eq(users.id, session.id));
+                    .where(and(eq(users.id, session.id), eq(users.companyId, ctx.companyId)));
                 await db.insert(coinTransactions).values({
                     id: crypto.randomUUID(),
                     userId: session.id,
+                    companyId: ctx.companyId,
                     amount: rewardCoins,
                     reason: COIN_REASON_GDO_SURVEY,
                 });
@@ -234,10 +239,11 @@ export async function saveGdoSurvey(
                         walletCoins: sql`${users.walletCoins} + ${rewardCoins}`,
                         experience: sql`${users.experience} + ${rewardXp}`,
                     })
-                    .where(eq(users.id, session.id));
+                    .where(and(eq(users.id, session.id), eq(users.companyId, ctx.companyId)));
                 await db.insert(coinTransactions).values({
                     id: crypto.randomUUID(),
                     userId: session.id,
+                    companyId: ctx.companyId,
                     amount: rewardCoins,
                     reason: COIN_REASON_GDO_SURVEY_PARTIAL,
                 });
@@ -252,8 +258,10 @@ export async function saveGdoSurvey(
 }
 
 export async function getGdoSurveyByLead(leadId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     await requireRole(["GDO", "CONFERME", "VENDITORE", "MANAGER", "ADMIN"]);
-    const [row] = await db.select().from(gdoLeadSurveys).where(eq(gdoLeadSurveys.leadId, leadId));
+    const [row] = await db.select().from(gdoLeadSurveys).where(and(eq(gdoLeadSurveys.leadId, leadId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
     return row || null;
 }
 
@@ -272,6 +280,8 @@ export async function saveConfermeSurvey(
     payload: ConfermeSurveyPayload,
 ): Promise<{ success: boolean; error?: string; suspicious?: boolean; rewards?: { coins: number; xp: number } }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const session = await requireRole(["CONFERME", "MANAGER", "ADMIN"]);
 
         if (payload.confirmed === false && payload.whyNot) {
@@ -284,18 +294,19 @@ export async function saveConfermeSurvey(
         // Le Conferme raccolgono il sondaggio SU TUTTI i lead, inclusi
         // quelli con funnel 'database'. Il contesto è post-appuntamento,
         // ha senso raccogliere feedback indipendentemente dal funnel.
-        const [leadRow] = await db.select({ id: leads.id }).from(leads).where(eq(leads.id, leadId));
+        const [leadRow] = await db.select({ id: leads.id }).from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)));
         if (!leadRow) return { success: false, error: "Lead non trovato" };
 
         const suspicious = payload.fillDurationMs < MIN_FILL_DURATION_MS;
 
-        const existing = await db.select({ id: confermeLeadSurveys.id }).from(confermeLeadSurveys).where(eq(confermeLeadSurveys.leadId, leadId));
+        const existing = await db.select({ id: confermeLeadSurveys.id }).from(confermeLeadSurveys).where(and(eq(confermeLeadSurveys.leadId, leadId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
 
         if (existing.length === 0) {
             await db.insert(confermeLeadSurveys).values({
                 id: crypto.randomUUID(),
                 leadId,
                 confermeUserId: session.id,
+                companyId: ctx.companyId,
                 remembersAppt: payload.remembersAppt,
                 watchedVideo: payload.watchedVideo,
                 confirmed: payload.confirmed,
@@ -312,7 +323,7 @@ export async function saveConfermeSurvey(
                 fillDurationMs: payload.fillDurationMs,
                 suspicious,
                 updatedAt: new Date(),
-            }).where(eq(confermeLeadSurveys.leadId, leadId));
+            }).where(and(eq(confermeLeadSurveys.leadId, leadId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
         }
 
         let rewardCoins = 0;
@@ -325,10 +336,11 @@ export async function saveConfermeSurvey(
                     walletCoins: sql`${users.walletCoins} + ${rewardCoins}`,
                     experience: sql`${users.experience} + ${rewardXp}`,
                 })
-                .where(eq(users.id, session.id));
+                .where(and(eq(users.id, session.id), eq(users.companyId, ctx.companyId)));
             await db.insert(coinTransactions).values({
                 id: crypto.randomUUID(),
                 userId: session.id,
+                companyId: ctx.companyId,
                 amount: rewardCoins,
                 reason: COIN_REASON_CONFERME_SURVEY,
             });
@@ -343,8 +355,10 @@ export async function saveConfermeSurvey(
 }
 
 export async function getConfermeSurveyByLead(leadId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     await requireRole(["GDO", "CONFERME", "VENDITORE", "MANAGER", "ADMIN"]);
-    const [row] = await db.select().from(confermeLeadSurveys).where(eq(confermeLeadSurveys.leadId, leadId));
+    const [row] = await db.select().from(confermeLeadSurveys).where(and(eq(confermeLeadSurveys.leadId, leadId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
     return row || null;
 }
 
@@ -362,6 +376,8 @@ export async function saveSalesSurvey(
     payload: SalesSurveyPayload,
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const session = await requireRole(["VENDITORE", "MANAGER", "ADMIN"]);
 
         const validProblem = SALES_PROBLEM_SIGNAL_OPTIONS.map((o) => o.value);
@@ -380,18 +396,19 @@ export async function saveSalesSurvey(
             return { success: false, error: "Seleziona la reazione al prezzo" };
         }
 
-        const { eligible } = await isLeadEligible(leadId);
+        const { eligible } = await isLeadEligible(leadId, ctx.companyId);
         if (!eligible) return { success: false, error: "Lead non idoneo" };
 
         const suspicious = payload.fillDurationMs < MIN_FILL_DURATION_MS;
 
-        const existing = await db.select({ id: salesLeadSurveys.id }).from(salesLeadSurveys).where(eq(salesLeadSurveys.leadId, leadId));
+        const existing = await db.select({ id: salesLeadSurveys.id }).from(salesLeadSurveys).where(and(eq(salesLeadSurveys.leadId, leadId), eq(salesLeadSurveys.companyId, ctx.companyId)));
 
         if (existing.length === 0) {
             await db.insert(salesLeadSurveys).values({
                 id: crypto.randomUUID(),
                 leadId,
                 salesUserId: session.id,
+                companyId: ctx.companyId,
                 problemSignals: payload.problemSignals,
                 urgencySignals: payload.urgencySignals,
                 priceReaction: payload.priceReaction,
@@ -406,7 +423,7 @@ export async function saveSalesSurvey(
                 fillDurationMs: payload.fillDurationMs,
                 suspicious,
                 updatedAt: new Date(),
-            }).where(eq(salesLeadSurveys.leadId, leadId));
+            }).where(and(eq(salesLeadSurveys.leadId, leadId), eq(salesLeadSurveys.companyId, ctx.companyId)));
         }
 
         return { success: true };
@@ -417,8 +434,10 @@ export async function saveSalesSurvey(
 }
 
 export async function getSalesSurveyByLead(leadId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     await requireRole(["GDO", "CONFERME", "VENDITORE", "MANAGER", "ADMIN"]);
-    const [row] = await db.select().from(salesLeadSurveys).where(eq(salesLeadSurveys.leadId, leadId));
+    const [row] = await db.select().from(salesLeadSurveys).where(and(eq(salesLeadSurveys.leadId, leadId), eq(salesLeadSurveys.companyId, ctx.companyId)));
     return row || null;
 }
 
@@ -426,27 +445,31 @@ export async function getSalesSurveyByLead(leadId: string) {
 
 export async function invalidateGdoSurvey(surveyId: string): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const session = await requireRole(["MANAGER", "ADMIN"]);
-        const [row] = await db.select().from(gdoLeadSurveys).where(eq(gdoLeadSurveys.id, surveyId));
+        const [row] = await db.select().from(gdoLeadSurveys).where(and(eq(gdoLeadSurveys.id, surveyId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
         if (!row) return { success: false, error: "Survey not found" };
         if (row.invalidatedBy) return { success: false, error: "Già invalidata" };
         await db.update(gdoLeadSurveys).set({
             invalidatedBy: session.id,
             invalidatedAt: new Date(),
-        }).where(eq(gdoLeadSurveys.id, surveyId));
+        }).where(and(eq(gdoLeadSurveys.id, surveyId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
         // Apply penalty
         await db.update(users)
             .set({ walletCoins: sql`${users.walletCoins} + ${INVALIDATION_PENALTY_COINS}` })
-            .where(eq(users.id, row.gdoUserId));
+            .where(and(eq(users.id, row.gdoUserId), eq(users.companyId, ctx.companyId)));
         await db.insert(coinTransactions).values({
             id: crypto.randomUUID(),
             userId: row.gdoUserId,
+            companyId: ctx.companyId,
             amount: INVALIDATION_PENALTY_COINS,
             reason: COIN_REASON_SURVEY_INVALIDATED,
         });
         await db.insert(notifications).values({
             id: crypto.randomUUID(),
             recipientUserId: row.gdoUserId,
+            companyId: ctx.companyId,
             type: "survey_invalidated",
             title: "Sondaggio invalidato",
             body: `Un Manager ha invalidato un tuo sondaggio (ID: ${surveyId}). Penalità: ${INVALIDATION_PENALTY_COINS} coins.`,
@@ -460,26 +483,30 @@ export async function invalidateGdoSurvey(surveyId: string): Promise<{ success: 
 
 export async function invalidateConfermeSurvey(surveyId: string): Promise<{ success: boolean; error?: string }> {
     try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
         const session = await requireRole(["MANAGER", "ADMIN"]);
-        const [row] = await db.select().from(confermeLeadSurveys).where(eq(confermeLeadSurveys.id, surveyId));
+        const [row] = await db.select().from(confermeLeadSurveys).where(and(eq(confermeLeadSurveys.id, surveyId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
         if (!row) return { success: false, error: "Survey not found" };
         if (row.invalidatedBy) return { success: false, error: "Già invalidata" };
         await db.update(confermeLeadSurveys).set({
             invalidatedBy: session.id,
             invalidatedAt: new Date(),
-        }).where(eq(confermeLeadSurveys.id, surveyId));
+        }).where(and(eq(confermeLeadSurveys.id, surveyId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
         await db.update(users)
             .set({ walletCoins: sql`${users.walletCoins} + ${INVALIDATION_PENALTY_COINS}` })
-            .where(eq(users.id, row.confermeUserId));
+            .where(and(eq(users.id, row.confermeUserId), eq(users.companyId, ctx.companyId)));
         await db.insert(coinTransactions).values({
             id: crypto.randomUUID(),
             userId: row.confermeUserId,
+            companyId: ctx.companyId,
             amount: INVALIDATION_PENALTY_COINS,
             reason: COIN_REASON_SURVEY_INVALIDATED,
         });
         await db.insert(notifications).values({
             id: crypto.randomUUID(),
             recipientUserId: row.confermeUserId,
+            companyId: ctx.companyId,
             type: "survey_invalidated",
             title: "Sondaggio invalidato",
             body: `Un Manager ha invalidato un tuo sondaggio (ID: ${surveyId}). Penalità: ${INVALIDATION_PENALTY_COINS} coins.`,
@@ -495,6 +522,8 @@ export async function listSuspiciousSurveys(): Promise<{
     gdo: Array<{ id: string; leadId: string; gdoUserId: string; userName: string | null; createdAt: Date; fillDurationMs: number | null; invalidatedAt: Date | null }>;
     conferme: Array<{ id: string; leadId: string; confermeUserId: string; userName: string | null; createdAt: Date; fillDurationMs: number | null; invalidatedAt: Date | null }>;
 }> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
     await requireRole(["MANAGER", "ADMIN"]);
     const gdo = await db.select({
         id: gdoLeadSurveys.id,
@@ -507,7 +536,7 @@ export async function listSuspiciousSurveys(): Promise<{
     })
         .from(gdoLeadSurveys)
         .leftJoin(users, eq(gdoLeadSurveys.gdoUserId, users.id))
-        .where(eq(gdoLeadSurveys.suspicious, true))
+        .where(and(eq(gdoLeadSurveys.suspicious, true), eq(gdoLeadSurveys.companyId, ctx.companyId)))
         .orderBy(desc(gdoLeadSurveys.createdAt))
         .limit(100);
 
@@ -522,7 +551,7 @@ export async function listSuspiciousSurveys(): Promise<{
     })
         .from(confermeLeadSurveys)
         .leftJoin(users, eq(confermeLeadSurveys.confermeUserId, users.id))
-        .where(eq(confermeLeadSurveys.suspicious, true))
+        .where(and(eq(confermeLeadSurveys.suspicious, true), eq(confermeLeadSurveys.companyId, ctx.companyId)))
         .orderBy(desc(confermeLeadSurveys.createdAt))
         .limit(100);
 
@@ -536,7 +565,9 @@ export async function getLeadSurveyContext(leadId: string): Promise<{
     eligible: boolean;
     eligibilityReason: "ok" | "excluded_funnel" | "not_found";
 }> {
-    const [row] = await db.select({ funnel: leads.funnel }).from(leads).where(eq(leads.id, leadId));
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const [row] = await db.select({ funnel: leads.funnel }).from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)));
     if (!row) return { funnel: null, eligible: false, eligibilityReason: "not_found" };
     const funnelLower = (row.funnel || "").trim().toLowerCase();
     if (funnelLower === EXCLUDED_FUNNEL) {
