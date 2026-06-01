@@ -144,6 +144,13 @@ export async function getConfermeAppointments(filters: {
         // auto-disattiva dopo oggi.
         const isHolidayOverrideThursday = todayStr === '04/30/2026';
 
+        // Override una tantum: lunedì 2026-06-01 il martedì successivo
+        // (2026-06-02, Festa della Repubblica) è festa. Oggi le Conferme
+        // devono chiamare gli appuntamenti di MERCOLEDÌ mattina invece di
+        // martedì mattina, perché domani non si lavora. Costante datata:
+        // si auto-disattiva dopo oggi.
+        const isHolidayOverrideMonday = todayStr === '06/01/2026';
+
         results = results.filter(row => {
             if (row.lead.confNeedsReschedule) return true; // Always show da definire
             if (!row.lead.appointmentDate) return false;
@@ -167,7 +174,10 @@ export async function getConfermeAppointments(filters: {
             } else {
                 // Mon-Thu. Override festivo: il 30/04/2026 (Gio) salta
                 // venerdì 1° maggio, next work day = Sabato (+2).
-                nextWorkDay.setDate(nextWorkDay.getDate() + (isHolidayOverrideThursday ? 2 : 1));
+                // Override festivo: il 01/06/2026 (Lun) salta martedì
+                // 2 giugno (Festa Repubblica), next work day = Mercoledì (+2).
+                const skipTomorrow = isHolidayOverrideThursday || isHolidayOverrideMonday;
+                nextWorkDay.setDate(nextWorkDay.getDate() + (skipTomorrow ? 2 : 1));
             }
             const nextWorkDayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(nextWorkDay);
 
