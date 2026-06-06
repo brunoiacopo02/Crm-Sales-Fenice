@@ -2070,3 +2070,33 @@ main .custom-scrollbar::-webkit-scrollbar-thumb {
 main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(0 0 0 / 0.18);
 }
+
+/* === Tema SerenaMente — attivo solo quando l'azienda selezionata è 'serenamente'.
+   Sovrascrive i token brand (verde salvia accento + navy testo) e il font (Sora).
+   Tutte le utility brand-* cascano automaticamente su questi valori. Fenice intatto. === */
+[data-company="serenamente"] {
+  --color-brand-orange-50:  #F1F7F3;
+  --color-brand-orange-100: #DDEBE2;
+  --color-brand-orange-200: #BFD9C9;
+  --color-brand-orange-300: #9CC6AC;
+  --color-brand-orange-400: #78B48C;
+  --color-brand-orange-500: #5E9E74;
+  --color-brand-orange-600: #4A8460;
+  --color-brand-orange-700: #3B6A4D;
+  --color-brand-orange-800: #2F543E;
+  --color-brand-orange-900: #243F2F;
+  --color-brand-orange:        #78B48C;
+  --color-brand-orange-hover:  #5E9E74;
+  --color-brand-charcoal:      #191970;
+
+  --font-display: var(--font-sora), var(--font-geist-sans), sans-serif;
+  --font-sans:    var(--font-sora), var(--font-geist-sans), sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Sfumature verdi soft della brand sull'area principale (molto tenui) */
+[data-company="serenamente"] main {
+  background-image:
+    radial-gradient(60rem 60rem at 100% 0%, rgba(120,180,140,0.07), transparent 70%),
+    radial-gradient(50rem 50rem at 0% 100%, rgba(120,180,140,0.06), transparent 70%);
+}
