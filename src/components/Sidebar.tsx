@@ -60,6 +60,9 @@ export function Sidebar({ companyId }: { companyId?: string }) {
         close()
     }, [pathname, close])
 
+    // Label store brand-aware (Serenamente non deve mostrare "Fenice Store")
+    const storeLabel = companyId === 'serenamente' ? "SerenaMente Store" : "Fenice Store"
+
     let navItems: NavItem[] = []
     let navGroups: NavGroup[] | null = null
 
@@ -72,7 +75,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             { name: "Storico Pause", href: "/storico-pause", icon: Clock },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
-            { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
+            { name: storeLabel, href: "/store", icon: Store, gamification: true },
         ]
     } else if (role === "CONFERME") {
         navItems = [
@@ -81,7 +84,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             { name: "Analytics Staffing", href: "/conferme/analytics", icon: LayoutDashboard },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
-            { name: "Fenice Store", href: "/store", icon: Store, gamification: true },
+            { name: storeLabel, href: "/store", icon: Store, gamification: true },
         ]
     } else if (role === "VENDITORE") {
         navItems = [
