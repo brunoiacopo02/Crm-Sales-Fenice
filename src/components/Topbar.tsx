@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react"
 import { searchLeads, SearchResult } from "@/app/actions/searchActions"
 import { usePathname, useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
+import { SalesCompanySwitcher } from '@/components/sales/SalesCompanySwitcher'
 
 const ContactDrawer = dynamic(
   () => import("./ContactDrawer").then(mod => mod.ContactDrawer),
@@ -254,6 +255,7 @@ export function Topbar() {
             </div>
 
             <div className="flex items-center gap-3 lg:gap-5 shrink-0">
+                <SalesCompanySwitcher />
                 {session?.user?.role === "GDO" && <PauseTimer />}
 
                 {/* Notifications */}
