@@ -17,6 +17,7 @@ import {
     Zap,
     Briefcase,
 } from "lucide-react"
+import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 
 import { useEffect, useState } from "react"
 import { getRecallLeads } from "@/app/actions/recallActions"
@@ -35,7 +36,7 @@ type NavGroup = {
     items: NavItem[]
 }
 
-export function Sidebar() {
+export function Sidebar({ companyId }: { companyId?: string }) {
     const pathname = usePathname()
     const { isOpen, close } = useSidebar()
     const { user: authUser, isLoading } = useAuth();
@@ -163,12 +164,16 @@ export function Sidebar() {
             >
                 {/* Logo */}
                 <div className="p-5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-orange to-fire-500 flex items-center justify-center font-bold text-brand-charcoal sidebar-logo-pulse text-sm">
-                            F
+                    {companyId === 'serenamente' ? (
+                        <SerenaMenteLogo />
+                    ) : (
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-orange to-fire-500 flex items-center justify-center font-bold text-brand-charcoal sidebar-logo-pulse text-sm">
+                                F
+                            </div>
+                            <span className="font-semibold text-base text-white tracking-wide">Fenice CRM</span>
                         </div>
-                        <span className="font-semibold text-base text-white tracking-wide">Fenice CRM</span>
-                    </div>
+                    )}
                     <button
                         onClick={close}
                         className="lg:hidden p-1.5 rounded-md text-ash-400 hover:text-white hover:bg-white/10 transition-colors"
