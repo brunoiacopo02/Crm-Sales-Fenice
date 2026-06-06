@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { leads, leadEvents, users, notifications } from "@/db/schema"
-import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm"
+import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import crypto from "crypto"
@@ -144,7 +144,15 @@ export async function getRedistributionPreview(input: Omit<RedistributionInput, 
     const targetUsers = await db
         .select({ id: users.id, name: users.name, displayName: users.displayName })
         .from(users)
-        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
+        .where(and(
+            eq(users.role, 'GDO'),
+            // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
+            // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+        ))
     const targetMap = new Map(targetUsers.map(u => [u.id, u.displayName || u.name || 'GDO']))
 
     const perTarget: RedistributionPreviewRow[] = input.targetGdoIds.map(id => ({
@@ -264,7 +272,15 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
     const targetUsers = await db
         .select({ id: users.id, name: users.name, displayName: users.displayName })
         .from(users)
-        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
+        .where(and(
+            eq(users.role, 'GDO'),
+            // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
+            // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+        ))
     const targetMap = new Map(targetUsers.map(u => [u.id, u.displayName || u.name || 'GDO']))
 
     const perTargetCount: Record<string, number> = {}
@@ -345,7 +361,15 @@ export async function getActiveGdosForRedistribution(): Promise<{ id: string; na
     const rows = await db
         .select({ id: users.id, name: users.name, displayName: users.displayName, isActive: users.isActive })
         .from(users)
-        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
+        .where(and(
+            eq(users.role, 'GDO'),
+            // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
+            // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+        ))
     return rows.map(r => ({
         id: r.id,
         name: r.name || '',
