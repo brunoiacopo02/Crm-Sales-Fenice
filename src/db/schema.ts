@@ -33,6 +33,9 @@ export const users = pgTable('users', {
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
     area: text('area').default('sales').notNull(),         // 'sales' | 'marketing' | 'both'
     marketingRole: text('marketingRole'),                  // 'manager' | 'media_buyer' | 'copywriter' | 'social' | null
+    // Aziende sales selezionabili dall'utente (staff condiviso multi-tenant).
+    // NULL = back-compat → l'app usa [companyId]. Sync con user_metadata.allowedCompanies.
+    allowedCompanies: text('allowed_companies').array(),
 
     // GDO Profiling
     gdoCode: integer('gdoCode').unique(), // 105, 113, etc.

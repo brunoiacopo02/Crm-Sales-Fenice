@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
 import { leads, users, assignmentSettings, importLogs } from "@/db/schema"
-import { and, eq, or } from "drizzle-orm"
+import { and, eq, or, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { logLeadEvent } from "@/lib/eventLogger"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
@@ -38,7 +38,15 @@ export async function getActiveGdosForImport() {
         isActive: users.isActive
     })
         .from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
+        .where(and(
+            eq(users.role, 'GDO'),
+            // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
+            // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+        )))
 
         // Se un account non è mai stato toccato, o è disattivato, o null per qualche bug di mapping RPC...
         // ...vogliamo che filtri SOLO quelli esplicitamente e inequivocabilmente considerati "Attivi" (true)
@@ -115,7 +123,15 @@ export async function processCsvImport(
 
     // Carica GDO Attivi del tenant corrente (solo quelli rigorosamente true)
     const activeGdos = (await db.select().from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
+        .where(and(
+            eq(users.role, 'GDO'),
+            // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
+            // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+        )))
         .filter((u: any) => {
             if (u.isActive === true) return true;
             return false;
@@ -340,7 +356,15 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
 
     // Get active GDOs del tenant e assegna usando stored settings (o override manuale)
     const activeGdos = (await db.select().from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
+        .where(and(
+            eq(users.role, 'GDO'),
+            // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
+            // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+        )))
         .filter((u: any) => u.isActive === true)
     if (activeGdos.length === 0) return { success: false, error: "Nessun GDO attivo per l'assegnazione." }
 
