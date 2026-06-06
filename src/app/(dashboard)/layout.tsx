@@ -30,6 +30,17 @@ export default async function DashboardLayout({
         redirect("/login")
     }
 
+    // Multi-azienda: se l'utente ha più aziende consentite e non ha ancora
+    // una selezione valida nel cookie, mandalo a sceglierla.
+    const { currentTenant } = await import('@/lib/tenancy')
+    const { cookies } = await import('next/headers')
+    const tctx = await currentTenant()
+    const cookieStore = await cookies()
+    const hasSelection = !!cookieStore.get('sales_active_company')?.value
+    if (tctx.allowedCompanies.length > 1 && !hasSelection) {
+        redirect('/seleziona-azienda')
+    }
+
     let skinCss: string | null = null;
     try {
         skinCss = await getEquippedSkinCss(session.user.id);
