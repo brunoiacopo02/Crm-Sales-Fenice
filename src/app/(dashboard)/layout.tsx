@@ -54,8 +54,8 @@ export default async function DashboardLayout({
     return (
         <RealtimeProvider>
             <SidebarProvider>
-                <div className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                    <Sidebar />
+                <div data-company={tctx.companyId} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
+                    <Sidebar companyId={tctx.companyId} />
                     <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                         {showSprintBanner && <SprintBanner />}
                         <Topbar />
