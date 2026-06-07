@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { Send, X, Briefcase, Users, CheckCircle2, Loader2, Mail, Sparkles } from "lucide-react"
 import { sendAgendaToLead } from "@/app/actions/activeCampaignActions"
+import { sendAgendaSerenamente } from "@/app/actions/serenamenteAgendaActions"
+import { useSalesCompany } from "@/components/providers/SalesCompanyProvider"
 import { useRouter } from "next/navigation"
 
 type AgendaButtonProps = {
@@ -15,6 +17,8 @@ type AgendaButtonProps = {
 
 export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSentAt }: AgendaButtonProps) {
     const router = useRouter()
+    const company = useSalesCompany()
+    const isSerenamente = company === 'serenamente'
     const [showModal, setShowModal] = useState(false)
     const [lavora, setLavora] = useState<boolean | null>(null)
     const [haFamiglia, setHaFamiglia] = useState<boolean | null>(null)
@@ -41,6 +45,26 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     const handleClose = () => {
         if (loading) return
         setShowModal(false)
+    }
+
+    const handleDirectSend = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (loading) return
+        if (alreadySent && !window.confirm("Agenda già inviata a questo lead. Reinviare?")) return
+        setLoading(true)
+        setErrorMsg(null)
+        try {
+            const result = await sendAgendaSerenamente(leadId)
+            if (result.success) {
+                router.refresh()
+            } else {
+                window.alert(result.error || "Errore invio agenda")
+            }
+        } catch (err: any) {
+            window.alert(err?.message || "Errore invio agenda")
+        } finally {
+            setLoading(false)
+        }
     }
 
     const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
@@ -80,17 +104,24 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     return (
         <>
             <button
-                onClick={handleOpen}
+                onClick={isSerenamente ? handleDirectSend : handleOpen}
+                disabled={isSerenamente && loading}
                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${alreadySent
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                     : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
                     }`}
                 title={
-                    alreadySent ? `Agenda già inviata (${new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}) — clicca per reinviare` :
-                        "Invia agenda Calendly via WhatsApp"
+                    isSerenamente
+                        ? "Invia agenda Serenamente"
+                        : alreadySent
+                            ? `Agenda già inviata (${new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}) — clicca per reinviare`
+                            : "Invia agenda Calendly via WhatsApp"
                 }
             >
-                {alreadySent ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                {isSerenamente && loading
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : alreadySent ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />
+                }
                 Agenda
             </button>
 

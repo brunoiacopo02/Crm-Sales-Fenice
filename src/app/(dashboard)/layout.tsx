@@ -14,6 +14,7 @@ const GlobalAlertListener = dynamic(() => import("@/components/GlobalAlertListen
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
+import { SalesCompanyProvider } from "@/components/providers/SalesCompanyProvider"
 import { SafeWrapper } from "@/components/SafeWrapper"
 // Social overlay providers DISABLED — caused WSOD. Will fix in dedicated session.
 
@@ -54,26 +55,28 @@ export default async function DashboardLayout({
     return (
         <RealtimeProvider>
             <SidebarProvider>
-                <div data-company={tctx.companyId} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                    <Sidebar companyId={tctx.companyId} />
-                    <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
-                        {showSprintBanner && <SprintBanner />}
-                        <Topbar />
-                        <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
-                            {children}
-                        </main>
+                <SalesCompanyProvider company={tctx.companyId}>
+                    <div data-company={tctx.companyId} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
+                        <Sidebar companyId={tctx.companyId} />
+                        <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
+                            {showSprintBanner && <SprintBanner />}
+                            <Topbar />
+                            <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
+                                {children}
+                            </main>
+                        </div>
                     </div>
-                </div>
-                {showGamificationOverlays && (
-                    <>
-                        <SafeWrapper><FomoToast /></SafeWrapper>
-                        <SafeWrapper><UniverseToast /></SafeWrapper>
-                        <SafeWrapper><CreatureRevealOverlay /></SafeWrapper>
-                        <SafeWrapper><DuelStartOverlay /></SafeWrapper>
-                    </>
-                )}
-                {/* Alert P2P listener: globale a tutta la dashboard, non solo alla pagina Conferme */}
-                <SafeWrapper><GlobalAlertListener currentUser={session.user} /></SafeWrapper>
+                    {showGamificationOverlays && (
+                        <>
+                            <SafeWrapper><FomoToast /></SafeWrapper>
+                            <SafeWrapper><UniverseToast /></SafeWrapper>
+                            <SafeWrapper><CreatureRevealOverlay /></SafeWrapper>
+                            <SafeWrapper><DuelStartOverlay /></SafeWrapper>
+                        </>
+                    )}
+                    {/* Alert P2P listener: globale a tutta la dashboard, non solo alla pagina Conferme */}
+                    <SafeWrapper><GlobalAlertListener currentUser={session.user} /></SafeWrapper>
+                </SalesCompanyProvider>
             </SidebarProvider>
         </RealtimeProvider>
     )
