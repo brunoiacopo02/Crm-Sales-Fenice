@@ -241,20 +241,16 @@ const SERENAMENTE_BLOCKS: ScriptBlock[] = [
 "Ciao #NOME#, sono #TUO NOME# di Serenamente. Come stai?" (pausa — lascia rispondere davvero)
 "Ti chiamo perché ti sei registrato/a all'evento Rinascere in Amore e volevo capire un attimo con te cosa ti ha spinto a iscriverti…"
 
-— Se "Bene, grazie": "Mi fa piacere…" e prosegui.
-— Se "Insomma / non un bel periodo": "Mi dispiace #NOME#, immagino non sia semplice. Anzi, è proprio per questo che ti chiamo…" (morbido, non incalzante)
+— "Bene, grazie": "Mi fa piacere" e prosegui subito col motivo della chiamata.
+— "Insomma / non un bel periodo": "Mi dispiace #NOME#, immagino non sia semplice. Anzi, è proprio per questo che ti chiamo…" (tono morbido)
 
 NON RICORDA di essersi iscritto/a:
-"Tranquillo/a, è normale, lo fanno in tanti. È un evento online gratuito di Serenamente per chi sta vivendo una crisi di coppia o una rottura e vuole ritrovare lucidità e serenità. Ti torna in mente? Volevo capire cosa stai vivendo in questo periodo a livello sentimentale."
+"Tranquillo/a, è normale, lo fanno in tanti e poi la giornata corre. È un evento online gratuito di Serenamente per chi sta vivendo una crisi di coppia o una rottura e vuole ritrovare lucidità e serenità. Ti torna in mente? Volevo capire cosa stai vivendo in questo periodo a livello sentimentale."
 
 "NON HO TEMPO ADESSO":
-"Immaginavo fossi nel pieno delle tue cose, infatti volevo parlarti brevemente. Dimmi solo in due parole cosa ti ha fatto iscrivere e capiamo insieme se ha senso risentirci. Va bene?"
-Se insiste: "Capito. Quando hai 5 minuti tranquilli, oggi pomeriggio o domani mattina?" (fissa un orario preciso, non 'ci sentiamo')
-
-"MI AVETE GIÀ CHIAMATO":
-"Sì #NOME#, e proprio per questo ti ricontatto: volevo capire se la tua situazione è cambiata e se posso esserti utile. Ricordami, cosa stai attraversando in questo periodo?"`,
-    voice: "Tono caldo, calmo, sicuro. Sorridi mentre parli: si sente. Parli con persone in un momento di fragilità (rottura, crisi): empatia VERA, mai recitata. Fai parlare più la persona (70/30). Durata ideale 7-8 min.",
-    warning: "REGOLE D'ORO: MAI promettere risultati ('ti facciamo tornare insieme', 'risolvi l'ansia'). Non siamo psicologi/terapeuti: è coaching sull'intelligenza emotiva, mai diagnosi o linguaggio medico. Promettiamo metodo e accompagnamento, non esiti garantiti.",
+"Immaginavo fossi nel pieno delle tue cose, infatti volevo parlarti brevemente. Ottimizziamo: dimmi solo in due parole cosa ti ha fatto iscrivere e capiamo insieme se ha senso risentirci. Va bene?"
+Se insiste: "Capito. Quando hai 5 minuti tranquilli?" (fissa un orario di richiamo preciso, non 'ci sentiamo')`,
+    voice: "Tono caldo, calmo, sicuro. Sorridi mentre parli: si sente. Parla da PARI a PARI, con sicurezza: stai offrendo un aiuto di valore, niente formule di inferiorità ('ti rubo un minuto', 'scusa il disturbo'). Fai parlare più la persona (70/30). Empatia vera, mai recitata. Durata ideale 7-14 min.",
   },
   {
     title: "2 — Ascolto & scoperta",
@@ -270,7 +266,7 @@ Lei: "non riesco a smettere di pensarci" → tu: "quindi la mente torna sempre l
 
 Se MINIMIZZA ("in fondo sto bene"):
 "Mi fa piacere. Ti faccio una domanda onesta: se fosse davvero tutto a posto, perché ti sei iscritto/a a un evento come questo?" (riflessione condivisa, senza aggressività)`,
-    voice: "Qui parla la persona, tu il 70% ascolti. Dopo la domanda apri-tutto: silenzio, non riempirlo. Valida sempre. Lo specchio (ripetere le sue parole) crea connessione immediata. Tono empatico, come un medico che ascolta.",
+    voice: "Qui parla la persona, tu il 70% ascolti. Dopo la domanda apri-tutto: silenzio, non riempirlo. Valida sempre. Lo specchio crea connessione immediata. Tono empatico, come un medico che ascolta.",
     checklist: {
       min: 0,
       sections: [
@@ -279,7 +275,7 @@ Se MINIMIZZA ("in fondo sto bene"):
           "Come ti fa sentire nel quotidiano? Sul sonno, sulla concentrazione, sull'umore?",
           "È più una crisi di coppia ancora aperta o una rottura già avvenuta?",
           "Ti capita di pensarci spesso durante la giornata?",
-          "Hai già provato a fare qualcosa per starci meglio? Com'è andata?",
+          "Hai già provato a fare qualcosa per stare meglio? Com'è andata?",
         ]},
       ]
     }
@@ -295,22 +291,31 @@ Se MINIMIZZA ("in fondo sto bene"):
     voice: "Riprendi l'obiettivo con le SUE parole. Porta delicatamente verso il futuro desiderato: deve sentire il contrasto tra come sta ora e come potrebbe stare.",
   },
   {
-    title: "4 — Ponte (interesse)",
-    content: `"#NOME#, quello che mi descrivi è esattamente ciò di cui si occupa Serenamente. Ti dico in due parole: il nostro approccio si basa sull'intelligenza emotiva — lo stesso ambito studiato da uno dei più noti psicologi al mondo, Daniel Goleman. In pratica ti dà gli strumenti per capire cosa ti sta travolgendo, ritrovare lucidità e poi decidere con chiarezza se e come recuperare il rapporto, oppure ripartire da te senza perderti."
+    title: "4 — Ponte",
+    content: `"#NOME#, quello che mi descrivi è esattamente ciò di cui si occupa Serenamente. Il nostro approccio si basa sull'intelligenza emotiva — lo stesso ambito studiato da uno dei più noti psicologi al mondo, Daniel Goleman. In pratica ti dà gli strumenti per capire cosa ti sta travolgendo, ritrovare lucidità e poi decidere con chiarezza se e come recuperare il rapporto, oppure ripartire da te senza perderti."
 
-"Non sono i soliti consigli tipo 'distraiti' o 'dimenticala': è un metodo strutturato, seguito da coach certificati."
-
-CREA CURIOSITÀ (non spiegare tutto):
-"Ci sono un paio di cose controintuitive su PERCHÉ certe relazioni si bloccano che di solito spiazzano le persone… ma le vedi meglio direttamente con il consulente."`,
-    voice: "Autorevolezza (Goleman = autorità, alza il valore percepito). Voce sicura. Apri un loop di curiosità e NON chiuderlo: il 'cosa controintuitivo' lo scoprirà solo in videochiamata. Questo crea desiderio di proseguire.",
+"Non sono i soliti consigli tipo 'distraiti' o 'dimenticalo': è un metodo strutturato, seguito da coach certificati che ti seguono uno a uno."`,
+    voice: "Autorevolezza (Goleman = autorità, alza il valore percepito). Voce sicura. Sottolinea il coach certificato che segue 1:1: è la cosa che fa più valore.",
   },
   {
-    title: "5 — Fissaggio",
+    title: "5 — Presentazione percorsi (pitch)",
+    content: `Obiettivo: dare CONSAPEVOLEZZA di cosa offriamo e a che prezzo, in modo chiaro e sicuro. Non vendi nel dettaglio: dai il quadro così il lead arriva consapevole. La leva che vende di più è il COACH PERSONALE 1:1 — ribadiscila sempre.
+
+"Ti spiego al volo come funziona così sai esattamente di cosa parliamo, poi ci fissiamo una chiamata con più calma per approfondire tutto insieme a un nostro coach. Il nostro è un percorso strutturato con una coach dedicata che ti segue 1:1, passo passo — non solo un video da guardare da solo/a. È per chi vuole un cambiamento profondo e duraturo: 21 giorni intensivi più 6 mesi di accompagnamento, con una sessione di coaching al mese e il supporto chat per tutto il percorso."
+
+"Chiaramente prevede un investimento che varia dai 700 ai 2500 euro, ma sai cosa penso? Che la salute mentale non ha prezzo, anzi oggi è la prima cosa da salvaguardare. Per questo direi che innanzitutto dobbiamo approfondire meglio la tua situazione."
+
+COLLEGA ALLA CALL:
+"Anche perché la cosa più importante è la coach personale che ti segue. Quale percorso è giusto per la TUA situazione lo vedi proprio nella videochiamata gratuita con il consulente: serve esattamente a quello, capire dove sei e cosa ti serve davvero."`,
+    voice: "Voce sicura e tranquilla sul prezzo: niente esitazione, niente scuse. Il prezzo è un range, dallo con naturalezza e riporta subito il focus sul valore (coach 1:1) e sulla call. 'La salute mentale non ha prezzo' detto con convinzione, non come slogan.",
+  },
+  {
+    title: "6 — Fissaggio",
     content: `Tecnica dell'ALTERNATIVA (non 'vuoi fissare?' ma 'quando?'):
-"Facciamo così: ti fisso una videochiamata gratuita e senza impegno con uno dei nostri consulenti. In base alla tua situazione specifica ti dirà SE e COME Serenamente può aiutarti davvero. Ho disponibilità domani alle 18:00 oppure giovedì alle 20:30: quale ti è più comoda?"
+"Facciamo così: fissiamo la videochiamata con uno dei nostri consulenti. In base alla tua situazione specifica ti dirà SE e COME Serenamente può aiutarti davvero, e quale percorso ha senso per te. Ho disponibilità domani alle 18:00 oppure giovedì alle 20:00: quale ti è più comoda?"
 
 CONFERMA SUBITO i dettagli (dopo il sì):
-• "Perfetto, ti segno [giorno/ora]. È una videochiamata (ti arriva il link), dura circa 30-40 minuti."
+• "Perfetto, ti segno [giorno/ora]. È una chiamata (ti arriva il link), dura circa 40-50 minuti."
 • "Trovati in un posto tranquillo, con calma e una buona connessione: è un momento dedicato a te."
 • "Se la decisione la condividi col/la partner o con qualcuno di importante, valuta se esserci insieme."
 
@@ -319,37 +324,37 @@ MICRO-IMPEGNO:
     voice: "Non chiedi il permesso, ORGANIZZI. L'alternativa di orario presuppone il sì. La scarsità ('blocca lo slot solo per te') + il micro-impegno ('posso contare su di te, vero?') attivano la coerenza: chi dice sì a voce tende a presentarsi.",
   },
   {
-    title: "6 — Gestione obiezioni",
-    content: `SCHEMA: 1) Accogli ("capisco") → 2) Domanda di chiarimento → 3) Riformula il valore → 4) Ri-proponi l'orario. Max 2-3 giri, poi chiudi con garbo.
+    title: "7 — Gestione obiezioni",
+    content: `SCHEMA: 1) Accogli ("capisco") → 2) Domanda di chiarimento → 3) Riformula il valore → 4) Ri-proponi l'orario.
+
+"È TROPPO / NON SO SE POSSO PERMETTERMELO":
+"Capisco, ed è giusto valutarlo con attenzione. Proprio per questo c'è la chiamata gratuita: il consulente ti mostra i diversi livelli e vedete insieme se e quale ha senso per te. Quando ci sentiamo, domani o giovedì?"
 
 "MANDAMI DEL MATERIALE":
-"Volentieri, ma sarò onesto/a: il materiale generico non serve a molto, la tua situazione è specifica. La videochiamata serve proprio a questo — è gratuita e tagliata su di te. Meglio domani alle 18 o giovedì alle 20:30?"
-
-"QUANTO COSTA?":
-"Domanda giusta. Serenamente ha più percorsi di livelli diversi, per questo non avrebbe senso spararti un numero al telefono: il consulente, capita la tua situazione, ti dice se c'è un percorso adatto e quale. La chiamata è gratuita e senza impegno. Va bene?" (il setter NON fa prezzo)
+"Volentieri, anche se devo essere onesto/a: il materiale generico serve a poco, la tua situazione è specifica. La videochiamata è gratuita ed è tagliata su di te. Meglio domani alle 18 o giovedì alle 20:00?"
 
 "DEVO PENSARCI / PARLARNE COL PARTNER":
-"Ci mancherebbe. La videochiamata non ti impegna a nulla: serve proprio ad avere gli elementi per pensarci con lucidità, invece di rimuginare da solo/a. Domani o giovedì?"
+"Ci mancherebbe. La videochiamata serve proprio ad avere gli elementi per pensarci con lucidità, invece di rimuginare da solo/a. Ci sentiamo, vedi se ha senso, e poi decidi con calma. Domani o giovedì?"
 
 "NON HO TEMPO":
-"Ti capisco, e infatti la prendiamo comoda: 30 minuti, anche la sera dopo cena. Qual è il momento meno caotico della tua settimana?"
+"Ti capisco, e infatti la prendiamo comoda: 40 minuti, anche la sera dopo cena. Qual è il momento meno caotico della tua giornata?"
 
 "NON SO SE FA PER ME":
 "È normale avere dubbi, e non devi essere sicuro/a adesso. La chiamata serve esattamente a toglierti il dubbio: se non è per te, te lo diciamo noi per primi. Cosa ti farebbe sentire più tranquillo/a nel provarci?"
 
 "NON SONO PIÙ INTERESSATO/A":
-"Nessun problema. Posso solo chiederti: è perché la situazione si è risolta, o perché in questo momento preferisci gestirla da solo/a?" (se riapre uno spiraglio, riproponi; se conferma il no, chiudi con rispetto)
-
-USCITA ELEGANTE (no chiaro):
-"Capito, rispetto la tua scelta. Ti auguro davvero di ritrovare presto la tua serenità. Se cambiassi idea, siamo qui. Un abbraccio, #NOME#."`,
-    voice: "Accogli sempre prima di rispondere: l'obiezione è una richiesta di rassicurazione. Max 2-3 giri. Mai pressione su chi è fragile: la dignità della persona viene prima del fissaggio.",
+"Nessun problema, ci sta. Solo una cosa: è perché la situazione si è risolta, o perché in questo momento preferisci gestirla da solo/a?" (se riapre uno spiraglio, riproponi)`,
+    voice: "Accogli sempre prima di rispondere: l'obiezione è una richiesta di rassicurazione. Riformula il valore (call gratuita, su misura, coach 1:1) e riproponi l'alternativa di orario. Mai pressione su chi è fragile.",
   },
   {
-    title: "7 — Chiusura & conferma",
-    content: `"Perfetto #NOME#, allora ci vediamo [giorno/ora] in videochiamata. Ti mando subito su WhatsApp il riepilogo e il link. Mi confermi che è il numero giusto?"
+    title: "8 — Chiusura & conferma",
+    content: `Manda l'agenda (pulsante Agenda qui sopra) ed esegui la procedura di fine call:
+• Chiedi al lead di leggerti il NOME che compare dopo la compilazione.
+• Spiega che riceverà una chiamata di PRE-SELEZIONE dalla collega.
+• Ribadisci PIÙ VOLTE di guardare il video appena può.
 
-"È stato un piacere parlarti. Ci tengo a dirti una cosa: hai già fatto la parte più difficile, cioè chiedere aiuto. Ci vediamo [giorno], mi raccomando esserci. A presto!"`,
-    voice: "Rallenta tutto. Voce bassa, calda, sicura, come un mentore. La frase finale ('hai già fatto la parte più difficile') riconosce il coraggio della persona: è l'ultima emozione che si porterà dietro.",
+"È stato un piacere parlarti, #NOME#. Ci vediamo in videochiamata — mi raccomando, esserci. A presto!"`,
+    voice: "Rallenta. Voce calda e sicura. Assicurati che il lead abbia capito i 3 passaggi (nome, pre-selezione, video): la conferma e il video sono ciò che riduce i no-show.",
   },
 ];
 
