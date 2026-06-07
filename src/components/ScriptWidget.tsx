@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, Clock, CheckCircle2, AlertTriangl
 import { GdoSurveyInline } from './surveys/GdoSurveyInline';
 import { GdoEarlyExitDialog } from './surveys/GdoEarlyExitDialog';
 import { AgendaButton } from './AgendaButton';
+import { useSalesCompany } from '@/components/providers/SalesCompanyProvider';
 import {
     GDO_FIELDS_BY_BLOCK,
     GDO_FIELD_MULTI,
@@ -13,7 +14,16 @@ import {
 } from '@/lib/surveys/questions';
 import { saveGdoSurvey, type GdoSurveyPayload } from '@/app/actions/surveyActions';
 
-const SCRIPT_BLOCKS = [
+type ScriptBlock = {
+  title: string;
+  content?: string | null;
+  voice?: string;
+  warning?: string;
+  requiresTimer?: boolean;
+  checklist?: { min: number; sections: { title: string; items: string[] }[] };
+};
+
+const SCRIPT_BLOCKS: ScriptBlock[] = [
   {
     title: "1 — Apertura",
     content: `Buongiorno, #NOME#?
@@ -223,6 +233,126 @@ Ti chiedo di leggere il nome della mia collega che appare dopo aver cliccato Inv
   },
 ];
 
+const SERENAMENTE_BLOCKS: ScriptBlock[] = [
+  {
+    title: "1 — Apertura & identificazione",
+    content: `"Buonasera, parlo con #NOME#?"
+🗣️
+"Ciao #NOME#, sono #TUO NOME# di Serenamente. Come stai?" (pausa — lascia rispondere davvero)
+"Ti chiamo perché ti sei registrato/a all'evento Rinascere in Amore e volevo capire un attimo con te cosa ti ha spinto a iscriverti…"
+
+— Se "Bene, grazie": "Mi fa piacere…" e prosegui.
+— Se "Insomma / non un bel periodo": "Mi dispiace #NOME#, immagino non sia semplice. Anzi, è proprio per questo che ti chiamo…" (morbido, non incalzante)
+
+NON RICORDA di essersi iscritto/a:
+"Tranquillo/a, è normale, lo fanno in tanti. È un evento online gratuito di Serenamente per chi sta vivendo una crisi di coppia o una rottura e vuole ritrovare lucidità e serenità. Ti torna in mente? Volevo capire cosa stai vivendo in questo periodo a livello sentimentale."
+
+"NON HO TEMPO ADESSO":
+"Immaginavo fossi nel pieno delle tue cose, infatti volevo parlarti brevemente. Dimmi solo in due parole cosa ti ha fatto iscrivere e capiamo insieme se ha senso risentirci. Va bene?"
+Se insiste: "Capito. Quando hai 5 minuti tranquilli, oggi pomeriggio o domani mattina?" (fissa un orario preciso, non 'ci sentiamo')
+
+"MI AVETE GIÀ CHIAMATO":
+"Sì #NOME#, e proprio per questo ti ricontatto: volevo capire se la tua situazione è cambiata e se posso esserti utile. Ricordami, cosa stai attraversando in questo periodo?"`,
+    voice: "Tono caldo, calmo, sicuro. Sorridi mentre parli: si sente. Parli con persone in un momento di fragilità (rottura, crisi): empatia VERA, mai recitata. Fai parlare più la persona (70/30). Durata ideale 7-8 min.",
+    warning: "REGOLE D'ORO: MAI promettere risultati ('ti facciamo tornare insieme', 'risolvi l'ansia'). Non siamo psicologi/terapeuti: è coaching sull'intelligenza emotiva, mai diagnosi o linguaggio medico. Promettiamo metodo e accompagnamento, non esiti garantiti.",
+  },
+  {
+    title: "2 — Ascolto & scoperta",
+    content: `Domanda apri-tutto:
+"Raccontami: cosa stai vivendo in questo momento? Una crisi con il partner, una rottura…?"
+→ Poi STAI ZITTO. Lascia parlare. Prendi appunti.
+
+VALIDA sempre, prima di ogni nuova domanda:
+"Capisco." · "Immagino quanto sia pesante." · "Ha senso che tu ti senta così." · "Grazie per avermelo detto, non è scontato."
+
+TECNICA DELLO SPECCHIO: riprendi le sue parole esatte.
+Lei: "non riesco a smettere di pensarci" → tu: "quindi la mente torna sempre lì, anche quando vorresti staccare…".
+
+Se MINIMIZZA ("in fondo sto bene"):
+"Mi fa piacere. Ti faccio una domanda onesta: se fosse davvero tutto a posto, perché ti sei iscritto/a a un evento come questo?" (riflessione condivisa, senza aggressività)`,
+    voice: "Qui parla la persona, tu il 70% ascolti. Dopo la domanda apri-tutto: silenzio, non riempirlo. Valida sempre. Lo specchio (ripetere le sue parole) crea connessione immediata. Tono empatico, come un medico che ascolta.",
+    checklist: {
+      min: 0,
+      sections: [
+        { title: "Domande di approfondimento (scegline 3-4, con delicatezza) — facoltative", items: [
+          "Da quanto tempo va avanti questa situazione?",
+          "Come ti fa sentire nel quotidiano? Sul sonno, sulla concentrazione, sull'umore?",
+          "È più una crisi di coppia ancora aperta o una rottura già avvenuta?",
+          "Ti capita di pensarci spesso durante la giornata?",
+          "Hai già provato a fare qualcosa per starci meglio? Com'è andata?",
+        ]},
+      ]
+    }
+  },
+  {
+    title: "3 — Obiettivi",
+    content: `"Ti faccio una domanda importante: cosa vorresti per te da questa situazione? Capire se si può recuperare il rapporto, tornare a stare bene, ritrovare lucidità per decidere…?"
+→ Lascia rispondere e riprendi l'obiettivo con parole sue.
+
+"E quanto conta per te riuscire a [obiettivo della persona] in questo periodo?"
+
+"Se tra qualche settimana ti sentissi di nuovo lucido/a e in equilibrio, cosa cambierebbe nelle tue giornate?"`,
+    voice: "Riprendi l'obiettivo con le SUE parole. Porta delicatamente verso il futuro desiderato: deve sentire il contrasto tra come sta ora e come potrebbe stare.",
+  },
+  {
+    title: "4 — Ponte (interesse)",
+    content: `"#NOME#, quello che mi descrivi è esattamente ciò di cui si occupa Serenamente. Ti dico in due parole: il nostro approccio si basa sull'intelligenza emotiva — lo stesso ambito studiato da uno dei più noti psicologi al mondo, Daniel Goleman. In pratica ti dà gli strumenti per capire cosa ti sta travolgendo, ritrovare lucidità e poi decidere con chiarezza se e come recuperare il rapporto, oppure ripartire da te senza perderti."
+
+"Non sono i soliti consigli tipo 'distraiti' o 'dimenticala': è un metodo strutturato, seguito da coach certificati."
+
+CREA CURIOSITÀ (non spiegare tutto):
+"Ci sono un paio di cose controintuitive su PERCHÉ certe relazioni si bloccano che di solito spiazzano le persone… ma le vedi meglio direttamente con il consulente."`,
+    voice: "Autorevolezza (Goleman = autorità, alza il valore percepito). Voce sicura. Apri un loop di curiosità e NON chiuderlo: il 'cosa controintuitivo' lo scoprirà solo in videochiamata. Questo crea desiderio di proseguire.",
+  },
+  {
+    title: "5 — Fissaggio",
+    content: `Tecnica dell'ALTERNATIVA (non 'vuoi fissare?' ma 'quando?'):
+"Facciamo così: ti fisso una videochiamata gratuita e senza impegno con uno dei nostri consulenti. In base alla tua situazione specifica ti dirà SE e COME Serenamente può aiutarti davvero. Ho disponibilità domani alle 18:00 oppure giovedì alle 20:30: quale ti è più comoda?"
+
+CONFERMA SUBITO i dettagli (dopo il sì):
+• "Perfetto, ti segno [giorno/ora]. È una videochiamata (ti arriva il link), dura circa 30-40 minuti."
+• "Trovati in un posto tranquillo, con calma e una buona connessione: è un momento dedicato a te."
+• "Se la decisione la condividi col/la partner o con qualcuno di importante, valuta se esserci insieme."
+
+MICRO-IMPEGNO:
+"Il consulente blocca quello slot solo per te, quindi posso contare sulla tua presenza, vero?" (aspetta il 'sì')`,
+    voice: "Non chiedi il permesso, ORGANIZZI. L'alternativa di orario presuppone il sì. La scarsità ('blocca lo slot solo per te') + il micro-impegno ('posso contare su di te, vero?') attivano la coerenza: chi dice sì a voce tende a presentarsi.",
+  },
+  {
+    title: "6 — Gestione obiezioni",
+    content: `SCHEMA: 1) Accogli ("capisco") → 2) Domanda di chiarimento → 3) Riformula il valore → 4) Ri-proponi l'orario. Max 2-3 giri, poi chiudi con garbo.
+
+"MANDAMI DEL MATERIALE":
+"Volentieri, ma sarò onesto/a: il materiale generico non serve a molto, la tua situazione è specifica. La videochiamata serve proprio a questo — è gratuita e tagliata su di te. Meglio domani alle 18 o giovedì alle 20:30?"
+
+"QUANTO COSTA?":
+"Domanda giusta. Serenamente ha più percorsi di livelli diversi, per questo non avrebbe senso spararti un numero al telefono: il consulente, capita la tua situazione, ti dice se c'è un percorso adatto e quale. La chiamata è gratuita e senza impegno. Va bene?" (il setter NON fa prezzo)
+
+"DEVO PENSARCI / PARLARNE COL PARTNER":
+"Ci mancherebbe. La videochiamata non ti impegna a nulla: serve proprio ad avere gli elementi per pensarci con lucidità, invece di rimuginare da solo/a. Domani o giovedì?"
+
+"NON HO TEMPO":
+"Ti capisco, e infatti la prendiamo comoda: 30 minuti, anche la sera dopo cena. Qual è il momento meno caotico della tua settimana?"
+
+"NON SO SE FA PER ME":
+"È normale avere dubbi, e non devi essere sicuro/a adesso. La chiamata serve esattamente a toglierti il dubbio: se non è per te, te lo diciamo noi per primi. Cosa ti farebbe sentire più tranquillo/a nel provarci?"
+
+"NON SONO PIÙ INTERESSATO/A":
+"Nessun problema. Posso solo chiederti: è perché la situazione si è risolta, o perché in questo momento preferisci gestirla da solo/a?" (se riapre uno spiraglio, riproponi; se conferma il no, chiudi con rispetto)
+
+USCITA ELEGANTE (no chiaro):
+"Capito, rispetto la tua scelta. Ti auguro davvero di ritrovare presto la tua serenità. Se cambiassi idea, siamo qui. Un abbraccio, #NOME#."`,
+    voice: "Accogli sempre prima di rispondere: l'obiezione è una richiesta di rassicurazione. Max 2-3 giri. Mai pressione su chi è fragile: la dignità della persona viene prima del fissaggio.",
+  },
+  {
+    title: "7 — Chiusura & conferma",
+    content: `"Perfetto #NOME#, allora ci vediamo [giorno/ora] in videochiamata. Ti mando subito su WhatsApp il riepilogo e il link. Mi confermi che è il numero giusto?"
+
+"È stato un piacere parlarti. Ci tengo a dirti una cosa: hai già fatto la parte più difficile, cioè chiedere aiuto. Ci vediamo [giorno], mi raccomando esserci. A presto!"`,
+    voice: "Rallenta tutto. Voce bassa, calda, sicura, come un mentore. La frase finale ('hai già fatto la parte più difficile') riconosce il coraggio della persona: è l'ultima emozione che si porterà dietro.",
+  },
+];
+
 const TIMER_SECONDS = 4 * 60;
 
 // Survey state shape
@@ -252,6 +382,9 @@ interface ScriptWidgetProps {
 }
 
 export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, agendaSentAt, onSurveySaved }: ScriptWidgetProps = {}) {
+  const company = useSalesCompany();
+  const isSerenamente = company === 'serenamente';
+  const blocks = isSerenamente ? SERENAMENTE_BLOCKS : SCRIPT_BLOCKS;
   const [current, setCurrent] = useState(0);
   const [checkedItems, setCheckedItems] = useState<Record<number, Set<string>>>({});
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -268,16 +401,17 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
   const [showEarlyExit, setShowEarlyExit] = useState(false);
 
   const surveyEnabled = useMemo(() => {
+      if (isSerenamente) return false;
       if (!leadId) return false;
       if ((funnel || '').trim().toLowerCase() === EXCLUDED_FUNNEL) return false;
       return true;
-  }, [leadId, funnel]);
+  }, [isSerenamente, leadId, funnel]);
 
   // Distingue "survey escluso per funnel" dallo standalone (senza leadId):
   // mostriamo un banner informativo SOLO nel primo caso.
-  const surveyExcludedByFunnel = !!leadId && (funnel || '').trim().toLowerCase() === EXCLUDED_FUNNEL;
+  const surveyExcludedByFunnel = !isSerenamente && !!leadId && (funnel || '').trim().toLowerCase() === EXCLUDED_FUNNEL;
 
-  const block = SCRIPT_BLOCKS[current];
+  const block = blocks[current];
   const checked = checkedItems[current] || new Set<string>();
   const checkedCount = checked.size;
   const minRequired = block.checklist?.min || 0;
@@ -297,7 +431,7 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
   }, [timerRunning]);
 
   useEffect(() => {
-    if (current >= 1 && !timerRunning && timerSeconds === 0) setTimerRunning(true);
+    if (!isSerenamente && current >= 1 && !timerRunning && timerSeconds === 0) setTimerRunning(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
 
@@ -320,12 +454,12 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
   };
 
   const canGoNext = useCallback(() => {
-    if (current >= SCRIPT_BLOCKS.length - 1) return false;
+    if (current >= blocks.length - 1) return false;
     if (block.checklist && checkedCount < minRequired) return false;
-    if (SCRIPT_BLOCKS[current + 1]?.requiresTimer && !timerDone) return false;
+    if (blocks[current + 1]?.requiresTimer && !timerDone) return false;
     if (!blockSurveyComplete(current)) return false;
     return true;
-  }, [current, checkedCount, minRequired, timerDone, block, answers, surveyEnabled]);
+  }, [current, checkedCount, minRequired, timerDone, block, answers, surveyEnabled, blocks]);
 
   // Save survey on completion of last block
   const tryFinalSave = useCallback(async () => {
@@ -358,7 +492,7 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
     if (!canGoNext()) return;
     const nextIndex = current + 1;
     setCurrent(nextIndex);
-    if (nextIndex === SCRIPT_BLOCKS.length - 1) {
+    if (nextIndex === blocks.length - 1) {
       window.dispatchEvent(new CustomEvent('script_completed'));
       void tryFinalSave();
     }
@@ -413,7 +547,7 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
   const remaining = Math.max(0, TIMER_SECONDS - timerSeconds);
   const timerMin = Math.floor(remaining / 60);
   const timerSec = remaining % 60;
-  const progress = ((current + 1) / SCRIPT_BLOCKS.length) * 100;
+  const progress = ((current + 1) / blocks.length) * 100;
 
   const blockFields = requiredFieldsForBlock(current);
 
@@ -442,7 +576,7 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
           <button onClick={goPrev} disabled={current === 0} className="p-1.5 rounded-lg border border-ash-200 hover:bg-ash-50 disabled:opacity-30 transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-xs font-mono text-ash-500 tabular-nums">{current + 1} / {SCRIPT_BLOCKS.length}</span>
+          <span className="text-xs font-mono text-ash-500 tabular-nums">{current + 1} / {blocks.length}</span>
           <button onClick={goNext} disabled={!canGoNext()} className="p-1.5 rounded-lg border border-ash-200 hover:bg-ash-50 disabled:opacity-30 transition-colors">
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -521,7 +655,7 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
             <div>
               <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl mb-4 text-lg font-bold border ${checkedCount >= minRequired ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                 {checkedCount >= minRequired ? <CheckCircle2 className="w-5 h-5" /> : null}
-                {checkedCount} / {minRequired}
+                {minRequired === 0 ? `${checkedCount} segnate · facoltative` : `${checkedCount} / ${minRequired}`}
               </div>
               {block.checklist.sections.map((sec, si) => (
                 <div key={si} className="mb-4">
