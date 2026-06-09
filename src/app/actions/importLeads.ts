@@ -10,7 +10,7 @@ import { logLeadEvent } from "@/lib/eventLogger"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
-export type AssignmentMode = 'equal' | 'custom_quota'
+export type AssignmentMode = 'equal' | 'custom_quota' | 'selected'
 
 // Server Action for managing settings
 export async function getAssignmentSettings() {

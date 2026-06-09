@@ -34,6 +34,18 @@ export function previewLeadDistribution(validCount: number, activeGdos: any[], m
                 currentGdoIndex = (currentGdoIndex + 1) % activeGdos.length
             }
         }
+    } else if (mode === 'selected') {
+        // Assegna SOLO ai GDO selezionati (customSettings[id] > 0), divisi equamente round-robin.
+        const pool = activeGdos.filter(g => (customSettings[g.id] || 0) > 0)
+        if (pool.length > 0) {
+            let idx = 0
+            for (let i = 0; i < validCount; i++) {
+                const gdo = pool[idx]
+                distribution[gdo.id].count++
+                idx = (idx + 1) % pool.length
+            }
+        }
+        // se nessuno selezionato, tutti i count restano 0 (la UI blocca il confirm)
     }
 
     return distribution
