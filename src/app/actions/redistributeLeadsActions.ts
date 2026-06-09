@@ -55,6 +55,12 @@ export type RedistributionExecuteResult = {
     perTarget?: Record<string, number>
 }
 
+// Sorgente virtuale: '__unassigned__' = lead non ancora assegnati (assignedToId IS NULL).
+const UNASSIGNED_SOURCE = '__unassigned__'
+function sourceMatch(sourceGdoId: string) {
+    return sourceGdoId === UNASSIGNED_SOURCE ? isNull(leads.assignedToId) : eq(leads.assignedToId, sourceGdoId)
+}
+
 function buildSectionConditions(section: RedistributionSection) {
     const base = [
         ne(leads.status, 'REJECTED'),
@@ -81,7 +87,7 @@ async function getRedistributionFunnelsInternal(sourceGdoId: string, section: Re
     if (!sourceGdoId) return []
     const conditions = [
         eq(leads.companyId, companyId),
-        eq(leads.assignedToId, sourceGdoId),
+        sourceMatch(sourceGdoId),
         ...buildSectionConditions(section),
     ]
     const rows = await db
@@ -112,7 +118,7 @@ export async function getRedistributionPreview(input: Omit<RedistributionInput, 
     }
 
     const sectionConds = buildSectionConditions(input.section)
-    const baseConds = [eq(leads.companyId, ctx.companyId), eq(leads.assignedToId, input.sourceGdoId), ...sectionConds]
+    const baseConds = [eq(leads.companyId, ctx.companyId), sourceMatch(input.sourceGdoId), ...sectionConds]
 
     const funnelsAvailable = await getRedistributionFunnelsInternal(input.sourceGdoId, input.section, ctx.companyId)
 
@@ -204,7 +210,7 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
     if (input.targetGdoIds.includes(input.sourceGdoId)) return { success: false, error: 'Il GDO sorgente non può essere anche destinatario.' }
 
     const sectionConds = buildSectionConditions(input.section)
-    const baseConds = [eq(leads.companyId, ctx.companyId), eq(leads.assignedToId, input.sourceGdoId), ...sectionConds]
+    const baseConds = [eq(leads.companyId, ctx.companyId), sourceMatch(input.sourceGdoId), ...sectionConds]
 
     if (input.funnels && input.funnels.length > 0) {
         const hasNullSentinel = input.funnels.includes('(vuoto)')
