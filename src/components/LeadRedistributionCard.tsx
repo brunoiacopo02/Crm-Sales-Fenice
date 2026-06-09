@@ -121,7 +121,7 @@ export function LeadRedistributionCard() {
     const handleExecute = async () => {
         if (!preview || preview.totalToMove === 0) return
         const moved = preview.totalToMove
-        const sourceName = gdos.find(g => g.id === sourceGdoId)?.displayName || 'GDO'
+        const sourceName = sourceGdoId === '__unassigned__' ? 'Da assegnare' : (gdos.find(g => g.id === sourceGdoId)?.displayName || 'GDO')
         const targetNames = preview.perTarget.filter(t => t.count > 0).map(t => `${t.targetGdoName} (${t.count})`).join(', ')
         if (!confirm(`Confermi la ridistribuzione di ${moved} lead da ${sourceName}?\n\nDestinazione: ${targetNames}`)) return
 
@@ -150,7 +150,7 @@ export function LeadRedistributionCard() {
 
     if (!isAdmin) return null
 
-    const sourceGdoName = gdos.find(g => g.id === sourceGdoId)?.displayName || ''
+    const sourceGdoName = sourceGdoId === '__unassigned__' ? 'Da assegnare' : (gdos.find(g => g.id === sourceGdoId)?.displayName || '')
     const totalCustomQuota = useMemo(
         () => targetGdoIds.reduce((acc, id) => acc + (customQuotas[id] || 0), 0),
         [targetGdoIds, customQuotas]
@@ -160,13 +160,12 @@ export function LeadRedistributionCard() {
         <div className="bg-white rounded-lg border border-ash-200 shadow-sm p-6 space-y-5 mt-8">
             <div className="flex items-center gap-2 border-b pb-3">
                 <Shuffle className="h-5 w-5 text-brand-orange" />
-                <h3 className="font-semibold text-ash-800">Ridistribuisci lead esistenti</h3>
+                <h3 className="font-semibold text-ash-800">Ridistribuisci / Assegna lead</h3>
                 <span className="text-xs text-ash-400 ml-2">Admin only</span>
             </div>
 
             <p className="text-xs text-ash-500">
-                Sposta in blocco i lead di una sezione di un GDO verso uno o più colleghi.
-                Lo stato del lead (callCount, recall, note) resta invariato.
+                Sposta in blocco i lead di una sezione verso uno o più GDO. Seleziona <strong>"Da assegnare"</strong> come sorgente per distribuire i lead non ancora assegnati. Lo stato del lead (callCount, recall, note) resta invariato.
             </p>
 
             {/* Step 1: GDO sorgente + sezione */}
@@ -180,6 +179,7 @@ export function LeadRedistributionCard() {
                         className="w-full h-10 px-3 text-sm border border-ash-300 rounded-md focus:ring-brand-orange focus:border-brand-orange bg-white"
                     >
                         <option value="">— Scegli GDO —</option>
+                        <option value="__unassigned__">📥 Da assegnare (lead non assegnati)</option>
                         {gdos.map(g => (
                             <option key={g.id} value={g.id}>
                                 {g.displayName || g.name}{!g.isActive ? ' (disattivo)' : ''}
