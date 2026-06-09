@@ -164,6 +164,7 @@ export default function ImportPage() {
     }
 
     const totalCalculatedAssigned = Object.values(distributionPreview).reduce((acc, val) => acc + val.count, 0)
+    const noSelectedAssignee = mode === 'selected' && !activeGdos.some(g => (customSettings[g.id] || 0) > 0)
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto pb-10 px-4 sm:px-6 lg:px-0">
@@ -345,6 +346,12 @@ export default function ImportPage() {
                                             >
                                                 Quote Personalizzate
                                             </button>
+                                            <button
+                                                onClick={() => setMode('selected')}
+                                                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${mode === 'selected' ? 'bg-white shadow-sm ring-1 ring-ash-200 text-ash-900' : 'text-ash-500 hover:text-ash-700'}`}
+                                            >
+                                                Assegnatario scelto
+                                            </button>
                                         </div>
 
                                         {mode === 'custom_quota' && (
@@ -373,6 +380,31 @@ export default function ImportPage() {
                                                     ))}
                                                 </div>
                                                 <p className="text-xs text-ash-400 mt-3 leading-relaxed">Se la somma delle quote è inferiore al totale lead, i restanti verranno arrotondati e spartiti equamente stile Round-Robin.</p>
+                                            </div>
+                                        )}
+                                        {mode === 'selected' && (
+                                            <div className="bg-ash-50 rounded-lg border border-ash-200 p-4">
+                                                <h4 className="text-xs font-semibold text-ash-700 mb-3 uppercase tracking-wider">Scegli a chi assegnare i lead</h4>
+                                                <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                                                    {activeGdos.map(gdo => {
+                                                        const checked = (customSettings[gdo.id] || 0) > 0
+                                                        return (
+                                                            <label key={gdo.id} className="flex items-center gap-3 bg-white p-2 px-3 rounded shadow-sm border border-ash-100 cursor-pointer hover:border-brand-orange/40 transition-colors">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={checked}
+                                                                    onChange={(e) => setCustomSettings(prev => ({ ...prev, [gdo.id]: e.target.checked ? 1 : 0 }))}
+                                                                    className="h-4 w-4 rounded border-ash-300 text-brand-orange focus:ring-brand-orange"
+                                                                />
+                                                                <div className="h-6 w-6 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-xs ring-1 ring-brand-orange/20">
+                                                                    {gdo.displayName?.substring(0, 2).toUpperCase()}
+                                                                </div>
+                                                                <span className="text-sm font-medium text-ash-800">{gdo.displayName}</span>
+                                                            </label>
+                                                        )
+                                                    })}
+                                                </div>
+                                                <p className="text-xs text-ash-400 mt-3 leading-relaxed">I lead verranno divisi equamente tra i GDO selezionati. Selezionane uno per assegnarli tutti a lui.</p>
                                             </div>
                                         )}
                                         {mode === 'equal' && (
@@ -427,10 +459,13 @@ export default function ImportPage() {
                                 </label>
                             </div>
 
+                            {noSelectedAssignee && (
+                                <p className="text-xs text-red-600 text-right mb-2">Seleziona almeno un GDO a cui assegnare i lead.</p>
+                            )}
                             <div className="pt-4 mb-4 flex justify-end">
                                 <button
                                     onClick={confirmImport}
-                                    disabled={loading || activeGdos.length === 0}
+                                    disabled={loading || activeGdos.length === 0 || noSelectedAssignee}
                                     className="flex items-center gap-2 py-3 px-8 rounded-lg shadow-md text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover focus:outline-none disabled:opacity-50 transition-all hover:shadow-lg hover:-translate-y-0.5"
                                 >
                                     {loading ? "Elaborazione DB in corso..." : `Conferma Esecuzione Assegnamento`}
