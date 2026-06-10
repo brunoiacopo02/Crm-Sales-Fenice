@@ -520,7 +520,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     <>
                                         <button
                                             onClick={() => handleSendNotify('call1')}
-                                            disabled={isSendingNotify || !lead.email}
+                                            disabled={isSendingNotify || (lead.companyId === 'serenamente' ? !lead.phone : !lead.email)}
                                             title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica WhatsApp dopo prima NR"}
                                             className="text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                                         >
@@ -529,7 +529,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         </button>
                                         <button
                                             onClick={() => handleSendNotify('3nr')}
-                                            disabled={isSendingNotify || !lead.email}
+                                            disabled={isSendingNotify || (lead.companyId === 'serenamente' ? !lead.phone : !lead.email)}
                                             title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica WhatsApp dopo 3 NR"}
                                             className="text-xs text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                                         >

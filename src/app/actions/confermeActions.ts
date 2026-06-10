@@ -13,7 +13,6 @@ import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
-import { sendSerenamenteTemplate, SERENAMENTE_TEMPLATE_NR, SERENAMENTE_TEMPLATE_AUTOCONFERMA } from "@/lib/serenamenteMessaging"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -792,25 +791,6 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
                 : { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) },
             companyId: ctx.companyId,
         });
-
-        // Serenamente: invio template WhatsApp dopo il 1° e il 3° NR (best-effort: non blocca l'NR).
-        // 1° NR → template "nr"; 3° NR (auto-scarto) → template "autoconferma". Fenice non invia da qui.
-        if (ctx.companyId === 'serenamente') {
-            const nameParts = (oldLead.name || '').trim().split(/\s+/).filter(Boolean);
-            const firstName = nameParts[0] || undefined;
-            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
-            try {
-                if (toUpdate.confCall1At) {
-                    const r = await sendSerenamenteTemplate({ phone: oldLead.phone || '', templateSid: SERENAMENTE_TEMPLATE_NR, label: 'Conferma — no risposta 1ª chiamata', firstName, lastName });
-                    if (!r.ok) console.error('[serenamente NR1 template]', r.error);
-                } else if (isAutoDiscard) {
-                    const r = await sendSerenamenteTemplate({ phone: oldLead.phone || '', templateSid: SERENAMENTE_TEMPLATE_AUTOCONFERMA, label: 'Autoconferma — no risposta 3ª chiamata', firstName, lastName });
-                    if (!r.ok) console.error('[serenamente NR3 template]', r.error);
-                }
-            } catch (e) {
-                console.error('[serenamente template send]', e);
-            }
-        }
 
         return { success: true, autoDiscarded: isAutoDiscard };
     } catch (error: any) {

@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { logLeadEvent } from "@/lib/eventLogger"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy'
+import { sendSerenamenteTemplate, SERENAMENTE_TEMPLATE_NR, SERENAMENTE_TEMPLATE_AUTOCONFERMA } from "@/lib/serenamenteMessaging"
 
 // ActiveCampaign configuration
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com'
@@ -218,6 +219,29 @@ export async function sendConfermeNotifyToLead(
     // Fetch lead
     const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
     if (!lead) return { success: false, error: 'Lead non trovato' }
+
+    // Serenamente: NON usa ActiveCampaign/Spoki di Fenice. Invia il template via Twilio.
+    // call1 → template "nr"; 3nr → template "autoconferma". Serve solo il telefono.
+    if (ctx.companyId === 'serenamente') {
+        const parts = (lead.name || '').trim().split(/\s+/).filter(Boolean)
+        const r = await sendSerenamenteTemplate({
+            phone: lead.phone || '',
+            templateSid: type === '3nr' ? SERENAMENTE_TEMPLATE_AUTOCONFERMA : SERENAMENTE_TEMPLATE_NR,
+            label: type === '3nr' ? 'Conferma — autoconferma (3° NR)' : 'Conferma — no risposta 1ª chiamata',
+            firstName: parts[0] || undefined,
+            lastName: parts.length > 1 ? parts.slice(1).join(' ') : undefined,
+        })
+        if (!r.ok) return { success: false, error: r.error || 'Errore invio template Serenamente' }
+        await logLeadEvent({
+            leadId,
+            eventType: 'AGENDA_SENT',
+            userId: supabaseUser.id,
+            metadata: { channel: 'twilio', type: type === '3nr' ? 'conferme_notify_3nr' : 'conferme_notify_call1', sid: r.sid ?? null },
+            companyId: ctx.companyId,
+        })
+        return { success: true }
+    }
+
     if (!lead.email) return { success: false, error: 'Il lead non ha email — impossibile creare contatto AC' }
 
     const automationId = type === '3nr'
