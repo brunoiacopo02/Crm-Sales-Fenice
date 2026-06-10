@@ -5,6 +5,7 @@ import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVe
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 import { AgendaButton } from "./AgendaButton"
+import { CompanyBadge } from "./CompanyBadge"
 
 type LeadProps = {
     lead: {
@@ -13,6 +14,7 @@ type LeadProps = {
         phone: string
         email: string | null
         funnel: string | null
+        companyId?: string | null
         callCount: number
         lastCallDate: Date | null
         status: string
@@ -163,6 +165,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             {lead.callCount > 0 && (
                                 <div className="text-[10px] font-bold text-ash-500 bg-ash-100 px-1.5 py-0.5 rounded-md">{lead.callCount}° ch.</div>
                             )}
+                            <CompanyBadge companyId={lead.companyId} />
                         </div>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-ash-500 mt-1">
@@ -377,6 +380,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                 <Sparkles className="h-4 w-4" />
                             </span>
                         )}
+                        <CompanyBadge companyId={lead.companyId} />
                     </div>
                     <div className="flex items-center gap-2 text-sm text-ash-500 mt-1 group/phone">
                         <Phone className="h-3 w-3" />

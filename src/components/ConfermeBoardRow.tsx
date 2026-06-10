@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw } from "lucide-react"
+import { CompanyBadge } from "./CompanyBadge"
 import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
 import { ConfermeCallTimer } from "@/components/ConfermeCallTimer"
@@ -263,6 +264,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                         <div className="flex items-center gap-1.5 shrink-0 hidden sm:inline-flex">
                             <div className="text-brand-orange-600 font-bold truncate max-w-[150px]">{item.gdo?.displayName || item.gdo?.name || "N/A"}</div>
                             {lead.funnel && <div className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-ash-100 text-ash-600 uppercase truncate max-w-[100px]">{lead.funnel}</div>}
+                            <CompanyBadge companyId={lead.companyId} />
                         </div>
                     )}
 
