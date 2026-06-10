@@ -489,7 +489,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             await createGoogleCalendarEvent(
                 salespersonAssigned,
                 {
-                    summary: `Appuntamento CRM: ${oldLead.name}`,
+                    summary: `Appuntamento ${oldLead.companyId === 'serenamente' ? 'Serenamente' : 'CRM'}: ${oldLead.name}`,
                     description: `Lead: ${oldLead.name}\nTelefono: ${oldLead.phone}\nEmail: ${oldLead.email || 'N/A'}\nFunnel: ${oldLead.funnel || 'N/A'}\n\nLink CRM: ${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/venditore`,
                     startTime: apptDate,
                     endTime: endTime,
@@ -1015,7 +1015,7 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
                 await createGoogleCalendarEvent(
                     oldLead.salespersonUserId,
                     {
-                        summary: `Appuntamento CRM: ${oldLead.name}`,
+                        summary: `Appuntamento ${oldLead.companyId === 'serenamente' ? 'Serenamente' : 'CRM'}: ${oldLead.name}`,
                         description: `Riprogrammato. Lead: ${oldLead.name}\nTelefono: ${oldLead.phone}\nEmail: ${oldLead.email || 'N/A'}\nFunnel: ${oldLead.funnel || 'N/A'}\n\nLink CRM: ${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/venditore`,
                         startTime: new Date(newApptDate),
                         endTime: endT,
