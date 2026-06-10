@@ -124,6 +124,14 @@ export async function sendAgendaToLead(
     const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
     if (!lead) return { success: false, error: 'Lead non trovato' }
 
+    // Rete di sicurezza: i lead non-Fenice (es. Serenamente) NON devono passare da
+    // ActiveCampaign/Spoki di Fenice — altrimenti il contatto entra nell'AC Fenice e il
+    // webhook crea un duplicato Fenice. Per Serenamente l'agenda va via Twilio (AgendaButton
+    // usa già sendAgendaSerenamente); questo blocca eventuali chiamate errate.
+    if (ctx.companyId !== 'fenice') {
+        return { success: false, error: `Lead ${ctx.companyId}: l'agenda va inviata col flusso dedicato (Twilio), non con ActiveCampaign Fenice.` }
+    }
+
     // Use lead email or override provided by GDO
     const emailToUse = lead.email || options.emailOverride
     if (!emailToUse) {
