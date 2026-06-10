@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents } from "@/db/schema"
-import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, inArray } from "drizzle-orm"
+import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, inArray, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent, checkFreeBusy, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
@@ -406,8 +406,12 @@ export async function addConfermeNote(leadId: string, text: string) {
 async function getSalespersonName(userId: string | undefined, companyId: string) {
     if (!userId) return null;
     const user = (await db.select().from(users).where(and(
-        eq(users.companyId, companyId),
         eq(users.id, userId),
+        // staff condiviso: risolvi il nome se il venditore è accessibile all'azienda attiva
+        or(
+            sql`${companyId} = ANY(${users.allowedCompanies})`,
+            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, companyId)),
+        ),
     )))[0];
     return user ? (user.displayName || user.name || userId) : userId;
 }

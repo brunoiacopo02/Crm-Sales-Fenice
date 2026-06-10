@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { users } from "@/db/schema"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, or, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
@@ -76,7 +76,15 @@ export async function getTeamAccounts() {
         role: users.role,
     })
         .from(users)
-        .where(and(inArray(users.role, ['GDO', 'VENDITORE', 'CONFERME']), eq(users.companyId, ctx.companyId)))
+        .where(and(
+            inArray(users.role, ['GDO', 'VENDITORE', 'CONFERME']),
+            // staff condiviso: membro accessibile se l'azienda attiva è tra le sue
+            // allowedCompanies, con fallback al companyId per utenti legacy (null).
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+        ))
         .orderBy(users.role, users.gdoCode)
 
 }
