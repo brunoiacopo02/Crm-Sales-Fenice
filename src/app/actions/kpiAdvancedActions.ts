@@ -5,7 +5,7 @@ import { callLogs, leads, users } from "@/db/schema"
 import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
-import { currentTenant, assertSalesArea } from '@/lib/tenancy'
+import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 
 import { cache } from "react"
 
@@ -74,7 +74,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     }).from(leads)
 
     // Apply lead-level filters
-    const leadConditions: any[] = [eq(leads.companyId, ctx.companyId)]
+    const leadConditions: any[] = [companyScope(ctx, leads.companyId)]
     if (filters.funnel) leadConditions.push(eq(leads.funnel, filters.funnel))
     if (filters.gdoId) leadConditions.push(eq(leads.assignedToId, filters.gdoId))
 
@@ -91,7 +91,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     // Now fetch logs within the date range
     let logConditions = [
-        eq(callLogs.companyId, ctx.companyId),
+        companyScope(ctx, callLogs.companyId),
         gte(callLogs.createdAt, safeStartDate),
         lte(callLogs.createdAt, safeEndDate)
     ]
@@ -163,7 +163,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // 4. Performance GDO
     const gdoStatsMap: Record<string, any> = {}
 
-    const allUsers = await db.select().from(users).where(eq(users.companyId, ctx.companyId))
+    const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
     const userMap = new Map(allUsers.map(u => [u.id, u.name]))
 
     validLogs.forEach(log => {
@@ -330,7 +330,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const user = (await db.select({
         dailyApptTarget: users.dailyApptTarget,
         weeklyConfirmedTarget: users.weeklyConfirmedTarget
-    }).from(users).where(and(eq(users.id, gdoId), eq(users.companyId, ctx.companyId))))[0]
+    }).from(users).where(and(eq(users.id, gdoId), companyScope(ctx, users.companyId))))[0]
 
     if (!user) return null
 
@@ -346,7 +346,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const todayApptLogs = await db.select({ leadId: callLogs.leadId })
         .from(callLogs)
         .where(and(
-            eq(callLogs.companyId, ctx.companyId),
+            companyScope(ctx, callLogs.companyId),
             eq(callLogs.userId, gdoId),
             eq(callLogs.outcome, 'APPUNTAMENTO'),
             gte(callLogs.createdAt, todayStart),
@@ -359,7 +359,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const weeklyConfirmedCount = (await db.select({ id: leads.id })
         .from(leads)
         .where(and(
-            eq(leads.companyId, ctx.companyId),
+            companyScope(ctx, leads.companyId),
             eq(leads.assignedToId, gdoId),
             eq(leads.confirmationsOutcome, 'confermato'),
             gte(leads.confirmationsTimestamp, weekStart),
@@ -372,7 +372,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const weeklyClosedRows = await db.select({ amount: leads.closeAmountEur })
         .from(leads)
         .where(and(
-            eq(leads.companyId, ctx.companyId),
+            companyScope(ctx, leads.companyId),
             eq(leads.assignedToId, gdoId),
             eq(leads.salespersonOutcome, 'Chiuso'),
             gte(leads.salespersonOutcomeAt, weekStart),
@@ -449,7 +449,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const gdoUsers = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
         .from(users)
         .where(and(
-            eq(users.companyId, ctx.companyId),
+            companyScope(ctx, users.companyId),
             eq(users.role, 'GDO')
         ))
 
@@ -466,7 +466,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     })
         .from(leads)
         .where(and(
-            eq(leads.companyId, ctx.companyId),
+            companyScope(ctx, leads.companyId),
             eq(leads.status, 'APPOINTMENT'),
             isNotNull(leads.assignedToId),
             isNotNull(leads.appointmentCreatedAt),
@@ -482,7 +482,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     })
         .from(leads)
         .where(and(
-            eq(leads.companyId, ctx.companyId),
+            companyScope(ctx, leads.companyId),
             eq(leads.status, 'REJECTED'),
             isNotNull(leads.assignedToId),
             gte(leads.updatedAt, startBound),
@@ -515,7 +515,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     })
         .from(callLogs)
         .where(and(
-            eq(callLogs.companyId, ctx.companyId),
+            companyScope(ctx, callLogs.companyId),
             isNotNull(callLogs.userId),
             gte(callLogs.createdAt, startBound),
             lt(callLogs.createdAt, end),
@@ -566,7 +566,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     })
         .from(leads)
         .where(and(
-            eq(leads.companyId, ctx.companyId),
+            companyScope(ctx, leads.companyId),
             isNotNull(leads.assignedToId),
             eq(leads.salespersonOutcome, 'Chiuso'),
             gte(leads.salespersonOutcomeAt, startBound),

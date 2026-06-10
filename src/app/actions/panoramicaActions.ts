@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { leads, monthlyLeadTargets, monthlyFunnelBaselines } from "@/db/schema";
 import { and, gte, lt, sql, eq, or } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
-import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from '@/lib/tenancy';
 import {
     countWorkingDaysInMonth,
     countWorkingDaysElapsed,
@@ -20,6 +20,15 @@ async function requireAdmin() {
     const role = user.user_metadata?.role;
     if (role !== 'ADMIN') return null;
     return { id: user.id, role };
+}
+
+/**
+ * Ctx "forzato" su una singola azienda, usato in modalità "Tutte le aziende"
+ * per calcolare la panoramica per ciascuna azienda con la logica single-company
+ * esistente (baseline/delta per-azienda preservati), prima di sommare i risultati.
+ */
+function singleCompanyCtx(ctx: TenantContext, companyId: string): TenantContext {
+    return { ...ctx, companyId, isAllCompanies: false };
 }
 
 export type LeadOverviewRow = {
@@ -64,6 +73,21 @@ export async function getLeadOverview(yearMonth?: string): Promise<LeadOverviewR
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
         const ym = yearMonth || currentYearMonthRome();
+        if (ctx.isAllCompanies) {
+            const parts = await Promise.all(
+                ctx.allowedCompanies.map((c) => leadOverviewForCompany(singleCompanyCtx(ctx, c), ym)),
+            );
+            return mergeLeadOverviews(parts, ym);
+        }
+        return await leadOverviewForCompany(ctx, ym);
+    } catch (error: any) {
+        console.error('Errore getLeadOverview:', error);
+        return { success: false, error: error?.message || String(error) };
+    }
+}
+
+async function leadOverviewForCompany(ctx: TenantContext, ym: string): Promise<LeadOverviewResult> {
+    try {
         const { year, month } = parseYearMonth(ym);
 
         // Month boundaries — Europe/Rome interpreted via UTC-ish dates. We use UTC
@@ -216,6 +240,7 @@ export async function setLeadMonthlyTarget(input: {
         assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
+        assertSingleCompany(ctx); // scrittura: bloccata in modalità "Tutte le aziende"
 
         if (input.targetNuovi < 0 || input.targetDatabase < 0 || input.workingDays <= 0) {
             return { success: false, error: 'Valori non validi' };
@@ -290,6 +315,7 @@ export async function setMonthlyMetricTargets(input: {
         assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
+        assertSingleCompany(ctx); // scrittura: bloccata in modalità "Tutte le aziende"
 
         if (!/^\d{4}-\d{2}$/.test(input.yearMonth)) {
             return { success: false, error: 'yearMonth deve essere YYYY-MM' };
@@ -439,9 +465,26 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
         const ym = yearMonth || currentYearMonthRome();
+        if (ctx.isAllCompanies) {
+            const parts = await Promise.all(
+                ctx.allowedCompanies.map((c) => metricsOverviewForCompany(singleCompanyCtx(ctx, c), ym)),
+            );
+            // Lead aggregato (già sommato) come denominatore per le % "su lead".
+            const aggLead = await getLeadOverview(ym);
+            const actLead = aggLead.success ? aggLead.totals.actCount : 0;
+            return mergeMetricsOverviews(parts, ym, actLead);
+        }
+        return await metricsOverviewForCompany(ctx, ym);
+    } catch (error: any) {
+        console.error('Errore getMetricsOverview:', error);
+        return { success: false, error: error?.message || String(error) };
+    }
+}
 
+async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promise<MetricsOverviewResult> {
+    try {
         // 1) Re-use funnel overview to get APP/Conf/Trat/Close totals (per stage).
-        const funnelOverview = await getFunnelOverview(ym);
+        const funnelOverview = await funnelOverviewForCompany(ctx, ym);
         if (!funnelOverview.success) {
             return { success: false, error: funnelOverview.error };
         }
@@ -450,7 +493,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
         // Il totale lead per la % ACT deve essere quello mostrato nella tabella
         // "Caricamento Lead" sopra (baseline + lead caricati nel mese), non il
         // conteggio funnel — così le due tabelle restano coerenti.
-        const leadOverview = await getLeadOverview(ym);
+        const leadOverview = await leadOverviewForCompany(ctx, ym);
         const actLeadFromOverview = leadOverview.success ? leadOverview.totals.actCount : 0;
 
         // 2) Fetch target config
@@ -854,7 +897,21 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
         const ym = yearMonth || currentYearMonthRome();
+        if (ctx.isAllCompanies) {
+            const parts = await Promise.all(
+                ctx.allowedCompanies.map((c) => funnelOverviewForCompany(singleCompanyCtx(ctx, c), ym)),
+            );
+            return mergeFunnelOverviews(parts, ym);
+        }
+        return await funnelOverviewForCompany(ctx, ym);
+    } catch (error: any) {
+        console.error('Errore getFunnelOverview:', error);
+        return { success: false, error: error?.message || String(error) };
+    }
+}
 
+async function funnelOverviewForCompany(ctx: TenantContext, ym: string): Promise<FunnelOverviewResult> {
+    try {
         // 1) Load baseline rows for the month
         const baselines = await db.select().from(monthlyFunnelBaselines)
             .where(and(
@@ -996,6 +1053,7 @@ export async function setFunnelRow(input: {
         assertSalesArea(ctx);
         const admin = await requireAdmin();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
+        assertSingleCompany(ctx); // scrittura: bloccata in modalità "Tutte le aziende"
 
         if (!/^\d{4}-\d{2}$/.test(input.yearMonth)) {
             return { success: false, error: 'yearMonth deve essere YYYY-MM' };
@@ -1070,4 +1128,178 @@ export async function setFunnelRow(input: {
         console.error('Errore setFunnelRow:', error);
         return { success: false, error: error?.message || String(error) };
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Aggregazione "Tutte le aziende" — merge dei risultati per-azienda
+// ─────────────────────────────────────────────────────────────────────────
+// Le percentuali sono ricalcolate sui valori assoluti sommati (i conteggi si
+// sommano in modo pulito; le % derivate vanno ricomputate). Config sommata solo
+// per visualizzazione: l'editing dei target è disabilitato in modalità all.
+
+type OkLead = Extract<LeadOverviewResult, { success: true }>;
+type OkFunnel = Extract<FunnelOverviewResult, { success: true }>;
+type OkMetrics = Extract<MetricsOverviewResult, { success: true }>;
+
+function mergeLeadOverviews(parts: LeadOverviewResult[], ym: string): LeadOverviewResult {
+    const ok = parts.filter((p): p is OkLead => p.success);
+    if (ok.length === 0) return parts[0] ?? { success: false, error: 'NO_DATA' };
+
+    const elapsed = ok[0].workingDaysElapsed;
+    const sumRow = (label: string, key: 'actCount' | 'targetCount') =>
+        ok.reduce((s, p) => s + (p.rows.find(r => r.label === label)?.[key] ?? 0), 0);
+
+    const actNuovi = sumRow('Nuovi', 'actCount');
+    const actDb = sumRow('DB', 'actCount');
+    const actTotal = actNuovi + actDb;
+    const targetNuovi = sumRow('Nuovi', 'targetCount');
+    const targetDb = sumRow('DB', 'targetCount');
+    const targetTotal = targetNuovi + targetDb;
+
+    const share = (n: number, d: number): number | null => d > 0 ? (n / d) * 100 : null;
+    const aggiungere = (current: number, total: number, targetShare: number): number => {
+        if (targetShare >= 1 || targetShare <= 0) return 0;
+        const currentShare = total > 0 ? current / total : 0;
+        if (currentShare >= targetShare) return 0;
+        const X = (targetShare * total - current) / (1 - targetShare);
+        return Math.max(0, Math.round(X));
+    };
+    const targetShareNuovi = targetTotal > 0 ? targetNuovi / targetTotal : 0;
+    const targetShareDb = targetTotal > 0 ? targetDb / targetTotal : 0;
+    const isConfigured = ok.some(p => p.isConfigured);
+
+    const rows: LeadOverviewRow[] = [
+        { label: 'Nuovi', actCount: actNuovi, actPercent: actTotal > 0 ? share(actNuovi, actTotal) : null, targetCount: targetNuovi, targetPercent: targetTotal > 0 ? share(targetNuovi, targetTotal) : null, aggiungere: isConfigured ? aggiungere(actNuovi, actTotal, targetShareNuovi) : 0 },
+        { label: 'DB', actCount: actDb, actPercent: actTotal > 0 ? share(actDb, actTotal) : null, targetCount: targetDb, targetPercent: targetTotal > 0 ? share(targetDb, targetTotal) : null, aggiungere: isConfigured ? aggiungere(actDb, actTotal, targetShareDb) : 0 },
+        { label: 'Totale', actCount: actTotal, actPercent: null, targetCount: targetTotal, targetPercent: null, aggiungere: null },
+    ];
+
+    const anyCfg = ok.find(p => p.config)?.config ?? null;
+    const config = anyCfg ? {
+        targetNuovi: ok.reduce((s, p) => s + (p.config?.targetNuovi ?? 0), 0),
+        targetDatabase: ok.reduce((s, p) => s + (p.config?.targetDatabase ?? 0), 0),
+        workingDays: anyCfg.workingDays,
+        baselineNuovi: ok.reduce((s, p) => s + (p.config?.baselineNuovi ?? 0), 0),
+        baselineDatabase: ok.reduce((s, p) => s + (p.config?.baselineDatabase ?? 0), 0),
+        baselineSetAt: null,
+    } : null;
+
+    return {
+        success: true,
+        yearMonth: ym,
+        isConfigured,
+        config,
+        workingDaysElapsed: elapsed,
+        rows,
+        totals: {
+            actCount: actTotal,
+            actDailyAvg: elapsed > 0 ? Math.round(actTotal / elapsed) : 0,
+            targetCount: targetTotal,
+            targetDailyAvg: elapsed > 0 ? Math.round(targetTotal / elapsed) : 0,
+        },
+    };
+}
+
+function mergeFunnelOverviews(parts: FunnelOverviewResult[], ym: string): FunnelOverviewResult {
+    const ok = parts.filter((p): p is OkFunnel => p.success);
+    if (ok.length === 0) return parts[0] ?? { success: false, error: 'NO_DATA' };
+
+    type Acc = { leadCount: number; appCount: number; confermeCount: number; trattativeCount: number; closeCount: number; fatturatoEur: number; spesaEur: number; dataPrimoSottoSoglia: string | null; statoSegnalazione: FunnelStato };
+    const byFunnel = new Map<string, Acc>();
+    const order: string[] = [];
+    const sev = (s: FunnelStato): number => s === 'ALLERT' ? 2 : s === 'PRE_RISK' ? 1 : 0;
+
+    for (const p of ok) {
+        for (const r of p.rows) {
+            let acc = byFunnel.get(r.funnelName);
+            if (!acc) {
+                acc = { leadCount: 0, appCount: 0, confermeCount: 0, trattativeCount: 0, closeCount: 0, fatturatoEur: 0, spesaEur: 0, dataPrimoSottoSoglia: null, statoSegnalazione: 'OK' };
+                byFunnel.set(r.funnelName, acc);
+                order.push(r.funnelName);
+            }
+            acc.leadCount += r.leadCount;
+            acc.appCount += r.appCount;
+            acc.confermeCount += r.confermeCount;
+            acc.trattativeCount += r.trattativeCount;
+            acc.closeCount += r.closeCount;
+            acc.fatturatoEur += r.fatturatoEur;
+            acc.spesaEur += r.spesaEur;
+            if (sev(r.statoSegnalazione) > sev(acc.statoSegnalazione)) acc.statoSegnalazione = r.statoSegnalazione;
+            if (r.dataPrimoSottoSoglia && (!acc.dataPrimoSottoSoglia || r.dataPrimoSottoSoglia < acc.dataPrimoSottoSoglia)) {
+                acc.dataPrimoSottoSoglia = r.dataPrimoSottoSoglia;
+            }
+        }
+    }
+
+    const pctLocal = (n: number, d: number): number | null => d > 0 ? (n / d) * 100 : null;
+    const rows: FunnelOverviewRow[] = order.map(name => {
+        const a = byFunnel.get(name)!;
+        return {
+            funnelName: name,
+            leadCount: a.leadCount,
+            appCount: a.appCount,
+            appPct: pctLocal(a.appCount, a.leadCount),
+            confermeCount: a.confermeCount,
+            confermePct: pctLocal(a.confermeCount, a.leadCount),
+            trattativeCount: a.trattativeCount,
+            trattativePct: pctLocal(a.trattativeCount, a.leadCount),
+            closeCount: a.closeCount,
+            closePct: pctLocal(a.closeCount, a.leadCount),
+            fatturatoEur: a.fatturatoEur,
+            spesaEur: a.spesaEur,
+            roas: a.spesaEur > 0 ? a.fatturatoEur / a.spesaEur : null,
+            dataPrimoSottoSoglia: a.dataPrimoSottoSoglia,
+            statoSegnalazione: a.statoSegnalazione,
+        };
+    });
+
+    let tLead = 0, tApp = 0, tConf = 0, tTratt = 0, tClose = 0, tFat = 0, tSpesa = 0;
+    for (const r of rows) { tLead += r.leadCount; tApp += r.appCount; tConf += r.confermeCount; tTratt += r.trattativeCount; tClose += r.closeCount; tFat += r.fatturatoEur; tSpesa += r.spesaEur; }
+
+    return {
+        success: true,
+        yearMonth: ym,
+        rows,
+        totals: { leadCount: tLead, appCount: tApp, confermeCount: tConf, trattativeCount: tTratt, closeCount: tClose, fatturatoEur: tFat, spesaEur: tSpesa, roas: tSpesa > 0 ? tFat / tSpesa : null },
+    };
+}
+
+function mergeMetricsOverviews(parts: MetricsOverviewResult[], ym: string, actLead: number): MetricsOverviewResult {
+    const ok = parts.filter((p): p is OkMetrics => p.success);
+    if (ok.length === 0) return parts[0] ?? { success: false, error: 'NO_DATA' };
+
+    const labels = ok[0].rows.map(r => r.label);
+    const sumBy = (i: number, key: 'actCount' | 'targetPrevCount' | 'targetPerDay' | 'today') =>
+        ok.reduce((s, p) => s + (p.rows[i]?.[key] ?? 0), 0);
+
+    const a = labels.map((_, i) => sumBy(i, 'actCount'));
+    const t = labels.map((_, i) => sumBy(i, 'targetPrevCount'));
+    const safeDiv = (n: number, d: number): number | null => d > 0 ? (n / d) * 100 : null;
+
+    // Denominatori a cascata: App su lead, Conf su App, Pres su Conf, Close su Pres.
+    const actDenoms: (number | null)[] = [actLead, a[0], a[1], a[2], null];
+    const targetDenoms: (number | null)[] = [null, t[0], t[1], t[2], null];
+
+    const rows: MetricsOverviewRow[] = labels.map((label, i) => ({
+        label,
+        actCount: a[i],
+        actPct: actDenoms[i] != null ? safeDiv(a[i], actDenoms[i] as number) : null,
+        targetPrevCount: t[i],
+        targetPrevPct: targetDenoms[i] != null ? safeDiv(t[i], targetDenoms[i] as number) : null,
+        targetPerDay: sumBy(i, 'targetPerDay'),
+        today: sumBy(i, 'today'),
+        isCurrency: ok[0].rows[i]?.isCurrency,
+    }));
+
+    return {
+        success: true,
+        yearMonth: ym,
+        workingDays: ok[0].workingDays,
+        workingDaysElapsed: ok[0].workingDaysElapsed,
+        isConfigured: ok.some(p => p.isConfigured),
+        config: null, // editing target disabilitato in modalità "Tutte le aziende"
+        rows,
+        trattativeSuLeadPct: safeDiv(a[2], actLead),
+        aovEur: a[3] > 0 ? a[4] / a[3] : null,
+    };
 }

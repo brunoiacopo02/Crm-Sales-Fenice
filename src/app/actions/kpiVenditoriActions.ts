@@ -5,7 +5,7 @@ import { leads, users } from "@/db/schema"
 import { eq, and, gte, lt, isNotNull } from "drizzle-orm"
 import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
-import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy';
 
 export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'custom', customStart?: string, customEnd?: string) {
     const ctx = await currentTenant();
@@ -49,7 +49,7 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         name: users.name,
         displayName: users.displayName,
         salesTargetEur: users.salesTargetEur,
-    }).from(users).where(and(eq(users.role, 'VENDITORE'), eq(users.companyId, ctx.companyId)))
+    }).from(users).where(and(eq(users.role, 'VENDITORE'), companyScope(ctx, users.companyId)))
 
     // Prendiamo tutti gli esiti dei venditori nel periodo (salespersonOutcomeAt
     // come campo data canonico — vedi lib/metricsUtils mapping M5/M6).
@@ -60,7 +60,7 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         amount: leads.closeAmountEur
     }).from(leads).where(
         and(
-            eq(leads.companyId, ctx.companyId),
+            companyScope(ctx, leads.companyId),
             isNotNull(leads.salespersonOutcome),
             isNotNull(leads.salespersonUserId),
             gte(leads.salespersonOutcomeAt, startDate),

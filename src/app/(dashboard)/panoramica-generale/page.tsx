@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { getLeadOverview, getFunnelOverview, getMetricsOverview } from "@/app/actions/panoramicaActions";
+import { tryCurrentTenant } from "@/lib/tenancy";
 import { PanoramicaClient } from "./PanoramicaClient";
 
 export default async function PanoramicaGeneralePage() {
@@ -16,6 +17,9 @@ export default async function PanoramicaGeneralePage() {
         redirect('/');
     }
 
+    const tctx = await tryCurrentTenant();
+    const isAllCompanies = !!tctx?.isAllCompanies;
+
     const [overview, funnelOverview, metricsOverview] = await Promise.all([
         getLeadOverview(),
         getFunnelOverview(),
@@ -27,10 +31,12 @@ export default async function PanoramicaGeneralePage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-ash-800">
-                        Sales Manager
+                        {isAllCompanies ? 'Sales Manager — Tutte le aziende' : 'Sales Manager'}
                     </h1>
                     <p className="text-sm text-ash-500 mt-0.5">
-                        Previsioni lead e numeri mensili del mese in corso.
+                        {isAllCompanies
+                            ? 'KPI aggregati di tutte le aziende del gruppo (mese in corso).'
+                            : 'Previsioni lead e numeri mensili del mese in corso.'}
                     </p>
                 </div>
             </div>
@@ -39,6 +45,7 @@ export default async function PanoramicaGeneralePage() {
                 initialData={overview}
                 initialFunnelData={funnelOverview}
                 initialMetricsData={metricsOverview}
+                readOnly={isAllCompanies}
             />
         </div>
     );

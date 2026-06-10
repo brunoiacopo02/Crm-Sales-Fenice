@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Building2 } from 'lucide-react'
+import { ChevronDown, Building2, Layers } from 'lucide-react'
+
+// Sentinella "Tutte le aziende". Duplicata client-side per non importare
+// @/lib/tenancy (modulo server-only). Deve combaciare con ALL_COMPANIES.
+const ALL_COMPANIES = '__all__'
 
 interface Company { id: string; display_name: string }
 
@@ -62,6 +66,7 @@ export function SalesCompanySwitcher() {
       .catch(() => {})
   }, [])
 
+  const isAll = active === ALL_COMPANIES
   const label = companies.find((c) => c.id === active)?.display_name ?? active ?? '—'
 
   async function pick(id: string) {
@@ -69,6 +74,12 @@ export function SalesCompanySwitcher() {
     setBusy(true)
     await selectCompany(id)
     setOpen(false)
+    // "Tutte le aziende" porta direttamente alla Panoramica gruppo (le pagine
+    // operative sono bloccate in questa modalità). Negli altri casi, reload.
+    if (id === ALL_COMPANIES) {
+      window.location.href = '/panoramica-generale'
+      return
+    }
     router.refresh()
     window.location.reload()
   }
@@ -90,22 +101,27 @@ export function SalesCompanySwitcher() {
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 rounded-md bg-orange-100 px-2.5 py-1 text-xs font-semibold text-brand-orange hover:bg-orange-200 transition"
       >
-        <Building2 className="w-3.5 h-3.5" />
+        {isAll ? <Layers className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}
         <span>{label}</span>
         <ChevronDown className="w-3 h-3" />
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-48 rounded-md border border-gray-200 bg-white shadow-lg z-50">
-          {companies.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => pick(c.id)}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-orange-50 ${c.id === active ? 'font-semibold text-brand-orange' : 'text-gray-700'}`}
-            >
-              {c.display_name}{c.id === active ? ' ✓' : ''}
-            </button>
-          ))}
+        <div className="absolute right-0 mt-1 w-52 rounded-md border border-gray-200 bg-white shadow-lg z-50 overflow-hidden">
+          {companies.map((c) => {
+            const all = c.id === ALL_COMPANIES
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => pick(c.id)}
+                className={`flex w-full items-center gap-2 text-left px-3 py-2 text-sm hover:bg-orange-50 ${all ? 'border-t border-gray-200' : ''} ${c.id === active ? 'font-semibold text-brand-orange' : 'text-gray-700'}`}
+              >
+                {all ? <Layers className="w-3.5 h-3.5 shrink-0" /> : <Building2 className="w-3.5 h-3.5 shrink-0 opacity-60" />}
+                <span className="flex-1">{c.display_name}</span>
+                {c.id === active && <span>✓</span>}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

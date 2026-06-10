@@ -15,6 +15,7 @@ import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
 import { SalesCompanyProvider } from "@/components/providers/SalesCompanyProvider"
+import { AllCompaniesGate } from "@/components/sales/AllCompaniesGate"
 import { SafeWrapper } from "@/components/SafeWrapper"
 // Social overlay providers DISABLED — caused WSOD. Will fix in dedicated session.
 
@@ -48,6 +49,11 @@ export default async function DashboardLayout({
     } catch { /* ignore skin errors */ }
     const isTheme = skinCss?.includes('skin-theme')
 
+    // Modalità "Tutte le aziende": tema neutro (no Serenamente) sulla vista di
+    // gruppo e gate che blocca le pagine operative.
+    const isAllCompanies = tctx.isAllCompanies
+    const dataCompany = isAllCompanies ? 'fenice' : tctx.companyId
+
     // Gamification attiva solo per GDO, CONFERME e supervisori — disabilitata per VENDITORE
     const showSprintBanner = ['GDO', 'MANAGER', 'ADMIN'].includes(session.user.role)
     const showGamificationOverlays = session.user.role !== 'VENDITORE'
@@ -55,14 +61,16 @@ export default async function DashboardLayout({
     return (
         <RealtimeProvider>
             <SidebarProvider>
-                <SalesCompanyProvider company={tctx.companyId}>
-                    <div data-company={tctx.companyId} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                        <Sidebar companyId={tctx.companyId} />
+                <SalesCompanyProvider company={dataCompany}>
+                    <div data-company={dataCompany} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
+                        <Sidebar companyId={dataCompany} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
                             <Topbar />
                             <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
-                                {children}
+                                <AllCompaniesGate active={isAllCompanies}>
+                                    {children}
+                                </AllCompaniesGate>
                             </main>
                         </div>
                     </div>
