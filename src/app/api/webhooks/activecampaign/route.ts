@@ -16,7 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
-import { eq, and, asc, sql, isNull, gte, desc } from "drizzle-orm";
+import { eq, and, asc, sql, isNull, gte, desc, or } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
@@ -497,6 +497,20 @@ export async function POST(req: NextRequest) {
                 return { kind: 'duplicate' as const, existingLeadId: existing.id };
             }
 
+            // Guardia cross-azienda: se questo contatto è GIÀ un lead di un'altra
+            // azienda (es. Serenamente, gestita via Twilio), NON creare un duplicato
+            // Fenice. Evita che i contatti Serenamente finiscano nell'intake Fenice.
+            const [crossCompany] = await tx.select({ id: leads.id, companyId: leads.companyId })
+                .from(leads)
+                .where(and(
+                    sql`${leads.companyId} <> ${FENICE_COMPANY}`,
+                    or(eq(leads.phone, phoneFinal), email ? eq(leads.email, email) : sql`false`),
+                ))
+                .limit(1);
+            if (crossCompany) {
+                return { kind: 'cross_company_skip' as const, otherCompany: crossCompany.companyId };
+            }
+
             // Round-robin GDO Fenice (dentro la tx: vede l'acLastAssignedAt
             // più aggiornato). I lead Fenice vanno solo ai GDO Fenice.
             const eligible = await tx.select({
@@ -545,6 +559,14 @@ export async function POST(req: NextRequest) {
                 skipped: 'duplicate_within_dedup_window',
                 acContactId: contactId,
                 existingLeadId: txResult.existingLeadId,
+            });
+        }
+
+        if (txResult.kind === 'cross_company_skip') {
+            return NextResponse.json({
+                skipped: 'cross_company_contact',
+                otherCompany: txResult.otherCompany,
+                acContactId: contactId,
             });
         }
 
