@@ -91,6 +91,17 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
             { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
         ]
+    } else if (role === "TL") {
+        // TL GDO: solo le sezioni legate ai GDO, niente fatturato/venditori/
+        // conferme/store admin/import/target aziendali (Correzioni CRM 2026-06-11).
+        navItems = [
+            { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
+            { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
+            { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
+            { name: "Richiami", href: "/richiami", icon: Calendar },
+            { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
+            { name: "Note GDO", href: "/note-gdo", icon: FileText },
+        ]
     } else if (role === "ADMIN" || role === "MANAGER") {
         if (session?.user?.email === "marketing@fenice.local" || session?.user?.name === "Marketing") {
             navItems = [

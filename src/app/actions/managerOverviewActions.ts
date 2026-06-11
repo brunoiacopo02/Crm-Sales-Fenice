@@ -260,9 +260,14 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
             },
         ];
 
+        // TL GDO: vede solo i parametri legati ai GDO (niente fatturato/costi).
+        const visibleParams = ctx.role === 'TL'
+            ? params.filter(p => p.key === 'appPerGdoDay' || p.key === 'confermaPct')
+            : params;
+
         return {
             success: true,
-            params,
+            params: visibleParams,
             newLeadsToday: { total: newRows.length, byFunnel },
             stock: { perGdo, unassigned },
             underperformers,

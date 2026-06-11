@@ -7,7 +7,7 @@ export default async function NoteGdoPage() {
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
 
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER')) {
+    if (!session || !['ADMIN', 'MANAGER', 'TL'].includes(session.user.role)) {
         redirect("/")
     }
 

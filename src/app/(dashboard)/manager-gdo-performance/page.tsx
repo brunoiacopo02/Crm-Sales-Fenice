@@ -12,7 +12,7 @@ export default async function ManagerGdoPerformancePage({
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
 
     const role = supabaseUser?.user_metadata?.role;
-    if (!supabaseUser || (role !== 'MANAGER' && role !== 'ADMIN')) {
+    if (!supabaseUser || !['MANAGER', 'ADMIN', 'TL'].includes(role)) {
         redirect('/unauthorized');
     }
 

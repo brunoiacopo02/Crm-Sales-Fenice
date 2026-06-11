@@ -26,6 +26,10 @@ export default async function DashboardPage() {
         redirect("/team")
     }
 
+    if (session?.user?.role === 'TL') {
+        redirect("/operativa-team")
+    }
+
     if (session?.user?.role === 'CONFERME') {
         redirect("/conferme")
     }
