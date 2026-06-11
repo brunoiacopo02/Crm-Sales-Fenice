@@ -38,3 +38,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 401 })
   }
 }
+
+/**
+ * Azzera la selezione azienda. Chiamata al logout: senza, il cookie HttpOnly
+ * sopravviveva alla sessione e il login successivo (anche di un ALTRO utente
+ * sullo stesso browser) ereditava l'azienda del precedente. QA e2e 2026-06-11.
+ */
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true })
+  res.cookies.set(SALES_ACTIVE_COMPANY_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  })
+  return res
+}

@@ -45,6 +45,9 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     const [expiredCount, setExpiredCount] = useState(0)
     const supabase = createClient()
     const handleSignOut = async () => {
+        // Azzera la selezione azienda (cookie HttpOnly) per non farla ereditare
+        // al prossimo login sullo stesso browser.
+        await fetch('/api/company/select', { method: 'DELETE' }).catch(() => { })
         await supabase.auth.signOut()
         window.location.href = "/login"
     }
