@@ -148,13 +148,18 @@ export function LeadRedistributionCard() {
         router.refresh()
     }
 
-    if (!isAdmin) return null
-
-    const sourceGdoName = sourceGdoId === '__unassigned__' ? 'Da assegnare' : (gdos.find(g => g.id === sourceGdoId)?.displayName || '')
+    // NB: gli hook devono stare PRIMA di qualsiasi early-return: questo useMemo
+    // era sotto `if (!isAdmin) return null` e quando useAuth() risolveva l'utente
+    // il numero di hook cambiava tra un render e l'altro → React #310 → crash
+    // dell'intera pagina /import (WSOD). Trovato dal QA e2e 2026-06-11.
     const totalCustomQuota = useMemo(
         () => targetGdoIds.reduce((acc, id) => acc + (customQuotas[id] || 0), 0),
         [targetGdoIds, customQuotas]
     )
+
+    if (!isAdmin) return null
+
+    const sourceGdoName = sourceGdoId === '__unassigned__' ? 'Da assegnare' : (gdos.find(g => g.id === sourceGdoId)?.displayName || '')
 
     return (
         <div className="bg-white rounded-lg border border-ash-200 shadow-sm p-6 space-y-5 mt-8">
