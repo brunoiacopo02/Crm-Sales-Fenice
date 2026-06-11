@@ -376,6 +376,16 @@ export async function updateLeadOutcome(
         newRecallNote = null
     }
 
+    // Badge "richiamo non risposto": NR su un lead che aveva un richiamo
+    // programmato → marca recallMissedAt. Nuovo richiamo o uscita dalla
+    // pipeline lo azzerano.
+    let newRecallMissedAt = lead.recallMissedAt
+    if (outcome === 'NON_RISPOSTO' && lead.recallDate) {
+        newRecallMissedAt = now
+    } else if (outcome === 'RICHIAMO' || outcome === 'DA_SCARTARE' || outcome === 'APPUNTAMENTO') {
+        newRecallMissedAt = null
+    }
+
     // Update lead record (atomic version check in WHERE prevents TOCTOU race)
     const updated = await db.update(leads)
         .set({
@@ -384,6 +394,7 @@ export async function updateLeadOutcome(
             lastCallDate: now,
             lastCallNote: note,
             recallNote: newRecallNote,
+            recallMissedAt: newRecallMissedAt,
             recallDate,
             appointmentDate,
             appointmentNote: outcome === 'APPUNTAMENTO' ? note : lead.appointmentNote,

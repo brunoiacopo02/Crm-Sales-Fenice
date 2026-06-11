@@ -10,6 +10,7 @@ const UniverseToast = dynamic(() => import("@/components/UniverseToast").then(mo
 const CreatureRevealOverlay = dynamic(() => import("@/components/CreatureRevealOverlay").then(mod => ({ default: mod.CreatureRevealOverlay })))
 const DuelStartOverlay = dynamic(() => import("@/components/DuelStartOverlay").then(mod => ({ default: mod.DuelStartOverlay })))
 const GlobalAlertListener = dynamic(() => import("@/components/GlobalAlertListener").then(mod => ({ default: mod.GlobalAlertListener })))
+const CrossCompanyRecallBanner = dynamic(() => import("@/components/CrossCompanyRecallBanner").then(mod => ({ default: mod.CrossCompanyRecallBanner })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
@@ -84,6 +85,10 @@ export default async function DashboardLayout({
                     )}
                     {/* Alert P2P listener: globale a tutta la dashboard, non solo alla pagina Conferme */}
                     <SafeWrapper><GlobalAlertListener currentUser={session.user} /></SafeWrapper>
+                    {/* Richiami sull'altra azienda (multi-company): banner cross-company */}
+                    {tctx.allowedCompanies.length > 1 && (
+                        <SafeWrapper><CrossCompanyRecallBanner /></SafeWrapper>
+                    )}
                 </SalesCompanyProvider>
             </SidebarProvider>
         </RealtimeProvider>

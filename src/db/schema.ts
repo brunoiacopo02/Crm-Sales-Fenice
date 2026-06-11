@@ -118,6 +118,10 @@ export const leads = pgTable('leads', {
     recallNote: text('recallNote'),
     agendaSentAt: timestamp('agendaSentAt', { withTimezone: true, mode: 'date' }),
     recallDate: timestamp('recallDate', { withTimezone: true, mode: 'date' }),
+    // Settato quando un lead con richiamo programmato riceve esito NON_RISPOSTO:
+    // indica "aveva un richiamo e non ha risposto" (badge sulla card). Azzerato
+    // quando viene programmato un nuovo richiamo o il lead esce dalla pipeline.
+    recallMissedAt: timestamp('recallMissedAt', { withTimezone: true, mode: 'date' }),
     appointmentDate: timestamp('appointmentDate', { withTimezone: true, mode: 'date' }),
     appointmentNote: text('appointmentNote'),
     appointmentCreatedAt: timestamp('appointmentCreatedAt', { withTimezone: true, mode: 'date' }),

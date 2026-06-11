@@ -11,6 +11,9 @@ type GdoQuickActionsProps = {
     leadId: string
     leadVersion: number
     onSettled?: () => void
+    /** Note esistenti (recallNote/lastCallNote) precompilate nel popover Richiamo:
+     *  per ri-programmare basta scegliere la data, senza ricopiare tutto. */
+    recallPrefillNote?: string | null
 }
 
 /** Spawn ~10 tiny confetti particles on a card for appointment celebration */
@@ -46,7 +49,7 @@ const DISCARD_REASONS = [
     "non ha soldi"
 ]
 
-export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActionsProps) {
+export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillNote }: GdoQuickActionsProps) {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
 
@@ -136,8 +139,8 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled }: GdoQuickActi
     const openPopover = (e: React.MouseEvent, type: 'scartato' | 'richiamo' | 'appuntamento') => {
         e.stopPropagation()
         setActivePopover(activePopover === type ? null : type)
-        // reset form on open
-        setNote("")
+        // reset form on open — il Richiamo precompila le note esistenti
+        setNote(type === 'richiamo' ? (recallPrefillNote || "") : "")
         setDateStr("")
         setDiscardReason("")
     }

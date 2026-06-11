@@ -1,12 +1,15 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2 } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 import { AgendaButton } from "./AgendaButton"
 import { CompanyBadge } from "./CompanyBadge"
+import { RecallDateTimePicker } from "./DateTimePickers"
 import { getLeadsWithSamePhone } from "@/app/actions/pipelineActions"
+import { updateRecallDetails } from "@/app/actions/recallActions"
 
 type LeadProps = {
     lead: {
@@ -29,6 +32,7 @@ type LeadProps = {
         source?: string | null
         phoneSuspicious?: boolean | null
         duplicatePhone?: boolean
+        recallMissedAt?: Date | null
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -112,11 +116,47 @@ function describeDuplicate(d: DuplicateInfo): string {
     return 'Mai chiamato'
 }
 
+function toLocalInputValue(d: Date): string {
+    const dt = new Date(d)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+}
+
 export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
+    const router = useRouter()
     const [showScript, setShowScript] = useState(false)
     const [showNoteModal, setShowNoteModal] = useState(false)
     const [showDupModal, setShowDupModal] = useState(false)
     const [dupList, setDupList] = useState<DuplicateInfo[] | null>(null)
+    const [showEditRecall, setShowEditRecall] = useState(false)
+    const [editRecallDate, setEditRecallDate] = useState("")
+    const [editRecallNote, setEditRecallNote] = useState("")
+    const [savingRecall, setSavingRecall] = useState(false)
+
+    const openEditRecall = (e: React.MouseEvent) => {
+        e.stopPropagation(); e.preventDefault()
+        setEditRecallDate(lead.recallDate ? toLocalInputValue(new Date(lead.recallDate)) : "")
+        setEditRecallNote(lead.recallNote || "")
+        setShowEditRecall(true)
+    }
+
+    const saveEditRecall = async () => {
+        if (!editRecallDate) return
+        setSavingRecall(true)
+        try {
+            const res = await updateRecallDetails(lead.id, new Date(editRecallDate), editRecallNote || null)
+            if (!res.success) {
+                alert(res.error)
+            } else {
+                setShowEditRecall(false)
+                router.refresh()
+            }
+        } catch {
+            alert("Errore nel salvataggio del richiamo")
+        } finally {
+            setSavingRecall(false)
+        }
+    }
 
     const openDupModal = (e: React.MouseEvent) => {
         e.stopPropagation(); e.preventDefault()
@@ -201,6 +241,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             )}
                             {lead.callCount > 0 && (
                                 <div className="text-[10px] font-bold text-ash-500 bg-ash-100 px-1.5 py-0.5 rounded-md">{lead.callCount}° ch.</div>
+                            )}
+                            {lead.recallMissedAt && (
+                                <div
+                                    className="flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600 shrink-0"
+                                    title={`Aveva un richiamo e non ha risposto (${new Date(lead.recallMissedAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })})`}
+                                >
+                                    <PhoneMissed className="h-3 w-3" /> Richiamo NR
+                                </div>
                             )}
                             <CompanyBadge companyId={lead.companyId} />
                         </div>
@@ -312,6 +360,16 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
 
                 {/* 4. Actions Right */}
                 <div className="flex items-center justify-end shrink-0 pl-2 gap-2">
+                    {lead.recallDate && (
+                        <button
+                            onClick={openEditRecall}
+                            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                            title="Modifica data/note del richiamo (senza registrare una chiamata)"
+                        >
+                            <Pencil className="w-3.5 h-3.5" />
+                            <span className="hidden xl:inline">Modifica</span>
+                        </button>
+                    )}
                     {displayNote && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowNoteModal(true); }}
@@ -337,7 +395,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                         hasEmail={!!lead.email}
                         agendaSentAt={lead.agendaSentAt}
                     />
-                    <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
+                    <GdoQuickActions leadId={lead.id} leadVersion={lead.version} recallPrefillNote={lead.recallNote || lead.lastCallNote || null} />
                 </div>
 
                 </div>{/* end main row */}
@@ -376,6 +434,52 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                     leadPhone={lead.phone}
                                     agendaSentAt={lead.agendaSentAt ?? null}
                                 />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modifica Richiamo Modal */}
+                {showEditRecall && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }}>
+                        <div className="absolute inset-0 bg-black/50" />
+                        <div
+                            className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200 px-5 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Pencil className="h-4 w-4 text-blue-600" />
+                                    <div>
+                                        <div className="text-sm font-bold text-ash-900">Modifica Richiamo</div>
+                                        <div className="text-xs text-ash-500">{lead.name} — nessuna chiamata registrata</div>
+                                    </div>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }} className="p-1.5 rounded-lg hover:bg-blue-200/50 transition-colors">
+                                    <X className="w-5 h-5 text-ash-600" />
+                                </button>
+                            </div>
+                            <div className="p-4">
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Nuova data e ora *</label>
+                                <div className="mb-3">
+                                    <RecallDateTimePicker value={editRecallDate} onChange={setEditRecallDate} compact />
+                                </div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Note (già compilate)</label>
+                                <textarea
+                                    value={editRecallNote}
+                                    onChange={(e) => setEditRecallNote(e.target.value)}
+                                    className="input-fenice !text-xs !py-2 !px-2.5 resize-none h-20 mb-3 w-full"
+                                />
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }} className="px-2 py-1 text-xs text-ash-500 font-semibold">Annulla</button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); saveEditRecall(); }}
+                                        disabled={savingRecall || !editRecallDate}
+                                        className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold disabled:opacity-50"
+                                    >
+                                        {savingRecall ? 'Salvataggio…' : 'Salva richiamo'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -512,7 +616,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                 </div>
             )}
             <div className="mt-auto pt-3 border-t border-ash-100 flex items-center justify-between">
-                <GdoQuickActions leadId={lead.id} leadVersion={lead.version} />
+                <GdoQuickActions leadId={lead.id} leadVersion={lead.version} recallPrefillNote={lead.recallNote || lead.lastCallNote || null} />
             </div>
         </div>
     )
