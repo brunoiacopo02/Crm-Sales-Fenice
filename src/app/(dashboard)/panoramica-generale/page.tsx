@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getLeadOverview, getFunnelOverview, getMetricsOverview } from "@/app/actions/panoramicaActions";
 import { tryCurrentTenant } from "@/lib/tenancy";
 import { PanoramicaClient } from "./PanoramicaClient";
+import { SalesAlertStrip } from "./SalesAlertStrip";
 
 export default async function PanoramicaGeneralePage() {
     const supabase = await createClient();
@@ -40,6 +41,8 @@ export default async function PanoramicaGeneralePage() {
                     </p>
                 </div>
             </div>
+
+            <SalesAlertStrip />
 
             <PanoramicaClient
                 initialData={overview}
