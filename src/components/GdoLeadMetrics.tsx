@@ -13,6 +13,7 @@ interface Metrics {
     confermati: number;
     presenziati: number;
     chiusi: number;
+    month: { fissati: number; confermati: number; presenziati: number; chiusi: number };
     weekStart: string;
     weekEnd: string;
 }
@@ -83,6 +84,10 @@ export function GdoLeadMetrics({ gdoUserId }: GdoLeadMetricsProps) {
     });
     const weekLabel = `${fmt(ws)} — ${fmt(we)}`;
 
+    const pct = (num: number, den: number) => (den > 0 ? `${Math.round((num / den) * 100)}%` : '—');
+    const m = metrics.month;
+    const monthLabel = new Date().toLocaleDateString('it-IT', { month: 'long', timeZone: 'Europe/Rome' });
+
     return (
         <div>
             <div className="flex items-center justify-between mb-2">
@@ -106,6 +111,24 @@ export function GdoLeadMetrics({ gdoUserId }: GdoLeadMetricsProps) {
                         </div>
                     );
                 })}
+            </div>
+            {/* Mini-barra mese: fissati + % conferma + % presentati sui propri app del mese */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs">
+                <div className="font-semibold uppercase tracking-wide text-gray-400">Mese di {monthLabel}</div>
+                <div className="text-gray-600">
+                    App fissati: <span className="font-bold text-gray-900">{m.fissati}</span>
+                </div>
+                <div className="text-gray-600">
+                    % Conferma: <span className={`font-bold ${m.fissati > 0 && m.confermati / m.fissati >= 0.15 ? 'text-emerald-600' : 'text-amber-600'}`}>{pct(m.confermati, m.fissati)}</span>
+                    <span className="text-gray-400"> ({m.confermati})</span>
+                </div>
+                <div className="text-gray-600">
+                    % Presentati: <span className="font-bold text-gray-900">{pct(m.presenziati, m.fissati)}</span>
+                    <span className="text-gray-400"> ({m.presenziati})</span>
+                </div>
+                <div className="text-gray-600">
+                    Chiusi: <span className="font-bold text-gray-900">{m.chiusi}</span>
+                </div>
             </div>
         </div>
     );

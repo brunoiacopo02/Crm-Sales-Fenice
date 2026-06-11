@@ -421,7 +421,18 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
     const weekStart = new Date(y, m - 1, d + monOffset, 0, 0, 0, 0);
     const weekEnd = new Date(y, m - 1, d + monOffset + 6, 23, 59, 59, 999);
 
+    // Mese corrente (Europe/Rome) — per le percentuali di conferma/presenza
+    // mostrate nella mini-barra KPI in pipeline.
+    const monthStart = new Date(y, m - 1, 1, 0, 0, 0, 0);
+    const monthEnd = new Date(y, m, 0, 23, 59, 59, 999);
+
+    // Range query = unione settimana ∪ mese (la settimana può sforare nel mese
+    // precedente/successivo); il bucketing preciso avviene in JS.
+    const rangeStart = weekStart < monthStart ? weekStart : monthStart;
+    const rangeEnd = weekEnd > monthEnd ? weekEnd : monthEnd;
+
     const gdoLeads = await db.select({
+        appointmentDate: leads.appointmentDate,
         confirmationsOutcome: leads.confirmationsOutcome,
         salespersonOutcome: leads.salespersonOutcome,
     }).from(leads).where(
@@ -429,8 +440,8 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
             eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoUserId),
             isNotNull(leads.appointmentDate),
-            gte(leads.appointmentDate, weekStart),
-            lte(leads.appointmentDate, weekEnd)
+            gte(leads.appointmentDate, rangeStart),
+            lte(leads.appointmentDate, rangeEnd)
         )
     );
 
@@ -438,16 +449,29 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
     let confermati = 0;
     let presenziati = 0;
     let chiusi = 0;
+    const month = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
 
     for (const lead of gdoLeads) {
-        fissati++;
         const isConfermato = lead.confirmationsOutcome === 'confermato';
         const isPresenziatoFlag = isPresenziato(lead.salespersonOutcome);
         const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
 
-        if (isConfermato) confermati++;
-        if (isPresenziatoFlag) presenziati++;
-        if (isChiuso) chiusi++;
+        const apptAt = lead.appointmentDate ? new Date(lead.appointmentDate) : null;
+        const inMonth = apptAt && apptAt >= monthStart && apptAt <= monthEnd;
+        if (inMonth) {
+            month.fissati++;
+            if (isConfermato) month.confermati++;
+            if (isPresenziatoFlag) month.presenziati++;
+            if (isChiuso) month.chiusi++;
+        }
+
+        const inWeek = apptAt && apptAt >= weekStart && apptAt <= weekEnd;
+        if (inWeek) {
+            fissati++;
+            if (isConfermato) confermati++;
+            if (isPresenziatoFlag) presenziati++;
+            if (isChiuso) chiusi++;
+        }
     }
 
     return {
@@ -455,6 +479,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         confermati,
         presenziati,
         chiusi,
+        month,
         weekStart: weekStart.toISOString(),
         weekEnd: weekEnd.toISOString(),
     };

@@ -2,8 +2,8 @@
 import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
-import { leads, callLogs, pipelineSnapshots } from "@/db/schema"
-import { eq, and, ne, isNull, isNotNull, lt, or, lte, desc, gte } from "drizzle-orm"
+import { leads, callLogs, pipelineSnapshots, users } from "@/db/schema"
+import { eq, and, ne, isNull, isNotNull, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
 import { subDays } from "date-fns"
@@ -82,6 +82,18 @@ export async function getPipelineLeads() {
     const firstCall = pipelineLeads.filter(l => l.callCount === 0)
     const secondCall = pipelineLeads.filter(l => l.callCount === 1)
     const thirdCall = pipelineLeads.filter(l => l.callCount === 2)
+
+    // 2ª/3ª chiamata: i lead fermi da più tempo in cima, quelli appena
+    // richiamati in fondo (richiesta GDO 2026-06-11). Ordina per lastCallDate
+    // crescente (mai chiamati/più vecchi prima), id come tiebreaker stabile.
+    const byOldestCall = (a: { lastCallDate: Date | null; id: string }, b: { lastCallDate: Date | null; id: string }) => {
+        const ta = a.lastCallDate ? new Date(a.lastCallDate).getTime() : 0
+        const tb = b.lastCallDate ? new Date(b.lastCallDate).getTime() : 0
+        if (ta !== tb) return ta - tb
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    }
+    secondCall.sort(byOldestCall)
+    thirdCall.sort(byOldestCall)
 
     // DIAG: capture every pipeline fetch with detail to investigate "lead spariscono"
     if (isGdo) {
@@ -186,14 +198,96 @@ export async function getPipelineLeads() {
         }
     }
 
+    // Detector duplicati telefono (non bloccante): numeri normalizzati alle
+    // ultime 9 cifre presenti su più lead della company. Le card mostrano un
+    // badge; il dettaglio si carica on-demand con getLeadsWithSamePhone().
+    let dupPhoneKeys = new Set<string>()
+    try {
+        const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 9)`
+        const dupRows = await db.select({ key: phoneKeyExpr })
+            .from(leads)
+            .where(eq(leads.companyId, ctx.companyId))
+            .groupBy(phoneKeyExpr)
+            .having(sql`count(*) > 1`)
+        dupPhoneKeys = new Set(dupRows.map(r => r.key).filter(k => !!k && k.length >= 6))
+    } catch (e) {
+        console.error('[dupPhones] detection failed', e)
+    }
+    const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-9)
+    const withDupFlag = <T extends { phone: string }>(arr: T[]) =>
+        arr.map(l => ({ ...l, duplicatePhone: dupPhoneKeys.has(phoneKey(l.phone)) }))
+
     return {
-        firstCall,
-        secondCall,
-        thirdCall,
+        firstCall: withDupFlag(firstCall),
+        secondCall: withDupFlag(secondCall),
+        thirdCall: withDupFlag(thirdCall),
         fourthCall: fourthCallLeads,
         isFourthCallActive,
-        recalls: recallsLeads,
+        recalls: withDupFlag(recallsLeads),
         appointments: appointmentsLeads
+    }
+}
+
+/**
+ * Dettaglio duplicati: tutti gli ALTRI lead della company con lo stesso numero
+ * (normalizzato alle ultime 9 cifre) del lead dato. Mostra chi li ha in carico,
+ * l'ultimo esito e le date — così il GDO evita di richiamare numeri già gestiti
+ * da un collega. Sola lettura, non bloccante.
+ */
+export async function getLeadsWithSamePhone(leadId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const [target] = await db.select({ id: leads.id, phone: leads.phone })
+        .from(leads)
+        .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)))
+        .limit(1)
+    if (!target) return { success: false as const, error: 'Lead non trovato' }
+
+    const key = (target.phone || '').replace(/\D/g, '').slice(-9)
+    if (key.length < 6) return { success: true as const, duplicates: [] }
+
+    const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 9)`
+    const rows = await db.select({
+        id: leads.id,
+        name: leads.name,
+        phone: leads.phone,
+        funnel: leads.funnel,
+        status: leads.status,
+        callCount: leads.callCount,
+        lastCallDate: leads.lastCallDate,
+        recallDate: leads.recallDate,
+        appointmentDate: leads.appointmentDate,
+        salespersonOutcome: leads.salespersonOutcome,
+        discardReason: leads.discardReason,
+        assignedToName: users.displayName,
+        assignedToRealName: users.name,
+    })
+        .from(leads)
+        .leftJoin(users, eq(users.id, leads.assignedToId))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            ne(leads.id, leadId),
+            sql`${phoneKeyExpr} = ${key}`,
+        ))
+        .orderBy(desc(leads.updatedAt))
+        .limit(10)
+
+    return {
+        success: true as const,
+        duplicates: rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            funnel: r.funnel,
+            status: r.status,
+            callCount: r.callCount,
+            lastCallDate: r.lastCallDate ? r.lastCallDate.toISOString() : null,
+            recallDate: r.recallDate ? r.recallDate.toISOString() : null,
+            appointmentDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
+            salespersonOutcome: r.salespersonOutcome,
+            discardReason: r.discardReason,
+            assignedToName: r.assignedToRealName || r.assignedToName || 'Non assegnato',
+        })),
     }
 }
 

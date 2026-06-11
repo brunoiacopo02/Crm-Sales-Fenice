@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2 } from "lucide-react"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 import { AgendaButton } from "./AgendaButton"
 import { CompanyBadge } from "./CompanyBadge"
+import { getLeadsWithSamePhone } from "@/app/actions/pipelineActions"
 
 type LeadProps = {
     lead: {
@@ -27,6 +28,7 @@ type LeadProps = {
         createdAt?: Date | null
         source?: string | null
         phoneSuspicious?: boolean | null
+        duplicatePhone?: boolean
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -87,9 +89,44 @@ function getFunnelRarity(funnel: string | null): FunnelRarity {
     return FUNNEL_RARITY_MAP[funnel.toUpperCase()] ?? 'bronze'
 }
 
+type DuplicateInfo = {
+    id: string
+    name: string
+    funnel: string | null
+    status: string
+    callCount: number
+    lastCallDate: string | null
+    recallDate: string | null
+    appointmentDate: string | null
+    salespersonOutcome: string | null
+    discardReason: string | null
+    assignedToName: string
+}
+
+function describeDuplicate(d: DuplicateInfo): string {
+    if (d.salespersonOutcome) return `Esito venditore: ${d.salespersonOutcome}`
+    if (d.status === 'APPOINTMENT') return `Appuntamento ${d.appointmentDate ? new Date(d.appointmentDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' }) : 'fissato'}`
+    if (d.status === 'REJECTED') return `Scartato${d.discardReason ? ` (${d.discardReason})` : ''}`
+    if (d.recallDate) return `Richiamo ${new Date(d.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}`
+    if (d.callCount > 0) return `${d.callCount} tentativ${d.callCount === 1 ? 'o' : 'i'}${d.lastCallDate ? `, ultimo ${new Date(d.lastCallDate).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}` : ''}`
+    return 'Mai chiamato'
+}
+
 export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
     const [showScript, setShowScript] = useState(false)
     const [showNoteModal, setShowNoteModal] = useState(false)
+    const [showDupModal, setShowDupModal] = useState(false)
+    const [dupList, setDupList] = useState<DuplicateInfo[] | null>(null)
+
+    const openDupModal = (e: React.MouseEvent) => {
+        e.stopPropagation(); e.preventDefault()
+        setShowDupModal(true)
+        if (dupList === null) {
+            getLeadsWithSamePhone(lead.id).then((res) => {
+                setDupList(res.success ? res.duplicates : [])
+            }).catch(() => setDupList([]))
+        }
+    }
     // Client-side time for expiry checks (avoids hydration mismatch)
     const [clientNow, setClientNow] = useState(0)
     useEffect(() => { setClientNow(Date.now()) }, [])
@@ -178,6 +215,16 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                     aria-label="Telefono potenzialmente incompleto — verifica prima di chiamare"
                                 />
                             )}
+                            {lead.duplicatePhone && (
+                                <button
+                                    onClick={openDupModal}
+                                    className="flex items-center gap-1 rounded-md border border-orange-300 bg-orange-50 px-1.5 py-0.5 text-[10px] font-bold text-orange-700 hover:bg-orange-100 transition-colors shrink-0"
+                                    title="Numero presente su altri lead — clicca per i dettagli"
+                                >
+                                    <Users className="h-3 w-3" />
+                                    Duplicato
+                                </button>
+                            )}
                             <button
                                 onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato!'); }}
                                 className="ml-0.5 p-1 hover:bg-brand-orange-50 text-ash-400 hover:text-brand-orange rounded-md transition-colors opacity-0 group-hover/phone:opacity-100"
@@ -226,6 +273,11 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             <div className="flex flex-col">
                                 <div className="text-[10px] text-ash-400 font-medium">Richiamo</div>
                                 <div>{new Date(lead.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}</div>
+                                {lead.lastCallDate && (
+                                    <div className="text-[10px] font-normal text-ash-400">
+                                        Ultima ch. {new Date(lead.lastCallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ) : lead.appointmentDate ? (
@@ -324,6 +376,54 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                     leadPhone={lead.phone}
                                     agendaSentAt={lead.agendaSentAt ?? null}
                                 />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Duplicati Modal */}
+                {showDupModal && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setShowDupModal(false); }}>
+                        <div className="absolute inset-0 bg-black/50" />
+                        <div
+                            className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="bg-gradient-to-r from-orange-50 to-orange-100 border-b border-orange-200 px-5 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Users className="h-5 w-5 text-orange-600" />
+                                    <div>
+                                        <div className="text-sm font-bold text-ash-900">Numero presente su altri lead</div>
+                                        <div className="text-xs text-ash-500">{lead.phone} — verifica prima di richiamare</div>
+                                    </div>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); setShowDupModal(false); }} className="p-1.5 rounded-lg hover:bg-orange-200/50 transition-colors">
+                                    <X className="w-5 h-5 text-ash-600" />
+                                </button>
+                            </div>
+                            <div className="p-4 max-h-[60vh] overflow-y-auto">
+                                {dupList === null ? (
+                                    <div className="flex items-center gap-2 py-4 text-sm text-ash-500">
+                                        <Loader2 className="h-4 w-4 animate-spin" /> Caricamento…
+                                    </div>
+                                ) : dupList.length === 0 ? (
+                                    <div className="py-4 text-sm text-ash-500">Nessun altro lead trovato con questo numero.</div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {dupList.map((d) => (
+                                            <div key={d.id} className="rounded-lg border border-ash-200 bg-ash-50/50 px-3 py-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="text-sm font-semibold text-ash-800 truncate">{d.name}</div>
+                                                    {d.funnel && <div className="text-[10px] font-bold uppercase text-ash-400 shrink-0">{d.funnel}</div>}
+                                                </div>
+                                                <div className="mt-0.5 text-xs text-ash-600">
+                                                    In carico a: <span className="font-semibold">{d.assignedToName}</span>
+                                                </div>
+                                                <div className="text-xs text-ash-500">{describeDuplicate(d)}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
