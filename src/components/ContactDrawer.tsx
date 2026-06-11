@@ -187,6 +187,23 @@ export function ContactDrawer({
     const lead = profile?.lead
     const events = profile?.events || []
 
+    // Chiusura protetta: se ci sono modifiche non salvate (es. note digitate),
+    // chiedi conferma prima di scartarle — evita di perdere il lavoro con un
+    // click accidentale fuori dal drawer.
+    const requestClose = () => {
+        if (isEditing && lead) {
+            const dirty =
+                editName !== (lead.name || "") ||
+                editPhone !== (lead.phone || "") ||
+                editEmail !== (lead.email || "") ||
+                editNote !== (lead.lastCallNote || "")
+            if (dirty && !window.confirm('Hai modifiche non salvate (note/dati). Chiudere comunque e perderle?')) {
+                return
+            }
+        }
+        onClose()
+    }
+
     const formatTimestamp = (ts: Date) => {
         return new Date(ts).toLocaleString('it-IT', {
             timeZone: 'Europe/Rome',
@@ -224,7 +241,7 @@ export function ContactDrawer({
 
     return (
         <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
-            <div className="drawer-overlay" onClick={onClose} />
+            <div className="drawer-overlay" onClick={requestClose} />
 
             <div className="relative w-full max-w-md flex flex-col bg-white shadow-elevated z-50 drawer-panel">
                 {/* Header - sticky */}
@@ -260,7 +277,7 @@ export function ContactDrawer({
                                     {isDeletingLead ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
                                 </button>
                             )}
-                            <button onClick={onClose} className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors">
+                            <button onClick={requestClose} className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>

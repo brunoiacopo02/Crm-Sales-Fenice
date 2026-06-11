@@ -17,6 +17,7 @@ type CrossRecall = {
     phone: string
     recallDate: string | null
     companyId: string
+    isExpired: boolean
 }
 
 const COMPANY_LABELS: Record<string, string> = {
@@ -32,7 +33,11 @@ export function CrossCompanyRecallBanner() {
     const load = useCallback(async () => {
         try {
             const rows = await getCrossCompanyRecalls()
-            setRecalls(rows)
+            const nowMs = Date.now()
+            setRecalls(rows.map(r => ({
+                ...r,
+                isExpired: r.recallDate ? new Date(r.recallDate).getTime() <= nowMs : false,
+            })))
         } catch {
             // utente senza multi-azienda o errore transitorio: silenzioso
         }
@@ -54,7 +59,7 @@ export function CrossCompanyRecallBanner() {
                 const when = r.recallDate
                     ? new Date(r.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })
                     : ''
-                const isExpired = r.recallDate ? new Date(r.recallDate).getTime() <= Date.now() : false
+                const isExpired = r.isExpired
                 return (
                     <div
                         key={r.id}

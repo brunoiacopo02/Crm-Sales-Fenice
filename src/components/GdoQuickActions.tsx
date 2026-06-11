@@ -61,9 +61,18 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
 
     const containerRef = useRef<HTMLDivElement>(null)
 
+    // Bozza in corso: se il GDO ha già digitato note/data, il click fuori NON
+    // chiude il popover (si chiude solo con Annulla/submit) — evita di perdere
+    // le note con un click accidentale.
+    const hasDraftRef = useRef(false)
+    useEffect(() => {
+        hasDraftRef.current = note.trim() !== "" || dateStr !== "" || discardReason !== ""
+    }, [note, dateStr, discardReason])
+
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                if (hasDraftRef.current) return
                 setActivePopover(null)
             }
         }

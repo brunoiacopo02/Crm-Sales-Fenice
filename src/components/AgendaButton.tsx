@@ -27,8 +27,12 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     const [loading, setLoading] = useState(false)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
+    // Stato ottimistico per l'invio diretto Serenamente: il badge diventa verde
+    // SUBITO, anche dentro il drawer dello script dove router.refresh() non
+    // ri-renderizza le props (il click sembrava "non fare nulla").
+    const [sentNow, setSentNow] = useState(false)
 
-    const alreadySent = !!agendaSentAt
+    const alreadySent = !!agendaSentAt || sentNow
     const needsEmail = !hasEmail
 
     const handleOpen = (e: React.MouseEvent) => {
@@ -49,6 +53,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
 
     const handleDirectSend = async (e: React.MouseEvent) => {
         e.stopPropagation()
+        e.preventDefault()
         if (loading) return
         if (alreadySent && !window.confirm("Agenda già inviata a questo lead. Reinviare?")) return
         setLoading(true)
@@ -56,12 +61,14 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         try {
             const result = await sendAgendaSerenamente(leadId)
             if (result.success) {
+                setSentNow(true)
+                window.alert("✅ Agenda inviata a " + leadName + " via WhatsApp")
                 router.refresh()
             } else {
-                window.alert(result.error || "Errore invio agenda")
+                window.alert("❌ Invio agenda fallito: " + (result.error || "errore sconosciuto"))
             }
         } catch (err: any) {
-            window.alert(err?.message || "Errore invio agenda")
+            window.alert("❌ Invio agenda fallito: " + (err?.message || "errore di rete"))
         } finally {
             setLoading(false)
         }
@@ -104,6 +111,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     return (
         <>
             <button
+                type="button"
                 onClick={isSerenamente ? handleDirectSend : handleOpen}
                 disabled={isSerenamente && loading}
                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${alreadySent
