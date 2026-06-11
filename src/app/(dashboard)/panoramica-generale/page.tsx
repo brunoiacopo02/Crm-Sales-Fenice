@@ -4,6 +4,7 @@ import { getLeadOverview, getFunnelOverview, getMetricsOverview } from "@/app/ac
 import { tryCurrentTenant } from "@/lib/tenancy";
 import { PanoramicaClient } from "./PanoramicaClient";
 import { SalesAlertStrip } from "./SalesAlertStrip";
+import { ManagerParamsStrip } from "./ManagerParamsStrip";
 
 export default async function PanoramicaGeneralePage() {
     const supabase = await createClient();
@@ -43,6 +44,8 @@ export default async function PanoramicaGeneralePage() {
             </div>
 
             <SalesAlertStrip />
+
+            {!isAllCompanies && <ManagerParamsStrip />}
 
             <PanoramicaClient
                 initialData={overview}

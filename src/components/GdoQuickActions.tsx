@@ -38,6 +38,28 @@ function spawnMiniConfetti(card: HTMLElement) {
     }
 }
 
+/**
+ * Finestre valide per fissare un appuntamento (richiesta manager 2026-06-11):
+ * domani 15:00-22:00 oppure dopodomani 9:00-22:00. Fuori finestra → warning
+ * NON bloccante (il GDO può comunque confermare).
+ */
+function appointmentSlotWarning(dateStr: string): string | null {
+    if (!dateStr) return null
+    const dt = new Date(dateStr)
+    if (isNaN(dt.getTime())) return null
+    const now = new Date()
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+    const dayDiff = Math.round((startOfDay(dt) - startOfDay(now)) / 86400000)
+    const h = dt.getHours() + dt.getMinutes() / 60
+    if (dayDiff === 1 && h >= 15 && h <= 22) return null
+    if (dayDiff === 2 && h >= 9 && h <= 22) return null
+    if (dayDiff < 1) return "Data nel passato o per oggi: le finestre giuste sono domani 15:00-22:00 o dopodomani 9:00-22:00."
+    if (dayDiff > 2) return "Data troppo lontana: fissa per domani (15:00-22:00) o dopodomani (9:00-22:00)."
+    return dayDiff === 1
+        ? "Orario fuori finestra: domani l'appuntamento va dalle 15:00 alle 22:00."
+        : "Orario fuori finestra: dopodomani l'appuntamento va dalle 9:00 alle 22:00."
+}
+
 const DISCARD_REASONS = [
     "non interessato",
     "disoccupato",
@@ -235,6 +257,12 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                             <RecallDateTimePicker value={dateStr} onChange={setDateStr} compact />
                         )}
                     </div>
+
+                    {activePopover === 'appuntamento' && dateStr && appointmentSlotWarning(dateStr) && (
+                        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-700">
+                            ⚠️ {appointmentSlotWarning(dateStr)}
+                        </div>
+                    )}
 
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Note (Opzionale)</label>
                     <textarea
