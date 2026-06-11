@@ -86,6 +86,15 @@ export async function claimTimedChestReward(userId: string): Promise<{
             return { success: false, error: 'Utente non trovato' };
         }
 
+        // Stop ricompense alle 20:00 (Europe/Rome): lo sblocco richiede ~20 min
+        // e il turno finisce — dopo le 20 niente nuovi claim (Correzioni CRM 2026-06-11).
+        const romeHour = parseInt(new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/Rome', hour: '2-digit', hour12: false,
+        }).format(new Date()), 10);
+        if (romeHour >= 20 || romeHour < 7) {
+            return { success: false, error: 'Gli scrigni si fermano alle 20:00 — torna domani!' };
+        }
+
         // Server-side cooldown check
         if (user.lastTimedChestAt) {
             const elapsed = Date.now() - new Date(user.lastTimedChestAt).getTime();

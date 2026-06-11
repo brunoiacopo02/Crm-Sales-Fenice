@@ -110,7 +110,15 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                 targetDate = new Date(dateStr)
             }
 
-            const result = await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion)
+            // Script completato in questa sessione per questo lead (flag scritto
+            // da ScriptWidget): conta nelle quest "usa lo script". Valido 2h.
+            let scriptDone = false
+            try {
+                const raw = sessionStorage.getItem(`script_done_${leadId}`)
+                scriptDone = !!raw && (Date.now() - parseInt(raw, 10)) < 2 * 60 * 60 * 1000
+            } catch { /* no-op */ }
+
+            const result = await updateLeadOutcome(leadId, outcome, note, targetDate, undefined, outcome === 'DA_SCARTARE' ? discardReason : undefined, leadVersion, scriptDone)
 
             if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
                 alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
@@ -120,6 +128,11 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
+            }
+
+            // Esito registrato: il flag script vale per UNA chiamata
+            if (scriptDone) {
+                try { sessionStorage.removeItem(`script_done_${leadId}`) } catch { /* no-op */ }
             }
 
             // Reset states

@@ -204,6 +204,18 @@ export function TimedChest({ userId }: { userId: string }) {
         return () => { mountedRef.current = false; };
     }, []);
 
+    // Finestra scrigni: spawn consentito solo fino alle 19:30 Europe/Rome —
+    // lo sblocco richiede 15-30 min e i claim si fermano alle 20:00
+    // (Correzioni CRM 2026-06-11). Il conteggio azioni continua comunque.
+    function chestWindowOpen(): boolean {
+        const hm = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false,
+        }).format(new Date());
+        const [h, m] = hm.split(':').map(Number);
+        const mins = h * 60 + m;
+        return mins >= 7 * 60 && mins <= 19 * 60 + 30;
+    }
+
     // Listen for reward_earned events to count actions
     useEffect(() => {
         function handleRewardEarned() {
@@ -214,7 +226,7 @@ export function TimedChest({ userId }: { userId: string }) {
                 const updated = { ...prev, actionCount: prev.actionCount + 1 };
 
                 // Check if threshold reached → spawn chest
-                if (updated.actionCount >= updated.threshold) {
+                if (updated.actionCount >= updated.threshold && chestWindowOpen()) {
                     const countdownMs = randomBetween(MIN_COUNTDOWN_MINUTES, MAX_COUNTDOWN_MINUTES) * 60 * 1000;
                     const now = new Date();
                     const readyAt = new Date(now.getTime() + countdownMs);

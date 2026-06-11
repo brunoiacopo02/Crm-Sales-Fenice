@@ -498,7 +498,13 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
     const nextIndex = current + 1;
     setCurrent(nextIndex);
     if (nextIndex === blocks.length - 1) {
-      window.dispatchEvent(new CustomEvent('script_completed'));
+      window.dispatchEvent(new CustomEvent('script_completed', { detail: { leadId: leadId ?? null } }));
+      // Flag per-lead letto da GdoQuickActions: l'esito loggato dalle azioni
+      // rapide porta scriptCompleted=true in callLogs → le quest "usa lo
+      // script" avanzano anche senza passare dall'OutcomeModal.
+      if (leadId) {
+        try { sessionStorage.setItem(`script_done_${leadId}`, String(Date.now())); } catch { /* no-op */ }
+      }
       void tryFinalSave();
     }
   };

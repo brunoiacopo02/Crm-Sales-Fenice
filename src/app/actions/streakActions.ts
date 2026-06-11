@@ -7,6 +7,7 @@ import { getStreakMultiplier, getStreakTierLabel, getNextStreakMilestone } from 
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { getItalianHolidays } from "@/lib/workingDaysUtils";
 
 // --- Helpers ---
 
@@ -15,12 +16,18 @@ function getTodayRome(): string {
 }
 
 /**
- * Check if a date string (YYYY-MM-DD) is a workday (Mon-Fri).
+ * Check if a date string (YYYY-MM-DD) is a workday.
+ * Calendario Fenice (allineato a workingDaysUtils): si lavora LUN-SAB,
+ * riposo solo domenica + festività italiane. Prima era Mon-Fri: il sabato
+ * lavorato non contava e ogni lunedì la streak ripartiva da 1 (bug
+ * "la streak si azzera la domenica", Correzioni CRM 2026-06-11).
  */
 function isWorkday(dateStr: string): boolean {
     const d = new Date(dateStr + 'T12:00:00');
     const day = d.getDay(); // 0=Sun, 6=Sat
-    return day >= 1 && day <= 5;
+    if (day === 0) return false;
+    const year = parseInt(dateStr.slice(0, 4), 10);
+    return !getItalianHolidays(year).has(dateStr);
 }
 
 /**
