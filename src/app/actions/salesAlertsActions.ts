@@ -15,7 +15,7 @@
  */
 
 import { db } from "@/db";
-import { leads, monthlyTargets, marketingTargets, metaAccountDaily, users, companies } from "@/db/schema";
+import { leads, monthlyLeadTargets, marketingTargets, metaAccountDaily, users, companies } from "@/db/schema";
 import { and, eq, gte, lt, lte, inArray, isNull, isNotNull, or } from "drizzle-orm";
 import { currentTenant, assertSalesArea, type TenantContext } from '@/lib/tenancy';
 import {
@@ -119,7 +119,7 @@ export async function getSalesAlerts(): Promise<SalesAlertsResult> {
             companyIds.map(async (c) => ({
                 companyId: c,
                 companyLabel: companyNames.get(c) || c,
-                cards: await cardsForCompany(singleCompanyCtx(ctx, c), ym, daysSoFar, totalDays),
+                cards: await cardsForCompany(singleCompanyCtx(ctx, c), ym, daysSoFar),
             })),
         );
 
@@ -145,7 +145,6 @@ async function cardsForCompany(
     ctx: TenantContext,
     ym: string,
     daysSoFar: number,
-    totalDays: number,
 ): Promise<SalesAlertCard[]> {
     const { year, month } = parseYearMonth(ym);
 
@@ -167,16 +166,24 @@ async function cardsForCompany(
     };
 
     // ── Target ────────────────────────────────────────────────────────────────
+    // Fonte: monthlyLeadTargets — la stessa tabella dei target "Numeri Mensili"
+    // della panoramica (NON monthlyTargets, che è la tabella di /manager-targets).
+    // Gli *Extra sono offset manuali sommati agli ACT in getMetricsOverview:
+    // li includiamo per far tornare le card con la tabella sottostante.
     const [targetRow] = await db
         .select({
-            targetAppFissati: monthlyTargets.targetAppFissati,
-            targetTrattative: monthlyTargets.targetTrattative,
-            targetClosed: monthlyTargets.targetClosed,
-            targetValoreContratti: monthlyTargets.targetValoreContratti,
-            workingDaysOverride: monthlyTargets.workingDaysOverride,
+            targetAppFissati: monthlyLeadTargets.targetAppMonthly,
+            targetTrattative: monthlyLeadTargets.targetPresMonthly,
+            targetClosed: monthlyLeadTargets.targetCloseMonthly,
+            targetValoreContratti: monthlyLeadTargets.targetFatturatoMonthly,
+            workingDays: monthlyLeadTargets.workingDays,
+            appExtra: monthlyLeadTargets.appExtra,
+            trattativeExtra: monthlyLeadTargets.trattativeExtra,
+            closeExtra: monthlyLeadTargets.closeExtra,
+            fatturatoExtraEur: monthlyLeadTargets.fatturatoExtraEur,
         })
-        .from(monthlyTargets)
-        .where(and(eq(monthlyTargets.companyId, ctx.companyId), eq(monthlyTargets.month, ym)))
+        .from(monthlyLeadTargets)
+        .where(and(eq(monthlyLeadTargets.companyId, ctx.companyId), eq(monthlyLeadTargets.yearMonth, ym)))
         .limit(1);
 
     const [roasTargetRow] = await db
@@ -271,7 +278,7 @@ async function cardsForCompany(
         .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
     const nGdo = gdoRows.length;
 
-    const workingDaysTotal = targetRow?.workingDaysOverride ?? countWorkingDaysInMonth(year, month);
+    const workingDaysTotal = targetRow?.workingDays || countWorkingDaysInMonth(year, month);
     const workingDaysElapsedByDay = new Array<number>(daysSoFar + 1).fill(0);
     for (let d = 1; d <= daysSoFar; d++) {
         workingDaysElapsedByDay[d] = countWorkingDaysElapsed(year, month, new Date(Date.UTC(year, month - 1, d, 12)));
@@ -280,22 +287,27 @@ async function cardsForCompany(
     // ── Costruzione card ─────────────────────────────────────────────────────
     const cards: SalesAlertCard[] = [];
 
-    // Card cumulative vs target proporzionale (calendario): valore, fissati, trattative, chiusure.
+    // Card cumulative vs target proporzionale sui GIORNI LAVORATIVI (stessa
+    // semantica del "Target Prev" di Numeri Mensili: daily = monthly/workingDays,
+    // prev = daily × giorni lavorativi trascorsi). `extra` = offset manuale
+    // (monthlyLeadTargets.*Extra) sommato all'ACT come in getMetricsOverview.
     function cumulativeCard(
         key: string,
         label: string,
         byDay: number[],
         monthlyTarget: number,
         unit: SalesAlertCard['unit'],
+        extra: number,
     ): SalesAlertCard {
         const hasTarget = monthlyTarget > 0;
-        let cum = 0;
+        let cum = extra;
         const series: DayPoint[] = [];
         let actualToday = 0;
         let targetToday = 0;
         for (let d = 1; d <= daysSoFar; d++) {
             cum += byDay[d];
-            const proportionalTarget = hasTarget ? (monthlyTarget * d) / totalDays : 0;
+            const wdElapsed = workingDaysElapsedByDay[d];
+            const proportionalTarget = hasTarget && workingDaysTotal > 0 ? (monthlyTarget * wdElapsed) / workingDaysTotal : 0;
             const deviation = proportionalTarget > 0 ? (cum - proportionalTarget) / proportionalTarget : null;
             series.push({ deviation, belowThreshold: hasTarget && deviation !== null && deviation < DEVIATION_THRESHOLD });
             if (d === daysSoFar) { actualToday = cum; targetToday = proportionalTarget; }
@@ -311,16 +323,16 @@ async function cardsForCompany(
         };
     }
 
-    cards.push(cumulativeCard('valore', 'Valore Contratti', valoreByDay, Number(targetRow?.targetValoreContratti ?? 0), 'eur'));
-    cards.push(cumulativeCard('fissati', 'App Fissati', apptByDay, targetRow?.targetAppFissati ?? 0, 'count'));
-    cards.push(cumulativeCard('trattative', 'Trattative', trattByDay, targetRow?.targetTrattative ?? 0, 'count'));
-    cards.push(cumulativeCard('chiusure', 'Chiusure', closeByDay, targetRow?.targetClosed ?? 0, 'count'));
+    cards.push(cumulativeCard('valore', 'Valore Contratti', valoreByDay, Number(targetRow?.targetValoreContratti ?? 0), 'eur', targetRow?.fatturatoExtraEur ?? 0));
+    cards.push(cumulativeCard('fissati', 'App Fissati', apptByDay, targetRow?.targetAppFissati ?? 0, 'count', targetRow?.appExtra ?? 0));
+    cards.push(cumulativeCard('trattative', 'Trattative', trattByDay, targetRow?.targetTrattative ?? 0, 'count', targetRow?.trattativeExtra ?? 0));
+    cards.push(cumulativeCard('chiusure', 'Chiusure', closeByDay, targetRow?.targetClosed ?? 0, 'count', targetRow?.closeExtra ?? 0));
 
     // ROAS: fatturato cumulato / spesa cumulata vs roasTarget (target non proporzionale).
     {
         const hasTarget = roasTarget > 0;
         let cumSpend = 0;
-        let cumRevenue = 0;
+        let cumRevenue = targetRow?.fatturatoExtraEur ?? 0;
         const series: DayPoint[] = [];
         let roasToday: number | null = null;
         for (let d = 1; d <= daysSoFar; d++) {
@@ -343,10 +355,10 @@ async function cardsForCompany(
     }
 
     // Medie per-GDO su giorni lavorativi: app/gg/GDO e chiusure/gg/GDO.
-    function perGdoCard(key: string, label: string, byDay: number[], monthlyTarget: number): SalesAlertCard {
+    function perGdoCard(key: string, label: string, byDay: number[], monthlyTarget: number, extra: number): SalesAlertCard {
         const hasTarget = monthlyTarget > 0 && nGdo > 0 && workingDaysTotal > 0;
         const targetAvg = hasTarget ? monthlyTarget / workingDaysTotal / nGdo : 0;
-        let cum = 0;
+        let cum = extra;
         const series: DayPoint[] = [];
         let actualToday = 0;
         for (let d = 1; d <= daysSoFar; d++) {
@@ -368,8 +380,8 @@ async function cardsForCompany(
         };
     }
 
-    cards.push(perGdoCard('appPerGdo', 'Media App/gg/GDO', apptByDay, targetRow?.targetAppFissati ?? 0));
-    cards.push(perGdoCard('closePerGdo', 'Media Chiusure/gg/GDO', closeByDay, targetRow?.targetClosed ?? 0));
+    cards.push(perGdoCard('appPerGdo', 'Media App/gg/GDO', apptByDay, targetRow?.targetAppFissati ?? 0, targetRow?.appExtra ?? 0));
+    cards.push(perGdoCard('closePerGdo', 'Media Chiusure/gg/GDO', closeByDay, targetRow?.targetClosed ?? 0, targetRow?.closeExtra ?? 0));
 
     return cards;
 }

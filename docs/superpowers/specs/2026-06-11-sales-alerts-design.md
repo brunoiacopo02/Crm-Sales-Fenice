@@ -18,13 +18,21 @@ Regola uniforme: scostamento cumulativo MTD vs target proporzionale; sotto sogli
 
 | # | Card | Actual giornaliero | Target mensile | Soglia |
 |---|------|--------------------|----------------|--------|
-| 1 | Valore Contratti | SUM `leads.closeAmountEur` per giorno di `salespersonOutcomeAt` (solo `salespersonOutcome='Chiuso'`) | `monthlyTargets.targetValoreContratti` | -20% |
-| 2 | App Fissati | conteggio lead con `appointmentDate` per giorno di `appointmentCreatedAt \|\| appointmentDate` | `monthlyTargets.targetAppFissati` | -20% |
-| 3 | Trattative | presenziati: `salespersonOutcome IN ('Chiuso','Non chiuso')` per giorno di `salespersonOutcomeAt` | `monthlyTargets.targetTrattative` | -20% |
-| 4 | Chiusure | `salespersonOutcome='Chiuso'` per giorno di `salespersonOutcomeAt` | `monthlyTargets.targetClosed` | -20% |
+| 1 | Valore Contratti | SUM `leads.closeAmountEur` per giorno di `salespersonOutcomeAt` (solo `salespersonOutcome='Chiuso'`) + `fatturatoExtraEur` | `monthlyLeadTargets.targetFatturatoMonthly` | -20% |
+| 2 | App Fissati | conteggio lead con `appointmentDate` per giorno di `appointmentCreatedAt \|\| appointmentDate` + `appExtra` | `monthlyLeadTargets.targetAppMonthly` | -20% |
+| 3 | Trattative | presenziati: `salespersonOutcome IN ('Chiuso','Non chiuso')` per giorno di `salespersonOutcomeAt` + `trattativeExtra` | `monthlyLeadTargets.targetPresMonthly` | -20% |
+| 4 | Chiusure | `salespersonOutcome='Chiuso'` per giorno di `salespersonOutcomeAt` + `closeExtra` | `monthlyLeadTargets.targetCloseMonthly` | -20% |
 | 5 | ROAS | fatturato cumulato (card 1) ÷ spesa cumulata (`metaAccountDaily.spend`, account dei funnel company) | `marketingTargets.roasTarget` (riuso del target marketing, id=1 per company) | -15% |
-| 6 | Media App/gg/GDO | app MTD ÷ giorni lavorativi trascorsi ÷ # GDO attivi | `targetAppFissati` ÷ giorni lavorativi del mese ÷ # GDO attivi | -20% |
-| 7 | Media Chiusure/gg/GDO | chiusure MTD ÷ giorni lavorativi trascorsi ÷ # GDO attivi | `targetClosed` ÷ giorni lavorativi del mese ÷ # GDO attivi | -20% |
+| 6 | Media App/gg/GDO | app MTD ÷ giorni lavorativi trascorsi ÷ # GDO attivi | `targetAppMonthly` ÷ giorni lavorativi del mese ÷ # GDO attivi | -20% |
+| 7 | Media Chiusure/gg/GDO | chiusure MTD ÷ giorni lavorativi trascorsi ÷ # GDO attivi | `targetCloseMonthly` ÷ giorni lavorativi del mese ÷ # GDO attivi | -20% |
+
+**Correzione post-QA (2026-06-11):** la fonte target è **`monthlyLeadTargets`**
+(yearMonth, companyId) — la stessa tabella dei target "Numeri Mensili" della panoramica —
+NON `monthlyTargets` (tabella di /manager-targets, ferma ad aprile 2026). Il target
+proporzionale delle card 1-4 usa i **giorni lavorativi** (`monthlyLeadTargets.workingDays`,
+fallback `countWorkingDaysInMonth`), identico al "Target Prev" di Numeri Mensili: daily =
+monthly/workingDays, prev = daily × giorni lavorativi trascorsi. Gli offset manuali `*Extra`
+sono sommati agli ACT (come in `getMetricsOverview`) così le card tornano con la tabella.
 
 Note:
 - Le definizioni 1-4 sono identiche a quelle di `panoramicaActions.ts` (stesse colonne/whitelist),
