@@ -2,7 +2,8 @@
 import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
-import { leads, callLogs, pipelineSnapshots, users } from "@/db/schema"
+import { leads, callLogs, pipelineSnapshots, users, leadEvents } from "@/db/schema"
+import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 import { eq, and, ne, isNull, isNotNull, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
@@ -386,9 +387,22 @@ export async function updateLeadOutcome(
         newRecallMissedAt = null
     }
 
+    // Nuovo appuntamento su un lead scartato dalle Conferme: lo scarto
+    // precedente viene azzerato (altrimenti resta nella lista scarti) e il
+    // ciclo NR Conferme riparte da zero. Se invece era solo parcheggiato o
+    // snoozato, risolve parcheggio/snooze (QA Conferme 2026-06-12).
+    const confermeReset = outcome === 'APPUNTAMENTO'
+        ? (lead.confirmationsOutcome === 'scartato'
+            ? CONFERME_DISCARD_RESET
+            : (lead.confNeedsReschedule || lead.confSnoozeAt
+                ? { confNeedsReschedule: false as const, confSnoozeAt: null }
+                : {}))
+        : {}
+
     // Update lead record (atomic version check in WHERE prevents TOCTOU race)
     const updated = await db.update(leads)
         .set({
+            ...confermeReset,
             status: newStatus,
             callCount: newCallCount,
             lastCallDate: now,
@@ -427,6 +441,26 @@ export async function updateLeadOutcome(
     }
 
     if (outcome === 'APPUNTAMENTO') {
+        // Traccia il reset dello scarto Conferme nella timeline del lead.
+        if (lead.confirmationsOutcome === 'scartato') {
+            try {
+                await db.insert(leadEvents).values({
+                    id: crypto.randomUUID(),
+                    leadId,
+                    eventType: 'conferme_scarto_reset',
+                    userId: effectiveUserId || null,
+                    timestamp: now,
+                    metadata: {
+                        previousDiscardReason: lead.confirmationsDiscardReason,
+                        trigger: 'gdo_new_appointment',
+                    },
+                    companyId: ctx.companyId,
+                })
+            } catch (e) {
+                console.error("conferme_scarto_reset event err:", e)
+            }
+        }
+
         // Marketing webhook: notify external CRM that an appointment was set
         await enqueueMarketingWebhook({
             eventType: 'appointment.set',

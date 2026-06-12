@@ -8,6 +8,7 @@ import { eq, asc, desc, and } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -39,6 +40,16 @@ export async function getAppointments() {
     const upcoming = allAppointments.filter(l => l.appointmentDate && l.appointmentDate >= now)
     const past = allAppointments.filter(l => l.appointmentDate && l.appointmentDate < now)
 
+    // Lead parcheggiati dalle Conferme ("da rifissare"): appointmentDate
+    // azzerata e data spostata in recallDate. Senza questo bucket il lead
+    // spariva dalla vista GDO (QA Conferme 2026-06-12).
+    const inRifissaggio = allAppointments.filter(l => !l.appointmentDate)
+    inRifissaggio.sort((a, b) => {
+        const ta = a.recallDate ? a.recallDate.getTime() : Infinity
+        const tb = b.recallDate ? b.recallDate.getTime() : Infinity
+        return ta - tb
+    })
+
     // Sort upcoming by appointmentDate ascending (closest first)
     upcoming.sort((a, b) => {
         if (!a.appointmentDate || !b.appointmentDate) return 0
@@ -51,7 +62,7 @@ export async function getAppointments() {
         return b.appointmentDate.getTime() - a.appointmentDate.getTime()
     })
 
-    return { upcoming, past }
+    return { upcoming, past, inRifissaggio }
 }
 
 export async function updateGdoAppointment(leadId: string, appointmentDate: Date, note: string, currentVersion?: number) {
@@ -78,7 +89,19 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
     // Assicurarsi che appointmentDate sia un oggetto Date valido se Next lo passasse come stringa in JSON
     const dateObj = new Date(appointmentDate);
 
+    // Rifissaggio GDO (QA Conferme 2026-06-12):
+    // - lead scartato dalle Conferme → azzera lo scarto e il ciclo NR, così
+    //   il nuovo appuntamento rientra nel board Conferme;
+    // - lead parcheggiato/snoozato dalle Conferme → risolve parcheggio e
+    //   snooze (recallDate ospitava la data del parcheggio, va azzerata).
+    const confermeReset = lead.confirmationsOutcome === 'scartato'
+        ? { ...CONFERME_DISCARD_RESET, recallDate: null }
+        : (lead.confNeedsReschedule || lead.confSnoozeAt
+            ? { confNeedsReschedule: false, confSnoozeAt: null, recallDate: null }
+            : {});
+
     const updated = await db.update(leads).set({
+        ...confermeReset,
         appointmentDate: dateObj,
         appointmentNote: note,
         version: lead.version + 1,
@@ -92,6 +115,26 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
 
     if (updated.length === 0) {
         return { success: false, error: 'CONCURRENCY_ERROR' };
+    }
+
+    // Traccia il reset dello scarto Conferme nella timeline del lead.
+    if (lead.confirmationsOutcome === 'scartato') {
+        try {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'conferme_scarto_reset',
+                userId: supabaseUser.id,
+                timestamp: new Date(),
+                metadata: {
+                    previousDiscardReason: lead.confirmationsDiscardReason,
+                    trigger: 'gdo_reschedule',
+                },
+                companyId: ctx.companyId,
+            })
+        } catch (e) {
+            console.error("conferme_scarto_reset event err:", e)
+        }
     }
 
     // Marketing webhook: appointment rescheduled by GDO.

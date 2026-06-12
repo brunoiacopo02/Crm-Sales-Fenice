@@ -7,7 +7,7 @@ export default async function AppointmentsPage() {
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
 
-    const { upcoming, past } = await getAppointments()
+    const { upcoming, past, inRifissaggio } = await getAppointments()
 
     return (
         <div className="space-y-6">
@@ -16,13 +16,14 @@ export default async function AppointmentsPage() {
                     Appuntamenti
                 </h1>
                 <div className="text-sm text-ash-500">
-                    Totale generati: <span className="font-semibold text-green-600">{upcoming.length + past.length}</span>
+                    Totale generati: <span className="font-semibold text-green-600">{upcoming.length + past.length + inRifissaggio.length}</span>
                 </div>
             </div>
 
             <AppointmentBoard
                 upcoming={upcoming}
                 past={past}
+                inRifissaggio={inRifissaggio}
             />
         </div>
     )

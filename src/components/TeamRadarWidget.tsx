@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 
 import { sendInternalAlert } from "@/app/actions/alertActions"
 import { Users, Send, AlertTriangle, MessageSquarePlus } from "lucide-react"
+import { connectConfermePresence, subscribeConfermePresence } from "@/lib/confermePresence"
 
 export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     const [activeUsers, setActiveUsers] = useState<any[]>([])
@@ -11,27 +12,25 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     const [message, setMessage] = useState("")
     const [isSending, setIsSending] = useState(false)
 
-    // Real-time radar using Supabase WebSockets
+    // Radar realtime sul presence SINGLETON condiviso (vedi
+    // src/lib/confermePresence.ts) — niente secondo canale sullo stesso topic.
     useEffect(() => {
-        const { createClient } = require("@/utils/supabase/client");
-        const supabase = createClient();
-        const channel = supabase.channel('conferme_realtime_board');
-
-        channel.on('presence', { event: 'sync' }, () => {
-            const newState = channel.presenceState();
-            const map = new Map();
-            for (const id in newState) {
-                newState[id].forEach((p: any) => {
-                    if (p.user && p.user.id !== currentUser.id) {
-                        map.set(p.user.id, p);
-                    }
-                });
+        const disconnect = connectConfermePresence({
+            id: currentUser.id,
+            name: currentUser.name,
+            displayName: currentUser.displayName,
+        })
+        const offPresence = subscribeConfermePresence((entries) => {
+            const map = new Map<string, any>()
+            for (const p of entries) {
+                if (!p.user || p.user.id === currentUser.id) continue
+                // Se un utente ha più entry (es. due tab), preferisci quella col lead attivo
+                const existing = map.get(p.user.id)
+                if (!existing || (p.leadId && !existing.leadId)) map.set(p.user.id, p)
             }
-            setActiveUsers(Array.from(map.values()));
-        });
-
-        channel.subscribe();
-        return () => { supabase.removeChannel(channel); };
+            setActiveUsers(Array.from(map.values()))
+        })
+        return () => { offPresence(); disconnect() }
     }, [currentUser.id])
 
     const handleSend = async () => {

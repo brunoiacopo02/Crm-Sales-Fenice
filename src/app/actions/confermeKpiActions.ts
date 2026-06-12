@@ -6,6 +6,7 @@ import { eq, and, gte, lte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 import { weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
+import { isConfermeTl } from '@/lib/confermeTl'
 
 /** Format a Date to 'yyyy-MM-dd' in Europe/Rome timezone */
 function toRomeDateStr(date: Date): string {
@@ -329,6 +330,152 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     }
 }
 
+// ── Panoramica TL Conferme ───────────────────────────────────────────────────
+// Dashboard generale per il TL del team Conferme (richiesta 2026-06-12):
+// %conferme, %presenze, %chiusure, numero chiusure e fatturato settimanale.
+
+export type ConfermeTlOverview =
+    | {
+        success: true
+        month: {
+            fissati: number
+            confermati: number
+            scartati: number
+            presentati: number
+            chiusure: number
+            fatturatoEur: number
+            pctConferme: number | null   // confermati / fissati
+            pctPresenze: number | null   // presentati / confermati
+            pctChiusure: number | null   // chiusure / presentati
+        }
+        week: {
+            chiusure: number
+            fatturatoEur: number
+        }
+        perOperator: Array<{
+            userId: string
+            name: string
+            confermati: number
+            scartati: number
+            chiusure: number
+            fatturatoEur: number
+        }>
+    }
+    | { success: false; error: string }
+
+export async function getConfermeTlOverview(monthDate: Date = new Date()): Promise<ConfermeTlOverview> {
+    try {
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+        const authorized = ['ADMIN', 'MANAGER'].includes(ctx.role)
+            || (ctx.role === 'CONFERME' && isConfermeTl(ctx.email))
+        if (!authorized) return { success: false, error: 'Non autorizzato' }
+
+        const start = startOfMonth(monthDate)
+        const end = endOfMonth(monthDate)
+
+        // Funnel mese — fissati = appuntamenti SCHEDULATI nel mese
+        // (appointmentDate, stessa definizione del calendario KPI Conferme).
+        const apptRows = await db.select({
+            outcome: leads.confirmationsOutcome,
+            confirmationsUserId: leads.confirmationsUserId,
+        }).from(leads).where(and(
+            companyScope(ctx, leads.companyId),
+            gte(leads.appointmentDate, start),
+            lte(leads.appointmentDate, end),
+        ))
+        const fissati = apptRows.length
+        const confermati = apptRows.filter(r => r.outcome === 'confermato').length
+        const scartati = apptRows.filter(r => r.outcome === 'scartato').length
+
+        // Presenze/chiusure mese — solo lead passati dalle Conferme
+        // (confirmationsOutcome='confermato' + confirmationsUserId), esito
+        // venditore registrato nel mese. Presentato = Chiuso | Non chiuso.
+        const outcomeRows = await db.select({
+            outcome: leads.salespersonOutcome,
+            amount: leads.closeAmountEur,
+            confirmationsUserId: leads.confirmationsUserId,
+        }).from(leads).where(and(
+            companyScope(ctx, leads.companyId),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            isNotNull(leads.confirmationsUserId),
+            isNotNull(leads.salespersonOutcomeAt),
+            gte(leads.salespersonOutcomeAt, start),
+            lte(leads.salespersonOutcomeAt, end),
+        ))
+        let presentati = 0
+        let chiusureMese = 0
+        let fatturatoMese = 0
+        for (const r of outcomeRows) {
+            if (r.outcome === 'Chiuso' || r.outcome === 'Non chiuso') {
+                presentati++
+                if (r.outcome === 'Chiuso') {
+                    chiusureMese++
+                    fatturatoMese += r.amount || 0
+                }
+            }
+        }
+
+        // Chiusure + fatturato della settimana corrente (lun-dom Europe/Rome).
+        const wk = weekBoundsRome(new Date())
+        const weekRows = await db.select({ amount: leads.closeAmountEur }).from(leads).where(and(
+            companyScope(ctx, leads.companyId),
+            eq(leads.salespersonOutcome, 'Chiuso'),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            isNotNull(leads.confirmationsUserId),
+            gte(leads.salespersonOutcomeAt, wk.start),
+            lt(leads.salespersonOutcomeAt, wk.end),
+        ))
+        const chiusureSettimana = weekRows.length
+        const fatturatoSettimana = weekRows.reduce((s, r) => s + (r.amount || 0), 0)
+
+        // Breakdown per operatore Conferme (mese): confermati/scartati lavorati
+        // da lui + chiusure/fatturato dei lead che ha confermato.
+        const operators = await db.select({
+            id: users.id,
+            name: users.name,
+            displayName: users.displayName,
+        }).from(users).where(and(
+            eq(users.role, 'CONFERME'),
+            companyScope(ctx, users.companyId),
+            eq(users.isActive, true),
+        ))
+        const perOperator = operators.map(op => {
+            const confirmedBy = apptRows.filter(r => r.confirmationsUserId === op.id)
+            const closedBy = outcomeRows.filter(r =>
+                r.confirmationsUserId === op.id && r.outcome === 'Chiuso')
+            return {
+                userId: op.id,
+                name: op.name || op.displayName || op.id,
+                confermati: confirmedBy.filter(r => r.outcome === 'confermato').length,
+                scartati: confirmedBy.filter(r => r.outcome === 'scartato').length,
+                chiusure: closedBy.length,
+                fatturatoEur: closedBy.reduce((s, r) => s + (r.amount || 0), 0),
+            }
+        }).sort((a, b) => b.confermati - a.confermati)
+
+        return {
+            success: true,
+            month: {
+                fissati,
+                confermati,
+                scartati,
+                presentati,
+                chiusure: chiusureMese,
+                fatturatoEur: fatturatoMese,
+                pctConferme: fissati > 0 ? confermati / fissati : null,
+                pctPresenze: confermati > 0 ? presentati / confermati : null,
+                pctChiusure: presentati > 0 ? chiusureMese / presentati : null,
+            },
+            week: { chiusure: chiusureSettimana, fatturatoEur: fatturatoSettimana },
+            perOperator,
+        }
+    } catch (error) {
+        console.error('Errore getConfermeTlOverview:', error)
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+}
+
 export async function getConfermeSalesList(monthDate: Date = new Date()) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
@@ -340,7 +487,15 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         displayName: users.displayName,
         name: users.name,
         avatarUrl: users.avatarUrl
-    }).from(users).where(and(eq(users.role, 'VENDITORE'), companyScope(ctx, users.companyId)))
+    }).from(users).where(and(
+        eq(users.role, 'VENDITORE'),
+        // Staff condiviso: venditori con companyId='fenice' operano anche su
+        // Serenamente via allowedCompanies (fallback legacy su companyId).
+        or(
+            sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+            and(sql`${users.allowedCompanies} IS NULL`, companyScope(ctx, users.companyId)),
+        ),
+    ))
 
     // Un solo set di lead "presenti nel mese" per ciascun venditore.
     // Un lead conta come ATTIVO NEL MESE se:

@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { leads, users } from "@/db/schema"
-import { and, eq, isNull, isNotNull, gte, lte, or, asc, inArray } from "drizzle-orm"
+import { and, eq, isNull, isNotNull, gte, lte, or, asc, inArray, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 
@@ -63,7 +63,12 @@ export async function listVenditori(): Promise<VenditoreLite[]> {
         name: users.name,
         displayName: users.displayName,
     }).from(users).where(and(
-        eq(users.companyId, ctx.companyId),
+        // Staff condiviso: venditori con companyId='fenice' operano anche su
+        // Serenamente via allowedCompanies (fallback legacy su companyId).
+        or(
+            sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+        ),
         eq(users.role, 'VENDITORE'),
         eq(users.isActive, true),
     ))

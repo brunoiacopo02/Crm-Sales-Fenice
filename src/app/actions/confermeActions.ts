@@ -1165,6 +1165,55 @@ export async function cancelConfermeRecall(
 }
 
 /**
+ * Richiami Conferme ("risentire dopo" / snooze) imminenti o scaduti su TUTTE
+ * le aziende consentite all'operatore, inclusa quella attiva. Alimenta il
+ * banner blu globale ConfermeRecallBanner (QA Conferme 2026-06-12): prima
+ * le sveglie snooze vivevano solo dentro il board della azienda attiva,
+ * quindi "non arrivavano o non sempre".
+ */
+export async function getConfermeRecallAlerts(): Promise<Array<{
+    id: string
+    name: string
+    phone: string | null
+    snoozeAt: string
+    notes: string | null
+    companyId: string
+}>> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    if (!["CONFERME", "MANAGER", "ADMIN"].includes(ctx.role)) return []
+    if (ctx.isAllCompanies) return []
+
+    const soon = new Date(Date.now() + 30 * 60 * 1000)
+    const rows = await db.select({
+        id: leads.id,
+        name: leads.name,
+        phone: leads.phone,
+        confSnoozeAt: leads.confSnoozeAt,
+        confRecallNotes: leads.confRecallNotes,
+        companyId: leads.companyId,
+    })
+        .from(leads)
+        .where(and(
+            inArray(leads.companyId, ctx.allowedCompanies),
+            isNull(leads.confirmationsOutcome),
+            isNotNull(leads.confSnoozeAt),
+            lte(leads.confSnoozeAt, soon),
+        ))
+        .orderBy(asc(leads.confSnoozeAt))
+        .limit(8)
+
+    return rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        snoozeAt: (r.confSnoozeAt as Date).toISOString(),
+        notes: r.confRecallNotes,
+        companyId: r.companyId,
+    }))
+}
+
+/**
  * Restituisce tutti gli appuntamenti dei venditori (lead con
  * salespersonUserId e appointmentDate valorizzati) nell'intervallo
  * richiesto. Raggruppato per venditore. Usato dalle Conferme per
@@ -1200,12 +1249,18 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
     const ctx = await currentTenant()
     assertSalesArea(ctx)
 
+    // Staff condiviso multi-tenant: i venditori hanno companyId='fenice' e
+    // operano su Serenamente via allowedCompanies. Filtrare solo su companyId
+    // svuotava il calendario su Serenamente (QA Conferme 2026-06-12).
     const venditori = await db.select({
         id: users.id,
         name: users.name,
         displayName: users.displayName,
     }).from(users).where(and(
-        eq(users.companyId, ctx.companyId),
+        or(
+            sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+        ),
         eq(users.role, 'VENDITORE'),
         eq(users.isActive, true),
     ));

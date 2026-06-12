@@ -23,7 +23,7 @@ export function HeroSaturationCard({ data }: { data: ConfermeAnalyticsResult }) 
                     <div className="text-xs text-ash-500 font-semibold uppercase tracking-wide">Capacità team</div>
                     <div className="text-2xl font-bold text-ash-800">{fmtMin(data.hero.capacityMin)}</div>
                     <div className="text-xs text-ash-400 mt-1">
-                        {data.meta.nOperatoriAttivi} operatori × 6h30
+                        {data.meta.nOperatoriAttivi} operatori × 6h
                     </div>
                 </div>
                 <div>

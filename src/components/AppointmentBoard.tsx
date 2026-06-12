@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Phone, Mail, CalendarCheck, Clock, CheckCircle2, Pencil } from "lucide-react"
+import { Phone, Mail, CalendarCheck, Clock, CheckCircle2, Pencil, RefreshCcw, BellRing } from "lucide-react"
 import dynamic from "next/dynamic"
 
 const EditAppointmentModal = dynamic(
@@ -15,27 +15,33 @@ type LeadList = any[]
 
 export function AppointmentBoard({
     upcoming,
-    past
+    past,
+    inRifissaggio = []
 }: {
     upcoming: LeadList
     past: LeadList
+    inRifissaggio?: LeadList
 }) {
-    const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
+    const [activeTab, setActiveTab] = useState<'upcoming' | 'past' | 'rifissaggio'>('upcoming')
     const [editingLead, setEditingLead] = useState<any>(null)
     const router = useRouter()
-    
+
     // Sort chronologically
     const sortedUpcoming = [...upcoming].sort((a,b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime())
     const sortedPast = [...past].sort((a,b) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime()) // Past descending
-    const currentList = activeTab === 'upcoming' ? sortedUpcoming : sortedPast
+    const currentList = activeTab === 'upcoming' ? sortedUpcoming : activeTab === 'past' ? sortedPast : inRifissaggio
 
-    const renderCard = (lead: any, isUpcoming: boolean) => (
-        <div key={lead.id} className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-x-4 sm:gap-y-2 group relative overflow-hidden ${isUpcoming ? 'border-green-200 hover:border-green-400' : 'border-ash-200 hover:border-ash-300'}`}>
+    const renderCard = (lead: any, variant: 'upcoming' | 'past' | 'rifissaggio') => {
+        const isUpcoming = variant === 'upcoming'
+        const isRifissaggio = variant === 'rifissaggio'
+        return (
+        <div key={lead.id} className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-x-4 sm:gap-y-2 group relative overflow-hidden ${isUpcoming ? 'border-green-200 hover:border-green-400' : isRifissaggio ? 'border-sky-200 hover:border-sky-400' : 'border-ash-200 hover:border-ash-300'}`}>
             {/* Visual Highlight indicator left */}
             {isUpcoming && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>}
-            
-            {/* Pulsante Modifica Veloce */}
-            {isUpcoming && (
+            {isRifissaggio && <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky-500"></div>}
+
+            {/* Pulsante Modifica Veloce (per i rifissaggi è il modo per fissare la nuova data) */}
+            {(isUpcoming || isRifissaggio) && (
                 <button 
                     onClick={() => setEditingLead(lead)}
                     className="absolute right-2 top-2 p-1.5 text-ash-400 hover:text-brand-orange hover:bg-orange-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 z-10 bg-white shadow-sm border border-ash-100"
@@ -85,19 +91,47 @@ export function AppointmentBoard({
 
             {/* 4. Dates & Action */}
             <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0 w-full sm:w-48 text-left sm:text-right">
-                <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center justify-end gap-1 w-full ${isUpcoming ? 'bg-green-100 text-green-700' : 'bg-ash-100 text-ash-600'}`}>
-                    <CalendarCheck className="h-3 w-3" />
-                    {lead.appointmentDate ? new Date(lead.appointmentDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' }) : 'N/D'}
-                </div>
+                {isRifissaggio ? (
+                    <div className="text-xs font-bold px-2 py-1 rounded inline-flex items-center justify-end gap-1 w-full bg-sky-100 text-sky-700">
+                        <RefreshCcw className="h-3 w-3" />
+                        Da rifissare{lead.recallDate ? ` (era ${new Date(lead.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })})` : ''}
+                    </div>
+                ) : (
+                    <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center justify-end gap-1 w-full ${isUpcoming ? 'bg-green-100 text-green-700' : 'bg-ash-100 text-ash-600'}`}>
+                        <CalendarCheck className="h-3 w-3" />
+                        {lead.appointmentDate ? new Date(lead.appointmentDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' }) : 'N/D'}
+                    </div>
+                )}
                 <div className="text-[10px] text-ash-400 flex items-center gap-1 w-full justify-end">
                     <Clock className="h-3 w-3" /> Fissato il: {lead.appointmentCreatedAt ? new Date(lead.appointmentCreatedAt).toLocaleDateString() : 'N/D'}
                 </div>
             </div>
 
             {/* 5. GDO Feedback Loop (Conferme & Vendita) */}
-            {(lead.confirmationsOutcome || lead.salespersonOutcome) && (
+            {(lead.confirmationsOutcome || lead.salespersonOutcome || isRifissaggio || lead.confSnoozeAt) && (
                 <div className="w-full mt-3 pt-3 border-t border-dashed border-ash-200 flex flex-wrap items-start gap-3 col-span-full">
-                    
+
+                    {/* Parcheggiato dalle Conferme: il GDO deve rifissare la data */}
+                    {isRifissaggio && (
+                        <div className="flex flex-col items-start gap-0.5 text-[11px] font-bold bg-sky-50 text-sky-700 px-2 py-1 rounded border border-sky-200">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                                Conferme: appuntamento da rifissare
+                            </div>
+                            {lead.confRecallNotes && (
+                                <span className="font-normal italic text-sky-600 ml-3">"{lead.confRecallNotes}"</span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Snooze Conferme: lo risentiranno più tardi */}
+                    {!isRifissaggio && lead.confSnoozeAt && (
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold bg-sky-50 text-sky-700 px-2 py-1 rounded border border-sky-200">
+                            <BellRing className="h-3 w-3" />
+                            Conferme: da risentire il {new Date(lead.confSnoozeAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
+                        </div>
+                    )}
+
                     {/* Conferme Badge */}
                     {lead.confirmationsOutcome === 'confermato' && (
                         <div className="flex items-center gap-1.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200">
@@ -155,7 +189,8 @@ export function AppointmentBoard({
                 </div>
             )}
         </div>
-    )
+        )
+    }
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl border border-ash-200 shadow-sm overflow-hidden max-w-5xl mx-auto">
@@ -174,6 +209,13 @@ export function AppointmentBoard({
                             In Programma <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">{upcoming.length}</span>
                         </button>
                         <button
+                            onClick={() => setActiveTab('rifissaggio')}
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'rifissaggio' ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 shadow-sm' : 'text-ash-500 hover:text-ash-700'}`}
+                        >
+                            <RefreshCcw className={`h-4 w-4 ${activeTab === 'rifissaggio' ? 'text-sky-600' : ''}`} />
+                            Da Rifissare <span className="text-xs bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">{inRifissaggio.length}</span>
+                        </button>
+                        <button
                             onClick={() => setActiveTab('past')}
                             className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'past' ? 'bg-white text-ash-900 ring-1 ring-ash-200 shadow-sm' : 'text-ash-500 hover:text-ash-700'}`}
                         >
@@ -187,16 +229,16 @@ export function AppointmentBoard({
             {/* LIST AREA */}
             <div className="flex-1 overflow-y-auto bg-ash-50/30 p-4">
                 <div className="flex flex-col gap-3 max-w-5xl mx-auto">
-                    {currentList.map((lead) => renderCard(lead, activeTab === 'upcoming'))}
+                    {currentList.map((lead) => renderCard(lead, activeTab))}
 
                     {currentList.length === 0 && (
                         <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-dashed border-ash-300 rounded-xl">
-                            <span className="text-5xl mb-4">{activeTab === 'upcoming' ? '📭' : '📜'}</span>
+                            <span className="text-5xl mb-4">{activeTab === 'upcoming' ? '📭' : activeTab === 'rifissaggio' ? '✅' : '📜'}</span>
                             <h3 className="text-lg font-medium text-ash-900">
-                                {activeTab === 'upcoming' ? 'Nessun appuntamento in programma' : 'Nessun appuntamento passato'}
+                                {activeTab === 'upcoming' ? 'Nessun appuntamento in programma' : activeTab === 'rifissaggio' ? 'Nessun appuntamento da rifissare' : 'Nessun appuntamento passato'}
                             </h3>
                             <p className="text-ash-500 mt-1 max-w-sm">
-                                {activeTab === 'upcoming' ? 'Continua a chiamare lead per fissare appuntamenti.' : 'Le anagrafiche degli appuntamenti scorsi appariranno qui.'}
+                                {activeTab === 'upcoming' ? 'Continua a chiamare lead per fissare appuntamenti.' : activeTab === 'rifissaggio' ? 'Quando le Conferme parcheggiano un tuo appuntamento da rifissare, lo trovi qui.' : 'Le anagrafiche degli appuntamenti scorsi appariranno qui.'}
                             </p>
                         </div>
                     )}

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Building2, Layers } from 'lucide-react'
+import { ChevronDown, Building2, Layers, ArrowLeftRight, Loader2 } from 'lucide-react'
+import { getCompanySwitchSummary, type CompanySwitchSummary } from '@/app/actions/companySummaryActions'
 
 // Sentinella "Tutte le aziende". Duplicata client-side per non importare
 // @/lib/tenancy (modulo server-only). Deve combaciare con ALL_COMPANIES.
@@ -53,8 +54,10 @@ export function SalesCompanySwitcher() {
   const [active, setActive] = useState<string | null>(null)
   const [canSwitch, setCanSwitch] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
+  const [summary, setSummary] = useState<CompanySwitchSummary[]>([])
 
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
     fetch('/api/company/selection', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -62,12 +65,20 @@ export function SalesCompanySwitcher() {
         setActive(d.active ?? null)
         setCanSwitch(!!d.canSwitch)
         setCompanies(d.companies ?? [])
+        // Mini-riassunto per azienda (panoramica rapida senza switchare).
+        if (d.canSwitch) {
+          const loadSummary = () => getCompanySwitchSummary().then(setSummary).catch(() => {})
+          loadSummary()
+          interval = setInterval(loadSummary, 120_000)
+        }
       })
       .catch(() => {})
+    return () => { if (interval) clearInterval(interval) }
   }, [])
 
   const isAll = active === ALL_COMPANIES
   const label = companies.find((c) => c.id === active)?.display_name ?? active ?? '—'
+  const summaryOf = (id: string) => summary.find((s) => s.companyId === id)
 
   async function pick(id: string) {
     if (busy || id === active) { setOpen(false); return }
@@ -94,6 +105,50 @@ export function SalesCompanySwitcher() {
     )
   }
 
+  // Switch istantaneo a un click: utente con esattamente 2 aziende reali e
+  // senza voce "Tutte le aziende" (QA Conferme 2026-06-12). Il pulsante mostra
+  // anche i numeri chiave dell'altra azienda (app oggi · richiami in scadenza).
+  const realCompanies = companies.filter((c) => c.id !== ALL_COMPANIES)
+  const hasAllOption = companies.some((c) => c.id === ALL_COMPANIES)
+  if (!hasAllOption && realCompanies.length === 2 && active && active !== ALL_COMPANIES) {
+    const other = realCompanies.find((c) => c.id !== active)
+    if (other) {
+      const s = summaryOf(other.id)
+      return (
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 rounded-md bg-orange-100 px-2.5 py-1 text-xs font-semibold text-brand-orange">
+            <Building2 className="w-3.5 h-3.5" />
+            <span>{label}</span>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => pick(other.id)}
+            title={`Passa subito a ${other.display_name}`}
+            className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-600 transition hover:border-brand-orange hover:text-brand-orange disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowLeftRight className="w-3.5 h-3.5" />}
+            <span>{other.display_name}</span>
+            {s && (s.apptToday > 0 || s.richiamiDue > 0) && (
+              <span className="flex items-center gap-1 text-[10px] font-bold">
+                {s.apptToday > 0 && (
+                  <span className="rounded bg-emerald-100 px-1 py-0.5 text-emerald-700" title={`${s.apptToday} appuntamenti oggi su ${other.display_name}`}>
+                    {s.apptToday} app
+                  </span>
+                )}
+                {s.richiamiDue > 0 && (
+                  <span className="rounded bg-sky-100 px-1 py-0.5 text-sky-700" title={`${s.richiamiDue} richiami in scadenza su ${other.display_name}`}>
+                    {s.richiamiDue} rich
+                  </span>
+                )}
+              </span>
+            )}
+          </button>
+        </div>
+      )
+    }
+  }
+
   return (
     <div className="relative">
       <button
@@ -109,6 +164,7 @@ export function SalesCompanySwitcher() {
         <div className="absolute right-0 mt-1 w-52 rounded-md border border-gray-200 bg-white shadow-lg z-50 overflow-hidden">
           {companies.map((c) => {
             const all = c.id === ALL_COMPANIES
+            const s = all ? undefined : summaryOf(c.id)
             return (
               <button
                 key={c.id}
@@ -118,6 +174,12 @@ export function SalesCompanySwitcher() {
               >
                 {all ? <Layers className="w-3.5 h-3.5 shrink-0" /> : <Building2 className="w-3.5 h-3.5 shrink-0 opacity-60" />}
                 <span className="flex-1">{c.display_name}</span>
+                {s && (s.apptToday > 0 || s.richiamiDue > 0) && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold">
+                    {s.apptToday > 0 && <span className="rounded bg-emerald-100 px-1 py-0.5 text-emerald-700">{s.apptToday} app</span>}
+                    {s.richiamiDue > 0 && <span className="rounded bg-sky-100 px-1 py-0.5 text-sky-700">{s.richiamiDue} rich</span>}
+                  </span>
+                )}
                 {c.id === active && <span>✓</span>}
               </button>
             )

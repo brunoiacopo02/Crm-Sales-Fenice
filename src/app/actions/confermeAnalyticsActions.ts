@@ -316,13 +316,15 @@ export async function getConfermeAnalytics(opts: {
     const pctParcheggiati = leadToccati > 0 ? leadIdsParcheggiati.size / leadToccati : 0;
 
     // 5. Hero: saturazione e staffing
+    // Turno operatore = 6h (360 min) — richiesta team Conferme 2026-06-12 (prima 6h30).
+    const SHIFT_MIN_PER_OPERATOR = 360;
     const tempoMedioTotaleMin = mediaTotaleSec / 60;
     const moltRitenta = 1 + pctSnoozeGiornata + pctParcheggiati;
     const chiamatePerGiorno = mediaAppGiorno * moltRitenta;
     const demandMin = chiamatePerGiorno * tempoMedioTotaleMin;
-    const capacityMin = 390 * Math.max(1, nOperatoriEffettivi);
+    const capacityMin = SHIFT_MIN_PER_OPERATOR * Math.max(1, nOperatoriEffettivi);
     const saturation = capacityMin > 0 ? demandMin / capacityMin : 0;
-    const operatorsFullDay = Math.ceil(demandMin / 390);
+    const operatorsFullDay = Math.ceil(demandMin / SHIFT_MIN_PER_OPERATOR);
 
     let peakOperators = 0;
     let peakHour: number | null = null;

@@ -11,6 +11,7 @@ const CreatureRevealOverlay = dynamic(() => import("@/components/CreatureRevealO
 const DuelStartOverlay = dynamic(() => import("@/components/DuelStartOverlay").then(mod => ({ default: mod.DuelStartOverlay })))
 const GlobalAlertListener = dynamic(() => import("@/components/GlobalAlertListener").then(mod => ({ default: mod.GlobalAlertListener })))
 const CrossCompanyRecallBanner = dynamic(() => import("@/components/CrossCompanyRecallBanner").then(mod => ({ default: mod.CrossCompanyRecallBanner })))
+const ConfermeRecallBanner = dynamic(() => import("@/components/ConfermeRecallBanner").then(mod => ({ default: mod.ConfermeRecallBanner })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
@@ -88,6 +89,10 @@ export default async function DashboardLayout({
                     {/* Richiami sull'altra azienda (multi-company): banner cross-company */}
                     {tctx.allowedCompanies.length > 1 && (
                         <SafeWrapper><CrossCompanyRecallBanner /></SafeWrapper>
+                    )}
+                    {/* Richiami "risentire dopo" Conferme: banner blu globale, tutte le aziende */}
+                    {session.user.role === 'CONFERME' && (
+                        <SafeWrapper><ConfermeRecallBanner /></SafeWrapper>
                     )}
                 </SalesCompanyProvider>
             </SidebarProvider>

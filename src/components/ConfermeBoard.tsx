@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise, Archive } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
 
@@ -15,7 +15,7 @@ import { ConfermeActiveTimerBanner } from "@/components/ConfermeActiveTimerBanne
 import { CloseLeadModal } from "@/components/CloseLeadModal"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
-import { createClient } from "@/utils/supabase/client"
+import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeLeadChanges } from "@/lib/confermePresence"
 
 type LeadData = any;
 
@@ -153,79 +153,41 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
     }, [viewMode, oggiHours, domaniHours, selectedHour]);
 
+    // Refs per leggere lo stato corrente dentro i listener realtime senza
+    // ricreare il canale (prima il canale veniva smontato/rimontato a ogni
+    // cambio vista → presence a intermittenza — QA Conferme 2026-06-12).
+    const viewModeRef = useRef(viewMode)
+    useEffect(() => { viewModeRef.current = viewMode }, [viewMode])
+    const fetchLeadsRef = useRef(fetchLeads)
+    useEffect(() => { fetchLeadsRef.current = fetchLeads })
+
     useEffect(() => {
-        const supabase = createClient();
-        const channel = supabase.channel('conferme_realtime_board');
+        // Canale presence SINGLETON condiviso con Drawer e Radar — vedi
+        // src/lib/confermePresence.ts. Mai creare qui un secondo canale
+        // con lo stesso topic.
+        const disconnect = connectConfermePresence({
+            id: currentUser.id,
+            name: currentUser.name,
+            displayName: currentUser.displayName,
+        })
 
-        // Listen for ANY change on the leads table (insert or update)
-        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
+        const offChanges = subscribeConfermeLeadChanges(() => {
             // Silently refetch when a change occurs to avoid stale data
-            if (viewMode !== 'table' && viewMode !== 'storico') fetchLeads(false);
-        });
+            const vm = viewModeRef.current
+            if (vm !== 'table' && vm !== 'storico') fetchLeadsRef.current(false)
+        })
 
-        // Listen for presence state changes (colleagues opening a drawer)
-        channel.on('presence', { event: 'sync' }, () => {
-            const newState = channel.presenceState();
-            const presenceArray: any[] = [];
-
-            for (const id in newState) {
-                const presenceGroup = newState[id];
-                presenceGroup.forEach((p: any) => p.leadId && presenceArray.push(p));
-            }
-            // Update global presence for those locked cards
-            setGlobalPresence(presenceArray);
-        });
-
-        // Track payload riutilizzato: heartbeat, re-track, primo track.
-        const buildTrackPayload = () => ({
-            online_at: new Date().toISOString(),
-            leadId: null,
-            user: {
-                id: currentUser.id,
-                name: currentUser.name,
-                displayName: currentUser.displayName,
-            },
-        });
-
-        let subscribed = false;
-        channel.subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
-                subscribed = true;
-                await channel.track(buildTrackPayload());
-            }
-        });
-
-        // Heartbeat: ogni 25s ripublica il track con nuovo online_at.
-        // Previene che Supabase/colleghi ci considerino offline per
-        // disconnessioni brevi o letargia della connessione realtime.
-        const heartbeat = setInterval(() => {
-            if (subscribed) channel.track(buildTrackPayload()).catch(() => { });
-        }, 25000);
-
-        // Re-track quando l'utente torna alla tab (tab background spesso
-        // sospende i WebSocket). Senza questo, chi torna dopo 10 minuti
-        // appare offline ai colleghi.
-        const onVisibilityChange = () => {
-            if (!document.hidden && subscribed) {
-                channel.track(buildTrackPayload()).catch(() => { });
-            }
-        };
-        document.addEventListener('visibilitychange', onVisibilityChange);
-
-        // Cleanup su chiusura tab/navigazione: untrack immediato.
-        const onPageHide = () => { try { channel.untrack(); } catch { } };
-        window.addEventListener('pagehide', onPageHide);
+        const offPresence = subscribeConfermePresence((entries) => {
+            // Update global presence for the locked cards (chi è su quale lead)
+            setGlobalPresence(entries.filter(p => p.leadId))
+        })
 
         return () => {
-            clearInterval(heartbeat);
-            document.removeEventListener('visibilitychange', onVisibilityChange);
-            window.removeEventListener('pagehide', onPageHide);
-            (async () => {
-                try { await channel.untrack(); } catch { /* ignore */ }
-                supabase.removeChannel(channel);
-            })();
-        };
-    }, [viewMode, currentUser.id])
+            offChanges()
+            offPresence()
+            disconnect()
+        }
+    }, [currentUser.id])
 
     // --- SNOOZE WATCHER ---
     const [alertedSnoozes, setAlertedSnoozes] = useState<Set<string>>(new Set())

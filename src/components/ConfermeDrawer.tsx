@@ -8,7 +8,7 @@ import { ConfermeCallTimer } from "./ConfermeCallTimer"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
-import { createClient } from "@/utils/supabase/client"
+import { connectConfermePresence, setConfermeActivity, subscribeConfermePresence } from "@/lib/confermePresence"
 import { stopTimerAndLogForLead } from "@/lib/confermeCallTimer"
 import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
@@ -138,65 +138,29 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setLoadingNotes(true)
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))
 
-            const supabase = createClient();
-            const channel = supabase.channel('conferme_realtime_board');
-
-            // 1. Invia il nostro stato di presenza "In Lavorazione" a tutti
-            channel.on('presence', { event: 'sync' }, () => {
-                const newState = channel.presenceState();
-                const usersPresent: any[] = [];
-                for (const id in newState) {
-                    const presenceArray = newState[id];
-                    presenceArray.forEach((p: any) => {
-                        // Se c'è un utente ed è diverso da noi, ed è sullo stesso lead, è un "Lock"
-                        if (p.user && p.user.id !== currentUser.id && p.leadId === lead.id) {
-                            usersPresent.push(p);
-                        }
-                    });
-                }
-                setActiveUsers(usersPresent);
+            // Presence SINGLETON condiviso (vedi src/lib/confermePresence.ts):
+            // niente secondo canale sullo stesso topic — era la causa del
+            // realtime a intermittenza (QA Conferme 2026-06-12).
+            const disconnect = connectConfermePresence({
+                id: currentUser.id,
+                name: currentUser.name,
+                displayName: currentUser.displayName,
             });
 
-            const buildTrackPayload = () => ({
-                online_at: new Date().toISOString(),
-                leadId: lead.id,
-                user: {
-                    id: currentUser.id,
-                    name: currentUser.name,
-                    displayName: currentUser.displayName,
-                },
-            });
+            // 1. Notifica a tutti che stiamo guardando questo lead
+            setConfermeActivity(lead.id);
 
-            // 2. Notifica a tutti che stiamo guardando questo lead
-            let subscribed = false;
-            channel.subscribe(async (status) => {
-                if (status === 'SUBSCRIBED') {
-                    subscribed = true;
-                    await channel.track(buildTrackPayload());
-                }
+            // 2. Chi altro è sullo stesso lead = "Lock"
+            const offPresence = subscribeConfermePresence((entries) => {
+                setActiveUsers(entries.filter(p =>
+                    p.user && p.user.id !== currentUser.id && p.leadId === lead.id
+                ));
             });
-
-            // Heartbeat + re-track on focus — vedi ConfermeBoard per la motivazione.
-            const heartbeat = setInterval(() => {
-                if (subscribed) channel.track(buildTrackPayload()).catch(() => { });
-            }, 25000);
-            const onVisibilityChange = () => {
-                if (!document.hidden && subscribed) {
-                    channel.track(buildTrackPayload()).catch(() => { });
-                }
-            };
-            document.addEventListener('visibilitychange', onVisibilityChange);
-            const onPageHide = () => { try { channel.untrack(); } catch { } };
-            window.addEventListener('pagehide', onPageHide);
 
             return () => {
-                clearInterval(heartbeat);
-                document.removeEventListener('visibilitychange', onVisibilityChange);
-                window.removeEventListener('pagehide', onPageHide);
-                (async () => {
-                    try { await channel.untrack(); } catch { /* ignore */ }
-                    supabase.removeChannel(channel);
-                })();
+                offPresence();
+                setConfermeActivity(null);
+                disconnect();
             }
         }
     }, [isOpen, lead?.id, lead?.version]) // update when version changes too
