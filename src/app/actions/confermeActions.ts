@@ -1185,6 +1185,12 @@ export async function getConfermeRecallAlerts(): Promise<Array<{
     if (ctx.isAllCompanies) return []
 
     const soon = new Date(Date.now() + 30 * 60 * 1000)
+    // Solo richiami di OGGI (Europe/Rome): senza floor il banner mostrava
+    // snooze stantii di mesi prima come "ADESSO" (verificato in prod il
+    // 2026-06-12). Gli snooze vecchi restano visibili nei board.
+    const romeDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
+    const [ry, rm, rd] = romeDateStr.split('-').map(Number)
+    const todayStart = new Date(ry, rm - 1, rd, 0, 0, 0, 0)
     const rows = await db.select({
         id: leads.id,
         name: leads.name,
@@ -1198,6 +1204,7 @@ export async function getConfermeRecallAlerts(): Promise<Array<{
             inArray(leads.companyId, ctx.allowedCompanies),
             isNull(leads.confirmationsOutcome),
             isNotNull(leads.confSnoozeAt),
+            gte(leads.confSnoozeAt, todayStart),
             lte(leads.confSnoozeAt, soon),
         ))
         .orderBy(asc(leads.confSnoozeAt))

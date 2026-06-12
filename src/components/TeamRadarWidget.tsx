@@ -4,10 +4,11 @@ import { useState, useEffect } from "react"
 
 import { sendInternalAlert } from "@/app/actions/alertActions"
 import { Users, Send, AlertTriangle, MessageSquarePlus } from "lucide-react"
-import { connectConfermePresence, subscribeConfermePresence } from "@/lib/confermePresence"
+import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeConnection } from "@/lib/confermePresence"
 
 export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     const [activeUsers, setActiveUsers] = useState<any[]>([])
+    const [connected, setConnected] = useState(false)
     const [selectedUser, setSelectedUser] = useState<any | null>(null)
     const [message, setMessage] = useState("")
     const [isSending, setIsSending] = useState(false)
@@ -30,7 +31,10 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
             }
             setActiveUsers(Array.from(map.values()))
         })
-        return () => { offPresence(); disconnect() }
+        // Evidenza stato canale: se il realtime muore, il pallino del Radar
+        // diventa rosso invece di mostrare silenziosamente dati stantii.
+        const offConnection = subscribeConfermeConnection(setConnected)
+        return () => { offPresence(); offConnection(); disconnect() }
     }, [currentUser.id])
 
     const handleSend = async () => {
@@ -53,9 +57,13 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     return (
         <div className="bg-white border-b border-ash-200 shadow-sm sticky top-0 z-40 px-4 h-10 flex items-center justify-between">
             <div className="flex items-center gap-3 w-full">
-                <div className="bg-brand-blue-dark text-white px-2 py-0.5 rounded flex items-center gap-1.5 shrink-0">
+                <div
+                    className="bg-brand-blue-dark text-white px-2 py-0.5 rounded flex items-center gap-1.5 shrink-0"
+                    title={connected ? "Realtime connesso" : "Realtime DISCONNESSO — i colleghi potrebbero non essere aggiornati. Ricarica la pagina se persiste."}
+                >
                     <Users className="w-3 h-3" />
                     <span className="font-bold text-[10px] uppercase tracking-wider">Radar</span>
+                    <span className={`inline-flex h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-500 animate-pulse'}`} />
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1">

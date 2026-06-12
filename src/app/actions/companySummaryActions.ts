@@ -43,11 +43,14 @@ export async function getCompanySwitchSummary(): Promise<CompanySwitchSummary[]>
                 lte(leads.appointmentDate, todayEnd),
             ))
 
-        // Richiami in scadenza, per ruolo.
+        // Richiami in scadenza, per ruolo. Floor a inizio giornata: senza,
+        // richiami/snooze stantii di mesi prima gonfiavano il contatore
+        // (es. "99 rich" — verificato in prod il 2026-06-12).
         const snoozeCond = and(
             eq(leads.companyId, companyId),
             isNull(leads.confirmationsOutcome),
             isNotNull(leads.confSnoozeAt),
+            gte(leads.confSnoozeAt, todayStart),
             lte(leads.confSnoozeAt, soon),
         )
         const gdoRecallConds = [
@@ -55,6 +58,7 @@ export async function getCompanySwitchSummary(): Promise<CompanySwitchSummary[]>
             ne(leads.status, 'REJECTED'),
             ne(leads.status, 'APPOINTMENT'),
             isNotNull(leads.recallDate),
+            gte(leads.recallDate, todayStart),
             lte(leads.recallDate, soon),
         ]
         if (ctx.role === 'GDO') gdoRecallConds.push(eq(leads.assignedToId, ctx.userId))

@@ -20,6 +20,7 @@
 
 import { createClient } from "@/utils/supabase/client"
 import type { RealtimeChannel } from "@supabase/supabase-js"
+import { logRealtimeStatus } from "@/lib/realtimeUtils"
 
 export type ConfermePresenceEntry = {
     online_at: string
@@ -29,6 +30,7 @@ export type ConfermePresenceEntry = {
 
 type PresenceListener = (entries: ConfermePresenceEntry[]) => void
 type ChangeListener = () => void
+type ConnectionListener = (connected: boolean) => void
 
 let channel: RealtimeChannel | null = null
 let subscribed = false
@@ -39,6 +41,11 @@ let currentLeadId: string | null = null
 let lastPresence: ConfermePresenceEntry[] = []
 const presenceListeners = new Set<PresenceListener>()
 const changeListeners = new Set<ChangeListener>()
+const connectionListeners = new Set<ConnectionListener>()
+
+function notifyConnection() {
+    connectionListeners.forEach(cb => { try { cb(subscribed) } catch { /* listener isolato */ } })
+}
 
 function buildPayload(): ConfermePresenceEntry {
     return {
@@ -54,7 +61,11 @@ function buildPayload(): ConfermePresenceEntry {
 
 function retrack() {
     if (channel && subscribed && currentUser?.id) {
-        channel.track(buildPayload()).catch(() => { })
+        // Niente catch silenzioso: se il track fallisce dobbiamo saperlo
+        // (evidenza per i report "non vedo i colleghi" — QA 2026-06-12).
+        channel.track(buildPayload()).catch((e) => {
+            console.warn("[presence] track fallito su conferme_realtime_board:", e)
+        })
     }
 }
 
@@ -88,7 +99,9 @@ function ensureChannel() {
         presenceListeners.forEach(cb => { try { cb(entries) } catch { /* listener isolato */ } })
     })
 
-    ch.subscribe((status) => {
+    const logStatus = logRealtimeStatus("conferme_realtime_board")
+    ch.subscribe((status, err) => {
+        logStatus(status, err)
         if (status === "SUBSCRIBED") {
             subscribed = true
             // Vale anche per i re-join automatici dopo riconnessione socket
@@ -97,6 +110,7 @@ function ensureChannel() {
         } else {
             subscribed = false
         }
+        notifyConnection()
     })
 
     // Heartbeat: ogni 25s ripublica il track con nuovo online_at. Previene
@@ -116,6 +130,7 @@ function teardown() {
     subscribed = false
     currentLeadId = null
     lastPresence = []
+    notifyConnection()
     ;(async () => {
         try { await ch.untrack() } catch { /* ignore */ }
         try { createClient().removeChannel(ch) } catch { /* ignore */ }
@@ -161,4 +176,15 @@ export function subscribeConfermePresence(cb: PresenceListener): () => void {
 export function subscribeConfermeLeadChanges(cb: ChangeListener): () => void {
     changeListeners.add(cb)
     return () => { changeListeners.delete(cb) }
+}
+
+/**
+ * Stato connessione del canale presence (true = SUBSCRIBED). Emette subito lo
+ * stato corrente. Usato dal Radar per mostrare se il realtime è vivo: dà agli
+ * operatori (e a noi) l'evidenza che prima mancava nei report "a volte non va".
+ */
+export function subscribeConfermeConnection(cb: ConnectionListener): () => void {
+    connectionListeners.add(cb)
+    try { cb(subscribed) } catch { /* ignore */ }
+    return () => { connectionListeners.delete(cb) }
 }
