@@ -73,9 +73,11 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         const wdElapsedWeek = workingDaysBetween(weekStart, now);
 
         // ── GDO attivi ───────────────────────────────────────────────────────
+        // statsActive: il TL/manager esclude dai conteggi i GDO non operativi,
+        // altrimenti le medie per-GDO escono diluite (divisore gonfiato).
         const gdos = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
             .from(users)
-            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true)));
         const nGdo = gdos.length;
         const gdoName = new Map(gdos.map(g => [g.id, g.name || g.displayName || g.id]));
 
@@ -274,6 +276,67 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         };
     } catch (error) {
         console.error('Errore getManagerOverview:', error);
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+}
+
+// ── Selettore "GDO attivi nelle statistiche" (TL/Manager/Admin) ─────────────
+// Il flag users.statsActive decide chi entra nei divisori delle medie per-GDO
+// (qui e in getSalesAlerts). Persistito a DB così TL e manager vedono gli
+// stessi numeri.
+
+export type GdoStatsRosterRow = {
+    id: string;
+    gdoCode: number | null;
+    name: string;
+    statsActive: boolean;
+};
+
+export type GdoStatsRosterResult =
+    | { success: true; roster: GdoStatsRosterRow[] }
+    | { success: false; error: string };
+
+export async function getGdoStatsRoster(): Promise<GdoStatsRosterResult> {
+    try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+        if (!['ADMIN', 'MANAGER', 'TL'].includes(ctx.role)) {
+            return { success: false, error: 'Non autorizzato' };
+        }
+        const rows = await db.select({
+            id: users.id,
+            gdoCode: users.gdoCode,
+            name: users.name,
+            displayName: users.displayName,
+            statsActive: users.statsActive,
+        })
+            .from(users)
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+        const roster = rows
+            .map(r => ({ id: r.id, gdoCode: r.gdoCode, name: r.name || r.displayName || r.id, statsActive: r.statsActive }))
+            .sort((a, b) => (a.gdoCode ?? 9999) - (b.gdoCode ?? 9999));
+        return { success: true, roster };
+    } catch (error) {
+        console.error('Errore getGdoStatsRoster:', error);
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+}
+
+export async function setGdoStatsActive(gdoUserId: string, active: boolean): Promise<{ success: boolean; error?: string }> {
+    try {
+        const ctx = await currentTenant();
+        assertSalesArea(ctx);
+        if (!['ADMIN', 'MANAGER', 'TL'].includes(ctx.role)) {
+            return { success: false, error: 'Non autorizzato' };
+        }
+        await db.update(users).set({ statsActive: active }).where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.id, gdoUserId),
+            eq(users.role, 'GDO'),
+        ));
+        return { success: true };
+    } catch (error) {
+        console.error('Errore setGdoStatsActive:', error);
         return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
 }

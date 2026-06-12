@@ -10,8 +10,11 @@
  */
 
 import { useState, useEffect, useTransition } from "react"
-import { Target, TrendingDown, Inbox, PackageOpen, Loader2 } from "lucide-react"
-import { getManagerOverview, type ManagerOverviewResult, type ManagerParamCard } from "@/app/actions/managerOverviewActions"
+import { Target, TrendingDown, Inbox, PackageOpen, Loader2, Users, ChevronDown, ChevronUp } from "lucide-react"
+import {
+    getManagerOverview, getGdoStatsRoster, setGdoStatsActive,
+    type ManagerOverviewResult, type ManagerParamCard, type GdoStatsRosterRow,
+} from "@/app/actions/managerOverviewActions"
 
 function fmtValue(card: ManagerParamCard, v: number | null): string {
     if (v === null || !isFinite(v)) return '—'
@@ -27,6 +30,9 @@ function fmtValue(card: ManagerParamCard, v: number | null): string {
 
 export function ManagerParamsStrip() {
     const [data, setData] = useState<ManagerOverviewResult | null>(null)
+    const [roster, setRoster] = useState<GdoStatsRosterRow[]>([])
+    const [rosterOpen, setRosterOpen] = useState(false)
+    const [togglingId, setTogglingId] = useState<string | null>(null)
     const [, startTransition] = useTransition()
 
     const load = async () => {
@@ -37,8 +43,30 @@ export function ManagerParamsStrip() {
         }
     }
 
+    const loadRoster = async () => {
+        try {
+            const res = await getGdoStatsRoster()
+            if (res.success) setRoster(res.roster)
+        } catch { /* selettore non disponibile, la strip resta usabile */ }
+    }
+
+    const toggleGdo = async (gdo: GdoStatsRosterRow) => {
+        if (togglingId) return
+        setTogglingId(gdo.id)
+        try {
+            const res = await setGdoStatsActive(gdo.id, !gdo.statsActive)
+            if (res.success) {
+                setRoster(prev => prev.map(r => r.id === gdo.id ? { ...r, statsActive: !gdo.statsActive } : r))
+                await load()
+            }
+        } finally {
+            setTogglingId(null)
+        }
+    }
+
     useEffect(() => {
         load()
+        loadRoster()
         const handler = () => startTransition(() => { load() })
         window.addEventListener("realtime_update", handler)
         return () => window.removeEventListener("realtime_update", handler)
@@ -64,16 +92,59 @@ export function ManagerParamsStrip() {
                 <h2 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ash-700">
                     <Target className="h-3.5 w-3.5 text-brand-orange" /> Parametri Manager
                 </h2>
-                <div className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
-                    <Inbox className="h-3.5 w-3.5" />
-                    Lead nuovi oggi: {data.newLeadsToday.total}
-                    {data.newLeadsToday.byFunnel.length > 0 && (
-                        <span className="font-normal text-sky-600">
-                            ({data.newLeadsToday.byFunnel.map(f => `${f.funnel} ${f.count}`).join(' · ')})
-                        </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {roster.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setRosterOpen(o => !o)}
+                            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-ash-600 transition-colors hover:border-brand-orange/40 hover:text-ash-800"
+                            title="Scegli quali GDO contano nelle medie per-GDO (App/gg, scorte, sotto target)"
+                        >
+                            <Users className="h-3.5 w-3.5" />
+                            GDO attivi: {roster.filter(r => r.statsActive).length}/{roster.length}
+                            {rosterOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </button>
                     )}
+                    <div className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                        <Inbox className="h-3.5 w-3.5" />
+                        Lead nuovi oggi: {data.newLeadsToday.total}
+                        {data.newLeadsToday.byFunnel.length > 0 && (
+                            <span className="font-normal text-sky-600">
+                                ({data.newLeadsToday.byFunnel.map(f => `${f.funnel} ${f.count}`).join(' · ')})
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
+
+            {/* Selettore GDO attivi nelle statistiche (TL/Manager) */}
+            {rosterOpen && roster.length > 0 && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+                    <div className="mb-2 text-[11px] text-ash-500">
+                        Solo i GDO selezionati entrano nei calcoli per-GDO (media app/giorno, scorte, sotto target).
+                        Deseleziona chi non sta lavorando per non sballare le medie.
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {roster.map(g => (
+                            <button
+                                key={g.id}
+                                type="button"
+                                disabled={togglingId !== null}
+                                onClick={() => toggleGdo(g)}
+                                className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-60 ${g.statsActive
+                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-400'
+                                    : 'border-gray-200 bg-white text-ash-400 line-through hover:border-gray-300'}`}
+                                title={g.statsActive ? `${g.name} conta nelle statistiche — clicca per escluderlo` : `${g.name} escluso dalle statistiche — clicca per includerlo`}
+                            >
+                                {togglingId === g.id
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <span className={`h-2 w-2 rounded-full ${g.statsActive ? 'bg-emerald-500' : 'bg-gray-300'}`} />}
+                                {g.gdoCode ? `${g.gdoCode} · ` : ''}{g.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Card parametri */}
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">

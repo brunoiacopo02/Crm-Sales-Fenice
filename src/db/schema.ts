@@ -78,6 +78,11 @@ export const users = pgTable('users', {
     acAutoIntake: boolean('acAutoIntake').default(false).notNull(),
     acLastAssignedAt: timestamp('acLastAssignedAt', { withTimezone: true, mode: 'date' }),
 
+    // Statistiche GDO: il TL/manager sceglie quali GDO contano nelle medie
+    // per-GDO (App/gg, alert, scorte). Account isActive ma non operativi
+    // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.
+    statsActive: boolean('statsActive').default(true).notNull(),
+
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 

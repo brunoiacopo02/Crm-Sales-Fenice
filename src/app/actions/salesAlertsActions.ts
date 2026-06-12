@@ -271,11 +271,12 @@ async function cardsForCompany(
         console.error('getSalesAlerts: spesa Meta non disponibile', e);
     }
 
-    // GDO attivi (per le medie per-GDO).
+    // GDO attivi (per le medie per-GDO). statsActive = selettore TL/manager
+    // dei GDO realmente operativi: i non spuntati non gonfiano il divisore.
     const gdoRows = await db
         .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true)));
     const nGdo = gdoRows.length;
 
     const workingDaysTotal = targetRow?.workingDays || countWorkingDaysInMonth(year, month);
