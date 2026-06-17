@@ -300,16 +300,29 @@ export async function updateLeadOutcome(
     userId?: string,
     discardReason?: string, // New field
     currentVersion?: number, // Optimistic locking
-    scriptCompleted?: boolean // Script tracking
+    scriptCompleted?: boolean, // Script tracking
+    serviceCtx?: { companyId: string; actorUserId: string; isBot: boolean } // Bot/service-account bypass
 ) {
 
-    const supabase = await createClient();
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
-    const effectiveUserId = userId || session?.user?.id
+    let ctx: { companyId: string }
+    let effectiveUserId: string | undefined
+    let isBotActor = false
 
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
+    if (serviceCtx) {
+        // Service account (bot fissatore): nessuna sessione Supabase, tenant esplicito.
+        ctx = { companyId: serviceCtx.companyId }
+        effectiveUserId = serviceCtx.actorUserId
+        isBotActor = serviceCtx.isBot
+    } else {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        effectiveUserId = userId || session?.user?.id
+
+        const tenant = await currentTenant()
+        assertSalesArea(tenant)
+        ctx = { companyId: tenant.companyId }
+    }
 
     const lead = (await db.select().from(leads).where(and(
         eq(leads.companyId, ctx.companyId),
@@ -432,7 +445,7 @@ export async function updateLeadOutcome(
     let rewardData = null;
 
     // Fenice Universe: chest progress for every call (chiamate) + boss attack
-    if (effectiveUserId) {
+    if (effectiveUserId && !isBotActor) {
         incrementChestProgress(effectiveUserId, 'chiamate', 1).catch(e => console.error("Chest chiamate err:", e));
         attackBoss(effectiveUserId, 'chiamata').catch(e => console.error("Adventure chiamata err:", e));
         checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check err:", e));
@@ -469,7 +482,7 @@ export async function updateLeadOutcome(
         }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
 
         // Gamification: award XP for appointment set (tenant attribution)
-        if (effectiveUserId) {
+        if (effectiveUserId && !isBotActor) {
             rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
 
             // Fenice Universe: chest progress for fissaggi + boss attack
@@ -478,11 +491,13 @@ export async function updateLeadOutcome(
             checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check fissaggio err:", e));
             incrementDuelScore(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Duel score fissaggi err:", e));
         }
-        await evaluateTeamGoals(leadId).catch((e: any) => {
-            console.error("Team goal evaluation failed:", e)
-        })
+        if (!isBotActor) {
+            await evaluateTeamGoals(leadId).catch((e: any) => {
+                console.error("Team goal evaluation failed:", e)
+            })
+        }
         // Loot drop milestone check (every 10 appointments)
-        if (effectiveUserId) {
+        if (effectiveUserId && !isBotActor) {
             await triggerLootDrop(effectiveUserId).catch((e: any) => {
                 console.error("Loot drop trigger failed:", e)
             })
