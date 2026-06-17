@@ -3,10 +3,10 @@
  * Scoped per email perché robusto al re-seed (gli UUID utente sono rigenerati,
  * l'email no) e coerente col pattern email-gate già usato (isConfermeTl).
  */
-export type UserTheme = 'rosa'
+export type UserTheme = 'andrea'
 
 const USER_THEME_BY_EMAIL: Record<string, UserTheme> = {
-  'andrea@fenice.local': 'rosa',
+  'andrea@fenice.local': 'andrea',
 }
 
 export function getUserTheme(email: string | null | undefined): UserTheme | undefined {

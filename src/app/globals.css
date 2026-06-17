@@ -2101,116 +2101,108 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     radial-gradient(50rem 50rem at 0% 100%, rgba(120,180,140,0.06), transparent 70%);
 }
 
-/* === Tema Rosa — attivo solo per l'utente andrea@fenice.local (attributo
-   data-theme="rosa" emesso dal layout dashboard). Sovrascrive i token brand
-   (rosa magenta soft + testo prugna) e il font (Plus Jakarta Sans). Tutte le
-   utility brand-* cascano automaticamente. Indipendente da data-company. === */
-[data-theme="rosa"] {
-  --color-brand-orange-50:  #FDF2F7;
-  --color-brand-orange-100: #FCE7F0;
-  --color-brand-orange-200: #F9CFE0;
-  --color-brand-orange-300: #F4A8C7;
-  --color-brand-orange-400: #EF7DA9;
-  --color-brand-orange-500: #EC5A92;
-  --color-brand-orange-600: #D63D78;
-  --color-brand-orange-700: #B82C61;
-  --color-brand-orange-800: #97244F;
-  --color-brand-orange-900: #5A1A3A;
-  --color-brand-orange:        #EC5A92;
-  --color-brand-orange-hover:  #D63D78;
-  --color-brand-charcoal:      #5A1A3A;
+/* =========================================================================
+   TEMA "ROSA ANTICO & ORO" — solo utente andrea@fenice.local
+   (attributo data-theme="andrea" emesso dal layout dashboard).
+   Rimappa TUTTE le scale-palette su rosa/oro/avorio. Scoped: nessun effetto
+   per altri utenti. Vince su data-company=serenamente (source order).
+   ========================================================================= */
+[data-theme="andrea"] {
+  /* Neutri → avorio/taupe caldo (ash) */
+  --color-ash-50:  #FBF7F4;
+  --color-ash-100: #F4ECE6;
+  --color-ash-200: #E7DAD0;
+  --color-ash-300: #D9C8BC;
+  --color-ash-400: #B5A398;
+  --color-ash-500: #8A766B;
+  --color-ash-600: #6B5560;
+  --color-ash-700: #4A3A40;
+  --color-ash-800: #3A2230;
+  --color-ash-900: #2A1822;
 
-  /* Gamification "fire" accent → rosa (sidebar attiva, progress bar, streak,
-     livello, separatori). Vale solo per Andrea: la sua gamification è rosa. */
-  --color-fire-400: #F472A6;
-  --color-fire-500: #EC5A92;
-  --color-fire-600: #D63D78;
-  --color-fire-glow: rgba(236, 90, 146, 0.4);
-  --shadow-gaming-glow-fire: 0 0 20px -4px rgba(236, 90, 146, 0.35), 0 0 8px -2px rgba(236, 90, 146, 0.2);
-  --shadow-glow-orange: 0 0 16px -2px rgba(236, 90, 146, 0.4);
-  --shadow-glow-ember:  0 0 16px -2px rgba(236, 90, 146, 0.3);
-  --color-gaming-border:       rgba(236, 90, 146, 0.14);
-  --color-gaming-border-hover: rgba(236, 90, 146, 0.28);
+  /* Rosa antico (brand) */
+  --color-brand-orange-50:  #FBF1F5;
+  --color-brand-orange-100: #F6E2EA;
+  --color-brand-orange-200: #EFCDDB;
+  --color-brand-orange-300: #E3AEC4;
+  --color-brand-orange-400: #D89BB4;
+  --color-brand-orange-500: #CE8BA6;
+  --color-brand-orange-600: #B8748F;
+  --color-brand-orange-700: #9A5C75;
+  --color-brand-orange-800: #7A475C;
+  --color-brand-orange-900: #3A2230;
+  --color-brand-orange:        #CE8BA6;
+  --color-brand-orange-hover:  #B8748F;
+  --color-brand-charcoal:      #3A2230;
 
-  /* Oro/ambra gamification → famiglia rosa, così i gradienti fire→gold e i
-     badge livello/coins non virano all'arancione. Tutto rosa per Andrea. */
-  --color-gaming-gold:     #F9A8C4;
-  --color-gaming-gold-dim: #D6749B;
-  --color-gaming-amber:    #F472A6;
-  --shadow-gaming-glow-gold:  0 0 20px -4px rgba(249, 168, 196, 0.3), 0 0 8px -2px rgba(249, 168, 196, 0.15);
-  --shadow-gaming-glow-amber: 0 0 20px -4px rgba(244, 114, 166, 0.3), 0 0 8px -2px rgba(244, 114, 166, 0.15);
-  --shadow-glow-gold:         0 0 16px -2px rgba(236, 90, 146, 0.3);
+  /* Fire (accento gamification) → rosa */
+  --color-fire-400: #D89BB4;
+  --color-fire-500: #CE8BA6;
+  --color-fire-600: #B8748F;
+  --color-fire-glow: rgba(206, 139, 166, 0.40);
 
-  /* Utility Tailwind orange-* (es. bg-orange-100 nei badge) → scala rosa,
-     così nessun arancione "di sistema" sopravvive nel tema di Andrea. */
-  --color-orange-50:  #FDF2F7;
-  --color-orange-100: #FCE7F0;
-  --color-orange-200: #F9CFE0;
-  --color-orange-300: #F4A8C7;
-  --color-orange-400: #EF7DA9;
-  --color-orange-500: #EC5A92;
-  --color-orange-600: #D63D78;
-  --color-orange-700: #B82C61;
-  --color-orange-800: #97244F;
-  --color-orange-900: #5A1A3A;
+  /* Ember (alert/NR) → terracotta-rosa */
+  --color-ember-50:  #FBEEE9;
+  --color-ember-100: #F6DCD1;
+  --color-ember-200: #EFC4B2;
+  --color-ember-300: #E0A98F;
+  --color-ember-400: #CE8A6A;
+  --color-ember-500: #B86B4A;
+  --color-ember-600: #9A5638;
+  --color-ember-700: #7E4329;
+  --color-ember-800: #5F3220;
+  --color-ember-900: #432316;
 
-  /* Anche le utility Tailwind amber-* e yellow-* (progress bar obiettivi,
-     coins, badge livello) → scala rosa. */
-  --color-amber-50:  #FDF2F7;
-  --color-amber-100: #FCE7F0;
-  --color-amber-200: #F9CFE0;
-  --color-amber-300: #F4A8C7;
-  --color-amber-400: #EF7DA9;
-  --color-amber-500: #EC5A92;
-  --color-amber-600: #D63D78;
-  --color-amber-700: #B82C61;
-  --color-amber-800: #97244F;
-  --color-amber-900: #5A1A3A;
-  --color-yellow-50:  #FDF2F7;
-  --color-yellow-100: #FCE7F0;
-  --color-yellow-200: #F9CFE0;
-  --color-yellow-300: #F4A8C7;
-  --color-yellow-400: #EF7DA9;
-  --color-yellow-500: #EC5A92;
-  --color-yellow-600: #D63D78;
-  --color-yellow-700: #B82C61;
-  --color-yellow-800: #97244F;
-  --color-yellow-900: #5A1A3A;
+  /* Oro raffinato (gold) */
+  --color-gold-50:  #FBF6EA;
+  --color-gold-100: #F5ECCF;
+  --color-gold-200: #EDDDA6;
+  --color-gold-300: #E3CC8F;
+  --color-gold-400: #D4B468;
+  --color-gold-500: #C9A24B;
+  --color-gold-600: #A8842F;
+  --color-gold-700: #846724;
+  --color-gold-800: #5F4A1A;
+  --color-gold-900: #3F3111;
 
-  --font-display: var(--font-jakarta), var(--font-geist-sans), sans-serif;
+  /* Gaming: superfici scure → avorio chiaro; testo → prugna; bordi → oro hairline */
+  --color-gaming-bg-deep:      #F4ECE6;
+  --color-gaming-bg:           #FBF7F4;
+  --color-gaming-bg-card:      #FFFFFF;
+  --color-gaming-bg-card-hover:#F9F1EC;
+  --color-gaming-bg-surface:   #F6ECEF;
+  --color-gaming-border:       rgba(201, 162, 75, 0.22);
+  --color-gaming-border-hover: rgba(201, 162, 75, 0.40);
+  --color-gaming-text:         #3A2230;
+  --color-gaming-text-muted:   #8A766B;
+  --color-gaming-gold:         #C9A24B;
+  --color-gaming-gold-dim:     #A8842F;
+  --color-gaming-amber:        #D4B468;
+
+  /* Utility Tailwind orange/amber/yellow → rosa-oro (accenti non semantici) */
+  --color-orange-50:#FBF1F5; --color-orange-100:#F6E2EA; --color-orange-200:#EFCDDB; --color-orange-300:#E3AEC4; --color-orange-400:#D89BB4; --color-orange-500:#CE8BA6; --color-orange-600:#B8748F; --color-orange-700:#9A5C75; --color-orange-800:#7A475C; --color-orange-900:#3A2230;
+  --color-amber-50:#FBF6EA; --color-amber-100:#F5ECCF; --color-amber-200:#EDDDA6; --color-amber-300:#E3CC8F; --color-amber-400:#D4B468; --color-amber-500:#C9A24B; --color-amber-600:#A8842F; --color-amber-700:#846724; --color-amber-800:#5F4A1A; --color-amber-900:#3F3111;
+  --color-yellow-50:#FBF6EA; --color-yellow-100:#F5ECCF; --color-yellow-200:#EDDDA6; --color-yellow-300:#E3CC8F; --color-yellow-400:#D4B468; --color-yellow-500:#C9A24B; --color-yellow-600:#A8842F; --color-yellow-700:#846724; --color-yellow-800:#5F4A1A; --color-yellow-900:#3F3111;
+
+  /* Ombre/glow → rosa/oro soffuse */
+  --color-fire-glow: rgba(206,139,166,0.4);
+  --shadow-glow-orange: 0 0 16px -2px rgba(206,139,166,0.4);
+  --shadow-glow-ember:  0 0 16px -2px rgba(184,107,74,0.3);
+  --shadow-glow-gold:   0 0 16px -2px rgba(201,162,75,0.3);
+  --shadow-gaming-glow-fire:  0 0 20px -4px rgba(206,139,166,0.3), 0 0 8px -2px rgba(206,139,166,0.18);
+  --shadow-gaming-glow-gold:  0 0 20px -4px rgba(201,162,75,0.3), 0 0 8px -2px rgba(201,162,75,0.16);
+  --shadow-gaming-glow-amber: 0 0 20px -4px rgba(212,180,104,0.3), 0 0 8px -2px rgba(212,180,104,0.16);
+
+  /* Tipografia: titoli serif, corpo sans */
+  --font-display: var(--font-playfair), Georgia, serif;
   --font-sans:    var(--font-jakarta), var(--font-geist-sans), sans-serif;
   font-family: var(--font-sans);
 }
 
-/* Sfumature rosa soft sull'area principale (molto tenui), come SerenaMente */
-[data-theme="rosa"] main {
+/* Sfondo avorio caldo dell'area principale, micro-sfumature rosa/oro */
+[data-theme="andrea"] main {
+  background-color: #FBF7F4;
   background-image:
-    radial-gradient(60rem 60rem at 100% 0%, rgba(236,90,146,0.07), transparent 70%),
-    radial-gradient(50rem 50rem at 0% 100%, rgba(236,90,146,0.06), transparent 70%);
-}
-
-/* Regole gamification con arancione LETTERALE (non passano dai token):
-   ridichiarate in rosa solo per Andrea. */
-[data-theme="rosa"] .sidebar-item-active {
-  background: linear-gradient(90deg, rgba(236, 90, 146, 0.12) 0%, rgba(236, 90, 146, 0.04) 100%);
-  box-shadow: inset 4px 0 12px -4px rgba(236, 90, 146, 0.3), 0 0 12px -4px rgba(236, 90, 146, 0.1);
-}
-[data-theme="rosa"] .sidebar-item-hover:hover {
-  background: rgba(236, 90, 146, 0.06);
-  box-shadow: inset 3px 0 8px -4px rgba(236, 90, 146, 0.2);
-}
-[data-theme="rosa"] .sidebar-item-hover:hover .sidebar-icon {
-  filter: drop-shadow(0 0 4px rgba(236, 90, 146, 0.4));
-}
-[data-theme="rosa"] .sidebar-gamification-separator::after {
-  filter: drop-shadow(0 0 4px rgba(236, 90, 146, 0.6));
-}
-[data-theme="rosa"] .text-gaming-fire {
-  text-shadow: 0 0 8px rgba(236, 90, 146, 0.3);
-}
-[data-theme="rosa"] .text-gaming-gold {
-  text-shadow: 0 0 8px rgba(249, 168, 196, 0.35);
-}
-[data-theme="rosa"] .sidebar-gamification-separator::before {
-  background: linear-gradient(90deg, transparent 0%, rgba(236, 90, 146, 0.15) 50%, transparent 100%);
+    radial-gradient(60rem 60rem at 100% 0%, rgba(201,162,75,0.05), transparent 70%),
+    radial-gradient(50rem 50rem at 0% 100%, rgba(206,139,166,0.06), transparent 70%);
 }
