@@ -83,6 +83,12 @@ export const users = pgTable('users', {
     // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.
     statsActive: boolean('statsActive').default(true).notNull(),
 
+    // Account bot (es. bot fissatore gdo205): partecipa al round-robin e ai KPI
+    // come un GDO, ma la gamification è disattivata e all'assegnazione il CRM
+    // pusha il lead al webhook del bot. Interruttore unico per gamification-off
+    // + push + badge report nelle Conferme.
+    isBot: boolean('isBot').default(false).notNull(),
+
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
@@ -144,6 +150,11 @@ export const leads = pgTable('leads', {
     confNeedsReschedule: boolean('confNeedsReschedule').default(false).notNull(),
     confSnoozeAt: timestamp('confSnoozeAt', { withTimezone: true, mode: 'date' }),
     confRecallNotes: text('confRecallNotes'),
+
+    // Report strutturato scritto dal bot fissatore al momento dell'esito.
+    // Forma attesa: { summary, painPoints[], budgetSignal, urgency, objections[], levaConsigliata }.
+    // Renderizzato come card "🤖 Report Bot" nel ConfermeDrawer. Nullable: solo i lead bot lo hanno.
+    botReport: jsonb('botReport'),
 
     confirmationsOutcome: text('confirmationsOutcome'),
     confirmationsDiscardReason: text('confirmationsDiscardReason'),
