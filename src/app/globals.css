@@ -2245,3 +2245,22 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 [data-theme="andrea"] .shadow-card { box-shadow: 0 8px 26px -12px rgba(206,139,166,0.28), 0 0 0 1px rgba(201,162,75,0.12); }
 [data-theme="andrea"] .shadow-gaming-card { box-shadow: 0 8px 26px -12px rgba(206,139,166,0.22), 0 0 0 1px rgba(201,162,75,0.12); }
 [data-theme="andrea"] .shadow-elevated { box-shadow: 0 16px 40px -16px rgba(58,34,48,0.28), 0 0 0 1px rgba(201,162,75,0.12); }
+
+/* ── Tema Andrea — Card "Obiettivo di Oggi": avorio SOLO per Andrea
+   (gli altri Conferme vedono il navy originale via .gcard-objective) ── */
+[data-theme="andrea"] .gcard-objective {
+  background-image: none !important;
+  background-color: var(--color-gaming-bg-card);
+  border: 1px solid var(--color-gaming-border);
+}
+[data-theme="andrea"] .gcard-objective .text-white { color: var(--color-gaming-text); }
+[data-theme="andrea"] .gcard-objective .text-blue-300,
+[data-theme="andrea"] .gcard-objective .text-blue-200 { color: var(--color-gaming-text-muted); }
+[data-theme="andrea"] .gcard-objective .bg-white\/10 { background-color: rgba(58,34,48,0.06); }
+
+/* ── Tema Andrea — "In Lavorazione" (card bloccata): cornice oro + micro-glow ── */
+[data-theme="andrea"] .from-amber-50\/80.to-amber-50\/40,
+[data-theme="andrea"] .border-amber-200\/60 {
+  border-color: rgba(201,162,75,0.45);
+  box-shadow: 0 0 0 1px rgba(201,162,75,0.25), 0 8px 24px -12px rgba(206,139,166,0.3);
+}
