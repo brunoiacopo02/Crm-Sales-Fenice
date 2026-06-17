@@ -2100,3 +2100,34 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     radial-gradient(60rem 60rem at 100% 0%, rgba(120,180,140,0.07), transparent 70%),
     radial-gradient(50rem 50rem at 0% 100%, rgba(120,180,140,0.06), transparent 70%);
 }
+
+/* === Tema Rosa — attivo solo per l'utente andrea@fenice.local (attributo
+   data-theme="rosa" emesso dal layout dashboard). Sovrascrive i token brand
+   (rosa magenta soft + testo prugna) e il font (Plus Jakarta Sans). Tutte le
+   utility brand-* cascano automaticamente. Indipendente da data-company. === */
+[data-theme="rosa"] {
+  --color-brand-orange-50:  #FDF2F7;
+  --color-brand-orange-100: #FCE7F0;
+  --color-brand-orange-200: #F9CFE0;
+  --color-brand-orange-300: #F4A8C7;
+  --color-brand-orange-400: #EF7DA9;
+  --color-brand-orange-500: #EC5A92;
+  --color-brand-orange-600: #D63D78;
+  --color-brand-orange-700: #B82C61;
+  --color-brand-orange-800: #97244F;
+  --color-brand-orange-900: #5A1A3A;
+  --color-brand-orange:        #EC5A92;
+  --color-brand-orange-hover:  #D63D78;
+  --color-brand-charcoal:      #5A1A3A;
+
+  --font-display: var(--font-jakarta), var(--font-geist-sans), sans-serif;
+  --font-sans:    var(--font-jakarta), var(--font-geist-sans), sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Sfumature rosa soft sull'area principale (molto tenui), come SerenaMente */
+[data-theme="rosa"] main {
+  background-image:
+    radial-gradient(60rem 60rem at 100% 0%, rgba(236,90,146,0.07), transparent 70%),
+    radial-gradient(50rem 50rem at 0% 100%, rgba(236,90,146,0.06), transparent 70%);
+}
