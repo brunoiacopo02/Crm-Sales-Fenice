@@ -32,6 +32,7 @@ const DEFAULT_FUNNEL = 'SCONOSCIUTO';
 // Per Serenamente esisterà un endpoint separato (/serenamente) con secret e
 // AC account distinti e companyId='serenamente' hardcoded. Vedi design doc §11.
 const FENICE_COMPANY = 'fenice';
+const BOT_DAILY_CAP = 20; // max lead/giorno (Europe/Rome) per account isBot nel round-robin
 
 // Liste AC da NON importare nel CRM (es. campagne di raccolta lead per
 // lanci futuri: i lead devono restare in AC finché non decidiamo di
@@ -468,6 +469,12 @@ export async function POST(req: NextRequest) {
         const now = new Date();
         const dedupCutoff = new Date(now.getTime() - 10 * 60 * 1000);
 
+        // Giorno solare corrente in Europe/Rome (per il cap giornaliero dei bot).
+        // Lasciamo a Postgres la conversione tz: confronto createdAt >= today 00:00 Rome.
+        const todayRome = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(now); // 'YYYY-MM-DD'
+
         // ===== SEZIONE CRITICA (transazione + advisory lock) =====
         // Dedup + round-robin + insert + update acLastAssignedAt devono
         // essere atomici rispetto ad altri webhook AC che riguardino lo
@@ -513,13 +520,24 @@ export async function POST(req: NextRequest) {
 
             // Round-robin GDO Fenice (dentro la tx: vede l'acLastAssignedAt
             // più aggiornato). I lead Fenice vanno solo ai GDO Fenice.
+            // Gli account bot (isBot=true) escono dal pool quando raggiungono
+            // BOT_DAILY_CAP lead nel giorno solare Europe/Rome. Gli umani passano sempre.
             const eligible = await tx.select({
                 id: users.id,
+                isBot: users.isBot,
             }).from(users).where(and(
                 eq(users.companyId, FENICE_COMPANY),
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true),
                 eq(users.acAutoIntake, true),
+                // Cap giornaliero: gli account bot escono dal pool a quota BOT_DAILY_CAP.
+                // Gli umani (isBot=false) passano sempre il filtro.
+                sql`(${users.isBot} = false OR (
+                    SELECT count(*) FROM leads l
+                    WHERE l."assignedToId" = ${users.id}
+                      AND l."companyId" = ${FENICE_COMPANY}
+                      AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
+                ) < ${BOT_DAILY_CAP})`,
             )).orderBy(asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id));
 
             if (eligible.length === 0) {
@@ -551,7 +569,7 @@ export async function POST(req: NextRequest) {
 
             await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 
-            return { kind: 'created' as const, assignedGdoId };
+            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot };
         });
 
         if (txResult.kind === 'duplicate') {
