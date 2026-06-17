@@ -13,7 +13,8 @@
  * notifica aggregata al manager invece di una per ogni errore.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
+import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { db } from "@/db";
 import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
 import { eq, and, asc, sql, isNull, gte, desc, or } from "drizzle-orm";
@@ -601,6 +602,17 @@ export async function POST(req: NextRequest) {
         }
 
         const assignedGdoId = txResult.assignedGdoId;
+
+        if (txResult.kind === 'created' && txResult.assignedGdoIsBot) {
+            after(() => pushLeadToBot({
+                leadId: newLeadId,
+                name: fullName,
+                phone: phoneFinal,
+                email,
+                funnel,
+                companyId: FENICE_COMPANY,
+            }));
+        }
 
         await logLeadEvent({
             leadId: newLeadId,

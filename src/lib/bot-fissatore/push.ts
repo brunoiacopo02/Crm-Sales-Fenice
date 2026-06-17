@@ -27,6 +27,7 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<void> {
                 'x-bot-signature': signature,
             },
             body: rawBody,
+            signal: AbortSignal.timeout(5000),
         });
         if (!res.ok) {
             console.error(`[bot-fissatore] push non-2xx: ${res.status} for lead ${payload.leadId}`);
