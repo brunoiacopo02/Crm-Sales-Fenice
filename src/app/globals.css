@@ -2120,6 +2120,63 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   --color-brand-orange-hover:  #D63D78;
   --color-brand-charcoal:      #5A1A3A;
 
+  /* Gamification "fire" accent → rosa (sidebar attiva, progress bar, streak,
+     livello, separatori). Vale solo per Andrea: la sua gamification è rosa. */
+  --color-fire-400: #F472A6;
+  --color-fire-500: #EC5A92;
+  --color-fire-600: #D63D78;
+  --color-fire-glow: rgba(236, 90, 146, 0.4);
+  --shadow-gaming-glow-fire: 0 0 20px -4px rgba(236, 90, 146, 0.35), 0 0 8px -2px rgba(236, 90, 146, 0.2);
+  --shadow-glow-orange: 0 0 16px -2px rgba(236, 90, 146, 0.4);
+  --shadow-glow-ember:  0 0 16px -2px rgba(236, 90, 146, 0.3);
+  --color-gaming-border:       rgba(236, 90, 146, 0.14);
+  --color-gaming-border-hover: rgba(236, 90, 146, 0.28);
+
+  /* Oro/ambra gamification → famiglia rosa, così i gradienti fire→gold e i
+     badge livello/coins non virano all'arancione. Tutto rosa per Andrea. */
+  --color-gaming-gold:     #F9A8C4;
+  --color-gaming-gold-dim: #D6749B;
+  --color-gaming-amber:    #F472A6;
+  --shadow-gaming-glow-gold:  0 0 20px -4px rgba(249, 168, 196, 0.3), 0 0 8px -2px rgba(249, 168, 196, 0.15);
+  --shadow-gaming-glow-amber: 0 0 20px -4px rgba(244, 114, 166, 0.3), 0 0 8px -2px rgba(244, 114, 166, 0.15);
+  --shadow-glow-gold:         0 0 16px -2px rgba(236, 90, 146, 0.3);
+
+  /* Utility Tailwind orange-* (es. bg-orange-100 nei badge) → scala rosa,
+     così nessun arancione "di sistema" sopravvive nel tema di Andrea. */
+  --color-orange-50:  #FDF2F7;
+  --color-orange-100: #FCE7F0;
+  --color-orange-200: #F9CFE0;
+  --color-orange-300: #F4A8C7;
+  --color-orange-400: #EF7DA9;
+  --color-orange-500: #EC5A92;
+  --color-orange-600: #D63D78;
+  --color-orange-700: #B82C61;
+  --color-orange-800: #97244F;
+  --color-orange-900: #5A1A3A;
+
+  /* Anche le utility Tailwind amber-* e yellow-* (progress bar obiettivi,
+     coins, badge livello) → scala rosa. */
+  --color-amber-50:  #FDF2F7;
+  --color-amber-100: #FCE7F0;
+  --color-amber-200: #F9CFE0;
+  --color-amber-300: #F4A8C7;
+  --color-amber-400: #EF7DA9;
+  --color-amber-500: #EC5A92;
+  --color-amber-600: #D63D78;
+  --color-amber-700: #B82C61;
+  --color-amber-800: #97244F;
+  --color-amber-900: #5A1A3A;
+  --color-yellow-50:  #FDF2F7;
+  --color-yellow-100: #FCE7F0;
+  --color-yellow-200: #F9CFE0;
+  --color-yellow-300: #F4A8C7;
+  --color-yellow-400: #EF7DA9;
+  --color-yellow-500: #EC5A92;
+  --color-yellow-600: #D63D78;
+  --color-yellow-700: #B82C61;
+  --color-yellow-800: #97244F;
+  --color-yellow-900: #5A1A3A;
+
   --font-display: var(--font-jakarta), var(--font-geist-sans), sans-serif;
   --font-sans:    var(--font-jakarta), var(--font-geist-sans), sans-serif;
   font-family: var(--font-sans);
@@ -2130,4 +2187,30 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-image:
     radial-gradient(60rem 60rem at 100% 0%, rgba(236,90,146,0.07), transparent 70%),
     radial-gradient(50rem 50rem at 0% 100%, rgba(236,90,146,0.06), transparent 70%);
+}
+
+/* Regole gamification con arancione LETTERALE (non passano dai token):
+   ridichiarate in rosa solo per Andrea. */
+[data-theme="rosa"] .sidebar-item-active {
+  background: linear-gradient(90deg, rgba(236, 90, 146, 0.12) 0%, rgba(236, 90, 146, 0.04) 100%);
+  box-shadow: inset 4px 0 12px -4px rgba(236, 90, 146, 0.3), 0 0 12px -4px rgba(236, 90, 146, 0.1);
+}
+[data-theme="rosa"] .sidebar-item-hover:hover {
+  background: rgba(236, 90, 146, 0.06);
+  box-shadow: inset 3px 0 8px -4px rgba(236, 90, 146, 0.2);
+}
+[data-theme="rosa"] .sidebar-item-hover:hover .sidebar-icon {
+  filter: drop-shadow(0 0 4px rgba(236, 90, 146, 0.4));
+}
+[data-theme="rosa"] .sidebar-gamification-separator::after {
+  filter: drop-shadow(0 0 4px rgba(236, 90, 146, 0.6));
+}
+[data-theme="rosa"] .text-gaming-fire {
+  text-shadow: 0 0 8px rgba(236, 90, 146, 0.3);
+}
+[data-theme="rosa"] .text-gaming-gold {
+  text-shadow: 0 0 8px rgba(249, 168, 196, 0.35);
+}
+[data-theme="rosa"] .sidebar-gamification-separator::before {
+  background: linear-gradient(90deg, transparent 0%, rgba(236, 90, 146, 0.15) 50%, transparent 100%);
 }
