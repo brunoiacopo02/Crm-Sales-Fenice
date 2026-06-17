@@ -133,7 +133,7 @@ export function StreakCounter({ userId }: { userId: string }) {
 
     return (
         <SafeWrapper fallback={null}>
-        <div className={`w-full border shadow-gaming-card rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br ${bgStateClass} ${borderStateClass} ${glowClass} ${shakeClass}`}>
+        <div className={`w-full border shadow-gaming-card rounded-2xl p-4 text-[var(--color-gaming-text)] relative overflow-hidden transition-all duration-500 bg-gradient-to-br ${bgStateClass} ${borderStateClass} ${glowClass} ${shakeClass}`}>
             {/* Background glow based on state */}
             {visualState === 'safe' && (
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
@@ -153,7 +153,7 @@ export function StreakCounter({ userId }: { userId: string }) {
                     </div>
                     <div>
                         <div className="flex items-baseline gap-1.5">
-                            <span className="text-2xl font-black tabular-nums text-white">{streakCount}</span>
+                            <span className="text-2xl font-black tabular-nums text-[var(--color-gaming-text)]">{streakCount}</span>
                             <span className="text-xs font-medium text-[var(--color-gaming-text-muted)]">
                                 {streakCount === 1 ? 'giorno' : 'giorni'}
                             </span>

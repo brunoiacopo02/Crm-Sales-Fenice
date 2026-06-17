@@ -42,7 +42,7 @@ function QuestCard({ quest, onClaim }: { quest: QuestItem; onClaim: (id: string)
                 {/* Title + Rewards row */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm text-white/90 truncate">{quest.title}</div>
+                        <div className="font-semibold text-sm text-[var(--color-gaming-text)] truncate">{quest.title}</div>
                         <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5 line-clamp-1">{quest.description}</div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -185,7 +185,7 @@ export function QuestPanel({ userId }: { userId: string }) {
 
     return (
         <SafeWrapper fallback={null}>
-        <div className="w-full border rounded-2xl p-5 text-white relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-[var(--color-gaming-bg)] via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] border-[var(--color-gaming-border)] shadow-gaming-card">
+        <div className="w-full border rounded-2xl p-5 text-[var(--color-gaming-text)] relative overflow-hidden transition-all duration-500 bg-gradient-to-br from-[var(--color-gaming-bg)] via-[var(--color-gaming-bg-card)] to-[var(--color-gaming-bg-surface)] border-[var(--color-gaming-border)] shadow-gaming-card">
             {/* Decorative blurs */}
             <div className="absolute top-0 left-0 w-48 h-48 bg-fire-500/6 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/4 pointer-events-none" />
             <div className="absolute bottom-0 right-0 w-36 h-36 bg-brand-orange/6 rounded-full blur-3xl translate-y-1/3 translate-x-1/4 pointer-events-none" />
@@ -201,7 +201,7 @@ export function QuestPanel({ userId }: { userId: string }) {
                             <Scroll className="h-5 w-5 text-fire-400" />
                         </div>
                         <div>
-                            <h3 className="text-base font-bold tracking-tight text-white">Quest Attive</h3>
+                            <h3 className="text-base font-bold tracking-tight text-[var(--color-gaming-text)]">Quest Attive</h3>
                             <div className="text-xs text-[var(--color-gaming-text-muted)] mt-0.5">
                                 {completedDaily}/{totalDaily} giornaliere · {completedWeekly}/{totalWeekly} settimanali
                             </div>
