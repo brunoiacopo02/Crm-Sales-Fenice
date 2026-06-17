@@ -139,13 +139,42 @@ Stitch è lo strumento creativo che precede la scrittura dei token:
 
 Output atteso: screenshot/mockup di riferimento + tabella hex finale.
 
+## Aggiornamento scope (2026-06-17, post verifica live)
+
+La verifica live ha mostrato che il solo override dei token `--color-brand-*`
+ri-colorava solo logo/avatar/badge brand: il grosso del "chrome" della
+dashboard Conferme (sidebar attiva, progress bar, streak, livello, tab) usa il
+**sistema colori gamification "fire"** e utility Tailwind `orange/amber/yellow`,
+quindi restava arancione. Su richiesta esplicita dell'utente
+(«estendilo a tutto, anche la parte di gamification, solo ed esclusivamente per
+Andrea, anche su Serenamente») lo scope è stato esteso. Il blocco
+`[data-theme="rosa"]` ora sovrascrive **anche**:
+
+- i token gamification fire/gaming (`--color-fire-400/500/600`, `--color-fire-glow`,
+  `--color-gaming-gold/amber/border`, glow shadows fire/gold/amber) → famiglia rosa;
+- le scale Tailwind `--color-orange-*`, `--color-amber-*`, `--color-yellow-*` → scala rosa;
+- le regole con arancione **letterale** (`.sidebar-item-active`, hover,
+  `.sidebar-gamification-separator`, `.text-gaming-fire/gold`) ridichiarate in rosa.
+
+**Serenamente:** quando Andrea opera su `data-company="serenamente"`, il rosa
+deve vincere sul verde. Garantito: i selettori sono a pari specificità e il
+blocco rosa è dopo quello serenamente in `globals.css` (source order). La
+gamification rosa vale **solo per Andrea** (gate su `data-theme`).
+
+Verifica live (login Andrea su `/conferme`): dashboard interamente rosa; rosa
+vince su serenamente; rimuovendo l'attributo tutto torna arancione (altri utenti
+intatti). Screenshot: `docs/superpowers/assets/tema-rosa-andrea/conferme-rosa-LIVE-andrea.png`.
+
 ## Cosa NON viene toccato
 
 - Logica componenti Conferme (presence realtime, drawer lifecycle, board,
-  timer, quest): nessuna modifica — solo token CSS.
-- Colori della gamification (restano invariati, come per SerenaMente).
-- Qualsiasi altro utente, azienda o pagina.
+  timer, quest): nessuna modifica — solo token/regole CSS.
+- Qualsiasi altro utente, azienda o pagina (tutti gli override sono scoped a
+  `[data-theme="rosa"]`, emesso solo per Andrea).
 - Schema DB, server actions, middleware.
+- Nota: eventuali stili inline arancioni in overlay gamification rari
+  (es. forziere/duello) non passano dai token CSS; non incidono sulla dashboard
+  operativa e restano fuori scope.
 
 ## Testing / verifica
 
