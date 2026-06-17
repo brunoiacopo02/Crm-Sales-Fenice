@@ -121,9 +121,8 @@ export function HotStreak({ children }: { children: ReactNode }) {
                 className={`absolute -inset-[2px] rounded-xl pointer-events-none z-0 transition-opacity duration-500 ${
                     isIntense
                         ? 'opacity-100 shadow-[0_0_24px_rgba(239,68,68,0.35),0_0_48px_rgba(245,158,11,0.2)]'
-                        : 'opacity-100'
+                        : 'opacity-100 shadow-[0_0_16px_rgba(245,158,11,0.25),0_0_32px_rgba(251,191,36,0.1)]'
                 }`}
-                style={!isIntense ? { boxShadow: 'var(--shadow-gaming-glow-fire)' } : undefined}
             />
 
             {/* Side borders — subtle fire glow on left and right */}
@@ -149,9 +148,8 @@ export function HotStreak({ children }: { children: ReactNode }) {
                 className={`absolute -top-3 -right-3 z-20 flex items-center gap-1 px-2 py-1 rounded-full border pointer-events-none ${
                     isIntense
                         ? 'bg-red-600 border-red-400 animate-hot-streak-badge-intense shadow-[0_0_12px_rgba(239,68,68,0.6)]'
-                        : 'bg-amber-500 border-amber-400 animate-hot-streak-badge'
+                        : 'bg-amber-500 border-amber-400 animate-hot-streak-badge shadow-[0_0_8px_rgba(245,158,11,0.5)]'
                 }`}
-                style={!isIntense ? { boxShadow: 'var(--shadow-gaming-glow-fire)' } : undefined}
             >
                 <Flame className={`text-white ${isIntense ? 'w-5 h-5' : 'w-4 h-4'}`} />
                 {isIntense && (
