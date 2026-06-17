@@ -14,6 +14,7 @@ const CrossCompanyRecallBanner = dynamic(() => import("@/components/CrossCompany
 const ConfermeRecallBanner = dynamic(() => import("@/components/ConfermeRecallBanner").then(mod => ({ default: mod.ConfermeRecallBanner })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
+import { getUserTheme } from "@/lib/userTheme"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
 import { SalesCompanyProvider } from "@/components/providers/SalesCompanyProvider"
@@ -56,6 +57,9 @@ export default async function DashboardLayout({
     const isAllCompanies = tctx.isAllCompanies
     const dataCompany = isAllCompanies ? 'fenice' : tctx.companyId
 
+    // Tema estetico per-utente (es. rosa per Andrea): scoped via attributo data-theme.
+    const userTheme = getUserTheme(session.user.email)
+
     // Gamification attiva solo per GDO, CONFERME e supervisori — disabilitata per VENDITORE
     const showSprintBanner = ['GDO', 'MANAGER', 'ADMIN'].includes(session.user.role)
     const showGamificationOverlays = session.user.role !== 'VENDITORE'
@@ -64,7 +68,7 @@ export default async function DashboardLayout({
         <RealtimeProvider>
             <SidebarProvider>
                 <SalesCompanyProvider company={dataCompany}>
-                    <div data-company={dataCompany} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
+                    <div data-company={dataCompany} data-theme={userTheme} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
                         <Sidebar companyId={dataCompany} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
