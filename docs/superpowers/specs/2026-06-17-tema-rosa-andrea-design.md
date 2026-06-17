@@ -116,8 +116,14 @@ Scala rosa magenta soft, stessa struttura 50→900 di SerenaMente:
 }
 ```
 
-> I valori esatti (scala + accento + testo) saranno confermati/affinati dal
-> design system Stitch prima di scrivere il CSS definitivo — vedi sotto.
+> **Palette VALIDATA da Stitch (2026-06-17).** Il design system "Andrea Rosa
+> Moderno Soft" (`assets/11463658245092560082`, progetto Stitch
+> `10372862462792847351`) ha confermato esattamente questi valori chiave:
+> accento `#EC5A92`, hover `#D63D78`, blush `#FBE9F1`, testo prugna `#5A1A3A`.
+> Mockup di riferimento della board Conferme:
+> `docs/superpowers/assets/tema-rosa-andrea/conferme-rosa-mockup.png`.
+> La scala 50→900 sopra (ramp magenta pulito) è quella definitiva per
+> l'override dei token `--color-brand-*`; non serve ulteriore affinamento.
 
 ## Ruolo di Stitch (MCP)
 
