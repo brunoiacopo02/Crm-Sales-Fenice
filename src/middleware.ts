@@ -8,6 +8,12 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next({ request });
     }
 
+    // Il bot fissatore chiama /api/bot/* con HMAC proprio (x-bot-signature):
+    // nessuna sessione Supabase, bypass del middleware come i webhook.
+    if (request.nextUrl.pathname.startsWith('/api/bot/')) {
+        return NextResponse.next({ request });
+    }
+
     // Vercel Cron e PULL endpoint marketing usano auth via Bearer token,
     // non Supabase session — bypass del middleware.
     if (request.nextUrl.pathname.startsWith('/api/cron/')
