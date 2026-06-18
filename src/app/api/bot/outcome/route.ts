@@ -56,6 +56,11 @@ export async function POST(req: NextRequest) {
         if (isNaN(date.getTime())) {
             return NextResponse.json({ error: 'bad_request', detail: 'date non valida (atteso ISO 8601)' }, { status: 400 });
         }
+        // Richiedi un fuso esplicito: senza offset la data è ambigua e l'appuntamento
+        // risulterebbe sfalsato. Es. valido: 2026-06-20T15:00:00+02:00
+        if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(body.date)) {
+            return NextResponse.json({ error: 'bad_request', detail: 'date deve includere il fuso orario (offset, es. +02:00)' }, { status: 400 });
+        }
     }
 
     // Carica il lead + verifica che appartenga a un account bot Fenice.

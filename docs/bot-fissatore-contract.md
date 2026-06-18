@@ -198,9 +198,16 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO';
 | `DA_SCARTARE` | Lead fuori target o non interessato | No |
 | `NON_RISPOSTO` | Nessuna risposta dopo i tentativi | No |
 
-> **Formato `date`:** ISO 8601 con offset di fuso orario esplicito.
-> Esempio corretto: `"2026-06-20T15:00:00+02:00"`.
-> Esempio errato (manca offset): `"2026-06-20T15:00:00"` — verrà rifiutato con 400.
+> **Formato `date`:** ISO 8601 con offset di fuso orario **obbligatorio** (`Z` oppure `±HH:MM`).
+> L'endpoint verifica attivamente la presenza dell'offset: una data priva di fuso viene
+> rifiutata con **400 `bad_request`** per evitare che gli appuntamenti risultino sfalsati
+> sul calendario del team Conferme.
+>
+> | Esempio | Esito |
+> |---|---|
+> | `"2026-06-20T15:00:00+02:00"` | Accettata |
+> | `"2026-06-20T13:00:00Z"` | Accettata |
+> | `"2026-06-20T15:00:00"` | **Rifiutata — 400** (`date deve includere il fuso orario`) |
 
 ### Schema `BotReport` (tutti i campi opzionali)
 
@@ -225,7 +232,8 @@ dashboard Conferme. È fortemente raccomandato per aiutare il team Conferme e i 
 | HTTP | `error` nel body | Significato |
 |---|---|---|
 | `200` | — (`{ ok: true }`) | Outcome registrato correttamente |
-| `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente per APPUNTAMENTO/RICHIAMO; JSON malformato |
+| `400` | `invalid_json` | Body non è JSON valido (parsing fallito) |
+| `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO |
 | `401` | `invalid_signature` | Firma HMAC assente o non corrispondente |
 | `403` | `forbidden` | Lead non appartiene all'azienda `fenice`, oppure non è assegnato a un account bot |
 | `404` | `lead_not_found` | `leadId` non esiste nel DB |
