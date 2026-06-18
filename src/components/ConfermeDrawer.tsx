@@ -12,6 +12,7 @@ import { connectConfermePresence, setConfermeActivity, subscribeConfermePresence
 import { stopTimerAndLogForLead } from "@/lib/confermeCallTimer"
 import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
+import type { BotReport } from '@/lib/bot-fissatore/types'
 
 function ConfermeDrawerSkeleton() {
     return (
@@ -707,6 +708,49 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     <label className="text-xs font-bold text-ash-500 uppercase tracking-wider ml-1">Note del Fissatore (GDO)</label>
                                     <textarea rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className="input-fenice text-sm resize-none text-ash-700 leading-relaxed" placeholder="Aggiungi una nota..."></textarea>
                                 </div>
+
+                                {lead.botReport && (() => {
+                                    const r = lead.botReport as BotReport | string;
+                                    if (typeof r === 'string') {
+                                        return (
+                                            <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                                                <div className="mb-1 text-sm font-semibold text-amber-800">🤖 Report Bot</div>
+                                                <div className="whitespace-pre-wrap text-sm text-gray-700">{r}</div>
+                                            </div>
+                                        );
+                                    }
+                                    return (
+                                        <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                                            <div className="mb-2 text-sm font-semibold text-amber-800">🤖 Report Bot</div>
+                                            {r.summary && <p className="mb-2 text-sm text-gray-700">{r.summary}</p>}
+                                            {r.levaConsigliata && (
+                                                <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-sm font-medium text-amber-900">
+                                                    Leva consigliata: {r.levaConsigliata}
+                                                </div>
+                                            )}
+                                            <div className="mb-2 flex flex-wrap gap-1">
+                                                {r.budgetSignal && <span className="rounded-full bg-white px-2 py-0.5 text-xs text-gray-600 ring-1 ring-amber-200">Budget: {r.budgetSignal}</span>}
+                                                {r.urgency && <span className="rounded-full bg-white px-2 py-0.5 text-xs text-gray-600 ring-1 ring-amber-200">Urgenza: {r.urgency}</span>}
+                                            </div>
+                                            {r.painPoints && r.painPoints.length > 0 && (
+                                                <div className="mb-2">
+                                                    <div className="text-xs font-semibold text-gray-500">Pain point</div>
+                                                    <ul className="ml-4 list-disc text-sm text-gray-700">
+                                                        {r.painPoints.map((p, i) => <li key={i}>{p}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {r.objections && r.objections.length > 0 && (
+                                                <div>
+                                                    <div className="text-xs font-semibold text-gray-500">Obiezioni</div>
+                                                    <ul className="ml-4 list-disc text-sm text-gray-600">
+                                                        {r.objections.map((o, i) => <li key={i}>{o}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
 
                                 <div className="pt-4 border-t border-ash-200">
                                     <button onClick={handleSaveData} disabled={savingData} className="w-full flex justify-center items-center gap-2 py-3 bg-ash-900 hover:bg-black text-white rounded-xl transition-all font-bold shadow-md hover:shadow-lg disabled:opacity-50">

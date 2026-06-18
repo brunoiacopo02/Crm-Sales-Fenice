@@ -257,6 +257,9 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                         if (conf === 'scartato') return <span title={`Scartato: ${lead.confirmationsDiscardReason || 'motivo non specificato'}`} className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 uppercase shrink-0">Scartato</span>
                         return null
                     })()}
+                    {lead.botReport && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800" title="Lead con report bot">🤖</span>
+                    )}
                     <div className={`text-ash-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-ash-400" />{lead.phone}</div>
 
                     {/* GDO name + Funnel (hidden in Snooze mode to save space) */}
