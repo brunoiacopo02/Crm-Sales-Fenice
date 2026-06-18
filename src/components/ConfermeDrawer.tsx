@@ -714,14 +714,14 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                     if (typeof r === 'string') {
                                         return (
                                             <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                                                <div className="mb-1 text-sm font-semibold text-amber-800">🤖 Report Bot</div>
+                                                <div className="mb-1 text-sm font-semibold text-amber-800">📋 Report Fissatore</div>
                                                 <div className="whitespace-pre-wrap text-sm text-gray-700">{r}</div>
                                             </div>
                                         );
                                     }
                                     return (
                                         <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                                            <div className="mb-2 text-sm font-semibold text-amber-800">🤖 Report Bot</div>
+                                            <div className="mb-2 text-sm font-semibold text-amber-800">📋 Report Fissatore</div>
                                             {r.summary && <p className="mb-2 text-sm text-gray-700">{r.summary}</p>}
                                             {r.levaConsigliata && (
                                                 <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-sm font-medium text-amber-900">

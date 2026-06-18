@@ -23,7 +23,9 @@ Il CRM Fenice ha un account GDO dedicato al bot:
 
 | Campo | Valore |
 |---|---|
-| Email | `gdo205` (account interno Fenice) |
+| Nome visualizzato | `GDO 201` (appare come un GDO normale nel CRM) |
+| Email | `gdo201@fenice.local` (account interno Fenice, non fa login UI) |
+| `gdoCode` | `201` |
 | Ruolo | GDO |
 | Azienda | `fenice` |
 | Flag `isBot` | `true` |
@@ -126,7 +128,7 @@ async function postOutcome(body) {
 
 ## Direzione 1 — CRM → Bot (push all'assegnazione)
 
-Quando un lead viene assegnato all'account `gdo205` (e `BOT_INTAKE_ENABLED=true`), il CRM
+Quando un lead viene assegnato all'account `GDO 201` (gdoCode 201, e `BOT_INTAKE_ENABLED=true`), il CRM
 esegue una chiamata **best-effort, no-retry** verso il bot.
 
 ### Request
@@ -246,7 +248,7 @@ dashboard Conferme. È fortemente raccomandato per aiutare il team Conferme e i 
 
 ### Cap giornaliero di assegnazioni (soft cap)
 
-Il CRM applica un limite di **20 assegnazioni al giorno** all'account bot (`gdo205`),
+Il CRM applica un limite di **20 assegnazioni al giorno** all'account bot (`GDO 201`),
 calcolato sul fuso orario `Europe/Rome`.
 
 **Questo è un soft cap:** in caso di burst di assegnazioni concorrenti, il contatore
