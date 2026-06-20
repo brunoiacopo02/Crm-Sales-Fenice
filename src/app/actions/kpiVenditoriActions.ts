@@ -7,7 +7,13 @@ import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy';
 
-export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'custom', customStart?: string, customEnd?: string) {
+// Normalizza il funnel come nel resto del codebase: trim + UPPER, vuoto/null → SCONOSCIUTO
+const normFunnel = (f: string | null | undefined) => (f ?? '').trim().toUpperCase() || 'SCONOSCIUTO'
+
+// Sentinella per "Tutti i funnel" (mai presente nel DB, come __all__ per le aziende)
+const ALL_FUNNELS = '__all__'
+
+export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'custom', customStart?: string, customEnd?: string, funnelFilter?: string) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     // Bounds Europe/Rome espliciti (Sprint 2.3): risolve sfasamento UTC-vs-Rome
@@ -57,7 +63,8 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
     const outcomes = await db.select({
         salespersonUserId: leads.salespersonUserId,
         outcome: leads.salespersonOutcome,
-        amount: leads.closeAmountEur
+        amount: leads.closeAmountEur,
+        funnel: leads.funnel
     }).from(leads).where(
         and(
             companyScope(ctx, leads.companyId),
@@ -68,8 +75,15 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         )
     )
 
+    // Filtro per funnel: se selezionato un funnel specifico, ricalcola tutta la
+    // tabella (chiusi/non chiusi/spariti/CR/fatturato/posizioni) sul solo sottoinsieme.
+    const wantFunnel = funnelFilter && funnelFilter !== ALL_FUNNELS ? funnelFilter : null
+    const scopedOutcomes = wantFunnel
+        ? outcomes.filter(o => normFunnel(o.funnel) === wantFunnel)
+        : outcomes
+
     const results = venditori.map(v => {
-        const vOutcomes = outcomes.filter(o => o.salespersonUserId === v.id)
+        const vOutcomes = scopedOutcomes.filter(o => o.salespersonUserId === v.id)
 
         const chiusi = vOutcomes.filter(o => o.outcome === 'Chiuso').length
         const nonChiusi = vOutcomes.filter(o => o.outcome === 'Non chiuso').length
@@ -103,4 +117,23 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         ...r,
         position: idx + 1
     }))
+}
+
+// Elenco dei funnel presenti tra i lead esitati dai venditori (company-scoped,
+// non vincolato al periodo così il dropdown resta stabile cambiando periodo/funnel).
+export async function getVenditoriFunnels(): Promise<string[]> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
+    const rows = await db.select({ funnel: leads.funnel }).from(leads).where(
+        and(
+            companyScope(ctx, leads.companyId),
+            isNotNull(leads.salespersonOutcome),
+            isNotNull(leads.salespersonUserId)
+        )
+    )
+
+    const set = new Set<string>()
+    for (const r of rows) set.add(normFunnel(r.funnel))
+    return [...set].sort((a, b) => a.localeCompare(b, 'it'))
 }

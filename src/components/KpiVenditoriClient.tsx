@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getVenditoriKpi } from "@/app/actions/kpiVenditoriActions"
-import { Trophy, TrendingUp, DollarSign, Target, CalendarDays, Award, Crown, Medal } from "lucide-react"
+import { getVenditoriKpi, getVenditoriFunnels } from "@/app/actions/kpiVenditoriActions"
+import { Trophy, TrendingUp, DollarSign, Target, CalendarDays, Award, Crown, Medal, Filter } from "lucide-react"
+
+const ALL_FUNNELS = '__all__'
 
 interface KpiVenditoriClientProps {
     currentUserRole: string
@@ -11,6 +13,8 @@ interface KpiVenditoriClientProps {
 
 export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVenditoriClientProps) {
     const [period, setPeriod] = useState<'oggi' | 'settimana' | 'mese' | 'custom'>('mese')
+    const [funnel, setFunnel] = useState<string>(ALL_FUNNELS)
+    const [funnels, setFunnels] = useState<string[]>([])
     const [kpiData, setKpiData] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
 
@@ -19,7 +23,7 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
     const fetchKpi = async () => {
         setIsLoading(true)
         try {
-            const data = await getVenditoriKpi(period)
+            const data = await getVenditoriKpi(period, undefined, undefined, funnel)
             setKpiData(data)
         } catch (error) {
             console.error(error)
@@ -28,9 +32,14 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
         }
     }
 
+    // Carica l'elenco funnel una sola volta
+    useEffect(() => {
+        getVenditoriFunnels().then(setFunnels).catch(console.error)
+    }, [])
+
     useEffect(() => {
         fetchKpi()
-    }, [period])
+    }, [period, funnel])
 
     const top3 = kpiData.slice(0, 3)
     const hasTop3 = top3.length >= 3
@@ -43,16 +52,31 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                     <CalendarDays className="h-5 w-5 text-ash-400" />
                     <div className="text-sm font-medium text-ash-600">Seleziona Periodo:</div>
                 </div>
-                <div className="flex bg-ash-100/80 p-1 rounded-lg text-sm font-medium">
-                    {(['oggi', 'settimana', 'mese'] as const).map(p => (
-                        <button
-                            key={p}
-                            onClick={() => setPeriod(p)}
-                            className={`px-4 py-2 rounded-md capitalize transition-all ${period === p ? 'bg-white shadow-soft text-brand-orange' : 'text-ash-500 hover:text-ash-700'}`}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-ash-400" />
+                        <select
+                            value={funnel}
+                            onChange={(e) => setFunnel(e.target.value)}
+                            className="text-sm font-medium text-ash-700 bg-ash-100/80 border border-ash-200/60 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 cursor-pointer"
                         >
-                            {p}
-                        </button>
-                    ))}
+                            <option value={ALL_FUNNELS}>Tutti i funnel</option>
+                            {funnels.map(f => (
+                                <option key={f} value={f}>{f}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex bg-ash-100/80 p-1 rounded-lg text-sm font-medium">
+                        {(['oggi', 'settimana', 'mese'] as const).map(p => (
+                            <button
+                                key={p}
+                                onClick={() => setPeriod(p)}
+                                className={`px-4 py-2 rounded-md capitalize transition-all ${period === p ? 'bg-white shadow-soft text-brand-orange' : 'text-ash-500 hover:text-ash-700'}`}
+                            >
+                                {p}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
