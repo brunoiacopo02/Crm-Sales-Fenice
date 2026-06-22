@@ -32,19 +32,22 @@ async function auditPush(payload: BotIntakePayload, meta: PushResult): Promise<v
  * Notifica il bot esterno che un lead gli è stato assegnato. Best-effort,
  * no-retry (per il test): un fallimento NON deve impattare l'intake del lead.
  * Kill-switch: BOT_INTAKE_ENABLED !== 'true' → no-op (ma tracciato come skipped).
+ * Ritorna l'esito (oltre a persistirlo): usato dal backfill per il report sincrono.
  */
-export async function pushLeadToBot(payload: BotIntakePayload): Promise<void> {
+export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResult> {
     if (process.env.BOT_INTAKE_ENABLED !== 'true') {
-        await auditPush(payload, { result: 'skipped_disabled' });
-        return;
+        const meta: PushResult = { result: 'skipped_disabled' };
+        await auditPush(payload, meta);
+        return meta;
     }
 
     const url = process.env.BOT_INTAKE_URL;
     const secret = process.env.BOT_WEBHOOK_SECRET;
     if (!url || !secret) {
         console.error('[bot-fissatore] missing env: BOT_INTAKE_URL or BOT_WEBHOOK_SECRET');
-        await auditPush(payload, { result: 'missing_env' });
-        return;
+        const meta: PushResult = { result: 'missing_env' };
+        await auditPush(payload, meta);
+        return meta;
     }
 
     // Solo l'host nell'audit: utile per diagnosi (URL giusto vs stale) senza loggare path/secret.
@@ -54,6 +57,7 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<void> {
     const rawBody = JSON.stringify(payload);
     const signature = signPayload(rawBody, secret);
 
+    let meta: PushResult;
     try {
         const res = await fetch(url, {
             method: 'POST',
@@ -67,13 +71,11 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<void> {
         if (!res.ok) {
             console.error(`[bot-fissatore] push non-2xx: ${res.status} for lead ${payload.leadId}`);
         }
-        await auditPush(payload, {
-            result: res.ok ? 'sent' : 'http_error',
-            status: res.status,
-            urlHost,
-        });
+        meta = { result: res.ok ? 'sent' : 'http_error', status: res.status, urlHost };
     } catch (e) {
         console.error(`[bot-fissatore] push failed for lead ${payload.leadId}`, e);
-        await auditPush(payload, { result: 'network_error', error: String(e), urlHost });
+        meta = { result: 'network_error', error: String(e), urlHost };
     }
+    await auditPush(payload, meta);
+    return meta;
 }
