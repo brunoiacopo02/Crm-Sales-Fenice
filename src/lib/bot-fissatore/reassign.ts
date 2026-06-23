@@ -24,6 +24,7 @@ export async function reassignBotLeadToHumanPool(
     leadId: string,
     reason: ReassignReason,
     botUserId: string,
+    botNote?: string | null,
 ): Promise<ReassignResult> {
     return await db.transaction(async (tx) => {
         const eligible = await tx.select({ id: users.id })
@@ -62,7 +63,7 @@ export async function reassignBotLeadToHumanPool(
                 eventType: 'REASSIGNED_FROM_BOT',
                 userId: null,
                 timestamp: now,
-                metadata: { reason, fromBot: botUserId, toGdo: null, note: 'no_eligible_gdo' },
+                metadata: { reason, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'no_eligible_gdo' },
                 companyId: FENICE,
             });
 
@@ -85,7 +86,7 @@ export async function reassignBotLeadToHumanPool(
             eventType: 'REASSIGNED_FROM_BOT',
             userId: gdoId,
             timestamp: now,
-            metadata: { reason, fromBot: botUserId, toGdo: gdoId },
+            metadata: { reason, botNote: botNote ?? null, fromBot: botUserId, toGdo: gdoId },
             companyId: FENICE,
         });
 

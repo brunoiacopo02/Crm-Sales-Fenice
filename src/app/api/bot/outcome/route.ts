@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     // coinvolto: i flussi dei GDO umani restano intatti.
     if (typedOutcome === 'NON_RISPOSTO' || typedOutcome === 'INTERROTTO') {
         const reason = typedOutcome === 'NON_RISPOSTO' ? 'mai_risposto' : 'chat_interrotta';
-        const r = await reassignBotLeadToHumanPool(leadId, reason, assignee.id);
+        const r = await reassignBotLeadToHumanPool(leadId, reason, assignee.id, note);
         return NextResponse.json({ ok: true, reassigned: r.assignedToId });
     }
 
