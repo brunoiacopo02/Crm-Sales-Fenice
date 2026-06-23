@@ -5,6 +5,7 @@ import { tryCurrentTenant } from "@/lib/tenancy";
 import { PanoramicaClient } from "./PanoramicaClient";
 import { SalesAlertStrip } from "./SalesAlertStrip";
 import { ManagerParamsStrip } from "./ManagerParamsStrip";
+import { isConfermeTl } from "@/lib/confermeTl";
 
 export default async function PanoramicaGeneralePage() {
     const supabase = await createClient();
@@ -15,12 +16,18 @@ export default async function PanoramicaGeneralePage() {
     }
 
     const role = user.user_metadata?.role;
-    if (role !== 'ADMIN') {
+    // Il TL del team Conferme (Alberto, gating per email) può vedere la dashboard
+    // Sales Manager in SOLA LETTURA. Tutti gli altri ruoli restano esclusi.
+    const isTlConfermeViewer = role === 'CONFERME' && isConfermeTl(user.email);
+    if (role !== 'ADMIN' && !isTlConfermeViewer) {
         redirect('/');
     }
 
     const tctx = await tryCurrentTenant();
     const isAllCompanies = !!tctx?.isAllCompanies;
+    // Sola lettura per il TL Conferme: vede KPI/alert ma non modifica i target
+    // né i parametri manager (la strip parametri viene nascosta).
+    const readOnly = isAllCompanies || isTlConfermeViewer;
 
     const [overview, funnelOverview, metricsOverview] = await Promise.all([
         getLeadOverview(),
@@ -45,13 +52,14 @@ export default async function PanoramicaGeneralePage() {
 
             <SalesAlertStrip />
 
-            {!isAllCompanies && <ManagerParamsStrip />}
+            {!isAllCompanies && !isTlConfermeViewer && <ManagerParamsStrip />}
 
             <PanoramicaClient
                 initialData={overview}
                 initialFunnelData={funnelOverview}
                 initialMetricsData={metricsOverview}
-                readOnly={isAllCompanies}
+                readOnly={readOnly}
+                readOnlyVariant={isAllCompanies ? 'all-companies' : 'viewer'}
             />
         </div>
     );

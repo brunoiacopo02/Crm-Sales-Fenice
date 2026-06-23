@@ -2,13 +2,18 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { getAvailableFunnels, getGdoAggregate, getConfermeAggregate, getSalesAggregate } from "./actions";
 import { listSuspiciousSurveys } from "@/app/actions/surveyActions";
+import { isConfermeTl } from "@/lib/confermeTl";
 import QualitaLeadClient from "./QualitaLeadClient";
 
 export default async function QualitaLeadPage() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const role = (user?.user_metadata?.role as string) || "";
-    if (!user || !["MANAGER", "ADMIN"].includes(role)) {
+    // MANAGER/ADMIN hanno accesso pieno. Il TL del team Conferme (Alberto, gating
+    // per email) può consultare l'intera dashboard ma NON invalidare i sondaggi.
+    const isManager = ["MANAGER", "ADMIN"].includes(role);
+    const isTlConfermeViewer = role === "CONFERME" && isConfermeTl(user?.email);
+    if (!user || (!isManager && !isTlConfermeViewer)) {
         redirect("/");
     }
 
@@ -44,6 +49,7 @@ export default async function QualitaLeadPage() {
                 initialSales={salesAgg}
                 initialClosedWonGdo={closedWonAgg}
                 initialSuspicious={suspicious}
+                canInvalidate={isManager}
             />
         </div>
     );

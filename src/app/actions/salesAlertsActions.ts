@@ -18,6 +18,7 @@ import { db } from "@/db";
 import { leads, monthlyLeadTargets, marketingTargets, metaAccountDaily, users, companies } from "@/db/schema";
 import { and, eq, gte, lt, lte, inArray, isNull, isNotNull, or } from "drizzle-orm";
 import { currentTenant, assertSalesArea, type TenantContext } from '@/lib/tenancy';
+import { isConfermeTl } from "@/lib/confermeTl";
 import {
     countWorkingDaysInMonth,
     countWorkingDaysElapsed,
@@ -97,7 +98,8 @@ export async function getSalesAlerts(): Promise<SalesAlertsResult> {
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
-        if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER') {
+        const isTlConfermeViewer = ctx.role === 'CONFERME' && isConfermeTl(ctx.email);
+        if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER' && !isTlConfermeViewer) {
             return { success: false, error: 'Non autorizzato' };
         }
 

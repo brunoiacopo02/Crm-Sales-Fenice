@@ -5,6 +5,7 @@ import { leads, monthlyLeadTargets, monthlyFunnelBaselines } from "@/db/schema";
 import { and, gte, lt, sql, eq, or } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from '@/lib/tenancy';
+import { isConfermeTl } from "@/lib/confermeTl";
 import {
     countWorkingDaysInMonth,
     countWorkingDaysElapsed,
@@ -20,6 +21,21 @@ async function requireAdmin() {
     const role = user.user_metadata?.role;
     if (role !== 'ADMIN') return null;
     return { id: user.id, role };
+}
+
+/**
+ * Guard di sola lettura per la dashboard Sales Manager: oltre all'ADMIN,
+ * consente l'accesso in lettura al TL del team Conferme (Alberto, gating per
+ * email via isConfermeTl). NON usare per le mutation: i target restano ADMIN-only.
+ */
+async function requireSalesOverviewRead() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const role = user.user_metadata?.role;
+    if (role === 'ADMIN') return { id: user.id, role };
+    if (role === 'CONFERME' && isConfermeTl(user.email)) return { id: user.id, role };
+    return null;
 }
 
 /**
@@ -69,7 +85,7 @@ export async function getLeadOverview(yearMonth?: string): Promise<LeadOverviewR
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
-        const admin = await requireAdmin();
+        const admin = await requireSalesOverviewRead();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
         const ym = yearMonth || currentYearMonthRome();
@@ -461,7 +477,7 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
-        const admin = await requireAdmin();
+        const admin = await requireSalesOverviewRead();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
         const ym = yearMonth || currentYearMonthRome();
@@ -893,7 +909,7 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
-        const admin = await requireAdmin();
+        const admin = await requireSalesOverviewRead();
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
         const ym = yearMonth || currentYearMonthRome();

@@ -27,10 +27,14 @@ interface Props {
     initialSales: SalesAggregate;
     initialClosedWonGdo: GdoAggregate;
     initialSuspicious: SuspiciousData;
+    /** Solo MANAGER/ADMIN possono invalidare i sondaggi sospetti (penalità coin).
+     *  Il TL Conferme consulta in sola lettura. */
+    canInvalidate?: boolean;
 }
 
 export default function QualitaLeadClient({
     funnels, initialFilters, initialGdo, initialConferme, initialSales, initialClosedWonGdo, initialSuspicious,
+    canInvalidate = false,
 }: Props) {
     const [filters, setFilters] = useState<QualitaLeadFilters>(initialFilters);
     const [gdo, setGdo] = useState(initialGdo);
@@ -225,12 +229,14 @@ export default function QualitaLeadClient({
                         rows={suspicious.gdo}
                         userKey="gdoUserId"
                         onInvalidate={(id) => handleInvalidate("gdo", id)}
+                        canInvalidate={canInvalidate}
                     />
                     <SuspiciousTable
                         title="Sondaggi Conferme sospetti"
                         rows={suspicious.conferme}
                         userKey="confermeUserId"
                         onInvalidate={(id) => handleInvalidate("conferme", id)}
+                        canInvalidate={canInvalidate}
                     />
                 </div>
             )}
@@ -341,11 +347,12 @@ function YesNoPair({ label, yes, no }: { label: string; yes: number; no: number 
     );
 }
 
-function SuspiciousTable({ title, rows, userKey, onInvalidate }: {
+function SuspiciousTable({ title, rows, userKey, onInvalidate, canInvalidate = false }: {
     title: string;
     rows: Array<{ id: string; leadId: string; userName: string | null; createdAt: Date; fillDurationMs: number | null; invalidatedAt: Date | null } & Record<string, unknown>>;
     userKey: string;
     onInvalidate: (id: string) => void;
+    canInvalidate?: boolean;
 }) {
     void userKey;
     return (
@@ -385,13 +392,16 @@ function SuspiciousTable({ title, rows, userKey, onInvalidate }: {
                                     )}
                                 </td>
                                 <td className="px-3 py-2 text-right">
-                                    {!r.invalidatedAt && (
+                                    {!r.invalidatedAt && canInvalidate && (
                                         <button
                                             onClick={() => onInvalidate(r.id)}
                                             className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                                         >
                                             <CheckCircle2 className="h-3 w-3" /> Invalida
                                         </button>
+                                    )}
+                                    {!r.invalidatedAt && !canInvalidate && (
+                                        <span className="text-xs text-ash-300">—</span>
                                     )}
                                 </td>
                             </tr>

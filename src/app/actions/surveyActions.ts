@@ -15,6 +15,7 @@ import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { checkAchievements } from "@/app/actions/achievementActions";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { isConfermeTl } from "@/lib/confermeTl";
 import {
     GDO_SURVEY_COMPLETE_COINS,
     GDO_SURVEY_COMPLETE_XP,
@@ -63,6 +64,23 @@ async function requireRole(allowed: string[]) {
         throw new Error("Unauthorized");
     }
     return session;
+}
+
+/**
+ * Accesso in lettura alla dashboard Qualità Lead: MANAGER/ADMIN + il TL del team
+ * Conferme (Alberto, gating per email). NON usare per le invalidazioni: quelle
+ * applicano penalità coin e restano riservate a MANAGER/ADMIN.
+ */
+async function requireQualitaLeadView() {
+    const session = await getSession();
+    const allowed = session && (
+        ["MANAGER", "ADMIN"].includes(session.role)
+        || (session.role === "CONFERME" && isConfermeTl(session.email))
+    );
+    if (!allowed) {
+        throw new Error("Unauthorized");
+    }
+    return session!;
 }
 
 async function isLeadEligible(leadId: string, companyId: string): Promise<{ eligible: boolean; funnel: string | null }> {
@@ -524,7 +542,7 @@ export async function listSuspiciousSurveys(): Promise<{
 }> {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    await requireRole(["MANAGER", "ADMIN"]);
+    await requireQualitaLeadView();
     const gdo = await db.select({
         id: gdoLeadSurveys.id,
         leadId: gdoLeadSurveys.leadId,

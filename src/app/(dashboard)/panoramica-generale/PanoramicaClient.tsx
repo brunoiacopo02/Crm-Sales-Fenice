@@ -35,12 +35,15 @@ export function PanoramicaClient({
     initialFunnelData,
     initialMetricsData,
     readOnly = false,
+    readOnlyVariant = 'all-companies',
 }: {
     initialData: LeadOverviewResult;
     initialFunnelData: FunnelOverviewResult;
     initialMetricsData: MetricsOverviewResult;
     /** Modalità "Tutte le aziende": KPI aggregati di gruppo, target read-only. */
     readOnly?: boolean;
+    /** Perché la vista è in sola lettura: aggregato gruppo o viewer (es. TL Conferme). */
+    readOnlyVariant?: 'all-companies' | 'viewer';
 }) {
     const router = useRouter();
     const [data, setData] = useState<LeadOverviewResult>(initialData);
@@ -114,10 +117,17 @@ export function PanoramicaClient({
                 </div>
             </div>
 
-            {readOnly && (
+            {readOnly && readOnlyVariant === 'all-companies' && (
                 <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800 flex items-center gap-2">
                     <span className="font-semibold">Tutte le aziende</span>
                     <span className="text-orange-700/80">— KPI aggregati del gruppo (somma di tutte le aziende). I target si configurano su una singola azienda.</span>
+                </div>
+            )}
+
+            {readOnly && readOnlyVariant === 'viewer' && (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 flex items-center gap-2">
+                    <span className="font-semibold">Sola lettura</span>
+                    <span className="text-sky-700/80">— Vista di consultazione: i target e i parametri manager non sono modificabili.</span>
                 </div>
             )}
 

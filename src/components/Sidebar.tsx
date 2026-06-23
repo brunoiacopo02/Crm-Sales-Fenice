@@ -84,8 +84,12 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     } else if (role === "CONFERME") {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
-            // Panoramica TL: solo per il TL del team Conferme (Alberto).
-            ...(isConfermeTl(session?.user?.email) ? [{ name: "Panoramica TL", href: "/conferme/panoramica-tl", icon: Compass }] : []),
+            // Panoramica TL + dashboard direzionali: solo per il TL del team Conferme (Alberto).
+            ...(isConfermeTl(session?.user?.email) ? [
+                { name: "Panoramica TL", href: "/conferme/panoramica-tl", icon: Compass },
+                { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
+                { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
+            ] : []),
             { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
             { name: "Analytics Staffing", href: "/conferme/analytics", icon: LayoutDashboard },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },

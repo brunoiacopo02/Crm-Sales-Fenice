@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { and, eq, gte, lte, isNotNull, sql } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
+import { isConfermeTl } from "@/lib/confermeTl";
 // Funnel da escludere dalla dashboard: sono artifici tecnici non veri
 // funnel business. Il confronto è sempre case-insensitive via UPPER().
 const UI_EXCLUDED_FUNNELS = new Set(['DATABASE', 'TEST', 'SCONOSCIUTO']);
@@ -18,7 +19,10 @@ async function requireManager() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const role = user?.user_metadata?.role as string | undefined;
-    if (!role || !["MANAGER", "ADMIN"].includes(role)) {
+    // Oltre a MANAGER/ADMIN, il TL del team Conferme (Alberto, gating per email)
+    // può consultare in lettura i sondaggi di qualità lead.
+    const isTlConfermeViewer = role === "CONFERME" && isConfermeTl(user?.email);
+    if (!role || (!["MANAGER", "ADMIN"].includes(role) && !isTlConfermeViewer)) {
         throw new Error("Unauthorized");
     }
     return { id: user!.id, role };
