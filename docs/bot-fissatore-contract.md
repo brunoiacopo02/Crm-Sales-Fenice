@@ -1,7 +1,7 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.0 — 2026-06-18.
+> **Versione:** 1.1 — 2026-06-23 (aggiunto esito `INTERROTTO`; `NON_RISPOSTO` ora riassegna a operatore umano).
 
 ---
 
@@ -181,24 +181,31 @@ x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
 ```ts
 interface BotOutcomeBody {
   leadId:         string;     // Obbligatorio — UUID ricevuto nel push
-  outcome:        BotOutcome; // Obbligatorio — uno dei 4 valori sotto
+  outcome:        BotOutcome; // Obbligatorio — uno dei 5 valori sotto
   date?:          string;     // Obbligatorio per APPUNTAMENTO e RICHIAMO (ISO 8601 con offset)
   note?:          string;     // Note libere sull'interazione
   discardReason?: string;     // Motivo scarto (usato per DA_SCARTARE)
   report?:        BotReport;  // Report strutturato (opzionale ma raccomandato)
 }
 
-type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO';
+type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO';
 ```
 
 ### Valori `outcome`
 
-| Valore | Significato | `date` richiesta |
-|---|---|---|
-| `APPUNTAMENTO` | Lead ha fissato un appuntamento | SI |
-| `RICHIAMO` | Lead vuole essere ricontattato | SI |
-| `DA_SCARTARE` | Lead fuori target o non interessato | No |
-| `NON_RISPOSTO` | Nessuna risposta dopo i tentativi | No |
+| Valore | Significato | `date` richiesta | Effetto nel CRM |
+|---|---|---|---|
+| `APPUNTAMENTO` | Lead ha fissato un appuntamento | SI | Passa alle Conferme |
+| `RICHIAMO` | Lead vuole essere ricontattato | SI | Richiamo programmato sul bot |
+| `DA_SCARTARE` | **Obiezione ferrea reale** (es. "non ho soldi", "non mi interessa") | No | **Scarto definitivo** |
+| `NON_RISPOSTO` | Non ha **mai risposto** dopo il ciclo di solleciti | No | **Riassegnato a un operatore umano** (round-robin) |
+| `INTERROTTO` | Chat **avviata ma interrotta senza obiezione ferrea** | No | **Riassegnato a un operatore umano** (round-robin) |
+
+> **Importante (cambio rispetto alla v1.0):** `NON_RISPOSTO` non scarta più il lead — lo
+> **restituisce** al CRM, che lo riassegna a un GDO umano. Il nuovo esito `INTERROTTO` ha lo
+> stesso effetto. Usare `DA_SCARTARE` **solo** quando c'è un'obiezione ferrea reale: tutto ciò
+> che non è un "no" netto (silenzio, chat che si spegne, tentennamenti) va in `NON_RISPOSTO` /
+> `INTERROTTO` così la persona viene rilavorata a voce da un operatore.
 
 > **Formato `date`:** ISO 8601 con offset di fuso orario **obbligatorio** (`Z` oppure `±HH:MM`).
 > L'endpoint verifica attivamente la presenza dell'offset: una data priva di fuso viene

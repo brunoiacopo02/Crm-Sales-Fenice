@@ -5,9 +5,12 @@ import { db } from '@/db';
 import { leads, users, leadEvents } from '@/db/schema';
 import { verifySignature } from '@/lib/marketing-webhooks/signing';
 import { updateLeadOutcome } from '@/app/actions/pipelineActions';
+import { reassignBotLeadToHumanPool } from '@/lib/bot-fissatore/reassign';
 import type { BotReport } from '@/lib/bot-fissatore/types';
 
-const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO'] as const;
+// INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
+// NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
+const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO'] as const;
 type BotOutcome = typeof VALID_OUTCOMES[number];
 
 interface BotOutcomeBody {
@@ -96,6 +99,16 @@ export async function POST(req: NextRequest) {
             metadata: report as Record<string, unknown>,
             companyId: 'fenice',
         }).catch((e) => console.error('[bot-fissatore] BOT_REPORT event err', e));
+    }
+
+    // Ritorno al pool umano: il bot non ha convertito ma non c'è obiezione ferrea
+    // (mai risposto / chat interrotta) → riassegna a un GDO umano via round-robin AC.
+    // Il lead riparte come nuovo (status=NEW, callCount=0). updateLeadOutcome NON è
+    // coinvolto: i flussi dei GDO umani restano intatti.
+    if (typedOutcome === 'NON_RISPOSTO' || typedOutcome === 'INTERROTTO') {
+        const reason = typedOutcome === 'NON_RISPOSTO' ? 'mai_risposto' : 'chat_interrotta';
+        const r = await reassignBotLeadToHumanPool(leadId, reason, assignee.id);
+        return NextResponse.json({ ok: true, reassigned: r.assignedToId });
     }
 
     // Transizione di stato via riuso totale di updateLeadOutcome (handoff Conferme,
