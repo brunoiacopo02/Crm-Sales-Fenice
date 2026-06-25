@@ -67,10 +67,24 @@ const UTM_FIELD_IDS = {
     utmTerm: '35',
 } as const;
 
-async function acGet(path: string): Promise<any> {
+// Retry con backoff esponenziale + jitter sui 429 (rate limit AC, ~5 req/s
+// per account) e sui 5xx transitori. Senza questo, un burst di webhook AC
+// (es. automazione che riversa una lista intera in pochi secondi) satura il
+// rate limit: ogni fetch sbatte su 429 e il lead finisce in acIntakeFailures
+// invece di essere importato. Rispetta l'header Retry-After se presente.
+const AC_MAX_RETRIES = 4;
+async function acGet(path: string, attempt = 0): Promise<any> {
     const res = await fetch(`${AC_URL}/api/3${path}`, {
         headers: { 'Api-Token': AC_KEY, 'Content-Type': 'application/json' },
     });
+    if ((res.status === 429 || (res.status >= 500 && res.status < 600)) && attempt < AC_MAX_RETRIES) {
+        const retryAfter = Number(res.headers.get('retry-after'));
+        const backoffMs = Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(retryAfter * 1000, 10000)
+            : Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250);
+        await new Promise((r) => setTimeout(r, backoffMs));
+        return acGet(path, attempt + 1);
+    }
     if (!res.ok) throw new Error(`AC API ${res.status}: ${await res.text()}`);
     return res.json();
 }

@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
-import { eq, and, desc, isNull, gte } from "drizzle-orm";
+import { eq, and, desc, isNull, gte, count } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 
@@ -74,7 +74,25 @@ export async function disableAllAcIntake(): Promise<{ success: boolean; error?: 
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com';
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '';
 const WEBHOOK_SECRET = process.env.ACTIVECAMPAIGN_WEBHOOK_SECRET || '';
+const WEBHOOK_SECRET_SERENAMENTE = process.env.ACTIVECAMPAIGN_WEBHOOK_SECRET_SERENAMENTE || '';
 const APP_URL = process.env.APP_URL || process.env.NEXTAUTH_URL || 'https://crm-sales-fenice.vercel.app';
+
+// Endpoint + secret del webhook AC per tenant: il retry deve colpire lo stesso
+// endpoint che ha generato il lead, non sempre quello di Fenice.
+function webhookTargetForCompany(companyId: string): { url: string; secret: string } | null {
+    if (companyId === 'serenamente') {
+        if (!WEBHOOK_SECRET_SERENAMENTE) return null;
+        return {
+            url: `${APP_URL}/api/webhooks/activecampaign/serenamente?secret=${encodeURIComponent(WEBHOOK_SECRET_SERENAMENTE)}`,
+            secret: WEBHOOK_SECRET_SERENAMENTE,
+        };
+    }
+    if (!WEBHOOK_SECRET) return null;
+    return {
+        url: `${APP_URL}/api/webhooks/activecampaign?secret=${encodeURIComponent(WEBHOOK_SECRET)}`,
+        secret: WEBHOOK_SECRET,
+    };
+}
 
 async function acRequest(path: string, method: string = 'GET', body?: unknown): Promise<any> {
     const res = await fetch(`${AC_URL}/api/3${path}`, {
@@ -245,6 +263,36 @@ export async function resolveAcFailure(id: string): Promise<{ success: boolean; 
  * Riprova a importare il contatto AC associato a una failure. Chiama di
  * nuovo il webhook internamente; se riesce, marca la failure come risolta.
  */
+// Core: riprova UNA failure già caricata, marcandola risolta se l'import riesce.
+// Condiviso da retryAcFailure (singola) e retryAllAcFailures (bulk).
+async function retryFailureRow(
+    row: typeof acIntakeFailures.$inferSelect,
+    actorId: string,
+): Promise<{ success: boolean; error?: string; leadId?: string }> {
+    if (!row.acContactId) return { success: false, error: 'Nessun contact id associato — non si può riprovare' };
+    const target = webhookTargetForCompany(row.companyId);
+    if (!target) return { success: false, error: 'Webhook secret non configurato' };
+
+    const form = new URLSearchParams({ 'contact[id]': row.acContactId, type: 'subscribe', source: 'manual_retry' });
+    const res = await fetch(target.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.success) {
+        return { success: false, error: data?.error || data?.skipped || `HTTP ${res.status}` };
+    }
+    await db.update(acIntakeFailures).set({
+        resolvedAt: new Date(),
+        resolvedBy: actorId,
+    }).where(and(
+        eq(acIntakeFailures.companyId, row.companyId),
+        eq(acIntakeFailures.id, row.id),
+    ));
+    return { success: true, leadId: data.leadId };
+}
+
 export async function retryAcFailure(id: string): Promise<{ success: boolean; error?: string; leadId?: string }> {
     try {
         const session = await requireManager();
@@ -253,32 +301,53 @@ export async function retryAcFailure(id: string): Promise<{ success: boolean; er
             eq(acIntakeFailures.id, id),
         ));
         if (!row) return { success: false, error: 'Failure non trovata' };
-        if (!row.acContactId) return { success: false, error: 'Nessun contact id associato — non si può riprovare' };
-        if (!WEBHOOK_SECRET) return { success: false, error: 'Webhook secret non configurato' };
-
-        const url = `${APP_URL}/api/webhooks/activecampaign?secret=${encodeURIComponent(WEBHOOK_SECRET)}`;
-        const form = new URLSearchParams({ 'contact[id]': row.acContactId, type: 'subscribe', source: 'manual_retry' });
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form.toString(),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.success) {
-            return { success: false, error: data?.error || data?.skipped || `HTTP ${res.status}` };
-        }
-        // Successo: marca come risolto
-        await db.update(acIntakeFailures).set({
-            resolvedAt: new Date(),
-            resolvedBy: session.id,
-        }).where(and(
-            eq(acIntakeFailures.companyId, session.ctx.companyId),
-            eq(acIntakeFailures.id, id),
-        ));
-        return { success: true, leadId: data.leadId };
+        return await retryFailureRow(row, session.id);
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) };
     }
+}
+
+/**
+ * Riprova in blocco le failure non risolte, una alla volta con una piccola
+ * pausa tra l'una e l'altra per non riscatenare il rate limit AC (il backoff
+ * in acGet fa il resto). Processa al massimo `batchSize` failure per chiamata
+ * così ogni invocazione resta sotto il timeout della serverless function: il
+ * client richiama finché `remaining > 0` e c'è progresso.
+ */
+export async function retryAllAcFailures(
+    batchSize: number = 15,
+): Promise<{ processed: number; succeeded: number; failed: number; remaining: number; errors: string[] }> {
+    const session = await requireManager();
+    const rows = await db.select().from(acIntakeFailures)
+        .where(and(
+            eq(acIntakeFailures.companyId, session.ctx.companyId),
+            isNull(acIntakeFailures.resolvedAt),
+        ))
+        .orderBy(desc(acIntakeFailures.createdAt))
+        .limit(Math.max(1, Math.min(batchSize, 50)));
+
+    let succeeded = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    for (const row of rows) {
+        try {
+            const r = await retryFailureRow(row, session.id);
+            if (r.success) succeeded++;
+            else { failed++; if (errors.length < 5 && r.error) errors.push(r.error); }
+        } catch (e) {
+            failed++;
+            if (errors.length < 5) errors.push(e instanceof Error ? e.message : String(e));
+        }
+        // throttle gentile tra retry (≈4 req/s di webhook, ognuno con backoff interno)
+        await new Promise((res) => setTimeout(res, 250));
+    }
+
+    const [{ cnt }] = await db.select({ cnt: count() }).from(acIntakeFailures)
+        .where(and(
+            eq(acIntakeFailures.companyId, session.ctx.companyId),
+            isNull(acIntakeFailures.resolvedAt),
+        ));
+    return { processed: rows.length, succeeded, failed, remaining: Number(cnt) || 0, errors };
 }
 
 // ============ AC intake stats (oggi / ieri / altro ieri) ============

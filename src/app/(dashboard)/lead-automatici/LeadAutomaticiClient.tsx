@@ -10,6 +10,7 @@ import {
     listGdosForAcIntake,
     listAcFailures,
     retryAcFailure,
+    retryAllAcFailures,
     resolveAcFailure,
     getAcIntakeStats,
     type GdoAcIntakeRow,
@@ -31,6 +32,9 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
     const [failures, setFailures] = useState(initialFailures);
     const [stats, setStats] = useState(initialStats);
     const [busyFailureId, setBusyFailureId] = useState<string | null>(null);
+    const [retryAll, setRetryAll] = useState<{ running: boolean; succeeded: number; failed: number; remaining: number }>(
+        { running: false, succeeded: 0, failed: 0, remaining: 0 },
+    );
     const [saving, setSaving] = useState<string | null>(null);
     const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
     const [isPending, startTransition] = useTransition();
@@ -106,6 +110,32 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
         }
         setMsg({ type: 'ok', text: `Lead importato (id: ${res.leadId?.slice(0, 8)}…)` });
         setFailures((f) => f.filter((x) => x.id !== id));
+    };
+
+    const handleRetryAll = async () => {
+        if (retryAll.running) return;
+        if (!confirm(`Riprovare l'import di tutti i ${failures.length} lead non importati? Verranno reimportati e assegnati in round-robin ai GDO abilitati.`)) return;
+        setMsg(null);
+        let totSucc = 0;
+        let totFail = 0;
+        // Cicla a batch finché restano failure e c'è progresso (evita loop infiniti
+        // su failure non recuperabili automaticamente, es. telefono assente).
+        for (let i = 0; i < 60; i++) {
+            const res = await retryAllAcFailures(15);
+            totSucc += res.succeeded;
+            totFail += res.failed;
+            setRetryAll({ running: true, succeeded: totSucc, failed: totFail, remaining: res.remaining });
+            if (res.remaining === 0 || res.succeeded === 0) break;
+        }
+        setRetryAll((s) => ({ ...s, running: false }));
+        const fresh = await listAcFailures(true);
+        setFailures(fresh);
+        const freshStats = await getAcIntakeStats();
+        setStats(freshStats);
+        setMsg({
+            type: totSucc > 0 ? 'ok' : 'err',
+            text: `Reimport completato: ${totSucc} recuperati${totFail > 0 ? `, ${totFail} ancora da gestire a mano` : ''}.`,
+        });
     };
 
     const handleResolve = async (id: string) => {
@@ -213,9 +243,23 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                             Contatti AC che non sono entrati nel CRM. Clicca "Riprova" per reimportare, oppure "Risolto" per nasconderli dopo averli gestiti manualmente su AC.
                         </p>
                     </div>
-                    <button onClick={refreshFailures} className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-xs font-medium text-ash-600 hover:bg-ash-50" title="Ricarica">
-                        <RefreshCw className="h-3 w-3" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {failures.length > 0 && (
+                            <button
+                                onClick={handleRetryAll}
+                                disabled={retryAll.running}
+                                className="flex items-center gap-1.5 rounded-lg border border-brand-orange/30 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:bg-orange-100 disabled:opacity-50"
+                                title="Riprova a importare tutti i lead falliti, in modo throttlato"
+                            >
+                                {retryAll.running
+                                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recupero… {retryAll.succeeded} ok · {retryAll.remaining} rimasti</>
+                                    : <><RotateCcw className="h-3.5 w-3.5" /> Riprova tutti</>}
+                            </button>
+                        )}
+                        <button onClick={refreshFailures} className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-xs font-medium text-ash-600 hover:bg-ash-50" title="Ricarica">
+                            <RefreshCw className="h-3 w-3" />
+                        </button>
+                    </div>
                 </div>
                 {failures.length === 0 ? (
                     <div className="p-6 text-center text-sm text-ash-400">
