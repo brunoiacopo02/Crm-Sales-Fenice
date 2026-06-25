@@ -41,7 +41,7 @@ const BOT_DAILY_CAP = 20; // max lead/giorno (Europe/Rome) per account isBot nel
 // (comma-separated). Match normalizzato: trim + lowercase, così
 // tolleriamo differenze di maiuscole/spazi tra UI AC e config.
 const BLOCKED_LIST_NAMES_NORMALIZED = new Set(
-    (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_NAMES || 'Lead Lancio Video Editor 2026')
+    (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_NAMES || 'Lead Lancio Video Editor 2026,Lead Lancio Black Summer 2026')
         .split(',')
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean),
