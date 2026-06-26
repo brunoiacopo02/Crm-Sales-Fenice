@@ -222,19 +222,21 @@ export interface ConfermeSurveyPayload {
     // Parte A — diagnosi/qualifica
     remembersAppt: boolean;
     watchedVideo: boolean;
-    works: boolean;
+    works?: boolean;                  // opzionale per non rompere il build finché il dialog (Task 5) non lo passa
     confirmed: boolean;
     whyNot: string | null;            // valore da CONFERME_DISCARD_REASONS quando confirmed=false
     // Parte B — briefing venditore (richiesto solo quando confirmed=true)
-    summary: string | null;
-    painPoints: string[];
-    urgency: string | null;
-    budgetSignal: string | null;
-    objections: string[];
-    levaConsigliata: string | null;
+    summary?: string | null;
+    painPoints?: string[];
+    urgency?: string | null;
+    budgetSignal?: string | null;
+    objections?: string[];
+    levaConsigliata?: string | null;
     fillDurationMs: number;
 }
 ```
+
+**Nota build-greenness:** i campi nuovi sono `?:` opzionali apposta — così il call-site attuale del dialog (non ancora aggiornato) continua a compilare. Nel corpo dell'action usare sempre i fallback (`payload.painPoints ?? []`, `payload.works ?? null`, ecc.). Dopo Task 5 il dialog li passa sempre.
 
 - [ ] **Step 3: Aggiungere validazione + helper completezza**
 
@@ -275,7 +277,7 @@ Dentro `saveConfermeSurvey`, sostituire il blocco di validazione `whyNot` (righe
         // Validazione briefing (quando confermato): pain points / urgenza dai set noti
         if (payload.confirmed === true) {
             const validPain = CONFERME_PAIN_POINT_OPTIONS.map((o) => o.value) as readonly string[];
-            for (const p of payload.painPoints) if (!validPain.includes(p)) return { success: false, error: `Pain point non valido: ${p}` };
+            for (const p of (payload.painPoints ?? [])) if (!validPain.includes(p)) return { success: false, error: `Pain point non valido: ${p}` };
             const validUrg = CONFERME_URGENCY_OPTIONS.map((o) => o.value) as readonly string[];
             if (payload.urgency && !validUrg.includes(payload.urgency)) return { success: false, error: "Urgenza non valida" };
             const validBud = CONFERME_BUDGET_OPTIONS.map((o) => o.value) as readonly string[];
@@ -286,12 +288,12 @@ Dentro `saveConfermeSurvey`, sostituire il blocco di validazione `whyNot` (righe
 Nei `db.insert(confermeLeadSurveys).values({...})` e `db.update(confermeLeadSurveys).set({...})`, aggiungere i campi (in entrambi i rami):
 
 ```ts
-                works: payload.works,
+                works: payload.works ?? null,
                 summary: payload.confirmed ? (payload.summary ?? null) : null,
-                painPoints: payload.confirmed ? payload.painPoints : [],
+                painPoints: payload.confirmed ? (payload.painPoints ?? []) : [],
                 urgency: payload.confirmed ? (payload.urgency ?? null) : null,
                 budgetSignal: payload.confirmed ? (payload.budgetSignal ?? null) : null,
-                objections: payload.confirmed ? payload.objections : [],
+                objections: payload.confirmed ? (payload.objections ?? []) : [],
                 levaConsigliata: payload.confirmed ? (payload.levaConsigliata ?? null) : null,
 ```
 
