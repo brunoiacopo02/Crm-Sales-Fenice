@@ -115,6 +115,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         return () => clearInterval(t);
     }, [])
 
+    // Reset form/note all'apertura della drawer o al cambio lead/versione.
+    // La `version` serve qui: dopo un salvataggio il lead viene rifetchato e i
+    // campi del form devono riallinearsi ai valori persistiti.
     useEffect(() => {
         if (isOpen && lead) {
             setLocalVersion(lead.version)
@@ -138,33 +141,41 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
             setLoadingNotes(true)
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))
-
-            // Presence SINGLETON condiviso (vedi src/lib/confermePresence.ts):
-            // niente secondo canale sullo stesso topic — era la causa del
-            // realtime a intermittenza (QA Conferme 2026-06-12).
-            const disconnect = connectConfermePresence({
-                id: currentUser.id,
-                name: currentUser.name,
-                displayName: currentUser.displayName,
-            });
-
-            // 1. Notifica a tutti che stiamo guardando questo lead
-            setConfermeActivity(lead.id);
-
-            // 2. Chi altro è sullo stesso lead = "Lock"
-            const offPresence = subscribeConfermePresence((entries) => {
-                setActiveUsers(entries.filter(p =>
-                    p.user && p.user.id !== currentUser.id && p.leadId === lead.id
-                ));
-            });
-
-            return () => {
-                offPresence();
-                setConfermeActivity(null);
-                disconnect();
-            }
         }
-    }, [isOpen, lead?.id, lead?.version]) // update when version changes too
+    }, [isOpen, lead?.id, lead?.version])
+
+    // Presence SINGLETON condiviso (vedi src/lib/confermePresence.ts): niente
+    // secondo canale sullo stesso topic.
+    // IMPORTANTE: NON dipende da `lead.version`. Prima sì, e ogni mutazione del
+    // lead (salvataggio / NR / refetch da realtime) faceva ripartire l'effetto:
+    // il cleanup pubblicava `leadId: null` e il re-run ripubblicava il leadId,
+    // facendo lampeggiare ai colleghi il lock "altro operatore in chiamata"
+    // (dropout intermittente di 1 ciclo di sync — QA presence 2026-06-15).
+    useEffect(() => {
+        if (!isOpen || !lead) return
+
+        const disconnect = connectConfermePresence({
+            id: currentUser.id,
+            name: currentUser.name,
+            displayName: currentUser.displayName,
+        });
+
+        // 1. Notifica a tutti che stiamo guardando questo lead
+        setConfermeActivity(lead.id);
+
+        // 2. Chi altro è sullo stesso lead = "Lock"
+        const offPresence = subscribeConfermePresence((entries) => {
+            setActiveUsers(entries.filter(p =>
+                p.user && p.user.id !== currentUser.id && p.leadId === lead.id
+            ));
+        });
+
+        return () => {
+            offPresence();
+            setConfermeActivity(null);
+            disconnect();
+        }
+    }, [isOpen, lead?.id])
 
     if (!isOpen || !item) return null;
 
