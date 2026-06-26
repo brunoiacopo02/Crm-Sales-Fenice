@@ -155,6 +155,49 @@ export const CONFERME_WHY_NOT_OPTIONS = [
 ] as const;
 export type ConfermeWhyNot = typeof CONFERME_WHY_NOT_OPTIONS[number]['value'];
 
+// Lista canonica dei motivi "non confermato / scarto" — fusione del vecchio
+// <select> di scarto (ConfermeDrawer) e dei whyNot del sondaggio. I value sono
+// le STRINGHE STORICHE già persistite in leads.confirmationsDiscardReason:
+// non vanno modificate, altrimenti i record passati perdono la label.
+export const CONFERME_DISCARD_REASONS = [
+    { value: 'non risponde', label: 'Non risponde' },
+    { value: 'non interessato', label: 'Non interessato' },
+    { value: 'non ha soldi', label: 'Non ha soldi' },
+    { value: 'posticipa senza data', label: 'Posticipa senza data' },
+    { value: 'disoccupato', label: 'Disoccupato' },
+    { value: 'straniero', label: 'Straniero' },
+    { value: 'solo informazioni', label: 'Solo informazioni' },
+    { value: "non vuole prendere l'appuntamento", label: "Non vuole prendere l'appuntamento" },
+    { value: 'numero inesistente', label: 'Numero inesistente' },
+    { value: 'attaccato in faccia', label: 'Attaccato in faccia' },
+    { value: 'non ha potere decisionale', label: 'Non ha potere decisionale' },
+] as const;
+export type ConfermeDiscardReason = typeof CONFERME_DISCARD_REASONS[number]['value'];
+
+// Briefing venditore (Parte B) — opzioni tunabili da Bruno.
+export const CONFERME_PAIN_POINT_OPTIONS = [
+    { value: 'economico', label: 'Problema economico' },
+    { value: 'lavoro_insoddisfatto', label: 'Insoddisfatto del lavoro' },
+    { value: 'tempo', label: 'Mancanza di tempo' },
+    { value: 'competenze', label: 'Mancano competenze' },
+    { value: 'crescita', label: 'Vuole cambiare vita/crescere' },
+] as const;
+export type ConfermePainPoint = typeof CONFERME_PAIN_POINT_OPTIONS[number]['value'];
+
+export const CONFERME_URGENCY_OPTIONS = [
+    { value: 'alta', label: 'Alta' },
+    { value: 'media', label: 'Media' },
+    { value: 'bassa', label: 'Bassa' },
+] as const;
+export type ConfermeUrgency = typeof CONFERME_URGENCY_OPTIONS[number]['value'];
+
+export const CONFERME_BUDGET_OPTIONS = [
+    { value: 'ok', label: 'Sembra avere budget' },
+    { value: 'incerto', label: 'Budget incerto' },
+    { value: 'no', label: 'Budget assente' },
+] as const;
+export type ConfermeBudget = typeof CONFERME_BUDGET_OPTIONS[number]['value'];
+
 // ========== SALES ==========
 export const SALES_PROBLEM_SIGNAL_OPTIONS = [
     { value: 'problema_specifico', label: 'Ha dichiarato un problema specifico' },
