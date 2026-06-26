@@ -163,6 +163,10 @@ export const leads = pgTable('leads', {
     salespersonAssigned: text('salespersonAssigned'),
     salespersonAssignedAt: timestamp('salespersonAssignedAt', { withTimezone: true, mode: 'date' }),
     salespersonUserId: text('salespersonUserId').references(() => users.id),
+    // Check-in "Inizia trattativa": timbra quando il venditore apre il lead nel CRM
+    // per condurre la trattativa. NULL = non ancora iniziata. Gatea l'accesso al
+    // telefono/briefing lato venditore e l'esito non è registrabile se è NULL.
+    negotiationStartedAt: timestamp('negotiationStartedAt', { withTimezone: true, mode: 'date' }),
     salespersonOutcome: text('salespersonOutcome'), // 'Chiuso' | 'Non chiuso' | 'Sparito'
     salespersonOutcomeNotes: text('salespersonOutcomeNotes'),
     salespersonOutcomeAt: timestamp('salespersonOutcomeAt', { withTimezone: true, mode: 'date' }),
@@ -187,6 +191,7 @@ export const leads = pgTable('leads', {
         confirmationsOutcomeIdx: index('confirmations_outcome_idx').on(table.confirmationsOutcome),
         assignedStatusIdx: index('assigned_status_idx').on(table.assignedToId, table.status),
         assignedRecallIdx: index('assigned_recall_idx').on(table.assignedToId, table.recallDate),
+        overdueOutcomeIdx: index('leads_overdue_idx').on(table.salespersonUserId, table.appointmentDate, table.salespersonOutcome),
     };
 });
 
@@ -813,6 +818,15 @@ export const confermeLeadSurveys = pgTable('confermeLeadSurveys', {
     watchedVideo: boolean('watchedVideo'),
     confirmed: boolean('confirmed'),
     whyNot: text('whyNot'),                 // 'non_risponde'|'non_interessato'|'no_soldi'|'posticipa_senza_data'|null
+    // Diagnosi/qualifica (Parte A)
+    works: boolean('works'),                          // "lavora / non lavora"
+    // Briefing venditore (Parte B) — stessa forma del botReport
+    summary: text('summary'),
+    painPoints: text('painPoints').array(),
+    urgency: text('urgency'),                          // 'alta'|'media'|'bassa'
+    budgetSignal: text('budgetSignal'),               // 'ok'|'incerto'|'no'
+    objections: text('objections').array(),
+    levaConsigliata: text('levaConsigliata'),
     fillDurationMs: integer('fillDurationMs'),
     suspicious: boolean('suspicious').default(false).notNull(),
     invalidatedBy: text('invalidatedBy').references(() => users.id),
