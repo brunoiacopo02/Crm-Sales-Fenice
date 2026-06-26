@@ -105,11 +105,11 @@ Stessa forma, stessa UI.
 
 ## 5. Sezione C — Accesso venditore (gating dell'informazione)
 
-Assunzione: trattative **di persona** (CLAUDE.md: "far presentare fisicamente la lead"). Se da remoto, un flag gateia anche il telefono.
+Le trattative sono **solo da remoto** (telefono/video): il venditore non deve raggiungere fisicamente nessuno, quindi **gateiamo tutto** dietro il check-in, **telefono incluso**. Forzatura massima — senza "Inizia trattativa" non ha nemmeno il numero per chiamare.
 
-- **Prima del check-in** (lista `/venditore`): solo **logistica per arrivare** — nome, indirizzo, ora, telefono. Nessun briefing, nessuno script.
+- **Prima del check-in** (lista `/venditore`): solo l'**indispensabile per sapere qual è il prossimo appuntamento** — nome lead e data/ora appuntamento. **Niente telefono, niente briefing, niente script.**
 - **Pulsante "Inizia trattativa"** → timbra `negotiationStartedAt = now` e apre il **workspace trattativa**:
-  - scheda lead completa
+  - scheda lead completa + **telefono** (rivelato solo qui)
   - **briefing** normalizzato (vedi 4)
   - slot **script di vendita** (riusa pattern `ScriptWidget`; contenuto venditore = step successivo)
   - **form esito + sondaggio venditore**
@@ -172,7 +172,7 @@ Lato client (`VenditoreDrawer`): il sondaggio inline va mostrato e validato anch
 
 ## 10. Decisioni aperte (da confermare in review)
 
-- Trattative **di persona** (default) vs da remoto → quanto della logistica gateare.
+- ~~Trattative di persona vs da remoto~~ → **DECISO: solo da remoto.** Si gateia tutto dietro il check-in, telefono incluso (vedi §5).
 - Elenco **esatto** dei motivi di scarto attuali, da fondere con i `whyNot` nella lista canonica (verifica in fase di piano).
 - Scope `/venditore` (Approccio A) confermato; non si blocca l'intero CRM.
 
