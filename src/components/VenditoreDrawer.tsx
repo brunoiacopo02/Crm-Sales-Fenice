@@ -55,7 +55,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
         priceReaction: null,
     })
     const surveyRequired = useMemo(() => {
-        if (outcome !== "Non chiuso") return false
+        if (outcome !== "Chiuso" && outcome !== "Non chiuso") return false
         const f = (lead?.funnel || "").trim().toLowerCase()
         return f !== EXCLUDED_FUNNEL
     }, [outcome, lead?.funnel])
@@ -100,12 +100,26 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
             return
         }
         if (surveyRequired && !surveyValid) {
-            alert("Compila il sondaggio lead non chiuso (tutti i 3 blocchi) prima di salvare.")
+            alert("Compila il sondaggio vendita (tutti i 3 blocchi) prima di salvare.")
             return
         }
 
         setIsSaving(true)
         try {
+            // Salva il sondaggio PRIMA dell'esito: la guardia server (Task 9) lo cercherà già persistito.
+            if (surveyRequired && surveyValid) {
+                const sRes = await saveSalesSurvey(lead.id, {
+                    problemSignals: survey.problemSignals,
+                    urgencySignals: survey.urgencySignals,
+                    priceReaction: survey.priceReaction!,
+                    fillDurationMs: Date.now() - surveyStartedAt,
+                })
+                if (!sRes.success) {
+                    alert(`Errore nel salvataggio del sondaggio: ${sRes.error}`)
+                    return
+                }
+            }
+
             const result = await saveVenditoreOutcome(lead.id, {
                 outcome,
                 notes,
@@ -126,20 +140,6 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
-            }
-
-            // Save survey if applicable — non blocca il success del saveVenditoreOutcome.
-            if (surveyRequired && surveyValid) {
-                const sRes = await saveSalesSurvey(lead.id, {
-                    problemSignals: survey.problemSignals,
-                    urgencySignals: survey.urgencySignals,
-                    priceReaction: survey.priceReaction!,
-                    fillDurationMs: Date.now() - surveyStartedAt,
-                })
-                if (!sRes.success) {
-                    console.error("Sales survey save failed:", sRes.error)
-                    // Non bloccante: il salvataggio principale è già andato a buon fine.
-                }
             }
 
             onSaved()
@@ -360,16 +360,6 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                                 </div>
                             </div>
 
-                            {/* Sondaggio lead non chiuso */}
-                            {surveyRequired && (
-                                <div className="pt-4 border-t border-orange-200">
-                                    <VenditoreSurveyInline
-                                        value={survey}
-                                        onChange={setSurvey}
-                                        disabled={isSaving}
-                                    />
-                                </div>
-                            )}
                         </div>
                     )}
 
@@ -378,6 +368,17 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                         <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 flex items-start gap-2 animate-fade-in">
                             <AlertCircle className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                             <p>Il lead non si è presentato all'appuntamento ("no-show"). Non sono richieste ulteriori annotazioni o follow-up obbligatori.</p>
+                        </div>
+                    )}
+
+                    {/* Sondaggio Vendita — obbligatorio per Chiuso e Non chiuso (funnel≠database) */}
+                    {surveyRequired && (
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                            <VenditoreSurveyInline
+                                value={survey}
+                                onChange={setSurvey}
+                                disabled={isSaving}
+                            />
                         </div>
                     )}
 

@@ -8,6 +8,8 @@ import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
+import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
 // Gamification disabled for VENDITORE role — import removed
 
 export async function getVenditoreAppointments(sellerId: string) {
@@ -37,6 +39,7 @@ export async function getVenditoreAppointments(sellerId: string) {
             closeProduct: leads.closeProduct,
             closeAmountEur: leads.closeAmountEur,
             notClosedReason: leads.notClosedReason,
+            negotiationStartedAt: leads.negotiationStartedAt,
         })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
@@ -45,9 +48,16 @@ export async function getVenditoreAppointments(sellerId: string) {
             eq(leads.salespersonUserId, sellerId),
         ))
         .orderBy(desc(leads.appointmentDate))
-        
 
-    return assignedLeads
+    // Phone must NOT reach the client before the venditore checks in via
+    // "Inizia trattativa".  We null it here for unchecked-in leads so it
+    // never travels over the wire; startNegotiation() returns the real phone
+    // once the check-in is recorded, and the client consumers already use
+    // `result.phone` from that action.
+    return assignedLeads.map(r => ({
+        ...r,
+        phone: r.negotiationStartedAt ? r.phone : null,
+    }))
 }
 
 // Funzione per registrare l'esito
@@ -85,6 +95,23 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     // Optimistic locking check
     if (currentVersion !== undefined && oldLead.version !== currentVersion) {
         return { success: false, error: 'CONCURRENCY_ERROR' }
+    }
+
+    // GUARDIA 1: niente esito senza check-in "Inizia trattativa".
+    if (!oldLead.negotiationStartedAt) {
+        return { success: false, error: "Avvia la trattativa (Inizia trattativa) prima di registrare l'esito." };
+    }
+
+    // GUARDIA 2: sondaggio obbligatorio su Chiuso/Non chiuso (funnel ≠ database).
+    // Normalize to lowercase to match AC webhooks that may store funnel uppercased
+    // (e.g. 'DATABASE' vs 'database') — mirrors the client-side check in VenditoreDrawer.
+    const needsSurvey = (payload.outcome === 'Chiuso' || payload.outcome === 'Non chiuso')
+        && (oldLead.funnel || '').trim().toLowerCase() !== EXCLUDED_FUNNEL;
+    if (needsSurvey) {
+        const survey = await getSalesSurveyByLead(leadId);
+        if (!survey || survey.suspicious) {
+            return { success: false, error: "Compila il sondaggio lead (3 blocchi) prima di salvare l'esito." };
+        }
     }
 
     const updated = await db.update(leads)
@@ -162,4 +189,56 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     revalidatePath('/', 'layout')
 
     return { success: true, rewardData }
+}
+
+export async function startNegotiation(leadId: string): Promise<{ success: boolean; error?: string; phone?: string }> {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const role = supabaseUser?.user_metadata?.role;
+    if (!supabaseUser || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(role)) {
+        return { success: false, error: "Unauthorized" };
+    }
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
+    const lead = (await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+        eq(leads.salespersonUserId, supabaseUser.id),
+    )))[0];
+    if (!lead) return { success: false, error: "Lead non assegnato" };
+
+    if (!lead.negotiationStartedAt) {
+        await db.update(leads).set({ negotiationStartedAt: new Date() })
+            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: "negotiation_started",
+            userId: supabaseUser.id,
+            timestamp: new Date(),
+            metadata: null,
+            companyId: ctx.companyId,
+        });
+    }
+    revalidatePath('/venditore');
+    return { success: true, phone: lead.phone };
+}
+
+export async function getLeadBriefing(leadId: string) {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const role = supabaseUser?.user_metadata?.role;
+    if (!supabaseUser || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(role)) {
+        return null;
+    }
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const lead = (await db.select({ botReport: leads.botReport }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId), eq(leads.id, leadId),
+    )))[0];
+    const { getConfermeSurveyByLead } = await import("@/app/actions/surveyActions");
+    const scheda = await getConfermeSurveyByLead(leadId);
+    const { normalizeBriefing } = await import("@/lib/briefing/normalize");
+    return normalizeBriefing(scheda as any, lead?.botReport);
 }
