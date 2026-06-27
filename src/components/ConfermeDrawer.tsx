@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2, ClipboardList } from "lucide-react"
-import { ConfermeSurveyDialog } from "./surveys/ConfermeSurveyDialog"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2 } from "lucide-react"
+import { SchedaEsitoInline, type SchedaEsitoHandle } from "./conferme/SchedaEsitoInline"
 import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { ConfermeCallTimer } from "./ConfermeCallTimer"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
+import { saveConfermeSurvey } from "@/app/actions/surveyActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { connectConfermePresence, setConfermeActivity, subscribeConfermePresence } from "@/lib/confermePresence"
@@ -77,8 +78,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const [salesperson, setSalesperson] = useState(lead?.salespersonUserId || "")
     const [savingOutcome, setSavingOutcome] = useState(false)
 
-    // Survey dialog state
-    const [showSurveyDialog, setShowSurveyDialog] = useState(false)
+    // Ref for inline Scheda Trattativa
+    const schedaRef = useRef<SchedaEsitoHandle>(null)
 
     // Salesperson outcome states
     const [spOutcome, setSpOutcome] = useState(lead?.salespersonOutcome || "")
@@ -240,6 +241,22 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             }
         }
 
+        // Validate and persist the inline Scheda Trattativa before outcome
+        if (!schedaRef.current?.validate()) {
+            alert("Compila la scheda (tutti i campi obbligatori) prima di salvare l'esito.");
+            return;
+        }
+        const schedaPayload = schedaRef.current.getPayload();
+        const sres = await saveConfermeSurvey(lead.id, {
+            ...schedaPayload,
+            confirmed: outcome === "confermato",
+            fillDurationMs: schedaRef.current.getFillDurationMs(),
+        });
+        if (!sres.success) {
+            alert(sres.error || "Errore salvataggio scheda trattativa");
+            return;
+        }
+
         setSavingOutcome(true)
         try {
             // Safety: ferma il timer per QUESTO lead se ancora running.
@@ -249,9 +266,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             const { setConfermeOutcome } = await import('@/app/actions/confermeActions');
             const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", undefined, salesperson)
             if (result && !result.success) {
-                if (/scheda|sondaggio/i.test(result.error || "")) {
-                    setShowSurveyDialog(true);
-                }
                 alert(result.error || "Errore salvataggio esito")
                 return;
             }
@@ -482,15 +496,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                 {!lead.confirmationsOutcome && (
                                     <ConfermeCallTimer leadId={lead.id} disabled={isSavingNR} />
                                 )}
-
-                                <button
-                                    onClick={() => setShowSurveyDialog(true)}
-                                    className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors flex items-center gap-1.5 ${!lead.confirmationsOutcome ? "text-orange-700 bg-orange-50 hover:bg-orange-100 border border-brand-orange ring-1 ring-brand-orange" : "text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300"}`}
-                                    title="Compila la Scheda Trattativa (obbligatoria prima dell'esito)"
-                                >
-                                    <ClipboardList className="w-3.5 h-3.5" />
-                                    📋 Scheda Trattativa
-                                </button>
 
                                 {!lead.confirmationsOutcome && (
                                     <>
@@ -882,6 +887,15 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                         )}
                                     </div>
 
+                                    {/* Scheda Trattativa inline — mostrata solo quando si sceglie un esito */}
+                                    {outcome && (
+                                        <SchedaEsitoInline
+                                            ref={schedaRef}
+                                            outcome={outcome as "scartato" | "confermato"}
+                                            leadId={lead.id}
+                                        />
+                                    )}
+
                                     <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
                                         {savingOutcome ? "Salvataggio in corso..." : "Piazza Esito Definitivo"}
                                     </button>
@@ -960,16 +974,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                 </fieldset>
             </div>
 
-            {/* Survey Dialog (Sondaggi lead — Conferme) */}
-            {lead?.id && (
-                <ConfermeSurveyDialog
-                    open={showSurveyDialog}
-                    onClose={() => setShowSurveyDialog(false)}
-                    leadId={lead.id}
-                    leadName={lead.name}
-                    onSaved={() => { if (onRefresh) onRefresh() }}
-                />
-            )}
         </div>
     )
 }
