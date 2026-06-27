@@ -327,8 +327,11 @@ git commit -m "feat(conferme): saveConfermeSurvey con Parte A/B + helper isConfe
 In `src/app/actions/confermeActions.ts` aggiungere agli import:
 
 ```ts
-import { isConfermeSchedaComplete, getConfermeSurveyByLead } from "@/app/actions/surveyActions"
+import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
+import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
 ```
+
+> Nota: `isConfermeSchedaComplete` vive in `src/lib/surveys/scheda.ts` (NON in surveyActions.ts), perché quel file è `"use server"` e non può esportare funzioni sincrone.
 
 - [ ] **Step 2: Inserire la guardia prima dell'update**
 
