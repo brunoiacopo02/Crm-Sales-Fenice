@@ -440,9 +440,11 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         }
 
         // GUARDIA SCHEDA TRATTATIVA: niente esito senza sondaggio completo.
+        // MANAGER/ADMIN sono esentati da ogni blocco (operano senza limiti).
+        const isStaff = session.user.role === "MANAGER" || session.user.role === "ADMIN";
         const scheda = await getConfermeSurveyByLead(leadId);
         const hasBotReport = !!oldLead.botReport;
-        if (!isConfermeSchedaComplete(scheda, { outcome, hasBotReport })) {
+        if (!isStaff && !isConfermeSchedaComplete(scheda, { outcome, hasBotReport })) {
             return {
                 success: false,
                 error: outcome === 'confermato'

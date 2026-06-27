@@ -97,15 +97,19 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         return { success: false, error: 'CONCURRENCY_ERROR' }
     }
 
+    // MANAGER/ADMIN sono esentati da ogni blocco (operano senza limiti).
+    const isStaff = session.user.role === 'MANAGER' || session.user.role === 'ADMIN';
+
     // GUARDIA 1: niente esito senza check-in "Inizia trattativa".
-    if (!oldLead.negotiationStartedAt) {
+    if (!isStaff && !oldLead.negotiationStartedAt) {
         return { success: false, error: "Avvia la trattativa (Inizia trattativa) prima di registrare l'esito." };
     }
 
     // GUARDIA 2: sondaggio obbligatorio su Chiuso/Non chiuso (funnel ≠ database).
     // Normalize to lowercase to match AC webhooks that may store funnel uppercased
     // (e.g. 'DATABASE' vs 'database') — mirrors the client-side check in VenditoreDrawer.
-    const needsSurvey = (payload.outcome === 'Chiuso' || payload.outcome === 'Non chiuso')
+    const needsSurvey = !isStaff
+        && (payload.outcome === 'Chiuso' || payload.outcome === 'Non chiuso')
         && (oldLead.funnel || '').trim().toLowerCase() !== EXCLUDED_FUNNEL;
     if (needsSurvey) {
         const survey = await getSalesSurveyByLead(leadId);
