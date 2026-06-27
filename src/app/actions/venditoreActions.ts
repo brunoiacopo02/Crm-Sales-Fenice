@@ -8,6 +8,8 @@ import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
+import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
 // Gamification disabled for VENDITORE role — import removed
 
 export async function getVenditoreAppointments(sellerId: string) {
@@ -86,6 +88,21 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     // Optimistic locking check
     if (currentVersion !== undefined && oldLead.version !== currentVersion) {
         return { success: false, error: 'CONCURRENCY_ERROR' }
+    }
+
+    // GUARDIA 1: niente esito senza check-in "Inizia trattativa".
+    if (!oldLead.negotiationStartedAt) {
+        return { success: false, error: "Avvia la trattativa (Inizia trattativa) prima di registrare l'esito." };
+    }
+
+    // GUARDIA 2: sondaggio obbligatorio su Chiuso/Non chiuso (funnel ≠ database).
+    const needsSurvey = (payload.outcome === 'Chiuso' || payload.outcome === 'Non chiuso')
+        && oldLead.funnel !== EXCLUDED_FUNNEL;
+    if (needsSurvey) {
+        const survey = await getSalesSurveyByLead(leadId);
+        if (!survey || survey.suspicious) {
+            return { success: false, error: "Compila il sondaggio lead (3 blocchi) prima di salvare l'esito." };
+        }
     }
 
     const updated = await db.update(leads)
