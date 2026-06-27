@@ -18,7 +18,7 @@ export default async function VenditorePage() {
     const graceMs = OVERDUE_GRACE_HOURS * 3600 * 1000
     const now = Date.now()
 
-    let overdue: { id: string; name: string | null; phone: string | null; appointmentDate: string | null; negotiationStartedAt: string | null }[] = []
+    let overdue: { id: string; name: string | null; phone: string | null; appointmentDate: string | null; negotiationStartedAt: string | null; funnel: string | null; version: number }[] = []
     try {
         const appointments = await getVenditoreAppointments(session.user.id)
         overdue = appointments
@@ -33,6 +33,8 @@ export default async function VenditorePage() {
                 phone: a.phone,
                 appointmentDate: a.appointmentDate ? new Date(a.appointmentDate).toISOString() : null,
                 negotiationStartedAt: a.negotiationStartedAt ? new Date(a.negotiationStartedAt).toISOString() : null,
+                funnel: a.funnel ?? null,
+                version: a.version ?? 0,
             }))
     } catch {
         // Non-fatal: if the fetch fails, the gate stays empty and the user can proceed

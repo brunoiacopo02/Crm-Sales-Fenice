@@ -26,6 +26,8 @@ export type OverdueLead = {
     phone: string | null
     appointmentDate: string | null
     negotiationStartedAt: string | null
+    funnel: string | null
+    version: number
 }
 
 interface OutcomeGateProps {
@@ -128,7 +130,7 @@ export function OutcomeGate({ overdue }: OutcomeGateProps) {
                                     </div>
                                     <button
                                         onClick={() => handleRegistra(lead)}
-                                        disabled={isPending}
+                                        disabled={isThisPending}
                                         className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                                     >
                                         {isThisPending ? "Avvio..." : "Registra esito"}
