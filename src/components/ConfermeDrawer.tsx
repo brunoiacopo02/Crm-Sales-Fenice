@@ -74,7 +74,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
     // Outcome states
     const [outcome, setOutcome] = useState(lead?.confirmationsOutcome || "")
-    const [discardReason, setDiscardReason] = useState(lead?.confirmationsDiscardReason || "")
     const [salesperson, setSalesperson] = useState(lead?.salespersonUserId || "")
     const [savingOutcome, setSavingOutcome] = useState(false)
 
@@ -133,7 +132,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             }
             setEditNoteGdo(lead.appointmentNote || "")
             setOutcome(lead.confirmationsOutcome || "")
-            setDiscardReason(lead.confirmationsDiscardReason || "")
             setSalesperson(lead.salespersonUserId || "")
             setSpOutcome(lead.salespersonOutcome || "")
             setSpNotes(lead.salespersonOutcomeNotes || "")
@@ -233,7 +231,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     }
 
     const handleSaveOutcome = async () => {
-        if (outcome === "scartato" && !discardReason) return alert("Inserisci motivo scarto");
         if (outcome === "confermato") {
             if (!salesperson) return alert("Seleziona venditore assegnato");
             if (!editEmail) {
@@ -250,9 +247,12 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             // slot corretto (callsMade + 1) dentro logConfermeCallDuration.
             await stopTimerAndLogForLead(lead.id, 'outcome');
             const { setConfermeOutcome } = await import('@/app/actions/confermeActions');
-            const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", discardReason, salesperson)
+            const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", undefined, salesperson)
             if (result && !result.success) {
-                alert(`Errore salvataggio esito: ${result.error}`)
+                if (/scheda|sondaggio/i.test(result.error || "")) {
+                    setShowSurveyDialog(true);
+                }
+                alert(result.error || "Errore salvataggio esito")
                 return;
             }
             if (result?.rewardData) {
@@ -485,11 +485,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
 
                                 <button
                                     onClick={() => setShowSurveyDialog(true)}
-                                    className="text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 px-3 py-1.5 rounded-full font-semibold transition-colors flex items-center gap-1.5"
-                                    title="Compila sondaggio esito appuntamento"
+                                    className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors flex items-center gap-1.5 ${!lead.confirmationsOutcome ? "text-orange-700 bg-orange-50 hover:bg-orange-100 border border-brand-orange ring-1 ring-brand-orange" : "text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300"}`}
+                                    title="Compila la Scheda Trattativa (obbligatoria prima dell'esito)"
                                 >
                                     <ClipboardList className="w-3.5 h-3.5" />
-                                    Sondaggio
+                                    📋 Scheda Trattativa
                                 </button>
 
                                 {!lead.confirmationsOutcome && (
@@ -863,23 +863,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                             <input type="radio" name="outcome" value="scartato" checked={outcome === "scartato"} onChange={() => setOutcome("scartato")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
                                             <span className={`font-bold ${outcome === "scartato" ? "text-rose-800" : "text-ash-700"}`}>Scartato Direttamente</span>
                                         </label>
-
-                                        {outcome === "scartato" && (
-                                            <div className="pl-11 -mt-2 mb-5 animate-in slide-in-from-top-2">
-                                                <select value={discardReason} onChange={e => setDiscardReason(e.target.value)} className="w-full px-4 py-2.5 border-2 border-rose-200 rounded-lg text-sm outline-none focus:border-rose-400 bg-white text-rose-900 font-medium">
-                                                    <option value="">-- Seleziona il motivo esatto --</option>
-                                                    <option value="non interessato">Non interessato</option>
-                                                    <option value="disoccupato">Disoccupato</option>
-                                                    <option value="straniero">Straniero</option>
-                                                    <option value="solo informazioni">Solo informazioni</option>
-                                                    <option value="non vuole prendere l'appuntamento">Non vuole prendere l'appuntamento</option>
-                                                    <option value="numero inesistente">Numero inesistente</option>
-                                                    <option value="attaccato in faccia">Attaccato in faccia</option>
-                                                    <option value="non ha potere decisionale">Non ha potere decisionale</option>
-                                                    <option value="non ha soldi">Non ha soldi</option>
-                                                </select>
-                                            </div>
-                                        )}
 
                                         <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${outcome === "confermato" ? "border-emerald-400 bg-emerald-50 shadow-sm" : "border-ash-100 hover:border-ash-200 hover:bg-ash-50 bg-white"}`}>
                                             <input type="radio" name="outcome" value="confermato" checked={outcome === "confermato"} onChange={() => setOutcome("confermato")} className="w-4 h-4 text-brand-orange focus:ring-brand-orange" />
