@@ -13,6 +13,8 @@ import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
+import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -437,6 +439,18 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             return { success: false, error: `CONCURRENCY_ERROR: DB è alla versione ${oldLead.version} ma il client ha inviato la versione ${currentVersion}` }
         }
 
+        // GUARDIA SCHEDA TRATTATIVA: niente esito senza sondaggio completo.
+        const scheda = await getConfermeSurveyByLead(leadId);
+        const hasBotReport = !!oldLead.botReport;
+        if (!isConfermeSchedaComplete(scheda, { outcome, hasBotReport })) {
+            return {
+                success: false,
+                error: outcome === 'confermato'
+                    ? "Compila la Scheda Trattativa (diagnosi + briefing) prima di confermare."
+                    : "Compila il sondaggio (diagnosi + motivo) prima di scartare.",
+            };
+        }
+
         // FreeBusy Check BEFORE DB update to avoid inconsistent state
         if (outcome === "confermato" && salespersonAssigned && oldLead.appointmentDate) {
             const apptDate = new Date(oldLead.appointmentDate);
@@ -450,7 +464,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
 
         const updated = await db.update(leads).set({
             confirmationsOutcome: outcome,
-            confirmationsDiscardReason: reason || null,
+            confirmationsDiscardReason: outcome === 'scartato' ? (scheda?.whyNot ?? reason ?? null) : null,
             confirmationsUserId: session.user.id,
             confirmationsTimestamp: new Date(),
             salespersonAssigned: await getSalespersonName(salespersonAssigned, ctx.companyId) || salespersonAssigned || null,
