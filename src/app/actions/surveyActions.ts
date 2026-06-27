@@ -39,6 +39,10 @@ import {
     GDO_FIELD_MULTI,
     GDO_SURVEY_FIELDS,
     CONFERME_WHY_NOT_OPTIONS,
+    CONFERME_DISCARD_REASONS,
+    CONFERME_PAIN_POINT_OPTIONS,
+    CONFERME_URGENCY_OPTIONS,
+    CONFERME_BUDGET_OPTIONS,
     SALES_PROBLEM_SIGNAL_OPTIONS,
     SALES_URGENCY_SIGNAL_OPTIONS,
     SALES_PRICE_REACTION_OPTIONS,
@@ -286,10 +290,19 @@ export async function getGdoSurveyByLead(leadId: string) {
 // ============ CONFERME SURVEY ============
 
 export interface ConfermeSurveyPayload {
+    // Parte A — diagnosi/qualifica
     remembersAppt: boolean;
     watchedVideo: boolean;
+    works?: boolean;                  // opzionale per non rompere il build finché il dialog (Task 5) non lo passa
     confirmed: boolean;
-    whyNot: string | null;
+    whyNot: string | null;            // valore da CONFERME_DISCARD_REASONS quando confirmed=false
+    // Parte B — briefing venditore (richiesto solo quando confirmed=true)
+    summary?: string | null;
+    painPoints?: string[];
+    urgency?: string | null;
+    budgetSignal?: string | null;
+    objections?: string[];
+    levaConsigliata?: string | null;
     fillDurationMs: number;
 }
 
@@ -302,11 +315,21 @@ export async function saveConfermeSurvey(
         assertSalesArea(ctx);
         const session = await requireRole(["CONFERME", "MANAGER", "ADMIN"]);
 
-        if (payload.confirmed === false && payload.whyNot) {
-            const valid = CONFERME_WHY_NOT_OPTIONS.map((o) => o.value);
-            if (!valid.includes(payload.whyNot as (typeof valid)[number])) {
-                return { success: false, error: "Invalid whyNot value" };
+        // Validazione motivo (quando non confermato)
+        if (payload.confirmed === false) {
+            const valid = CONFERME_DISCARD_REASONS.map((o) => o.value) as readonly string[];
+            if (!payload.whyNot || !valid.includes(payload.whyNot)) {
+                return { success: false, error: "Motivo scarto non valido" };
             }
+        }
+        // Validazione briefing (quando confermato): pain points / urgenza dai set noti
+        if (payload.confirmed === true) {
+            const validPain = CONFERME_PAIN_POINT_OPTIONS.map((o) => o.value) as readonly string[];
+            for (const p of (payload.painPoints ?? [])) if (!validPain.includes(p)) return { success: false, error: `Pain point non valido: ${p}` };
+            const validUrg = CONFERME_URGENCY_OPTIONS.map((o) => o.value) as readonly string[];
+            if (payload.urgency && !validUrg.includes(payload.urgency)) return { success: false, error: "Urgenza non valida" };
+            const validBud = CONFERME_BUDGET_OPTIONS.map((o) => o.value) as readonly string[];
+            if (payload.budgetSignal && !validBud.includes(payload.budgetSignal)) return { success: false, error: "Budget non valido" };
         }
 
         // Le Conferme raccolgono il sondaggio SU TUTTI i lead, inclusi
@@ -327,8 +350,15 @@ export async function saveConfermeSurvey(
                 companyId: ctx.companyId,
                 remembersAppt: payload.remembersAppt,
                 watchedVideo: payload.watchedVideo,
+                works: payload.works ?? null,
                 confirmed: payload.confirmed,
                 whyNot: payload.confirmed ? null : (payload.whyNot ?? null),
+                summary: payload.confirmed ? (payload.summary ?? null) : null,
+                painPoints: payload.confirmed ? (payload.painPoints ?? []) : [],
+                urgency: payload.confirmed ? (payload.urgency ?? null) : null,
+                budgetSignal: payload.confirmed ? (payload.budgetSignal ?? null) : null,
+                objections: payload.confirmed ? (payload.objections ?? []) : [],
+                levaConsigliata: payload.confirmed ? (payload.levaConsigliata ?? null) : null,
                 fillDurationMs: payload.fillDurationMs,
                 suspicious,
             });
@@ -336,8 +366,15 @@ export async function saveConfermeSurvey(
             await db.update(confermeLeadSurveys).set({
                 remembersAppt: payload.remembersAppt,
                 watchedVideo: payload.watchedVideo,
+                works: payload.works ?? null,
                 confirmed: payload.confirmed,
                 whyNot: payload.confirmed ? null : (payload.whyNot ?? null),
+                summary: payload.confirmed ? (payload.summary ?? null) : null,
+                painPoints: payload.confirmed ? (payload.painPoints ?? []) : [],
+                urgency: payload.confirmed ? (payload.urgency ?? null) : null,
+                budgetSignal: payload.confirmed ? (payload.budgetSignal ?? null) : null,
+                objections: payload.confirmed ? (payload.objections ?? []) : [],
+                levaConsigliata: payload.confirmed ? (payload.levaConsigliata ?? null) : null,
                 fillDurationMs: payload.fillDurationMs,
                 suspicious,
                 updatedAt: new Date(),
