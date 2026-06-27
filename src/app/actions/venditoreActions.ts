@@ -37,6 +37,7 @@ export async function getVenditoreAppointments(sellerId: string) {
             closeProduct: leads.closeProduct,
             closeAmountEur: leads.closeAmountEur,
             notClosedReason: leads.notClosedReason,
+            negotiationStartedAt: leads.negotiationStartedAt,
         })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
@@ -162,4 +163,38 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     revalidatePath('/', 'layout')
 
     return { success: true, rewardData }
+}
+
+export async function startNegotiation(leadId: string): Promise<{ success: boolean; error?: string; phone?: string }> {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const role = supabaseUser?.user_metadata?.role;
+    if (!supabaseUser || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(role)) {
+        return { success: false, error: "Unauthorized" };
+    }
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
+    const lead = (await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+        eq(leads.salespersonUserId, supabaseUser.id),
+    )))[0];
+    if (!lead) return { success: false, error: "Lead non assegnato" };
+
+    if (!lead.negotiationStartedAt) {
+        await db.update(leads).set({ negotiationStartedAt: new Date() })
+            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: "negotiation_started",
+            userId: supabaseUser.id,
+            timestamp: new Date(),
+            metadata: null,
+            companyId: ctx.companyId,
+        });
+    }
+    revalidatePath('/venditore');
+    return { success: true, phone: lead.phone };
 }
