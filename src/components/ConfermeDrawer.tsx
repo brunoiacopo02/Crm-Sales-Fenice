@@ -241,20 +241,22 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             }
         }
 
-        // Validate and persist the inline Scheda Trattativa before outcome
-        if (!schedaRef.current?.validate()) {
-            alert("Compila la scheda (tutti i campi obbligatori) prima di salvare l'esito.");
-            return;
-        }
-        const schedaPayload = schedaRef.current.getPayload();
-        const sres = await saveConfermeSurvey(lead.id, {
-            ...schedaPayload,
-            confirmed: outcome === "confermato",
-            fillDurationMs: schedaRef.current.getFillDurationMs(),
-        });
-        if (!sres.success) {
-            alert(sres.error || "Errore salvataggio scheda trattativa");
-            return;
+        // Scheda Trattativa: la persistiamo se compilata. NON blocchiamo lato
+        // client — è il server (setConfermeOutcome) a esigere la scheda completa
+        // per le Conferme ed esentare MANAGER/ADMIN. Così i manager non vengono
+        // mai bloccati; una Conferme con scheda incompleta riceve il rifiuto del
+        // server e completa la scheda inline (già visibile) prima di ritentare.
+        if (schedaRef.current?.validate()) {
+            const schedaPayload = schedaRef.current.getPayload();
+            const sres = await saveConfermeSurvey(lead.id, {
+                ...schedaPayload,
+                confirmed: outcome === "confermato",
+                fillDurationMs: schedaRef.current.getFillDurationMs(),
+            });
+            if (!sres.success) {
+                alert(sres.error || "Errore salvataggio scheda trattativa");
+                return;
+            }
         }
 
         setSavingOutcome(true)
