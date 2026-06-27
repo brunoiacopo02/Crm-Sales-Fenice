@@ -198,3 +198,15 @@ export async function startNegotiation(leadId: string): Promise<{ success: boole
     revalidatePath('/venditore');
     return { success: true, phone: lead.phone };
 }
+
+export async function getLeadBriefing(leadId: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const lead = (await db.select({ botReport: leads.botReport }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId), eq(leads.id, leadId),
+    )))[0];
+    const { getConfermeSurveyByLead } = await import("@/app/actions/surveyActions");
+    const scheda = await getConfermeSurveyByLead(leadId);
+    const { normalizeBriefing } = await import("@/lib/briefing/normalize");
+    return normalizeBriefing(scheda as any, lead?.botReport);
+}

@@ -1,11 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { getVenditoreAppointments, saveVenditoreOutcome } from "@/app/actions/venditoreActions"
+import { useState, useEffect, useTransition } from "react"
+import { getVenditoreAppointments, saveVenditoreOutcome, startNegotiation, getLeadBriefing } from "@/app/actions/venditoreActions"
 import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy } from "lucide-react"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
 import dynamic from "next/dynamic"
+import { useRouter } from "next/navigation"
+import type { LeadBriefing } from "@/lib/briefing/normalize"
+import { LeadBriefingCard } from "@/components/venditore/LeadBriefingCard"
 
 const VenditoreDrawer = dynamic(
   () => import("@/components/VenditoreDrawer").then(mod => mod.VenditoreDrawer),
@@ -29,6 +32,32 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     // Drawer state
     const [selectedLead, setSelectedLead] = useState<any>(null)
+    const [activeBriefing, setActiveBriefing] = useState<LeadBriefing | null | undefined>(undefined)
+    const [isPending, startTransitionNeg] = useTransition()
+    const [pendingLeadId, setPendingLeadId] = useState<string | null>(null)
+    const router = useRouter()
+
+    const handleStartNegotiation = (app: any) => {
+        setPendingLeadId(app.id)
+        startTransitionNeg(async () => {
+            const result = await startNegotiation(app.id)
+            if (!result.success) {
+                alert(result.error || "Errore durante l'avvio della trattativa")
+                setPendingLeadId(null)
+                return
+            }
+            const briefing = await getLeadBriefing(app.id)
+            setActiveBriefing(briefing ?? null)
+            setSelectedLead({ ...app, phone: result.phone ?? app.phone, negotiationStartedAt: new Date().toISOString() })
+            router.refresh()
+            setPendingLeadId(null)
+        })
+    }
+
+    const closeDrawer = () => {
+        setSelectedLead(null)
+        setActiveBriefing(undefined)
+    }
 
     const fetchAppointments = async () => {
         setIsLoading(true)
@@ -221,11 +250,12 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                     const isCompleted = !!app.salespersonOutcome;
                                     const apptDate = app.appointmentDate ? new Date(app.appointmentDate) : null;
 
+                                    const isGated = !app.negotiationStartedAt
                                     return (
                                         <tr
                                             key={app.id}
-                                            onClick={() => setSelectedLead(app)}
-                                            className="hover:bg-brand-orange-50/30 cursor-pointer transition-all duration-200 group animate-fade-in"
+                                            onClick={() => { if (!isGated) setSelectedLead(app) }}
+                                            className={`hover:bg-brand-orange-50/30 transition-all duration-200 group animate-fade-in ${isGated ? '' : 'cursor-pointer'}`}
                                             style={{ animationDelay: `${Math.min(idx * 30, 300)}ms`, animationFillMode: 'backwards' }}
                                         >
                                             <td className="px-6 py-4">
@@ -239,10 +269,12 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="font-medium text-ash-800">{app.name}</div>
-                                                <div className="text-ash-400 text-xs mt-1 flex flex-col gap-0.5">
-                                                    <div>{app.phone}</div>
-                                                    <div>{app.email}</div>
-                                                </div>
+                                                {!isGated && (
+                                                    <div className="text-ash-400 text-xs mt-1 flex flex-col gap-0.5">
+                                                        <div>{app.phone}</div>
+                                                        <div>{app.email}</div>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-brand-orange-50 text-brand-orange-700 text-xs font-medium border border-brand-orange-200/50">
@@ -256,7 +288,17 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                {isCompleted ? (
+                                                {isGated ? (
+                                                    <div>
+                                                        <button
+                                                            onClick={e => { e.stopPropagation(); handleStartNegotiation(app) }}
+                                                            disabled={isPending}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {pendingLeadId === app.id ? 'Avvio...' : '▶ Inizia trattativa'}
+                                                        </button>
+                                                    </div>
+                                                ) : isCompleted ? (
                                                     <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${app.salespersonOutcome === 'Chiuso' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200/50' :
                                                         app.salespersonOutcome === 'Sparito' ? 'bg-ash-100 text-ash-600 border border-ash-200/50' :
                                                             'bg-ember-50 text-ember-700 border border-ember-200/50'
@@ -343,19 +385,27 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                     {/* Backdrop */}
                     <div
                         className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-                        onClick={() => setSelectedLead(null)}
+                        onClick={closeDrawer}
                     />
 
                     {/* Drawer Content */}
                     <div className="relative w-full max-w-2xl bg-white h-full shadow-elevated flex flex-col pt-[72px] animate-slide-in-right">
-                        <VenditoreDrawer
-                            lead={selectedLead}
-                            onClose={() => setSelectedLead(null)}
-                            onSaved={() => {
-                                setSelectedLead(null)
-                                fetchAppointments()
-                            }}
-                        />
+                        {/* Briefing card — visible only after "Inizia trattativa" check-in */}
+                        {activeBriefing !== undefined && (
+                            <div className="px-4 sm:px-6 py-3 border-b border-ash-200 overflow-y-auto max-h-[40vh] shrink-0">
+                                <LeadBriefingCard briefing={activeBriefing} />
+                            </div>
+                        )}
+                        <div className={activeBriefing !== undefined ? "flex-1 min-h-0" : "h-full"}>
+                            <VenditoreDrawer
+                                lead={selectedLead}
+                                onClose={closeDrawer}
+                                onSaved={() => {
+                                    closeDrawer()
+                                    fetchAppointments()
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
             )}
