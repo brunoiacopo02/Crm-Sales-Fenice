@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { saveVenditoreOutcome } from "@/app/actions/venditoreActions"
 import { saveSalesSurvey, getSalesSurveyByLead } from "@/app/actions/surveyActions"
-import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle } from "lucide-react"
+import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle, Lock, Play } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
@@ -14,6 +14,9 @@ interface VenditoreDrawerProps {
     lead: any
     onClose: () => void
     onSaved: () => void
+    // Check-in trattativa avviabile direttamente dalla scheda (oltre che dalla riga).
+    onStartNegotiation?: () => void
+    isStarting?: boolean
 }
 
 const NOT_CLOSED_REASONS = [
@@ -27,7 +30,10 @@ const NOT_CLOSED_REASONS = [
     "Event imminente che lo blocca"
 ]
 
-export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps) {
+export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, isStarting }: VenditoreDrawerProps) {
+    // Trattativa avviata? Telefono e form esito sono sbloccati solo dopo il check-in
+    // "Inizia trattativa" (regola remoto-only). Riflette anche l'avvio appena fatto.
+    const isStarted = !!lead?.negotiationStartedAt
     const [outcome, setOutcome] = useState<string>(lead?.salespersonOutcome || "")
     const [closeProduct, setCloseProduct] = useState(lead?.closeProduct || "advance")
     const [closeAmountEur, setCloseAmountEur] = useState(lead?.closeAmountEur?.toString() || "")
@@ -179,8 +185,17 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                             <h3 className="text-xl font-bold text-gray-900">{lead?.name}</h3>
                             <div className="mt-2 space-y-1">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <Phone className="h-4 w-4 text-gray-400" />
-                                    <a href={`tel:${lead?.phone}`} className="hover:text-brand-orange hover:underline">{lead?.phone}</a>
+                                    {isStarted ? (
+                                        <>
+                                            <Phone className="h-4 w-4 text-gray-400" />
+                                            <a href={`tel:${lead?.phone}`} className="hover:text-brand-orange hover:underline">{lead?.phone}</a>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Lock className="h-4 w-4 text-gray-400" />
+                                            <span className="text-gray-400 italic">Numero visibile dopo l'avvio della trattativa</span>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <Mail className="h-4 w-4 text-gray-400" />
@@ -218,6 +233,33 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                     )}
                 </div>
 
+                {/* Check-in trattativa: CTA finché non avviata (telefono/esito restano bloccati) */}
+                {!isStarted && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex-1">
+                            <div className="text-sm font-bold text-amber-900 flex items-center gap-2">
+                                <Lock className="w-4 h-4" /> Trattativa non ancora avviata
+                            </div>
+                            <div className="text-xs text-amber-700 mt-1">
+                                Avvia la trattativa per sbloccare il numero di telefono, il briefing e l'inserimento dell'esito.
+                            </div>
+                        </div>
+                        <button
+                            onClick={onStartNegotiation}
+                            disabled={!onStartNegotiation || isStarting}
+                            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 shrink-0"
+                        >
+                            {isStarting ? (
+                                <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <Play className="h-4 w-4" />
+                            )}
+                            {isStarting ? 'Avvio…' : 'Inizia trattativa'}
+                        </button>
+                    </div>
+                )}
+
+                {isStarted && (<>
                 {/* Banner lead già esitato */}
                 {lead?.salespersonOutcome && (
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
@@ -396,10 +438,12 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                         />
                     </div>
                 </div>
+                </>)}
 
             </div>
 
-            {/* Footer */}
+            {/* Footer — solo a trattativa avviata */}
+            {isStarted && (
             <div className="p-6 border-t border-ash-200 bg-ash-50 flex justify-end gap-3 sticky bottom-0">
                 <button
                     onClick={onClose}
@@ -420,6 +464,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved }: VenditoreDrawerProps
                     {isSaving ? "Salvataggio..." : "Salva Esito"}
                 </button>
             </div>
+            )}
         </div>
     )
 }

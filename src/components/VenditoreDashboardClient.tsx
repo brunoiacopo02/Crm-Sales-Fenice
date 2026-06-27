@@ -58,6 +58,19 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         })
     }
 
+    // Apre la scheda del lead. Se la trattativa è già avviata, ricarica il briefing
+    // così la card torna visibile alla riapertura (prima restava nascosta).
+    const openLead = (app: any) => {
+        setSelectedLead(app)
+        if (app.negotiationStartedAt) {
+            setActiveBriefing(undefined)
+            getLeadBriefing(app.id).then(b => setActiveBriefing(b ?? null)).catch(() => setActiveBriefing(null))
+        } else {
+            // Trattativa non avviata: nessun briefing finché non si fa il check-in.
+            setActiveBriefing(undefined)
+        }
+    }
+
     const closeDrawer = () => {
         setSelectedLead(null)
         setActiveBriefing(undefined)
@@ -258,8 +271,8 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                     return (
                                         <tr
                                             key={app.id}
-                                            onClick={() => { if (!isGated) setSelectedLead(app) }}
-                                            className={`hover:bg-brand-orange-50/30 transition-all duration-200 group animate-fade-in ${isGated ? '' : 'cursor-pointer'}`}
+                                            onClick={() => openLead(app)}
+                                            className="hover:bg-brand-orange-50/30 transition-all duration-200 group animate-fade-in cursor-pointer"
                                             style={{ animationDelay: `${Math.min(idx * 30, 300)}ms`, animationFillMode: 'backwards' }}
                                         >
                                             <td className="px-6 py-4">
@@ -404,6 +417,8 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                             <VenditoreDrawer
                                 lead={selectedLead}
                                 onClose={closeDrawer}
+                                onStartNegotiation={() => handleStartNegotiation(selectedLead)}
+                                isStarting={isPending && pendingLeadId === selectedLead?.id}
                                 onSaved={() => {
                                     closeDrawer()
                                     fetchAppointments()
