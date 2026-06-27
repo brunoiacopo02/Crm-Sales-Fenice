@@ -48,9 +48,16 @@ export async function getVenditoreAppointments(sellerId: string) {
             eq(leads.salespersonUserId, sellerId),
         ))
         .orderBy(desc(leads.appointmentDate))
-        
 
-    return assignedLeads
+    // Phone must NOT reach the client before the venditore checks in via
+    // "Inizia trattativa".  We null it here for unchecked-in leads so it
+    // never travels over the wire; startNegotiation() returns the real phone
+    // once the check-in is recorded, and the client consumers already use
+    // `result.phone` from that action.
+    return assignedLeads.map(r => ({
+        ...r,
+        phone: r.negotiationStartedAt ? r.phone : null,
+    }))
 }
 
 // Funzione per registrare l'esito
@@ -96,8 +103,10 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     }
 
     // GUARDIA 2: sondaggio obbligatorio su Chiuso/Non chiuso (funnel ≠ database).
+    // Normalize to lowercase to match AC webhooks that may store funnel uppercased
+    // (e.g. 'DATABASE' vs 'database') — mirrors the client-side check in VenditoreDrawer.
     const needsSurvey = (payload.outcome === 'Chiuso' || payload.outcome === 'Non chiuso')
-        && oldLead.funnel !== EXCLUDED_FUNNEL;
+        && (oldLead.funnel || '').trim().toLowerCase() !== EXCLUDED_FUNNEL;
     if (needsSurvey) {
         const survey = await getSalesSurveyByLead(leadId);
         if (!survey || survey.suspicious) {
@@ -217,6 +226,12 @@ export async function startNegotiation(leadId: string): Promise<{ success: boole
 }
 
 export async function getLeadBriefing(leadId: string) {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const role = supabaseUser?.user_metadata?.role;
+    if (!supabaseUser || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(role)) {
+        return null;
+    }
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     const lead = (await db.select({ botReport: leads.botReport }).from(leads).where(and(
