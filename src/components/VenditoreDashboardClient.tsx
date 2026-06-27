@@ -40,17 +40,21 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const handleStartNegotiation = (app: any) => {
         setPendingLeadId(app.id)
         startTransitionNeg(async () => {
-            const result = await startNegotiation(app.id)
-            if (!result.success) {
-                alert(result.error || "Errore durante l'avvio della trattativa")
+            try {
+                const result = await startNegotiation(app.id)
+                if (!result.success) {
+                    alert(result.error || "Errore durante l'avvio della trattativa")
+                    return
+                }
+                const briefing = await getLeadBriefing(app.id)
+                setActiveBriefing(briefing ?? null)
+                setSelectedLead({ ...app, phone: result.phone ?? app.phone, negotiationStartedAt: new Date().toISOString() })
+                router.refresh()
+            } catch (err) {
+                alert("Errore di rete durante l'avvio trattativa. Riprova.")
+            } finally {
                 setPendingLeadId(null)
-                return
             }
-            const briefing = await getLeadBriefing(app.id)
-            setActiveBriefing(briefing ?? null)
-            setSelectedLead({ ...app, phone: result.phone ?? app.phone, negotiationStartedAt: new Date().toISOString() })
-            router.refresh()
-            setPendingLeadId(null)
         })
     }
 
