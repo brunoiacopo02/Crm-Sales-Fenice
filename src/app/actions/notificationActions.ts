@@ -26,7 +26,8 @@ export async function markNotificationsAsRead(notificationIds: string[]) {
                 status: 'read',
                 readAt: new Date()
             })
-            .where(and(inArray(notifications.id, notificationIds), eq(notifications.companyId, ctx.companyId)))
+            // Solo le non lette: evita di riscrivere righe già 'read' (write-IO sprecato)
+            .where(and(inArray(notifications.id, notificationIds), eq(notifications.companyId, ctx.companyId), eq(notifications.status, 'unread')))
 
 
     return true
@@ -40,7 +41,8 @@ export async function markAllNotificationsAsRead(userId: string) {
                 status: 'read',
                 readAt: new Date()
             })
-            .where(and(eq(notifications.recipientUserId, userId), eq(notifications.companyId, ctx.companyId)))
+            // Solo le non lette: "segna tutte come lette" non deve riscrivere l'intero storico
+            .where(and(eq(notifications.recipientUserId, userId), eq(notifications.companyId, ctx.companyId), eq(notifications.status, 'unread')))
 
 
     return true
