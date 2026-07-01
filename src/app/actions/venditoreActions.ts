@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
 import { leads, users, callLogs, notifications, leadEvents, salesAttempts } from "@/db/schema"
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
+import { eq, and, desc, sql, gte, lte, isNotNull } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { dayBoundsRome } from "@/lib/dateUtils"
 import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
 import { validateOutcomeTransition } from "@/lib/venditorePerformance/guard"
@@ -89,6 +90,89 @@ export async function getVenditoreAppointments(sellerId: string) {
             nextFollowUpDate: agg?.nextFollowUpDate ?? null,
         };
     })
+}
+
+// Lead il cui ULTIMO tentativo è 'Non chiuso' → hanno un follow-up pendente.
+// Ritorna righe nella stessa forma di getVenditoreAppointments (così il
+// VenditoreDrawer si riusa identico) più nextFollowUpDate (garantito non
+// nullo) e bucket 'overdue' | 'today' | 'upcoming' per il raggruppamento UI.
+export async function getVenditoreFollowUps(sellerId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const rows = await db.select({
+        id: leads.id,
+        name: leads.name,
+        email: leads.email,
+        phone: leads.phone,
+        funnel: leads.funnel,
+        appointmentDate: leads.appointmentDate,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
+        salespersonOutcome: leads.salespersonOutcome,
+        salespersonOutcomeAt: leads.salespersonOutcomeAt,
+        salespersonOutcomeNotes: leads.salespersonOutcomeNotes,
+        followUp1Date: leads.followUp1Date,
+        followUp2Date: leads.followUp2Date,
+        gdoUserId: leads.assignedToId,
+        gdoName: users.displayName,
+        gdoCode: users.gdoCode,
+        appointmentNote: leads.appointmentNote,
+        version: leads.version,
+        closeProduct: leads.closeProduct,
+        closeAmountEur: leads.closeAmountEur,
+        notClosedReason: leads.notClosedReason,
+        negotiationStartedAt: leads.negotiationStartedAt,
+    })
+        .from(leads)
+        .leftJoin(users, eq(leads.assignedToId, users.id))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.salespersonUserId, sellerId),
+            eq(leads.salespersonOutcome, 'Non chiuso'),
+            isNotNull(leads.followUp1Date),
+        ))
+
+    // attempt aggregati per attemptCount/priorNonClosedCount/nextFollowUpDate
+    const attemptRows = await db.select({
+        leadId: salesAttempts.leadId,
+        outcome: salesAttempts.outcome,
+        nextFollowUpDate: salesAttempts.nextFollowUpDate,
+        createdAt: salesAttempts.createdAt,
+    }).from(salesAttempts).where(and(
+        eq(salesAttempts.companyId, ctx.companyId),
+        eq(salesAttempts.salesUserId, sellerId),
+    ))
+
+    const agg = new Map<string, { attemptCount: number; priorNonClosedCount: number; nextFollowUpDate: Date | null; lastAt: number }>()
+    for (const r of attemptRows) {
+        const cur = agg.get(r.leadId) ?? { attemptCount: 0, priorNonClosedCount: 0, nextFollowUpDate: null, lastAt: 0 }
+        cur.attemptCount += 1
+        if (r.outcome === 'Non chiuso') cur.priorNonClosedCount += 1
+        const ts = r.createdAt ? new Date(r.createdAt).getTime() : 0
+        if (ts >= cur.lastAt) { cur.lastAt = ts; cur.nextFollowUpDate = r.outcome === 'Non chiuso' ? r.nextFollowUpDate : null }
+        agg.set(r.leadId, cur)
+    }
+
+    const now = new Date()
+    const { start: todayStart, end: todayEnd } = dayBoundsRome(now)
+
+    const result = rows
+        .map(r => {
+            const a = agg.get(r.id)
+            const fu = a?.nextFollowUpDate ?? null
+            return {
+                ...r,
+                phone: r.negotiationStartedAt ? r.phone : null,
+                attemptCount: a?.attemptCount ?? 0,
+                priorNonClosedCount: a?.priorNonClosedCount ?? 0,
+                nextFollowUpDate: fu,
+                bucket: !fu ? 'upcoming' : (fu < todayStart ? 'overdue' : (fu < todayEnd ? 'today' : 'upcoming')) as 'overdue' | 'today' | 'upcoming',
+            }
+        })
+        .filter((r): r is typeof r & { nextFollowUpDate: Date } => !!r.nextFollowUpDate) // solo con follow-up pendente reale
+        .sort((x, y) => x.nextFollowUpDate.getTime() - y.nextFollowUpDate.getTime())
+
+    return result
 }
 
 // Funzione per registrare l'esito

@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
-import { getVenditoreAppointments, saveVenditoreOutcome, startNegotiation, getLeadBriefing } from "@/app/actions/venditoreActions"
-import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy } from "lucide-react"
+import { getVenditoreAppointments, getVenditoreFollowUps, saveVenditoreOutcome, startNegotiation, getLeadBriefing } from "@/app/actions/venditoreActions"
+import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell } from "lucide-react"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
 import dynamic from "next/dynamic"
@@ -20,8 +20,9 @@ import { createClient } from "@/utils/supabase/client"
 
 export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const supabase = createClient()
-    const [view, setView] = useState<'LISTA' | 'AGENDA' | 'CLASSIFICA'>('LISTA')
+    const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA'>('LISTA')
     const [appointments, setAppointments] = useState<any[]>([])
+    const [followUps, setFollowUps] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
 
@@ -90,6 +91,17 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         }
     }
 
+    // Caricato anche al mount (non solo quando la tab Follow-up è attiva) così
+    // il badge "scaduti" resta aggiornato pure con la vista Lista/Agenda aperta.
+    const fetchFollowUps = async () => {
+        try {
+            const data = await getVenditoreFollowUps(sellerId)
+            setFollowUps(data)
+        } catch (error) {
+            console.error(error)
+        }
+    }
+
     const handleConnectCalendar = async () => {
         try {
             const url = await getGoogleAuthUrl(sellerId)
@@ -108,6 +120,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     useEffect(() => {
         fetchAppointments()
+        fetchFollowUps()
 
         const channel = supabase
             .channel('venditore_leads_updates')
@@ -129,6 +142,18 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
             supabase.removeChannel(channel)
         }
     }, [sellerId])
+
+    // Rinfresca i follow-up ogni volta che si apre la tab, così i bucket
+    // (scaduti/oggi/prossimi) sono aggiornati anche se è passato del tempo
+    // dall'ultimo fetch al mount.
+    useEffect(() => {
+        if (view !== 'FOLLOWUP') return
+        let alive = true
+        getVenditoreFollowUps(sellerId).then(r => { if (alive) setFollowUps(r) })
+        return () => { alive = false }
+    }, [view, sellerId])
+
+    const overdueCount = followUps.filter(f => f.bucket === 'overdue').length
 
     const filteredAppointments = appointments.filter(app => {
         // Search
@@ -165,6 +190,16 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                     >
                         <List className="h-4 w-4" />
                         Lista
+                    </button>
+                    <button
+                        onClick={() => setView('FOLLOWUP')}
+                        className={`relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${view === 'FOLLOWUP' ? 'bg-white shadow-soft text-brand-charcoal' : 'text-ash-500 hover:text-ash-700'}`}
+                    >
+                        <Bell className="h-4 w-4" />
+                        Follow-up
+                        {overdueCount > 0 && (
+                            <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold">{overdueCount}</span>
+                        )}
                     </button>
                     <button
                         onClick={() => setView('AGENDA')}
@@ -337,6 +372,43 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                             </tbody>
                         </table>
                     </div>
+                ) : view === 'FOLLOWUP' ? (
+                    <div className="p-6 bg-gradient-to-b from-ash-50/50 to-white">
+                        <div className="space-y-6">
+                            {(['overdue', 'today', 'upcoming'] as const).map(bucket => {
+                                const items = followUps.filter(f => f.bucket === bucket)
+                                if (!items.length) return null
+                                const label = bucket === 'overdue' ? 'Scaduti' : bucket === 'today' ? 'Oggi' : 'Prossimi'
+                                const color = bucket === 'overdue' ? 'text-red-600' : bucket === 'today' ? 'text-amber-600' : 'text-ash-600'
+                                return (
+                                    <div key={bucket}>
+                                        <h3 className={`text-sm font-bold uppercase tracking-wider mb-2 ${color}`}>{label} ({items.length})</h3>
+                                        <div className="space-y-2">
+                                            {items.map((f, idx) => (
+                                                <div
+                                                    key={f.id}
+                                                    onClick={() => openLead(f)}
+                                                    className="w-full text-left bg-white border border-ash-200/60 rounded-lg p-4 hover:border-brand-orange/40 hover:shadow-card transition-all cursor-pointer flex items-center justify-between animate-fade-in"
+                                                    style={{ animationDelay: `${Math.min(idx * 30, 300)}ms`, animationFillMode: 'backwards' }}
+                                                >
+                                                    <div>
+                                                        <div className="font-semibold text-ash-800">{f.name}</div>
+                                                        <div className="text-xs text-ash-500 mt-1">
+                                                            {f.funnel || 'Sconosciuto'} · Follow-up: {format(new Date(f.nextFollowUpDate), "dd MMM yyyy - HH:mm", { locale: it })}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-xs text-ash-400">Tentativi: {f.attemptCount}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                            {followUps.length === 0 && (
+                                <div className="text-center text-ash-400 py-12">Nessun follow-up in sospeso 🎉</div>
+                            )}
+                        </div>
+                    </div>
                 ) : view === 'AGENDA' ? (
                     <div className="p-6 bg-gradient-to-b from-ash-50/50 to-white">
                         {/* Agenda View */}
@@ -422,6 +494,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                 onSaved={() => {
                                     closeDrawer()
                                     fetchAppointments()
+                                    fetchFollowUps()
                                 }}
                             />
                         </div>
