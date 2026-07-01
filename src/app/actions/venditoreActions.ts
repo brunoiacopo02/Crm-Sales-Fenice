@@ -3,13 +3,14 @@ import { createClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
-import { leads, users, callLogs, notifications, leadEvents } from "@/db/schema"
+import { leads, users, callLogs, notifications, leadEvents, salesAttempts } from "@/db/schema"
 import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
+import { validateOutcomeTransition } from "@/lib/venditorePerformance/guard"
 // Gamification disabled for VENDITORE role — import removed
 
 export async function getVenditoreAppointments(sellerId: string) {
@@ -49,20 +50,50 @@ export async function getVenditoreAppointments(sellerId: string) {
         ))
         .orderBy(desc(leads.appointmentDate))
 
+    // Conteggi tentativi per lead (per tetto follow-up e ciclo).
+    const leadIds = assignedLeads.map(l => l.id);
+    const attemptRows = leadIds.length
+        ? await db.select({
+            leadId: salesAttempts.leadId,
+            outcome: salesAttempts.outcome,
+            nextFollowUpDate: salesAttempts.nextFollowUpDate,
+            createdAt: salesAttempts.createdAt,
+        }).from(salesAttempts).where(and(
+            eq(salesAttempts.companyId, ctx.companyId),
+            eq(salesAttempts.salesUserId, sellerId),
+        ))
+        : [];
+
+    const byLead = new Map<string, { attemptCount: number; priorNonClosedCount: number; nextFollowUpDate: Date | null; lastAt: number }>();
+    for (const r of attemptRows) {
+        const cur = byLead.get(r.leadId) ?? { attemptCount: 0, priorNonClosedCount: 0, nextFollowUpDate: null, lastAt: 0 };
+        cur.attemptCount += 1;
+        if (r.outcome === 'Non chiuso') cur.priorNonClosedCount += 1;
+        const ts = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+        if (ts >= cur.lastAt) { cur.lastAt = ts; cur.nextFollowUpDate = r.outcome === 'Non chiuso' ? r.nextFollowUpDate : null; }
+        byLead.set(r.leadId, cur);
+    }
+
     // Phone must NOT reach the client before the venditore checks in via
     // "Inizia trattativa".  We null it here for unchecked-in leads so it
     // never travels over the wire; startNegotiation() returns the real phone
     // once the check-in is recorded, and the client consumers already use
     // `result.phone` from that action.
-    return assignedLeads.map(r => ({
-        ...r,
-        phone: r.negotiationStartedAt ? r.phone : null,
-    }))
+    return assignedLeads.map(r => {
+        const agg = byLead.get(r.id);
+        return {
+            ...r,
+            phone: r.negotiationStartedAt ? r.phone : null,
+            attemptCount: agg?.attemptCount ?? 0,
+            priorNonClosedCount: agg?.priorNonClosedCount ?? 0,
+            nextFollowUpDate: agg?.nextFollowUpDate ?? null,
+        };
+    })
 }
 
 // Funzione per registrare l'esito
 export async function saveVenditoreOutcome(leadId: string, payload: {
-    outcome: string, // "Chiuso" | "Non chiuso" | "Sparito"
+    outcome: string, // "Chiuso" | "Non chiuso" | "Perso" | "Sparito"
     notes?: string,
     closeProduct?: string,
     closeAmountEur?: number,
@@ -74,7 +105,8 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     outcomeAt?: Date,
     notClosedReason?: string,
     followUp1Date?: Date | null,
-    followUp2Date?: Date | null
+    followUp2Date?: Date | null,
+    nextFollowUpDate?: Date | null
 }, currentVersion?: number) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -118,6 +150,23 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         }
     }
 
+    // Conteggio tentativi pregressi sul lead (per attemptNumber e tetto follow-up).
+    const priorAttempts = await db.select({ outcome: salesAttempts.outcome })
+        .from(salesAttempts)
+        .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)));
+    const attemptNumber = priorAttempts.length;
+    const priorNonClosedCount = priorAttempts.filter(a => a.outcome === 'Non chiuso').length;
+
+    // GUARDIA 3: follow-up obbligatorio dopo "Non chiuso" + tetto a 3 (solo VENDITORE).
+    if (!isStaff) {
+        const check = validateOutcomeTransition({
+            outcome: payload.outcome,
+            nextFollowUpDate: payload.nextFollowUpDate ?? null,
+            priorNonClosedCount,
+        });
+        if (!check.ok) return { success: false, error: check.error };
+    }
+
     const updated = await db.update(leads)
         .set({
             salespersonOutcome: payload.outcome,
@@ -125,8 +174,8 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             closeProduct: payload.closeProduct || null,
             closeAmountEur: payload.closeAmountEur || null,
             notClosedReason: payload.notClosedReason || null,
-            followUp1Date: payload.followUp1Date || null,
-            followUp2Date: payload.followUp2Date || null,
+            followUp1Date: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
+            followUp2Date: null,
             salespersonOutcomeAt: payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date(),
             version: oldLead.version + 1,
         })
@@ -140,6 +189,22 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     if (updated.length === 0) {
         return { success: false, error: 'CONCURRENCY_ERROR' }
     }
+
+    // Storia: registra questo tentativo/esito.
+    const effectiveOutcomeAt = payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date();
+    await db.insert(salesAttempts).values({
+        id: crypto.randomUUID(),
+        leadId,
+        salesUserId: oldLead.salespersonUserId ?? session.user.id,
+        attemptNumber,
+        outcome: payload.outcome,
+        notClosedReason: payload.notClosedReason || null,
+        nextFollowUpDate: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
+        closeProduct: payload.closeProduct || null,
+        closeAmountEur: payload.closeAmountEur || null,
+        outcomeAt: effectiveOutcomeAt,
+        companyId: ctx.companyId,
+    });
 
     // Marketing webhook: deal closed (won/lost based on outcome)
     const closedEventType = payload.outcome === 'Chiuso' ? 'deal.closed_won' : 'deal.closed_lost';
@@ -159,7 +224,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         eventType: "salesperson_outcome_set",
         userId: session.user.id,
         timestamp: new Date(),
-        metadata: payload,
+        metadata: { ...payload, attemptNumber },
         companyId: ctx.companyId,
     })
 

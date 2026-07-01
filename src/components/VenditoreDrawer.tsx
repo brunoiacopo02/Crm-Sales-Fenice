@@ -8,7 +8,8 @@ import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
 import { VenditoreSurveyInline, type VenditoreSurveyState } from "./surveys/VenditoreSurveyInline"
-import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
+import { EXCLUDED_FUNNEL, NOT_CLOSED_REASONS } from "@/lib/surveys/questions"
+import { MAX_FOLLOW_UPS } from "@/lib/venditorePerformance/guard"
 
 interface VenditoreDrawerProps {
     lead: any
@@ -19,21 +20,13 @@ interface VenditoreDrawerProps {
     isStarting?: boolean
 }
 
-const NOT_CLOSED_REASONS = [
-    "Non ha soldi",
-    "Deve parlare con terzi",
-    "Valuta altri percorsi",
-    "Non ha urgenza reale",
-    "Non vuole decidere in call",
-    "Troppo spaventato",
-    "Fa già altri corsi",
-    "Event imminente che lo blocca"
-]
-
 export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, isStarting }: VenditoreDrawerProps) {
     // Trattativa avviata? Telefono e form esito sono sbloccati solo dopo il check-in
     // "Inizia trattativa" (regola remoto-only). Riflette anche l'avvio appena fatto.
     const isStarted = !!lead?.negotiationStartedAt
+    const priorNonClosedCount = lead?.priorNonClosedCount ?? 0
+    const followUpCapReached = priorNonClosedCount >= MAX_FOLLOW_UPS
+    const OUTCOME_OPTIONS = followUpCapReached ? ["Chiuso", "Perso", "Sparito"] : ["Chiuso", "Non chiuso", "Perso", "Sparito"]
     const [outcome, setOutcome] = useState<string>(lead?.salespersonOutcome || "")
     const [closeProduct, setCloseProduct] = useState(lead?.closeProduct || "advance")
     const [closeAmountEur, setCloseAmountEur] = useState(lead?.closeAmountEur?.toString() || "")
@@ -48,8 +41,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
     const [notClosedReason, setNotClosedReason] = useState(lead?.notClosedReason || "")
     const [notes, setNotes] = useState(lead?.salespersonOutcomeNotes || "")
 
-    const [followUp1Date, setFollowUp1Date] = useState(lead?.followUp1Date ? toRomeDatetimeLocal(new Date(lead.followUp1Date)) : "")
-    const [followUp2Date, setFollowUp2Date] = useState(lead?.followUp2Date ? toRomeDatetimeLocal(new Date(lead.followUp2Date)) : "")
+    const [nextFollowUpDate, setNextFollowUpDate] = useState(lead?.nextFollowUpDate ? toRomeDatetimeLocal(new Date(lead.nextFollowUpDate)) : "")
 
     const [isSaving, setIsSaving] = useState(false)
 
@@ -89,9 +81,6 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
         })()
     }, [lead?.id])
 
-    // Form logic validations
-    const canAddFollowUp = !followUp1Date || !followUp2Date;
-
     const handleSave = async () => {
         if (!outcome) {
             alert("Seleziona un Esito Vendita")
@@ -101,8 +90,12 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
             alert("Prodotto e Importo sono obbligatori per le vendite chiuse.")
             return
         }
-        if (outcome === "Non chiuso" && !notClosedReason) {
-            alert("Seleziona una motivazione valida per cui la vendita non è chiusa.")
+        if ((outcome === "Non chiuso" || outcome === "Perso") && !notClosedReason) {
+            alert("Seleziona una motivazione valida.")
+            return
+        }
+        if (outcome === "Non chiuso" && !nextFollowUpDate) {
+            alert("Dopo un \"Non chiuso\" devi impostare la data del prossimo follow-up.")
             return
         }
         if (surveyRequired && !surveyValid) {
@@ -134,9 +127,8 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                 // Tutti i datetime-local sono interpretati come Europe/Rome (Sprint 2.4):
                 // evita che chiusure registrate sera/notte cadano nella settimana sbagliata.
                 outcomeAt: outcome === "Chiuso" && closeDate ? (parseRomeDatetimeLocal(closeDate) || undefined) : undefined,
-                notClosedReason: outcome === "Non chiuso" ? notClosedReason : undefined,
-                followUp1Date: outcome === "Non chiuso" && followUp1Date ? parseRomeDatetimeLocal(followUp1Date) : null,
-                followUp2Date: outcome === "Non chiuso" && followUp2Date ? parseRomeDatetimeLocal(followUp2Date) : null,
+                notClosedReason: (outcome === "Non chiuso" || outcome === "Perso") ? notClosedReason : undefined,
+                nextFollowUpDate: outcome === "Non chiuso" && nextFollowUpDate ? parseRomeDatetimeLocal(nextFollowUpDate) : null,
             }, lead.version)
 
             if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
@@ -286,8 +278,8 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Seleziona l'esito dell'appuntamento *
                         </label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            {["Chiuso", "Non chiuso", "Sparito"].map(o => (
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                            {OUTCOME_OPTIONS.map(o => (
                                 <button
                                     key={o}
                                     onClick={() => setOutcome(o)}
@@ -295,6 +287,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                                     ${outcome === o
                                             ? (o === 'Chiuso' ? 'bg-green-50 border-green-500 text-green-700 ring-1 ring-green-500' :
                                                 o === 'Non chiuso' ? 'bg-orange-50 border-orange-500 text-orange-700 ring-1 ring-orange-500' :
+                                                o === 'Perso' ? 'bg-red-50 border-red-500 text-red-700 ring-1 ring-red-500' :
                                                     'bg-gray-100 border-gray-500 text-gray-700 ring-1 ring-gray-500')
                                             : 'bg-white border-gray-200 text-gray-500 hover:border-brand-orange hover:bg-orange-50/30'
                                         }`}
@@ -370,38 +363,15 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                             </div>
 
                             <div className="pt-4 border-t border-orange-200">
-                                <h4 className="text-sm font-bold text-orange-900 mb-3">Opzionale: Pianifica Follow-up</h4>
-                                <div className="space-y-3">
-                                    <div className="flex gap-4 items-center">
-                                        <div className="w-1/3 text-xs font-semibold text-orange-800 uppercase">Follow-up 1</div>
-                                        <input
-                                            type="datetime-local"
-                                            value={followUp1Date}
-                                            onChange={e => setFollowUp1Date(e.target.value)}
-                                            className="input-fenice text-sm !border-orange-200 !p-1.5 flex-1"
-                                        />
-                                        {followUp1Date && (
-                                            <button onClick={() => setFollowUp1Date('')} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-4 items-center opacity-70 hover:opacity-100 transition-opacity">
-                                        <div className="w-1/3 text-xs font-semibold text-orange-800 uppercase">Follow-up 2</div>
-                                        <input
-                                            type="datetime-local"
-                                            value={followUp2Date}
-                                            onChange={e => setFollowUp2Date(e.target.value)}
-                                            className="input-fenice text-sm !border-orange-200 !p-1.5 flex-1"
-                                        />
-                                        {followUp2Date && (
-                                            <button onClick={() => setFollowUp2Date('')} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-orange-700 mt-2">
-                                        I follow-up verranno automaticamente aggiunti al tuo Google Calendar. Max 2 follow-up supportati.
-                                    </p>
-                                </div>
+                                <h4 className="text-sm font-bold text-orange-900 mb-1">Prossimo follow-up *</h4>
+                                <p className="text-xs text-orange-700 mb-3">Obbligatorio: fissa quando ricontattare il lead. Verrà mostrato nella tua tab "Follow-up".</p>
+                                <input
+                                    type="datetime-local"
+                                    value={nextFollowUpDate}
+                                    onChange={e => setNextFollowUpDate(e.target.value)}
+                                    className="input-fenice text-sm !border-orange-200 !p-1.5 w-full"
+                                />
                             </div>
-
                         </div>
                     )}
 
@@ -410,6 +380,26 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                         <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 flex items-start gap-2 animate-fade-in">
                             <AlertCircle className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                             <p>Il lead non si è presentato all'appuntamento ("no-show"). Non sono richieste ulteriori annotazioni o follow-up obbligatori.</p>
+                        </div>
+                    )}
+
+                    {/* PERSO — esito terminale */}
+                    {outcome === "Perso" && (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-4 animate-fade-in">
+                            <div>
+                                <label className="block text-sm font-medium text-red-900 mb-1">Motivazione *</label>
+                                <select
+                                    value={notClosedReason}
+                                    onChange={e => setNotClosedReason(e.target.value)}
+                                    className="input-fenice text-sm !border-red-200"
+                                >
+                                    <option value="" disabled>Seleziona un motivo...</option>
+                                    {NOT_CLOSED_REASONS.map(r => (
+                                        <option key={r} value={r}>{r}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <p className="text-xs text-red-700">Esito definitivo: il lead è perso e non verranno richiesti altri follow-up.</p>
                         </div>
                     )}
 

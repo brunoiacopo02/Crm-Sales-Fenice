@@ -224,6 +224,19 @@ export const SALES_PRICE_REACTION_OPTIONS = [
 ] as const;
 export type SalesPriceReaction = typeof SALES_PRICE_REACTION_OPTIONS[number]['value'];
 
+// Motivi di non chiusura del venditore (label === valore salvato in DB).
+export const NOT_CLOSED_REASONS = [
+    'Non ha soldi',
+    'Deve parlare con terzi',
+    'Valuta altri percorsi',
+    'Non ha urgenza reale',
+    'Non vuole decidere in call',
+    'Troppo spaventato',
+    'Fa già altri corsi',
+    'Event imminente che lo blocca',
+] as const;
+export type NotClosedReason = typeof NOT_CLOSED_REASONS[number];
+
 // ========== VALIDATION HELPERS ==========
 export function isValidGdoValue<F extends GdoSurveyField>(field: F, value: unknown): boolean {
     if (value == null) return false;

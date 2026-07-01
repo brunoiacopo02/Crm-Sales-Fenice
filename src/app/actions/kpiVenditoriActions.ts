@@ -88,8 +88,9 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         const chiusi = vOutcomes.filter(o => o.outcome === 'Chiuso').length
         const nonChiusi = vOutcomes.filter(o => o.outcome === 'Non chiuso').length
         const sparito = vOutcomes.filter(o => o.outcome === 'Sparito').length
+        const perso = vOutcomes.filter(o => o.outcome === 'Perso').length
 
-        const totalEsitati = chiusi + nonChiusi + sparito
+        const totalEsitati = chiusi + nonChiusi + sparito + perso
         const closingRate = totalEsitati > 0 ? (chiusi / totalEsitati) * 100 : 0
 
         const fatturato = vOutcomes
@@ -102,6 +103,7 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
             chiusi,
             nonChiusi,
             sparito,
+            perso,
             totalEsitati,
             closingRate: Math.round(closingRate),
             fatturato,
