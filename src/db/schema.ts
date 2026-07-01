@@ -1,4 +1,4 @@
-import { pgTable, text, integer, bigint, real, boolean, timestamp, jsonb, index, unique, primaryKey, date, numeric, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, bigint, real, boolean, timestamp, jsonb, index, uniqueIndex, unique, primaryKey, date, numeric, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 // Multi-tenant: una riga per azienda gestita dal CRM unificato (sales + marketing).
@@ -861,6 +861,49 @@ export const salesLeadSurveys = pgTable('salesLeadSurveys', {
     return {
         salesUserIdx: index('sales_surveys_user_idx').on(table.salesUserId),
         createdAtIdx: index('sales_surveys_created_idx').on(table.createdAt),
+    };
+});
+
+// Storia degli esiti venditore: un record per ogni tentativo/esito su un lead.
+// leads.* resta lo stato "corrente" per KPI/board; questa tabella è la storia
+// su cui gira l'analytics performance (motivi, funnel follow-up, tentativi medi).
+export const salesAttempts = pgTable('salesAttempts', {
+    id: text('id').primaryKey(),
+    leadId: text('leadId').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // 0 = esito post-appuntamento; 1..3 = follow-up successivi.
+    attemptNumber: integer('attemptNumber').notNull(),
+    outcome: text('outcome').notNull(),            // 'Chiuso' | 'Non chiuso' | 'Perso' | 'Sparito'
+    notClosedReason: text('notClosedReason'),      // uno degli 8 motivi (solo Non chiuso/Perso)
+    nextFollowUpDate: timestamp('nextFollowUpDate', { withTimezone: true, mode: 'date' }), // solo se Non chiuso
+    closeProduct: text('closeProduct'),            // 'advance'|'gold'|'exclusive' (solo Chiuso)
+    closeAmountEur: real('closeAmountEur'),        // solo Chiuso
+    // Data effettiva dell'esito (mirror di leads.salespersonOutcomeAt): usata per i bounds periodo.
+    outcomeAt: timestamp('outcomeAt', { withTimezone: true, mode: 'date' }).notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+}, (table) => {
+    return {
+        leadIdx: index('sales_attempts_lead_idx').on(table.leadId),
+        userDateIdx: index('sales_attempts_user_date_idx').on(table.salesUserId, table.outcomeAt),
+        companyDateIdx: index('sales_attempts_company_date_idx').on(table.companyId, table.outcomeAt),
+    };
+});
+
+// Focus di coaching settimanale assegnato dal manager al venditore.
+export const salesWeeklyFocus = pgTable('salesWeeklyFocus', {
+    id: text('id').primaryKey(),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    weekStart: text('weekStart').notNull(),        // 'YYYY-MM-DD' = lunedì (Rome)
+    objection: text('objection'),                  // uno degli 8 motivi (nullable)
+    taskNote: text('taskNote').notNull().default(''),
+    createdBy: text('createdBy').notNull().references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+}, (table) => {
+    return {
+        weekUnique: uniqueIndex('sales_weekly_focus_user_week_uq').on(table.salesUserId, table.weekStart),
     };
 });
 
