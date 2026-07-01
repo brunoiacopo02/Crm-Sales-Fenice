@@ -2,10 +2,11 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { getLeadOverview, getFunnelOverview, getMetricsOverview } from "@/app/actions/panoramicaActions";
 import { tryCurrentTenant } from "@/lib/tenancy";
-import { PanoramicaClient } from "./PanoramicaClient";
 import { SalesAlertStrip } from "./SalesAlertStrip";
 import { ManagerParamsStrip } from "./ManagerParamsStrip";
 import { isConfermeTl } from "@/lib/confermeTl";
+import { SalesManagerView } from "./SalesManagerView";
+import { currentYearMonthRome } from "@/lib/workingDaysUtils";
 
 export default async function PanoramicaGeneralePage() {
     const supabase = await createClient();
@@ -35,6 +36,8 @@ export default async function PanoramicaGeneralePage() {
         getMetricsOverview(),
     ]);
 
+    const currentYearMonth = currentYearMonthRome();
+
     return (
         <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
@@ -50,16 +53,19 @@ export default async function PanoramicaGeneralePage() {
                 </div>
             </div>
 
-            <SalesAlertStrip />
-
-            {!isAllCompanies && !isTlConfermeViewer && <ManagerParamsStrip />}
-
-            <PanoramicaClient
+            <SalesManagerView
                 initialData={overview}
                 initialFunnelData={funnelOverview}
                 initialMetricsData={metricsOverview}
                 readOnly={readOnly}
                 readOnlyVariant={isAllCompanies ? 'all-companies' : 'viewer'}
+                currentYearMonth={currentYearMonth}
+                strips={
+                    <>
+                        <SalesAlertStrip />
+                        {!isAllCompanies && !isTlConfermeViewer && <ManagerParamsStrip />}
+                    </>
+                }
             />
         </div>
     );
