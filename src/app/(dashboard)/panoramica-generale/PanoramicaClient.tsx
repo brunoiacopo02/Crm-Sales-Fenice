@@ -36,6 +36,8 @@ export function PanoramicaClient({
     initialMetricsData,
     readOnly = false,
     readOnlyVariant = 'all-companies',
+    selectedMonth,
+    currentYearMonth,
 }: {
     initialData: LeadOverviewResult;
     initialFunnelData: FunnelOverviewResult;
@@ -44,12 +46,18 @@ export function PanoramicaClient({
     readOnly?: boolean;
     /** Perché la vista è in sola lettura: aggregato gruppo o viewer (es. TL Conferme). */
     readOnlyVariant?: 'all-companies' | 'viewer';
+    /** Mese selezionato dal wrapper ('YYYY-MM'). */
+    selectedMonth: string;
+    /** Mese in corso ('YYYY-MM') per distinguere la vista storica. */
+    currentYearMonth: string;
 }) {
     const router = useRouter();
     const [data, setData] = useState<LeadOverviewResult>(initialData);
     const [funnelData, setFunnelData] = useState<FunnelOverviewResult>(initialFunnelData);
     const [metricsData, setMetricsData] = useState<MetricsOverviewResult>(initialMetricsData);
     const [modalOpen, setModalOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const isPastMonth = selectedMonth !== currentYearMonth;
 
     const refresh = async () => {
         const ym = data.success ? data.yearMonth : undefined;
@@ -62,6 +70,29 @@ export function PanoramicaClient({
         setFunnelData(freshFunnel);
         setMetricsData(freshMetrics);
     };
+
+    // Rifetch quando cambia il mese selezionato dal wrapper. Il mese corrente
+    // iniziale usa i dati SSR (nessun fetch se già allineato).
+    useEffect(() => {
+        const loadedYm = data.success ? data.yearMonth : null;
+        if (loadedYm === selectedMonth) return;
+        let cancelled = false;
+        setLoading(true);
+        (async () => {
+            const [fresh, freshFunnel, freshMetrics] = await Promise.all([
+                getLeadOverview(selectedMonth),
+                getFunnelOverview(selectedMonth),
+                getMetricsOverview(selectedMonth),
+            ]);
+            if (cancelled) return;
+            setData(fresh);
+            setFunnelData(freshFunnel);
+            setMetricsData(freshMetrics);
+            setLoading(false);
+        })();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedMonth]);
 
     if (!data.success) {
         return (
@@ -82,8 +113,13 @@ export function PanoramicaClient({
                         <Calendar className="w-5 h-5 text-brand-orange" />
                     </div>
                     <div>
-                        <div className="text-xs uppercase tracking-wider text-ash-500 font-semibold">Mese corrente</div>
-                        <div className="text-base font-bold text-ash-800">{formatMonthLabel(yearMonth)}</div>
+                        <div className="text-xs uppercase tracking-wider text-ash-500 font-semibold">
+                            {isPastMonth ? 'Mese storico' : 'Mese in corso'}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="text-base font-bold text-ash-800">{formatMonthLabel(yearMonth)}</div>
+                            {loading && <span className="text-[11px] text-ash-400">Caricamento…</span>}
+                        </div>
                     </div>
                     {isConfigured && config && (
                         <div className="ml-4 flex items-center gap-4 text-xs text-ash-600 border-l border-ash-200 pl-4">
@@ -106,7 +142,7 @@ export function PanoramicaClient({
                     >
                         <RefreshCw className="w-3.5 h-3.5" /> Aggiorna
                     </button>
-                    {!readOnly && (
+                    {!readOnly && !isPastMonth && (
                         <button
                             onClick={() => setModalOpen(true)}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white bg-brand-orange hover:brightness-110 transition-all"
@@ -196,7 +232,7 @@ export function PanoramicaClient({
             </div>
 
             {/* Monthly metrics rollup */}
-            <MetricsSection data={metricsData} onRefresh={refresh} readOnly={readOnly} />
+            <MetricsSection data={metricsData} onRefresh={refresh} readOnly={readOnly || isPastMonth} isPastMonth={isPastMonth} />
 
             {modalOpen && (
                 <TargetModal
@@ -655,7 +691,7 @@ function fmtNum(n: number, maxDecimals = 0): string {
     return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: maxDecimals });
 }
 
-function MetricsSection({ data, onRefresh, readOnly = false }: { data: MetricsOverviewResult; onRefresh: () => void; readOnly?: boolean }) {
+function MetricsSection({ data, onRefresh, readOnly = false, isPastMonth = false }: { data: MetricsOverviewResult; onRefresh: () => void; readOnly?: boolean; isPastMonth?: boolean }) {
     const [modalOpen, setModalOpen] = useState(false);
 
     if (!data.success) {
@@ -724,8 +760,8 @@ function MetricsSection({ data, onRefresh, readOnly = false }: { data: MetricsOv
                                 <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100">
                                     {row.isCurrency ? fmtEur(row.targetPerDay) : fmtNum(row.targetPerDay, 2)}
                                 </td>
-                                <td className={`px-4 py-3 text-right tabular-nums border-l border-ash-100 font-semibold ${row.today > 0 ? 'text-emerald-600' : 'text-ash-400'}`}>
-                                    {row.isCurrency ? fmtEur(row.today) : fmtInt(row.today)}
+                                <td className={`px-4 py-3 text-right tabular-nums border-l border-ash-100 font-semibold ${!isPastMonth && row.today > 0 ? 'text-emerald-600' : 'text-ash-400'}`}>
+                                    {isPastMonth ? '—' : (row.isCurrency ? fmtEur(row.today) : fmtInt(row.today))}
                                 </td>
                             </tr>
                         ))}
