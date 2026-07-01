@@ -40,14 +40,14 @@ test('followUpFunnel: 2 lead entrati (A,B), 1 chiuso (A)', () => {
     assert.equal(f.conversionPct, 50);
 });
 
-test('closingStats: 1 chiuso, 2 nonChiusi, 1 perso, fatturato 2000', () => {
+test('closingStats: A→Chiuso, B→Non chiuso (aperto), C→Perso (conteggio per esito più recente)', () => {
     const s = closingStats(attempts, start, end);
     assert.equal(s.chiusi, 1);
-    assert.equal(s.nonChiusi, 2);
+    assert.equal(s.nonChiusi, 1);
     assert.equal(s.perso, 1);
     assert.equal(s.sparito, 0);
-    assert.equal(s.totalEsitati, 4);
-    assert.equal(s.closingPct, 25);
+    assert.equal(s.totalEsitati, 3);
+    assert.equal(s.closingPct, 33);
     assert.equal(s.fatturato, 2000);
     assert.equal(s.topProduct, 'gold');
 });
@@ -62,7 +62,7 @@ test('monthlyTrend produce una riga per mese richiesto', () => {
     const t = monthlyTrend(attempts, ['2026-06']);
     assert.equal(t.length, 1);
     assert.equal(t[0].yearMonth, '2026-06');
-    assert.equal(t[0].closingPct, 25);
+    assert.equal(t[0].closingPct, 33);
 });
 
 test('reasonDistribution vuoto → array vuoto, topReason null', () => {

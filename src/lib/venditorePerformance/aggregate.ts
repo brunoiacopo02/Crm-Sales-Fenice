@@ -43,22 +43,19 @@ export function followUpFunnel(attempts: AttemptInput[], start: Date, end: Date)
 }
 
 export function closingStats(attempts: AttemptInput[], start: Date, end: Date) {
-    const inWindow = attempts.filter(a => inRange(a, start, end));
-    // Dedupe per (leadId, outcome): un lead può generare più attempt con lo stesso
-    // esito intermedio (es. due "Non chiuso" prima del "Chiuso" finale); vogliamo
-    // contare gli stati distinti raggiunti dal lead nel periodo, non ogni riga.
-    const seen = new Set<string>();
-    const scoped: AttemptInput[] = [];
-    for (const a of inWindow) {
-        const key = `${a.leadId}|${a.outcome}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        scoped.push(a);
+    // Un lead conta UNA volta, per il suo esito più recente (coerente con getVenditoriKpi).
+    const latestByLead = new Map<string, AttemptInput>();
+    for (const a of attempts) {
+        const cur = latestByLead.get(a.leadId);
+        if (!cur || a.outcomeAt > cur.outcomeAt || (a.outcomeAt.getTime() === cur.outcomeAt.getTime() && a.attemptNumber > cur.attemptNumber)) {
+            latestByLead.set(a.leadId, a);
+        }
     }
-    const chiusi = scoped.filter(a => a.outcome === 'Chiuso');
-    const nonChiusi = scoped.filter(a => a.outcome === 'Non chiuso').length;
-    const perso = scoped.filter(a => a.outcome === 'Perso').length;
-    const sparito = scoped.filter(a => a.outcome === 'Sparito').length;
+    const finals = [...latestByLead.values()].filter(a => inRange(a, start, end));
+    const chiusi = finals.filter(a => a.outcome === 'Chiuso');
+    const nonChiusi = finals.filter(a => a.outcome === 'Non chiuso').length;
+    const perso = finals.filter(a => a.outcome === 'Perso').length;
+    const sparito = finals.filter(a => a.outcome === 'Sparito').length;
     const totalEsitati = chiusi.length + nonChiusi + perso + sparito;
     const fatturato = chiusi.reduce((s, a) => s + (a.closeAmountEur ?? 0), 0);
     const prodCounts = new Map<string, number>();
