@@ -6,7 +6,8 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --import tsx --test src/lib/venditorePerformance/aggregate.test.ts src/lib/venditorePerformance/guard.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
