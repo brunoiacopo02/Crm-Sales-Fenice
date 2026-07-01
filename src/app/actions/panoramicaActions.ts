@@ -500,7 +500,9 @@ export async function getMetricsOverview(yearMonth?: string): Promise<MetricsOve
 async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promise<MetricsOverviewResult> {
     try {
         // 1) Re-use funnel overview to get APP/Conf/Trat/Close totals (per stage).
-        const funnelOverview = await funnelOverviewForCompany(ctx, ym);
+        //    Su mesi passati non persistere lo stato allarme (read-only).
+        const persistAlerts = ym === currentYearMonthRome();
+        const funnelOverview = await funnelOverviewForCompany(ctx, ym, persistAlerts);
         if (!funnelOverview.success) {
             return { success: false, error: funnelOverview.error };
         }
@@ -913,20 +915,21 @@ export async function getFunnelOverview(yearMonth?: string): Promise<FunnelOverv
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
 
         const ym = yearMonth || currentYearMonthRome();
+        const persistAlerts = ym === currentYearMonthRome();
         if (ctx.isAllCompanies) {
             const parts = await Promise.all(
-                ctx.allowedCompanies.map((c) => funnelOverviewForCompany(singleCompanyCtx(ctx, c), ym)),
+                ctx.allowedCompanies.map((c) => funnelOverviewForCompany(singleCompanyCtx(ctx, c), ym, persistAlerts)),
             );
             return mergeFunnelOverviews(parts, ym);
         }
-        return await funnelOverviewForCompany(ctx, ym);
+        return await funnelOverviewForCompany(ctx, ym, persistAlerts);
     } catch (error: any) {
         console.error('Errore getFunnelOverview:', error);
         return { success: false, error: error?.message || String(error) };
     }
 }
 
-async function funnelOverviewForCompany(ctx: TenantContext, ym: string): Promise<FunnelOverviewResult> {
+async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistAlertState = true): Promise<FunnelOverviewResult> {
     try {
         // 1) Load baseline rows for the month
         const baselines = await db.select().from(monthlyFunnelBaselines)
@@ -987,13 +990,20 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string): Promise
             const fatturatoEur = crm.fatturato + (baseline?.fatturatoEur ?? 0);
             const spesaEur = baseline?.spesaEur ?? 0;
 
-            // Resolve alert state (side-effect: may update DB)
+            // Resolve alert state. Su mesi passati (persistAlertState=false) NON si
+            // scrive sul DB: si mostrano i valori memorizzati così com'erano, altrimenti
+            // consultare uno storico ne sovrascriverebbe lo stato macchina in base a oggi.
             let dataPrimoSottoSoglia: string | null = null;
             let statoSegnalazione: FunnelStato = 'OK';
             if (baseline) {
-                const resolved = await resolveAlertState(baseline, closeCount, ctx.companyId);
-                dataPrimoSottoSoglia = resolved.dataPrimoSottoSoglia ? resolved.dataPrimoSottoSoglia.toISOString() : null;
-                statoSegnalazione = resolved.statoSegnalazione;
+                if (persistAlertState) {
+                    const resolved = await resolveAlertState(baseline, closeCount, ctx.companyId);
+                    dataPrimoSottoSoglia = resolved.dataPrimoSottoSoglia ? resolved.dataPrimoSottoSoglia.toISOString() : null;
+                    statoSegnalazione = resolved.statoSegnalazione;
+                } else {
+                    dataPrimoSottoSoglia = baseline.dataPrimoSottoSoglia ? baseline.dataPrimoSottoSoglia.toISOString() : null;
+                    statoSegnalazione = baseline.statoSegnalazione as FunnelStato;
+                }
             }
 
             rows.push({
