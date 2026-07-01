@@ -167,6 +167,11 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         if (!check.ok) return { success: false, error: check.error };
     }
 
+    // GUARDIA 4: motivo obbligatorio su esiti non-chiusura (Non chiuso / Perso).
+    if (!isStaff && (payload.outcome === 'Non chiuso' || payload.outcome === 'Perso') && !payload.notClosedReason) {
+        return { success: false, error: 'Seleziona una motivazione per un esito Non chiuso o Perso.' };
+    }
+
     const updated = await db.update(leads)
         .set({
             salespersonOutcome: payload.outcome,
