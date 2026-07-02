@@ -69,7 +69,9 @@ export async function getVenditorePerformance(input: { salesUserId: string; year
     const lastByLead = new Map<string, AttemptInput>()
     for (const a of attempts) {
         const cur = lastByLead.get(a.leadId)
-        if (!cur || a.outcomeAt >= cur.outcomeAt) lastByLead.set(a.leadId, a)
+        if (!cur || a.outcomeAt > cur.outcomeAt || (a.outcomeAt.getTime() === cur.outcomeAt.getTime() && a.attemptNumber > cur.attemptNumber)) {
+            lastByLead.set(a.leadId, a)
+        }
     }
     let overdueFollowUps = 0
     for (const a of lastByLead.values()) {
