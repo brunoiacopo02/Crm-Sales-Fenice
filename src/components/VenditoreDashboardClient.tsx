@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useTransition } from "react"
 import { getVenditoreAppointments, getVenditoreFollowUps, saveVenditoreOutcome, startNegotiation, getLeadBriefing } from "@/app/actions/venditoreActions"
-import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell } from "lucide-react"
+import { getVenditorePerformance } from "@/app/actions/venditorePerformanceActions"
+import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3 } from "lucide-react"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import type { LeadBriefing } from "@/lib/briefing/normalize"
 import { LeadBriefingCard } from "@/components/venditore/LeadBriefingCard"
+import { VenditorePerformanceView } from "@/components/venditore-performance/VenditorePerformanceView"
+import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 
 const VenditoreDrawer = dynamic(
   () => import("@/components/VenditoreDrawer").then(mod => mod.VenditoreDrawer),
@@ -20,11 +23,13 @@ import { createClient } from "@/utils/supabase/client"
 
 export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const supabase = createClient()
-    const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA'>('LISTA')
+    const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA' | 'PERFORMANCE'>('LISTA')
     const [appointments, setAppointments] = useState<any[]>([])
     const [followUps, setFollowUps] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
+    const [perfMonth, setPerfMonth] = useState<string>(() => currentYearMonthRome())
+    const [perfData, setPerfData] = useState<any>(null)
 
     // Filters
     const [search, setSearch] = useState("")
@@ -153,6 +158,15 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         return () => { alive = false }
     }, [view, sellerId])
 
+    // Carica i dati di performance quando si apre la tab o si cambia mese.
+    useEffect(() => {
+        if (view !== 'PERFORMANCE') return
+        let alive = true
+        setPerfData(null)
+        getVenditorePerformance({ salesUserId: sellerId, yearMonth: perfMonth }).then(d => { if (alive) setPerfData(d) })
+        return () => { alive = false }
+    }, [view, sellerId, perfMonth])
+
     const overdueCount = followUps.filter(f => f.bucket === 'overdue').length
 
     const filteredAppointments = appointments.filter(app => {
@@ -214,6 +228,13 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                     >
                         <Trophy className="h-4 w-4" />
                         Team Classifica
+                    </button>
+                    <button
+                        onClick={() => setView('PERFORMANCE')}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${view === 'PERFORMANCE' ? 'bg-white shadow-soft text-brand-charcoal' : 'text-ash-500 hover:text-ash-700'}`}
+                    >
+                        <BarChart3 className="h-4 w-4" />
+                        Performance
                     </button>
                 </div>
 
@@ -458,6 +479,23 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                             {filteredAppointments.length === 0 && (
                                 <div className="text-center text-ash-400 py-12">Nessun appuntamento in agenda.</div>
                             )}
+                        </div>
+                    </div>
+                ) : view === 'PERFORMANCE' ? (
+                    <div className="p-2 sm:p-6 bg-gradient-to-b from-ash-50/50 to-white">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm font-medium text-ash-600">Mese:</label>
+                                <select value={perfMonth} onChange={e => setPerfMonth(e.target.value)} className="bg-ash-50/50 border border-ash-200/60 text-ash-700 text-sm rounded-lg focus:ring-brand-orange/30 focus:border-brand-orange p-2.5">
+                                    {Array.from({ length: 12 }).map((_, i) => {
+                                        const now = new Date()
+                                        const dt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+                                        const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`
+                                        return <option key={ym} value={ym}>{ym}</option>
+                                    })}
+                                </select>
+                            </div>
+                            {perfData ? <VenditorePerformanceView data={perfData} /> : <div className="text-center text-ash-400 py-12">Caricamento…</div>}
                         </div>
                     </div>
                 ) : (
