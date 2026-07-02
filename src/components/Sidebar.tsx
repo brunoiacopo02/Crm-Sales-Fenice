@@ -88,6 +88,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             ...(isConfermeTl(session?.user?.email) ? [
                 { name: "Panoramica TL", href: "/conferme/panoramica-tl", icon: Compass },
                 { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
+                { name: "Performance Venditori", href: "/performance-venditori", icon: Trophy },
                 { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
             ] : []),
             { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
@@ -124,6 +125,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                     label: "Admin",
                     items: [
                         { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
+                        { name: "Performance Venditori", href: "/performance-venditori", icon: Trophy },
                     ],
                 }] : []),
                 {
