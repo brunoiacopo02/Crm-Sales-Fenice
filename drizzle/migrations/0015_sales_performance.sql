@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS "salesWeeklyFocus" (
 CREATE INDEX IF NOT EXISTS "sales_attempts_lead_idx" ON "salesAttempts" ("leadId");
 CREATE INDEX IF NOT EXISTS "sales_attempts_user_date_idx" ON "salesAttempts" ("salesUserId", "outcomeAt");
 CREATE INDEX IF NOT EXISTS "sales_attempts_company_date_idx" ON "salesAttempts" ("companyId", "outcomeAt");
-CREATE UNIQUE INDEX IF NOT EXISTS "sales_weekly_focus_user_week_uq" ON "salesWeeklyFocus" ("salesUserId", "weekStart");
+CREATE UNIQUE INDEX IF NOT EXISTS "sales_weekly_focus_user_week_uq" ON "salesWeeklyFocus" ("companyId", "salesUserId", "weekStart");
 
 -- Fix schema drift: le tabelle sono già state applicate in produzione (0 righe,
 -- create senza la FK inline sopra riportata). Le CREATE TABLE IF NOT EXISTS sopra

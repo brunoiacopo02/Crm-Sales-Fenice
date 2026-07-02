@@ -903,7 +903,7 @@ export const salesWeeklyFocus = pgTable('salesWeeklyFocus', {
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
 }, (table) => {
     return {
-        weekUnique: uniqueIndex('sales_weekly_focus_user_week_uq').on(table.salesUserId, table.weekStart),
+        weekUnique: uniqueIndex('sales_weekly_focus_user_week_uq').on(table.companyId, table.salesUserId, table.weekStart),
     };
 });
 
