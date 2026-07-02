@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation"
 import type { LeadBriefing } from "@/lib/briefing/normalize"
 import { LeadBriefingCard } from "@/components/venditore/LeadBriefingCard"
 import { VenditorePerformanceView } from "@/components/venditore-performance/VenditorePerformanceView"
+import { WeeklyFocusBanner } from "@/components/venditore-performance/WeeklyFocusBanner"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 
 const VenditoreDrawer = dynamic(
@@ -193,6 +194,8 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     return (
         <div className="space-y-6 animate-fade-in">
+            <WeeklyFocusBanner salesUserId={sellerId} />
+
             {/* Toolbar */}
             <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-soft border border-ash-200/60 flex flex-col md:flex-row gap-4 items-center justify-between">
 

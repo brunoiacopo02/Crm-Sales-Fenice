@@ -157,3 +157,31 @@ export function parseYearMonth(yearMonth: string): { year: number; month: number
     const [y, m] = yearMonth.split('-').map(Number);
     return { year: y, month: m };
 }
+
+/**
+ * 'YYYY-MM-DD' del lunedì della settimana corrente in Europe/Rome.
+ *
+ * NOTA: non importa `weekBoundsRome` da `@/lib/dateUtils` di proposito —
+ * `dateUtils.ts` importa già `parseYearMonth` da questo file, quindi un
+ * import inverso creerebbe un ciclo. La logica di calendario Rome è
+ * reimplementata qui con lo stesso pattern (Intl formatToParts) usato dalle
+ * altre funzioni di questo file.
+ */
+export function currentWeekStartRome(d: Date = new Date()): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'
+    }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {} as Record<string, string>);
+    const y = parseInt(parts.year, 10);
+    const m = parseInt(parts.month, 10);
+    const day = parseInt(parts.day, 10);
+    const weekdayIndex: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+    const dow = weekdayIndex[parts.weekday] ?? 0;
+
+    // Cursore in UTC che rappresenta la data-calendario Rome (stesso trucco
+    // usato in workingDaysBetween) — sottrarre `dow` giorni porta al lunedì.
+    const cursor = new Date(Date.UTC(y, m - 1, day));
+    cursor.setUTCDate(cursor.getUTCDate() - dow);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${cursor.getUTCFullYear()}-${pad(cursor.getUTCMonth() + 1)}-${pad(cursor.getUTCDate())}`;
+}
