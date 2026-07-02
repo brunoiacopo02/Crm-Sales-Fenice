@@ -42,6 +42,12 @@ export function followUpFunnel(attempts: AttemptInput[], start: Date, end: Date)
     return { enteredFollowUp: enteredLeads.size, closed, conversionPct: roundPct(closed, enteredLeads.size) };
 }
 
+// NOTA: il lead è bucketizzato sul suo esito GLOBALMENTE più recente (non sul primo
+// esito dentro [start,end)). Questo è intenzionale (point-in-time, lead-level, coerente
+// con getVenditoriKpi) ma implica che i numeri di chiusura/trend di un mese passato
+// possano cambiare retroattivamente quando arrivano nuovi tentativi: es. un "Non chiuso"
+// di giugno che si chiude ad agosto sposta quel lead fuori dai finals di giugno la
+// prossima volta che closingStats/monthlyTrend vengono ricalcolati.
 export function closingStats(attempts: AttemptInput[], start: Date, end: Date) {
     // Un lead conta UNA volta, per il suo esito più recente (coerente con getVenditoriKpi).
     const latestByLead = new Map<string, AttemptInput>();

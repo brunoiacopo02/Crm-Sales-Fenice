@@ -3,9 +3,9 @@
 import { createClient } from "@/utils/supabase/server"
 import { db } from "@/db"
 import { salesWeeklyFocus, users } from "@/db/schema"
-import { and, eq } from "drizzle-orm"
+import { and, eq, or, sql } from "drizzle-orm"
 import crypto from "crypto"
-import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
+import { currentTenant, assertSalesArea, assertSingleCompany } from "@/lib/tenancy"
 import { currentWeekStartRome } from "@/lib/workingDaysUtils"
 
 export async function getSalesWeeklyFocus(salesUserId: string, weekStart?: string) {
@@ -32,6 +32,7 @@ export async function setSalesWeeklyFocus(input: { salesUserId: string; weekStar
 
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    assertSingleCompany(ctx)
 
     const existing = (await db.select({ id: salesWeeklyFocus.id }).from(salesWeeklyFocus).where(and(
         eq(salesWeeklyFocus.companyId, ctx.companyId),
@@ -43,7 +44,6 @@ export async function setSalesWeeklyFocus(input: { salesUserId: string; weekStar
         await db.update(salesWeeklyFocus).set({
             objection: input.objection || null,
             taskNote: input.taskNote || '',
-            createdBy: user.id,
             updatedAt: new Date(),
         }).where(eq(salesWeeklyFocus.id, existing.id))
     } else {
@@ -64,6 +64,13 @@ export async function listVenditori() {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
     const rows = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
-        .from(users).where(and(eq(users.role, 'VENDITORE'), companyScope(ctx, users.companyId)))
+        .from(users).where(and(
+            or(
+                sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+                and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            ),
+            eq(users.role, 'VENDITORE'),
+            eq(users.isActive, true),
+        ))
     return rows.map(r => ({ id: r.id, name: r.displayName || r.name || '' })).sort((a, b) => a.name.localeCompare(b.name, 'it'))
 }

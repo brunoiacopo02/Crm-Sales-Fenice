@@ -12,11 +12,22 @@ import { dayBoundsRome } from "@/lib/dateUtils"
 import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
 import { validateOutcomeTransition } from "@/lib/venditorePerformance/guard"
+import { isConfermeTl } from "@/lib/confermeTl"
 // Gamification disabled for VENDITORE role — import removed
+
+async function resolveIsStaff() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const role = user?.user_metadata?.role
+    const email = user?.user_metadata?.email ?? user?.email
+    return role === 'MANAGER' || role === 'ADMIN' || (role === 'CONFERME' && isConfermeTl(email))
+}
 
 export async function getVenditoreAppointments(sellerId: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    const isStaff = await resolveIsStaff()
+    if (!isStaff && sellerId !== ctx.userId) throw new Error('Forbidden')
     // Ritorna i lead assegnati a questo venditore che hanno un appuntamento
     const assignedLeads = await db
         .select({
@@ -99,6 +110,8 @@ export async function getVenditoreAppointments(sellerId: string) {
 export async function getVenditoreFollowUps(sellerId: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    const isStaff = await resolveIsStaff()
+    if (!isStaff && sellerId !== ctx.userId) throw new Error('Forbidden')
 
     const rows = await db.select({
         id: leads.id,
@@ -133,15 +146,18 @@ export async function getVenditoreFollowUps(sellerId: string) {
         ))
 
     // attempt aggregati per attemptCount/priorNonClosedCount/nextFollowUpDate
-    const attemptRows = await db.select({
-        leadId: salesAttempts.leadId,
-        outcome: salesAttempts.outcome,
-        nextFollowUpDate: salesAttempts.nextFollowUpDate,
-        createdAt: salesAttempts.createdAt,
-    }).from(salesAttempts).where(and(
-        eq(salesAttempts.companyId, ctx.companyId),
-        eq(salesAttempts.salesUserId, sellerId),
-    ))
+    const leadIds = rows.map(r => r.id)
+    const attemptRows = leadIds.length
+        ? await db.select({
+            leadId: salesAttempts.leadId,
+            outcome: salesAttempts.outcome,
+            nextFollowUpDate: salesAttempts.nextFollowUpDate,
+            createdAt: salesAttempts.createdAt,
+        }).from(salesAttempts).where(and(
+            eq(salesAttempts.companyId, ctx.companyId),
+            eq(salesAttempts.salesUserId, sellerId),
+        ))
+        : []
 
     const agg = new Map<string, { attemptCount: number; priorNonClosedCount: number; nextFollowUpDate: Date | null; lastAt: number }>()
     for (const r of attemptRows) {
@@ -256,44 +272,66 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         return { success: false, error: 'Seleziona una motivazione per un esito Non chiuso o Perso.' };
     }
 
-    const updated = await db.update(leads)
-        .set({
-            salespersonOutcome: payload.outcome,
-            salespersonOutcomeNotes: payload.notes || null,
+    // Scrittura atomica: update leads + insert salesAttempts + insert leadEvents.
+    // Se l'update version-guarded non trova righe (conflitto concorrente), non
+    // inseriamo lo storico: la transazione va in rollback ed emerge CONCURRENCY_ERROR.
+    const effectiveOutcomeAt = payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date();
+    const txResult = await db.transaction(async (tx) => {
+        const updated = await tx.update(leads)
+            .set({
+                salespersonOutcome: payload.outcome,
+                salespersonOutcomeNotes: payload.notes || null,
+                closeProduct: payload.closeProduct || null,
+                closeAmountEur: payload.closeAmountEur || null,
+                notClosedReason: payload.notClosedReason || null,
+                followUp1Date: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
+                followUp2Date: null,
+                salespersonOutcomeAt: effectiveOutcomeAt,
+                version: oldLead.version + 1,
+            })
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.id, leadId),
+                eq(leads.version, oldLead.version),
+            ))
+            .returning({ id: leads.id })
+
+        if (updated.length === 0) {
+            return { success: false as const, error: 'CONCURRENCY_ERROR' as const }
+        }
+
+        // Storia: registra questo tentativo/esito.
+        await tx.insert(salesAttempts).values({
+            id: crypto.randomUUID(),
+            leadId,
+            salesUserId: oldLead.salespersonUserId ?? session.user.id,
+            attemptNumber,
+            outcome: payload.outcome,
+            notClosedReason: payload.notClosedReason || null,
+            nextFollowUpDate: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
             closeProduct: payload.closeProduct || null,
             closeAmountEur: payload.closeAmountEur || null,
-            notClosedReason: payload.notClosedReason || null,
-            followUp1Date: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
-            followUp2Date: null,
-            salespersonOutcomeAt: payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date(),
-            version: oldLead.version + 1,
+            outcomeAt: effectiveOutcomeAt,
+            companyId: ctx.companyId,
+        });
+
+        // 1. Audit Log per la cronologia completa (Timeline)
+        await tx.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: "salesperson_outcome_set",
+            userId: session.user.id,
+            timestamp: new Date(),
+            metadata: { ...payload, attemptNumber },
+            companyId: ctx.companyId,
         })
-        .where(and(
-            eq(leads.companyId, ctx.companyId),
-            eq(leads.id, leadId),
-            eq(leads.version, oldLead.version),
-        ))
-        .returning({ id: leads.id })
 
-    if (updated.length === 0) {
-        return { success: false, error: 'CONCURRENCY_ERROR' }
+        return { success: true as const }
+    })
+
+    if (!txResult.success) {
+        return { success: false, error: txResult.error }
     }
-
-    // Storia: registra questo tentativo/esito.
-    const effectiveOutcomeAt = payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date();
-    await db.insert(salesAttempts).values({
-        id: crypto.randomUUID(),
-        leadId,
-        salesUserId: oldLead.salespersonUserId ?? session.user.id,
-        attemptNumber,
-        outcome: payload.outcome,
-        notClosedReason: payload.notClosedReason || null,
-        nextFollowUpDate: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
-        closeProduct: payload.closeProduct || null,
-        closeAmountEur: payload.closeAmountEur || null,
-        outcomeAt: effectiveOutcomeAt,
-        companyId: ctx.companyId,
-    });
 
     // Marketing webhook: deal closed (won/lost based on outcome)
     const closedEventType = payload.outcome === 'Chiuso' ? 'deal.closed_won' : 'deal.closed_lost';
@@ -305,17 +343,6 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
 
     // Gamification disabled for VENDITORE role
     const rewardData: any = null;
-
-    // 1. Audit Log per la cronologia completa (Timeline)
-    await db.insert(leadEvents).values({
-        id: crypto.randomUUID(),
-        leadId,
-        eventType: "salesperson_outcome_set",
-        userId: session.user.id,
-        timestamp: new Date(),
-        metadata: { ...payload, attemptNumber },
-        companyId: ctx.companyId,
-    })
 
     // 2. Propagazione Notifiche Live a GDO e Conferme
     const isClosed = payload.outcome === "Chiuso"

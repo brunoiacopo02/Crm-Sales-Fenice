@@ -5,6 +5,8 @@ import { salesAttempts } from "@/db/schema"
 import { and, eq } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { monthBoundsRome } from "@/lib/dateUtils"
+import { createClient } from "@/utils/supabase/server"
+import { isConfermeTl } from "@/lib/confermeTl"
 import {
     reasonDistribution, topReason, followUpFunnel, closingStats,
     attemptsToClose, monthlyTrend, type AttemptInput,
@@ -35,6 +37,13 @@ export interface VenditorePerformanceData {
 export async function getVenditorePerformance(input: { salesUserId: string; yearMonth: string }): Promise<VenditorePerformanceData> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const role = user?.user_metadata?.role
+    const email = user?.user_metadata?.email ?? user?.email
+    const isStaff = role === 'MANAGER' || role === 'ADMIN' || (role === 'CONFERME' && isConfermeTl(email))
+    if (!isStaff && input.salesUserId !== ctx.userId) throw new Error('Forbidden')
 
     const rows = await db.select({
         leadId: salesAttempts.leadId,
