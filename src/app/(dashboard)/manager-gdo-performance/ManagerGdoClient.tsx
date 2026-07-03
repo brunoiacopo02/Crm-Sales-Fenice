@@ -134,14 +134,26 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                             <h3 className="text-xl font-bold tracking-tight">{gdoData.gdoName}</h3>
                             <div className="ml-auto flex items-center gap-4 text-sm">
                                 <div className="flex items-center gap-1.5">
-                                    <div className="text-ash-400">Lead Assegn.</div>
+                                    <div className="text-ash-400">{gdoData.isBot ? 'Ricevuti' : 'Lead Assegn.'}</div>
                                     <div className="font-bold text-white">{gdoData.leadAssegnati ?? 0}</div>
                                 </div>
+                                {gdoData.isBot && gdoData.botStats && (
+                                    <>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="text-ash-400">Ridati GDO</div>
+                                            <div className="font-bold text-amber-400">{gdoData.botStats.ridati}</div>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="text-ash-400">Fissati</div>
+                                            <div className="font-bold text-emerald-400">{gdoData.botStats.fissati}</div>
+                                        </div>
+                                    </>
+                                )}
                                 <div className="flex items-center gap-1.5">
-                                    <div className="text-ash-400">% Fissaggio</div>
+                                    <div className="text-ash-400">{gdoData.isBot ? '% Fiss. su ricevuti' : '% Fissaggio'}</div>
                                     <div className="font-bold text-brand-orange">{gdoData.percFissaggio ?? '-'}</div>
                                 </div>
-                                {(() => {
+                                {!gdoData.isBot && (() => {
                                     const rate = gdoData.gdoId ? scriptRates[gdoData.gdoId] : undefined;
                                     const pct = rate?.completionRate ?? 0;
                                     const colorClass = pct >= 70 ? 'text-emerald-400' : pct >= 40 ? 'text-amber-400' : 'text-red-400';
@@ -155,6 +167,26 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                                 })()}
                             </div>
                         </div>
+
+                        {/* Strip Bot Fissatore: dettaglio ridistribuzione + conversioni separate */}
+                        {gdoData.isBot && gdoData.botStats && (
+                            <div className="bg-brand-charcoal/95 text-white px-4 py-2.5 border-b border-ash-700 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="text-ash-400">Tenuti dal bot</div>
+                                    <div className="font-bold text-white">{gdoData.botStats.tenuti}</div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="text-ash-400">% Fiss. sui tenuti</div>
+                                    <div className="font-bold text-emerald-400">{gdoData.botStats.percTenuti}</div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="text-ash-400">Ridati poi fissati dai GDO</div>
+                                    <div className="font-bold text-amber-400">
+                                        {gdoData.botStats.fissatiRidatiGdo} <span className="text-ash-400 font-normal">({gdoData.botStats.percRidatiFissati} dei ridati)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="p-0 lg:p-6 grid grid-cols-1 xl:grid-cols-2 gap-8">
 
