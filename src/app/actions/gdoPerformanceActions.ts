@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from "@/db";
-import { leads, users, weeklyGamificationRules, callLogs, manualAdjustments, leadEvents } from "@/db/schema";
-import { eq, and, gte, lte, lt, isNotNull, sql, or, inArray } from "drizzle-orm";
+import { leads, users, weeklyGamificationRules, callLogs, manualAdjustments } from "@/db/schema";
+import { eq, and, gte, lte, lt, isNotNull, sql, or } from "drizzle-orm";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
@@ -92,146 +92,6 @@ function getMonthWeeks(monthStr: string) {
     return weeks;
 }
 
-export interface BotThroughput {
-    ricevuti: number;        // lead entrati in carico al bot nel mese
-    ridati: number;          // di quelli, restituiti ai GDO umani (mai risposto / chat interrotta)
-    tenuti: number;          // ricevuti - ridati (mai ridistribuiti)
-    fissati: number;         // fissati dal bot (event-based: call log APPUNTAMENTO del bot)
-    fissatiTenuti: number;   // fissati dal bot su lead mai ridati (numeratore % sui tenuti)
-    fissatiRidatiGdo: number; // ridati poi fissati da un GDO umano dopo la riassegnazione
-    confermati: number;      // fissati dal bot poi confermati dalle Conferme
-    presenziati: number;     // fissati dal bot poi presenziati (esito venditore)
-    chiusi: number;          // fissati dal bot poi chiusi dal venditore
-}
-
-/**
- * Throughput reale del Bot Fissatore per il mese, calcolato sugli eventi
- * (non sulla formula umana "lead assegnati / fissaggi"). Il bot riceve lead via
- * round-robin, ne fissa una parte e RIDÀ ai GDO umani quelli mai risposti / chat
- * interrotte (assignedToId cambia → spariscono dalla sua riga). Senza questa
- * logica la riga del bot mostra solo i lead ancora in carico, falsando i numeri.
- *
- * Coorte = lead il cui PRIMO contatto col bot cade nel mese, dove "contatto" è
- * il primo tra: push riuscito (BOT_PUSHED result=sent), riassegnazione dal bot,
- * call log del bot. L'unione copre anche backfill di lead vecchi e lead arrivati
- * al bot senza audit di push (esiste in prod). I fissati si contano dai call log
- * (un fissato resta fissato anche se il lead viene poi scartato/riassegnato:
- * contare lo stato attuale del lead li faceva sparire).
- */
-async function getBotMonthThroughput(companyId: string, botUserId: string, startObj: Date, endObj: Date): Promise<BotThroughput> {
-    const [pushRows, reassignRows, botCallRows] = await Promise.all([
-        db.select({ leadId: leadEvents.leadId, first: sql<string>`min(${leadEvents.timestamp})` })
-            .from(leadEvents)
-            .where(and(
-                eq(leadEvents.companyId, companyId),
-                eq(leadEvents.eventType, 'BOT_PUSHED'),
-                sql`${leadEvents.metadata}->>'result' = 'sent'`,
-            ))
-            .groupBy(leadEvents.leadId),
-        db.select({ leadId: leadEvents.leadId, first: sql<string>`min(${leadEvents.timestamp})` })
-            .from(leadEvents)
-            .where(and(
-                eq(leadEvents.companyId, companyId),
-                eq(leadEvents.eventType, 'REASSIGNED_FROM_BOT'),
-            ))
-            .groupBy(leadEvents.leadId),
-        db.select({
-            leadId: callLogs.leadId,
-            first: sql<string>`min(${callLogs.createdAt})`,
-            hasAppt: sql<boolean>`bool_or(${callLogs.outcome} = 'APPUNTAMENTO')`,
-        })
-            .from(callLogs)
-            .where(and(
-                eq(callLogs.companyId, companyId),
-                eq(callLogs.userId, botUserId),
-            ))
-            .groupBy(callLogs.leadId),
-    ]);
-
-    // Primo contatto col bot per lead (ms epoch), su tutte e tre le sorgenti.
-    const firstTouch = new Map<string, number>();
-    const touch = (leadId: string | null, ts: string | Date) => {
-        if (!leadId) return;
-        const ms = new Date(ts).getTime();
-        const prev = firstTouch.get(leadId);
-        if (prev === undefined || ms < prev) firstTouch.set(leadId, ms);
-    };
-    pushRows.forEach(r => touch(r.leadId, r.first));
-    reassignRows.forEach(r => touch(r.leadId, r.first));
-    botCallRows.forEach(r => touch(r.leadId, r.first));
-
-    const startMs = startObj.getTime();
-    const endMs = endObj.getTime();
-    const cohort = new Set<string>();
-    for (const [leadId, ms] of firstTouch) {
-        if (ms >= startMs && ms <= endMs) cohort.add(leadId);
-    }
-
-    const reassignFirst = new Map<string, number>();
-    for (const r of reassignRows) {
-        if (r.leadId && cohort.has(r.leadId)) reassignFirst.set(r.leadId, new Date(r.first).getTime());
-    }
-    const fissatiSet = new Set(botCallRows.filter(r => r.leadId && r.hasAppt && cohort.has(r.leadId)).map(r => r.leadId!));
-
-    // Ridati poi fissati da un GDO umano: call log APPUNTAMENTO di un altro utente
-    // successivo alla riassegnazione (il fissaggio umano pre-bot non conta).
-    let fissatiRidatiGdo = 0;
-    const ridatiIds = [...reassignFirst.keys()];
-    if (ridatiIds.length > 0) {
-        const humanFixRows = await db.select({
-            leadId: callLogs.leadId,
-            userId: callLogs.userId,
-            at: callLogs.createdAt,
-        }).from(callLogs).where(and(
-            eq(callLogs.companyId, companyId),
-            eq(callLogs.outcome, 'APPUNTAMENTO'),
-            inArray(callLogs.leadId, ridatiIds),
-        ));
-        const fixedAfterReassign = new Set<string>();
-        for (const r of humanFixRows) {
-            if (!r.leadId || r.userId === botUserId) continue;
-            const reassignedAt = reassignFirst.get(r.leadId);
-            if (reassignedAt !== undefined && r.at && r.at.getTime() >= reassignedAt) {
-                fixedAfterReassign.add(r.leadId);
-            }
-        }
-        fissatiRidatiGdo = fixedAfterReassign.size;
-    }
-
-    // Esiti a valle dei fissati del bot: conferme, presenze e chiusure.
-    let confermati = 0, presenziati = 0, chiusi = 0;
-    if (fissatiSet.size > 0) {
-        const fissatiLeads = await db.select({
-            confirmationsOutcome: leads.confirmationsOutcome,
-            salespersonOutcome: leads.salespersonOutcome,
-        }).from(leads).where(and(
-            eq(leads.companyId, companyId),
-            inArray(leads.id, [...fissatiSet]),
-        ));
-        for (const l of fissatiLeads) {
-            if (l.confirmationsOutcome === 'confermato') confermati++;
-            if (isPresenziato(l.salespersonOutcome)) presenziati++;
-            if (l.salespersonOutcome?.toLowerCase() === 'chiuso') chiusi++;
-        }
-    }
-
-    const ricevuti = cohort.size;
-    const ridati = reassignFirst.size;
-    const fissatiTenuti = [...fissatiSet].filter(id => !reassignFirst.has(id)).length;
-
-    return {
-        ricevuti,
-        ridati,
-        tenuti: ricevuti - ridati,
-        fissati: fissatiSet.size,
-        fissatiTenuti,
-        fissatiRidatiGdo,
-        confermati,
-        presenziati,
-        chiusi,
-    };
-}
-
 /**
  * FASE 2.1: Logica backend Tabellare e Calendario (Manager)
  */
@@ -240,7 +100,9 @@ export async function getManagerGdoTables(monthString: string) {
     assertSalesArea(ctx);
     // Tutti id e dati base GDO
     const allUsers = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')));
-    const activeGdos = allUsers.filter(u => u.isActive);
+    // Il Bot Fissatore ha una pagina dedicata (/statistiche-fissatore) con metriche
+    // event-based: qui la formula umana lo falserebbe, quindi niente card per lui.
+    const activeGdos = allUsers.filter(u => u.isActive && !u.isBot);
 
     // Tutti gli appuntamenti fissati questo mese (verranno splittati per data di appuntamento,
     // ma la select la facciamo su tutto, o per appointmentDate compreso in questo mese per evitare di prenderli tutti)
@@ -397,33 +259,6 @@ export async function getManagerGdoTables(monthString: string) {
             weekNames: weeks.map(w => w.name)
         };
     });
-
-    // Bot Fissatore: sostituisci i numeri di testata con il throughput reale
-    // (ricevuti / ridati / fissati dagli eventi), perché la formula umana
-    // "lead assegnati" conta solo quelli ancora in carico e ignora i ridati.
-    const botUser = activeGdos.find(u => u.isBot);
-    if (botUser) {
-        const botRow = result.find(r => r.gdoId === botUser.id) as any;
-        if (botRow) {
-            const bt = await getBotMonthThroughput(ctx.companyId, botUser.id, startObj, endObj);
-            const pct = (num: number, den: number) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '-';
-            botRow.isBot = true;
-            botRow.botStats = {
-                ...bt,
-                // % fissaggio su tutto ciò che il bot ha avuto nel mese
-                percRicevuti: pct(bt.fissati, bt.ricevuti),
-                // % fissaggio contando solo i lead che il bot NON ha ridistribuito
-                percTenuti: pct(bt.fissatiTenuti, bt.tenuti),
-                // % dei ridati che i GDO umani hanno poi fissato
-                percRidatiFissati: pct(bt.fissatiRidatiGdo, bt.ridati),
-                // conversioni a valle dei fissati del bot
-                percConfermati: pct(bt.confermati, bt.fissati),
-                percChiusi: pct(bt.chiusi, bt.fissati),
-            };
-            botRow.leadAssegnati = bt.ricevuti;
-            botRow.percFissaggio = pct(bt.fissati, bt.ricevuti);
-        }
-    }
 
     return result.sort((a, b) => b.totalRows.fissati - a.totalRows.fissati); // Sort by total appointments
 }

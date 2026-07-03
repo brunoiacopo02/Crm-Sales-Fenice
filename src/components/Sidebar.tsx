@@ -16,6 +16,7 @@ import {
     ClipboardList,
     Zap,
     Briefcase,
+    Activity,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -169,6 +170,12 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                     items: [
                         { name: "Monitor RPG GDO", href: "/manager-rpg-monitor", icon: Gamepad2 },
                         { name: "Gestione Store", href: "/team/store", icon: Store },
+                    ],
+                },
+                {
+                    label: "Automazioni",
+                    items: [
+                        { name: "Statistiche Fissatore", href: "/statistiche-fissatore", icon: Activity },
                     ],
                 },
             ]
