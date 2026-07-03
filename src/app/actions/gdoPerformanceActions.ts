@@ -99,6 +99,9 @@ export interface BotThroughput {
     fissati: number;         // fissati dal bot (event-based: call log APPUNTAMENTO del bot)
     fissatiTenuti: number;   // fissati dal bot su lead mai ridati (numeratore % sui tenuti)
     fissatiRidatiGdo: number; // ridati poi fissati da un GDO umano dopo la riassegnazione
+    confermati: number;      // fissati dal bot poi confermati dalle Conferme
+    presenziati: number;     // fissati dal bot poi presenziati (esito venditore)
+    chiusi: number;          // fissati dal bot poi chiusi dal venditore
 }
 
 /**
@@ -195,6 +198,23 @@ async function getBotMonthThroughput(companyId: string, botUserId: string, start
         fissatiRidatiGdo = fixedAfterReassign.size;
     }
 
+    // Esiti a valle dei fissati del bot: conferme, presenze e chiusure.
+    let confermati = 0, presenziati = 0, chiusi = 0;
+    if (fissatiSet.size > 0) {
+        const fissatiLeads = await db.select({
+            confirmationsOutcome: leads.confirmationsOutcome,
+            salespersonOutcome: leads.salespersonOutcome,
+        }).from(leads).where(and(
+            eq(leads.companyId, companyId),
+            inArray(leads.id, [...fissatiSet]),
+        ));
+        for (const l of fissatiLeads) {
+            if (l.confirmationsOutcome === 'confermato') confermati++;
+            if (isPresenziato(l.salespersonOutcome)) presenziati++;
+            if (l.salespersonOutcome?.toLowerCase() === 'chiuso') chiusi++;
+        }
+    }
+
     const ricevuti = cohort.size;
     const ridati = reassignFirst.size;
     const fissatiTenuti = [...fissatiSet].filter(id => !reassignFirst.has(id)).length;
@@ -206,6 +226,9 @@ async function getBotMonthThroughput(companyId: string, botUserId: string, start
         fissati: fissatiSet.size,
         fissatiTenuti,
         fissatiRidatiGdo,
+        confermati,
+        presenziati,
+        chiusi,
     };
 }
 
@@ -393,6 +416,9 @@ export async function getManagerGdoTables(monthString: string) {
                 percTenuti: pct(bt.fissatiTenuti, bt.tenuti),
                 // % dei ridati che i GDO umani hanno poi fissato
                 percRidatiFissati: pct(bt.fissatiRidatiGdo, bt.ridati),
+                // conversioni a valle dei fissati del bot
+                percConfermati: pct(bt.confermati, bt.fissati),
+                percChiusi: pct(bt.chiusi, bt.fissati),
             };
             botRow.leadAssegnati = bt.ricevuti;
             botRow.percFissaggio = pct(bt.fissati, bt.ricevuti);

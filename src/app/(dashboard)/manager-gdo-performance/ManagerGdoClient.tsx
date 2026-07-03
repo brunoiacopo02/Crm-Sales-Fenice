@@ -185,6 +185,18 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                                         {gdoData.botStats.fissatiRidatiGdo} <span className="text-ash-400 font-normal">({gdoData.botStats.percRidatiFissati} dei ridati)</span>
                                     </div>
                                 </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="text-ash-400">Confermati</div>
+                                    <div className="font-bold text-sky-400">
+                                        {gdoData.botStats.confermati} <span className="text-ash-400 font-normal">({gdoData.botStats.percConfermati} dei fissati)</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="text-ash-400">Chiusi</div>
+                                    <div className="font-bold text-emerald-400">
+                                        {gdoData.botStats.chiusi} <span className="text-ash-400 font-normal">({gdoData.botStats.percChiusi} dei fissati)</span>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
