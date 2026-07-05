@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getAvailableFunnels, getGdoAggregate, getConfermeAggregate, getSalesAggregate } from "./actions";
 import { listSuspiciousSurveys } from "@/app/actions/surveyActions";
 import { isConfermeTl } from "@/lib/confermeTl";
+import { toRomeDateStr } from "@/lib/dateUtils";
 import QualitaLeadClient from "./QualitaLeadClient";
 
 export default async function QualitaLeadPage() {
@@ -17,16 +18,14 @@ export default async function QualitaLeadPage() {
         redirect("/");
     }
 
-    // Default: last 30 days, no funnel filter, role = all
+    // Default: last 30 days (confini Europe/Rome, non UTC), no funnel filter, role = all
     const today = new Date();
-    const start = new Date(today);
-    start.setDate(start.getDate() - 30);
-    const toISO = (d: Date) => d.toISOString().slice(0, 10);
+    const start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
     const defaultFilters = {
         roleScope: "all" as const,
         funnels: [] as string[],
-        startDate: toISO(start),
-        endDate: toISO(today),
+        startDate: toRomeDateStr(start),
+        endDate: toRomeDateStr(today),
         onlyClosedWon: false,
     };
 
