@@ -1076,7 +1076,7 @@ export const acDailyMetrics = pgTable('ac_daily_metrics', {
     fetchedAt: timestamp('fetched_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (t) => ({
     pk: primaryKey({ columns: [t.companyId, t.funnelId, t.date, t.metric] }),
-    companyFunnelDateIdx: index('ac_daily_metrics_company_funnel_date_idx').on(t.companyId, t.funnelId, t.date),
+    // 2026-07-05: droppato ac_daily_metrics_company_funnel_date_idx (mai usato, Disk IO)
 }));
 
 // Mirror per-contact dei record ActiveCampaign. Popolato da ac-sync cron.
@@ -1136,7 +1136,7 @@ export const adsDailyInsights = pgTable('ads_daily_insights', {
     postUrl: text('post_url'),
 }, (t) => ({
     pk: primaryKey({ columns: [t.companyId, t.adId, t.date] }),
-    companyFunnelDateIdx: index('ads_daily_insights_company_funnel_date_idx').on(t.companyId, t.funnelId, t.date),
+    // 2026-07-05: droppato ads_daily_insights_company_funnel_date_idx (mai usato, Disk IO)
 }));
 
 // Marker "fetched" — conferma che per (company, funnel, date) i dati Meta sono
@@ -1211,9 +1211,7 @@ export const crmEvents = pgTable('crm_events', {
     leadId: text('lead_id'),
     payload: jsonb('payload').notNull(),
 }, (t) => ({
-    companyOccurredIdx: index('crm_events_company_occurred_idx').on(t.companyId, t.occurredAt.desc()),
-    leadIdx: index('crm_events_lead_idx').on(t.leadId),
-    typeIdx: index('crm_events_type_idx').on(t.eventType),
+    // 2026-07-05: droppati crm_events_company_occurred_idx / _lead_idx / _type_idx (mai usati, Disk IO)
 }));
 
 // Read model per appointment.set + appointment.outcome.
@@ -1240,9 +1238,7 @@ export const crmAppointments = pgTable('crm_appointments', {
     utmContent: text('utm_content'),
 }, (t) => ({
     companyLeadDateUnique: unique('crm_appointments_company_lead_date_unique').on(t.companyId, t.leadId, t.appointmentDate),
-    companyDateIdx: index('crm_appointments_company_date_idx').on(t.companyId, t.appointmentDate),
-    companyFunnelDateIdx: index('crm_appointments_company_funnel_date_idx').on(t.companyId, t.funnel, t.appointmentDate),
-    statusIdx: index('crm_appointments_status_idx').on(t.companyId, t.status, t.appointmentDate),
+    // 2026-07-05: droppati crm_appointments_company_date_idx / _company_funnel_date_idx / _status_idx (mai usati, Disk IO)
 }));
 
 // Read model per deal.closed_won + deal.closed_lost.
@@ -1267,8 +1263,6 @@ export const crmDeals = pgTable('crm_deals', {
     utmContent: text('utm_content'),
 }, (t) => ({
     companyEventUnique: unique('crm_deals_company_event_unique').on(t.companyId, t.eventId),
-    companyClosedIdx: index('crm_deals_company_closed_idx').on(t.companyId, t.closedDate),
-    companyFunnelClosedIdx: index('crm_deals_company_funnel_closed_idx').on(t.companyId, t.funnel, t.closedDate),
-    companySalespersonIdx: index('crm_deals_company_salesperson_idx').on(t.companyId, t.salespersonId),
+    // 2026-07-05: droppati crm_deals_company_closed_idx / _company_funnel_closed_idx / _company_salesperson_idx (mai usati, Disk IO)
 }));
 
