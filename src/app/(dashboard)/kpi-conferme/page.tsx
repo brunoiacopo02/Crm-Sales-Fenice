@@ -13,7 +13,7 @@ export default async function ConfermeKpiPage() {
     const { role } = user.user_metadata || {}
 
     if (role !== "MANAGER" && role !== "ADMIN" && role !== "CONFERME") {
-        redirect("/accesso-negato")
+        redirect("/unauthorized")
     }
 
     return (
