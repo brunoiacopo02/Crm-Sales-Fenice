@@ -134,9 +134,11 @@ export async function getVenditoriMonitor(filters: {
 
     // Follow-up aperti: verità in salesAttempts.nextFollowUpDate (il nuovo
     // ciclo di follow-up scrive lì, non più su leads.followUp1Date/followUp2Date
-    // che restano sempre null → prima query sempre vuota). Prendo l'ultimo
-    // tentativo per lead (attemptNumber massimo) tra quelli con esito ancora
-    // 'Non chiuso' e una prossima data di follow-up valorizzata.
+    // che restano sempre null → prima query sempre vuota). Prendo TUTTI gli
+    // attempt dei lead ancora 'Non chiuso': la scelta dell'ultimo tentativo va
+    // fatta PRIMA di filtrare sulla data, altrimenti un ultimo attempt senza
+    // data (staff che bypassa la UI) mostrerebbe la data stale di un attempt
+    // precedente — mentre la vista venditore escluderebbe il lead.
     const attemptRows = await db.select({
         leadId: salesAttempts.leadId,
         attemptNumber: salesAttempts.attemptNumber,
@@ -153,11 +155,11 @@ export async function getVenditoriMonitor(filters: {
           eq(leads.companyId, ctx.companyId),
           inArray(leads.salespersonUserId, targetIds),
           eq(leads.salespersonOutcome, 'Non chiuso'),
-          isNotNull(salesAttempts.nextFollowUpDate),
       ))
 
     // Tengo, per ogni lead, solo il tentativo con attemptNumber massimo
-    // (il follow-up "corrente" pendente).
+    // (il follow-up "corrente"); il lead conta solo se QUEL tentativo ha
+    // una nextFollowUpDate — stesso criterio di getVenditoreFollowUps.
     const latestByLead = new Map<string, typeof attemptRows[number]>()
     for (const r of attemptRows) {
         const cur = latestByLead.get(r.leadId)
@@ -169,7 +171,8 @@ export async function getVenditoriMonitor(filters: {
     const overdue: FollowUpRow[] = []
 
     for (const r of latestByLead.values()) {
-        const date = r.nextFollowUpDate as Date
+        if (!r.nextFollowUpDate) continue // ultimo attempt senza follow-up pendente
+        const date = r.nextFollowUpDate
         const row: FollowUpRow = {
             leadId: r.leadId,
             leadName: r.name || 'Senza nome',
