@@ -112,7 +112,12 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
         const res = await retryAcFailure(id);
         setBusyFailureId(null);
         if (!res.success) {
-            setMsg({ type: 'err', text: `Retry fallito: ${res.error}` });
+            // Il webhook risponde skipped='blocked_list' se il contatto è ancora
+            // in una lista bloccata: messaggio leggibile invece del codice grezzo.
+            const text = res.error === 'blocked_list'
+                ? 'Il contatto è ancora in una lista AC bloccata: sblocca la lista (o rimuovilo dalla lista su AC) prima di riprovare.'
+                : `Retry fallito: ${res.error}`;
+            setMsg({ type: 'err', text });
             return;
         }
         setMsg({ type: 'ok', text: `Lead importato (id: ${res.leadId?.slice(0, 8)}…)` });
