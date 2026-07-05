@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
-import { eq, and, desc, isNull, gte, count } from "drizzle-orm";
+import { eq, and, desc, isNull, gte, count, notLike } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 
@@ -168,7 +168,7 @@ export interface AcFailureRow {
     acContactId: string | null;
     reason: string;
     reasonHuman: string;           // testo italiano leggibile
-    reasonCategory: 'phone' | 'ac_api' | 'no_gdo' | 'missing_id' | 'not_found' | 'server' | 'other';
+    reasonCategory: 'phone' | 'ac_api' | 'no_gdo' | 'missing_id' | 'not_found' | 'server' | 'blocked_list' | 'other';
     provenienza: string | null;
     email: string | null;
     phoneRaw: string | null;
@@ -182,6 +182,13 @@ export interface AcFailureRow {
 
 function humanizeReason(reason: string): { human: string; category: AcFailureRow['reasonCategory'] } {
     const r = reason || '';
+    if (r.startsWith('blocked_list:')) {
+        const listId = r.slice('blocked_list:'.length).trim();
+        return {
+            human: `Contatto iscritto a una lista AC bloccata${listId ? ` (ID lista ${listId})` : ''}. Resta volutamente fuori dal CRM finché la lista non viene sbloccata.`,
+            category: 'blocked_list',
+        };
+    }
     if (r.startsWith('Telefono non normalizzabile') || r.startsWith('Telefono non utilizzabile')) {
         const match = r.match(/"([^"]*)"/);
         const num = match?.[1] ?? '';
@@ -318,10 +325,14 @@ export async function retryAllAcFailures(
     batchSize: number = 15,
 ): Promise<{ processed: number; succeeded: number; failed: number; remaining: number; errors: string[] }> {
     const session = await requireManager();
+    // I record 'blocked_list:*' sono esclusi dal bulk retry: il webhook li
+    // ri-skipperebbe in loop finché la lista AC resta bloccata. Restano
+    // recuperabili solo col retry singolo (quando la lista viene sbloccata).
     const rows = await db.select().from(acIntakeFailures)
         .where(and(
             eq(acIntakeFailures.companyId, session.ctx.companyId),
             isNull(acIntakeFailures.resolvedAt),
+            notLike(acIntakeFailures.reason, 'blocked_list:%'),
         ))
         .orderBy(desc(acIntakeFailures.createdAt))
         .limit(Math.max(1, Math.min(batchSize, 50)));
@@ -346,6 +357,7 @@ export async function retryAllAcFailures(
         .where(and(
             eq(acIntakeFailures.companyId, session.ctx.companyId),
             isNull(acIntakeFailures.resolvedAt),
+            notLike(acIntakeFailures.reason, 'blocked_list:%'),
         ));
     return { processed: rows.length, succeeded, failed, remaining: Number(cnt) || 0, errors };
 }

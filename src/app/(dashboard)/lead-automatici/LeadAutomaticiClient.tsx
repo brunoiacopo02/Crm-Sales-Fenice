@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, ExternalLink, RotateCcw, Check, TrendingUp } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, ExternalLink, RotateCcw, Check, TrendingUp, Ban } from "lucide-react";
 import {
     setGdoAcIntake,
     disableAllAcIntake,
@@ -40,6 +40,13 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
     const [isPending, startTransition] = useTransition();
 
     const activeCount = rows.filter(r => r.acAutoIntake).length;
+
+    // I contatti "bloccati da lista" (lanci futuri, vedi BLOCKED_LIST_NAMES_NORMALIZED
+    // nel webhook) sono failure a tutti gli effetti ma NON vanno mescolati con i
+    // failure veri: non contano nel badge, e sono esclusi da "Riprova tutti" perché
+    // il retry li ri-skipperebbe in loop finché la lista resta bloccata.
+    const realFailures = useMemo(() => failures.filter(f => f.reasonCategory !== 'blocked_list'), [failures]);
+    const blockedFailures = useMemo(() => failures.filter(f => f.reasonCategory === 'blocked_list'), [failures]);
 
     const handleToggle = async (r: GdoAcIntakeRow) => {
         setSaving(r.id);
@@ -114,7 +121,7 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
 
     const handleRetryAll = async () => {
         if (retryAll.running) return;
-        if (!confirm(`Riprovare l'import di tutti i ${failures.length} lead non importati? Verranno reimportati e assegnati in round-robin ai GDO abilitati.`)) return;
+        if (!confirm(`Riprovare l'import di tutti i ${realFailures.length} lead non importati? Verranno reimportati e assegnati in round-robin ai GDO abilitati.`)) return;
         setMsg(null);
         let totSucc = 0;
         let totFail = 0;
@@ -235,8 +242,8 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     <div>
                         <h2 className="flex items-center gap-2 text-sm font-bold text-ash-900">
                             <AlertTriangle className="h-4 w-4 text-amber-600" /> Lead non importati
-                            {failures.length > 0 && (
-                                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">{failures.length}</span>
+                            {realFailures.length > 0 && (
+                                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">{realFailures.length}</span>
                             )}
                         </h2>
                         <p className="text-xs text-ash-500">
@@ -244,7 +251,7 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        {failures.length > 0 && (
+                        {realFailures.length > 0 && (
                             <button
                                 onClick={handleRetryAll}
                                 disabled={retryAll.running}
@@ -261,14 +268,14 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                         </button>
                     </div>
                 </div>
-                {failures.length === 0 ? (
+                {realFailures.length === 0 ? (
                     <div className="p-6 text-center text-sm text-ash-400">
                         <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
                         Nessun errore in sospeso
                     </div>
                 ) : (
                     <div className="divide-y divide-ash-100">
-                        {failures.map(f => {
+                        {realFailures.map(f => {
                             const fullName = [f.firstName, f.lastName].filter(Boolean).join(' ').trim();
                             return (
                                 <div key={f.id} className="p-4 space-y-2">
@@ -326,6 +333,106 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                                     </div>
 
                                     {/* Dettagli tecnici collassati */}
+                                    <details className="group">
+                                        <summary className="cursor-pointer text-[10px] text-ash-400 hover:text-ash-600">Dettagli tecnici</summary>
+                                        <div className="mt-1 space-y-1">
+                                            <div className="text-[10px] text-ash-500">Messaggio grezzo: <code className="font-mono">{f.reason}</code></div>
+                                            <pre className="overflow-x-auto rounded-md bg-ash-100 p-2 text-[10px] leading-snug text-ash-700 max-h-40">
+                                                {JSON.stringify(f.payload, null, 2)}
+                                            </pre>
+                                        </div>
+                                    </details>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </section>
+
+            {/* Bloccati da lista AC (lanci futuri, es. BLOCKED_LIST_NAMES_NORMALIZED).
+                Sezione separata dai failure veri: non contano nel badge sopra e non
+                entrano in "Riprova tutti" (rifinirebbero bloccati in loop). Recuperabili
+                solo col retry singolo, per quando la lista viene sbloccata. */}
+            <section className="rounded-2xl border border-indigo-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-indigo-100 px-4 py-3">
+                    <div>
+                        <h2 className="flex items-center gap-2 text-sm font-bold text-ash-900">
+                            <Ban className="h-4 w-4 text-indigo-600" /> Bloccati da lista
+                            {blockedFailures.length > 0 && (
+                                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-700">{blockedFailures.length}</span>
+                            )}
+                        </h2>
+                        <p className="text-xs text-ash-500">
+                            Contatti AC iscritti a una lista bloccata (es. campagna di lancio futuro): restano volutamente fuori dal CRM.
+                            Non inclusi in "Riprova tutti" — usa il retry singolo quando sblocchi la lista, oppure "Risolto" per archiviarli.
+                        </p>
+                    </div>
+                    <button onClick={refreshFailures} className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-xs font-medium text-ash-600 hover:bg-ash-50" title="Ricarica">
+                        <RefreshCw className="h-3 w-3" />
+                    </button>
+                </div>
+                {blockedFailures.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-ash-400">
+                        <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
+                        Nessun contatto bloccato in sospeso
+                    </div>
+                ) : (
+                    <div className="divide-y divide-ash-100">
+                        {blockedFailures.map(f => {
+                            const fullName = [f.firstName, f.lastName].filter(Boolean).join(' ').trim();
+                            return (
+                                <div key={f.id} className="p-4 space-y-2">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                                            <Ban className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                                            <div className="text-sm font-semibold text-ash-900">{f.reasonHuman}</div>
+                                        </div>
+                                        <span className="text-[10px] text-ash-400 shrink-0 font-mono">{new Date(f.createdAt).toLocaleString('it-IT')}</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg bg-ash-50 p-3">
+                                        <InfoCell label="Nome" value={fullName || '—'} />
+                                        <InfoCell label="Email" value={f.email || '—'} mono />
+                                        <InfoCell label="Telefono" value={f.phoneRaw || '—'} mono />
+                                        <InfoCell label="Provenienza" value={f.provenienza || '—'} />
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                        <div className="text-[11px] text-ash-500">
+                                            {f.acContactId ? <>ID AC: <code className="font-mono">{f.acContactId}</code></> : 'Nessun ID AC'}
+                                        </div>
+                                        <div className="flex gap-1.5">
+                                            {f.acContactLink && (
+                                                <a
+                                                    href={f.acContactLink}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                                                >
+                                                    <ExternalLink className="h-3 w-3" /> Apri su AC
+                                                </a>
+                                            )}
+                                            {f.acContactId && (
+                                                <button
+                                                    onClick={() => handleRetry(f.id)}
+                                                    disabled={busyFailureId === f.id}
+                                                    className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                                    title="Riprova a importare questo singolo contatto (utile se la lista è stata sbloccata)"
+                                                >
+                                                    {busyFailureId === f.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                                    Riprova
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => handleResolve(f.id)}
+                                                disabled={busyFailureId === f.id}
+                                                className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-ash-700 hover:bg-ash-50 disabled:opacity-50"
+                                            >
+                                                <Check className="h-3 w-3" /> Risolto
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <details className="group">
                                         <summary className="cursor-pointer text-[10px] text-ash-400 hover:text-ash-600">Dettagli tecnici</summary>
                                         <div className="mt-1 space-y-1">

@@ -287,6 +287,17 @@ export async function POST(req: NextRequest) {
             const blocked = await getBlockedListIds();
             if (blocked.has(String(triggerListId))) {
                 console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (payload) ${triggerListId}`);
+                // Tracciato in acIntakeFailures (reason 'blocked_list:<id>') così l'admin
+                // lo vede in /lead-automatici invece che sparire in silenzio. Escluso da
+                // "Riprova tutti" (rifinirebbe bloccato in loop): recuperabile solo col
+                // retry singolo, per quando la lista viene sbloccata.
+                await recordFailure({
+                    reason: `blocked_list:${String(triggerListId)}`,
+                    acContactId: contactId,
+                    email: rawPayload['contact[email]'] || rawPayload['contact.email'] || null,
+                    phoneRaw: rawPayload['contact[phone]'] || rawPayload['contact.phone'] || null,
+                    payload: rawPayload,
+                });
                 return NextResponse.json({
                     skipped: 'blocked_list',
                     listId: String(triggerListId),
@@ -303,6 +314,13 @@ export async function POST(req: NextRequest) {
             const membership = await isContactInBlockedList(contactId);
             if (membership.blocked) {
                 console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (membership) ${membership.listId}`);
+                await recordFailure({
+                    reason: `blocked_list:${membership.listId}`,
+                    acContactId: contactId,
+                    email: rawPayload['contact[email]'] || rawPayload['contact.email'] || null,
+                    phoneRaw: rawPayload['contact[phone]'] || rawPayload['contact.phone'] || null,
+                    payload: rawPayload,
+                });
                 return NextResponse.json({
                     skipped: 'blocked_list',
                     listId: membership.listId,
