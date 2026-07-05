@@ -1,13 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 
 import { sendInternalAlert } from "@/app/actions/alertActions"
+import { getConfermeHeartbeats, type ConfermeHeartbeat } from "@/app/actions/presenceActions"
 import { Users, Send, AlertTriangle, MessageSquarePlus } from "lucide-react"
 import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeConnection } from "@/lib/confermePresence"
 
+const HEARTBEAT_POLL_MS = 30_000
+
 export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     const [activeUsers, setActiveUsers] = useState<any[]>([])
+    const [heartbeats, setHeartbeats] = useState<ConfermeHeartbeat[]>([])
     const [connected, setConnected] = useState(false)
     const [selectedUser, setSelectedUser] = useState<any | null>(null)
     const [message, setMessage] = useState("")
@@ -36,6 +40,39 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
         const offConnection = subscribeConfermeConnection(setConnected)
         return () => { offPresence(); offConnection(); disconnect() }
     }, [currentUser.id])
+
+    // Task P1: heartbeat DB come fonte di verità di backup — copre i casi in
+    // cui il Realtime non propaga (churn di subscribe, rete instabile). Poll
+    // ogni 30s, il server filtra già i soli heartbeat freschi (< 90s).
+    useEffect(() => {
+        let cancelled = false
+        const poll = () => {
+            getConfermeHeartbeats()
+                .then((rows) => {
+                    if (!cancelled) setHeartbeats(rows.filter(r => r.userId !== currentUser.id))
+                })
+                .catch((e) => console.warn("[presence] getConfermeHeartbeats fallito:", e))
+        }
+        poll()
+        const interval = setInterval(poll, HEARTBEAT_POLL_MS)
+        return () => { cancelled = true; clearInterval(interval) }
+    }, [currentUser.id])
+
+    // Presente = visibile via Realtime OPPURE con heartbeat DB fresco.
+    // activity/leadId dell'heartbeat fanno da fallback quando manca il dato realtime.
+    const mergedUsers = useMemo(() => {
+        const map = new Map<string, any>()
+        for (const p of activeUsers) map.set(p.user.id, p)
+        for (const h of heartbeats) {
+            const existing = map.get(h.userId)
+            if (existing) {
+                if (!existing.leadId && h.leadId) existing.leadId = h.leadId
+            } else {
+                map.set(h.userId, { user: { id: h.userId, name: h.name, displayName: h.name }, leadId: h.leadId })
+            }
+        }
+        return Array.from(map.values())
+    }, [activeUsers, heartbeats])
 
     const handleSend = async () => {
         if (!selectedUser || !message.trim()) return
@@ -67,12 +104,12 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1">
-                    {activeUsers.length === 0 ? (
+                    {mergedUsers.length === 0 ? (
                         <div className="text-[10px] text-ash-400 font-medium italic">
                             Nessun altro collega online.
                         </div>
                     ) : (
-                        activeUsers.map((p) => (
+                        mergedUsers.map((p) => (
                             <div key={p.user.id} className="flex items-center gap-1.5 bg-ash-50 border border-ash-200 py-0.5 px-2 rounded-full shrink-0 group hover:border-orange-200 hover:bg-orange-50 transition-colors">
                                 <div className="relative flex h-1.5 w-1.5">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>

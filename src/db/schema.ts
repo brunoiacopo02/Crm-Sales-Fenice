@@ -432,6 +432,21 @@ export const pipelineSnapshots = pgTable('pipelineSnapshots', {
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
 
+// Heartbeat DB come fonte di verità della presence Conferme (Task P1,
+// 2026-07-05): il Realtime Supabase (channel `conferme_realtime_board`,
+// vedi src/lib/confermePresence.ts) resta il segnale "instant" ma è
+// inaffidabile su reti/tab instabili — gli operatori a volte non si vedono
+// online a vicenda. Il client fa upsert ogni 45s + a ogni cambio attività;
+// il Radar considera "presente" chi è fresco (< 90s) qui OPPURE visibile
+// via Realtime. Scritture trascurabili (~4 operatori × 1 upsert/45s).
+export const presenceHeartbeats = pgTable('presenceHeartbeats', {
+    userId: text('userId').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    activity: text('activity').notNull(), // es. 'board' | 'call' | 'idle'
+    leadId: text('leadId'),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const gdoNotes = pgTable('gdoNotes', {
     id: text('id').primaryKey(),
     gdoUserId: text('gdoUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
