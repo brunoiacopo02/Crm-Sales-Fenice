@@ -600,6 +600,7 @@ export async function getConfermeDailyObjectives(confermeUserId: string) {
     const confResult = await db.select({ count: sql<number>`count(*)::integer` })
         .from(leads)
         .where(and(
+            companyScope(ctx, leads.companyId),
             eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.confirmationsUserId),
             gte(leads.confirmationsTimestamp, todayStart),
