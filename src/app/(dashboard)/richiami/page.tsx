@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server"
+import { requireRole } from "@/lib/authz"
 import { getRecallLeads } from "@/app/actions/recallActions"
 import { RecallBoard } from "@/components/RecallBoard"
 
@@ -6,6 +7,8 @@ export default async function RecallPage() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+
+    await requireRole(session, ['GDO', 'ADMIN', 'MANAGER', 'TL'])
 
     // Fetch recall leads
     const { expired, upcoming } = await getRecallLeads()
