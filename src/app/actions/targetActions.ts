@@ -2,11 +2,12 @@
 
 import { db } from '@/db';
 import { monthlyTargets, dailyKpiSnapshots, users, leads } from '@/db/schema';
-import { eq, and, sql, gte, lte, or, inArray, isNotNull, asc } from 'drizzle-orm';
+import { eq, and, sql, gte, lt, lte, or, inArray, isNotNull, asc } from 'drizzle-orm';
 import crypto from 'crypto';
-import { startOfMonth, endOfMonth, endOfDay, isBefore, isAfter, isSunday } from 'date-fns';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { isStatsGdo } from '@/lib/kpi/canon';
+import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils';
+import { countWorkingDaysInMonth, countWorkingDaysElapsed } from '@/lib/workingDaysUtils';
 
 // Tipi di utilità per i target
 export interface MonthlyTargetInput {
@@ -84,44 +85,17 @@ export interface TargetStatsResponse {
 }
 
 /**
- * Calcola programmaticamente i giorni lavorativi (Dal Lun - Sab, no Domenica)
- * in un determinato mese testuale (es. 2026-03).
+ * Calcola i giorni lavorativi (Europe/Rome, festività italiane incluse — Pasquetta
+ * mobile compresa, sabati lavorativi) in un determinato mese testuale (es. 2026-03),
+ * usando gli helper canonici di `workingDaysUtils.ts`.
  */
 function getDateMetrics(monthString: string, testTodayOverride?: Date) {
-    const today = testTodayOverride || new Date(); // Dalla timezone del server di esecuzione
+    const today = testTodayOverride || new Date();
 
-    // Parsiamo il mese: 2026-03-01T00:00:00.000
     const [year, month] = monthString.split('-').map(Number);
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0, 23, 59, 59, 999);
 
-    let giorniLavorativiTotaliMese = 0;
-    let giorniLavorativiTrascorsiOggi = 0;
-
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        // isSunday() -> 0 è domenica
-        if (d.getDay() !== 0) {
-            giorniLavorativiTotaliMese++;
-
-            // Se il giorno del mese controllato è antecedente o identico (nel calendario lavorativo) a oggi
-            // ATTENZIONE: solo se il "today" matcha il target month.
-            const isSameMonth = today.getFullYear() === year && today.getMonth() === month - 1;
-
-            if (isSameMonth) {
-                // Limitiamo il count ai giorni trascorsi fino ad OGGI compreso
-                if (d.getDate() <= today.getDate()) {
-                    giorniLavorativiTrascorsiOggi++;
-                }
-            } else if (today > end) {
-                // Il mese è gia finito nel passato, i trascorsi sono == al totale
-                giorniLavorativiTrascorsiOggi++;
-            }
-            // Se today < start (mese futuro), i trascorsi rimangono 0.
-        }
-    }
-
-    // Fallback matematico per non dividere per 0 casomai fossimo nel weekend o mese vuoto
-    if (giorniLavorativiTotaliMese === 0) giorniLavorativiTotaliMese = 1;
+    const giorniLavorativiTotaliMese = countWorkingDaysInMonth(year, month);
+    const giorniLavorativiTrascorsiOggi = countWorkingDaysElapsed(year, month, today);
 
     return { giorniLavorativiTotaliMese, giorniLavorativiTrascorsiOggi, today };
 }
@@ -237,7 +211,7 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
 
     const dateMetrics = getDateMetrics(monthString, testTodayOverride);
     const today = dateMetrics.today;
-    const todayFormatted = today.toISOString().split('T')[0];
+    const todayFormatted = toRomeDateStr(today);
 
     // 1. Setup Targets e Utenti (tenant-scoped)
     const tQuery = await db.select().from(monthlyTargets).where(and(
@@ -279,39 +253,29 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     if (gdoAttivi === 0) gdoAttivi = 1; // Fallback matematico
 
     // 2. Fetch Lead del Mese (Simile a Marketing Dashboard, escludendo BLT)
-    const [yearStr, monthStr] = monthString.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10);
-
-    const start = new Date(year, month - 1, 1).toISOString();
-    const end = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
-
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).toISOString();
-
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    const todayStartDate = new Date(todayStart);
-    const todayEndDate = new Date(todayEnd);
+    // Bounds Europe/Rome (prima: componenti Date estratti in tz server → UTC su Vercel).
+    const { start: startDate, end: endDate } = monthBoundsRome(monthString);
+    const { start: todayStartDate, end: todayEndDate } = dayBoundsRome(today);
 
     // Ogni metrica è attribuita al mese in cui è avvenuta l'azione corrispondente,
     // NON al mese di creazione del lead. Pesco i lead con OR su tutte le date evento
     // e poi conto per la data canonica di ogni metrica (modello marketingActions).
+    // end è esclusivo (inizio periodo successivo): confronto con `<`.
     const inMonth = (d: Date | null | undefined): boolean =>
-        !!d && d >= startDate && d <= endDate;
+        !!d && d >= startDate && d < endDate;
     const inToday = (d: Date | null | undefined): boolean =>
-        !!d && d >= todayStartDate && d <= todayEndDate;
+        !!d && d >= todayStartDate && d < todayEndDate;
 
     const monthLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
             or(sql`${leads.funnel} IS NULL`, sql`${leads.funnel} != 'BLT'`),
             or(
-                and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
-                and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
-                and(gte(leads.appointmentDate, startDate), lte(leads.appointmentDate, endDate)),
-                and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
-                and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
+                and(gte(leads.createdAt, startDate), lt(leads.createdAt, endDate)),
+                and(gte(leads.appointmentCreatedAt, startDate), lt(leads.appointmentCreatedAt, endDate)),
+                and(gte(leads.appointmentDate, startDate), lt(leads.appointmentDate, endDate)),
+                and(gte(leads.confirmationsTimestamp, startDate), lt(leads.confirmationsTimestamp, endDate)),
+                and(gte(leads.salespersonOutcomeAt, startDate), lt(leads.salespersonOutcomeAt, endDate)),
             )
         )
     );

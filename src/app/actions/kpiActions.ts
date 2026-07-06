@@ -3,8 +3,9 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { callLogs, leads } from "@/db/schema"
-import { eq, gte, lte, and, sql } from "drizzle-orm"
+import { eq, gte, lt, and, sql } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { dayBoundsRome } from '@/lib/dateUtils';
 export type KpiData = {
     totalCalls: number
     totalAnswers: number
@@ -28,17 +29,13 @@ export async function getDailyKpi(dateStr?: string): Promise<KpiData> {
     // Use provided date or today
     const targetDate = dateStr ? new Date(dateStr) : new Date()
 
-    // Create start and end of the day bounds
-    const startOfDay = new Date(targetDate)
-    startOfDay.setHours(0, 0, 0, 0)
-
-    const endOfDay = new Date(targetDate)
-    endOfDay.setHours(23, 59, 59, 999)
+    // Bounds del giorno in Europe/Rome (evita lo sfasamento UTC del server Vercel).
+    const { start: startOfDay, end: endOfDay } = dayBoundsRome(targetDate)
 
     const conditions = [
         eq(callLogs.companyId, ctx.companyId),
         gte(callLogs.createdAt, startOfDay),
-        lte(callLogs.createdAt, endOfDay)
+        lt(callLogs.createdAt, endOfDay)
     ]
 
     if (isGdo) conditions.push(eq(callLogs.userId, userId))
