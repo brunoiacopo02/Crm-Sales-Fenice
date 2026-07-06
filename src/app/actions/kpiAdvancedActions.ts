@@ -100,9 +100,20 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     const rawLogs = await db.select().from(callLogs).where(and(...logConditions))
 
+    // Bot fissatore escluso da TUTTO su questa pagina (aggregati di testata,
+    // trend, motivi scarto, ranking) — decisione PO 2026-07-05: la sua
+    // produzione resta visibile solo su panoramica-generale e /statistiche-fissatore.
+    // I log legacy senza userId restano inclusi come da comportamento storico.
+    const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
+    const userMap = new Map(allUsers.map(u => [u.id, u.name]))
+    const realGdoIds = new Set(allUsers.filter(isRealGdo).map(u => u.id))
+    const isRealGdoLog = (log: { userId: string | null }): boolean =>
+        !log.userId || realGdoIds.has(log.userId)
+
     // Filter logs to match only leads in `allLeads` (in case funnel filter was applied)
+    // + esclusione bot fissatore (vedi sopra)
     const validLeadIds = new Set(allLeads.map(l => l.id))
-    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId))
+    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId) && isRealGdoLog(log))
 
     // Working-hours filter: se ON, le chiamate sono SOLO quelle 13:30-20:00.
     // Gli APPUNTAMENTI restano comunque tutti conteggiati (matchando la
@@ -162,16 +173,10 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const recallUnconvertedPerc = recallLogs.length > 0 ? Math.round((unconvertedRecalls / recallLogs.length) * 100) : 0
 
     // 4. Performance GDO
+    // (validLogs è già filtrato a monte: solo GDO reali + tracciato legacy senza userId)
     const gdoStatsMap: Record<string, any> = {}
 
-    const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
-    const userMap = new Map(allUsers.map(u => [u.id, u.name]))
-    // Bot fissatore escluso dal ranking GDO (decisione PO 2026-07-05): le sue
-    // chiamate/appuntamenti non devono inquinare classifiche/medie del team.
-    const realGdoIds = new Set(allUsers.filter(isRealGdo).map(u => u.id))
-
     validLogs.forEach(log => {
-        if (log.userId && !realGdoIds.has(log.userId)) return
         const uid = log.userId || 'Tracciato Vecchio / Sconosciuto'
         const uname = userMap.get(uid) || uid
         if (!gdoStatsMap[uname]) {
@@ -465,6 +470,11 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             eq(users.role, 'GDO')
         ))
     const gdoUsers = gdoUsersRaw.filter(isRealGdo)
+    // Id dei soli GDO reali: usato per filtrare anche le aggregazioni team,
+    // così la card team è la somma esatta delle righe per-GDO (bot escluso da
+    // TUTTO su questa pagina — la sua produzione resta visibile solo su
+    // panoramica-generale e /statistiche-fissatore).
+    const realGdoIdSet = new Set(gdoUsers.map(u => u.id))
 
     // --- Query 2: lead chiusi nella finestra (per GDO) ---
     // Un lead è "chiuso" quando ha raggiunto uno stato terminale:
@@ -506,6 +516,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const closedByLead = new Map<string, { assignedToId: string; callCount: number }>()
     for (const row of [...appointmentLeads, ...rejectedLeads]) {
         if (!row.assignedToId) continue
+        if (!realGdoIdSet.has(row.assignedToId)) continue // bot/non-GDO fuori anche dai totali team
         if (closedByLead.has(row.id)) continue
         closedByLead.set(row.id, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
     }
@@ -548,6 +559,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const perUserDay = new Map<string, Map<string, DayBucket>>()
     for (const c of allCalls) {
         if (!c.userId) continue
+        if (!realGdoIdSet.has(c.userId)) continue // bot/non-GDO fuori anche dai totali team
         const day = dayKeyRome(c.createdAt)
         let userMap = perUserDay.get(c.userId)
         if (!userMap) { userMap = new Map(); perUserDay.set(c.userId, userMap) }
@@ -589,7 +601,9 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
 
     const closuresByGdo = new Map<string, number>()
     for (const r of closuresAgg) {
-        if (r.assignedToId) closuresByGdo.set(r.assignedToId, Number(r.cnt))
+        if (!r.assignedToId) continue
+        if (!realGdoIdSet.has(r.assignedToId)) continue // bot/non-GDO fuori anche dai totali team
+        closuresByGdo.set(r.assignedToId, Number(r.cnt))
     }
 
     // --- Compose per-GDO rows ---
