@@ -328,7 +328,9 @@ async function getConfermeWeeklyState(
     companyId: string,
     overrides?: { role?: string; target1Override?: number; reward1Override?: number; target2Override?: number; reward2Override?: number },
 ) {
-    const currentMonthStr = today.toISOString().slice(0, 7);
+    // Mese in Europe/Rome (getMonthWeeks è Rome-native): toISOString() (UTC)
+    // sceglierebbe il mese sbagliato nella finestra 00:00-02:00 Rome.
+    const currentMonthStr = toRomeDateStr(today).slice(0, 7);
     const weeks = getMonthWeeks(currentMonthStr);
 
     let currentWeekName = "Fuori Mese";
@@ -402,8 +404,10 @@ async function getConfermeWeeklyState(
         target2,
         reward2,
         currentWeekName,
-        weekStart: currentWeekStart.toISOString().split('T')[0],
-        weekEnd: currentWeekEnd.toISOString().split('T')[0],
+        // Label in data Europe/Rome: con i bound di getMonthWeeks ora Rome-native,
+        // toISOString() (UTC) mostrerebbe il giorno precedente (lun 00:00 Rome = dom 22:00 UTC).
+        weekStart: toRomeDateStr(currentWeekStart),
+        weekEnd: toRomeDateStr(currentWeekEnd),
         isBiweekly: false,
     };
 }
