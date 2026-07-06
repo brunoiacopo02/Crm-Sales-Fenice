@@ -120,16 +120,15 @@ export async function saveMonthlyTarget(target: MonthlyTargetInput) {
         eq(monthlyLeadTargets.yearMonth, target.month),
     ));
 
-    // `workingDays` su monthlyLeadTargets è NOT NULL (colonna condivisa col
-    // Sales Manager, che la richiede sempre > 0): non può rappresentare "nessun
-    // override" con null come faceva `monthlyTargets.workingDaysOverride`. Se il
-    // manager sceglie "calcolo automatico" (workingDaysOverride null/0),
-    // valorizziamo comunque il campo con il conteggio automatico corrente
-    // (Rome-aware, festività incluse) invece di lasciarlo indefinito.
-    const [year, month] = target.month.split('-').map(Number);
+    // `workingDays` su monthlyLeadTargets è NOT NULL ma la convenzione condivisa
+    // dal resto del codebase (ramo di lettura ~riga 268, panoramicaActions.ts,
+    // confermeKpiActions.ts) è: 0 = sentinella "nessun override, calcola
+    // automaticamente". Scrivere qui il conteggio automatico invece di 0
+    // farebbe apparire l'override come attivo e congelerebbe i giorni
+    // lavorativi anche in modalità automatica (finding Critical review B5).
     const resolvedWorkingDays = (target.workingDaysOverride != null && target.workingDaysOverride > 0)
         ? target.workingDaysOverride
-        : countWorkingDaysInMonth(year, month);
+        : 0;
 
     const metricFields = {
         targetAppMonthly: target.targetAppFissati,
