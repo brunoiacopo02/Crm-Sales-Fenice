@@ -14,6 +14,11 @@ type GdoQuickActionsProps = {
     /** Note esistenti (recallNote/lastCallNote) precompilate nel popover Richiamo:
      *  per ri-programmare basta scegliere la data, senza ricopiare tutto. */
     recallPrefillNote?: string | null
+    /** Direzione di apertura dei popover. Nel ContactDrawer le azioni sono
+     *  l'ultima sezione di un pannello scrollabile: aprendo verso il basso i
+     *  pulsanti Annulla/Conferma finiscono fuori schermo (bug GDO 2026-07-06).
+     *  Lì va passato 'up'. Default 'down' (pipeline, spazio sotto la card). */
+    popoverDirection?: 'down' | 'up'
 }
 
 /** Spawn ~10 tiny confetti particles on a card for appointment celebration */
@@ -71,7 +76,7 @@ const DISCARD_REASONS = [
     "non ha soldi"
 ]
 
-export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillNote }: GdoQuickActionsProps) {
+export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillNote, popoverDirection = 'down' }: GdoQuickActionsProps) {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
 
@@ -82,6 +87,21 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
     const [discardReason, setDiscardReason] = useState("")
 
     const containerRef = useRef<HTMLDivElement>(null)
+    const popoverRef = useRef<HTMLDivElement>(null)
+
+    // Rete di sicurezza: se il popover appena aperto sfora l'area visibile del
+    // contenitore scrollabile (drawer) o della pagina, lo porta in vista.
+    useEffect(() => {
+        if (!activePopover) return
+        const raf = requestAnimationFrame(() => {
+            popoverRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        })
+        return () => cancelAnimationFrame(raf)
+    }, [activePopover])
+
+    const popoverPositionClass = popoverDirection === 'up'
+        ? 'bottom-[110%] slide-in-from-bottom-2'
+        : 'top-[110%] slide-in-from-top-2'
 
     // Bozza in corso: se il GDO ha già digitato note/data, il click fuori NON
     // chiude il popover (si chiude solo con Annulla/submit) — evita di perdere
@@ -232,7 +252,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
 
             {/* POPOVER SCARTATO */}
             {activePopover === 'scartato' && (
-                <div onClick={e => e.stopPropagation()} className="absolute right-0 top-[110%] w-64 bg-white border border-ash-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
+                <div ref={popoverRef} onClick={e => e.stopPropagation()} className={`absolute right-0 ${popoverPositionClass} w-64 bg-white border border-ash-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in`}>
                     <h4 className="text-[12px] font-bold text-rose-700 mb-3 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5" /> Scarta Lead</h4>
                     
                     <select
@@ -257,7 +277,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
 
             {/* POPOVER RICHIAMO O APPUNTAMENTO */}
             {(activePopover === 'richiamo' || activePopover === 'appuntamento') && (
-                <div onClick={e => e.stopPropagation()} className="absolute right-0 top-[110%] w-72 bg-white border border-ash-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
+                <div ref={popoverRef} onClick={e => e.stopPropagation()} className={`absolute right-0 ${popoverPositionClass} w-72 bg-white border border-ash-200 rounded-xl shadow-xl z-50 p-4 animate-in fade-in`}>
                     <h4 className={`text-[12px] font-bold mb-3 flex items-center gap-1.5 ${activePopover === 'appuntamento' ? 'text-brand-orange' : 'text-blue-600'}`}>
                         {activePopover === 'appuntamento' ? <><Handshake className="w-3.5 h-3.5" /> Fissa Appuntamento</> : <><CalendarClock className="w-3.5 h-3.5" /> Programma Richiamo</>}
                     </h4>
