@@ -466,7 +466,7 @@ export function ContactDrawer({
                                         hasEmail={!!lead.email}
                                         agendaSentAt={lead.agendaSentAt}
                                     />
-                                    <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} />
+                                    <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} popoverDirection="up" />
                                 </div>
                                 <div className="text-xs text-brand-orange/70 mt-2">
                                     Clicca un pulsante per esitare il lead, fissarlo, o inviare l'agenda Calendly via WhatsApp.
