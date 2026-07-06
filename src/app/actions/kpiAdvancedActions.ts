@@ -6,7 +6,7 @@ import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
-import { isRealGdo, apptSetAt, DEFAULT_DAILY_APPT_TARGET } from '@/lib/kpi/canon'
+import { isRealGdo, apptSetAt } from '@/lib/kpi/canon'
 
 import { cache } from "react"
 

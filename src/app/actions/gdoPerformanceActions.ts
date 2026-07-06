@@ -7,7 +7,7 @@ import { isWithinInterval } from "date-fns";
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
-import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
+import { isRealGdo, DEFAULT_DAILY_APPT_TARGET, apptSetAt } from "@/lib/kpi/canon";
 import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 
 export interface GamificationTargetInput {
@@ -188,9 +188,15 @@ export async function getManagerGdoTables(monthString: string) {
         }
 
         // 2. DIMENSIONE WEEKLY (Calendar)
-        // Find which week this appointment falls into
-        if (lead.appointmentDate) {
-            const wIndex = weeks.findIndex(w => isWithinInterval(lead.appointmentDate!, { start: w.start, end: w.end }));
+        // Bucketing per la STESSA data canonica del filtro mensile (fissaggio,
+        // non data del meeting): altrimenti un lead fissato a fine mese per un
+        // meeting nel mese successivo entra in monthLeads/totalStats ma la sua
+        // settimana (calcolata su appointmentDate) può non esistere in weeks
+        // (mese diverso) → wIndex=-1 e sparisce dalle righe settimanali pur
+        // essendo contato in testata.
+        const setAt = apptSetAt(lead);
+        if (setAt) {
+            const wIndex = weeks.findIndex(w => isWithinInterval(setAt, { start: w.start, end: w.end }));
             if (wIndex !== -1) {
                 if (isConfermato) gdoStats.calendarStats.confermati[wIndex]++;
                 if (isPresenziatoFlag) gdoStats.calendarStats.presenziati[wIndex]++;
