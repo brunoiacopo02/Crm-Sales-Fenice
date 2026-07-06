@@ -5,7 +5,7 @@ import { monthlyTargets, dailyKpiSnapshots, users, leads } from '@/db/schema';
 import { eq, and, sql, gte, lt, lte, or, inArray, isNotNull, asc } from 'drizzle-orm';
 import crypto from 'crypto';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
-import { isStatsGdo } from '@/lib/kpi/canon';
+import { isStatsGdo, apptSetAt as canonApptSetAt } from '@/lib/kpi/canon';
 import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils';
 import { countWorkingDaysInMonth, countWorkingDaysElapsed } from '@/lib/workingDaysUtils';
 
@@ -313,15 +313,17 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
             bucket.totale++;
         }
 
-        // App Fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy).
-        // Gate su apptSetAt (non su lead.appointmentDate corrente), perché il flow di reschedule
-        // delle Conferme azzera appointmentDate ma lascia appointmentCreatedAt — il fissaggio storico
-        // resta valido.
-        const apptSetAt = lead.appointmentCreatedAt || lead.appointmentDate;
-        if (apptSetAt && inMonth(apptSetAt)) {
+        // App Fissati: base canonica PO 2026-07-05 (src/lib/kpi/canon.ts) — data
+        // di fissaggio (appointmentCreatedAt fallback appointmentDate), gate
+        // appointmentDate IS NOT NULL. Prima non c'era gate: un appuntamento
+        // annullato (appointmentDate azzerato dal flow di reschedule Conferme,
+        // ma appointmentCreatedAt ancora valorizzato) veniva comunque contato
+        // come fissato.
+        const apptDate = canonApptSetAt(lead);
+        if (apptDate && inMonth(apptDate)) {
             actAppsFissati++;
             bucket.fissati++;
-            if (inToday(lead.appointmentCreatedAt)) {
+            if (inToday(apptDate)) {
                 todayFissati++;
             }
         }

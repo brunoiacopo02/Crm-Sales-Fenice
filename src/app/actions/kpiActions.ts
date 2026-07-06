@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { callLogs, leads } from "@/db/schema"
-import { eq, gte, lt, and, sql } from "drizzle-orm"
+import { eq, gte, lt, and, sql, isNotNull } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { dayBoundsRome } from '@/lib/dateUtils';
 export type KpiData = {
@@ -54,7 +54,21 @@ export async function getDailyKpi(dateStr?: string): Promise<KpiData> {
     const answers = logs.filter(l => l.outcome !== 'NON_RISPOSTO')
     const totalAnswers = answers.length
 
-    const appointments = logs.filter(l => l.outcome === 'APPUNTAMENTO').length
+    // App Fissati: base canonica PO 2026-07-05 — data di fissaggio
+    // (COALESCE(appointmentCreatedAt, appointmentDate)), gate appointmentDate
+    // IS NOT NULL, dedup naturale (1 riga lead = 1 appuntamento). Sostituisce
+    // il vecchio conteggio da callLogs.outcome='APPUNTAMENTO' (righe, non lead).
+    const appointmentConditions = [
+        eq(leads.companyId, ctx.companyId),
+        isNotNull(leads.appointmentDate),
+        sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startOfDay}`,
+        sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endOfDay}`,
+    ]
+    if (isGdo) appointmentConditions.push(eq(leads.assignedToId, userId))
+    const appointmentLeads = await db.select({ id: leads.id })
+        .from(leads)
+        .where(and(...appointmentConditions))
+    const appointments = appointmentLeads.length
     const rejected = logs.filter(l => l.outcome === 'DA_SCARTARE').length
 
     const conversionRate = totalCalls > 0

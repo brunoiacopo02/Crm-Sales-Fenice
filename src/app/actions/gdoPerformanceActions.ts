@@ -7,7 +7,7 @@ import { isWithinInterval } from "date-fns";
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
-import { isRealGdo } from "@/lib/kpi/canon";
+import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
 import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 
 export interface GamificationTargetInput {
@@ -104,9 +104,11 @@ export async function getManagerGdoTables(monthString: string) {
     // event-based: qui la formula umana lo falserebbe, quindi niente card per lui.
     const activeGdos = allUsers.filter(u => u.isActive && !u.isBot);
 
-    // Tutti gli appuntamenti fissati questo mese (verranno splittati per data di appuntamento,
-    // ma la select la facciamo su tutto, o per appointmentDate compreso in questo mese per evitare di prenderli tutti)
-    // Meglio prendere tutti i lead e poi filtrare in memoria.
+    // Tutti gli appuntamenti fissati questo mese. Base canonica PO 2026-07-05
+    // (src/lib/kpi/canon.ts): attribuzione per data di FISSAGGIO
+    // (COALESCE(appointmentCreatedAt, appointmentDate)), non per data del
+    // meeting (appointmentDate) — un appuntamento fissato a fine mese per il
+    // mese successivo va contato nel mese in cui è stato fissato.
     // Bounds Europe/Rome (end esclusivo): prima usava componenti Date locali (UTC su Vercel).
     const { start: startObj, end: endObj } = monthBoundsRome(monthString);
 
@@ -115,8 +117,8 @@ export async function getManagerGdoTables(monthString: string) {
             and(
                 eq(leads.companyId, ctx.companyId),
                 isNotNull(leads.appointmentDate),
-                gte(leads.appointmentDate, startObj),
-                lt(leads.appointmentDate, endObj)
+                sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startObj}`,
+                sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endObj}`,
             )
         ),
         db.select({
@@ -510,7 +512,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
     // Get user's dailyApptTarget
     const userRow = await db.select({ dailyApptTarget: users.dailyApptTarget })
         .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, gdoUserId))).limit(1);
-    const dailyApptTarget = userRow[0]?.dailyApptTarget || 2;
+    const dailyApptTarget = userRow[0]?.dailyApptTarget || DEFAULT_DAILY_APPT_TARGET;
 
     // Count today's calls from callLogs
     const callResult = await db.select({ count: sql<number>`count(*)::integer` })

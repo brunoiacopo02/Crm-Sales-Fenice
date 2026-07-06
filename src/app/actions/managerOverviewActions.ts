@@ -15,9 +15,10 @@ import { leads, users, monthlyLeadTargets, metaAccountDaily } from "@/db/schema"
 import { and, eq, gte, lt, lte, isNull, isNotNull, inArray, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { workingDaysBetween, currentYearMonthRome } from "@/lib/workingDaysUtils";
+import { MANAGER_TARGET_APP_PER_GDO_DAY as TARGET_APP_PER_GDO_DAY } from "@/lib/kpi/canon";
 
 // Target espliciti richiesti dal management (Correzioni CRM 2026-06-11).
-const TARGET_APP_PER_GDO_DAY = 10;
+// TARGET_APP_PER_GDO_DAY (soglia giudizio manager = 10) ora importata da canon.
 const TARGET_CONFERMA_PCT = 0.15;
 const TARGET_COSTO_CONTRATTO_EUR = 760;
 const WEEKLY_STRETCH_FACTOR = 1.15;

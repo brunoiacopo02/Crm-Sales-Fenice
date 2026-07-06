@@ -3,12 +3,12 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
-import { gte, lt, eq, and } from "drizzle-orm"
+import { gte, lt, eq, and, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
-import { isRealGdo } from '@/lib/kpi/canon';
+import { isRealGdo, apptSetAt } from '@/lib/kpi/canon';
 export type KpiPeriod = 'oggi' | 'ieri' | 'settimana' | 'mese'
 
 /** Verifica se un timestamp cade nell'orario lavorativo GDO 13:30-20:00 Europe/Rome */
@@ -86,14 +86,40 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     // (decisione PO 2026-07-05); i log senza userId restano (tracciato legacy).
     logs = logs.filter(l => !l.userId || realGdoIds.has(l.userId))
 
+    // App Fissati: base canonica PO 2026-07-05 — data di fissaggio (apptSetAt =
+    // appointmentCreatedAt ?? appointmentDate), gate appointmentDate IS NOT NULL,
+    // dedup per lead (1 riga = 1 lead). Sostituisce il vecchio conteggio da
+    // callLogs.outcome='APPUNTAMENTO' (righe, poteva contare 2 volte lo stesso
+    // lead per richiamo+conferma). Il bot fissatore resta escluso dagli
+    // aggregati/ranking team (coerente col filtro sui log sopra).
+    const apptLeadsRaw = await db.select({
+            id: leads.id,
+            assignedToId: leads.assignedToId,
+            funnel: leads.funnel,
+            appointmentDate: leads.appointmentDate,
+            appointmentCreatedAt: leads.appointmentCreatedAt,
+        })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            isNotNull(leads.appointmentDate),
+            sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startDate}`,
+            sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endDate}`,
+        ))
+    let apptLeadsFiltered = apptLeadsRaw.filter(l => !l.assignedToId || realGdoIds.has(l.assignedToId))
+    if (funnelFilter && funnelFilter !== 'ALL') {
+        apptLeadsFiltered = apptLeadsFiltered.filter(l => l.funnel === funnelFilter)
+    }
+    const apptLeads = apptLeadsFiltered.map(l => ({ ...l, apptAt: apptSetAt(l)! }))
+
     // 1. CALCOLO AGGREGATI TOTALI TEAM
     // Filtro orario lavorativo 13:30-20:00 Europe/Rome per conteggi chiamate
     const workingHoursLogs = logs.filter(l => isWithinWorkingHours(l.createdAt))
     const totalCalls = workingHoursLogs.length
     const answeredLogs = workingHoursLogs.filter(l => l.outcome !== 'NON_RISPOSTO')
     const totalAnswers = answeredLogs.length
-    // Appuntamenti NON filtrati per orario (non hanno orario fisso)
-    const totalAppointments = logs.filter(l => l.outcome === 'APPUNTAMENTO').length
+    // Appuntamenti = App Fissati dal lead (apptLeads sopra), non più righe log
+    const totalAppointments = apptLeads.length
     const totalRecalls = workingHoursLogs.filter(l => l.outcome === 'RICHIAMO').length
 
     // Chiamate / Ora: range fisso 13:30-20:00 = 6.5 ore lavorative
@@ -124,9 +150,6 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
         const rank = rankingMap.get(log.userId)
         if (!rank) continue
 
-        // Appuntamenti sempre conteggiati (non hanno orario fisso)
-        if (log.outcome === 'APPUNTAMENTO') rank.appointments += 1
-
         // Chiamate/risposte solo in orario lavorativo 13:30-20:00
         if (isWithinWorkingHours(log.createdAt)) {
             rank.calls += 1
@@ -136,6 +159,13 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
             if (logTime < rank.firstCallTime) rank.firstCallTime = logTime
             if (logTime > rank.lastCallTime) rank.lastCallTime = logTime
         }
+    }
+    // Appuntamenti per GDO: dal lead (apptLeads sopra, attribuzione via
+    // leads.assignedToId), non più dal log — dedup naturale (1 riga = 1 lead).
+    for (const l of apptLeads) {
+        if (!l.assignedToId) continue
+        const rank = rankingMap.get(l.assignedToId)
+        if (rank) rank.appointments += 1
     }
 
     // Trasformazione e calcoli percentuali per Ranking
@@ -172,16 +202,25 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
             const m = parseInt(mStr)
 
             if (h === 13 && m >= 30) {
-                const entry = trendMap.get('13:30')!
-                entry.chiamate += 1
-                if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+                trendMap.get('13:30')!.chiamate += 1
             } else if (h >= 14 && h <= 20) {
-                const label = `${h}:00`
-                const entry = trendMap.get(label)
-                if (entry) {
-                    entry.chiamate += 1
-                    if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
-                }
+                const entry = trendMap.get(`${h}:00`)
+                if (entry) entry.chiamate += 1
+            }
+        }
+        // Appuntamenti (App Fissati) bucketizzati sulla propria data di
+        // fissaggio (apptAt), non sull'orario del log della chiamata.
+        for (const l of apptLeads) {
+            const romeTime = l.apptAt.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
+            const [hStr, mStr] = romeTime.split(':')
+            const h = parseInt(hStr)
+            const m = parseInt(mStr)
+
+            if (h === 13 && m >= 30) {
+                trendMap.get('13:30')!.appuntamenti += 1
+            } else if (h >= 14 && h <= 20) {
+                const entry = trendMap.get(`${h}:00`)
+                if (entry) entry.appuntamenti += 1
             }
         }
     } else {
@@ -197,9 +236,15 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
             if (!isWithinWorkingHours(log.createdAt)) continue
             const label = format(log.createdAt, 'EEE dd/MM')
             if (trendMap.has(label)) {
-                const entry = trendMap.get(label)!
-                entry.chiamate += 1
-                if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+                trendMap.get(label)!.chiamate += 1
+            }
+        }
+        // Appuntamenti (App Fissati) bucketizzati sulla propria data di
+        // fissaggio (apptAt), non sull'orario del log della chiamata.
+        for (const l of apptLeads) {
+            const label = format(l.apptAt, 'EEE dd/MM')
+            if (trendMap.has(label)) {
+                trendMap.get(label)!.appuntamenti += 1
             }
         }
     }
