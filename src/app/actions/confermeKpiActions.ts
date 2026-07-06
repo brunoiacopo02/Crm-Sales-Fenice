@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { leads, users, monthlyTargets } from "@/db/schema"
+import { leads, users, monthlyLeadTargets } from "@/db/schema"
 import { eq, and, gte, lte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
 import { eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
 import { weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
@@ -245,10 +245,12 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const calcWorkingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
     const calcTotalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
 
-    // Check for manager override of working days
+    // Check for manager override of working days — letto da monthlyLeadTargets
+    // (fonte canonica, unificata col Sales Manager e con /manager-targets —
+    // Task B5). Chiave month → yearMonth, workingDaysOverride → workingDays.
     const monthStr = format(start, 'yyyy-MM')
-    const mtQuery = await db.select().from(monthlyTargets).where(and(eq(monthlyTargets.month, monthStr), companyScope(ctx, monthlyTargets.companyId)))
-    const overrideVal = mtQuery.length > 0 ? mtQuery[0].workingDaysOverride : null
+    const mtQuery = await db.select().from(monthlyLeadTargets).where(and(eq(monthlyLeadTargets.yearMonth, monthStr), companyScope(ctx, monthlyLeadTargets.companyId)))
+    const overrideVal = mtQuery.length > 0 ? mtQuery[0].workingDays : null
     const totalWorkingDays = (overrideVal != null && overrideVal > 0) ? overrideVal : calcTotalWorkingDays
     const workingDaysPassed = Math.min(calcWorkingDaysPassed, totalWorkingDays)
 

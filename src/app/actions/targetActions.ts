@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { monthlyTargets, dailyKpiSnapshots, users, leads } from '@/db/schema';
+import { monthlyLeadTargets, dailyKpiSnapshots, users, leads } from '@/db/schema';
 import { eq, and, sql, gte, lt, lte, or, inArray, isNotNull, asc } from 'drizzle-orm';
 import crypto from 'crypto';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
@@ -101,32 +101,68 @@ function getDateMetrics(monthString: string, testTodayOverride?: Date) {
 }
 
 /**
- * Salva i target impostati dal manager
+ * Salva i target impostati dal manager.
+ *
+ * Unificato sulla tabella canonica `monthlyLeadTargets` (stessa fonte del
+ * Sales Manager, decisione PO 2026-07-05 — Task B5). `monthlyTargets` (legacy)
+ * NON viene più letta né scritta da qui, ma resta nel DB con i suoi dati.
+ *
+ * Mappatura campi: targetAppFissati→targetAppMonthly, targetAppConfermati→
+ * targetConfMonthly, targetTrattative→targetPresMonthly, targetClosed→
+ * targetCloseMonthly, targetValoreContratti→targetFatturatoMonthly,
+ * workingDaysOverride→workingDays. Chiave: month ('YYYY-MM') → yearMonth.
  */
 export async function saveMonthlyTarget(target: MonthlyTargetInput) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    const existing = await db.select().from(monthlyTargets).where(and(
-        eq(monthlyTargets.companyId, ctx.companyId),
-        eq(monthlyTargets.month, target.month),
+    const existing = await db.select().from(monthlyLeadTargets).where(and(
+        eq(monthlyLeadTargets.companyId, ctx.companyId),
+        eq(monthlyLeadTargets.yearMonth, target.month),
     ));
 
+    // `workingDays` su monthlyLeadTargets è NOT NULL (colonna condivisa col
+    // Sales Manager, che la richiede sempre > 0): non può rappresentare "nessun
+    // override" con null come faceva `monthlyTargets.workingDaysOverride`. Se il
+    // manager sceglie "calcolo automatico" (workingDaysOverride null/0),
+    // valorizziamo comunque il campo con il conteggio automatico corrente
+    // (Rome-aware, festività incluse) invece di lasciarlo indefinito.
+    const [year, month] = target.month.split('-').map(Number);
+    const resolvedWorkingDays = (target.workingDaysOverride != null && target.workingDaysOverride > 0)
+        ? target.workingDaysOverride
+        : countWorkingDaysInMonth(year, month);
+
+    const metricFields = {
+        targetAppMonthly: target.targetAppFissati,
+        targetConfMonthly: target.targetAppConfermati,
+        targetPresMonthly: target.targetTrattative,
+        targetCloseMonthly: target.targetClosed,
+        targetFatturatoMonthly: target.targetValoreContratti,
+        workingDays: resolvedWorkingDays,
+    };
+
     if (existing.length > 0) {
-        await db.update(monthlyTargets)
+        await db.update(monthlyLeadTargets)
             .set({
-                ...target,
-                updatedAt: new Date()
+                ...metricFields,
+                updatedAt: new Date(),
             })
             .where(and(
-                eq(monthlyTargets.companyId, ctx.companyId),
-                eq(monthlyTargets.id, existing[0].id),
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.id, existing[0].id),
             ));
     } else {
-        await db.insert(monthlyTargets).values({
+        await db.insert(monthlyLeadTargets).values({
             id: crypto.randomUUID(),
-            ...target,
-            updatedAt: new Date(),
             companyId: ctx.companyId,
+            yearMonth: target.month,
+            // Campi lead (Sales Manager, /panoramica-generale) non gestiti da
+            // questa form: default neutri non distruttivi. L'admin li imposta
+            // separatamente con setLeadMonthlyTarget; se poi configura anche
+            // quella pagina, l'update la sovrascriverà correttamente.
+            targetNuovi: 0,
+            targetDatabase: 0,
+            ...metricFields,
+            updatedAt: new Date(),
         });
     }
     return true;
@@ -214,18 +250,30 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     const todayFormatted = toRomeDateStr(today);
 
     // 1. Setup Targets e Utenti (tenant-scoped)
-    const tQuery = await db.select().from(monthlyTargets).where(and(
-        eq(monthlyTargets.companyId, ctx.companyId),
-        eq(monthlyTargets.month, monthString),
+    // Letto da monthlyLeadTargets (fonte canonica, unificata col Sales Manager
+    // — Task B5): mappiamo i campi sulla shape MonthlyTargetInput esistente,
+    // così il tipo di ritorno e la UI client non cambiano.
+    const tQuery = await db.select().from(monthlyLeadTargets).where(and(
+        eq(monthlyLeadTargets.companyId, ctx.companyId),
+        eq(monthlyLeadTargets.yearMonth, monthString),
     ));
-    const targetData = tQuery.length > 0 ? tQuery[0] : {
+    const targetRow = tQuery.length > 0 ? tQuery[0] : null;
+    const targetData: MonthlyTargetInput = targetRow ? {
+        month: monthString,
+        targetAppFissati: targetRow.targetAppMonthly,
+        targetAppConfermati: targetRow.targetConfMonthly,
+        targetTrattative: targetRow.targetPresMonthly,
+        targetClosed: targetRow.targetCloseMonthly,
+        targetValoreContratti: targetRow.targetFatturatoMonthly,
+        workingDaysOverride: targetRow.workingDays > 0 ? targetRow.workingDays : null,
+    } : {
         month: monthString,
         targetAppFissati: 0,
         targetAppConfermati: 0,
         targetTrattative: 0,
         targetClosed: 0,
         targetValoreContratti: 0,
-        workingDaysOverride: null as number | null,
+        workingDaysOverride: null,
     };
 
     // Se il manager ha impostato un override manuale dei giorni lavorativi, usalo
