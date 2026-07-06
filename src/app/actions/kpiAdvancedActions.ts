@@ -103,17 +103,18 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // Bot fissatore escluso da TUTTO su questa pagina (aggregati di testata,
     // trend, motivi scarto, ranking) — decisione PO 2026-07-05: la sua
     // produzione resta visibile solo su panoramica-generale e /statistiche-fissatore.
-    // I log legacy senza userId restano inclusi come da comportamento storico.
+    // L'esclusione è basata SOLO su isBot: i log dei MANAGER e i log legacy
+    // senza userId restano inclusi come da comportamento storico pre-B2.
     const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
     const userMap = new Map(allUsers.map(u => [u.id, u.name]))
-    const realGdoIds = new Set(allUsers.filter(isRealGdo).map(u => u.id))
-    const isRealGdoLog = (log: { userId: string | null }): boolean =>
-        !log.userId || realGdoIds.has(log.userId)
+    const botIds = new Set(allUsers.filter(u => u.isBot).map(u => u.id))
+    const isBotLog = (log: { userId: string | null }): boolean =>
+        !!log.userId && botIds.has(log.userId)
 
     // Filter logs to match only leads in `allLeads` (in case funnel filter was applied)
     // + esclusione bot fissatore (vedi sopra)
     const validLeadIds = new Set(allLeads.map(l => l.id))
-    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId) && isRealGdoLog(log))
+    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId) && !isBotLog(log))
 
     // Working-hours filter: se ON, le chiamate sono SOLO quelle 13:30-20:00.
     // Gli APPUNTAMENTI restano comunque tutti conteggiati (matchando la
@@ -173,7 +174,9 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const recallUnconvertedPerc = recallLogs.length > 0 ? Math.round((unconvertedRecalls / recallLogs.length) * 100) : 0
 
     // 4. Performance GDO
-    // (validLogs è già filtrato a monte: solo GDO reali + tracciato legacy senza userId)
+    // (validLogs è già bot-free a monte via botIds; MANAGER e tracciato legacy
+    // senza userId restano inclusi come pre-B2 — un MANAGER selezionato dal
+    // dropdown non viene azzerato)
     const gdoStatsMap: Record<string, any> = {}
 
     validLogs.forEach(log => {
