@@ -7,6 +7,7 @@ import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fn
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { isRealGdo } from "@/lib/kpi/canon";
 
 export interface GamificationTargetInput {
     month: string;
@@ -625,7 +626,9 @@ export async function getScriptCompletionRate(userId: string) {
 export async function getAllGdoScriptRates(): Promise<Record<string, { completionRate: number; scriptCompletedCount: number }>> {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    const activeGdos = await db.select({ id: users.id }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+    // Esclude il bot fissatore dalle statistiche di completamento script (decisione PO 2026-07-05)
+    const activeGdosRaw = await db.select({ id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+    const activeGdos = activeGdosRaw.filter(isRealGdo);
 
     if (activeGdos.length === 0) return {};
 

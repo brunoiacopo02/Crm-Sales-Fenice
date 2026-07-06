@@ -8,6 +8,7 @@ import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { isRealGdo } from '@/lib/kpi/canon';
 export type KpiPeriod = 'oggi' | 'ieri' | 'settimana' | 'mese'
 
 /** Verifica se un timestamp cade nell'orario lavorativo GDO 13:30-20:00 Europe/Rome */
@@ -76,9 +77,14 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
         logs = logs.filter(l => l.leadFunnel === funnelFilter)
     }
 
-    // Recupero Mappatura Utenti
-    const allUsers = await db.select().from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
+    // Recupero Mappatura Utenti — esclude il bot fissatore dal ranking/aggregati team
+    const allUsersRaw = await db.select().from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
+    const allUsers = allUsersRaw.filter(isRealGdo)
     const userMap = new Map(allUsers.map(u => [u.id, u]))
+    const realGdoIds = new Set(allUsers.map(u => u.id))
+    // Le chiamate del bot fissatore non entrano negli aggregati/ranking team
+    // (decisione PO 2026-07-05); i log senza userId restano (tracciato legacy).
+    logs = logs.filter(l => !l.userId || realGdoIds.has(l.userId))
 
     // 1. CALCOLO AGGREGATI TOTALI TEAM
     // Filtro orario lavorativo 13:30-20:00 Europe/Rome per conteggi chiamate

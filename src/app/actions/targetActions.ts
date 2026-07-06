@@ -6,6 +6,7 @@ import { eq, and, sql, gte, lte, or, inArray, isNotNull, asc } from 'drizzle-orm
 import crypto from 'crypto';
 import { startOfMonth, endOfMonth, endOfDay, isBefore, isAfter, isSunday } from 'date-fns';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { isStatsGdo } from '@/lib/kpi/canon';
 
 // Tipi di utilità per i target
 export interface MonthlyTargetInput {
@@ -264,16 +265,18 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         giorniLavorativiTotaliMese
     );
 
-    const gdoUsersObj = await db.select().from(users)
+    // Divisore delle medie per-GDO: solo GDO reali (esclude bot fissatore) con
+    // statsActive (decisione PO 2026-07-05), non solo isActive.
+    const gdoUsersObjRaw = await db.select().from(users)
         .where(
             and(
                 eq(users.companyId, ctx.companyId),
-                eq(users.role, 'GDO'),
-                eq(users.isActive, true)
+                eq(users.role, 'GDO')
             )
         );
+    const gdoUsersObj = gdoUsersObjRaw.filter(isStatsGdo);
     let gdoAttivi = gdoUsersObj.length;
-    if (gdoAttivi === 0) gdoAttivi = 1; // Fallback matematico 
+    if (gdoAttivi === 0) gdoAttivi = 1; // Fallback matematico
 
     // 2. Fetch Lead del Mese (Simile a Marketing Dashboard, escludendo BLT)
     const [yearStr, monthStr] = monthString.split('-');

@@ -75,9 +75,10 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         // ── GDO attivi ───────────────────────────────────────────────────────
         // statsActive: il TL/manager esclude dai conteggi i GDO non operativi,
         // altrimenti le medie per-GDO escono diluite (divisore gonfiato).
+        // isBot=false: il bot fissatore non è un GDO reale (decisione PO 2026-07-05).
         const gdos = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
             .from(users)
-            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true)));
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true), eq(users.isBot, false)));
         const nGdo = gdos.length;
         const gdoName = new Map(gdos.map(g => [g.id, g.name || g.displayName || g.id]));
 

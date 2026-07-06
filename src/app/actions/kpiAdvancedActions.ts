@@ -6,6 +6,7 @@ import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
+import { isRealGdo } from '@/lib/kpi/canon'
 
 import { cache } from "react"
 
@@ -165,8 +166,12 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
     const userMap = new Map(allUsers.map(u => [u.id, u.name]))
+    // Bot fissatore escluso dal ranking GDO (decisione PO 2026-07-05): le sue
+    // chiamate/appuntamenti non devono inquinare classifiche/medie del team.
+    const realGdoIds = new Set(allUsers.filter(isRealGdo).map(u => u.id))
 
     validLogs.forEach(log => {
+        if (log.userId && !realGdoIds.has(log.userId)) return
         const uid = log.userId || 'Tracciato Vecchio / Sconosciuto'
         const uname = userMap.get(uid) || uid
         if (!gdoStatsMap[uname]) {
@@ -241,8 +246,8 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     // Funnel list
     const funnelList = Array.from(new Set(allLeads.map(l => l.funnel!).filter(Boolean)))
-    // GDO List
-    const gdoList = allUsers.filter(u => u.role === 'GDO' || u.role === 'MANAGER').map(u => ({ id: u.id, name: u.name }))
+    // GDO List — GDO reali (esclude bot fissatore) + MANAGER (per filtrare le proprie chiamate)
+    const gdoList = allUsers.filter(u => isRealGdo(u) || u.role === 'MANAGER').map(u => ({ id: u.id, name: u.name }))
 
     // Trend chart data (sostituisce il vecchio mockTrend lato client).
     // Granularità 'hour' = barre 13:30 + 14-20 (orario lavoro).
@@ -445,13 +450,21 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const startBound = dayBoundsRome(new Date(now.getTime() - 29 * 86400000)).start
     const end = now
 
-    // --- Query 1: utenti GDO attivi del tenant ---
-    const gdoUsers = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
+    // --- Query 1: utenti GDO attivi del tenant (esclude bot fissatore) ---
+    const gdoUsersRaw = await db.select({
+        id: users.id,
+        name: users.name,
+        displayName: users.displayName,
+        role: users.role,
+        isActive: users.isActive,
+        isBot: users.isBot,
+    })
         .from(users)
         .where(and(
             companyScope(ctx, users.companyId),
             eq(users.role, 'GDO')
         ))
+    const gdoUsers = gdoUsersRaw.filter(isRealGdo)
 
     // --- Query 2: lead chiusi nella finestra (per GDO) ---
     // Un lead è "chiuso" quando ha raggiunto uno stato terminale:
