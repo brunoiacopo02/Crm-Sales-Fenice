@@ -10,9 +10,10 @@ export default async function QualitaLeadPage() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const role = (user?.user_metadata?.role as string) || "";
-    // MANAGER/ADMIN hanno accesso pieno. Il TL del team Conferme (Alberto, gating
-    // per email) può consultare l'intera dashboard ma NON invalidare i sondaggi.
-    const isManager = ["MANAGER", "ADMIN"].includes(role);
+    // MANAGER/ADMIN e il TL GDO (role TL, decisione PO 2026-07-05) hanno accesso
+    // pieno. Il TL del team Conferme (Alberto, gating per email) può consultare
+    // l'intera dashboard ma NON invalidare i sondaggi.
+    const isManager = ["MANAGER", "ADMIN", "TL"].includes(role);
     const isTlConfermeViewer = role === "CONFERME" && isConfermeTl(user?.email);
     if (!user || (!isManager && !isTlConfermeViewer)) {
         redirect("/");

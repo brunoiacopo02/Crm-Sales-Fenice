@@ -11,7 +11,7 @@ export default async function ArchivePage() {
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
 
     const role = supabaseUser?.user_metadata?.role;
-    if (!supabaseUser || (role !== 'MANAGER' && role !== 'ADMIN')) {
+    if (!supabaseUser || (role !== 'MANAGER' && role !== 'ADMIN' && role !== 'TL')) {
         redirect('/');
     }
 

@@ -9,8 +9,8 @@ export default async function AnalisiQualitaPage() {
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
 
-    // Solo Admin e Manager vedono l'analisi qualitativa completa
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER')) {
+    // Admin, Manager e TL GDO (decisione PO 2026-07-05) vedono l'analisi qualitativa completa
+    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER' && session.user.role !== 'TL')) {
         redirect("/")
     }
 

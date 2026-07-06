@@ -18,9 +18,10 @@ export default async function PanoramicaGeneralePage() {
 
     const role = user.user_metadata?.role;
     // Il TL del team Conferme (Alberto, gating per email) può vedere la dashboard
-    // Sales Manager in SOLA LETTURA. Tutti gli altri ruoli restano esclusi.
+    // Sales Manager in SOLA LETTURA. Il TL GDO (role TL) ha invece accesso PIENO
+    // (decisione PO 2026-07-05). Tutti gli altri ruoli restano esclusi.
     const isTlConfermeViewer = role === 'CONFERME' && isConfermeTl(user.email);
-    if (role !== 'ADMIN' && !isTlConfermeViewer) {
+    if (role !== 'ADMIN' && role !== 'TL' && !isTlConfermeViewer) {
         redirect('/');
     }
 

@@ -22,9 +22,10 @@ async function requireManager(): Promise<{ id: string; role: string; ctx: Tenant
     const { data: { user } } = await supabase.auth.getUser();
     const role = user?.user_metadata?.role as string | undefined;
     // Oltre a MANAGER/ADMIN, il TL del team Conferme (Alberto, gating per email)
-    // può consultare in lettura i sondaggi di qualità lead.
+    // può consultare in lettura i sondaggi di qualità lead. Il TL GDO (role TL)
+    // ha invece accesso pieno, come MANAGER (decisione PO 2026-07-05).
     const isTlConfermeViewer = role === "CONFERME" && isConfermeTl(user?.email);
-    if (!role || (!["MANAGER", "ADMIN"].includes(role) && !isTlConfermeViewer)) {
+    if (!role || (!["MANAGER", "ADMIN", "TL"].includes(role) && !isTlConfermeViewer)) {
         throw new Error("Unauthorized");
     }
     const ctx = await currentTenant();

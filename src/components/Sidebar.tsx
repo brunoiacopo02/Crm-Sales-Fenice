@@ -104,15 +104,44 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
         ]
     } else if (role === "TL") {
-        // TL GDO: solo le sezioni legate ai GDO, niente fatturato/venditori/
-        // conferme/store admin/import/target aziendali (Correzioni CRM 2026-06-11).
-        navItems = [
-            { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
-            { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
-            { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
-            { name: "Richiami", href: "/richiami", icon: Calendar },
-            { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
-            { name: "Note GDO", href: "/note-gdo", icon: FileText },
+        // TL GDO: sezioni legate ai GDO + dashboard Sales Manager e tutte le
+        // viste lead/GDO (accesso pieno, decisione PO 2026-07-05). Restano
+        // escluse le sezioni venditori/conferme/store admin/marketing/team.
+        navGroups = [
+            {
+                label: "GDO",
+                items: [
+                    { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
+                    { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
+                    { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
+                    { name: "Richiami", href: "/richiami", icon: Calendar },
+                    { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
+                    { name: "Note GDO", href: "/note-gdo", icon: FileText },
+                ],
+            },
+            {
+                label: "Sales Manager",
+                items: [
+                    { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
+                    { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
+                ],
+            },
+            {
+                label: "Operativo",
+                items: [
+                    { name: "Appuntamenti Oggi", href: "/appuntamenti-oggi", icon: Calendar },
+                    { name: "Importa Lead", href: "/import", icon: Upload },
+                    { name: "Lead Automatici (AC)", href: "/lead-automatici", icon: Zap },
+                    { name: "Archivio Storico", href: "/archivio", icon: Database },
+                ],
+            },
+            {
+                label: "Qualità",
+                items: [
+                    { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
+                    { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
+                ],
+            },
         ]
     } else if (role === "ADMIN" || role === "MANAGER") {
         if (session?.user?.email === "marketing@fenice.local" || session?.user?.name === "Marketing") {
