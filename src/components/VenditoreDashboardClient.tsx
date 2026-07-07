@@ -20,10 +20,9 @@ const VenditoreDrawer = dynamic(
 )
 import { KpiVenditoriClient } from "@/components/KpiVenditoriClient"
 import { getGoogleAuthUrl, checkGoogleCalendarConnection, disconnectGoogleCalendar } from "@/app/actions/calendarActions"
-import { createClient } from "@/utils/supabase/client"
+import { onBusEvent } from "@/lib/realtimeBus"
 
 export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
-    const supabase = createClient()
     const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA' | 'PERFORMANCE'>('LISTA')
     const [appointments, setAppointments] = useState<any[]>([])
     const [followUps, setFollowUps] = useState<any[]>([])
@@ -128,24 +127,14 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         fetchAppointments()
         fetchFollowUps()
 
-        const channel = supabase
-            .channel('venditore_leads_updates')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'leads',
-                    filter: `salespersonUserId=eq.${sellerId}`
-                },
-                () => {
-                    fetchAppointments()
-                }
-            )
-            .subscribe()
+        // Bus Broadcast (migrazione 0019): ping ad ogni cambio sulla tabella
+        // leads della company; la refetch è già scoped al venditore.
+        const offLeads = onBusEvent('leads', () => {
+            fetchAppointments()
+        })
 
         return () => {
-            supabase.removeChannel(channel)
+            offLeads()
         }
     }, [sellerId])
 

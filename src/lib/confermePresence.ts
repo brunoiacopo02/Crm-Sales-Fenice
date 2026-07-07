@@ -15,7 +15,7 @@
  * - connectConfermePresence(user)  → monta il canale (refcount) e traccia
  * - setConfermeActivity(leadId)    → aggiorna il lead su cui si sta lavorando
  * - subscribeConfermePresence(cb)  → lista presence (tutti gli utenti online)
- * - subscribeConfermeLeadChanges(cb) → eventi postgres_changes su `leads`
+ * - subscribeConfermeLeadChanges(cb) → cambi sulla tabella `leads` (dal bus)
  *
  * Task P1 (2026-07-05): il Realtime da solo è inaffidabile (churn di
  * subscribe, tab in background, reti instabili) — gli operatori a volte non
@@ -23,12 +23,19 @@
  * (src/app/actions/presenceActions.ts) come fonte di verità di backup: upsert
  * ogni 45s + a ogni cambio attività, sullo STESSO singleton (nessun secondo
  * canale realtime). Il Radar unisce le due fonti lato componente.
+ *
+ * Migrazione Broadcast (2026-07-07): il canale è ora SOLO presence — i cambi
+ * lead arrivano dal bus (src/lib/realtimeBus.ts, trigger migrazione 0019),
+ * quindi questo topic non pesa più sul WAL polling del DB. Hardening radar:
+ * watchdog che ricrea il canale se resta giù >2 cicli da 30s e listener
+ * window 'online' per il rientro immediato dopo una caduta di rete.
  */
 
 import { createClient } from "@/utils/supabase/client"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 import { logRealtimeStatus } from "@/lib/realtimeUtils"
 import { upsertHeartbeat } from "@/app/actions/presenceActions"
+import { onBusEvent } from "@/lib/realtimeBus"
 
 export type ConfermePresenceEntry = {
     online_at: string
@@ -45,6 +52,9 @@ let subscribed = false
 let refCount = 0
 let heartbeat: ReturnType<typeof setInterval> | null = null
 let dbHeartbeat: ReturnType<typeof setInterval> | null = null
+let presenceWatchdog: ReturnType<typeof setInterval> | null = null
+let downTicks = 0
+let busUnsubscribe: (() => void) | null = null
 let currentUser: ConfermePresenceEntry["user"] | null = null
 let currentLeadId: string | null = null
 let lastPresence: ConfermePresenceEntry[] = []
@@ -94,7 +104,45 @@ function pushDbHeartbeat() {
 function onVisibilityChange() {
     // Tab in background sospende i WebSocket: al ritorno ripubblica il track,
     // altrimenti chi torna dopo 10 minuti appare offline ai colleghi.
-    if (!document.hidden) { retrack(); pushDbHeartbeat() }
+    if (!document.hidden) { retrack(); pushDbHeartbeat(); watchdogTick() }
+}
+
+function onOnline() {
+    // Rete tornata: non aspettare il prossimo ciclo di watchdog.
+    retrack()
+    pushDbHeartbeat()
+    watchdogTick()
+}
+
+/**
+ * Watchdog radar (hardening 2026-07-07): se il canale resta non-SUBSCRIBED
+ * per 2 cicli consecutivi (>30s) il rejoin automatico di supabase-js non ce
+ * l'ha fatta — ricrea il canale da zero mantenendo listener e refcount.
+ * È la risposta strutturale ai report "a volte non vedo i colleghi online".
+ */
+function watchdogTick() {
+    if (refCount <= 0 || !channel) return
+    if (subscribed) { downTicks = 0; return }
+    downTicks++
+    if (downTicks >= 2) {
+        console.warn(`[presence] conferme_realtime_board giù da ${downTicks} cicli, rebuild del canale`)
+        downTicks = 0
+        rebuildChannel()
+    }
+}
+
+function rebuildChannel() {
+    const ch = channel
+    channel = null
+    subscribed = false
+    if (ch) {
+        ;(async () => {
+            try { await ch.untrack() } catch { /* ignore */ }
+            try { createClient().removeChannel(ch) } catch { /* ignore */ }
+        })()
+    }
+    ensureChannel()
+    retrack()
 }
 
 function onPageHide() {
@@ -106,10 +154,6 @@ function ensureChannel() {
     const supabase = createClient()
     const ch = supabase.channel("conferme_realtime_board")
     channel = ch
-
-    ch.on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => {
-        changeListeners.forEach(cb => { try { cb() } catch { /* listener isolato */ } })
-    })
 
     ch.on("presence", { event: "sync" }, () => {
         const state = ch.presenceState()
@@ -135,21 +179,38 @@ function ensureChannel() {
         notifyConnection()
     })
 
-    // Heartbeat: ogni 25s ripublica il track con nuovo online_at. Previene
-    // che Supabase/colleghi ci considerino offline per disconnessioni brevi.
-    heartbeat = setInterval(retrack, 25_000)
-    // Heartbeat DB (Task P1): ogni 45s, fonte di verità di backup al Realtime.
-    dbHeartbeat = setInterval(pushDbHeartbeat, 45_000)
-    document.addEventListener("visibilitychange", onVisibilityChange)
-    window.addEventListener("pagehide", onPageHide)
+    // Timer e listener globali: guardati singolarmente perché ensureChannel
+    // viene richiamata anche dal rebuild del watchdog (niente duplicati).
+    if (!heartbeat) {
+        // Heartbeat: ogni 25s ripublica il track con nuovo online_at. Previene
+        // che Supabase/colleghi ci considerino offline per disconnessioni brevi.
+        heartbeat = setInterval(retrack, 25_000)
+        // Heartbeat DB (Task P1): ogni 45s, fonte di verità di backup al Realtime.
+        dbHeartbeat = setInterval(pushDbHeartbeat, 45_000)
+        // Watchdog radar: controlla ogni 30s che il canale sia vivo.
+        presenceWatchdog = setInterval(watchdogTick, 30_000)
+        document.addEventListener("visibilitychange", onVisibilityChange)
+        window.addEventListener("pagehide", onPageHide)
+        window.addEventListener("online", onOnline)
+    }
+    if (!busUnsubscribe) {
+        // Cambi lead dal bus Broadcast (già debounced lato bus).
+        busUnsubscribe = onBusEvent("leads", () => {
+            changeListeners.forEach(cb => { try { cb() } catch { /* listener isolato */ } })
+        })
+    }
 }
 
 function teardown() {
     if (!channel) return
     if (heartbeat) { clearInterval(heartbeat); heartbeat = null }
     if (dbHeartbeat) { clearInterval(dbHeartbeat); dbHeartbeat = null }
+    if (presenceWatchdog) { clearInterval(presenceWatchdog); presenceWatchdog = null }
+    if (busUnsubscribe) { busUnsubscribe(); busUnsubscribe = null }
+    downTicks = 0
     document.removeEventListener("visibilitychange", onVisibilityChange)
     window.removeEventListener("pagehide", onPageHide)
+    window.removeEventListener("online", onOnline)
     const ch = channel
     channel = null
     subscribed = false
@@ -199,7 +260,7 @@ export function subscribeConfermePresence(cb: PresenceListener): () => void {
     return () => { presenceListeners.delete(cb) }
 }
 
-/** Sottoscrive i postgres_changes sulla tabella leads. */
+/** Sottoscrive i cambi sulla tabella leads (bus Broadcast, debounced). */
 export function subscribeConfermeLeadChanges(cb: ChangeListener): () => void {
     changeListeners.add(cb)
     return () => { changeListeners.delete(cb) }

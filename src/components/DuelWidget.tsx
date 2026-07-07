@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { SafeWrapper } from "./SafeWrapper";
 import { getActiveDuelsForUser } from "@/app/actions/duelActions";
-import { createClient } from "@/utils/supabase/client";
+import { onBusEvent } from "@/lib/realtimeBus";
 
 type DuelData = {
   id: string;
@@ -52,15 +52,10 @@ function DuelWidgetInner({ userId }: { userId: string }) {
   }, [fetchDuels]);
 
   // Realtime: refetch immediato ad ogni cambio nella tabella duels
+  // (bus Broadcast, trigger duels_broadcast — migrazione 0019)
   useEffect(() => {
-    const supabase = createClient();
-    const ch = supabase.channel('duel_widget_' + userId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'duels' }, () => {
-        fetchDuels();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [fetchDuels, userId]);
+    return onBusEvent('duels', fetchDuels);
+  }, [fetchDuels]);
 
   useEffect(() => {
     if (duels.length === 0) return;

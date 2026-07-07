@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Swords, Clock, Coins, Trophy, Users as UsersIcon, RefreshCw } from "lucide-react";
 import { SafeWrapper } from "./SafeWrapper";
 import { getAllActiveDuelsForMonitor } from "@/app/actions/duelActions";
-import { createClient } from "@/utils/supabase/client";
+import { onBusEvent } from "@/lib/realtimeBus";
 
 interface DuelRow {
     id: string;
@@ -66,15 +66,9 @@ function TeamDuelsMonitorInner() {
     void tick;
 
     // Realtime: quando la tabella duels cambia (score updates, nuovi duelli,
-    // completamento) refetch immediato.
+    // completamento) refetch immediato (bus Broadcast — migrazione 0019).
     useEffect(() => {
-        const supabase = createClient();
-        const ch = supabase.channel('duels_monitor')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'duels' }, () => {
-                fetchDuels();
-            })
-            .subscribe();
-        return () => { supabase.removeChannel(ch); };
+        return onBusEvent('duels', fetchDuels);
     }, [fetchDuels]);
 
     if (loading) {

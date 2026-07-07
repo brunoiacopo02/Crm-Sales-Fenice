@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { onBusEvent } from '@/lib/realtimeBus';
 import { useAuth } from '@/components/AuthProvider';
 import { SocialNotificationToast } from '@/components/SocialNotificationToast';
 import type { SocialToastData } from '@/components/SocialNotificationToast';
@@ -57,21 +58,14 @@ export function SocialNotificationProvider({ children }: { children?: React.Reac
         return () => window.removeEventListener('social_notification', handler);
     }, [pushNotification]);
 
-    // Supabase Realtime: listen for new achievements by other users
+    // Realtime (bus Broadcast, trigger user_achievements_broadcast): nuovi
+    // achievement dei colleghi. Payload trigger: {userId, achievementId, tier}.
     useEffect(() => {
         if (!user) return;
 
-        const channel = supabase
-            .channel('social-achievements')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'userAchievements',
-                },
+        const offAchievements = onBusEvent('userAchievements',
                 async (payload) => {
-                    const record = payload.new as { userId?: string; achievementId?: string; tier?: number };
+                    const record = payload as { userId?: string; achievementId?: string; tier?: number };
                     // Skip own achievements (user already gets RewardPopup)
                     if (!record || record.userId === user.id) return;
 
@@ -94,29 +88,21 @@ export function SocialNotificationProvider({ children }: { children?: React.Reac
                         actorName,
                     });
                 }
-            )
-            .subscribe();
+        );
 
         return () => {
-            supabase.removeChannel(channel);
+            offAchievements();
         };
     }, [user, supabase, pushNotification]);
 
-    // Supabase Realtime: listen for boss battle updates
+    // Realtime (bus Broadcast, trigger boss_battles_broadcast): update boss.
+    // Payload trigger: {id, status, title}.
     useEffect(() => {
         if (!user) return;
 
-        const channel = supabase
-            .channel('social-bossbattles')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'bossBattles',
-                },
+        const offBossBattles = onBusEvent('bossBattles',
                 (payload) => {
-                    const record = payload.new as { id?: string; status?: string; title?: string; currentHp?: number; totalHp?: number };
+                    const record = payload as { id?: string; status?: string; title?: string };
                     if (!record) return;
 
                     if (record.status === 'defeated') {
@@ -127,29 +113,21 @@ export function SocialNotificationProvider({ children }: { children?: React.Reac
                         });
                     }
                 }
-            )
-            .subscribe();
+        );
 
         return () => {
-            supabase.removeChannel(channel);
+            offBossBattles();
         };
     }, [user, supabase, pushNotification]);
 
-    // Supabase Realtime: listen for new seasonal events
+    // Realtime (bus Broadcast, trigger seasonal_events_broadcast): nuovi eventi
+    // stagionali. Payload: {title, description, xpMultiplier, coinsMultiplier}.
     useEffect(() => {
         if (!user) return;
 
-        const channel = supabase
-            .channel('social-seasonal')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'seasonalEvents',
-                },
+        const offSeasonal = onBusEvent('seasonalEvents',
                 (payload) => {
-                    const record = payload.new as { title?: string; description?: string; xpMultiplier?: number; coinsMultiplier?: number };
+                    const record = payload as { title?: string; description?: string; xpMultiplier?: number; coinsMultiplier?: number };
                     if (!record) return;
 
                     const multiplierMsg = [];
@@ -162,11 +140,10 @@ export function SocialNotificationProvider({ children }: { children?: React.Reac
                         message: `${record.title || 'Nuovo evento'} — ${multiplierMsg.length > 0 ? multiplierMsg.join(' + ') + '!' : record.description || 'Partecipa ora!'}`,
                     });
                 }
-            )
-            .subscribe();
+        );
 
         return () => {
-            supabase.removeChannel(channel);
+            offSeasonal();
         };
     }, [user, supabase, pushNotification]);
 

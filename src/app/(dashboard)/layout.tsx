@@ -65,7 +65,7 @@ export default async function DashboardLayout({
     const showGamificationOverlays = session.user.role !== 'VENDITORE'
 
     return (
-        <RealtimeProvider>
+        <RealtimeProvider userId={session.user.id} companies={tctx.allowedCompanies}>
             <SidebarProvider>
                 <SalesCompanyProvider company={dataCompany}>
                     <div data-company={dataCompany} data-theme={userTheme} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>

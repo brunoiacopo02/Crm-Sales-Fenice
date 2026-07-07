@@ -1,16 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/utils/supabase/client"
 import { markAlertAsRead, getMyUnreadAlerts } from "@/app/actions/alertActions"
 import { AlertOctagon, CheckCircle2 } from "lucide-react"
-import { logRealtimeStatus } from "@/lib/realtimeUtils"
+import { onBusEvent } from "@/lib/realtimeBus"
 
 export function GlobalAlertListener({ currentUser }: { currentUser: any }) {
     const [alerts, setAlerts] = useState<any[]>([])
     const [visibleAlert, setVisibleAlert] = useState<any | null>(null)
     const [isMarking, setIsMarking] = useState(false)
-    const supabase = createClient()
 
     useEffect(() => {
         if (!currentUser?.id) return
@@ -25,32 +23,19 @@ export function GlobalAlertListener({ currentUser }: { currentUser: any }) {
         }
         loadInitialAlerts()
 
-        const channel = supabase.channel('internal_alerts_changes')
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'internalAlerts',
-                filter: `receiverId=eq.${currentUser.id}`
-            }, (payload) => {
-                handleNewAlert(payload.new)
-            })
-            // We also need to listen for broadcast alerts where receiverId is null
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'internalAlerts',
-                filter: `receiverId=is.null`
-            }, (payload) => {
-                handleNewAlert(payload.new)
-            })
-            .subscribe(logRealtimeStatus('global-alerts'))
+        // Migrazione Broadcast 2026-07-07: il trigger internal_alerts_broadcast
+        // (migrazione 0019) invia il ping sia sul topic personale (receiverId)
+        // sia su quello company (receiverId NULL): un solo listener li copre.
+        const offAlerts = onBusEvent('internalAlerts', () => {
+            handleNewAlert()
+        })
 
         return () => {
-            supabase.removeChannel(channel)
+            offAlerts()
         }
-    }, [currentUser?.id, supabase])
+    }, [currentUser?.id])
 
-    const handleNewAlert = async (newRecord: any) => {
+    const handleNewAlert = async () => {
         // Fetch full details (with sender name etc) because the DB payload only has the raw internalAlerts row
         // A simple way is to refetch all my unread alerts to get the joined data
         const updated = await getMyUnreadAlerts() // this will also include this new alert

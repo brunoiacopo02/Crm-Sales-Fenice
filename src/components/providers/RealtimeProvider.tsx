@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { logRealtimeStatus } from '@/lib/realtimeUtils'
+import { initRealtimeBus, onBusEvent } from '@/lib/realtimeBus'
 
 type RealtimeContextType = {
     broadcastFomo: (event: string, payload: Record<string, unknown>) => void;
@@ -14,52 +15,54 @@ const RealtimeContext = createContext<RealtimeContextType>({ broadcastFomo: () =
 
 export const useRealtimeBroadcast = () => useContext(RealtimeContext);
 
-export function RealtimeProvider({ children }: { children: React.ReactNode }) {
+/**
+ * Migrazione Broadcast 2026-07-07: gli eventi derivati dal DB (leads,
+ * leadEvents, userAchievements) arrivano dal bus (src/lib/realtimeBus.ts,
+ * trigger migrazione 0019) invece che da postgres_changes. I due canali
+ * broadcast puri pre-esistenti restano invariati:
+ * - 'public:leads-changes' per fomo_hotstreak (send client→client via
+ *   broadcastFomo, usato da HotStreak.tsx)
+ * - 'team-adventure' per team_boss_damage (inviato anche server-side da
+ *   teamAdventureActions.ts)
+ */
+export function RealtimeProvider({ userId, companies, children }: {
+    userId: string;
+    companies: string[];
+    children: React.ReactNode;
+}) {
     const router = useRouter()
     const supabase = createClient()
     const channelRef = useRef<RealtimeChannel | null>(null)
 
     useEffect(() => {
-        // Iscrizione al canale Realtime globale per Leads + FOMO events + broadcast
+        const disconnect = initRealtimeBus(userId, companies)
+
+        const offLeads = onBusEvent('leads', () => {
+            router.refresh()
+        })
+        const offLeadEvents = onBusEvent('leadEvents', (payload) => {
+            try {
+                window.dispatchEvent(new CustomEvent('fomo_lead_event', { detail: payload }));
+            } catch { /* silent fail */ }
+        })
+        const offAchievements = onBusEvent('userAchievements', (payload) => {
+            try {
+                window.dispatchEvent(new CustomEvent('fomo_achievement_event', { detail: payload }));
+            } catch { /* silent fail */ }
+        })
+
+        return () => {
+            offLeads()
+            offLeadEvents()
+            offAchievements()
+            disconnect()
+        }
+    }, [router, userId, companies.join(',')])
+
+    useEffect(() => {
+        // Canale broadcast client→client per gli hot streak (nessun costo DB).
         const channel = supabase
             .channel('public:leads-changes')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*', // Ascolta INSERT, UPDATE, DELETE
-                    schema: 'public',
-                    table: 'leads'
-                },
-                () => {
-                    router.refresh()
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'leadEvents'
-                },
-                (payload) => {
-                    try {
-                        window.dispatchEvent(new CustomEvent('fomo_lead_event', { detail: payload.new }));
-                    } catch { /* silent fail */ }
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'userAchievements'
-                },
-                (payload) => {
-                    try {
-                        window.dispatchEvent(new CustomEvent('fomo_achievement_event', { detail: payload.new }));
-                    } catch { /* silent fail */ }
-                }
-            )
             .on(
                 'broadcast',
                 { event: 'fomo_hotstreak' },
@@ -91,7 +94,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
             supabase.removeChannel(teamChannel)
             channelRef.current = null
         }
-    }, [router, supabase])
+    }, [supabase])
 
     const broadcastFomo = useCallback((event: string, payload: Record<string, unknown>) => {
         try {
