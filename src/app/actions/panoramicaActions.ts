@@ -220,7 +220,8 @@ async function leadOverviewForCompany(ctx: TenantContext, ym: string): Promise<L
             config: cfg ? {
                 targetNuovi: cfg.targetNuovi,
                 targetDatabase: cfg.targetDatabase,
-                workingDays: cfg.workingDays,
+                // workingDays risolto (0 = auto → countWorkingDaysInMonth), mai 0 grezzo verso il client.
+                workingDays,
                 baselineNuovi: cfg.baselineNuovi,
                 baselineDatabase: cfg.baselineDatabase,
                 baselineSetAt: cfg.baselineSetAt ? cfg.baselineSetAt.toISOString() : null,
@@ -260,7 +261,8 @@ export async function setLeadMonthlyTarget(input: {
         if (!admin) return { success: false, error: 'UNAUTHORIZED' };
         assertSingleCompany(ctx); // scrittura: bloccata in modalità "Tutte le aziende"
 
-        if (input.targetNuovi < 0 || input.targetDatabase < 0 || input.workingDays <= 0) {
+        // workingDays: 0 = automatico (calcolo Rome-aware), > 0 = override manuale. Solo i negativi sono invalidi.
+        if (input.targetNuovi < 0 || input.targetDatabase < 0 || input.workingDays < 0) {
             return { success: false, error: 'Valori non validi' };
         }
         if (!/^\d{4}-\d{2}$/.test(input.yearMonth)) {

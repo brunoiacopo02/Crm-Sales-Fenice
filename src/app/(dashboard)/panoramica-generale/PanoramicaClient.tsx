@@ -569,17 +569,21 @@ function TargetModal({
     const [targetNuovi, setTargetNuovi] = useState<number>(initialConfig?.targetNuovi ?? 0);
     const [targetDatabase, setTargetDatabase] = useState<number>(initialConfig?.targetDatabase ?? 0);
     const [workingDays, setWorkingDays] = useState<number>(initialConfig?.workingDays ?? 0);
+    const [autoWorkingDays, setAutoWorkingDays] = useState<boolean>(!initialConfig || initialConfig.workingDays === 0);
+    const [suggestedWd, setSuggestedWd] = useState<number>(0);
     const [baselineNuovi, setBaselineNuovi] = useState<number>(initialConfig?.baselineNuovi ?? 0);
     const [baselineDatabase, setBaselineDatabase] = useState<number>(initialConfig?.baselineDatabase ?? 0);
     const [error, setError] = useState<string>('');
 
-    // If editing a fresh month with no config, prefill workingDays with the auto-computed value
+    // Calcola sempre il suggerito (per il label del checkbox); prefilla workingDays
+    // solo quando non c'è ancora una config salvata per il mese.
     useEffect(() => {
-        if (!initialConfig) {
-            getSuggestedWorkingDays(yearMonth).then((wd) => {
+        getSuggestedWorkingDays(yearMonth).then((wd) => {
+            setSuggestedWd(wd);
+            if (!initialConfig) {
                 setWorkingDays(wd);
-            });
-        }
+            }
+        });
     }, [yearMonth, initialConfig]);
 
     function handleSave() {
@@ -588,7 +592,7 @@ function TargetModal({
             setError('Target non può essere negativo');
             return;
         }
-        if (workingDays <= 0) {
+        if (!autoWorkingDays && workingDays <= 0) {
             setError('I giorni lavorativi devono essere > 0');
             return;
         }
@@ -602,7 +606,7 @@ function TargetModal({
                 yearMonth,
                 targetNuovi,
                 targetDatabase,
-                workingDays,
+                workingDays: autoWorkingDays ? 0 : workingDays,
                 baselineNuovi,
                 baselineDatabase,
             });
@@ -643,12 +647,22 @@ function TargetModal({
                     </div>
 
                     <div>
-                        <LabeledInput
-                            label="Giorni lavorativi del mese"
-                            value={workingDays}
-                            onChange={setWorkingDays}
-                            help="Auto-calcolato escludendo domeniche e festivi italiani. Modificabile."
-                        />
+                        <label className="flex items-center gap-2 text-xs font-medium text-gray-600 mb-1">
+                            <input
+                                type="checkbox"
+                                checked={autoWorkingDays}
+                                onChange={e => setAutoWorkingDays(e.target.checked)}
+                            />
+                            Giorni lavorativi automatici ({suggestedWd || '…'} per questo mese)
+                        </label>
+                        {!autoWorkingDays && (
+                            <LabeledInput
+                                label="Giorni lavorativi (override manuale)"
+                                value={workingDays}
+                                onChange={setWorkingDays}
+                                help="Vince sul calcolo automatico ovunque (Sales Manager e Target & Previsioni)."
+                            />
+                        )}
                     </div>
 
                     {/* Baseline */}
