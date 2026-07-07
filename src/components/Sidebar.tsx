@@ -139,7 +139,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                 label: "Qualità",
                 items: [
                     { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
-                    { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
+                    { name: "Analisi Funnel", href: "/analisi-qualita", icon: Search },
                 ],
             },
         ]

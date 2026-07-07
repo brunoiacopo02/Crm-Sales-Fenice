@@ -82,6 +82,12 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     const allUsers = allUsersRaw.filter(isRealGdo)
     const userMap = new Map(allUsers.map(u => [u.id, u]))
     const realGdoIds = new Set(allUsers.map(u => u.id))
+    // Solo bot fissatore (isBot=true), a differenza di realGdoIds che esclude
+    // anche i GDO disattivati. Usato per l'attribuzione degli appuntamenti da
+    // lead (fix F5): la storia di un GDO dimesso a metà mese resta contata,
+    // solo la produzione del bot va fuori — altrimenti kpi-gdo (che dopo il
+    // fix F1 esclude solo il bot) e kpi-team divergerebbero sui totali.
+    const botIds = new Set(allUsersRaw.filter(u => u.isBot).map(u => u.id))
     // Le chiamate del bot fissatore non entrano negli aggregati/ranking team
     // (decisione PO 2026-07-05); i log senza userId restano (tracciato legacy).
     logs = logs.filter(l => !l.userId || realGdoIds.has(l.userId))
@@ -91,7 +97,8 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     // dedup per lead (1 riga = 1 lead). Sostituisce il vecchio conteggio da
     // callLogs.outcome='APPUNTAMENTO' (righe, poteva contare 2 volte lo stesso
     // lead per richiamo+conferma). Il bot fissatore resta escluso dagli
-    // aggregati/ranking team (coerente col filtro sui log sopra).
+    // aggregati/ranking team (coerente col filtro sui log sopra); i GDO
+    // disattivati restano invece contati (vedi botIds sopra).
     const apptLeadsRaw = await db.select({
             id: leads.id,
             assignedToId: leads.assignedToId,
@@ -106,7 +113,7 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startDate}`,
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endDate}`,
         ))
-    let apptLeadsFiltered = apptLeadsRaw.filter(l => !l.assignedToId || realGdoIds.has(l.assignedToId))
+    let apptLeadsFiltered = apptLeadsRaw.filter(l => !l.assignedToId || !botIds.has(l.assignedToId))
     if (funnelFilter && funnelFilter !== 'ALL') {
         apptLeadsFiltered = apptLeadsFiltered.filter(l => l.funnel === funnelFilter)
     }

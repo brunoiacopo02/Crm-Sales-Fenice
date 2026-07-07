@@ -91,12 +91,28 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const safeStartDate = new Date(filters.startDate)
     const safeEndDate = new Date(filters.endDate)
 
+    // Bot fissatore escluso da TUTTO su questa pagina (aggregati di testata,
+    // trend, motivi scarto, ranking) — decisione PO 2026-07-05: la sua
+    // produzione resta visibile solo su panoramica-generale e /statistiche-fissatore.
+    // L'esclusione è basata SOLO su isBot: i log dei MANAGER e i log legacy
+    // senza userId restano inclusi come da comportamento storico pre-B2.
+    // Costruito PRIMA del blocco App Fissati (vedi sotto) perché serve anche
+    // per escludere i lead fissati dal bot da apptLeadsInRange (fix F1).
+    const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
+    const userMap = new Map(allUsers.map(u => [u.id, u.name]))
+    const botIds = new Set(allUsers.filter(u => u.isBot).map(u => u.id))
+    const isBotLog = (log: { userId: string | null }): boolean =>
+        !!log.userId && botIds.has(log.userId)
+
     // App Fissati: base canonica decisione PO 2026-07-05 — data di fissaggio
     // (apptSetAt = appointmentCreatedAt ?? appointmentDate, gate appointmentDate
     // IS NOT NULL), dedup per lead. Sostituisce il vecchio conteggio da
     // callLogs.outcome='APPUNTAMENTO' (righe, non lead) sia per la testata che
-    // per il ranking per-GDO qui sotto.
+    // per il ranking per-GDO qui sotto. Esclude i lead assegnati al bot
+    // fissatore (fix F1): la sua produzione non deve entrare in testata,
+    // ranking o trend di questa pagina.
     const apptLeadsInRange = allLeads.filter(l => {
+        if (l.assignedToId && botIds.has(l.assignedToId)) return false
         const d = apptSetAt(l)
         return d !== null && d >= safeStartDate && d <= safeEndDate
     })
@@ -119,17 +135,6 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     if (filters.gdoId) logConditions.push(eq(callLogs.userId, filters.gdoId))
 
     const rawLogs = await db.select().from(callLogs).where(and(...logConditions))
-
-    // Bot fissatore escluso da TUTTO su questa pagina (aggregati di testata,
-    // trend, motivi scarto, ranking) — decisione PO 2026-07-05: la sua
-    // produzione resta visibile solo su panoramica-generale e /statistiche-fissatore.
-    // L'esclusione è basata SOLO su isBot: i log dei MANAGER e i log legacy
-    // senza userId restano inclusi come da comportamento storico pre-B2.
-    const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
-    const userMap = new Map(allUsers.map(u => [u.id, u.name]))
-    const botIds = new Set(allUsers.filter(u => u.isBot).map(u => u.id))
-    const isBotLog = (log: { userId: string | null }): boolean =>
-        !!log.userId && botIds.has(log.userId)
 
     // Filter logs to match only leads in `allLeads` (in case funnel filter was applied)
     // + esclusione bot fissatore (vedi sopra)
