@@ -2,11 +2,11 @@
 import { useAuth } from "@/components/AuthProvider"
 
 import { useState, useEffect } from "react"
-import { getAdvancedKpi, KpiFilters, getGdoTargetsProgress, getGdoThroughputMetrics30d, type GdoThroughputMetrics } from "@/app/actions/kpiAdvancedActions"
+import { getAdvancedKpi, KpiFilters, getGdoTargetsProgress, getGdoThroughputMetrics30d, getGdoCallAttemptMetrics, type GdoThroughputMetrics, type CallAttemptMetricsRow } from "@/app/actions/kpiAdvancedActions"
 import { dayBoundsRome, monthBoundsRome, previousYearMonth } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import dynamic from "next/dynamic"
-import { Filter, PhoneCall, Headphones, CalendarCheck, Clock, Percent, Target, TrendingUp, ArrowUpDown } from "lucide-react"
+import { Filter, PhoneCall, Headphones, CalendarCheck, Clock, Percent, Target, TrendingUp, ArrowUpDown, ListOrdered } from "lucide-react"
 import { BiweeklyHistoryTable } from "@/components/BiweeklyHistoryTable"
 // Lazy load Recharts heavy components
 const LineChart = dynamic(() => import("recharts").then((mod) => mod.LineChart), { ssr: false })
@@ -48,6 +48,7 @@ export function KpiGdoBoard() {
     const [loading, setLoading] = useState(true)
     const [throughput, setThroughput] = useState<GdoThroughputMetrics | null>(null)
     const [throughputLoading, setThroughputLoading] = useState(true)
+    const [attemptMetrics, setAttemptMetrics] = useState<CallAttemptMetricsRow[] | null>(null)
     const [sortBy, setSortBy] = useState<'dailyCapacity' | 'productivityCoeff' | 'calls' | 'appointments' | 'apptRate' | 'confermePerc' | 'presenziatiPerc'>('dailyCapacity')
 
     useEffect(() => {
@@ -113,6 +114,13 @@ export function KpiGdoBoard() {
 
                 const res = await getAdvancedKpi(filters)
                 setData(res)
+
+                getGdoCallAttemptMetrics({
+                    startDate: start,
+                    endDate: end,
+                    funnel: funnelFilter !== "ALL" ? funnelFilter : undefined,
+                    gdoId: gdoFilter !== "ALL" ? gdoFilter : undefined,
+                }).then(setAttemptMetrics).catch(e => console.error(e))
 
                 if (gdoFilter !== "ALL") {
                     const tRes = await getGdoTargetsProgress(gdoFilter)
@@ -568,6 +576,78 @@ export function KpiGdoBoard() {
                 </div>
 
             </div>
+
+            {/* RESA PER TENTATIVO */}
+            {attemptMetrics && (() => {
+                const filterIsDatabase = funnelFilter !== "ALL" && funnelFilter.toLowerCase() === 'database'
+                const showNuovi = funnelFilter === "ALL" || !filterIsDatabase
+                const showDatabase = funnelFilter === "ALL" || filterIsDatabase
+                const fmtPct = (b: { calls: number; answerPct: number; apptPct: number }, key: 'answerPct' | 'apptPct') =>
+                    b.calls === 0 ? <span className="text-ash-300">—</span> : `${b[key]}%`
+                return (
+                    <div className="bg-white p-5 border border-ash-200/60 rounded-xl shadow-soft">
+                        <div className="flex items-center gap-2 mb-4 border-b border-ash-200/60 pb-2">
+                            <ListOrdered className="h-5 w-5 text-brand-orange" />
+                            <h3 className="font-bold text-ash-800">Resa per tentativo</h3>
+                        </div>
+                        <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                            <table className="w-full text-xs sm:text-sm">
+                                <thead>
+                                    <tr className="border-b border-ash-200/60 text-left">
+                                        <th rowSpan={2} className="pb-2 pr-3 text-ash-500 font-semibold align-bottom">Tentativo</th>
+                                        {showNuovi && (
+                                            <th colSpan={3} className="pb-2 pr-3 text-center text-ash-600 font-bold border-l border-ash-200/60">Nuovi</th>
+                                        )}
+                                        {showDatabase && (
+                                            <th colSpan={3} className="pb-2 pr-3 text-center text-ash-600 font-bold border-l border-ash-200/60">Database</th>
+                                        )}
+                                    </tr>
+                                    <tr className="border-b border-ash-200/60 text-right">
+                                        {showNuovi && (
+                                            <>
+                                                <th className="pb-2 pr-3 text-ash-500 font-semibold border-l border-ash-200/60">Chiamate</th>
+                                                <th className="pb-2 pr-3 text-ash-500 font-semibold">% Risposta</th>
+                                                <th className="pb-2 pr-3 text-ash-500 font-semibold">% Fissaggio</th>
+                                            </>
+                                        )}
+                                        {showDatabase && (
+                                            <>
+                                                <th className="pb-2 pr-3 text-ash-500 font-semibold border-l border-ash-200/60">Chiamate</th>
+                                                <th className="pb-2 pr-3 text-ash-500 font-semibold">% Risposta</th>
+                                                <th className="pb-2 pr-3 text-ash-500 font-semibold">% Fissaggio</th>
+                                            </>
+                                        )}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {attemptMetrics.map(row => (
+                                        <tr key={row.attempt} className="border-b border-ash-100/60 transition-all duration-200 hover:bg-brand-orange-50/20">
+                                            <td className="py-2.5 pr-3 font-bold text-ash-700">{row.attempt}</td>
+                                            {showNuovi && (
+                                                <>
+                                                    <td className="py-2.5 pr-3 text-right border-l border-ash-100/60 text-ash-700">{row.nuovi.calls}</td>
+                                                    <td className="py-2.5 pr-3 text-right text-ash-700">{fmtPct(row.nuovi, 'answerPct')}</td>
+                                                    <td className="py-2.5 pr-3 text-right text-ash-700">{fmtPct(row.nuovi, 'apptPct')}</td>
+                                                </>
+                                            )}
+                                            {showDatabase && (
+                                                <>
+                                                    <td className="py-2.5 pr-3 text-right border-l border-ash-100/60 text-ash-700">{row.database.calls}</td>
+                                                    <td className="py-2.5 pr-3 text-right text-ash-700">{fmtPct(row.database, 'answerPct')}</td>
+                                                    <td className="py-2.5 pr-3 text-right text-ash-700">{fmtPct(row.database, 'apptPct')}</td>
+                                                </>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="text-xs text-ash-400 mt-3">
+                            Numero di tentativo = posizione della chiamata nella storia del lead. Il tetto attuale resta 3 tentativi a vuoto.
+                        </div>
+                    </div>
+                )
+            })()}
 
             {/* CLASSIFICA PRODUTTIVITÀ GDO */}
             {data.gdoStats.length > 0 && (

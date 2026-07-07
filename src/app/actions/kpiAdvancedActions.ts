@@ -740,3 +740,72 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
         }
     }
 }
+
+// --- "Resa per tentativo": tasso risposta e fissaggio per numero di chiamata ---
+// Il numero di tentativo è la posizione della chiamata nella storia COMPLETA del
+// lead (company-scoped), calcolato via row_number() su tutta la storia; il filtro
+// periodo si applica DOPO il ranking, non sul solo periodo.
+export interface CallAttemptBucket { calls: number; answerPct: number; apptPct: number }
+export interface CallAttemptMetricsRow { attempt: '1ª' | '2ª' | '3ª' | '4ª+'; nuovi: CallAttemptBucket; database: CallAttemptBucket }
+
+export async function getGdoCallAttemptMetrics(filters: { startDate: Date | string; endDate: Date | string; funnel?: string; gdoId?: string }): Promise<CallAttemptMetricsRow[]> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const start = new Date(filters.startDate)
+    const end = new Date(filters.endDate)
+
+    const botRows = await db.select({ id: users.id }).from(users)
+        .where(and(companyScope(ctx, users.companyId), eq(users.isBot, true)))
+    const botIds = new Set(botRows.map(r => r.id))
+
+    // CTE: rn = posizione della chiamata nella storia completa del lead
+    const ranked = db.$with('ranked').as(
+        db.select({
+            leadId: callLogs.leadId,
+            userId: callLogs.userId,
+            outcome: callLogs.outcome,
+            discardReason: callLogs.discardReason,
+            createdAt: callLogs.createdAt,
+            rn: sql<number>`row_number() over (partition by ${callLogs.leadId} order by ${callLogs.createdAt}, ${callLogs.id})`.as('rn'),
+        }).from(callLogs).where(companyScope(ctx, callLogs.companyId)),
+    )
+    const rows = await db.with(ranked)
+        .select({
+            rn: ranked.rn,
+            userId: ranked.userId,
+            outcome: ranked.outcome,
+            discardReason: ranked.discardReason,
+            funnel: leads.funnel,
+        })
+        .from(ranked)
+        .innerJoin(leads, eq(leads.id, ranked.leadId))
+        .where(and(
+            gte(ranked.createdAt, start),
+            lte(ranked.createdAt, end), // i filtri di KpiGdoBoard passano end INCLUSIVO (stesso contratto di getAdvancedKpi): mantenere lte qui
+            ...(filters.funnel ? [eq(leads.funnel, filters.funnel)] : []),
+            ...(filters.gdoId ? [eq(ranked.userId, filters.gdoId)] : []),
+        ))
+
+    const emptyBucket = () => ({ calls: 0, answered: 0, appts: 0 })
+    const buckets = new Map<string, { nuovi: ReturnType<typeof emptyBucket>; database: ReturnType<typeof emptyBucket> }>(
+        ['1ª', '2ª', '3ª', '4ª+'].map(k => [k, { nuovi: emptyBucket(), database: emptyBucket() }]),
+    )
+    for (const r of rows) {
+        if (r.userId && botIds.has(r.userId)) continue // bot escluso
+        const key = r.rn >= 4 ? '4ª+' : (`${r.rn}ª` as const)
+        const side = (r.funnel ?? '').toLowerCase() === 'database' ? 'database' : 'nuovi'
+        const b = buckets.get(key)![side]
+        b.calls++
+        if (r.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(r.outcome, r.discardReason)) b.answered++
+        if (r.outcome === 'APPUNTAMENTO') b.appts++
+    }
+    const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0
+    return (['1ª', '2ª', '3ª', '4ª+'] as const).map(attempt => {
+        const b = buckets.get(attempt)!
+        return {
+            attempt,
+            nuovi: { calls: b.nuovi.calls, answerPct: pct(b.nuovi.answered, b.nuovi.calls), apptPct: pct(b.nuovi.appts, b.nuovi.calls) },
+            database: { calls: b.database.calls, answerPct: pct(b.database.answered, b.database.calls), apptPct: pct(b.database.appts, b.database.calls) },
+        }
+    })
+}
