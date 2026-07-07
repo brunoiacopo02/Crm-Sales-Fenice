@@ -569,7 +569,9 @@ function TargetModal({
     const [targetNuovi, setTargetNuovi] = useState<number>(initialConfig?.targetNuovi ?? 0);
     const [targetDatabase, setTargetDatabase] = useState<number>(initialConfig?.targetDatabase ?? 0);
     const [workingDays, setWorkingDays] = useState<number>(initialConfig?.workingDays ?? 0);
-    const [autoWorkingDays, setAutoWorkingDays] = useState<boolean>(!initialConfig || initialConfig.workingDays === 0);
+    // config.workingDays è il valore RISOLTO (mai 0): per capire se il mese è in "auto"
+    // serve il flag dedicato, altrimenti riaprire il modal congelerebbe l'auto come override.
+    const [autoWorkingDays, setAutoWorkingDays] = useState<boolean>(!initialConfig || initialConfig.workingDaysIsAuto);
     const [suggestedWd, setSuggestedWd] = useState<number>(0);
     const [baselineNuovi, setBaselineNuovi] = useState<number>(initialConfig?.baselineNuovi ?? 0);
     const [baselineDatabase, setBaselineDatabase] = useState<number>(initialConfig?.baselineDatabase ?? 0);

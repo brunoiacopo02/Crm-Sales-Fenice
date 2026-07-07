@@ -65,7 +65,10 @@ export type LeadOverviewResult = {
     config: {
         targetNuovi: number;
         targetDatabase: number;
+        /** Valore RISOLTO (mai 0): override manuale se > 0 nel DB, altrimenti countWorkingDaysInMonth. */
         workingDays: number;
+        /** true se nel DB workingDays=0 (convenzione "auto"): il modal la usa per inizializzare il checkbox. */
+        workingDaysIsAuto: boolean;
         baselineNuovi: number;
         baselineDatabase: number;
         baselineSetAt: string | null;
@@ -222,6 +225,7 @@ async function leadOverviewForCompany(ctx: TenantContext, ym: string): Promise<L
                 targetDatabase: cfg.targetDatabase,
                 // workingDays risolto (0 = auto → countWorkingDaysInMonth), mai 0 grezzo verso il client.
                 workingDays,
+                workingDaysIsAuto: cfg.workingDays === 0,
                 baselineNuovi: cfg.baselineNuovi,
                 baselineDatabase: cfg.baselineDatabase,
                 baselineSetAt: cfg.baselineSetAt ? cfg.baselineSetAt.toISOString() : null,
@@ -1209,6 +1213,9 @@ function mergeLeadOverviews(parts: LeadOverviewResult[], ym: string): LeadOvervi
         targetNuovi: ok.reduce((s, p) => s + (p.config?.targetNuovi ?? 0), 0),
         targetDatabase: ok.reduce((s, p) => s + (p.config?.targetDatabase ?? 0), 0),
         workingDays: anyCfg.workingDays,
+        // Merge multi-azienda: "auto" solo se TUTTE le config presenti sono auto.
+        // Solo visualizzazione: in modalità "Tutte le aziende" il modal è nascosto (canEditTargets=false).
+        workingDaysIsAuto: ok.every(p => !p.config || p.config.workingDaysIsAuto),
         baselineNuovi: ok.reduce((s, p) => s + (p.config?.baselineNuovi ?? 0), 0),
         baselineDatabase: ok.reduce((s, p) => s + (p.config?.baselineDatabase ?? 0), 0),
         baselineSetAt: null,
