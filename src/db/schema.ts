@@ -193,6 +193,9 @@ export const leads = pgTable('leads', {
         assignedStatusIdx: index('assigned_status_idx').on(table.assignedToId, table.status),
         assignedRecallIdx: index('assigned_recall_idx').on(table.assignedToId, table.recallDate),
         overdueOutcomeIdx: index('leads_overdue_idx').on(table.salespersonUserId, table.appointmentDate, table.salespersonOutcome),
+        // Poll richiami Conferme (~150k query/g): senza questo indice partiva un seq scan a chiamata
+        confSnoozeIdx: index('leads_conf_snooze_idx').on(table.companyId, table.confSnoozeAt)
+            .where(sql`"confirmationsOutcome" IS NULL AND "confSnoozeAt" IS NOT NULL`),
     };
 });
 
@@ -230,6 +233,8 @@ export const leadEvents = pgTable('leadEvents', {
     return {
         leadIdIdx: index('lead_events_lead_id_idx').on(table.leadId),
         userIdIdx: index('lead_events_user_id_idx').on(table.userId),
+        // Conteggi gamification (checkAndAdvanceStage): copre companyId+userId+eventType+timestamp in index-only scan
+        companyUserEventTsIdx: index('lead_events_company_user_event_ts_idx').on(table.companyId, table.userId, table.eventType, table.timestamp),
     };
 });
 
@@ -264,6 +269,12 @@ export const notifications = pgTable('notifications', {
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     readAt: timestamp('readAt', { withTimezone: true, mode: 'date' }),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
+}, (table) => {
+    return {
+        companyRecipientIdx: index('notifications_company_recipient_idx').on(table.companyId, table.recipientUserId),
+        // Il client Supabase (NotificationBell) filtra solo per recipientUserId + ORDER BY createdAt DESC: senza questo indice era un seq scan
+        recipientCreatedIdx: index('notifications_recipient_created_idx').on(table.recipientUserId, table.createdAt.desc()),
+    };
 });
 
 export const assignmentSettings = pgTable('assignmentSettings', {
