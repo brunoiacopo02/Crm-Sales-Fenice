@@ -1,5 +1,0 @@
-[   42617ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/8e2dc8f28a8e9d9d.js?dpl=dpl_4V23vijjFhsQanK4Xdjbr6nFMYHt:2
-[  113483ms] [WARNING] [realtime] subscription "global-alerts" CHANNEL_ERROR undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/8e2dc8f28a8e9d9d.js?dpl=dpl_4V23vijjFhsQanK4Xdjbr6nFMYHt:2
-[  113484ms] [WARNING] [realtime] subscription "realtime-provider-main" CHANNEL_ERROR undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/8e2dc8f28a8e9d9d.js?dpl=dpl_4V23vijjFhsQanK4Xdjbr6nFMYHt:2
-[  113484ms] [WARNING] [realtime] subscription "team-adventure" CHANNEL_ERROR undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/8e2dc8f28a8e9d9d.js?dpl=dpl_4V23vijjFhsQanK4Xdjbr6nFMYHt:2
-[  113484ms] [WARNING] [realtime] subscription "user-notifications" CHANNEL_ERROR undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/8e2dc8f28a8e9d9d.js?dpl=dpl_4V23vijjFhsQanK4Xdjbr6nFMYHt:2

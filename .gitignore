@@ -54,3 +54,8 @@ dev.db
 tmp-seed-batches/
 seed-launch-pool.out.sql
 seed-launch-pool.log
+
+# Artefatti locali sessioni agent/QA (mai nel repo)
+.playwright-mcp/
+.claude/worktrees/
+.claude/settings.local.json
