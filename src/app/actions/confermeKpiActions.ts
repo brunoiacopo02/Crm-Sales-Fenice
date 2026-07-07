@@ -2,36 +2,11 @@
 
 import { db } from "@/db"
 import { leads, users, monthlyLeadTargets } from "@/db/schema"
-import { eq, and, gte, lte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
-import { eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
-import { weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
+import { eq, and, gte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
+import { format } from "date-fns"
+import { weekBoundsRome, monthBoundsRome, dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isConfermeTl } from '@/lib/confermeTl'
-
-/** Format a Date to 'yyyy-MM-dd' in Europe/Rome timezone */
-function toRomeDateStr(date: Date): string {
-    return date.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
-}
-
-/**
- * Risolve il mese Europe/Rome (es. "2026-07") di un istante, poi ricostruisce
- * i bounds del mese in componenti UTC-locali — lo stesso fuso "server" già
- * usato da `date-fns` (che opera nel timezone del processo, UTC su Vercel)
- * per `eachDayOfInterval`/`eachWeekOfInterval`/`startOfWeek`/`endOfWeek` in
- * questo file. Così il MESE selezionato è sempre quello corretto (Rome) anche
- * a ridosso della mezzanotte — prima `startOfMonth(monthDate)` interpretava
- * `monthDate` con i componenti locali del server (UTC), sbagliando mese nella
- * finestra 00:00-02:00 Rome — senza alterare la semantica UTC-locale su cui
- * si basa tutto il resto della funzione (griglia calendario, weekday, ecc.),
- * che richiederebbe una riscrittura più ampia per diventare Rome-native.
- */
-function monthBoundsForCalendar(monthDate: Date): { start: Date; end: Date } {
-    const [y, m] = toRomeDateStr(monthDate).slice(0, 7).split('-').map(Number)
-    return {
-        start: new Date(Date.UTC(y, m - 1, 1)),
-        end: new Date(Date.UTC(y, m, 0, 23, 59, 59, 999)),
-    }
-}
 
 /** Default Conferme bonus: T1=30 chiusure (€145), T2=38 chiusure (€290).
  *  Module-private (i file con "use server" possono esportare solo funzioni
@@ -44,9 +19,10 @@ const CONFERME_REWARD_T2 = 290;
 export async function getConfermeKpiStats(monthDate: Date = new Date(), confermeUserId?: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    const { start, end } = monthBoundsForCalendar(monthDate)
-    const calendarStart = startOfWeek(start, { weekStartsOn: 1 })
-    const calendarEnd = endOfWeek(end, { weekStartsOn: 1 })
+    const monthStr = toRomeDateStr(monthDate).slice(0, 7)
+    const { start, end } = monthBoundsRome(monthStr) // end esclusivo
+    const calendarStart = weekBoundsRome(new Date(start.getTime() + 12 * 3600_000)).start
+    const calendarEnd = weekBoundsRome(new Date(end.getTime() - 12 * 3600_000)).end // fine (esclusiva) della settimana che contiene l'ultimo giorno
 
     // === QUERY 1: per il THROUGHPUT SETTIMANALE ===
     // Qui 'confermati' = conferme AVVENUTE nel range (confirmationsTimestamp).
@@ -55,7 +31,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const conditionsConfirmations = [
         companyScope(ctx, leads.companyId),
         gte(leads.confirmationsTimestamp, calendarStart),
-        lte(leads.confirmationsTimestamp, calendarEnd)
+        lt(leads.confirmationsTimestamp, calendarEnd)
     ]
     if (confermeUserId) {
         conditionsConfirmations.push(eq(leads.confirmationsUserId, confermeUserId))
@@ -74,7 +50,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const conditionsCalendar = [
         companyScope(ctx, leads.companyId),
         gte(leads.appointmentDate, calendarStart),
-        lte(leads.appointmentDate, calendarEnd)
+        lt(leads.appointmentDate, calendarEnd)
     ]
     if (confermeUserId) {
         // Filtrare per utente: Fissati resta globale, ma Confermati/Scartati
@@ -90,10 +66,14 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         confirmationsUserId: leads.confirmationsUserId,
     }).from(leads).where(and(...conditionsCalendar))
 
-    // Grouping by Day — dailyStats basato su appointmentDate
-    const daysInMonth = eachDayOfInterval({ start, end })
-    const dailyStats = daysInMonth.map(d => {
-        const dayStr = format(d, 'yyyy-MM-dd')
+    // Grouping by Day — dailyStats basato su appointmentDate. Giorni del mese
+    // come stringhe Rome (il passo a mezzogiorno evita i bordi DST).
+    const daysInMonth: string[] = []
+    for (let t = start.getTime() + 12 * 3600_000; t < end.getTime(); t += 24 * 3600_000) {
+        const s = toRomeDateStr(new Date(t))
+        if (daysInMonth[daysInMonth.length - 1] !== s) daysInMonth.push(s)
+    }
+    const dailyStats = daysInMonth.map(dayStr => {
         const leadsOfDay = calendarLeads.filter(l =>
             l.appointmentDate && toRomeDateStr(new Date(l.appointmentDate)) === dayStr,
         )
@@ -106,7 +86,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
 
         return {
             date: dayStr,
-            dayOfWeek: d.getDay(), // 0 = Sunday, 1 = Monday
+            dayOfWeek: new Date(dayStr + 'T12:00:00Z').getUTCDay(), // 0 = Sunday, 1 = Monday
             fixed,
             confirmed,
             discarded,
@@ -137,23 +117,30 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const tier1Target = weeklyTier1Target * 4;
     const tier2Target = weeklyTier2Target * 4;
 
-    // Build weekly history array based on full ISO weeks that overlap this month
-    const weeksInMonth = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 }) // Mondays
+    // Build weekly history array based on full ISO weeks that overlap this month,
+    // Rome-native (weekEnd esclusivo).
+    const weekStartsRome: Date[] = []
+    let w = weekBoundsRome(new Date(start.getTime() + 12 * 3600_000)).start
+    while (w < end) {
+        weekStartsRome.push(w)
+        w = weekBoundsRome(new Date(w.getTime() + 7 * 86400_000 + 12 * 3600_000)).start
+    }
 
-    const weeklyHistory = weeksInMonth.map((weekStart, index) => {
-        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
+    const weeklyHistory = weekStartsRome.map((weekStart, index) => {
+        const weekEnd = weekBoundsRome(new Date(weekStart.getTime() + 12 * 3600_000)).end // esclusivo
 
         const actThisWeek = confirmedLeads.filter(l =>
             l.date && l.outcome === 'confermato' &&
             new Date(l.date) >= weekStart &&
-            new Date(l.date) <= weekEnd
+            new Date(l.date) < weekEnd
         ).length;
 
-        const isCurrent = new Date() >= weekStart && new Date() <= weekEnd
+        const isCurrent = new Date() >= weekStart && new Date() < weekEnd
+        const fmt = (d: Date) => { const [Y, M, D] = toRomeDateStr(d).split('-'); return `${D}/${M}` }
 
         return {
             weekName: `Sett. ${index + 1}`,
-            dateRange: `${format(weekStart, 'dd/MM')} - ${format(weekEnd, 'dd/MM')}`,
+            dateRange: `${fmt(weekStart)} - ${fmt(new Date(weekEnd.getTime() - 12 * 3600_000))}`,
             act: actThisWeek,
             t1: weeklyTier1Target,
             t2: weeklyTier2Target,
@@ -248,7 +235,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     // Check for manager override of working days — letto da monthlyLeadTargets
     // (fonte canonica, unificata col Sales Manager e con /manager-targets —
     // Task B5). Chiave month → yearMonth, workingDaysOverride → workingDays.
-    const monthStr = format(start, 'yyyy-MM')
+    // (monthStr già calcolato Rome-native all'inizio della funzione.)
     const mtQuery = await db.select().from(monthlyLeadTargets).where(and(eq(monthlyLeadTargets.yearMonth, monthStr), companyScope(ctx, monthlyLeadTargets.companyId)))
     const overrideVal = mtQuery.length > 0 ? mtQuery[0].workingDays : null
     const totalWorkingDays = (overrideVal != null && overrideVal > 0) ? overrideVal : calcTotalWorkingDays
@@ -300,7 +287,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         companyScope(ctx, leads.companyId),
         isNotNull(leads.salespersonOutcomeAt),
         gte(leads.salespersonOutcomeAt, start),
-        lte(leads.salespersonOutcomeAt, end),
+        lt(leads.salespersonOutcomeAt, end),
     ))
 
     const todayStr = toRomeDateStr(new Date())
@@ -606,15 +593,7 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
 export async function getConfermeDailyObjectives(confermeUserId: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    const now = new Date()
-    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
-    const [yearStr, monthStr, dayStr] = todayStr.split('-')
-    const year = parseInt(yearStr, 10)
-    const month = parseInt(monthStr, 10)
-    const day = parseInt(dayStr, 10)
-
-    const todayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
-    const todayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
+    const { start: todayStart, end: todayEnd } = dayBoundsRome(new Date())
 
     // Daily conferme target: 8 conferme al giorno per TUTTO IL TEAM (non individuale)
     const dailyTarget = 8
@@ -627,7 +606,7 @@ export async function getConfermeDailyObjectives(confermeUserId: string) {
             eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.confirmationsUserId),
             gte(leads.confirmationsTimestamp, todayStart),
-            lte(leads.confirmationsTimestamp, todayEnd)
+            lt(leads.confirmationsTimestamp, todayEnd)
         ))
     const confirmationsDone = confResult[0]?.count || 0
 

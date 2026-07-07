@@ -8,7 +8,7 @@ import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isRealGdo, DEFAULT_DAILY_APPT_TARGET, apptSetAt } from "@/lib/kpi/canon";
-import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
+import { monthBoundsRome, dayBoundsRome, weekBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 
 export interface GamificationTargetInput {
     month: string;
@@ -291,7 +291,9 @@ export async function getCurrentGdoGamificationState(gdoUserId: string, testToda
 
     // GDO: ciclo bisettimanale
     const cycle = getBiweeklyCycle(today);
-    const currentMonthStr = today.toISOString().slice(0, 7);
+    // Mese Europe/Rome: toISOString() (UTC) sceglierebbe il mese sbagliato
+    // nella finestra 00:00-02:00 Rome.
+    const currentMonthStr = toRomeDateStr(today).slice(0, 7);
 
     // Default GDO bisettimanale: 18 / 22 presenze → €270 / €540.
     // Manager modifica via /manager-targets (riusa weeklyGamificationRules).
@@ -426,19 +428,14 @@ async function getConfermeWeeklyState(
 export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    // Settimana corrente ISO-like (lunedì 00:00 → domenica 23:59:59) in Europe/Rome.
-    const romeDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }); // 'YYYY-MM-DD'
-    const [y, m, d] = romeDateStr.split('-').map(Number);
-    const todayRome = new Date(y, m - 1, d);
-    const dow = todayRome.getDay(); // 0 = dom, 1 = lun ... 6 = sab
-    const monOffset = dow === 0 ? -6 : 1 - dow;
-    const weekStart = new Date(y, m - 1, d + monOffset, 0, 0, 0, 0);
-    const weekEnd = new Date(y, m - 1, d + monOffset + 6, 23, 59, 59, 999);
+    // Settimana corrente (lunedì 00:00 → lunedì successivo 00:00, esclusivo) Europe/Rome.
+    const now = new Date();
+    const { start: weekStart, end: weekEnd } = weekBoundsRome(now); // end esclusivo
+    const monthStr = toRomeDateStr(now).slice(0, 7);
 
     // Mese corrente (Europe/Rome) — per le percentuali di conferma/presenza
     // mostrate nella mini-barra KPI in pipeline.
-    const monthStart = new Date(y, m - 1, 1, 0, 0, 0, 0);
-    const monthEnd = new Date(y, m, 0, 23, 59, 59, 999);
+    const { start: monthStart, end: monthEnd } = monthBoundsRome(monthStr); // end esclusivo
 
     // Range query = unione settimana ∪ mese (la settimana può sforare nel mese
     // precedente/successivo); il bucketing preciso avviene in JS.
@@ -455,7 +452,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
             eq(leads.assignedToId, gdoUserId),
             isNotNull(leads.appointmentDate),
             gte(leads.appointmentDate, rangeStart),
-            lte(leads.appointmentDate, rangeEnd)
+            lt(leads.appointmentDate, rangeEnd)
         )
     );
 
@@ -471,7 +468,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
 
         const apptAt = lead.appointmentDate ? new Date(lead.appointmentDate) : null;
-        const inMonth = apptAt && apptAt >= monthStart && apptAt <= monthEnd;
+        const inMonth = apptAt && apptAt >= monthStart && apptAt < monthEnd;
         if (inMonth) {
             month.fissati++;
             if (isConfermato) month.confermati++;
@@ -479,7 +476,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
             if (isChiuso) month.chiusi++;
         }
 
-        const inWeek = apptAt && apptAt >= weekStart && apptAt <= weekEnd;
+        const inWeek = apptAt && apptAt >= weekStart && apptAt < weekEnd;
         if (inWeek) {
             fissati++;
             if (isConfermato) confermati++;
@@ -495,7 +492,11 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         chiusi,
         month,
         weekStart: weekStart.toISOString(),
-        weekEnd: weekEnd.toISOString(),
+        // weekEnd è esclusivo (lunedì successivo 00:00): il consumer
+        // (GdoLeadMetrics.tsx) lo mostra come "fine settimana", quindi qui
+        // sottraiamo 1ms SOLO per la rappresentazione — i confronti sopra
+        // restano `< weekEnd`.
+        weekEnd: new Date(weekEnd.getTime() - 1).toISOString(),
     };
 }
 
@@ -505,15 +506,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
 export async function getGdoDailyObjectives(gdoUserId: string) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    const now = new Date();
-    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
-    const [yearStr, monthStr, dayStr] = todayStr.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10);
-    const day = parseInt(dayStr, 10);
-
-    const todayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
-    const todayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+    const { start: todayStart, end: todayEnd } = dayBoundsRome(new Date()); // end esclusivo
 
     // Get user's dailyApptTarget
     const userRow = await db.select({ dailyApptTarget: users.dailyApptTarget })
@@ -527,7 +520,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
             eq(callLogs.companyId, ctx.companyId),
             eq(callLogs.userId, gdoUserId),
             gte(callLogs.createdAt, todayStart),
-            lte(callLogs.createdAt, todayEnd)
+            lt(callLogs.createdAt, todayEnd)
         ));
     const callsDone = callResult[0]?.count || 0;
 
@@ -539,7 +532,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
             eq(leads.assignedToId, gdoUserId),
             isNotNull(leads.appointmentCreatedAt),
             gte(leads.appointmentCreatedAt, todayStart),
-            lte(leads.appointmentCreatedAt, todayEnd)
+            lt(leads.appointmentCreatedAt, todayEnd)
         ));
     const appointmentsDone = apptResult[0]?.count || 0;
 
