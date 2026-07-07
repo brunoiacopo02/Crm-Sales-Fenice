@@ -36,6 +36,7 @@ export function PanoramicaClient({
     initialMetricsData,
     readOnly = false,
     readOnlyVariant = 'all-companies',
+    canEditTargets = false,
     selectedMonth,
     currentYearMonth,
 }: {
@@ -46,6 +47,8 @@ export function PanoramicaClient({
     readOnly?: boolean;
     /** Perché la vista è in sola lettura: aggregato gruppo o viewer (es. TL Conferme). */
     readOnlyVariant?: 'all-companies' | 'viewer';
+    /** Mostra i controlli di modifica target/funnel/metriche: SOLO admin (le mutation sono ADMIN-only lato server). */
+    canEditTargets?: boolean;
     /** Mese selezionato dal wrapper ('YYYY-MM'). */
     selectedMonth: string;
     /** Mese in corso ('YYYY-MM') per distinguere la vista storica. */
@@ -142,7 +145,7 @@ export function PanoramicaClient({
                     >
                         <RefreshCw className="w-3.5 h-3.5" /> Aggiorna
                     </button>
-                    {!readOnly && !isPastMonth && (
+                    {canEditTargets && !isPastMonth && (
                         <button
                             onClick={() => setModalOpen(true)}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white bg-brand-orange hover:brightness-110 transition-all"
@@ -167,7 +170,7 @@ export function PanoramicaClient({
                 </div>
             )}
 
-            {!isConfigured && !readOnly && (
+            {!isConfigured && canEditTargets && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                     ⚠️ Target mensile non ancora impostato. Clicca <b>&quot;Imposta target&quot;</b> per configurare
                     target mensile, giorni lavorativi e baseline iniziale del mese.
@@ -232,7 +235,7 @@ export function PanoramicaClient({
             </div>
 
             {/* Monthly metrics rollup */}
-            <MetricsSection data={metricsData} onRefresh={refresh} readOnly={readOnly || isPastMonth} isPastMonth={isPastMonth} />
+            <MetricsSection data={metricsData} onRefresh={refresh} readOnly={!canEditTargets || isPastMonth} isPastMonth={isPastMonth} />
 
             {modalOpen && (
                 <TargetModal

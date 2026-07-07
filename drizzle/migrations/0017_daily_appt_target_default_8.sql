@@ -1,0 +1,14 @@
+-- Decisione PO (review finale branch fix/admin-review-luglio, 2026-07-07):
+-- il default individuale di dailyApptTarget passa da 2 a 8, allineato a
+-- DEFAULT_DAILY_APPT_TARGET in src/lib/kpi/canon.ts (già usato ovunque nei
+-- calcoli KPI). Nessun UPDATE sulle righe esistenti: cambia solo il default
+-- applicato ai nuovi utenti; i GDO già in anagrafica mantengono il loro
+-- target attuale (editabile da Team Management).
+--
+-- NOTA: `npx drizzle-kit generate` non è utilizzabile in questo repo perché
+-- drizzle/meta/_journal.json traccia solo le migrazioni 0000/0001/0003 (drift
+-- noto, vedi 0016_presence_heartbeats.sql: 0004-0016 sono state scritte a
+-- mano e applicate in prod via Supabase MCP, bypassando il journal locale).
+-- Il generate propone un diff enorme e non pertinente (create/rename/drop su
+-- tabelle preesistenti) — file scritto a mano, nessuna operazione distruttiva.
+ALTER TABLE users ALTER COLUMN "dailyApptTarget" SET DEFAULT 8;

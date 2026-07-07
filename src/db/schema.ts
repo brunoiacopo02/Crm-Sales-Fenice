@@ -1,5 +1,6 @@
 import { pgTable, text, integer, bigint, real, boolean, timestamp, jsonb, index, uniqueIndex, unique, primaryKey, date, numeric, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { DEFAULT_DAILY_APPT_TARGET } from '@/lib/kpi/canon';
 
 // Multi-tenant: una riga per azienda gestita dal CRM unificato (sales + marketing).
 // Fenice è il tenant principale; Serenamente parte a vendere entro 2026-06-04;
@@ -46,7 +47,7 @@ export const users = pgTable('users', {
     equippedItemId: text('equippedItemId'), // references shopItems.id optionally
 
     // Targets
-    dailyApptTarget: integer('dailyApptTarget').default(2).notNull(),
+    dailyApptTarget: integer('dailyApptTarget').default(DEFAULT_DAILY_APPT_TARGET).notNull(),
     weeklyConfirmedTarget: integer('weeklyConfirmedTarget').default(5).notNull(),
     confermeTargetTier1: integer('confermeTargetTier1').default(19).notNull(),
     confermeTargetTier2: integer('confermeTargetTier2').default(24).notNull(),
