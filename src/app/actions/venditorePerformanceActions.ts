@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { salesAttempts } from "@/db/schema"
-import { and, eq } from "drizzle-orm"
+import { salesAttempts, leads, users } from "@/db/schema"
+import { and, eq, gte, lt, desc, sql } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { monthBoundsRome } from "@/lib/dateUtils"
 import { createClient } from "@/utils/supabase/server"
@@ -96,5 +96,64 @@ export async function getVenditorePerformance(input: { salesUserId: string; year
         attemptsToClose: attemptsToClose(attempts, start, end),
         overdueFollowUps,
         trend: monthlyTrend(attempts, lastMonths(input.yearMonth, 6)),
+    }
+}
+
+export interface VenditoreRispostaRow {
+    id: string; outcomeAt: string;            // ISO
+    venditoreName: string | null;
+    leadId: string; leadName: string | null; leadPhone: string | null; funnel: string | null;
+    attemptNumber: number;                     // 0 = esito app, 1-3 = FU #n
+    outcome: string;                           // 'Chiuso' | 'Non chiuso' | 'Perso' | 'Sparito'
+    notClosedReason: string | null;
+    nextFollowUpDate: string | null;           // ISO
+    closeProduct: string | null; closeAmountEur: number | null;
+    notes: string | null;                      // leads.salespersonOutcomeNotes
+}
+
+const PAGE_SIZE = 50
+
+// Tutte le righe di esito venditore (salesAttempts), staff-only, filtrabili e paginate.
+export async function getVenditoriRisposte(input: { yearMonth: string; salesUserId?: string; outcome?: string; notClosedReason?: string; page?: number }): Promise<{ rows: VenditoreRispostaRow[]; total: number; pageSize: number }> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const role = user?.user_metadata?.role
+    const email = user?.user_metadata?.email ?? user?.email
+    const isStaff = role === 'MANAGER' || role === 'ADMIN' || (role === 'CONFERME' && isConfermeTl(email))
+    if (!isStaff) throw new Error('Forbidden')
+
+    const { start, end } = monthBoundsRome(input.yearMonth)
+    const conds = [
+        companyScope(ctx, salesAttempts.companyId),
+        gte(salesAttempts.outcomeAt, start),
+        lt(salesAttempts.outcomeAt, end),
+        ...(input.salesUserId ? [eq(salesAttempts.salesUserId, input.salesUserId)] : []),
+        ...(input.outcome ? [eq(salesAttempts.outcome, input.outcome)] : []),
+        ...(input.notClosedReason ? [eq(salesAttempts.notClosedReason, input.notClosedReason)] : []),
+    ]
+    const page = Math.max(1, input.page ?? 1)
+    const [rows, totalRes] = await Promise.all([
+        db.select({
+            id: salesAttempts.id, outcomeAt: salesAttempts.outcomeAt,
+            venditoreName: users.name,
+            leadId: salesAttempts.leadId, leadName: leads.name, leadPhone: leads.phone, funnel: leads.funnel,
+            attemptNumber: salesAttempts.attemptNumber, outcome: salesAttempts.outcome,
+            notClosedReason: salesAttempts.notClosedReason, nextFollowUpDate: salesAttempts.nextFollowUpDate,
+            closeProduct: salesAttempts.closeProduct, closeAmountEur: salesAttempts.closeAmountEur,
+            notes: leads.salespersonOutcomeNotes,
+        }).from(salesAttempts)
+          .innerJoin(leads, eq(leads.id, salesAttempts.leadId))
+          .innerJoin(users, eq(users.id, salesAttempts.salesUserId))
+          .where(and(...conds))
+          .orderBy(desc(salesAttempts.outcomeAt), desc(salesAttempts.id))
+          .limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE),
+        db.select({ count: sql<number>`count(*)::integer` }).from(salesAttempts).where(and(...conds)),
+    ])
+    return {
+        rows: rows.map(r => ({ ...r, outcomeAt: r.outcomeAt.toISOString(), nextFollowUpDate: r.nextFollowUpDate?.toISOString() ?? null })),
+        total: totalRes[0]?.count ?? 0,
+        pageSize: PAGE_SIZE,
     }
 }
