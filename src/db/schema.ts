@@ -213,6 +213,10 @@ export const callLogs = pgTable('callLogs', {
     return {
         userIdIdx: index('calllogs_user_id_idx').on(table.userId),
         userCreatedAtIdx: index('calllogs_user_created_at_idx').on(table.userId, table.createdAt),
+        // Resa per tentativo (row_number PARTITION BY leadId ORDER BY createdAt,id):
+        // senza questo indice il sort spillava ~12MB su disco a ogni caricamento.
+        // Il prefisso leadId serve anche la timeline chiamate della ContactDrawer.
+        leadCreatedIdIdx: index('calllogs_lead_created_id_idx').on(table.leadId, table.createdAt, table.id),
     };
 });
 
