@@ -36,7 +36,7 @@ export function TeamManagementClient() {
     })
 
     // State per Mass Update Targets
-    const [massDailyTarget, setMassDailyTarget] = useState(2)
+    const [massDailyTarget, setMassDailyTarget] = useState(DEFAULT_DAILY_APPT_TARGET)
     const [massWeeklyTarget, setMassWeeklyTarget] = useState(5)
 
     // State per Mass Update Targets Conferme

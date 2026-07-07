@@ -30,6 +30,11 @@ function formatMonthLabel(ym: string): string {
     return `${names[parseInt(m, 10) - 1]} ${y}`;
 }
 
+function friendlyError(e?: string): string {
+    if (e === 'UNAUTHORIZED') return 'Non hai i permessi per modificare i target.'
+    return e || 'Errore durante il salvataggio'
+}
+
 export function PanoramicaClient({
     initialData,
     initialFunnelData,
@@ -470,7 +475,7 @@ function FunnelEditModal({
                 spesaEur,
             });
             if (res.success) onSaved();
-            else setError(res.error || 'Errore salvataggio');
+            else setError(friendlyError(res.error));
         });
     }
 
@@ -604,7 +609,7 @@ function TargetModal({
             if (res.success) {
                 onSaved();
             } else {
-                setError(res.error || 'Errore durante il salvataggio');
+                setError(friendlyError(res.error));
             }
         });
     }
@@ -854,7 +859,7 @@ function MetricsTargetModal({
                 targetClosePct,
             });
             if (res.success) onSaved();
-            else setError(res.error || 'Errore salvataggio');
+            else setError(friendlyError(res.error));
         });
     }
 
