@@ -26,14 +26,16 @@ async function requireAdmin() {
 /**
  * Guard di sola lettura per la dashboard Sales Manager: oltre all'ADMIN,
  * consente l'accesso in lettura al TL del team Conferme (Alberto, gating per
- * email via isConfermeTl). NON usare per le mutation: i target restano ADMIN-only.
+ * email via isConfermeTl) e al TL GDO (role TL, decisione PO 2026-07-05, che
+ * ha accesso pieno alla pagina /panoramica-generale). NON usare per le
+ * mutation: i target restano ADMIN-only.
  */
 async function requireSalesOverviewRead() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
     const role = user.user_metadata?.role;
-    if (role === 'ADMIN') return { id: user.id, role };
+    if (role === 'ADMIN' || role === 'TL') return { id: user.id, role };
     if (role === 'CONFERME' && isConfermeTl(user.email)) return { id: user.id, role };
     return null;
 }

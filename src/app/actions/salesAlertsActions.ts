@@ -99,7 +99,7 @@ export async function getSalesAlerts(): Promise<SalesAlertsResult> {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
         const isTlConfermeViewer = ctx.role === 'CONFERME' && isConfermeTl(ctx.email);
-        if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER' && !isTlConfermeViewer) {
+        if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER' && ctx.role !== 'TL' && !isTlConfermeViewer) {
             return { success: false, error: 'Non autorizzato' };
         }
 

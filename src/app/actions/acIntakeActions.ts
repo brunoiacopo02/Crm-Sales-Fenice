@@ -10,7 +10,10 @@ async function requireManager(): Promise<{ id: string; role: string; ctx: Tenant
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const role = user?.user_metadata?.role as string | undefined;
-    if (!user || !role || !["MANAGER", "ADMIN"].includes(role)) {
+    // TL GDO ammesso il 2026-07-05 (decisione PO): la pagina /lead-automatici
+    // ora è aperta al ruolo TL e chiama queste action senza try/catch, quindi
+    // il gate deve restare allineato al gate di pagina.
+    if (!user || !role || !["MANAGER", "ADMIN", "TL"].includes(role)) {
         throw new Error("Unauthorized");
     }
     const ctx = await currentTenant();
