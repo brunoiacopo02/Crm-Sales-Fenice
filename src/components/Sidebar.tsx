@@ -151,47 +151,64 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             ]
         } else {
             navGroups = [
-                ...(role === "ADMIN" ? [{
-                    label: "Admin",
-                    items: [
-                        { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
-                        { name: "Performance Venditori", href: "/performance-venditori", icon: Trophy },
-                    ],
-                }] : []),
                 {
-                    label: "Operativo",
+                    label: "Direzione",
                     items: [
-                        { name: "Dashboard Operativa", href: "/team", icon: UserCog },
-                        { name: "Appuntamenti Oggi", href: "/appuntamenti-oggi", icon: Calendar },
-                        { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
+                        ...(role === "ADMIN" ? [{ name: "Sales Manager", href: "/panoramica-generale", icon: Compass }] : []),
+                        { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
+                    ],
+                },
+                {
+                    label: "GDO",
+                    items: [
+                        { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
+                        { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
+                        { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
+                        { name: "Note GDO", href: "/note-gdo", icon: FileText },
+                        { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
+                        { name: "Statistiche Fissatore", href: "/statistiche-fissatore", icon: Activity },
+                    ],
+                },
+                {
+                    label: "Venditori",
+                    items: [
+                        { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
+                        ...(role === "ADMIN" ? [{ name: "Performance Venditori", href: "/performance-venditori", icon: Trophy }] : []),
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
-                        { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
+                    ],
+                },
+                {
+                    label: "Conferme",
+                    items: [
+                        { name: "Appuntamenti (Conferme)", href: "/conferme", icon: Calendar },
+                        { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
+                        { name: "Panoramica TL", href: "/conferme/panoramica-tl", icon: Compass },
+                        { name: "Analytics Staffing Conferme", href: "/conferme/analytics", icon: LayoutDashboard },
+                    ],
+                },
+                {
+                    label: "Lead & Import",
+                    items: [
+                        { name: "Appuntamenti Oggi", href: "/appuntamenti-oggi", icon: Calendar },
                         { name: "Importa Lead", href: "/import", icon: Upload },
                         { name: "Lead Automatici (AC)", href: "/lead-automatici", icon: Zap },
                         { name: "Archivio Storico", href: "/archivio", icon: Database },
+                        { name: "Richiami", href: "/richiami", icon: Calendar },
                         { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
                     ],
                 },
                 {
-                    label: "KPI & Analytics",
+                    label: "Qualità",
                     items: [
-                        { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
-                        { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
-                        { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
-                        { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },
-                        { name: "Analytics Staffing Conferme", href: "/conferme/analytics", icon: LayoutDashboard },
-                        { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
                         { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
-                        { name: "Analisi Qualità", href: "/analisi-qualita", icon: Search },
-                        { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
+                        { name: "Analisi Funnel", href: "/analisi-qualita", icon: Search },
                     ],
                 },
                 {
-                    label: "Team & HR",
+                    label: "Marketing",
                     items: [
-                        { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
-                        { name: "Note GDO", href: "/note-gdo", icon: FileText },
+                        { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
                     ],
                 },
                 {
@@ -202,9 +219,9 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                     ],
                 },
                 {
-                    label: "Automazioni",
+                    label: "Team",
                     items: [
-                        { name: "Statistiche Fissatore", href: "/statistiche-fissatore", icon: Activity },
+                        { name: "Gestione Account", href: "/team", icon: UserCog },
                     ],
                 },
             ]
