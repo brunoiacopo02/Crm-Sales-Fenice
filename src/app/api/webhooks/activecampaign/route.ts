@@ -17,7 +17,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { db } from "@/db";
 import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
-import { eq, and, asc, sql, isNull, gte, desc, or } from "drizzle-orm";
+import { eq, and, asc, sql, isNull, gte, desc, or, like } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
@@ -206,6 +206,36 @@ async function recordFailure(input: {
 }
 
 /**
+ * Registra lo skip da lista bloccata in acIntakeFailures con DEDUP:
+ * eventi AC ripetuti (subscribe/update) sullo stesso contatto bloccato NON
+ * devono accumulare righe (incidente Disk IO da write-storm). Se esiste già
+ * una riga blocked_list NON risolta per lo stesso acContactId, aggiorniamo
+ * solo il payload dell'esistente invece di inserirne una nuova.
+ */
+async function recordBlockedListSkip(contactId: string, listId: string | null, rawPayload: Record<string, string>) {
+    const [existing] = await db.select({ id: acIntakeFailures.id }).from(acIntakeFailures)
+        .where(and(
+            eq(acIntakeFailures.companyId, FENICE_COMPANY),
+            eq(acIntakeFailures.acContactId, contactId),
+            isNull(acIntakeFailures.resolvedAt),
+            like(acIntakeFailures.reason, 'blocked_list:%'),
+        )).limit(1);
+    if (existing) {
+        await db.update(acIntakeFailures)
+            .set({ payload: rawPayload })
+            .where(eq(acIntakeFailures.id, existing.id));
+        return;
+    }
+    await recordFailure({
+        reason: `blocked_list:${listId ?? ''}`,
+        acContactId: contactId,
+        email: rawPayload['contact[email]'] || rawPayload['contact.email'] || null,
+        phoneRaw: rawPayload['contact[phone]'] || rawPayload['contact.phone'] || null,
+        payload: rawPayload,
+    });
+}
+
+/**
  * Notifica ai manager: UNA sola notifica ogni 10 minuti di inattività,
  * non una per ogni failure. Messaggio link-style che invita ad aprire la
  * sezione "Lead non importati".
@@ -287,6 +317,12 @@ export async function POST(req: NextRequest) {
             const blocked = await getBlockedListIds();
             if (blocked.has(String(triggerListId))) {
                 console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (payload) ${triggerListId}`);
+                // Tracciato in acIntakeFailures (reason 'blocked_list:<id>') così l'admin
+                // lo vede in /lead-automatici invece che sparire in silenzio. Escluso da
+                // "Riprova tutti" (rifinirebbe bloccato in loop): recuperabile solo col
+                // retry singolo, per quando la lista viene sbloccata. Con dedup: eventi
+                // ripetuti sullo stesso contatto non accumulano righe.
+                await recordBlockedListSkip(contactId, String(triggerListId), rawPayload);
                 return NextResponse.json({
                     skipped: 'blocked_list',
                     listId: String(triggerListId),
@@ -303,6 +339,7 @@ export async function POST(req: NextRequest) {
             const membership = await isContactInBlockedList(contactId);
             if (membership.blocked) {
                 console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (membership) ${membership.listId}`);
+                await recordBlockedListSkip(contactId, membership.listId, rawPayload);
                 return NextResponse.json({
                     skipped: 'blocked_list',
                     listId: membership.listId,

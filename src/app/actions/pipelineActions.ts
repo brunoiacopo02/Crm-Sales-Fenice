@@ -128,7 +128,12 @@ export async function getPipelineLeads() {
                 .update(firstIds.join(',') + '|' + secondIds.join(',') + '|' + thirdIds.join(','))
                 .digest('hex')
 
-            const lastSnap = await db.select({ fingerprint: pipelineSnapshots.fingerprint })
+            const lastSnap = await db.select({
+                fingerprint: pipelineSnapshots.fingerprint,
+                firstCallCount: pipelineSnapshots.firstCallCount,
+                secondCallCount: pipelineSnapshots.secondCallCount,
+                thirdCallCount: pipelineSnapshots.thirdCallCount,
+            })
                 .from(pipelineSnapshots)
                 .where(and(
                     eq(pipelineSnapshots.companyId, ctx.companyId),
@@ -138,6 +143,13 @@ export async function getPipelineLeads() {
                 .limit(1)
 
             if (!lastSnap[0] || lastSnap[0].fingerprint !== fingerprint) {
+                // Le liste ID servono solo per diagnosticare i "lead spariti": le salviamo
+                // esclusivamente quando una tab si restringe rispetto allo snapshot precedente.
+                const shrunk = !!lastSnap[0] && (
+                    firstCall.length < lastSnap[0].firstCallCount ||
+                    secondCall.length < lastSnap[0].secondCallCount ||
+                    thirdCall.length < lastSnap[0].thirdCallCount
+                )
                 await db.insert(pipelineSnapshots).values({
                     id: crypto.randomUUID(),
                     userId,
@@ -145,9 +157,9 @@ export async function getPipelineLeads() {
                     secondCallCount: secondCall.length,
                     thirdCallCount: thirdCall.length,
                     recallsCount: recallsLeads.length,
-                    firstCallIds: firstIds,
-                    secondCallIds: secondIds,
-                    thirdCallIds: thirdIds,
+                    firstCallIds: shrunk ? firstIds : [],
+                    secondCallIds: shrunk ? secondIds : [],
+                    thirdCallIds: shrunk ? thirdIds : [],
                     fingerprint,
                     companyId: ctx.companyId,
                 })

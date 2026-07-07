@@ -169,7 +169,7 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         const role = user?.user_metadata?.role as string | undefined;
-        if (!user || !role || !["ADMIN", "MANAGER"].includes(role)) {
+        if (!user || !role || !["ADMIN", "MANAGER", "TL"].includes(role)) {
             return { success: false, error: "Unauthorized — solo admin/manager possono cancellare appuntamenti" };
         }
 

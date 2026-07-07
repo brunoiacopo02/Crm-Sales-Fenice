@@ -15,7 +15,7 @@ export default async function AppuntamentiOggiPage() {
         ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } }
         : null
 
-    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "MANAGER")) {
+    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "MANAGER" && session.user.role !== "TL")) {
         redirect("/")
     }
 

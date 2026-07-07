@@ -1,3 +1,5 @@
+// Pagina orfana DI PROPOSITO: tool one-shot di backfill marketing, non linkata in
+// sidebar per evitare click accidentali. Accesso solo via URL diretto (ADMIN/MANAGER).
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import BackfillClient from './BackfillClient';

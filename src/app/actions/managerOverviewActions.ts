@@ -15,9 +15,10 @@ import { leads, users, monthlyLeadTargets, metaAccountDaily } from "@/db/schema"
 import { and, eq, gte, lt, lte, isNull, isNotNull, inArray, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { workingDaysBetween, currentYearMonthRome } from "@/lib/workingDaysUtils";
+import { MANAGER_TARGET_APP_PER_GDO_DAY as TARGET_APP_PER_GDO_DAY } from "@/lib/kpi/canon";
 
 // Target espliciti richiesti dal management (Correzioni CRM 2026-06-11).
-const TARGET_APP_PER_GDO_DAY = 10;
+// TARGET_APP_PER_GDO_DAY (soglia giudizio manager = 10) ora importata da canon.
 const TARGET_CONFERMA_PCT = 0.15;
 const TARGET_COSTO_CONTRATTO_EUR = 760;
 const WEEKLY_STRETCH_FACTOR = 1.15;
@@ -75,9 +76,10 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         // ── GDO attivi ───────────────────────────────────────────────────────
         // statsActive: il TL/manager esclude dai conteggi i GDO non operativi,
         // altrimenti le medie per-GDO escono diluite (divisore gonfiato).
+        // isBot=false: il bot fissatore non è un GDO reale (decisione PO 2026-07-05).
         const gdos = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
             .from(users)
-            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true)));
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true), eq(users.isBot, false)));
         const nGdo = gdos.length;
         const gdoName = new Map(gdos.map(g => [g.id, g.name || g.displayName || g.id]));
 

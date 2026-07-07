@@ -4,8 +4,8 @@ import { eq } from "drizzle-orm"
 import { redirect } from "next/navigation"
 
 export default async function DebugTablePage() {
-    // Only allow in development mode for safety
-    if (process.env.NODE_ENV === "production") {
+    // Only allow in development mode for safety (blocks prod AND Vercel previews)
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
         redirect("/")
     }
 

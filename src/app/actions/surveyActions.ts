@@ -77,7 +77,7 @@ async function requireRole(allowed: string[]) {
 async function requireQualitaLeadView() {
     const session = await getSession();
     const allowed = session && (
-        ["MANAGER", "ADMIN"].includes(session.role)
+        ["MANAGER", "ADMIN", "TL"].includes(session.role)
         || (session.role === "CONFERME" && isConfermeTl(session.email))
     );
     if (!allowed) {
@@ -501,7 +501,7 @@ export async function invalidateGdoSurvey(surveyId: string): Promise<{ success: 
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
-        const session = await requireRole(["MANAGER", "ADMIN"]);
+        const session = await requireRole(["MANAGER", "ADMIN", "TL"]);
         const [row] = await db.select().from(gdoLeadSurveys).where(and(eq(gdoLeadSurveys.id, surveyId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
         if (!row) return { success: false, error: "Survey not found" };
         if (row.invalidatedBy) return { success: false, error: "Già invalidata" };
@@ -539,7 +539,7 @@ export async function invalidateConfermeSurvey(surveyId: string): Promise<{ succ
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
-        const session = await requireRole(["MANAGER", "ADMIN"]);
+        const session = await requireRole(["MANAGER", "ADMIN", "TL"]);
         const [row] = await db.select().from(confermeLeadSurveys).where(and(eq(confermeLeadSurveys.id, surveyId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
         if (!row) return { success: false, error: "Survey not found" };
         if (row.invalidatedBy) return { success: false, error: "Già invalidata" };

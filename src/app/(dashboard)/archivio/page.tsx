@@ -3,22 +3,33 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
+import { currentTenant } from "@/lib/tenancy";
+import { and, eq, or, sql } from "drizzle-orm";
 
 export default async function ArchivePage() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
 
     const role = supabaseUser?.user_metadata?.role;
-    if (!supabaseUser || (role !== 'MANAGER' && role !== 'ADMIN')) {
+    if (!supabaseUser || (role !== 'MANAGER' && role !== 'ADMIN' && role !== 'TL')) {
         redirect('/');
     }
 
-    // Fetch employees for dropdowns
+    const ctx = await currentTenant();
+
+    // Fetch employees for dropdowns, scoped sull'azienda attiva. Staff condiviso:
+    // utenti con companyId='fenice' operano anche su Serenamente via allowedCompanies
+    // (fallback legacy su companyId) — pattern venditoriMonitorActions.ts:68-71.
     const allUsers = await db.select({
         id: users.id,
         name: users.name,
         role: users.role
-    }).from(users);
+    }).from(users).where(
+        or(
+            sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
+            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+        )
+    );
 
     const gdoUsers = allUsers.filter(u => u.role === 'GDO');
     const salesUsers = allUsers.filter(u => u.role === 'VENDITORE');

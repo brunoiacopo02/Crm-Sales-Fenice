@@ -7,7 +7,7 @@ export default async function LeadAutomaticiPage() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const role = (user?.user_metadata?.role as string) || "";
-    if (!user || !["MANAGER", "ADMIN"].includes(role)) {
+    if (!user || !["MANAGER", "ADMIN", "TL"].includes(role)) {
         redirect("/");
     }
 

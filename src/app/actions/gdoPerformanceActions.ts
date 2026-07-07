@@ -3,10 +3,12 @@
 import { db } from "@/db";
 import { leads, users, weeklyGamificationRules, callLogs, manualAdjustments } from "@/db/schema";
 import { eq, and, gte, lte, lt, isNotNull, sql, or } from "drizzle-orm";
-import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
+import { isWithinInterval } from "date-fns";
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { isRealGdo, DEFAULT_DAILY_APPT_TARGET, apptSetAt } from "@/lib/kpi/canon";
+import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 
 export interface GamificationTargetInput {
     month: string;
@@ -49,32 +51,31 @@ function isPresenziato(outcome: string | null) {
 
 /**
  * Funzione Helper: Divide il mese in blocchi di settimane solari (Lunedì-Domenica).
+ * Contratto invariato (start = 00:00 inclusivo, end = 23:59:59.999 inclusivo)
+ * per non rompere i consumer esistenti (isWithinInterval, lte); cambia solo il
+ * fuso di calcolo: prima usava componenti Date locali (UTC su Vercel), ora
+ * Europe/Rome tramite gli helper canonici di dateUtils.ts.
  */
 function getMonthWeeks(monthStr: string) {
-    const startObj = parseISO(`${monthStr}-01T00:00:00`);
-    const endObj = endOfMonth(startObj);
+    const { start: monthStart, end: monthEndExclusive } = monthBoundsRome(monthStr);
+    const monthEnd = new Date(monthEndExclusive.getTime() - 1); // ultimo istante del mese (inclusivo)
 
-    // We break it down to buckets.
     const weeks: { name: string, start: Date, end: Date }[] = [];
-    let currentStart = startObj;
+    let currentStart = monthStart;
     let weekIndex = 1;
 
-    while (currentStart <= endObj) {
-        // getDay(): Sunday = 0, Monday = 1 ... Saturday = 6
-        let daysToSunday = 0;
-        const currentDayOfWeek = getDay(currentStart);
-        if (currentDayOfWeek === 0) {
-            daysToSunday = 0;
-        } else {
-            daysToSunday = 7 - currentDayOfWeek;
-        }
+    while (currentStart <= monthEnd) {
+        // Mezzogiorno UTC del giorno Rome corrente: non attraversa mai la mezzanotte
+        // locale, quindi getUTCDay() riflette sempre il weekday Rome corretto.
+        const noon = new Date(`${toRomeDateStr(currentStart)}T12:00:00Z`);
+        const dow = noon.getUTCDay(); // 0 = domenica ... 6 = sabato
+        const daysToSunday = dow === 0 ? 0 : 7 - dow;
+        const sundayNoon = new Date(noon.getTime() + daysToSunday * 24 * 60 * 60 * 1000);
 
-        let currentEnd = addDays(currentStart, daysToSunday);
-        // Ensure end of day time
-        currentEnd = new Date(currentEnd.getFullYear(), currentEnd.getMonth(), currentEnd.getDate(), 23, 59, 59, 999);
-
-        if (currentEnd > endObj) {
-            currentEnd = new Date(endObj.getFullYear(), endObj.getMonth(), endObj.getDate(), 23, 59, 59, 999);
+        // Fine settimana Rome inclusiva = ultimo istante della domenica.
+        let currentEnd = new Date(dayBoundsRome(sundayNoon).end.getTime() - 1);
+        if (currentEnd > monthEnd) {
+            currentEnd = monthEnd;
         }
 
         weeks.push({
@@ -83,9 +84,8 @@ function getMonthWeeks(monthStr: string) {
             end: currentEnd
         });
 
-        // Next starts at currentEnd + 1 ms => next day 00:00:00
-        currentStart = addDays(new Date(currentEnd.getFullYear(), currentEnd.getMonth(), currentEnd.getDate()), 1);
-        currentStart = new Date(currentStart.getFullYear(), currentStart.getMonth(), currentStart.getDate(), 0, 0, 0, 0);
+        // La settimana successiva inizia a mezzanotte Rome del giorno dopo currentEnd.
+        currentStart = dayBoundsRome(new Date(currentEnd.getTime() + 1)).start;
         weekIndex++;
     }
 
@@ -104,19 +104,21 @@ export async function getManagerGdoTables(monthString: string) {
     // event-based: qui la formula umana lo falserebbe, quindi niente card per lui.
     const activeGdos = allUsers.filter(u => u.isActive && !u.isBot);
 
-    // Tutti gli appuntamenti fissati questo mese (verranno splittati per data di appuntamento,
-    // ma la select la facciamo su tutto, o per appointmentDate compreso in questo mese per evitare di prenderli tutti)
-    // Meglio prendere tutti i lead e poi filtrare in memoria.
-    const startObj = parseISO(`${monthString}-01T00:00:00`);
-    const endObj = new Date(endOfMonth(startObj).getFullYear(), endOfMonth(startObj).getMonth(), endOfMonth(startObj).getDate(), 23, 59, 59, 999);
+    // Tutti gli appuntamenti fissati questo mese. Base canonica PO 2026-07-05
+    // (src/lib/kpi/canon.ts): attribuzione per data di FISSAGGIO
+    // (COALESCE(appointmentCreatedAt, appointmentDate)), non per data del
+    // meeting (appointmentDate) — un appuntamento fissato a fine mese per il
+    // mese successivo va contato nel mese in cui è stato fissato.
+    // Bounds Europe/Rome (end esclusivo): prima usava componenti Date locali (UTC su Vercel).
+    const { start: startObj, end: endObj } = monthBoundsRome(monthString);
 
     const [monthLeads, assignedLeadsRaw] = await Promise.all([
         db.select().from(leads).where(
             and(
                 eq(leads.companyId, ctx.companyId),
                 isNotNull(leads.appointmentDate),
-                gte(leads.appointmentDate, startObj),
-                lte(leads.appointmentDate, endObj)
+                sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startObj}`,
+                sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endObj}`,
             )
         ),
         db.select({
@@ -127,7 +129,7 @@ export async function getManagerGdoTables(monthString: string) {
                 eq(leads.companyId, ctx.companyId),
                 isNotNull(leads.assignedToId),
                 gte(leads.createdAt, startObj),
-                lte(leads.createdAt, endObj)
+                lt(leads.createdAt, endObj)
             ))
     ]);
 
@@ -186,9 +188,15 @@ export async function getManagerGdoTables(monthString: string) {
         }
 
         // 2. DIMENSIONE WEEKLY (Calendar)
-        // Find which week this appointment falls into
-        if (lead.appointmentDate) {
-            const wIndex = weeks.findIndex(w => isWithinInterval(lead.appointmentDate!, { start: w.start, end: w.end }));
+        // Bucketing per la STESSA data canonica del filtro mensile (fissaggio,
+        // non data del meeting): altrimenti un lead fissato a fine mese per un
+        // meeting nel mese successivo entra in monthLeads/totalStats ma la sua
+        // settimana (calcolata su appointmentDate) può non esistere in weeks
+        // (mese diverso) → wIndex=-1 e sparisce dalle righe settimanali pur
+        // essendo contato in testata.
+        const setAt = apptSetAt(lead);
+        if (setAt) {
+            const wIndex = weeks.findIndex(w => isWithinInterval(setAt, { start: w.start, end: w.end }));
             if (wIndex !== -1) {
                 if (isConfermato) gdoStats.calendarStats.confermati[wIndex]++;
                 if (isPresenziatoFlag) gdoStats.calendarStats.presenziati[wIndex]++;
@@ -328,7 +336,9 @@ async function getConfermeWeeklyState(
     companyId: string,
     overrides?: { role?: string; target1Override?: number; reward1Override?: number; target2Override?: number; reward2Override?: number },
 ) {
-    const currentMonthStr = today.toISOString().slice(0, 7);
+    // Mese in Europe/Rome (getMonthWeeks è Rome-native): toISOString() (UTC)
+    // sceglierebbe il mese sbagliato nella finestra 00:00-02:00 Rome.
+    const currentMonthStr = toRomeDateStr(today).slice(0, 7);
     const weeks = getMonthWeeks(currentMonthStr);
 
     let currentWeekName = "Fuori Mese";
@@ -402,8 +412,10 @@ async function getConfermeWeeklyState(
         target2,
         reward2,
         currentWeekName,
-        weekStart: currentWeekStart.toISOString().split('T')[0],
-        weekEnd: currentWeekEnd.toISOString().split('T')[0],
+        // Label in data Europe/Rome: con i bound di getMonthWeeks ora Rome-native,
+        // toISOString() (UTC) mostrerebbe il giorno precedente (lun 00:00 Rome = dom 22:00 UTC).
+        weekStart: toRomeDateStr(currentWeekStart),
+        weekEnd: toRomeDateStr(currentWeekEnd),
         isBiweekly: false,
     };
 }
@@ -506,7 +518,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
     // Get user's dailyApptTarget
     const userRow = await db.select({ dailyApptTarget: users.dailyApptTarget })
         .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, gdoUserId))).limit(1);
-    const dailyApptTarget = userRow[0]?.dailyApptTarget || 2;
+    const dailyApptTarget = userRow[0]?.dailyApptTarget || DEFAULT_DAILY_APPT_TARGET;
 
     // Count today's calls from callLogs
     const callResult = await db.select({ count: sql<number>`count(*)::integer` })
@@ -625,7 +637,9 @@ export async function getScriptCompletionRate(userId: string) {
 export async function getAllGdoScriptRates(): Promise<Record<string, { completionRate: number; scriptCompletedCount: number }>> {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    const activeGdos = await db.select({ id: users.id }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+    // Esclude il bot fissatore dalle statistiche di completamento script (decisione PO 2026-07-05)
+    const activeGdosRaw = await db.select({ id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+    const activeGdos = activeGdosRaw.filter(isRealGdo);
 
     if (activeGdos.length === 0) return {};
 

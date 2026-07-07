@@ -36,6 +36,7 @@ export function SalesManagerView({
     initialMetricsData,
     readOnly = false,
     readOnlyVariant = 'all-companies',
+    canEditTargets = false,
     currentYearMonth,
     strips,
 }: {
@@ -44,6 +45,8 @@ export function SalesManagerView({
     initialMetricsData: MetricsOverviewResult;
     readOnly?: boolean;
     readOnlyVariant?: 'all-companies' | 'viewer';
+    /** Mostra i controlli di modifica target/funnel/metriche: SOLO admin. */
+    canEditTargets?: boolean;
     currentYearMonth: string;
     /** Strisce operative (Alert MTD, Parametri Manager) montate solo sul mese corrente. */
     strips: ReactNode;
@@ -88,6 +91,7 @@ export function SalesManagerView({
                 initialMetricsData={initialMetricsData}
                 readOnly={readOnly}
                 readOnlyVariant={readOnlyVariant}
+                canEditTargets={canEditTargets}
                 selectedMonth={selectedMonth}
                 currentYearMonth={currentYearMonth}
             />

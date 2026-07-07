@@ -1,11 +1,13 @@
 'use server';
 
 import { db } from '@/db';
-import { monthlyTargets, dailyKpiSnapshots, users, leads } from '@/db/schema';
-import { eq, and, sql, gte, lte, or, inArray, isNotNull, asc } from 'drizzle-orm';
+import { monthlyLeadTargets, dailyKpiSnapshots, users, leads } from '@/db/schema';
+import { eq, and, sql, gte, lt, lte, or, inArray, isNotNull, asc } from 'drizzle-orm';
 import crypto from 'crypto';
-import { startOfMonth, endOfMonth, endOfDay, isBefore, isAfter, isSunday } from 'date-fns';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { isStatsGdo, apptSetAt as canonApptSetAt } from '@/lib/kpi/canon';
+import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils';
+import { countWorkingDaysInMonth, countWorkingDaysElapsed } from '@/lib/workingDaysUtils';
 
 // Tipi di utilità per i target
 export interface MonthlyTargetInput {
@@ -83,75 +85,83 @@ export interface TargetStatsResponse {
 }
 
 /**
- * Calcola programmaticamente i giorni lavorativi (Dal Lun - Sab, no Domenica)
- * in un determinato mese testuale (es. 2026-03).
+ * Calcola i giorni lavorativi (Europe/Rome, festività italiane incluse — Pasquetta
+ * mobile compresa, sabati lavorativi) in un determinato mese testuale (es. 2026-03),
+ * usando gli helper canonici di `workingDaysUtils.ts`.
  */
 function getDateMetrics(monthString: string, testTodayOverride?: Date) {
-    const today = testTodayOverride || new Date(); // Dalla timezone del server di esecuzione
+    const today = testTodayOverride || new Date();
 
-    // Parsiamo il mese: 2026-03-01T00:00:00.000
     const [year, month] = monthString.split('-').map(Number);
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0, 23, 59, 59, 999);
 
-    let giorniLavorativiTotaliMese = 0;
-    let giorniLavorativiTrascorsiOggi = 0;
-
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        // isSunday() -> 0 è domenica
-        if (d.getDay() !== 0) {
-            giorniLavorativiTotaliMese++;
-
-            // Se il giorno del mese controllato è antecedente o identico (nel calendario lavorativo) a oggi
-            // ATTENZIONE: solo se il "today" matcha il target month.
-            const isSameMonth = today.getFullYear() === year && today.getMonth() === month - 1;
-
-            if (isSameMonth) {
-                // Limitiamo il count ai giorni trascorsi fino ad OGGI compreso
-                if (d.getDate() <= today.getDate()) {
-                    giorniLavorativiTrascorsiOggi++;
-                }
-            } else if (today > end) {
-                // Il mese è gia finito nel passato, i trascorsi sono == al totale
-                giorniLavorativiTrascorsiOggi++;
-            }
-            // Se today < start (mese futuro), i trascorsi rimangono 0.
-        }
-    }
-
-    // Fallback matematico per non dividere per 0 casomai fossimo nel weekend o mese vuoto
-    if (giorniLavorativiTotaliMese === 0) giorniLavorativiTotaliMese = 1;
+    const giorniLavorativiTotaliMese = countWorkingDaysInMonth(year, month);
+    const giorniLavorativiTrascorsiOggi = countWorkingDaysElapsed(year, month, today);
 
     return { giorniLavorativiTotaliMese, giorniLavorativiTrascorsiOggi, today };
 }
 
 /**
- * Salva i target impostati dal manager
+ * Salva i target impostati dal manager.
+ *
+ * Unificato sulla tabella canonica `monthlyLeadTargets` (stessa fonte del
+ * Sales Manager, decisione PO 2026-07-05 — Task B5). `monthlyTargets` (legacy)
+ * NON viene più letta né scritta da qui, ma resta nel DB con i suoi dati.
+ *
+ * Mappatura campi: targetAppFissati→targetAppMonthly, targetAppConfermati→
+ * targetConfMonthly, targetTrattative→targetPresMonthly, targetClosed→
+ * targetCloseMonthly, targetValoreContratti→targetFatturatoMonthly,
+ * workingDaysOverride→workingDays. Chiave: month ('YYYY-MM') → yearMonth.
  */
 export async function saveMonthlyTarget(target: MonthlyTargetInput) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    const existing = await db.select().from(monthlyTargets).where(and(
-        eq(monthlyTargets.companyId, ctx.companyId),
-        eq(monthlyTargets.month, target.month),
+    const existing = await db.select().from(monthlyLeadTargets).where(and(
+        eq(monthlyLeadTargets.companyId, ctx.companyId),
+        eq(monthlyLeadTargets.yearMonth, target.month),
     ));
 
+    // `workingDays` su monthlyLeadTargets è NOT NULL ma la convenzione condivisa
+    // dal resto del codebase (ramo di lettura ~riga 268, panoramicaActions.ts,
+    // confermeKpiActions.ts) è: 0 = sentinella "nessun override, calcola
+    // automaticamente". Scrivere qui il conteggio automatico invece di 0
+    // farebbe apparire l'override come attivo e congelerebbe i giorni
+    // lavorativi anche in modalità automatica (finding Critical review B5).
+    const resolvedWorkingDays = (target.workingDaysOverride != null && target.workingDaysOverride > 0)
+        ? target.workingDaysOverride
+        : 0;
+
+    const metricFields = {
+        targetAppMonthly: target.targetAppFissati,
+        targetConfMonthly: target.targetAppConfermati,
+        targetPresMonthly: target.targetTrattative,
+        targetCloseMonthly: target.targetClosed,
+        targetFatturatoMonthly: target.targetValoreContratti,
+        workingDays: resolvedWorkingDays,
+    };
+
     if (existing.length > 0) {
-        await db.update(monthlyTargets)
+        await db.update(monthlyLeadTargets)
             .set({
-                ...target,
-                updatedAt: new Date()
+                ...metricFields,
+                updatedAt: new Date(),
             })
             .where(and(
-                eq(monthlyTargets.companyId, ctx.companyId),
-                eq(monthlyTargets.id, existing[0].id),
+                eq(monthlyLeadTargets.companyId, ctx.companyId),
+                eq(monthlyLeadTargets.id, existing[0].id),
             ));
     } else {
-        await db.insert(monthlyTargets).values({
+        await db.insert(monthlyLeadTargets).values({
             id: crypto.randomUUID(),
-            ...target,
-            updatedAt: new Date(),
             companyId: ctx.companyId,
+            yearMonth: target.month,
+            // Campi lead (Sales Manager, /panoramica-generale) non gestiti da
+            // questa form: default neutri non distruttivi. L'admin li imposta
+            // separatamente con setLeadMonthlyTarget; se poi configura anche
+            // quella pagina, l'update la sovrascriverà correttamente.
+            targetNuovi: 0,
+            targetDatabase: 0,
+            ...metricFields,
+            updatedAt: new Date(),
         });
     }
     return true;
@@ -236,21 +246,33 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
 
     const dateMetrics = getDateMetrics(monthString, testTodayOverride);
     const today = dateMetrics.today;
-    const todayFormatted = today.toISOString().split('T')[0];
+    const todayFormatted = toRomeDateStr(today);
 
     // 1. Setup Targets e Utenti (tenant-scoped)
-    const tQuery = await db.select().from(monthlyTargets).where(and(
-        eq(monthlyTargets.companyId, ctx.companyId),
-        eq(monthlyTargets.month, monthString),
+    // Letto da monthlyLeadTargets (fonte canonica, unificata col Sales Manager
+    // — Task B5): mappiamo i campi sulla shape MonthlyTargetInput esistente,
+    // così il tipo di ritorno e la UI client non cambiano.
+    const tQuery = await db.select().from(monthlyLeadTargets).where(and(
+        eq(monthlyLeadTargets.companyId, ctx.companyId),
+        eq(monthlyLeadTargets.yearMonth, monthString),
     ));
-    const targetData = tQuery.length > 0 ? tQuery[0] : {
+    const targetRow = tQuery.length > 0 ? tQuery[0] : null;
+    const targetData: MonthlyTargetInput = targetRow ? {
+        month: monthString,
+        targetAppFissati: targetRow.targetAppMonthly,
+        targetAppConfermati: targetRow.targetConfMonthly,
+        targetTrattative: targetRow.targetPresMonthly,
+        targetClosed: targetRow.targetCloseMonthly,
+        targetValoreContratti: targetRow.targetFatturatoMonthly,
+        workingDaysOverride: targetRow.workingDays > 0 ? targetRow.workingDays : null,
+    } : {
         month: monthString,
         targetAppFissati: 0,
         targetAppConfermati: 0,
         targetTrattative: 0,
         targetClosed: 0,
         targetValoreContratti: 0,
-        workingDaysOverride: null as number | null,
+        workingDaysOverride: null,
     };
 
     // Se il manager ha impostato un override manuale dei giorni lavorativi, usalo
@@ -264,51 +286,43 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         giorniLavorativiTotaliMese
     );
 
-    const gdoUsersObj = await db.select().from(users)
+    // Divisore delle medie per-GDO: solo GDO reali (esclude bot fissatore) con
+    // statsActive (decisione PO 2026-07-05), non solo isActive.
+    const gdoUsersObjRaw = await db.select().from(users)
         .where(
             and(
                 eq(users.companyId, ctx.companyId),
-                eq(users.role, 'GDO'),
-                eq(users.isActive, true)
+                eq(users.role, 'GDO')
             )
         );
+    const gdoUsersObj = gdoUsersObjRaw.filter(isStatsGdo);
     let gdoAttivi = gdoUsersObj.length;
-    if (gdoAttivi === 0) gdoAttivi = 1; // Fallback matematico 
+    if (gdoAttivi === 0) gdoAttivi = 1; // Fallback matematico
 
     // 2. Fetch Lead del Mese (Simile a Marketing Dashboard, escludendo BLT)
-    const [yearStr, monthStr] = monthString.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10);
-
-    const start = new Date(year, month - 1, 1).toISOString();
-    const end = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
-
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).toISOString();
-
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    const todayStartDate = new Date(todayStart);
-    const todayEndDate = new Date(todayEnd);
+    // Bounds Europe/Rome (prima: componenti Date estratti in tz server → UTC su Vercel).
+    const { start: startDate, end: endDate } = monthBoundsRome(monthString);
+    const { start: todayStartDate, end: todayEndDate } = dayBoundsRome(today);
 
     // Ogni metrica è attribuita al mese in cui è avvenuta l'azione corrispondente,
     // NON al mese di creazione del lead. Pesco i lead con OR su tutte le date evento
     // e poi conto per la data canonica di ogni metrica (modello marketingActions).
+    // end è esclusivo (inizio periodo successivo): confronto con `<`.
     const inMonth = (d: Date | null | undefined): boolean =>
-        !!d && d >= startDate && d <= endDate;
+        !!d && d >= startDate && d < endDate;
     const inToday = (d: Date | null | undefined): boolean =>
-        !!d && d >= todayStartDate && d <= todayEndDate;
+        !!d && d >= todayStartDate && d < todayEndDate;
 
     const monthLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
             or(sql`${leads.funnel} IS NULL`, sql`${leads.funnel} != 'BLT'`),
             or(
-                and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
-                and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
-                and(gte(leads.appointmentDate, startDate), lte(leads.appointmentDate, endDate)),
-                and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
-                and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
+                and(gte(leads.createdAt, startDate), lt(leads.createdAt, endDate)),
+                and(gte(leads.appointmentCreatedAt, startDate), lt(leads.appointmentCreatedAt, endDate)),
+                and(gte(leads.appointmentDate, startDate), lt(leads.appointmentDate, endDate)),
+                and(gte(leads.confirmationsTimestamp, startDate), lt(leads.confirmationsTimestamp, endDate)),
+                and(gte(leads.salespersonOutcomeAt, startDate), lt(leads.salespersonOutcomeAt, endDate)),
             )
         )
     );
@@ -346,15 +360,17 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
             bucket.totale++;
         }
 
-        // App Fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy).
-        // Gate su apptSetAt (non su lead.appointmentDate corrente), perché il flow di reschedule
-        // delle Conferme azzera appointmentDate ma lascia appointmentCreatedAt — il fissaggio storico
-        // resta valido.
-        const apptSetAt = lead.appointmentCreatedAt || lead.appointmentDate;
-        if (apptSetAt && inMonth(apptSetAt)) {
+        // App Fissati: base canonica PO 2026-07-05 (src/lib/kpi/canon.ts) — data
+        // di fissaggio (appointmentCreatedAt fallback appointmentDate), gate
+        // appointmentDate IS NOT NULL. Prima non c'era gate: un appuntamento
+        // annullato (appointmentDate azzerato dal flow di reschedule Conferme,
+        // ma appointmentCreatedAt ancora valorizzato) veniva comunque contato
+        // come fissato.
+        const apptDate = canonApptSetAt(lead);
+        if (apptDate && inMonth(apptDate)) {
             actAppsFissati++;
             bucket.fissati++;
-            if (inToday(lead.appointmentCreatedAt)) {
+            if (inToday(apptDate)) {
                 todayFissati++;
             }
         }

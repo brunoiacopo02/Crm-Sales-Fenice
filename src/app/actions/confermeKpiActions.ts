@@ -1,16 +1,36 @@
 "use server"
 
 import { db } from "@/db"
-import { leads, users, monthlyTargets } from "@/db/schema"
+import { leads, users, monthlyLeadTargets } from "@/db/schema"
 import { eq, and, gte, lte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
-import { startOfMonth, endOfMonth, eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
-import { weekBoundsRome } from "@/lib/dateUtils"
+import { eachDayOfInterval, format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns"
+import { weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isConfermeTl } from '@/lib/confermeTl'
 
 /** Format a Date to 'yyyy-MM-dd' in Europe/Rome timezone */
 function toRomeDateStr(date: Date): string {
     return date.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
+}
+
+/**
+ * Risolve il mese Europe/Rome (es. "2026-07") di un istante, poi ricostruisce
+ * i bounds del mese in componenti UTC-locali — lo stesso fuso "server" già
+ * usato da `date-fns` (che opera nel timezone del processo, UTC su Vercel)
+ * per `eachDayOfInterval`/`eachWeekOfInterval`/`startOfWeek`/`endOfWeek` in
+ * questo file. Così il MESE selezionato è sempre quello corretto (Rome) anche
+ * a ridosso della mezzanotte — prima `startOfMonth(monthDate)` interpretava
+ * `monthDate` con i componenti locali del server (UTC), sbagliando mese nella
+ * finestra 00:00-02:00 Rome — senza alterare la semantica UTC-locale su cui
+ * si basa tutto il resto della funzione (griglia calendario, weekday, ecc.),
+ * che richiederebbe una riscrittura più ampia per diventare Rome-native.
+ */
+function monthBoundsForCalendar(monthDate: Date): { start: Date; end: Date } {
+    const [y, m] = toRomeDateStr(monthDate).slice(0, 7).split('-').map(Number)
+    return {
+        start: new Date(Date.UTC(y, m - 1, 1)),
+        end: new Date(Date.UTC(y, m, 0, 23, 59, 59, 999)),
+    }
 }
 
 /** Default Conferme bonus: T1=30 chiusure (€145), T2=38 chiusure (€290).
@@ -24,8 +44,7 @@ const CONFERME_REWARD_T2 = 290;
 export async function getConfermeKpiStats(monthDate: Date = new Date(), confermeUserId?: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    const start = startOfMonth(monthDate)
-    const end = endOfMonth(monthDate)
+    const { start, end } = monthBoundsForCalendar(monthDate)
     const calendarStart = startOfWeek(start, { weekStartsOn: 1 })
     const calendarEnd = endOfWeek(end, { weekStartsOn: 1 })
 
@@ -226,10 +245,12 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const calcWorkingDaysPassed = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6 && new Date(d.date) <= new Date()).length
     const calcTotalWorkingDays = dailyStats.filter(d => d.dayOfWeek !== 0 && d.dayOfWeek !== 6).length
 
-    // Check for manager override of working days
+    // Check for manager override of working days — letto da monthlyLeadTargets
+    // (fonte canonica, unificata col Sales Manager e con /manager-targets —
+    // Task B5). Chiave month → yearMonth, workingDaysOverride → workingDays.
     const monthStr = format(start, 'yyyy-MM')
-    const mtQuery = await db.select().from(monthlyTargets).where(and(eq(monthlyTargets.month, monthStr), companyScope(ctx, monthlyTargets.companyId)))
-    const overrideVal = mtQuery.length > 0 ? mtQuery[0].workingDaysOverride : null
+    const mtQuery = await db.select().from(monthlyLeadTargets).where(and(eq(monthlyLeadTargets.yearMonth, monthStr), companyScope(ctx, monthlyLeadTargets.companyId)))
+    const overrideVal = mtQuery.length > 0 ? mtQuery[0].workingDays : null
     const totalWorkingDays = (overrideVal != null && overrideVal > 0) ? overrideVal : calcTotalWorkingDays
     const workingDaysPassed = Math.min(calcWorkingDaysPassed, totalWorkingDays)
 
@@ -371,8 +392,9 @@ export async function getConfermeTlOverview(monthDate: Date = new Date()): Promi
             || (ctx.role === 'CONFERME' && isConfermeTl(ctx.email))
         if (!authorized) return { success: false, error: 'Non autorizzato' }
 
-        const start = startOfMonth(monthDate)
-        const end = endOfMonth(monthDate)
+        // Bounds Europe/Rome (end esclusivo): prima startOfMonth/endOfMonth
+        // interpretavano monthDate nel fuso del server (UTC su Vercel).
+        const { start, end } = monthBoundsRome(toRomeDateStr(monthDate).slice(0, 7))
 
         // Funnel mese — fissati = appuntamenti SCHEDULATI nel mese
         // (appointmentDate, stessa definizione del calendario KPI Conferme).
@@ -382,7 +404,7 @@ export async function getConfermeTlOverview(monthDate: Date = new Date()): Promi
         }).from(leads).where(and(
             companyScope(ctx, leads.companyId),
             gte(leads.appointmentDate, start),
-            lte(leads.appointmentDate, end),
+            lt(leads.appointmentDate, end),
         ))
         const fissati = apptRows.length
         const confermati = apptRows.filter(r => r.outcome === 'confermato').length
@@ -401,7 +423,7 @@ export async function getConfermeTlOverview(monthDate: Date = new Date()): Promi
             isNotNull(leads.confirmationsUserId),
             isNotNull(leads.salespersonOutcomeAt),
             gte(leads.salespersonOutcomeAt, start),
-            lte(leads.salespersonOutcomeAt, end),
+            lt(leads.salespersonOutcomeAt, end),
         ))
         let presentati = 0
         let chiusureMese = 0
@@ -479,8 +501,9 @@ export async function getConfermeTlOverview(monthDate: Date = new Date()): Promi
 export async function getConfermeSalesList(monthDate: Date = new Date()) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    const start = startOfMonth(monthDate)
-    const end = endOfMonth(monthDate)
+    // Bounds Europe/Rome (end esclusivo): prima startOfMonth/endOfMonth
+    // interpretavano monthDate nel fuso del server (UTC su Vercel).
+    const { start, end } = monthBoundsRome(toRomeDateStr(monthDate).slice(0, 7))
 
     const vendors = await db.select({
         id: users.id,
@@ -522,12 +545,12 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
             and(
                 eq(leads.confirmationsOutcome, 'confermato'),
                 gte(leads.confirmationsTimestamp, start),
-                lte(leads.confirmationsTimestamp, end),
+                lt(leads.confirmationsTimestamp, end),
             ),
             and(
                 isNotNull(leads.salespersonOutcomeAt),
                 gte(leads.salespersonOutcomeAt, start),
-                lte(leads.salespersonOutcomeAt, end),
+                lt(leads.salespersonOutcomeAt, end),
             ),
         ),
     ))
@@ -552,7 +575,7 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         //  ma Tratt/Chius lo prenderà giugno.)
         const outcomeInMonth = r.salespersonOutcomeAt
             && new Date(r.salespersonOutcomeAt) >= start
-            && new Date(r.salespersonOutcomeAt) <= end
+            && new Date(r.salespersonOutcomeAt) < end
         if (isPresenziatoFlag && outcomeInMonth) {
             cur.trattative++
             if (r.salespersonOutcome === 'Chiuso') {
@@ -600,6 +623,7 @@ export async function getConfermeDailyObjectives(confermeUserId: string) {
     const confResult = await db.select({ count: sql<number>`count(*)::integer` })
         .from(leads)
         .where(and(
+            companyScope(ctx, leads.companyId),
             eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.confirmationsUserId),
             gte(leads.confirmationsTimestamp, todayStart),

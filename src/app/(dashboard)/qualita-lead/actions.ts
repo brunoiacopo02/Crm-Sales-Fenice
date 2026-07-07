@@ -7,25 +7,29 @@ import {
     salesLeadSurveys,
     leads,
 } from "@/db/schema";
-import { and, eq, gte, lte, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gte, lt, isNotNull, sql } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { isConfermeTl } from "@/lib/confermeTl";
+import { currentTenant, companyScope, type TenantContext } from "@/lib/tenancy";
+import { dayBoundsRome } from "@/lib/dateUtils";
 // Funnel da escludere dalla dashboard: sono artifici tecnici non veri
 // funnel business. Il confronto è sempre case-insensitive via UPPER().
 const UI_EXCLUDED_FUNNELS = new Set(['DATABASE', 'TEST', 'SCONOSCIUTO']);
 
 // ========== AUTH ==========
-async function requireManager() {
+async function requireManager(): Promise<{ id: string; role: string; ctx: TenantContext }> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const role = user?.user_metadata?.role as string | undefined;
     // Oltre a MANAGER/ADMIN, il TL del team Conferme (Alberto, gating per email)
-    // può consultare in lettura i sondaggi di qualità lead.
+    // può consultare in lettura i sondaggi di qualità lead. Il TL GDO (role TL)
+    // ha invece accesso pieno, come MANAGER (decisione PO 2026-07-05).
     const isTlConfermeViewer = role === "CONFERME" && isConfermeTl(user?.email);
-    if (!role || (!["MANAGER", "ADMIN"].includes(role) && !isTlConfermeViewer)) {
+    if (!role || (!["MANAGER", "ADMIN", "TL"].includes(role) && !isTlConfermeViewer)) {
         throw new Error("Unauthorized");
     }
-    return { id: user!.id, role };
+    const ctx = await currentTenant();
+    return { id: user!.id, role, ctx };
 }
 
 export interface QualitaLeadFilters {
@@ -44,10 +48,10 @@ export interface QualitaLeadFilters {
  * TEST / SCONOSCIUTO.
  */
 export async function getAvailableFunnels(): Promise<string[]> {
-    await requireManager();
+    const { ctx } = await requireManager();
     const rows = await db.selectDistinct({
         funnel: sql<string>`UPPER(${leads.funnel})`.as('funnel'),
-    }).from(leads).where(isNotNull(leads.funnel));
+    }).from(leads).where(and(isNotNull(leads.funnel), companyScope(ctx, leads.companyId)));
     const unique = new Set<string>();
     for (const r of rows) {
         const f = (r.funnel || '').trim();
@@ -60,10 +64,15 @@ export async function getAvailableFunnels(): Promise<string[]> {
 
 function buildCommonConditions(filters: QualitaLeadFilters, tableCreatedAt: any) {
     const conds: any[] = [];
-    if (filters.startDate) conds.push(gte(tableCreatedAt, new Date(filters.startDate + "T00:00:00Z")));
+    // Mezzogiorno evita il rollover di data quando si costruisce l'istante
+    // dal solo 'YYYY-MM-DD' (vedi dayBoundsRome).
+    if (filters.startDate) {
+        const { start } = dayBoundsRome(new Date(filters.startDate + "T12:00:00"));
+        conds.push(gte(tableCreatedAt, start));
+    }
     if (filters.endDate) {
-        const end = new Date(filters.endDate + "T23:59:59Z");
-        conds.push(lte(tableCreatedAt, end));
+        const { end } = dayBoundsRome(new Date(filters.endDate + "T12:00:00"));
+        conds.push(lt(tableCreatedAt, end));
     }
     return conds;
 }
@@ -75,6 +84,7 @@ interface DomainCount {
 }
 
 async function aggregateSingle(
+    ctx: TenantContext,
     table: any,
     field: any,
     filters: QualitaLeadFilters,
@@ -91,6 +101,7 @@ async function aggregateSingle(
     }).from(table).innerJoin(leads, eq(table.leadId, leads.id));
 
     const conds = [...baseConds];
+    conds.push(companyScope(ctx, leads.companyId));
     // Always exclude lead with funnel='database'
     conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
@@ -111,6 +122,7 @@ async function aggregateSingle(
 }
 
 async function aggregateArray(
+    ctx: TenantContext,
     table: any,
     field: any,
     filters: QualitaLeadFilters,
@@ -126,6 +138,7 @@ async function aggregateArray(
     }).from(table).innerJoin(leads, eq(table.leadId, leads.id));
 
     const conds = [...baseConds];
+    conds.push(companyScope(ctx, leads.companyId));
     conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());
@@ -165,24 +178,25 @@ export interface GdoAggregate {
 }
 
 export async function getGdoAggregate(filters: QualitaLeadFilters): Promise<GdoAggregate> {
-    await requireManager();
+    const { ctx } = await requireManager();
 
     const [
         ageRange, occupation, requestReason, expectation, mainProblem, digitalKnow, changeWithin, changeSince,
     ] = await Promise.all([
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.ageRange, filters),
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.occupation, filters),
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.requestReason, filters),
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.expectation, filters),
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.mainProblem, filters),
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.digitalKnow, filters),
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.changeWithin, filters),
-        aggregateSingle(gdoLeadSurveys, gdoLeadSurveys.changeSince, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.ageRange, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.occupation, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.requestReason, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.expectation, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.mainProblem, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.digitalKnow, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.changeWithin, filters),
+        aggregateSingle(ctx, gdoLeadSurveys, gdoLeadSurveys.changeSince, filters),
     ]);
 
     // Totals
     const baseConds = buildCommonConditions(filters, gdoLeadSurveys.createdAt);
     baseConds.push(sql`${gdoLeadSurveys.invalidatedBy} IS NULL`);
+    baseConds.push(companyScope(ctx, leads.companyId));
     baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());
@@ -213,10 +227,11 @@ export interface ConfermeAggregate {
 }
 
 export async function getConfermeAggregate(filters: QualitaLeadFilters): Promise<ConfermeAggregate> {
-    await requireManager();
+    const { ctx } = await requireManager();
 
     const baseConds = buildCommonConditions(filters, confermeLeadSurveys.createdAt);
     baseConds.push(sql`${confermeLeadSurveys.invalidatedBy} IS NULL`);
+    baseConds.push(companyScope(ctx, leads.companyId));
     baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());
@@ -234,7 +249,7 @@ export async function getConfermeAggregate(filters: QualitaLeadFilters): Promise
         confNo: sql<number>`count(*) FILTER (WHERE ${confermeLeadSurveys.confirmed} = false)::int`,
     }).from(confermeLeadSurveys).innerJoin(leads, eq(confermeLeadSurveys.leadId, leads.id)).where(and(...baseConds));
 
-    const whyNot = await aggregateSingle(confermeLeadSurveys, confermeLeadSurveys.whyNot, filters);
+    const whyNot = await aggregateSingle(ctx, confermeLeadSurveys, confermeLeadSurveys.whyNot, filters);
 
     return {
         remembersApptYes: Number(agg?.remembersYes ?? 0),
@@ -256,10 +271,11 @@ export interface SalesAggregate {
 }
 
 export async function getSalesAggregate(filters: QualitaLeadFilters): Promise<SalesAggregate> {
-    await requireManager();
+    const { ctx } = await requireManager();
 
     const baseConds = buildCommonConditions(filters, salesLeadSurveys.createdAt);
     baseConds.push(sql`${salesLeadSurveys.invalidatedBy} IS NULL`);
+    baseConds.push(companyScope(ctx, leads.companyId));
     baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());
@@ -273,9 +289,9 @@ export async function getSalesAggregate(filters: QualitaLeadFilters): Promise<Sa
         .where(and(...baseConds));
 
     const [problemSignals, urgencySignals, priceReaction] = await Promise.all([
-        aggregateArray(salesLeadSurveys, salesLeadSurveys.problemSignals, filters),
-        aggregateArray(salesLeadSurveys, salesLeadSurveys.urgencySignals, filters),
-        aggregateSingle(salesLeadSurveys, salesLeadSurveys.priceReaction, filters),
+        aggregateArray(ctx, salesLeadSurveys, salesLeadSurveys.problemSignals, filters),
+        aggregateArray(ctx, salesLeadSurveys, salesLeadSurveys.urgencySignals, filters),
+        aggregateSingle(ctx, salesLeadSurveys, salesLeadSurveys.priceReaction, filters),
     ]);
 
     return {

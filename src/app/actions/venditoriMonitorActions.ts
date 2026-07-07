@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { leads, users } from "@/db/schema"
-import { and, eq, isNull, isNotNull, gte, lte, or, asc, inArray, sql } from "drizzle-orm"
+import { leads, users, salesAttempts } from "@/db/schema"
+import { and, eq, isNotNull, gte, lte, or, asc, inArray, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 
@@ -41,7 +41,7 @@ export interface FollowUpRow {
     leadName: string
     leadPhone: string | null
     funnel: string | null
-    followUpNumber: 1 | 2
+    followUpNumber: 1 | 2 | 3
     followUpDate: Date
     venditoreId: string
     venditoreName: string
@@ -132,52 +132,64 @@ export async function getVenditoriMonitor(filters: {
         appointmentNote: r.appointmentNote ?? null,
     }))
 
-    // Follow-up: leads con followUp1Date o followUp2Date valorizzato
-    // e salespersonOutcome null (pratica ancora aperta). Prendo tutti i
-    // lead con fu valorizzato del venditore per poi filtrare in JS per
-    // range date (le due date sono su colonne diverse, query
-    // più pulita in JS che in SQL).
-    const fuRows = await db.select({
-        id: leads.id,
+    // Follow-up aperti: verità in salesAttempts.nextFollowUpDate (il nuovo
+    // ciclo di follow-up scrive lì, non più su leads.followUp1Date/followUp2Date
+    // che restano sempre null → prima query sempre vuota). Prendo TUTTI gli
+    // attempt dei lead ancora 'Non chiuso': la scelta dell'ultimo tentativo va
+    // fatta PRIMA di filtrare sulla data, altrimenti un ultimo attempt senza
+    // data (staff che bypassa la UI) mostrerebbe la data stale di un attempt
+    // precedente — mentre la vista venditore escluderebbe il lead.
+    const attemptRows = await db.select({
+        leadId: salesAttempts.leadId,
+        attemptNumber: salesAttempts.attemptNumber,
+        nextFollowUpDate: salesAttempts.nextFollowUpDate,
         name: leads.name,
         phone: leads.phone,
         funnel: leads.funnel,
-        followUp1Date: leads.followUp1Date,
-        followUp2Date: leads.followUp2Date,
         salespersonUserId: leads.salespersonUserId,
         salespersonOutcome: leads.salespersonOutcome,
         salespersonOutcomeNotes: leads.salespersonOutcomeNotes,
-    }).from(leads).where(and(
-        eq(leads.companyId, ctx.companyId),
-        inArray(leads.salespersonUserId, targetIds),
-        isNull(leads.salespersonOutcome),
-        or(isNotNull(leads.followUp1Date), isNotNull(leads.followUp2Date))!,
-    ))
+    }).from(salesAttempts)
+      .innerJoin(leads, eq(leads.id, salesAttempts.leadId))
+      .where(and(
+          eq(leads.companyId, ctx.companyId),
+          inArray(leads.salespersonUserId, targetIds),
+          eq(leads.salespersonOutcome, 'Non chiuso'),
+      ))
+
+    // Tengo, per ogni lead, solo il tentativo con attemptNumber massimo
+    // (il follow-up "corrente"); il lead conta solo se QUEL tentativo ha
+    // una nextFollowUpDate — stesso criterio di getVenditoreFollowUps.
+    const latestByLead = new Map<string, typeof attemptRows[number]>()
+    for (const r of attemptRows) {
+        const cur = latestByLead.get(r.leadId)
+        if (!cur || r.attemptNumber > cur.attemptNumber) latestByLead.set(r.leadId, r)
+    }
 
     const now = new Date()
     const upcoming: FollowUpRow[] = []
     const overdue: FollowUpRow[] = []
 
-    for (const r of fuRows) {
-        const common = {
-            leadId: r.id,
+    for (const r of latestByLead.values()) {
+        if (!r.nextFollowUpDate) continue // ultimo attempt senza follow-up pendente
+        const date = r.nextFollowUpDate
+        const row: FollowUpRow = {
+            leadId: r.leadId,
             leadName: r.name || 'Senza nome',
             leadPhone: r.phone ?? null,
             funnel: r.funnel ?? null,
+            followUpNumber: Math.min(r.attemptNumber + 1, 3) as 1 | 2 | 3,
+            followUpDate: date,
             venditoreId: r.salespersonUserId!,
             venditoreName: nameOf.get(r.salespersonUserId!) || '—',
             salespersonOutcome: r.salespersonOutcome ?? null,
             salespersonOutcomeNotes: r.salespersonOutcomeNotes ?? null,
         }
-        const pushOne = (date: Date, n: 1 | 2) => {
-            if (date < now) {
-                overdue.push({ ...common, followUpNumber: n, followUpDate: date })
-            } else if (date >= filters.startDate && date <= filters.endDate) {
-                upcoming.push({ ...common, followUpNumber: n, followUpDate: date })
-            }
+        if (date < now) {
+            overdue.push(row)
+        } else if (date >= filters.startDate && date <= filters.endDate) {
+            upcoming.push(row)
         }
-        if (r.followUp1Date) pushOne(r.followUp1Date as Date, 1)
-        if (r.followUp2Date) pushOne(r.followUp2Date as Date, 2)
     }
 
     upcoming.sort((a, b) => a.followUpDate.getTime() - b.followUpDate.getTime())

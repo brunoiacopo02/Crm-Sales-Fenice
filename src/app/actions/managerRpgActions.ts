@@ -296,7 +296,8 @@ export async function fetchAllTeamRpgProfiles() {
         eq(users.companyId, ctx.companyId),
         inArray(users.role, ['GDO', 'CONFERME']),
     ));
-    const activeUsers = allUsers.filter(u => u.isActive);
+    // Esclude il bot fissatore dai profili RPG (decisione PO 2026-07-05)
+    const activeUsers = allUsers.filter(u => u.isActive && !u.isBot);
     return batchComputeRpgProfiles(activeUsers, true, ctx.companyId);
 }
 
@@ -308,7 +309,7 @@ export async function getTeamGamificationOverview() {
     assertSalesArea(ctx);
     const todayScope = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
 
-    // Get all active GDO + CONFERME users
+    // Get all active GDO + CONFERME users (esclude il bot fissatore, decisione PO 2026-07-05)
     const teamUsers = await db.select({
         id: users.id,
         displayName: users.displayName,
@@ -320,7 +321,8 @@ export async function getTeamGamificationOverview() {
         and(
             eq(users.companyId, ctx.companyId),
             inArray(users.role, ['GDO', 'CONFERME']),
-            eq(users.isActive, true)
+            eq(users.isActive, true),
+            eq(users.isBot, false)
         )
     );
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { getTeamAccounts, seedGdoAccounts, updateGdoProfile, updateGdoTargets, updateConfermeTargets } from "@/app/actions/teamActions"
 import { User, ShieldAlert, Check, X, Edit2, KeyRound } from "lucide-react"
+import { DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon"
 
 export function TeamManagementClient() {
     const [team, setTeam] = useState<any[]>([])
@@ -26,7 +27,7 @@ export function TeamManagementClient() {
     }>({
         displayName: '',
         isActive: true,
-        dailyApptTarget: 2,
+        dailyApptTarget: DEFAULT_DAILY_APPT_TARGET,
         weeklyConfirmedTarget: 5,
         confermeTargetTier1: 19,
         confermeTargetTier2: 24,
@@ -81,7 +82,7 @@ export function TeamManagementClient() {
         setEditData({
             displayName: user.displayName || user.name || '',
             isActive: user.isActive,
-            dailyApptTarget: user.dailyApptTarget ?? 2,
+            dailyApptTarget: user.dailyApptTarget ?? DEFAULT_DAILY_APPT_TARGET,
             weeklyConfirmedTarget: user.weeklyConfirmedTarget ?? 5,
             confermeTargetTier1: user.confermeTargetTier1 ?? 19,
             confermeTargetTier2: user.confermeTargetTier2 ?? 24,
@@ -310,7 +311,7 @@ export function TeamManagementClient() {
                                                             className="w-16 px-2 py-1 border border-brand-orange rounded text-center focus:outline-none focus:ring-1 focus:ring-brand-orange"
                                                         />
                                                     ) : (
-                                                        <span className="font-bold">{user.dailyApptTarget ?? 2}</span>
+                                                        <span className="font-bold">{user.dailyApptTarget ?? DEFAULT_DAILY_APPT_TARGET}</span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-ash-700">

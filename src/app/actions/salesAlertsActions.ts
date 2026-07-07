@@ -99,7 +99,7 @@ export async function getSalesAlerts(): Promise<SalesAlertsResult> {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
         const isTlConfermeViewer = ctx.role === 'CONFERME' && isConfermeTl(ctx.email);
-        if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER' && !isTlConfermeViewer) {
+        if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER' && ctx.role !== 'TL' && !isTlConfermeViewer) {
             return { success: false, error: 'Non autorizzato' };
         }
 
@@ -275,10 +275,11 @@ async function cardsForCompany(
 
     // GDO attivi (per le medie per-GDO). statsActive = selettore TL/manager
     // dei GDO realmente operativi: i non spuntati non gonfiano il divisore.
+    // isBot=false: il bot fissatore non è un GDO reale (decisione PO 2026-07-05).
     const gdoRows = await db
         .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true)));
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true), eq(users.isBot, false)));
     const nGdo = gdoRows.length;
 
     const workingDaysTotal = targetRow?.workingDays || countWorkingDaysInMonth(year, month);

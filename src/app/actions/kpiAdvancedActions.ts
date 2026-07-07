@@ -6,6 +6,7 @@ import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
+import { isRealGdo, apptSetAt } from '@/lib/kpi/canon'
 
 import { cache } from "react"
 
@@ -68,6 +69,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         assignedToId: leads.assignedToId,
         recallDate: leads.recallDate,
         appointmentDate: leads.appointmentDate,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
         // Necessari per % Conferme / % Presenziati nel ranking GDO
         confirmationsOutcome: leads.confirmationsOutcome,
         salespersonOutcome: leads.salespersonOutcome,
@@ -89,6 +91,41 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const safeStartDate = new Date(filters.startDate)
     const safeEndDate = new Date(filters.endDate)
 
+    // Bot fissatore escluso da TUTTO su questa pagina (aggregati di testata,
+    // trend, motivi scarto, ranking) — decisione PO 2026-07-05: la sua
+    // produzione resta visibile solo su panoramica-generale e /statistiche-fissatore.
+    // L'esclusione è basata SOLO su isBot: i log dei MANAGER e i log legacy
+    // senza userId restano inclusi come da comportamento storico pre-B2.
+    // Costruito PRIMA del blocco App Fissati (vedi sotto) perché serve anche
+    // per escludere i lead fissati dal bot da apptLeadsInRange (fix F1).
+    const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
+    const userMap = new Map(allUsers.map(u => [u.id, u.name]))
+    const botIds = new Set(allUsers.filter(u => u.isBot).map(u => u.id))
+    const isBotLog = (log: { userId: string | null }): boolean =>
+        !!log.userId && botIds.has(log.userId)
+
+    // App Fissati: base canonica decisione PO 2026-07-05 — data di fissaggio
+    // (apptSetAt = appointmentCreatedAt ?? appointmentDate, gate appointmentDate
+    // IS NOT NULL), dedup per lead. Sostituisce il vecchio conteggio da
+    // callLogs.outcome='APPUNTAMENTO' (righe, non lead) sia per la testata che
+    // per il ranking per-GDO qui sotto. Esclude i lead assegnati al bot
+    // fissatore (fix F1): la sua produzione non deve entrare in testata,
+    // ranking o trend di questa pagina.
+    const apptLeadsInRange = allLeads.filter(l => {
+        if (l.assignedToId && botIds.has(l.assignedToId)) return false
+        const d = apptSetAt(l)
+        return d !== null && d >= safeStartDate && d <= safeEndDate
+    })
+    const apptLeadIdsInRange = new Set(apptLeadsInRange.map(l => l.id))
+    // Attribuzione per GDO: il GDO ASSEGNATARIO del lead (leads.assignedToId),
+    // non chi ha loggato la chiamata — coerente con la produzione reale del GDO.
+    const apptLeadIdsByAssignee = new Map<string, Set<string>>()
+    for (const l of apptLeadsInRange) {
+        if (!l.assignedToId) continue
+        if (!apptLeadIdsByAssignee.has(l.assignedToId)) apptLeadIdsByAssignee.set(l.assignedToId, new Set())
+        apptLeadIdsByAssignee.get(l.assignedToId)!.add(l.id)
+    }
+
     // Now fetch logs within the date range
     let logConditions = [
         companyScope(ctx, callLogs.companyId),
@@ -100,8 +137,9 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const rawLogs = await db.select().from(callLogs).where(and(...logConditions))
 
     // Filter logs to match only leads in `allLeads` (in case funnel filter was applied)
+    // + esclusione bot fissatore (vedi sopra)
     const validLeadIds = new Set(allLeads.map(l => l.id))
-    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId))
+    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId) && !isBotLog(log))
 
     // Working-hours filter: se ON, le chiamate sono SOLO quelle 13:30-20:00.
     // Gli APPUNTAMENTI restano comunque tutti conteggiati (matchando la
@@ -126,9 +164,9 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const answeredLeadIds = new Set(answeredLogs.map(l => l.leadId))
     const answeredLeadsCount = answeredLeadIds.size
 
-    const appointmentLogs = validLogs.filter(l => l.outcome === 'APPUNTAMENTO')
-    const appointmentLeadIds = new Set(appointmentLogs.map(l => l.leadId))
-    const appointmentsSet = appointmentLeadIds.size
+    // Testata "App Fissati": lead con apptSetAt nel periodo (vedi sopra), non
+    // più righe callLogs. Dedup per lead già garantito da apptLeadIdsInRange.
+    const appointmentsSet = apptLeadIdsInRange.size
 
     // 2. Motivi Scarto (Qualità Lead) — esclude "numero inesistente"
     const discardLogs = validLogs.filter(l =>
@@ -161,10 +199,10 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const recallUnconvertedPerc = recallLogs.length > 0 ? Math.round((unconvertedRecalls / recallLogs.length) * 100) : 0
 
     // 4. Performance GDO
+    // (validLogs è già bot-free a monte via botIds; MANAGER e tracciato legacy
+    // senza userId restano inclusi come pre-B2 — un MANAGER selezionato dal
+    // dropdown non viene azzerato)
     const gdoStatsMap: Record<string, any> = {}
-
-    const allUsers = await db.select().from(users).where(companyScope(ctx, users.companyId))
-    const userMap = new Map(allUsers.map(u => [u.id, u.name]))
 
     validLogs.forEach(log => {
         const uid = log.userId || 'Tracciato Vecchio / Sconosciuto'
@@ -178,10 +216,19 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         st.totalContacted.add(log.leadId)
         // Numero inesistente non conta come risposta (vedi NEVER_ANSWERED_DISCARD_REASONS)
         if (log.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(log.outcome, log.discardReason)) st.answers++
-        if (log.outcome === 'APPUNTAMENTO') {
-            st.apptLeadIds.add(log.leadId)
-        }
     })
+
+    // Merge App Fissati per GDO: attribuzione via leads.assignedToId + apptSetAt
+    // (vedi apptLeadIdsByAssignee sopra), non via log.outcome='APPUNTAMENTO'.
+    // Crea la riga anche per un GDO che ha fissato ma non ha chiamate loggate
+    // nel periodo (raro, ma l'attribuzione ora è sul lead, non sul chiamante).
+    for (const [assigneeId, apptIds] of apptLeadIdsByAssignee.entries()) {
+        const uname = userMap.get(assigneeId) || assigneeId
+        if (!gdoStatsMap[uname]) {
+            gdoStatsMap[uname] = { name: uname, calls: 0, answers: 0, totalContacted: new Set(), apptLeadIds: new Set<string>(), firstCallTimes: [] }
+        }
+        gdoStatsMap[uname].apptLeadIds = apptIds
+    }
 
     const WORKING_HOURS_PER_DAY = 6.5
 
@@ -241,14 +288,17 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     // Funnel list
     const funnelList = Array.from(new Set(allLeads.map(l => l.funnel!).filter(Boolean)))
-    // GDO List
-    const gdoList = allUsers.filter(u => u.role === 'GDO' || u.role === 'MANAGER').map(u => ({ id: u.id, name: u.name }))
+    // GDO List — GDO reali (esclude bot fissatore) + MANAGER (per filtrare le proprie chiamate)
+    const gdoList = allUsers.filter(u => isRealGdo(u) || u.role === 'MANAGER').map(u => ({ id: u.id, name: u.name }))
 
     // Trend chart data (sostituisce il vecchio mockTrend lato client).
     // Granularità 'hour' = barre 13:30 + 14-20 (orario lavoro).
     // Granularità 'day' = una barra per giorno nel range.
     const granularity: 'day' | 'hour' = filters.trendGranularity === 'hour' ? 'hour' : 'day'
     const trendMap = new Map<string, { chiamate: number; appuntamenti: number }>()
+    // Appuntamenti della serie: stessa base canonica della testata (apptLeadsInRange,
+    // apptSetAt già filtrato su [safeStartDate, safeEndDate]), non più righe callLogs.
+    const apptLeadsWithAt = apptLeadsInRange.map(l => ({ ...l, apptAt: apptSetAt(l)! }))
 
     if (granularity === 'hour') {
         trendMap.set('13:30', { chiamate: 0, appuntamenti: 0 })
@@ -264,9 +314,19 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             if (h === 13 && m >= 30) label = '13:30'
             else if (h >= 14 && h <= 20) label = `${h}:00`
             if (label && trendMap.has(label)) {
-                const entry = trendMap.get(label)!
-                entry.chiamate += 1
-                if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+                trendMap.get(label)!.chiamate += 1
+            }
+        }
+        for (const l of apptLeadsWithAt) {
+            const romeTime = l.apptAt.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
+            const [hStr, mStr] = romeTime.split(':')
+            const h = parseInt(hStr)
+            const m = parseInt(mStr)
+            let label: string | null = null
+            if (h === 13 && m >= 30) label = '13:30'
+            else if (h >= 14 && h <= 20) label = `${h}:00`
+            if (label && trendMap.has(label)) {
+                trendMap.get(label)!.appuntamenti += 1
             }
         }
     } else {
@@ -280,15 +340,23 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             trendMap.set(label, { chiamate: 0, appuntamenti: 0 })
             cursor.setDate(cursor.getDate() + 1)
         }
+        // Gli APPUNTAMENTI restano sempre conteggiati anche con workingHoursOnly
+        // attivo (non hanno orario fisso) — filtro solo le chiamate.
         const sourceLogs = workingHoursOnly
-            ? allValidLogs.filter(l => l.outcome === 'APPUNTAMENTO' || isWithinWorkingHours(l.createdAt))
+            ? allValidLogs.filter(l => isWithinWorkingHours(l.createdAt))
             : allValidLogs
         for (const log of sourceLogs) {
             const label = format(log.createdAt, 'EEE dd/MM')
             const entry = trendMap.get(label)
             if (entry) {
                 entry.chiamate += 1
-                if (log.outcome === 'APPUNTAMENTO') entry.appuntamenti += 1
+            }
+        }
+        for (const l of apptLeadsWithAt) {
+            const label = format(l.apptAt, 'EEE dd/MM')
+            const entry = trendMap.get(label)
+            if (entry) {
+                entry.appuntamenti += 1
             }
         }
     }
@@ -340,19 +408,21 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const { start: todayStart, end: todayEnd } = dayBoundsRome(now)
     const { start: weekStart, end: weekEnd } = weekBoundsRome(now)
 
-    // Appuntamenti Odierni — deduplicato per leadId.
-    // Un GDO può loggare APPUNTAMENTO due volte sullo stesso lead in rari
-    // casi (richiamo + conferma): conta come UN solo appuntamento.
-    const todayApptLogs = await db.select({ leadId: callLogs.leadId })
-        .from(callLogs)
+    // Appuntamenti Odierni — base canonica decisione PO 2026-07-05: data di
+    // fissaggio (COALESCE(appointmentCreatedAt, appointmentDate)), gate
+    // appointmentDate IS NOT NULL, attribuiti al GDO assegnatario del lead.
+    // Sostituisce il vecchio conteggio da callLogs.outcome='APPUNTAMENTO'
+    // (righe, non lead — poteva contare 2 volte lo stesso lead).
+    const todayApptLeads = await db.select({ id: leads.id })
+        .from(leads)
         .where(and(
-            companyScope(ctx, callLogs.companyId),
-            eq(callLogs.userId, gdoId),
-            eq(callLogs.outcome, 'APPUNTAMENTO'),
-            gte(callLogs.createdAt, todayStart),
-            lt(callLogs.createdAt, todayEnd)
+            companyScope(ctx, leads.companyId),
+            eq(leads.assignedToId, gdoId),
+            isNotNull(leads.appointmentDate),
+            sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${todayStart}`,
+            sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${todayEnd}`,
         ))
-    const todayAppointmentsCount = new Set(todayApptLogs.map(l => l.leadId)).size
+    const todayAppointmentsCount = todayApptLeads.length
 
     // Conferme Settimanali — filtra per `confirmationsTimestamp` (momento
     // in cui le Conferme marcano "confermato"), non per `appointmentDate`.
@@ -445,13 +515,26 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const startBound = dayBoundsRome(new Date(now.getTime() - 29 * 86400000)).start
     const end = now
 
-    // --- Query 1: utenti GDO attivi del tenant ---
-    const gdoUsers = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
+    // --- Query 1: utenti GDO attivi del tenant (esclude bot fissatore) ---
+    const gdoUsersRaw = await db.select({
+        id: users.id,
+        name: users.name,
+        displayName: users.displayName,
+        role: users.role,
+        isActive: users.isActive,
+        isBot: users.isBot,
+    })
         .from(users)
         .where(and(
             companyScope(ctx, users.companyId),
             eq(users.role, 'GDO')
         ))
+    const gdoUsers = gdoUsersRaw.filter(isRealGdo)
+    // Id dei soli GDO reali: usato per filtrare anche le aggregazioni team,
+    // così la card team è la somma esatta delle righe per-GDO (bot escluso da
+    // TUTTO su questa pagina — la sua produzione resta visibile solo su
+    // panoramica-generale e /statistiche-fissatore).
+    const realGdoIdSet = new Set(gdoUsers.map(u => u.id))
 
     // --- Query 2: lead chiusi nella finestra (per GDO) ---
     // Un lead è "chiuso" quando ha raggiunto uno stato terminale:
@@ -493,6 +576,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const closedByLead = new Map<string, { assignedToId: string; callCount: number }>()
     for (const row of [...appointmentLeads, ...rejectedLeads]) {
         if (!row.assignedToId) continue
+        if (!realGdoIdSet.has(row.assignedToId)) continue // bot/non-GDO fuori anche dai totali team
         if (closedByLead.has(row.id)) continue
         closedByLead.set(row.id, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
     }
@@ -535,6 +619,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const perUserDay = new Map<string, Map<string, DayBucket>>()
     for (const c of allCalls) {
         if (!c.userId) continue
+        if (!realGdoIdSet.has(c.userId)) continue // bot/non-GDO fuori anche dai totali team
         const day = dayKeyRome(c.createdAt)
         let userMap = perUserDay.get(c.userId)
         if (!userMap) { userMap = new Map(); perUserDay.set(c.userId, userMap) }
@@ -576,7 +661,9 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
 
     const closuresByGdo = new Map<string, number>()
     for (const r of closuresAgg) {
-        if (r.assignedToId) closuresByGdo.set(r.assignedToId, Number(r.cnt))
+        if (!r.assignedToId) continue
+        if (!realGdoIdSet.has(r.assignedToId)) continue // bot/non-GDO fuori anche dai totali team
+        closuresByGdo.set(r.assignedToId, Number(r.cnt))
     }
 
     // --- Compose per-GDO rows ---

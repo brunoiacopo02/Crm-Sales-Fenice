@@ -16,11 +16,19 @@
  * - setConfermeActivity(leadId)    → aggiorna il lead su cui si sta lavorando
  * - subscribeConfermePresence(cb)  → lista presence (tutti gli utenti online)
  * - subscribeConfermeLeadChanges(cb) → eventi postgres_changes su `leads`
+ *
+ * Task P1 (2026-07-05): il Realtime da solo è inaffidabile (churn di
+ * subscribe, tab in background, reti instabili) — gli operatori a volte non
+ * si vedono online a vicenda. Questo modulo aggancia anche un heartbeat su DB
+ * (src/app/actions/presenceActions.ts) come fonte di verità di backup: upsert
+ * ogni 45s + a ogni cambio attività, sullo STESSO singleton (nessun secondo
+ * canale realtime). Il Radar unisce le due fonti lato componente.
  */
 
 import { createClient } from "@/utils/supabase/client"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 import { logRealtimeStatus } from "@/lib/realtimeUtils"
+import { upsertHeartbeat } from "@/app/actions/presenceActions"
 
 export type ConfermePresenceEntry = {
     online_at: string
@@ -36,6 +44,7 @@ let channel: RealtimeChannel | null = null
 let subscribed = false
 let refCount = 0
 let heartbeat: ReturnType<typeof setInterval> | null = null
+let dbHeartbeat: ReturnType<typeof setInterval> | null = null
 let currentUser: ConfermePresenceEntry["user"] | null = null
 let currentLeadId: string | null = null
 let lastPresence: ConfermePresenceEntry[] = []
@@ -69,10 +78,23 @@ function retrack() {
     }
 }
 
+/**
+ * Upsert dell'heartbeat DB (Task P1). Fonte di verità di backup rispetto al
+ * Realtime: non richiede `subscribed` perché deve funzionare anche quando il
+ * canale è temporaneamente giù.
+ */
+function pushDbHeartbeat() {
+    if (!currentUser?.id) return
+    const activity = currentLeadId ? "call" : "board"
+    upsertHeartbeat(activity, currentLeadId).catch((e) => {
+        console.warn("[presence] upsertHeartbeat fallito:", e)
+    })
+}
+
 function onVisibilityChange() {
     // Tab in background sospende i WebSocket: al ritorno ripubblica il track,
     // altrimenti chi torna dopo 10 minuti appare offline ai colleghi.
-    if (!document.hidden) retrack()
+    if (!document.hidden) { retrack(); pushDbHeartbeat() }
 }
 
 function onPageHide() {
@@ -116,6 +138,8 @@ function ensureChannel() {
     // Heartbeat: ogni 25s ripublica il track con nuovo online_at. Previene
     // che Supabase/colleghi ci considerino offline per disconnessioni brevi.
     heartbeat = setInterval(retrack, 25_000)
+    // Heartbeat DB (Task P1): ogni 45s, fonte di verità di backup al Realtime.
+    dbHeartbeat = setInterval(pushDbHeartbeat, 45_000)
     document.addEventListener("visibilitychange", onVisibilityChange)
     window.addEventListener("pagehide", onPageHide)
 }
@@ -123,6 +147,7 @@ function ensureChannel() {
 function teardown() {
     if (!channel) return
     if (heartbeat) { clearInterval(heartbeat); heartbeat = null }
+    if (dbHeartbeat) { clearInterval(dbHeartbeat); dbHeartbeat = null }
     document.removeEventListener("visibilitychange", onVisibilityChange)
     window.removeEventListener("pagehide", onPageHide)
     const ch = channel
@@ -147,6 +172,7 @@ export function connectConfermePresence(user: ConfermePresenceEntry["user"]): ()
     refCount++
     ensureChannel()
     retrack()
+    pushDbHeartbeat()
     let disconnected = false
     return () => {
         if (disconnected) return
@@ -163,6 +189,7 @@ export function connectConfermePresence(user: ConfermePresenceEntry["user"]): ()
 export function setConfermeActivity(leadId: string | null) {
     currentLeadId = leadId
     retrack()
+    pushDbHeartbeat()
 }
 
 /** Sottoscrive la lista presence; emette subito lo stato corrente. */

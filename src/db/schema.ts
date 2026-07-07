@@ -1,5 +1,6 @@
 import { pgTable, text, integer, bigint, real, boolean, timestamp, jsonb, index, uniqueIndex, unique, primaryKey, date, numeric, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { DEFAULT_DAILY_APPT_TARGET } from '@/lib/kpi/canon';
 
 // Multi-tenant: una riga per azienda gestita dal CRM unificato (sales + marketing).
 // Fenice è il tenant principale; Serenamente parte a vendere entro 2026-06-04;
@@ -46,7 +47,7 @@ export const users = pgTable('users', {
     equippedItemId: text('equippedItemId'), // references shopItems.id optionally
 
     // Targets
-    dailyApptTarget: integer('dailyApptTarget').default(2).notNull(),
+    dailyApptTarget: integer('dailyApptTarget').default(DEFAULT_DAILY_APPT_TARGET).notNull(),
     weeklyConfirmedTarget: integer('weeklyConfirmedTarget').default(5).notNull(),
     confermeTargetTier1: integer('confermeTargetTier1').default(19).notNull(),
     confermeTargetTier2: integer('confermeTargetTier2').default(24).notNull(),
@@ -430,6 +431,21 @@ export const pipelineSnapshots = pgTable('pipelineSnapshots', {
     thirdCallIds: jsonb('thirdCallIds').$type<string[]>().notNull(),
     fingerprint: text('fingerprint').notNull(),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
+});
+
+// Heartbeat DB come fonte di verità della presence Conferme (Task P1,
+// 2026-07-05): il Realtime Supabase (channel `conferme_realtime_board`,
+// vedi src/lib/confermePresence.ts) resta il segnale "instant" ma è
+// inaffidabile su reti/tab instabili — gli operatori a volte non si vedono
+// online a vicenda. Il client fa upsert ogni 45s + a ogni cambio attività;
+// il Radar considera "presente" chi è fresco (< 90s) qui OPPURE visibile
+// via Realtime. Scritture trascurabili (~4 operatori × 1 upsert/45s).
+export const presenceHeartbeats = pgTable('presenceHeartbeats', {
+    userId: text('userId').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    activity: text('activity').notNull(), // es. 'board' | 'call' | 'idle'
+    leadId: text('leadId'),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const gdoNotes = pgTable('gdoNotes', {
@@ -1076,7 +1092,7 @@ export const acDailyMetrics = pgTable('ac_daily_metrics', {
     fetchedAt: timestamp('fetched_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (t) => ({
     pk: primaryKey({ columns: [t.companyId, t.funnelId, t.date, t.metric] }),
-    companyFunnelDateIdx: index('ac_daily_metrics_company_funnel_date_idx').on(t.companyId, t.funnelId, t.date),
+    // 2026-07-05: droppato ac_daily_metrics_company_funnel_date_idx (mai usato, Disk IO)
 }));
 
 // Mirror per-contact dei record ActiveCampaign. Popolato da ac-sync cron.
@@ -1136,7 +1152,7 @@ export const adsDailyInsights = pgTable('ads_daily_insights', {
     postUrl: text('post_url'),
 }, (t) => ({
     pk: primaryKey({ columns: [t.companyId, t.adId, t.date] }),
-    companyFunnelDateIdx: index('ads_daily_insights_company_funnel_date_idx').on(t.companyId, t.funnelId, t.date),
+    // 2026-07-05: droppato ads_daily_insights_company_funnel_date_idx (mai usato, Disk IO)
 }));
 
 // Marker "fetched" — conferma che per (company, funnel, date) i dati Meta sono
@@ -1211,9 +1227,7 @@ export const crmEvents = pgTable('crm_events', {
     leadId: text('lead_id'),
     payload: jsonb('payload').notNull(),
 }, (t) => ({
-    companyOccurredIdx: index('crm_events_company_occurred_idx').on(t.companyId, t.occurredAt.desc()),
-    leadIdx: index('crm_events_lead_idx').on(t.leadId),
-    typeIdx: index('crm_events_type_idx').on(t.eventType),
+    // 2026-07-05: droppati crm_events_company_occurred_idx / _lead_idx / _type_idx (mai usati, Disk IO)
 }));
 
 // Read model per appointment.set + appointment.outcome.
@@ -1240,9 +1254,7 @@ export const crmAppointments = pgTable('crm_appointments', {
     utmContent: text('utm_content'),
 }, (t) => ({
     companyLeadDateUnique: unique('crm_appointments_company_lead_date_unique').on(t.companyId, t.leadId, t.appointmentDate),
-    companyDateIdx: index('crm_appointments_company_date_idx').on(t.companyId, t.appointmentDate),
-    companyFunnelDateIdx: index('crm_appointments_company_funnel_date_idx').on(t.companyId, t.funnel, t.appointmentDate),
-    statusIdx: index('crm_appointments_status_idx').on(t.companyId, t.status, t.appointmentDate),
+    // 2026-07-05: droppati crm_appointments_company_date_idx / _company_funnel_date_idx / _status_idx (mai usati, Disk IO)
 }));
 
 // Read model per deal.closed_won + deal.closed_lost.
@@ -1267,8 +1279,6 @@ export const crmDeals = pgTable('crm_deals', {
     utmContent: text('utm_content'),
 }, (t) => ({
     companyEventUnique: unique('crm_deals_company_event_unique').on(t.companyId, t.eventId),
-    companyClosedIdx: index('crm_deals_company_closed_idx').on(t.companyId, t.closedDate),
-    companyFunnelClosedIdx: index('crm_deals_company_funnel_closed_idx').on(t.companyId, t.funnel, t.closedDate),
-    companySalespersonIdx: index('crm_deals_company_salesperson_idx').on(t.companyId, t.salespersonId),
+    // 2026-07-05: droppati crm_deals_company_closed_idx / _company_funnel_closed_idx / _company_salesperson_idx (mai usati, Disk IO)
 }));
 
