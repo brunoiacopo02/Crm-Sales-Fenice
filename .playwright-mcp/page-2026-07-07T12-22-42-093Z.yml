@@ -1,0 +1,160 @@
+- generic [active] [ref=f6e1]:
+  - generic [ref=f6e2]:
+    - complementary [ref=f6e3]:
+      - generic [ref=f6e5]:
+        - generic [ref=f6e6]: F
+        - generic [ref=f6e7]: Fenice CRM
+      - navigation [ref=f6e9]
+      - button "Disconnetti" [ref=f6e12]:
+        - img [ref=f6e13]
+        - generic [ref=f6e16]: Disconnetti
+    - generic [ref=f6e17]:
+      - banner [ref=f6e18]:
+        - generic [ref=f6e19]:
+          - generic [ref=f6e20]:
+            - img [ref=f6e21]
+            - generic [ref=f6e25]: —
+          - button [ref=f6e27]:
+            - img [ref=f6e28]
+          - generic [ref=f6e31]:
+            - generic [ref=f6e33]: GDO
+            - generic [ref=f6e35]: U
+      - main [ref=f6e39]:
+        - generic [ref=f6e40]:
+          - generic [ref=f6e42]:
+            - heading "Sales Manager" [level=1] [ref=f6e43]
+            - paragraph [ref=f6e44]: Previsioni lead e numeri mensili del mese in corso.
+          - generic [ref=f6e45]:
+            - generic [ref=f6e47]:
+              - img [ref=f6e48]
+              - generic [ref=f6e50]: Periodo
+              - combobox "Periodo" [ref=f6e51] [cursor=pointer]:
+                - option "Luglio 2026 (in corso)" [selected]
+                - option "Giugno 2026"
+                - option "Maggio 2026"
+                - option "Aprile 2026"
+                - option "Marzo 2026"
+                - option "Febbraio 2026"
+                - option "Gennaio 2026"
+                - option "Dicembre 2025"
+                - option "Novembre 2025"
+                - option "Ottobre 2025"
+                - option "Settembre 2025"
+                - option "Agosto 2025"
+            - generic [ref=f6e53]:
+              - img [ref=f6e54]
+              - text: Caricamento stato alert…
+            - generic [ref=f6e57]:
+              - img [ref=f6e58]
+              - text: Caricamento parametri manager…
+            - generic [ref=f6e60]:
+              - generic [ref=f6e61]:
+                - img [ref=f6e63]
+                - generic [ref=f6e65]:
+                  - generic [ref=f6e66]: Mese in corso
+                  - generic [ref=f6e68]: Luglio 2026
+                - generic [ref=f6e69]:
+                  - generic [ref=f6e70]:
+                    - text: Giorni lav. 6
+                    - generic [ref=f6e71]: /27
+                  - generic [ref=f6e72]: Target mensile 9261
+              - button "Aggiorna" [ref=f6e74]:
+                - img [ref=f6e75]
+                - text: Aggiorna
+            - generic [ref=f6e80]:
+              - generic [ref=f6e81]:
+                - img [ref=f6e82]
+                - heading "Caricamento Lead — Luglio 2026" [level=2] [ref=f6e85]
+              - table [ref=f6e87]:
+                - rowgroup [ref=f6e88]:
+                  - row "Lead ACT Target Aggiungere" [ref=f6e89]:
+                    - columnheader "Lead" [ref=f6e90]
+                    - columnheader "ACT" [ref=f6e91]
+                    - columnheader "Target" [ref=f6e92]
+                    - columnheader "Aggiungere" [ref=f6e93]
+                - rowgroup [ref=f6e94]:
+                  - row "Nuovi 755 25.72% 1170 56.85% 2119" [ref=f6e95]:
+                    - cell "Nuovi" [ref=f6e96]
+                    - cell "755" [ref=f6e97]
+                    - cell "25.72%" [ref=f6e98]
+                    - cell "1170" [ref=f6e99]
+                    - cell "56.85%" [ref=f6e100]
+                    - cell "2119" [ref=f6e101]
+                  - row "DB 2181 74.28% 888 43.15% 0" [ref=f6e102]:
+                    - cell "DB" [ref=f6e103]
+                    - cell "2181" [ref=f6e104]
+                    - cell "74.28%" [ref=f6e105]
+                    - cell "888" [ref=f6e106]
+                    - cell "43.15%" [ref=f6e107]
+                    - cell "0" [ref=f6e108]
+                  - row "Totale 2936 489 2058 343" [ref=f6e109]:
+                    - cell "Totale" [ref=f6e110]
+                    - cell "2936" [ref=f6e111]
+                    - cell "489" [ref=f6e112]
+                    - cell "2058" [ref=f6e113]
+                    - cell "343" [ref=f6e114]
+                    - cell [ref=f6e115]
+              - generic [ref=f6e116]: ACT = Baseline + tutti i lead caricati nel CRM nel mese corrente · Target proporzionale basato su 6/27 giorni lavorativi
+            - generic [ref=f6e117]:
+              - generic [ref=f6e118]:
+                - img [ref=f6e119]
+                - heading "Numeri Mensili — Luglio 2026" [level=2] [ref=f6e122]
+                - generic [ref=f6e123]: 6/27 giorni lavorativi elapsed
+              - table [ref=f6e125]:
+                - rowgroup [ref=f6e126]:
+                  - row "Numeri mensili ACT Target Prev Target / Day Today" [ref=f6e127]:
+                    - columnheader "Numeri mensili" [ref=f6e128]
+                    - columnheader "ACT" [ref=f6e129]
+                    - columnheader "Target Prev" [ref=f6e130]
+                    - columnheader "Target / Day" [ref=f6e131]
+                    - columnheader "Today" [ref=f6e132]
+                - rowgroup [ref=f6e133]:
+                  - row "Appuntamenti fissati 235 8.00% 286 13.90% 47,67 9" [ref=f6e134]:
+                    - cell "Appuntamenti fissati" [ref=f6e135]
+                    - cell "235" [ref=f6e136]
+                    - cell "8.00%" [ref=f6e137]
+                    - cell "286" [ref=f6e138]
+                    - cell "13.90%" [ref=f6e139]
+                    - cell "47,67" [ref=f6e140]
+                    - cell "9" [ref=f6e141]
+                  - row "Appuntamenti Confermati 22 9.36% 46 16.00% 7,63 1" [ref=f6e142]:
+                    - cell "Appuntamenti Confermati" [ref=f6e143]
+                    - cell "22" [ref=f6e144]
+                    - cell "9.36%" [ref=f6e145]
+                    - cell "46" [ref=f6e146]
+                    - cell "16.00%" [ref=f6e147]
+                    - cell "7,63" [ref=f6e148]
+                    - cell "1" [ref=f6e149]
+                  - row "Trattative presenziati 15 68.18% 41 90.00% 6,89 0" [ref=f6e150]:
+                    - cell "Trattative presenziati" [ref=f6e151]
+                    - cell "15" [ref=f6e152]
+                    - cell "68.18%" [ref=f6e153]
+                    - cell "41" [ref=f6e154]
+                    - cell "90.00%" [ref=f6e155]
+                    - cell "6,89" [ref=f6e156]
+                    - cell "0" [ref=f6e157]
+                  - row "Closed 5 33.33% 17 42.00% 2,89 0" [ref=f6e158]:
+                    - cell "Closed" [ref=f6e159]
+                    - cell "5" [ref=f6e160]
+                    - cell "33.33%" [ref=f6e161]
+                    - cell "17" [ref=f6e162]
+                    - cell "42.00%" [ref=f6e163]
+                    - cell "2,89" [ref=f6e164]
+                    - cell "0" [ref=f6e165]
+                  - row "Valore Contratti firmati 10.967 € — 41.519 € — 6920 € 0 €" [ref=f6e166]:
+                    - cell "Valore Contratti firmati" [ref=f6e167]
+                    - cell "10.967 €" [ref=f6e168]
+                    - cell "—" [ref=f6e169]
+                    - cell "41.519 €" [ref=f6e170]
+                    - cell "—" [ref=f6e171]
+                    - cell "6920 €" [ref=f6e172]
+                    - cell "0 €" [ref=f6e173]
+              - generic [ref=f6e174]:
+                - generic [ref=f6e175]: Trattative su lead
+                - generic [ref=f6e176]: 0.51%
+                - generic [ref=f6e177]: — % leads che sono arrivati almeno all'appuntamento presenziato
+              - generic [ref=f6e178]:
+                - generic [ref=f6e179]: AOV
+                - generic [ref=f6e180]: 2193 €
+                - generic [ref=f6e181]: — valore medio per contratto (Valore Contratti ÷ Closed)
+  - alert [ref=f6e182]

@@ -1,0 +1,85 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: F
+      - generic [ref=e7]: Fenice CRM
+    - navigation [ref=e9]
+    - button "Disconnetti" [ref=e12]:
+      - img [ref=e13]
+      - generic [ref=e16]: Disconnetti
+  - generic [ref=e17]:
+    - banner [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - img [ref=e21]
+          - generic [ref=e25]: —
+        - button [ref=e27]:
+          - img [ref=e28]
+        - generic [ref=e31]:
+          - generic [ref=e33]: GDO
+          - generic [ref=e35]: U
+    - main [ref=e39]:
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - heading "Pipeline Chiamate" [level=1] [ref=e42]
+          - generic [ref=e43]: Benvenuto, QA GDO
+        - generic [ref=e63]:
+          - generic [ref=e66]:
+            - button "1ª Chiamata 1" [ref=e67]:
+              - text: 1ª Chiamata
+              - generic [ref=e68]: "1"
+            - button "2ª Chiamata 0" [ref=e69]:
+              - text: 2ª Chiamata
+              - generic [ref=e70]: "0"
+            - button "3ª Chiamata 1" [ref=e71]:
+              - text: 3ª Chiamata
+              - generic [ref=e72]: "1"
+            - button "4ª Recupero 0" [ref=e74]:
+              - img [ref=e75]
+              - text: 4ª Recupero
+              - generic [ref=e77]: "0"
+          - generic [ref=e82] [cursor=pointer]:
+            - generic [ref=e83]:
+              - generic [ref=e85]:
+                - text: QA Test Uno
+                - generic "Lead Fenice" [ref=e86]: Fenice
+              - generic [ref=e88]:
+                - generic [ref=e89]:
+                  - img [ref=e90]
+                  - generic [ref=e92]: +39 333 000 0001
+                  - button "Duplicato" [ref=e93]:
+                    - img [ref=e94]
+                    - text: Duplicato
+                  - button "Copia numero" [ref=e99]:
+                    - img [ref=e100]
+                - generic [ref=e103]:
+                  - img [ref=e104]
+                  - generic "qa1@test.local" [ref=e107]
+                  - button "Copia email" [ref=e108]:
+                    - img [ref=e109]
+            - generic [ref=e112]:
+              - generic [ref=e113]: DATABASE
+              - generic [ref=e114]: Nuovo
+            - generic [ref=e117]:
+              - img [ref=e119]
+              - generic [ref=e121]: Mai chiamato
+            - generic [ref=e122]:
+              - button "Script" [ref=e123]:
+                - img [ref=e124]
+                - text: Script
+              - button "Agenda" [ref=e127]:
+                - img [ref=e128]
+                - text: Agenda
+              - generic [ref=e131]:
+                - button "NR" [ref=e132]:
+                  - img [ref=e133]
+                  - text: NR
+                - button "Scartato" [ref=e137]:
+                  - img [ref=e138]
+                  - text: Scartato
+                - button "Richiamo" [ref=e141]:
+                  - img [ref=e142]
+                  - text: Richiamo
+                - button "App Preso" [ref=e146]:
+                  - img [ref=e147]
+                  - text: App Preso

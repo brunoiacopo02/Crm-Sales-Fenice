@@ -1,0 +1,14 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e25] [cursor=pointer]:
+    - img [ref=e26]
+  - alert [ref=e19]
+  - generic [ref=e30]:
+    - heading "Scegli l'azienda" [level=1] [ref=e31]
+    - paragraph [ref=e32]: Lavorerai sui dati dell'azienda selezionata.
+    - generic [ref=e33]:
+      - button "Fenice Academy" [ref=e34]:
+        - img [ref=e35]
+        - generic [ref=e39]: Fenice Academy
+      - button "Serenamente" [ref=e40]:
+        - img [ref=e41]
+        - generic [ref=e45]: Serenamente

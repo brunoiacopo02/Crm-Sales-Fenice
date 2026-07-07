@@ -1,0 +1,384 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - img [ref=e7]
+        - generic [ref=e15]:
+          - generic [ref=e16]: SerenaMente
+          - generic [ref=e17]: crescita mentale
+      - navigation [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e21]: Admin
+          - link "Sales Manager" [ref=e22] [cursor=pointer]:
+            - /url: /panoramica-generale
+            - generic [ref=e23]:
+              - img [ref=e24]
+              - generic [ref=e27]: Sales Manager
+        - generic [ref=e28]:
+          - generic [ref=e30]: Operativo
+          - link "Dashboard Operativa" [ref=e31] [cursor=pointer]:
+            - /url: /team
+            - generic [ref=e32]:
+              - img [ref=e33]
+              - generic [ref=e45]: Dashboard Operativa
+          - link "Appuntamenti Oggi" [ref=e46] [cursor=pointer]:
+            - /url: /appuntamenti-oggi
+            - generic [ref=e47]:
+              - img [ref=e48]
+              - generic [ref=e50]: Appuntamenti Oggi
+          - link "Appuntamenti (Conferme)" [ref=e51] [cursor=pointer]:
+            - /url: /conferme
+            - generic [ref=e52]:
+              - img [ref=e53]
+              - generic [ref=e55]: Appuntamenti (Conferme)
+          - link "Monitor Vendite" [ref=e56] [cursor=pointer]:
+            - /url: /monitor-vendite
+            - generic [ref=e57]:
+              - img [ref=e58]
+              - generic [ref=e61]: Monitor Vendite
+          - link "Portafoglio Clienti" [ref=e62] [cursor=pointer]:
+            - /url: /portafoglio-clienti
+            - generic [ref=e63]:
+              - img [ref=e64]
+              - generic [ref=e67]: Portafoglio Clienti
+          - link "Monitor Pause" [ref=e68] [cursor=pointer]:
+            - /url: /monitor-pause
+            - generic [ref=e69]:
+              - img [ref=e70]
+              - generic [ref=e73]: Monitor Pause
+          - link "Importa Lead" [ref=e74] [cursor=pointer]:
+            - /url: /import
+            - generic [ref=e75]:
+              - img [ref=e76]
+              - generic [ref=e79]: Importa Lead
+          - link "Lead Automatici (AC)" [ref=e80] [cursor=pointer]:
+            - /url: /lead-automatici
+            - generic [ref=e81]:
+              - img [ref=e82]
+              - generic [ref=e84]: Lead Automatici (AC)
+          - link "Archivio Storico" [ref=e85] [cursor=pointer]:
+            - /url: /archivio
+            - generic [ref=e86]:
+              - img [ref=e87]
+              - generic [ref=e91]: Archivio Storico
+          - link "Scartati (Marketing)" [ref=e92] [cursor=pointer]:
+            - /url: /scartati
+            - generic [ref=e93]:
+              - img [ref=e94]
+              - generic [ref=e98]: Scartati (Marketing)
+        - generic [ref=e99]:
+          - generic [ref=e101]: KPI & Analytics
+          - link "KPI GDO" [ref=e102] [cursor=pointer]:
+            - /url: /kpi-gdo
+            - generic [ref=e103]:
+              - img [ref=e104]
+              - generic [ref=e109]: KPI GDO
+          - link "Operativa Team" [ref=e110] [cursor=pointer]:
+            - /url: /operativa-team
+            - generic [ref=e111]:
+              - img [ref=e112]
+              - generic [ref=e117]: Operativa Team
+          - link "KPI Venditori" [ref=e118] [cursor=pointer]:
+            - /url: /kpi-venditori
+            - generic [ref=e119]:
+              - img [ref=e120]
+              - generic [ref=e126]: KPI Venditori
+          - link "KPI Conferme" [ref=e127] [cursor=pointer]:
+            - /url: /kpi-conferme
+            - generic [ref=e128]:
+              - img [ref=e129]
+              - generic [ref=e134]: KPI Conferme
+          - link "Analytics Staffing Conferme" [ref=e135] [cursor=pointer]:
+            - /url: /conferme/analytics
+            - generic [ref=e136]:
+              - img [ref=e137]
+              - generic [ref=e142]: Analytics Staffing Conferme
+          - link "Marketing Analytics" [ref=e143] [cursor=pointer]:
+            - /url: /marketing-analytics
+            - generic [ref=e144]:
+              - img [ref=e145]
+              - generic [ref=e149]: Marketing Analytics
+          - link "Qualità Lead (Sondaggi)" [ref=e150] [cursor=pointer]:
+            - /url: /qualita-lead
+            - generic [ref=e151]:
+              - img [ref=e152]
+              - generic [ref=e155]: Qualità Lead (Sondaggi)
+          - link "Analisi Qualità" [ref=e156] [cursor=pointer]:
+            - /url: /analisi-qualita
+            - generic [ref=e157]:
+              - img [ref=e158]
+              - generic [ref=e161]: Analisi Qualità
+          - link "Performance GDO" [ref=e162] [cursor=pointer]:
+            - /url: /manager-gdo-performance
+            - generic [ref=e163]:
+              - img [ref=e164]
+              - generic [ref=e170]: Performance GDO
+        - generic [ref=e171]:
+          - generic [ref=e173]: Team & HR
+          - link "Target & Previsioni" [ref=e174] [cursor=pointer]:
+            - /url: /manager-targets
+            - generic [ref=e175]:
+              - img [ref=e176]
+              - generic [ref=e180]: Target & Previsioni
+          - link "Note GDO" [ref=e181] [cursor=pointer]:
+            - /url: /note-gdo
+            - generic [ref=e182]:
+              - img [ref=e183]
+              - generic [ref=e186]: Note GDO
+        - generic [ref=e187]:
+          - generic [ref=e188]: 🔥
+          - generic [ref=e189]: Gamification
+          - link "Monitor RPG GDO" [ref=e190] [cursor=pointer]:
+            - /url: /manager-rpg-monitor
+            - generic [ref=e191]:
+              - img [ref=e192]
+              - generic [ref=e194]: Monitor RPG GDO
+          - link "Gestione Store" [ref=e195] [cursor=pointer]:
+            - /url: /team/store
+            - generic [ref=e196]:
+              - img [ref=e197]
+              - generic [ref=e201]: Gestione Store
+      - button "Disconnetti" [ref=e204]:
+        - img [ref=e205]
+        - generic [ref=e208]: Disconnetti
+    - generic [ref=e209]:
+      - banner [ref=e210]:
+        - generic [ref=e211]:
+          - generic [ref=e212]:
+            - button "Serenamente" [ref=e371]:
+              - img [ref=e372]
+              - generic [ref=e376]: Serenamente
+              - img [ref=e377]
+            - generic [ref=e480]:
+              - button "Fenice Academy" [ref=e481]:
+                - img [ref=e482]
+                - generic [ref=e486]: Fenice Academy
+              - button "Serenamente ✓" [ref=e487]:
+                - img [ref=e488]
+                - generic [ref=e492]: Serenamente
+                - generic [ref=e493]: ✓
+              - button "Tutte le aziende" [ref=e494]:
+                - img [ref=e495]
+                - generic [ref=e499]: Tutte le aziende
+          - button [ref=e219]:
+            - img [ref=e220]
+          - generic [ref=e223]:
+            - generic [ref=e225]: QA Admin
+            - generic [ref=e227]: Q
+      - main [ref=e229]:
+        - generic [ref=e230]:
+          - generic [ref=e232]:
+            - heading "Sales Manager" [level=1] [ref=e233]
+            - paragraph [ref=e234]: Previsioni lead e numeri mensili del mese in corso.
+          - generic [ref=e235]:
+            - generic [ref=e236]:
+              - heading "Stato Alert — Mese Corrente" [level=2] [ref=e379]
+              - generic [ref=e380]: Sotto -20% per ≥ 7gg = ALERT · soglia ROAS -15% · giorno 11/30
+            - generic [ref=e383]:
+              - generic "Nessun target impostato per questo mese" [ref=e384]:
+                - generic [ref=e385]:
+                  - generic [ref=e386]: Valore Contratti
+                  - generic [ref=e387]: scost. —
+                - generic [ref=e388]:
+                  - img [ref=e389]
+                  - text: NO TARGET
+              - generic "Nessun target impostato per questo mese" [ref=e391]:
+                - generic [ref=e392]:
+                  - generic [ref=e393]: App Fissati
+                  - generic [ref=e394]: scost. —
+                - generic [ref=e395]:
+                  - img [ref=e396]
+                  - text: NO TARGET
+              - generic "Nessun target impostato per questo mese" [ref=e398]:
+                - generic [ref=e399]:
+                  - generic [ref=e400]: Trattative
+                  - generic [ref=e401]: scost. —
+                - generic [ref=e402]:
+                  - img [ref=e403]
+                  - text: NO TARGET
+              - generic "Nessun target impostato per questo mese" [ref=e405]:
+                - generic [ref=e406]:
+                  - generic [ref=e407]: Chiusure
+                  - generic [ref=e408]: scost. —
+                - generic [ref=e409]:
+                  - img [ref=e410]
+                  - text: NO TARGET
+              - generic "Nessun target impostato per questo mese" [ref=e412]:
+                - generic [ref=e413]:
+                  - generic [ref=e414]: ROAS
+                  - generic [ref=e415]: scost. —
+                - generic [ref=e416]:
+                  - img [ref=e417]
+                  - text: NO TARGET
+              - generic "Nessun target impostato per questo mese" [ref=e419]:
+                - generic [ref=e420]:
+                  - generic [ref=e421]: Media App/gg/GDO
+                  - generic [ref=e422]: scost. —
+                - generic [ref=e423]:
+                  - img [ref=e424]
+                  - text: NO TARGET
+              - generic "Nessun target impostato per questo mese" [ref=e426]:
+                - generic [ref=e427]:
+                  - generic [ref=e428]: Media Chiusure/gg/GDO
+                  - generic [ref=e429]: scost. —
+                - generic [ref=e430]:
+                  - img [ref=e431]
+                  - text: NO TARGET
+          - generic [ref=e239]:
+            - generic [ref=e240]:
+              - heading "Parametri Manager" [level=2] [ref=e433]:
+                - img [ref=e434]
+                - text: Parametri Manager
+              - generic [ref=e438]:
+                - img [ref=e439]
+                - text: "Lead nuovi oggi: 4"
+                - generic [ref=e442]: (ORG 4)
+            - generic [ref=e443]:
+              - generic [ref=e444]:
+                - generic [ref=e445]: App/gg per GDO (mese)
+                - generic [ref=e446]:
+                  - generic [ref=e447]: —
+                  - generic [ref=e448]: / ≥ 10
+              - generic [ref=e449]:
+                - generic [ref=e450]: "% Conferme media (mese)"
+                - generic [ref=e451]:
+                  - generic [ref=e452]: 13%
+                  - generic [ref=e453]: / ≥ 15%
+              - generic [ref=e454]:
+                - generic [ref=e455]: Fatturato settimana
+                - generic [ref=e456]:
+                  - generic [ref=e457]: 0 €
+                  - generic [ref=e458]: / ≥ 0 €
+              - generic [ref=e459]:
+                - generic [ref=e460]: Costo/contratto (mese)
+                - generic [ref=e461]:
+                  - generic [ref=e462]: —
+                  - generic [ref=e463]: / ≤ 760 €
+            - generic [ref=e464]:
+              - generic [ref=e465]:
+                - generic [ref=e466]:
+                  - generic [ref=e467]:
+                    - img [ref=e468]
+                    - text: Scorte lead lavorabili
+                  - generic [ref=e472]: "Non assegnati: 175"
+                - generic [ref=e473]: Nessun GDO attivo.
+              - generic [ref=e474]:
+                - generic [ref=e475]:
+                  - img [ref=e476]
+                  - text: GDO sotto target (settimana)
+                - generic [ref=e479]: ✓ Nessun GDO sotto il 50% del target app/giorno.
+          - generic [ref=e243]:
+            - generic [ref=e244]:
+              - img [ref=e246]
+              - generic [ref=e248]:
+                - generic [ref=e249]: Mese corrente
+                - generic [ref=e250]: Giugno 2026
+            - generic [ref=e251]:
+              - button "Aggiorna" [ref=e252]:
+                - img [ref=e253]
+                - text: Aggiorna
+              - button "Imposta target" [ref=e258]:
+                - img [ref=e259]
+                - text: Imposta target
+          - generic [ref=e262]: ⚠️ Target mensile non ancora impostato. Clicca "Imposta target" per configurare target mensile, giorni lavorativi e baseline iniziale del mese.
+          - generic [ref=e263]:
+            - generic [ref=e264]:
+              - img [ref=e265]
+              - heading "Caricamento Lead — Giugno 2026" [level=2] [ref=e268]
+            - table [ref=e270]:
+              - rowgroup [ref=e271]:
+                - row "Lead ACT Target Aggiungere" [ref=e272]:
+                  - columnheader "Lead" [ref=e273]
+                  - columnheader "ACT" [ref=e274]
+                  - columnheader "Target" [ref=e275]
+                  - columnheader "Aggiungere" [ref=e276]
+              - rowgroup [ref=e277]:
+                - row "Nuovi 1194 100.00% 0 — 0" [ref=e278]:
+                  - cell "Nuovi" [ref=e279]
+                  - cell "1194" [ref=e280]
+                  - cell "100.00%" [ref=e281]
+                  - cell "0" [ref=e282]
+                  - cell "—" [ref=e283]
+                  - cell "0" [ref=e284]
+                - row "DB 0 0.00% 0 — 0" [ref=e285]:
+                  - cell "DB" [ref=e286]
+                  - cell "0" [ref=e287]
+                  - cell "0.00%" [ref=e288]
+                  - cell "0" [ref=e289]
+                  - cell "—" [ref=e290]
+                  - cell "0" [ref=e291]
+                - row "Totale 1194 133 0 0" [ref=e292]:
+                  - cell "Totale" [ref=e293]
+                  - cell "1194" [ref=e294]
+                  - cell "133" [ref=e295]
+                  - cell "0" [ref=e296]
+                  - cell "0" [ref=e297]
+                  - cell [ref=e298]
+            - generic [ref=e299]: ACT = Baseline + tutti i lead caricati nel CRM nel mese corrente · Target proporzionale basato su 9/? giorni lavorativi
+          - generic [ref=e300]:
+            - generic [ref=e301]:
+              - img [ref=e302]
+              - heading "Numeri Mensili — Giugno 2026" [level=2] [ref=e305]
+              - generic [ref=e306]: 9/25 giorni lavorativi elapsed
+              - button "Imposta target" [ref=e307]:
+                - img [ref=e308]
+                - text: Imposta target
+            - generic [ref=e311]: ⚠️ Target metriche mensili non ancora impostati. Clicca "Imposta target" per configurare.
+            - table [ref=e313]:
+              - rowgroup [ref=e314]:
+                - row "Numeri mensili ACT Target Prev Target / Day Today" [ref=e315]:
+                  - columnheader "Numeri mensili" [ref=e316]
+                  - columnheader "ACT" [ref=e317]
+                  - columnheader "Target Prev" [ref=e318]
+                  - columnheader "Target / Day" [ref=e319]
+                  - columnheader "Today" [ref=e320]
+              - rowgroup [ref=e321]:
+                - row "Appuntamenti fissati 84 7.04% 0 — 0 14" [ref=e322]:
+                  - cell "Appuntamenti fissati" [ref=e323]
+                  - cell "84" [ref=e324]
+                  - cell "7.04%" [ref=e325]
+                  - cell "0" [ref=e326]
+                  - cell "—" [ref=e327]
+                  - cell "0" [ref=e328]
+                  - cell "14" [ref=e329]
+                - row "Appuntamenti Confermati 11 13.10% 0 — 0 2" [ref=e330]:
+                  - cell "Appuntamenti Confermati" [ref=e331]
+                  - cell "11" [ref=e332]
+                  - cell "13.10%" [ref=e333]
+                  - cell "0" [ref=e334]
+                  - cell "—" [ref=e335]
+                  - cell "0" [ref=e336]
+                  - cell "2" [ref=e337]
+                - row "Trattative presenziati 4 36.36% 0 — 0 0" [ref=e338]:
+                  - cell "Trattative presenziati" [ref=e339]
+                  - cell "4" [ref=e340]
+                  - cell "36.36%" [ref=e341]
+                  - cell "0" [ref=e342]
+                  - cell "—" [ref=e343]
+                  - cell "0" [ref=e344]
+                  - cell "0" [ref=e345]
+                - row "Closed 0 0.00% 0 — 0 0" [ref=e346]:
+                  - cell "Closed" [ref=e347]
+                  - cell "0" [ref=e348]
+                  - cell "0.00%" [ref=e349]
+                  - cell "0" [ref=e350]
+                  - cell "—" [ref=e351]
+                  - cell "0" [ref=e352]
+                  - cell "0" [ref=e353]
+                - row "Valore Contratti firmati 0 € — 0 € — 0 € 0 €" [ref=e354]:
+                  - cell "Valore Contratti firmati" [ref=e355]
+                  - cell "0 €" [ref=e356]
+                  - cell "—" [ref=e357]
+                  - cell "0 €" [ref=e358]
+                  - cell "—" [ref=e359]
+                  - cell "0 €" [ref=e360]
+                  - cell "0 €" [ref=e361]
+            - generic [ref=e362]:
+              - generic [ref=e363]: Trattative su lead
+              - generic [ref=e364]: 0.34%
+              - generic [ref=e365]: — % leads che sono arrivati almeno all'appuntamento presenziato
+            - generic [ref=e366]:
+              - generic [ref=e367]: AOV
+              - generic [ref=e368]: —
+              - generic [ref=e369]: — valore medio per contratto (Valore Contratti ÷ Closed)
+  - alert [ref=e370]

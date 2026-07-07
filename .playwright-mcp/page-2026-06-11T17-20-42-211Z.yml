@@ -1,0 +1,151 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "La mia Pipeline" [ref=e145] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e146]:
+            - img [ref=e147]
+            - generic [ref=e149]: La mia Pipeline
+        - link "I miei Richiami 1" [ref=e151] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e152]:
+            - img [ref=e153]
+            - generic [ref=e155]: I miei Richiami
+          - generic [ref=e156]: "1"
+        - link "I miei Appuntamenti" [ref=e158] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=e159]:
+            - img [ref=e160]
+            - generic [ref=e165]: I miei Appuntamenti
+        - link "Le mie Performance" [ref=e167] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e168]:
+            - img [ref=e169]
+            - generic [ref=e174]: Le mie Performance
+        - link "Storico Pause" [ref=e176] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=e177]:
+            - img [ref=e178]
+            - generic [ref=e181]: Storico Pause
+        - generic [ref=e182]:
+          - generic [ref=e183]: 🔥
+          - link "Il mio Profilo" [ref=e184] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=e185]:
+              - img [ref=e186]
+              - generic [ref=e188]: Il mio Profilo
+        - link "Classifica" [ref=e190] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e191]:
+            - img [ref=e192]
+            - generic [ref=e198]: Classifica
+        - link "Fenice Store" [ref=e200] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e201]:
+            - img [ref=e202]
+            - generic [ref=e206]: Fenice Store
+      - button "Disconnetti" [ref=e12]:
+        - img [ref=e13]
+        - generic [ref=e16]: Disconnetti
+    - generic [ref=e17]:
+      - banner [ref=e18]:
+        - generic [ref=e209]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=e210]
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e25]: Fenice Academy
+          - generic [ref=e211]:
+            - generic [ref=e212]:
+              - generic [ref=e213]: Budget
+              - generic [ref=e214]: 30:00
+            - button "Inizia Pausa" [ref=e215]
+          - button [ref=e27]:
+            - img [ref=e28]
+          - generic [ref=e31]:
+            - generic "I tuoi Fenice Coin" [ref=e216]:
+              - img "Fenice Coin" [ref=e217]
+              - generic [ref=e218]: "15"
+            - generic [ref=e32]:
+              - generic [ref=e33]: QA GDO
+              - generic [ref=e220]:
+                - generic [ref=e221]: Lv.1
+                - generic [ref=e223]: 0%
+            - generic [ref=e35]: Q
+      - main [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - heading "Agenda Richiami" [level=1] [ref=e42]
+            - generic [ref=e43]: 0 urgenze in rosso
+          - generic [ref=e44]:
+            - generic [ref=e47]:
+              - button "Da Richiamare Ora 0" [ref=e251]:
+                - img [ref=e49]
+                - text: Da Richiamare Ora
+                - generic [ref=e51]: "0"
+              - button "In Arrivo 1" [ref=e252]:
+                - img [ref=e53]
+                - text: In Arrivo
+                - generic [ref=e56]: "1"
+            - generic [ref=e258] [cursor=pointer]:
+              - generic [ref=e259]:
+                - generic [ref=e260]:
+                  - generic [ref=e262]:
+                    - text: QA Test Richiamo
+                    - generic [ref=e263]: 1° ch.
+                    - generic "Lead Fenice" [ref=e264]: Fenice
+                  - generic [ref=e266]:
+                    - generic [ref=e267]:
+                      - img [ref=e268]
+                      - generic [ref=e270]: "+393330000002"
+                      - button "Copia numero" [ref=e271]:
+                        - img [ref=e272]
+                    - generic [ref=e275]:
+                      - img [ref=e276]
+                      - generic "qa3@test.local" [ref=e279]
+                      - button "Copia email" [ref=e280]:
+                        - img [ref=e281]
+                - generic [ref=e284]:
+                  - generic [ref=e285]: DATABASE
+                  - generic [ref=e286]: Richiamo Arrivo
+                - generic [ref=e289]:
+                  - img [ref=e291]
+                  - generic [ref=e293]:
+                    - generic [ref=e294]: Richiamo
+                    - generic [ref=e295]: 12/06/26, 10:00
+                    - generic [ref=e296]: Ultima ch. 10/06/26, 19:10
+                - generic [ref=e297]:
+                  - button "Modifica data/note del richiamo (senza registrare una chiamata)" [ref=e298]:
+                    - img [ref=e299]
+                  - button "Note" [ref=e302]:
+                    - img [ref=e303]
+                    - text: Note
+                  - button "Script" [ref=e306]:
+                    - img [ref=e307]
+                    - text: Script
+                  - button "Agenda" [ref=e310]:
+                    - img [ref=e311]
+                    - text: Agenda
+                  - generic [ref=e314]:
+                    - button "NR" [ref=e315]:
+                      - img [ref=e316]
+                      - text: NR
+                    - button "Scartato" [ref=e320]:
+                      - img [ref=e321]
+                      - text: Scartato
+                    - button "Richiamo" [ref=e324]:
+                      - img [ref=e325]
+                      - text: Richiamo
+                    - button "App Preso" [ref=e329]:
+                      - img [ref=e330]
+                      - text: App Preso
+              - generic [ref=e335]:
+                - img [ref=e336]
+                - generic [ref=e338]: Nota richiamo di test QA
+  - alert [ref=e219]

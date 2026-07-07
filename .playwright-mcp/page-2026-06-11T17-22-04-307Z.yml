@@ -1,0 +1,197 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "La mia Pipeline" [ref=e155] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e156]:
+            - img [ref=e157]
+            - generic [ref=e159]: La mia Pipeline
+        - link "I miei Richiami" [ref=e161] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e162]:
+            - img [ref=e163]
+            - generic [ref=e165]: I miei Richiami
+        - link "I miei Appuntamenti" [ref=e167] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=e168]:
+            - img [ref=e169]
+            - generic [ref=e174]: I miei Appuntamenti
+        - link "Le mie Performance" [ref=e176] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e177]:
+            - img [ref=e178]
+            - generic [ref=e183]: Le mie Performance
+        - link "Storico Pause" [ref=e185] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=e186]:
+            - img [ref=e187]
+            - generic [ref=e190]: Storico Pause
+        - generic [ref=e191]:
+          - generic [ref=e192]: 🔥
+          - link "Il mio Profilo" [ref=e193] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=e194]:
+              - img [ref=e195]
+              - generic [ref=e197]: Il mio Profilo
+        - link "Classifica" [ref=e199] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e200]:
+            - img [ref=e201]
+            - generic [ref=e207]: Classifica
+        - link "Fenice Store" [ref=e209] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e210]:
+            - img [ref=e211]
+            - generic [ref=e215]: Fenice Store
+      - button "Disconnetti" [ref=e12]:
+        - img [ref=e13]
+        - generic [ref=e16]: Disconnetti
+    - generic [ref=e17]:
+      - banner [ref=e18]:
+        - generic [ref=e218]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=e219]
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e25]: Fenice Academy
+          - generic [ref=e220]:
+            - generic [ref=e221]:
+              - generic [ref=e222]: Budget
+              - generic [ref=e223]: 30:00
+            - button "Inizia Pausa" [ref=e224]
+          - button [ref=e27]:
+            - img [ref=e28]
+          - generic [ref=e31]:
+            - generic "I tuoi Fenice Coin" [ref=e225]:
+              - img "Fenice Coin" [ref=e226]
+              - generic [ref=e227]: "15"
+            - generic [ref=e32]:
+              - generic [ref=e33]: QA GDO
+              - generic [ref=e298]:
+                - generic [ref=e299]: Lv.1
+                - generic [ref=e301]: 0%
+            - generic [ref=e35]: Q
+      - main [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - heading "Pipeline Chiamate" [level=1] [ref=e42]
+            - generic [ref=e43]: Benvenuto, QA GDO
+          - generic [ref=e45]:
+            - generic [ref=e46]:
+              - img [ref=e228]
+              - generic [ref=e232]: Obiettivi di Oggi
+            - generic [ref=e47]:
+              - generic [ref=e48]:
+                - generic [ref=e233]:
+                  - img [ref=e234]
+                  - generic [ref=e236]: Chiamate oggi
+                - generic [ref=e237]:
+                  - generic [ref=e238]: "1"
+                  - generic [ref=e239]: / 90
+              - generic [ref=e49]:
+                - generic [ref=e242]:
+                  - img [ref=e243]
+                  - generic [ref=e245]: Fissaggi oggi
+                - generic [ref=e246]:
+                  - generic [ref=e247]: "0"
+                  - generic [ref=e248]: / 2
+          - generic [ref=e50]:
+            - generic [ref=e251]: I tuoi lead — settimana 8 giu — 15 giu
+            - generic [ref=e252]:
+              - generic [ref=e253]:
+                - img [ref=e255]
+                - generic [ref=e258]:
+                  - generic [ref=e259]: "0"
+                  - generic [ref=e260]: Appuntamenti Fissati
+              - generic [ref=e261]:
+                - img [ref=e263]
+                - generic [ref=e267]:
+                  - generic [ref=e268]: "0"
+                  - generic [ref=e269]: Confermati
+              - generic [ref=e270]:
+                - img [ref=e272]
+                - generic [ref=e277]:
+                  - generic [ref=e278]: "0"
+                  - generic [ref=e279]: Presenze
+              - generic [ref=e280]:
+                - img [ref=e282]
+                - generic [ref=e285]:
+                  - generic [ref=e286]: "0"
+                  - generic [ref=e287]: Chiusure
+            - generic [ref=e288]:
+              - generic [ref=e289]: Mese di giugno
+              - generic [ref=e290]: "App fissati: 0"
+              - generic [ref=e291]:
+                - text: "% Conferma: —"
+                - generic [ref=e292]: (0)
+              - generic [ref=e293]:
+                - text: "% Presentati: —"
+                - generic [ref=e294]: (0)
+              - generic [ref=e295]: "Chiusi: 0"
+          - generic [ref=e63]:
+            - generic [ref=e66]:
+              - button "1ª Chiamata 1" [ref=e67]:
+                - text: 1ª Chiamata
+                - generic [ref=e68]: "1"
+              - button "2ª Chiamata 0" [ref=e69]:
+                - text: 2ª Chiamata
+                - generic [ref=e70]: "0"
+              - button "3ª Chiamata 1" [ref=e71]:
+                - text: 3ª Chiamata
+                - generic [ref=e72]: "1"
+              - button "4ª Recupero 0" [ref=e74]:
+                - img [ref=e75]
+                - text: 4ª Recupero
+                - generic [ref=e77]: "0"
+            - generic [ref=e404] [cursor=pointer]:
+              - generic [ref=e405]:
+                - generic [ref=e407]:
+                  - text: QA Test Uno
+                  - generic "Lead Fenice" [ref=e408]: Fenice
+                - generic [ref=e410]:
+                  - generic [ref=e411]:
+                    - img [ref=e412]
+                    - generic [ref=e414]: +39 333 000 0001
+                    - button "Duplicato" [ref=e415]:
+                      - img [ref=e416]
+                      - text: Duplicato
+                    - button "Copia numero" [ref=e421]:
+                      - img [ref=e422]
+                  - generic [ref=e425]:
+                    - img [ref=e426]
+                    - generic "qa1@test.local" [ref=e429]
+                    - button "Copia email" [ref=e430]:
+                      - img [ref=e431]
+              - generic [ref=e434]:
+                - generic [ref=e435]: DATABASE
+                - generic [ref=e436]: Nuovo
+              - generic [ref=e439]:
+                - img [ref=e441]
+                - generic [ref=e443]: Mai chiamato
+              - generic [ref=e444]:
+                - button "Script" [ref=e445]:
+                  - img [ref=e446]
+                  - text: Script
+                - button "Agenda" [ref=e449]:
+                  - img [ref=e450]
+                  - text: Agenda
+                - generic [ref=e453]:
+                  - button "NR" [ref=e454]:
+                    - img [ref=e455]
+                    - text: NR
+                  - button "Scartato" [ref=e459]:
+                    - img [ref=e460]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e463]:
+                    - img [ref=e464]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e468]:
+                    - img [ref=e469]
+                    - text: App Preso
+  - alert [ref=e297]

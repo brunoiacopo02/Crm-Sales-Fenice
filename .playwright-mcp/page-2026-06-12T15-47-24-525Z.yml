@@ -1,0 +1,14 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - heading "Fenice Academy CRM" [level=2] [ref=e4]
+      - paragraph [ref=e5]: Rialzarsi e risorgere dalle proprie ceneri
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - generic [ref=e10]: Indirizzo Email
+        - textbox "Indirizzo Email" [ref=e12]
+      - generic [ref=e13]:
+        - generic [ref=e14]: Password
+        - textbox "Password" [ref=e16]
+      - button "Accedi" [ref=e18]
+  - alert [ref=e19]

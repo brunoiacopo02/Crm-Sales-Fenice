@@ -1,0 +1,208 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "La mia Pipeline" [ref=e145] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e146]:
+            - img [ref=e147]
+            - generic [ref=e149]: La mia Pipeline
+        - link "I miei Richiami 1" [ref=e151] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e152]:
+            - img [ref=e153]
+            - generic [ref=e155]: I miei Richiami
+          - generic [ref=e156]: "1"
+        - link "I miei Appuntamenti" [ref=e158] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=e159]:
+            - img [ref=e160]
+            - generic [ref=e165]: I miei Appuntamenti
+        - link "Le mie Performance" [ref=e167] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e168]:
+            - img [ref=e169]
+            - generic [ref=e174]: Le mie Performance
+        - link "Storico Pause" [ref=e176] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=e177]:
+            - img [ref=e178]
+            - generic [ref=e181]: Storico Pause
+        - generic [ref=e182]:
+          - generic [ref=e183]: 🔥
+          - link "Il mio Profilo" [ref=e184] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=e185]:
+              - img [ref=e186]
+              - generic [ref=e188]: Il mio Profilo
+        - link "Classifica" [ref=e190] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e191]:
+            - img [ref=e192]
+            - generic [ref=e198]: Classifica
+        - link "Fenice Store" [ref=e200] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e201]:
+            - img [ref=e202]
+            - generic [ref=e206]: Fenice Store
+      - button "Disconnetti" [ref=e12]:
+        - img [ref=e13]
+        - generic [ref=e16]: Disconnetti
+    - generic [ref=e17]:
+      - banner [ref=e18]:
+        - generic [ref=e209]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=e210]
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e25]: Fenice Academy
+          - generic [ref=e211]:
+            - generic [ref=e212]:
+              - generic [ref=e213]: Budget
+              - generic [ref=e214]: 30:00
+            - button "Inizia Pausa" [ref=e215]
+          - button [ref=e27]:
+            - img [ref=e28]
+          - generic [ref=e31]:
+            - generic "I tuoi Fenice Coin" [ref=e216]:
+              - img "Fenice Coin" [ref=e217]
+              - generic [ref=e218]: "15"
+            - generic [ref=e32]:
+              - generic [ref=e33]: QA GDO
+              - generic [ref=e220]:
+                - generic [ref=e221]: Lv.1
+                - generic [ref=e223]: 0%
+            - generic [ref=e35]: Q
+      - main [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - heading "Agenda Richiami" [level=1] [ref=e42]
+            - generic [ref=e43]: 1 urgenze in rosso
+          - generic [ref=e44]:
+            - generic [ref=e47]:
+              - button "Da Richiamare Ora 1" [ref=e48]:
+                - img [ref=e49]
+                - text: Da Richiamare Ora
+                - generic [ref=e51]: "1"
+              - button "In Arrivo 0" [ref=e52]:
+                - img [ref=e53]
+                - text: In Arrivo
+                - generic [ref=e56]: "0"
+            - generic [ref=e61] [cursor=pointer]:
+              - generic [ref=e62]:
+                - generic [ref=e63]:
+                  - generic [ref=e65]:
+                    - text: QA Test Richiamo
+                    - generic [ref=e66]: 1° ch.
+                    - generic "Lead Fenice" [ref=e67]: Fenice
+                  - generic [ref=e69]:
+                    - generic [ref=e70]:
+                      - img [ref=e71]
+                      - generic [ref=e73]: "+393330000002"
+                      - button "Copia numero" [ref=e74]:
+                        - img [ref=e75]
+                    - generic [ref=e78]:
+                      - img [ref=e79]
+                      - generic "qa3@test.local" [ref=e82]
+                      - button "Copia email" [ref=e83]:
+                        - img [ref=e84]
+                - generic [ref=e87]:
+                  - generic [ref=e88]: DATABASE
+                  - generic [ref=e89]: Richiamo Scaduto
+                - generic [ref=e92]:
+                  - img [ref=e94]
+                  - generic [ref=e96]:
+                    - generic [ref=e97]: Richiamo
+                    - generic [ref=e98]: 11/06/26, 19:00
+                    - generic [ref=e99]: Ultima ch. 10/06/26, 19:10
+                - generic [ref=e100]:
+                  - button "Modifica data/note del richiamo (senza registrare una chiamata)" [ref=e101]:
+                    - img [ref=e102]
+                  - button "Note" [ref=e105]:
+                    - img [ref=e106]
+                    - text: Note
+                  - button "Script" [ref=e109]:
+                    - img [ref=e110]
+                    - text: Script
+                  - button "Agenda" [ref=e113]:
+                    - img [ref=e114]
+                    - text: Agenda
+                  - generic [ref=e117]:
+                    - button "NR" [ref=e118]:
+                      - img [ref=e119]
+                      - text: NR
+                    - button "Scartato" [ref=e123]:
+                      - img [ref=e124]
+                      - text: Scartato
+                    - button "Richiamo" [ref=e127]:
+                      - img [ref=e128]
+                      - text: Richiamo
+                    - button "App Preso" [ref=e132]:
+                      - img [ref=e133]
+                      - text: App Preso
+              - generic [ref=e138]:
+                - img [ref=e139]
+                - generic [ref=e141]: Nota richiamo di test QA
+              - generic [ref=e226]:
+                - generic [ref=e227]:
+                  - generic [ref=e228]:
+                    - img [ref=e229]
+                    - generic [ref=e232]:
+                      - generic [ref=e233]: Modifica Richiamo
+                      - generic [ref=e234]: QA Test Richiamo — nessuna chiamata registrata
+                  - button [ref=e235]:
+                    - img [ref=e236]
+                - generic [ref=e239]:
+                  - generic [ref=e240]: Nuova data e ora *
+                  - generic [ref=e242]:
+                    - textbox [ref=e243]: 2026-06-11
+                    - combobox [ref=e244]:
+                      - option "Ora" [disabled]
+                      - option "00"
+                      - option "01"
+                      - option "02"
+                      - option "03"
+                      - option "04"
+                      - option "05"
+                      - option "06"
+                      - option "07"
+                      - option "08"
+                      - option "09"
+                      - option "10"
+                      - option "11"
+                      - option "12"
+                      - option "13"
+                      - option "14"
+                      - option "15"
+                      - option "16"
+                      - option "17"
+                      - option "18"
+                      - option "19" [selected]
+                      - option "20"
+                      - option "21"
+                      - option "22"
+                      - option "23"
+                    - combobox [ref=e245]:
+                      - option "00" [selected]
+                      - option "05"
+                      - option "10"
+                      - option "15"
+                      - option "20"
+                      - option "25"
+                      - option "30"
+                      - option "35"
+                      - option "40"
+                      - option "45"
+                      - option "50"
+                      - option "55"
+                  - generic [ref=e246]: Note (già compilate)
+                  - textbox [ref=e247]: Nota richiamo di test QA
+                  - generic [ref=e248]:
+                    - button "Annulla" [ref=e249]
+                    - button "Salva richiamo" [ref=e250]
+  - alert [ref=e219]

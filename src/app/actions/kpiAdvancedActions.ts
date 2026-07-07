@@ -781,7 +781,7 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
         .innerJoin(leads, eq(leads.id, ranked.leadId))
         .where(and(
             gte(ranked.createdAt, start),
-            lte(ranked.createdAt, end), // i filtri di KpiGdoBoard passano end INCLUSIVO (stesso contratto di getAdvancedKpi): mantenere lte qui
+            lte(ranked.createdAt, end), // end = bound esclusivo (dayBoundsRome/monthBoundsRome), ma getAdvancedKpi usa lte sullo stesso valore: manteniamo lte per coerenza dei totali (off-by-1ms teorico condiviso).
             ...(filters.funnel ? [eq(leads.funnel, filters.funnel)] : []),
             ...(filters.gdoId ? [eq(ranked.userId, filters.gdoId)] : []),
         ))
@@ -793,7 +793,7 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
     for (const r of rows) {
         if (r.userId && botIds.has(r.userId)) continue // bot escluso
         const key = r.rn >= 4 ? '4ª+' : (`${r.rn}ª` as const)
-        const side = (r.funnel ?? '').toLowerCase() === 'database' ? 'database' : 'nuovi'
+        const side = (r.funnel ?? '').trim().toLowerCase() === 'database' ? 'database' : 'nuovi'
         const b = buckets.get(key)![side]
         b.calls++
         if (r.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(r.outcome, r.discardReason)) b.answered++

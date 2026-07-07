@@ -1,0 +1,44 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - img [ref=e7]
+        - generic [ref=e15]:
+          - generic [ref=e16]: SerenaMente
+          - generic [ref=e17]: crescita mentale
+      - navigation [ref=e19]
+      - button "Disconnetti" [ref=e22]:
+        - img [ref=e23]
+        - generic [ref=e26]: Disconnetti
+    - generic [ref=e27]:
+      - banner [ref=e28]:
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - img [ref=e31]
+            - generic [ref=e35]: —
+          - button [ref=e37]:
+            - img [ref=e38]
+          - generic [ref=e41]:
+            - generic [ref=e43]: GDO
+            - generic [ref=e45]: U
+      - main [ref=e49]:
+        - generic [ref=e50]:
+          - generic [ref=e52]:
+            - heading "Operativa Team" [level=1] [ref=e53]
+            - paragraph [ref=e54]: "Tabella mensile/trimestrale: ore lavorate, chiamate, lead gestiti per ogni operatore."
+          - generic [ref=e57]:
+            - img [ref=e58]
+            - text: Caricamento parametri manager…
+          - generic [ref=e61]:
+            - generic [ref=e62]:
+              - generic [ref=e63]:
+                - heading "Dashboard Operativa Aziendale" [level=2] [ref=e64]:
+                  - img [ref=e65]
+                  - text: Dashboard Operativa Aziendale
+                - generic [ref=e67]: Monitoraggio volumi, tassi di risposta, appuntamenti e conversione oraria.
+              - generic [ref=e68]:
+                - button "Oggi" [ref=e69]
+                - button "Questo Mese" [ref=e70]
+                - button "Trimestre (90 gg)" [ref=e71]
+            - generic [ref=e75]: Caricamento dati...
+  - alert [ref=e76]

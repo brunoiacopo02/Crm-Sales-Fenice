@@ -1,0 +1,139 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e19]
+  - generic [ref=e20]:
+    - complementary [ref=e21]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: F
+        - generic [ref=e25]: Fenice CRM
+      - navigation [ref=e27]:
+        - link "La mia Pipeline" [ref=e29] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e30]:
+            - img [ref=e31]
+            - generic [ref=e33]: La mia Pipeline
+        - link "I miei Richiami 1" [ref=e35] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e36]:
+            - img [ref=e37]
+            - generic [ref=e39]: I miei Richiami
+          - generic [ref=e40]: "1"
+        - link "I miei Appuntamenti" [ref=e42] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=e43]:
+            - img [ref=e44]
+            - generic [ref=e49]: I miei Appuntamenti
+        - link "Le mie Performance" [ref=e51] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e52]:
+            - img [ref=e53]
+            - generic [ref=e58]: Le mie Performance
+        - link "Storico Pause" [ref=e60] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=e61]:
+            - img [ref=e62]
+            - generic [ref=e65]: Storico Pause
+        - generic [ref=e66]:
+          - generic [ref=e67]: 🔥
+          - link "Il mio Profilo" [ref=e68] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=e69]:
+              - img [ref=e70]
+              - generic [ref=e72]: Il mio Profilo
+        - link "Classifica" [ref=e74] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e75]:
+            - img [ref=e76]
+            - generic [ref=e82]: Classifica
+        - link "Fenice Store" [ref=e84] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e85]:
+            - img [ref=e86]
+            - generic [ref=e90]: Fenice Store
+      - button "Disconnetti" [ref=e93]:
+        - img [ref=e94]
+        - generic [ref=e97]: Disconnetti
+    - generic [ref=e98]:
+      - banner [ref=e99]:
+        - generic [ref=e102]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=e103]
+        - generic [ref=e104]:
+          - generic [ref=e105]:
+            - img [ref=e106]
+            - generic [ref=e110]: Fenice Academy
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - generic [ref=e113]: Budget
+              - generic [ref=e114]: 30:00
+            - button "Inizia Pausa" [ref=e115]
+          - button [ref=e117]:
+            - img [ref=e118]
+          - generic [ref=e121]:
+            - generic "I tuoi Fenice Coin" [ref=e122]:
+              - img "Fenice Coin" [ref=e123]
+              - generic [ref=e124]: "0"
+            - generic [ref=e125]:
+              - generic [ref=e126]: QA GDO
+              - generic [ref=e127]:
+                - generic [ref=e128]: Lv.1
+                - generic [ref=e130]: 0%
+            - generic [ref=e132]: Q
+      - main [ref=e134]:
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - heading "Pipeline Chiamate" [level=1] [ref=e137]
+            - generic [ref=e138]: Benvenuto, QA GDO
+          - generic [ref=e158]:
+            - generic [ref=e161]:
+              - button "1ª Chiamata 1" [ref=e163]:
+                - text: 1ª Chiamata
+                - generic [ref=e164]: "1"
+              - button "2ª Chiamata 0" [ref=e165]:
+                - text: 2ª Chiamata
+                - generic [ref=e166]: "0"
+              - button "3ª Chiamata 0" [ref=e167]:
+                - text: 3ª Chiamata
+                - generic [ref=e168]: "0"
+            - generic [ref=e173] [cursor=pointer]:
+              - generic [ref=e174]:
+                - generic [ref=e176]:
+                  - text: QA Test Uno
+                  - generic "Lead Fenice" [ref=e177]: Fenice
+                - generic [ref=e179]:
+                  - generic [ref=e180]:
+                    - img [ref=e181]
+                    - generic [ref=e183]: +39 333 000 0001
+                    - button "Copia numero" [ref=e184]:
+                      - img [ref=e185]
+                  - generic [ref=e188]:
+                    - img [ref=e189]
+                    - generic "qa1@test.local" [ref=e192]
+                    - button "Copia email" [ref=e193]:
+                      - img [ref=e194]
+              - generic [ref=e197]:
+                - generic [ref=e198]: DATABASE
+                - generic [ref=e199]: Nuovo
+              - generic [ref=e202]:
+                - img [ref=e204]
+                - generic [ref=e206]: Mai chiamato
+              - generic [ref=e207]:
+                - button "Script" [ref=e208]:
+                  - img [ref=e209]
+                  - text: Script
+                - button "Agenda" [ref=e212]:
+                  - img [ref=e213]
+                  - text: Agenda
+                - generic [ref=e216]:
+                  - button "NR" [ref=e217]:
+                    - img [ref=e218]
+                    - text: NR
+                  - button "Scartato" [ref=e222]:
+                    - img [ref=e223]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e226]:
+                    - img [ref=e227]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e231]:
+                    - img [ref=e232]
+                    - text: App Preso

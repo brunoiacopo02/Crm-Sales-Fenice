@@ -1,0 +1,67 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: F
+      - generic [ref=e7]: Fenice CRM
+    - navigation [ref=e9]
+    - button "Disconnetti" [ref=e12]:
+      - img [ref=e13]
+      - generic [ref=e16]: Disconnetti
+  - generic [ref=e17]:
+    - banner [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - img [ref=e21]
+          - generic [ref=e25]: —
+        - button [ref=e27]:
+          - img [ref=e28]
+        - generic [ref=e31]:
+          - generic [ref=e33]: GDO
+          - generic [ref=e35]: U
+    - main [ref=e39]:
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - heading "Importa Lead tramite CSV" [level=1] [ref=e43]
+            - paragraph [ref=e44]: Carica l'export con le colonne richieste per popolare il CRM.
+          - button "Aggiungi Lead Singolo" [ref=e45]:
+            - img [ref=e46]
+            - text: Aggiungi Lead Singolo
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - generic [ref=e52]: "1"
+              - heading "Carica File" [level=3] [ref=e53]
+            - generic [ref=e54] [cursor=pointer]:
+              - img [ref=e55]
+              - paragraph [ref=e59]: Clicca qui per caricare
+              - paragraph [ref=e60]: Solo formati CSV, TXT supportati
+            - generic [ref=e61]:
+              - paragraph [ref=e62]:
+                - img [ref=e63]
+                - text: "Requisiti CSV:"
+              - list [ref=e65]:
+                - listitem [ref=e66]: Separatore gestito in automatico ( Virgola o Punto e Virgola ).
+                - listitem [ref=e67]:
+                  - text: "Le colonne indispensabili sono:"
+                  - strong [ref=e68]: Telefono1
+                  - text: e
+                  - strong [ref=e69]: Cognome
+                  - text: .
+                - listitem [ref=e70]:
+                  - text: Il
+                  - strong [ref=e71]: Cognome
+                  - text: verrà mappato come Funnel di provenienza.
+                - listitem [ref=e72]:
+                  - strong [ref=e73]: Nome
+                  - text: ed
+                  - strong [ref=e74]: Email
+                  - text: sono facoltativi.
+                - listitem [ref=e75]: Le colonne superflue (es. Info, Unnamed) verranno ignorate.
+          - generic [ref=e76]:
+            - generic [ref=e78]:
+              - generic [ref=e79]: "2"
+              - heading "Preview & Validazione" [level=3] [ref=e80]
+            - generic [ref=e81]:
+              - img [ref=e82]
+              - paragraph [ref=e85]: In attesa del file CSV...

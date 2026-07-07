@@ -1,0 +1,168 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e19]
+  - generic [ref=e20]:
+    - complementary [ref=e21]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: F
+        - generic [ref=e25]: Fenice CRM
+      - navigation [ref=e27]:
+        - link "Dashboard Conferme" [ref=e29] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e30]:
+            - img [ref=e31]
+            - generic [ref=e33]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e35] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e36]:
+            - img [ref=e37]
+            - generic [ref=e42]: KPI Conferme
+        - link "Analytics Staffing" [ref=e44] [cursor=pointer]:
+          - /url: /conferme/analytics
+          - generic [ref=e45]:
+            - img [ref=e46]
+            - generic [ref=e51]: Analytics Staffing
+        - generic [ref=e52]:
+          - generic [ref=e53]: 🔥
+          - link "Il mio Profilo" [ref=e54] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=e55]:
+              - img [ref=e56]
+              - generic [ref=e58]: Il mio Profilo
+        - link "Classifica" [ref=e60] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e61]:
+            - img [ref=e62]
+            - generic [ref=e68]: Classifica
+        - link "Fenice Store" [ref=e70] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e71]:
+            - img [ref=e72]
+            - generic [ref=e76]: Fenice Store
+      - button "Disconnetti" [ref=e79]:
+        - img [ref=e80]
+        - generic [ref=e83]: Disconnetti
+    - generic [ref=e84]:
+      - banner [ref=e85]:
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - img [ref=e88]
+            - generic [ref=e92]: Fenice Academy
+          - button [ref=e94]:
+            - img [ref=e95]
+          - generic [ref=e98]:
+            - generic "I tuoi Fenice Coin" [ref=e99]:
+              - img "Fenice Coin" [ref=e100]
+              - generic [ref=e101]: "0"
+            - generic [ref=e102]:
+              - generic [ref=e103]: QA Presence 1
+              - generic [ref=e104]:
+                - generic [ref=e105]: Lv.1
+                - generic [ref=e107]: 0%
+            - generic [ref=e109]: Q
+      - main [ref=e111]:
+        - generic [ref=e112]:
+          - generic [ref=e115]:
+            - generic [ref=e116]:
+              - img [ref=e117]
+              - generic [ref=e122]: Radar
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - generic [ref=e129]: Alberto
+                - button "Invia Avviso P2P" [ref=e130]:
+                  - img [ref=e131]
+              - generic [ref=e133]:
+                - generic [ref=e137]:
+                  - generic [ref=e138]: QA Presence 2
+                  - generic [ref=e139]: L-a6c9
+                - button "Invia Avviso P2P" [ref=e140]:
+                  - img [ref=e141]
+              - generic [ref=e143]:
+                - generic [ref=e148]: Andrea
+                - button "Invia Avviso P2P" [ref=e149]:
+                  - img [ref=e150]
+          - generic [ref=e152]:
+            - heading "Dashboard Conferme" [level=1] [ref=e153]
+            - generic [ref=e154]:
+              - button "Agenda venditori" [ref=e155]:
+                - img [ref=e156]
+                - text: Agenda venditori
+              - generic [ref=e158]: Gestione appuntamenti centralizzata
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - img [ref=e161]
+              - generic [ref=e165]: Obiettivo di Oggi
+            - generic [ref=e166]:
+              - generic [ref=e167]:
+                - img [ref=e168]
+                - generic [ref=e171]: Confermati oggi
+              - generic [ref=e172]:
+                - generic [ref=e173]:
+                  - generic [ref=e174]: "5"
+                  - generic [ref=e175]: / 8
+                - generic [ref=e179]: 63%
+          - generic [ref=e181]:
+            - generic [ref=e182]:
+              - img [ref=e184]
+              - generic [ref=e186]:
+                - generic [ref=e187]:
+                  - generic [ref=e188]: "0"
+                  - generic [ref=e189]: giorni
+                - generic [ref=e190]: Inizia la tua streak
+            - generic [ref=e194]:
+              - img [ref=e195]
+              - generic [ref=e198]: 3g a x1.5
+          - generic [ref=e200]:
+            - generic [ref=e201]:
+              - generic [ref=e202]:
+                - button "Pomeriggio 0" [ref=e203]:
+                  - img [ref=e204]
+                  - text: Pomeriggio
+                  - generic [ref=e210]: "0"
+                - button "Mattina 0" [ref=e211]:
+                  - img [ref=e212]
+                  - text: Mattina
+                  - generic [ref=e217]: "0"
+                - button "Richiami 0" [ref=e218]:
+                  - img [ref=e219]
+                  - text: Richiami
+                  - generic [ref=e222]: "0"
+                - button "Storico" [ref=e223]:
+                  - img [ref=e224]
+                  - text: Storico
+              - generic [ref=e227]:
+                - generic [ref=e228]:
+                  - img [ref=e229]
+                  - textbox "Cerca per nome, email o telefono..." [ref=e232]
+                - button "Vista Globale DB" [ref=e233]
+            - generic [ref=e237]: Caricamento...
+  - generic [ref=e239]:
+    - generic [ref=e240]:
+      - img [ref=e242]
+      - generic [ref=e247]:
+        - generic [ref=e248]:
+          - generic [ref=e249]: FENICE
+          - generic [ref=e250]: Richiamo Conferme ADESSO
+        - generic [ref=e251]: Vincenzo Copertino · 3701376318
+        - generic [ref=e252]: 07/04/26, 16:30
+      - button "Nascondi" [ref=e253]:
+        - img [ref=e254]
+    - generic [ref=e257]:
+      - img [ref=e259]
+      - generic [ref=e264]:
+        - generic [ref=e265]:
+          - generic [ref=e266]: FENICE
+          - generic [ref=e267]: Richiamo Conferme ADESSO
+        - generic [ref=e268]: Enrico · 3711494631
+        - generic [ref=e269]: 07/04/26, 17:30
+      - button "Nascondi" [ref=e270]:
+        - img [ref=e271]
+    - generic [ref=e274]:
+      - img [ref=e276]
+      - generic [ref=e281]:
+        - generic [ref=e282]:
+          - generic [ref=e283]: FENICE
+          - generic [ref=e284]: Richiamo Conferme ADESSO
+        - generic [ref=e285]: Gaetana · 3407113080
+        - generic [ref=e286]: 18/04/26, 16:00
+      - button "Nascondi" [ref=e287]:
+        - img [ref=e288]

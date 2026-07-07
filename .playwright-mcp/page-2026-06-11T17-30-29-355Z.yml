@@ -1,0 +1,163 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - generic [ref=e53]:
+          - generic [ref=e54]: Admin
+          - link "Sales Manager" [ref=e55] [cursor=pointer]:
+            - /url: /panoramica-generale
+            - generic [ref=e56]:
+              - img [ref=e57]
+              - generic [ref=e60]: Sales Manager
+        - generic [ref=e61]:
+          - generic [ref=e63]: Operativo
+          - link "Dashboard Operativa" [ref=e64] [cursor=pointer]:
+            - /url: /team
+            - generic [ref=e65]:
+              - img [ref=e66]
+              - generic [ref=e78]: Dashboard Operativa
+          - link "Appuntamenti Oggi" [ref=e79] [cursor=pointer]:
+            - /url: /appuntamenti-oggi
+            - generic [ref=e80]:
+              - img [ref=e81]
+              - generic [ref=e83]: Appuntamenti Oggi
+          - link "Appuntamenti (Conferme)" [ref=e84] [cursor=pointer]:
+            - /url: /conferme
+            - generic [ref=e85]:
+              - img [ref=e86]
+              - generic [ref=e88]: Appuntamenti (Conferme)
+          - link "Monitor Vendite" [ref=e89] [cursor=pointer]:
+            - /url: /monitor-vendite
+            - generic [ref=e90]:
+              - img [ref=e91]
+              - generic [ref=e94]: Monitor Vendite
+          - link "Portafoglio Clienti" [ref=e95] [cursor=pointer]:
+            - /url: /portafoglio-clienti
+            - generic [ref=e96]:
+              - img [ref=e97]
+              - generic [ref=e100]: Portafoglio Clienti
+          - link "Monitor Pause" [ref=e101] [cursor=pointer]:
+            - /url: /monitor-pause
+            - generic [ref=e102]:
+              - img [ref=e103]
+              - generic [ref=e106]: Monitor Pause
+          - link "Importa Lead" [ref=e107] [cursor=pointer]:
+            - /url: /import
+            - generic [ref=e108]:
+              - img [ref=e109]
+              - generic [ref=e112]: Importa Lead
+          - link "Lead Automatici (AC)" [ref=e113] [cursor=pointer]:
+            - /url: /lead-automatici
+            - generic [ref=e114]:
+              - img [ref=e115]
+              - generic [ref=e117]: Lead Automatici (AC)
+          - link "Archivio Storico" [ref=e118] [cursor=pointer]:
+            - /url: /archivio
+            - generic [ref=e119]:
+              - img [ref=e120]
+              - generic [ref=e124]: Archivio Storico
+          - link "Scartati (Marketing)" [ref=e125] [cursor=pointer]:
+            - /url: /scartati
+            - generic [ref=e126]:
+              - img [ref=e127]
+              - generic [ref=e131]: Scartati (Marketing)
+        - generic [ref=e132]:
+          - generic [ref=e134]: KPI & Analytics
+          - link "KPI GDO" [ref=e135] [cursor=pointer]:
+            - /url: /kpi-gdo
+            - generic [ref=e136]:
+              - img [ref=e137]
+              - generic [ref=e142]: KPI GDO
+          - link "Operativa Team" [ref=e143] [cursor=pointer]:
+            - /url: /operativa-team
+            - generic [ref=e144]:
+              - img [ref=e145]
+              - generic [ref=e150]: Operativa Team
+          - link "KPI Venditori" [ref=e151] [cursor=pointer]:
+            - /url: /kpi-venditori
+            - generic [ref=e152]:
+              - img [ref=e153]
+              - generic [ref=e159]: KPI Venditori
+          - link "KPI Conferme" [ref=e160] [cursor=pointer]:
+            - /url: /kpi-conferme
+            - generic [ref=e161]:
+              - img [ref=e162]
+              - generic [ref=e167]: KPI Conferme
+          - link "Analytics Staffing Conferme" [ref=e168] [cursor=pointer]:
+            - /url: /conferme/analytics
+            - generic [ref=e169]:
+              - img [ref=e170]
+              - generic [ref=e175]: Analytics Staffing Conferme
+          - link "Marketing Analytics" [ref=e176] [cursor=pointer]:
+            - /url: /marketing-analytics
+            - generic [ref=e177]:
+              - img [ref=e178]
+              - generic [ref=e182]: Marketing Analytics
+          - link "Qualità Lead (Sondaggi)" [ref=e183] [cursor=pointer]:
+            - /url: /qualita-lead
+            - generic [ref=e184]:
+              - img [ref=e185]
+              - generic [ref=e188]: Qualità Lead (Sondaggi)
+          - link "Analisi Qualità" [ref=e189] [cursor=pointer]:
+            - /url: /analisi-qualita
+            - generic [ref=e190]:
+              - img [ref=e191]
+              - generic [ref=e194]: Analisi Qualità
+          - link "Performance GDO" [ref=e195] [cursor=pointer]:
+            - /url: /manager-gdo-performance
+            - generic [ref=e196]:
+              - img [ref=e197]
+              - generic [ref=e203]: Performance GDO
+        - generic [ref=e204]:
+          - generic [ref=e206]: Team & HR
+          - link "Target & Previsioni" [ref=e207] [cursor=pointer]:
+            - /url: /manager-targets
+            - generic [ref=e208]:
+              - img [ref=e209]
+              - generic [ref=e213]: Target & Previsioni
+          - link "Note GDO" [ref=e214] [cursor=pointer]:
+            - /url: /note-gdo
+            - generic [ref=e215]:
+              - img [ref=e216]
+              - generic [ref=e219]: Note GDO
+        - generic [ref=e220]:
+          - generic [ref=e221]: 🔥
+          - generic [ref=e222]: Gamification
+          - link "Monitor RPG GDO" [ref=e223] [cursor=pointer]:
+            - /url: /manager-rpg-monitor
+            - generic [ref=e224]:
+              - img [ref=e225]
+              - generic [ref=e227]: Monitor RPG GDO
+          - link "Gestione Store" [ref=e228] [cursor=pointer]:
+            - /url: /team/store
+            - generic [ref=e229]:
+              - img [ref=e230]
+              - generic [ref=e234]: Gestione Store
+      - button "Disconnetti" [ref=e12]:
+        - img [ref=e13]
+        - generic [ref=e16]: Disconnetti
+    - generic [ref=e17]:
+      - banner [ref=e18]:
+        - generic [ref=e19]:
+          - button "Fenice Academy" [ref=e235]:
+            - img [ref=e236]
+            - generic [ref=e240]: Fenice Academy
+            - img [ref=e241]
+          - button [ref=e27]:
+            - img [ref=e28]
+          - generic [ref=e31]:
+            - generic [ref=e33]: QA Admin
+            - generic [ref=e35]: Q
+      - main [ref=e39]:
+        - generic [ref=e41]:
+          - img [ref=e43]
+          - heading "Target & Previsioni" [level=1] [ref=e47]
+          - paragraph [ref=e48]: Le tabelle dei target sono state spostate nella dashboard Sales Manager. Lì trovi la nuova tabella "Numeri Mensili" con ACT, Target Prev, Target/Day e Today, oltre al pulsante per impostare i target del mese.
+          - link "Apri Sales Manager" [ref=e49] [cursor=pointer]:
+            - /url: /panoramica-generale
+            - text: Apri Sales Manager
+            - img [ref=e50]
+  - alert [ref=e52]

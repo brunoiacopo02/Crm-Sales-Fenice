@@ -1,0 +1,3 @@
+[     613ms] [ERROR] TypeError: Failed to fetch
+    at O (https://crm-sales-fenice.vercel.app/_next/static/chunks/269dc890dd37ee5c.js?dpl=dpl_2BLZAUNtCQno7AL5ghm13kdZuT4c:1:75742) @ :0
+[     973ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/b0e9dd92312f829e.js?dpl=dpl_2BLZAUNtCQno7AL5ghm13kdZuT4c:2

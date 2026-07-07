@@ -1,0 +1,127 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - img [ref=e7]
+        - generic [ref=e15]:
+          - generic [ref=e16]: SerenaMente
+          - generic [ref=e17]: crescita mentale
+      - navigation [ref=e19]:
+        - link "Operativa Team" [ref=e21] [cursor=pointer]:
+          - /url: /operativa-team
+          - generic [ref=e22]:
+            - img [ref=e23]
+            - generic [ref=e28]: Operativa Team
+        - link "KPI GDO" [ref=e30] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e31]:
+            - img [ref=e32]
+            - generic [ref=e37]: KPI GDO
+        - link "Performance GDO" [ref=e39] [cursor=pointer]:
+          - /url: /manager-gdo-performance
+          - generic [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e47]: Performance GDO
+        - link "Richiami" [ref=e49] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e53]: Richiami
+        - link "Monitor Pause" [ref=e55] [cursor=pointer]:
+          - /url: /monitor-pause
+          - generic [ref=e56]:
+            - img [ref=e57]
+            - generic [ref=e60]: Monitor Pause
+        - link "Note GDO" [ref=e62] [cursor=pointer]:
+          - /url: /note-gdo
+          - generic [ref=e63]:
+            - img [ref=e64]
+            - generic [ref=e67]: Note GDO
+      - button "Disconnetti" [ref=e70]:
+        - img [ref=e71]
+        - generic [ref=e74]: Disconnetti
+    - generic [ref=e75]:
+      - banner [ref=e76]:
+        - generic [ref=e77]:
+          - button "Serenamente" [ref=e79]:
+            - img [ref=e80]
+            - generic [ref=e84]: Serenamente
+            - img [ref=e85]
+          - button [ref=e88]:
+            - img [ref=e89]
+          - generic [ref=e92]:
+            - generic [ref=e94]: TL GDO
+            - generic [ref=e96]: T
+      - main [ref=e98]:
+        - generic [ref=e99]:
+          - generic [ref=e101]:
+            - heading "Operativa Team" [level=1] [ref=e102]
+            - paragraph [ref=e103]: "Tabella mensile/trimestrale: ore lavorate, chiamate, lead gestiti per ogni operatore."
+          - generic [ref=e105]:
+            - generic [ref=e106]:
+              - heading "Parametri Manager" [level=2] [ref=e126]:
+                - img [ref=e127]
+                - text: Parametri Manager
+              - generic [ref=e131]:
+                - img [ref=e132]
+                - text: "Lead nuovi oggi: 4"
+                - generic [ref=e135]: (ORG 4)
+            - generic [ref=e136]:
+              - generic [ref=e137]:
+                - generic [ref=e138]: App/gg per GDO (mese)
+                - generic [ref=e139]:
+                  - generic [ref=e140]: —
+                  - generic [ref=e141]: / ≥ 10
+              - generic [ref=e142]:
+                - generic [ref=e143]: "% Conferme media (mese)"
+                - generic [ref=e144]:
+                  - generic [ref=e145]: 13%
+                  - generic [ref=e146]: / ≥ 15%
+            - generic [ref=e147]:
+              - generic [ref=e148]:
+                - generic [ref=e149]:
+                  - generic [ref=e150]:
+                    - img [ref=e151]
+                    - text: Scorte lead lavorabili
+                  - generic [ref=e155]: "Non assegnati: 175"
+                - generic [ref=e156]: Nessun GDO attivo.
+              - generic [ref=e157]:
+                - generic [ref=e158]:
+                  - img [ref=e159]
+                  - text: GDO sotto target (settimana)
+                - generic [ref=e162]: ✓ Nessun GDO sotto il 50% del target app/giorno.
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - heading "Dashboard Operativa Aziendale" [level=2] [ref=e113]:
+                  - img [ref=e114]
+                  - text: Dashboard Operativa Aziendale
+                - generic [ref=e116]: Monitoraggio volumi, tassi di risposta, appuntamenti e conversione oraria.
+              - generic [ref=e117]:
+                - button "Oggi" [ref=e118]
+                - button "Questo Mese" [ref=e119]
+                - button "Trimestre (90 gg)" [ref=e120]
+            - table [ref=e163]:
+              - rowgroup [ref=e164]:
+                - row "GDO Ore Lavorate Chiamate / Ora Chiamate Risposte Tasso Risp. App. Fissati % Fissaggio" [ref=e165]:
+                  - columnheader "GDO" [ref=e166]
+                  - columnheader "Ore Lavorate" [ref=e167]
+                  - columnheader "Chiamate / Ora" [ref=e168]
+                  - columnheader "Chiamate" [ref=e169]
+                  - columnheader "Risposte" [ref=e170]
+                  - columnheader "Tasso Risp." [ref=e171]
+                  - columnheader "App. Fissati" [ref=e172]
+                  - columnheader "% Fissaggio" [ref=e173]
+              - rowgroup [ref=e174]:
+                - row "TOTALE / MEDIA REPARTO 0.0h 0.0 0 0 0.0% 0 0.0%" [ref=e175]:
+                  - cell "TOTALE / MEDIA REPARTO" [ref=e176]
+                  - cell "0.0h" [ref=e177]
+                  - cell "0.0" [ref=e178]
+                  - cell "0" [ref=e179]
+                  - cell "0" [ref=e180]
+                  - cell "0.0%" [ref=e181]
+                  - cell "0" [ref=e182]
+                  - cell "0.0%" [ref=e183]
+                - row "Nessun dato registrato o operatori non attivi." [ref=e184]:
+                  - cell "Nessun dato registrato o operatori non attivi." [ref=e185]
+  - alert [ref=e125]

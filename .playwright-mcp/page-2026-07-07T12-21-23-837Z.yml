@@ -1,0 +1,399 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - generic [ref=f3e5]:
+      - generic [ref=f3e6]: F
+      - generic [ref=f3e7]: Fenice CRM
+    - navigation [ref=f3e9]
+    - button "Disconnetti" [ref=f3e12]:
+      - img [ref=f3e13]
+      - generic [ref=f3e16]: Disconnetti
+  - generic [ref=f3e17]:
+    - banner [ref=f3e18]:
+      - generic [ref=f3e19]:
+        - generic [ref=f3e20]:
+          - img [ref=f3e21]
+          - generic [ref=f3e25]: —
+        - button [ref=f3e27]:
+          - img [ref=f3e28]
+        - generic [ref=f3e31]:
+          - generic [ref=f3e33]: GDO
+          - generic [ref=f3e35]: U
+    - main [ref=f3e39]:
+      - generic [ref=f3e41]:
+        - generic [ref=f3e42]:
+          - heading "Lead Automatici da ActiveCampaign" [level=1] [ref=f3e43]:
+            - img [ref=f3e44]
+            - text: Lead Automatici da ActiveCampaign
+          - paragraph [ref=f3e46]: Quando AC riceve un lead nuovo, viene inserito nel CRM e assegnato in round-robin a uno dei GDO abilitati qui sotto.
+        - generic [ref=f3e48]:
+          - generic [ref=f3e49]:
+            - heading "Collegamento webhook AC" [level=2] [ref=f3e50]
+            - paragraph [ref=f3e51]: Non collegato — i lead AC non arrivano nel CRM finché non attivi il webhook.
+          - button "Attiva webhook" [ref=f3e53]:
+            - img [ref=f3e54]
+            - text: Attiva webhook
+        - generic [ref=f3e56]:
+          - generic [ref=f3e57]:
+            - generic [ref=f3e58]:
+              - heading "Lead importati da AC" [level=2] [ref=f3e59]:
+                - img [ref=f3e60]
+                - text: Lead importati da AC
+              - paragraph [ref=f3e63]: Conteggio in base al fuso Italia (mezzanotte–mezzanotte). Niente storico.
+            - button "Aggiorna statistiche" [ref=f3e64]:
+              - img [ref=f3e65]
+          - generic [ref=f3e70]:
+            - generic [ref=f3e71]:
+              - generic [ref=f3e72]: Oggi
+              - generic [ref=f3e73]:
+                - generic [ref=f3e74]: "67"
+                - generic [ref=f3e75]: lead
+              - generic [ref=f3e76]:
+                - text: "Media a GDO:"
+                - strong [ref=f3e77]: "9.6"
+                - generic [ref=f3e78]: (7 GDO)
+            - generic [ref=f3e79]:
+              - generic [ref=f3e80]: Ieri
+              - generic [ref=f3e81]:
+                - generic [ref=f3e82]: "124"
+                - generic [ref=f3e83]: lead
+              - generic [ref=f3e84]:
+                - text: "Media a GDO:"
+                - strong [ref=f3e85]: "20.7"
+                - generic [ref=f3e86]: (6 GDO)
+            - generic [ref=f3e87]:
+              - generic [ref=f3e88]: Altro ieri
+              - generic [ref=f3e89]:
+                - generic [ref=f3e90]: "129"
+                - generic [ref=f3e91]: lead
+              - generic [ref=f3e92]:
+                - text: "Media a GDO:"
+                - strong [ref=f3e93]: "21.5"
+                - generic [ref=f3e94]: (6 GDO)
+        - generic [ref=f3e95]:
+          - generic [ref=f3e96]:
+            - generic [ref=f3e97]:
+              - heading "Lead non importati 4" [level=2] [ref=f3e98]:
+                - img [ref=f3e99]
+                - text: Lead non importati
+                - generic [ref=f3e101]: "4"
+              - paragraph [ref=f3e102]: Contatti AC che non sono entrati nel CRM. Clicca "Riprova" per reimportare, oppure "Risolto" per nasconderli dopo averli gestiti manualmente su AC.
+            - generic [ref=f3e103]:
+              - button "Riprova tutti" [ref=f3e104]:
+                - img [ref=f3e105]
+                - text: Riprova tutti
+              - button "Ricarica" [ref=f3e108]:
+                - img [ref=f3e109]
+          - generic [ref=f3e114]:
+            - generic [ref=f3e115]:
+              - generic [ref=f3e116]:
+                - generic [ref=f3e117]:
+                  - img [ref=f3e118]
+                  - generic [ref=f3e120]: Il contatto AC non ha un numero di telefono.
+                - generic [ref=f3e121]: 07/07/2026, 10:33:48
+              - generic [ref=f3e122]:
+                - generic [ref=f3e123]:
+                  - generic [ref=f3e124]: Nome
+                  - generic "Mahdi soualmia" [ref=f3e125]
+                - generic [ref=f3e126]:
+                  - generic [ref=f3e127]: Email
+                  - generic "mahdisoulmia@gmail.com" [ref=f3e128]
+                - generic [ref=f3e129]:
+                  - generic [ref=f3e130]: Telefono
+                  - generic "—" [ref=f3e131]
+                - generic [ref=f3e132]:
+                  - generic [ref=f3e133]: Provenienza
+                  - generic "GOOGLE" [ref=f3e134]
+              - generic [ref=f3e135]:
+                - generic [ref=f3e136]:
+                  - text: "ID AC:"
+                  - code [ref=f3e137]: "215547"
+                - generic [ref=f3e138]:
+                  - link "Apri su AC" [ref=f3e139] [cursor=pointer]:
+                    - /url: https://feniceacademy0089903.activehosted.com/app/contacts/215547
+                    - img [ref=f3e140]
+                    - text: Apri su AC
+                  - button "Riprova" [ref=f3e144]:
+                    - img [ref=f3e145]
+                    - text: Riprova
+                  - button "Risolto" [ref=f3e148]:
+                    - img [ref=f3e149]
+                    - text: Risolto
+              - group [ref=f3e151]:
+                - generic "Dettagli tecnici" [ref=f3e152] [cursor=pointer]
+            - generic [ref=f3e153]:
+              - generic [ref=f3e154]:
+                - generic [ref=f3e155]:
+                  - img [ref=f3e156]
+                  - generic [ref=f3e158]: Il contatto AC non ha un numero di telefono.
+                - generic [ref=f3e159]: 07/07/2026, 10:33:48
+              - generic [ref=f3e160]:
+                - generic [ref=f3e161]:
+                  - generic [ref=f3e162]: Nome
+                  - generic "Mahdi soualmia" [ref=f3e163]
+                - generic [ref=f3e164]:
+                  - generic [ref=f3e165]: Email
+                  - generic "mahdisoulmia@gmail.com" [ref=f3e166]
+                - generic [ref=f3e167]:
+                  - generic [ref=f3e168]: Telefono
+                  - generic "—" [ref=f3e169]
+                - generic [ref=f3e170]:
+                  - generic [ref=f3e171]: Provenienza
+                  - generic "GOOGLE" [ref=f3e172]
+              - generic [ref=f3e173]:
+                - generic [ref=f3e174]:
+                  - text: "ID AC:"
+                  - code [ref=f3e175]: "215547"
+                - generic [ref=f3e176]:
+                  - link "Apri su AC" [ref=f3e177] [cursor=pointer]:
+                    - /url: https://feniceacademy0089903.activehosted.com/app/contacts/215547
+                    - img [ref=f3e178]
+                    - text: Apri su AC
+                  - button "Riprova" [ref=f3e182]:
+                    - img [ref=f3e183]
+                    - text: Riprova
+                  - button "Risolto" [ref=f3e186]:
+                    - img [ref=f3e187]
+                    - text: Risolto
+              - group [ref=f3e189]:
+                - generic "Dettagli tecnici" [ref=f3e190] [cursor=pointer]
+            - generic [ref=f3e191]:
+              - generic [ref=f3e192]:
+                - generic [ref=f3e193]:
+                  - img [ref=f3e194]
+                  - generic [ref=f3e196]: Il contatto AC non ha un numero di telefono.
+                - generic [ref=f3e197]: 07/07/2026, 10:10:37
+              - generic [ref=f3e198]:
+                - generic [ref=f3e199]:
+                  - generic [ref=f3e200]: Nome
+                  - generic "—" [ref=f3e201]
+                - generic [ref=f3e202]:
+                  - generic [ref=f3e203]: Email
+                  - generic "progettifeniceacademy@gmail.com" [ref=f3e204]
+                - generic [ref=f3e205]:
+                  - generic [ref=f3e206]: Telefono
+                  - generic "—" [ref=f3e207]
+                - generic [ref=f3e208]:
+                  - generic [ref=f3e209]: Provenienza
+                  - generic "—" [ref=f3e210]
+              - generic [ref=f3e211]:
+                - generic [ref=f3e212]:
+                  - text: "ID AC:"
+                  - code [ref=f3e213]: "215539"
+                - generic [ref=f3e214]:
+                  - link "Apri su AC" [ref=f3e215] [cursor=pointer]:
+                    - /url: https://feniceacademy0089903.activehosted.com/app/contacts/215539
+                    - img [ref=f3e216]
+                    - text: Apri su AC
+                  - button "Riprova" [ref=f3e220]:
+                    - img [ref=f3e221]
+                    - text: Riprova
+                  - button "Risolto" [ref=f3e224]:
+                    - img [ref=f3e225]
+                    - text: Risolto
+              - group [ref=f3e227]:
+                - generic "Dettagli tecnici" [ref=f3e228] [cursor=pointer]
+            - generic [ref=f3e229]:
+              - generic [ref=f3e230]:
+                - generic [ref=f3e231]:
+                  - img [ref=f3e232]
+                  - generic [ref=f3e234]: Il contatto AC non ha un numero di telefono.
+                - generic [ref=f3e235]: 07/07/2026, 10:10:36
+              - generic [ref=f3e236]:
+                - generic [ref=f3e237]:
+                  - generic [ref=f3e238]: Nome
+                  - generic "—" [ref=f3e239]
+                - generic [ref=f3e240]:
+                  - generic [ref=f3e241]: Email
+                  - generic "progettifeniceacademy@gmail.com" [ref=f3e242]
+                - generic [ref=f3e243]:
+                  - generic [ref=f3e244]: Telefono
+                  - generic "—" [ref=f3e245]
+                - generic [ref=f3e246]:
+                  - generic [ref=f3e247]: Provenienza
+                  - generic "—" [ref=f3e248]
+              - generic [ref=f3e249]:
+                - generic [ref=f3e250]:
+                  - text: "ID AC:"
+                  - code [ref=f3e251]: "215539"
+                - generic [ref=f3e252]:
+                  - link "Apri su AC" [ref=f3e253] [cursor=pointer]:
+                    - /url: https://feniceacademy0089903.activehosted.com/app/contacts/215539
+                    - img [ref=f3e254]
+                    - text: Apri su AC
+                  - button "Riprova" [ref=f3e258]:
+                    - img [ref=f3e259]
+                    - text: Riprova
+                  - button "Risolto" [ref=f3e262]:
+                    - img [ref=f3e263]
+                    - text: Risolto
+              - group [ref=f3e265]:
+                - generic "Dettagli tecnici" [ref=f3e266] [cursor=pointer]
+        - generic [ref=f3e267]:
+          - generic [ref=f3e268]:
+            - generic [ref=f3e269]:
+              - heading "Bloccati da lista" [level=2] [ref=f3e270]:
+                - img [ref=f3e271]
+                - text: Bloccati da lista
+              - paragraph [ref=f3e274]: "Contatti AC iscritti a una lista bloccata (es. campagna di lancio futuro): restano volutamente fuori dal CRM. Non inclusi in \"Riprova tutti\" — usa il retry singolo quando sblocchi la lista, oppure \"Risolto\" per archiviarli."
+            - button "Ricarica" [ref=f3e275]:
+              - img [ref=f3e276]
+          - generic [ref=f3e281]:
+            - img [ref=f3e282]
+            - text: Nessun contatto bloccato in sospeso
+        - generic [ref=f3e285]:
+          - generic [ref=f3e286]:
+            - generic [ref=f3e287]:
+              - heading "GDO abilitati al round-robin" [level=2] [ref=f3e288]:
+                - img [ref=f3e289]
+                - text: GDO abilitati al round-robin
+              - paragraph [ref=f3e294]:
+                - text: "Attivi:"
+                - strong [ref=f3e295]: "6"
+                - text: su 19. Abilita solo chi oggi è operativo e deve ricevere i nuovi lead.
+            - generic [ref=f3e296]:
+              - button "Ricarica" [ref=f3e297]:
+                - img [ref=f3e298]
+              - button "Disabilita tutti" [ref=f3e303]
+          - generic [ref=f3e304]:
+            - generic [ref=f3e305]:
+              - generic [ref=f3e306]:
+                - generic [ref=f3e307]:
+                  - generic [ref=f3e308]: "105"
+                  - generic [ref=f3e309]: GDO 105
+                - generic [ref=f3e310]: "Ultimo lead AC: 28/05/2026, 17:58:25"
+              - button [ref=f3e311]
+            - generic [ref=f3e313]:
+              - generic [ref=f3e314]:
+                - generic [ref=f3e315]:
+                  - generic [ref=f3e316]: "106"
+                  - generic [ref=f3e317]: GDO 106
+                - generic [ref=f3e318]: "Ultimo lead AC: 07/07/2026, 14:02:46"
+              - button [ref=f3e319]
+            - generic [ref=f3e321]:
+              - generic [ref=f3e322]:
+                - generic [ref=f3e323]:
+                  - generic [ref=f3e324]: "107"
+                  - generic [ref=f3e325]: GDO 107
+                  - generic [ref=f3e326]: DISATTIVO
+                - generic [ref=f3e327]: Nessun lead AC ricevuto ancora
+              - button [disabled] [ref=f3e328]
+            - generic [ref=f3e330]:
+              - generic [ref=f3e331]:
+                - generic [ref=f3e332]:
+                  - generic [ref=f3e333]: "108"
+                  - generic [ref=f3e334]: GDO 108
+                  - generic [ref=f3e335]: DISATTIVO
+                - generic [ref=f3e336]: Nessun lead AC ricevuto ancora
+              - button [disabled] [ref=f3e337]
+            - generic [ref=f3e339]:
+              - generic [ref=f3e340]:
+                - generic [ref=f3e341]:
+                  - generic [ref=f3e342]: "109"
+                  - generic [ref=f3e343]: GDO 109
+                - generic [ref=f3e344]: Nessun lead AC ricevuto ancora
+              - button [ref=f3e345]
+            - generic [ref=f3e347]:
+              - generic [ref=f3e348]:
+                - generic [ref=f3e349]:
+                  - generic [ref=f3e350]: "110"
+                  - generic [ref=f3e351]: GDO 110
+                - generic [ref=f3e352]: "Ultimo lead AC: 03/06/2026, 14:05:03"
+              - button [ref=f3e353]
+            - generic [ref=f3e355]:
+              - generic [ref=f3e356]:
+                - generic [ref=f3e357]:
+                  - generic [ref=f3e358]: "111"
+                  - generic [ref=f3e359]: GDO 111
+                  - generic [ref=f3e360]: DISATTIVO
+                - generic [ref=f3e361]: Nessun lead AC ricevuto ancora
+              - button [disabled] [ref=f3e362]
+            - generic [ref=f3e364]:
+              - generic [ref=f3e365]:
+                - generic [ref=f3e366]:
+                  - generic [ref=f3e367]: "112"
+                  - generic [ref=f3e368]: GDO 112
+                - generic [ref=f3e369]: Nessun lead AC ricevuto ancora
+              - button [ref=f3e370]
+            - generic [ref=f3e372]:
+              - generic [ref=f3e373]:
+                - generic [ref=f3e374]:
+                  - generic [ref=f3e375]: "113"
+                  - generic [ref=f3e376]: GDO 113
+                  - generic [ref=f3e377]: DISATTIVO
+                - generic [ref=f3e378]: Nessun lead AC ricevuto ancora
+              - button [disabled] [ref=f3e379]
+            - generic [ref=f3e381]:
+              - generic [ref=f3e382]:
+                - generic [ref=f3e383]:
+                  - generic [ref=f3e384]: "114"
+                  - generic [ref=f3e385]: GDO 114
+                - generic [ref=f3e386]: "Ultimo lead AC: 07/07/2026, 14:05:13"
+              - button [ref=f3e387]
+            - generic [ref=f3e389]:
+              - generic [ref=f3e390]:
+                - generic [ref=f3e391]:
+                  - generic [ref=f3e392]: "115"
+                  - generic [ref=f3e393]: GDO 115
+                - generic [ref=f3e394]: "Ultimo lead AC: 07/07/2026, 14:17:32"
+              - button [ref=f3e395]
+            - generic [ref=f3e397]:
+              - generic [ref=f3e398]:
+                - generic [ref=f3e399]:
+                  - generic [ref=f3e400]: "116"
+                  - generic [ref=f3e401]: GDO 116
+                  - generic [ref=f3e402]: DISATTIVO
+                - generic [ref=f3e403]: "Ultimo lead AC: 28/05/2026, 17:12:57"
+              - button [disabled] [ref=f3e404]
+            - generic [ref=f3e406]:
+              - generic [ref=f3e407]:
+                - generic [ref=f3e408]:
+                  - generic [ref=f3e409]: "117"
+                  - generic [ref=f3e410]: GDO 117
+                - generic [ref=f3e411]: "Ultimo lead AC: 07/07/2026, 14:01:21"
+              - button [ref=f3e412]
+            - generic [ref=f3e414]:
+              - generic [ref=f3e415]:
+                - generic [ref=f3e416]:
+                  - generic [ref=f3e417]: "118"
+                  - generic [ref=f3e418]: GDO 118
+                  - generic [ref=f3e419]: DISATTIVO
+                - generic [ref=f3e420]: "Ultimo lead AC: 30/05/2026, 11:17:40"
+              - button [disabled] [ref=f3e421]
+            - generic [ref=f3e423]:
+              - generic [ref=f3e424]:
+                - generic [ref=f3e425]:
+                  - generic [ref=f3e426]: "119"
+                  - generic [ref=f3e427]: GDO 119
+                - generic [ref=f3e428]: "Ultimo lead AC: 07/07/2026, 13:57:10"
+              - button [ref=f3e429]
+            - generic [ref=f3e431]:
+              - generic [ref=f3e432]:
+                - generic [ref=f3e433]:
+                  - generic [ref=f3e434]: "120"
+                  - generic [ref=f3e435]: GDO 120
+                  - generic [ref=f3e436]: DISATTIVO
+                - generic [ref=f3e437]: Nessun lead AC ricevuto ancora
+              - button [disabled] [ref=f3e438]
+            - generic [ref=f3e440]:
+              - generic [ref=f3e441]:
+                - generic [ref=f3e442]:
+                  - generic [ref=f3e443]: "201"
+                  - generic [ref=f3e444]: GDO 201
+                - generic [ref=f3e445]: "Ultimo lead AC: 07/07/2026, 13:57:24"
+              - button [ref=f3e446]
+            - generic [ref=f3e448]:
+              - generic [ref=f3e449]:
+                - generic [ref=f3e450]:
+                  - generic [ref=f3e451]: "?"
+                  - generic [ref=f3e452]: Mario GDO
+                  - generic [ref=f3e453]: DISATTIVO
+                - generic [ref=f3e454]: Nessun lead AC ricevuto ancora
+              - button [disabled] [ref=f3e455]
+            - generic [ref=f3e457]:
+              - generic [ref=f3e458]:
+                - generic [ref=f3e459]:
+                  - generic [ref=f3e460]: "?"
+                  - generic [ref=f3e461]: GDO
+                  - generic [ref=f3e462]: DISATTIVO
+                - generic [ref=f3e463]: Nessun lead AC ricevuto ancora
+              - button [disabled] [ref=f3e464]

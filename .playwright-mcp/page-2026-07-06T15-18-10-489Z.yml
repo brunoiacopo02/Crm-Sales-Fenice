@@ -1,0 +1,2610 @@
+- generic [active] [ref=f5e1]:
+  - generic [ref=f5e2]:
+    - complementary [ref=f5e3]:
+      - generic [ref=f5e5]:
+        - generic [ref=f5e6]: F
+        - generic [ref=f5e7]: Fenice CRM
+      - navigation [ref=f5e9]:
+        - link "La mia Pipeline" [ref=f5e3842] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f5e3843]:
+            - img [ref=f5e3844]
+            - generic [ref=f5e3846]: La mia Pipeline
+        - link "I miei Richiami" [ref=f5e3848] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=f5e3849]:
+            - img [ref=f5e3850]
+            - generic [ref=f5e3852]: I miei Richiami
+        - link "I miei Appuntamenti" [ref=f5e3854] [cursor=pointer]:
+          - /url: /appuntamenti
+          - generic [ref=f5e3855]:
+            - img [ref=f5e3856]
+            - generic [ref=f5e3861]: I miei Appuntamenti
+        - link "Le mie Performance" [ref=f5e3863] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=f5e3864]:
+            - img [ref=f5e3865]
+            - generic [ref=f5e3870]: Le mie Performance
+        - link "Storico Pause" [ref=f5e3872] [cursor=pointer]:
+          - /url: /storico-pause
+          - generic [ref=f5e3873]:
+            - img [ref=f5e3874]
+            - generic [ref=f5e3877]: Storico Pause
+        - generic [ref=f5e3878]:
+          - generic [ref=f5e3879]: 🔥
+          - link "Il mio Profilo" [ref=f5e3880] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=f5e3881]:
+              - img [ref=f5e3882]
+              - generic [ref=f5e3884]: Il mio Profilo
+        - link "Classifica" [ref=f5e3886] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=f5e3887]:
+            - img [ref=f5e3888]
+            - generic [ref=f5e3894]: Classifica
+        - link "Fenice Store" [ref=f5e3896] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=f5e3897]:
+            - img [ref=f5e3898]
+            - generic [ref=f5e3902]: Fenice Store
+      - button "Disconnetti" [ref=f5e12]:
+        - img [ref=f5e13]
+        - generic [ref=f5e16]: Disconnetti
+    - generic [ref=f5e17]:
+      - banner [ref=f5e18]:
+        - generic [ref=f5e3905]:
+          - generic:
+            - img
+          - textbox "Cerca lead per nome, email o telefono..." [ref=f5e3906]: "3292767474"
+          - button [ref=f5e3907]:
+            - img [ref=f5e3908]
+        - generic [ref=f5e19]:
+          - generic [ref=f5e20]:
+            - generic [ref=f5e3927]:
+              - img [ref=f5e3928]
+              - generic [ref=f5e3932]: Fenice Academy
+            - button "Serenamente" [ref=f5e3933]:
+              - img [ref=f5e3934]
+              - generic [ref=f5e3937]: Serenamente
+          - generic [ref=f5e3938]:
+            - generic [ref=f5e3939]:
+              - generic [ref=f5e3940]: Budget
+              - generic [ref=f5e3941]: 30:00
+            - button "Inizia Pausa" [ref=f5e3942]
+          - button "20" [ref=f5e3943]:
+            - img [ref=f5e28]
+            - generic [ref=f5e3946]: "20"
+          - generic [ref=f5e31]:
+            - generic "I tuoi Fenice Coin" [ref=f5e3947]:
+              - img "Fenice Coin" [ref=f5e3948]
+              - generic [ref=f5e3949]: "9757"
+            - generic [ref=f5e32]:
+              - generic [ref=f5e33]: GDO 114
+              - generic [ref=f5e3950]:
+                - generic [ref=f5e3951]: Lv.21
+                - generic [ref=f5e3954]: 11%
+            - generic [ref=f5e35]: G
+        - generic [ref=f5e4032]:
+          - generic [ref=f5e4034]:
+            - generic [ref=f5e4035]:
+              - heading "Ben Gallagher" [level=2] [ref=f5e4036]
+              - generic [ref=f5e4037]: CORSO 10 ORE
+            - generic [ref=f5e4038]:
+              - button "Agenda" [ref=f5e4039]:
+                - img [ref=f5e4040]
+                - text: Agenda
+              - button [ref=f5e4043]:
+                - img [ref=f5e4044]
+          - generic [ref=f5e4047]:
+            - button "Dettagli" [ref=f5e4048]
+            - button "Script" [ref=f5e4049]
+            - button "Timeline" [ref=f5e4050]
+            - button "Sondaggi" [ref=f5e4051]
+          - generic [ref=f5e4053]:
+            - generic [ref=f5e4054]:
+              - generic [ref=f5e4055]:
+                - heading "Anagrafica" [level=3] [ref=f5e4056]
+                - button "Modifica" [ref=f5e4057]:
+                  - img [ref=f5e4058]
+                  - text: Modifica
+              - generic [ref=f5e4061]:
+                - generic [ref=f5e4062]:
+                  - img [ref=f5e4063]
+                  - generic [ref=f5e4066]: Ben Gallagher
+                - generic [ref=f5e4067]:
+                  - img [ref=f5e4068]
+                  - generic [ref=f5e4070]: "3292767474"
+                - generic [ref=f5e4071]:
+                  - img [ref=f5e4072]
+                  - generic [ref=f5e4075]: benjigallagher@outlook.com
+            - separator [ref=f5e4076]
+            - generic [ref=f5e4077]:
+              - heading "Stato CRM" [level=3] [ref=f5e4078]
+              - generic [ref=f5e4079]:
+                - generic [ref=f5e4080]:
+                  - generic [ref=f5e4081]: Stato DB
+                  - generic [ref=f5e4082]: REJECTED
+                - generic [ref=f5e4083]:
+                  - generic [ref=f5e4084]: Assegnazione
+                  - generic [ref=f5e4085]: GDO 114
+                - generic [ref=f5e4086]:
+                  - generic [ref=f5e4087]: Tentativi Chiamate
+                  - generic [ref=f5e4088]: 4 / 3
+            - separator [ref=f5e4089]
+            - generic [ref=f5e4090]:
+              - heading "Azioni Rapide sull'Esito" [level=3] [ref=f5e4091]
+              - generic [ref=f5e4092]:
+                - button "Agenda" [ref=f5e4093]:
+                  - img [ref=f5e4094]
+                  - text: Agenda
+                - generic [ref=f5e4097]:
+                  - button "NR" [ref=f5e4098]:
+                    - img [ref=f5e4099]
+                    - text: NR
+                  - button "Scartato" [ref=f5e4103]:
+                    - img [ref=f5e4104]
+                    - text: Scartato
+                  - button "Richiamo" [ref=f5e4107]:
+                    - img [ref=f5e4108]
+                    - text: Richiamo
+                  - button "App Preso" [ref=f5e4112]:
+                    - img [ref=f5e4113]
+                    - text: App Preso
+              - generic [ref=f5e4118]: Clicca un pulsante per esitare il lead, fissarlo, o inviare l'agenda Calendly via WhatsApp.
+      - main [ref=f5e39]:
+        - generic [ref=f5e40]:
+          - generic [ref=f5e41]:
+            - heading "Pipeline Chiamate" [level=1] [ref=f5e42]
+            - generic [ref=f5e43]: Benvenuto, GDO 114
+          - generic [ref=f5e45]:
+            - generic [ref=f5e46]:
+              - img [ref=f5e3955]
+              - generic [ref=f5e3959]: Obiettivi di Oggi
+            - generic [ref=f5e47]:
+              - generic [ref=f5e48]:
+                - generic [ref=f5e3960]:
+                  - img [ref=f5e3961]
+                  - generic [ref=f5e3963]: Chiamate oggi
+                - generic [ref=f5e3964]:
+                  - generic [ref=f5e3965]: "93"
+                  - generic [ref=f5e3966]: / 90
+              - generic [ref=f5e49]:
+                - generic [ref=f5e3969]:
+                  - img [ref=f5e3970]
+                  - generic [ref=f5e3972]: Fissaggi oggi
+                - generic [ref=f5e3973]:
+                  - generic [ref=f5e3974]: "1"
+                  - generic [ref=f5e3975]: / 10
+          - generic [ref=f5e50]:
+            - generic [ref=f5e3979]: I tuoi lead — settimana 6 lug — 12 lug
+            - generic [ref=f5e3980]:
+              - generic [ref=f5e3981]:
+                - img [ref=f5e3983]
+                - generic [ref=f5e3986]:
+                  - generic [ref=f5e3987]: "10"
+                  - generic [ref=f5e3988]: Appuntamenti Fissati
+              - generic [ref=f5e3989]:
+                - img [ref=f5e3991]
+                - generic [ref=f5e3995]:
+                  - generic [ref=f5e3996]: "2"
+                  - generic [ref=f5e3997]: Confermati
+              - generic [ref=f5e3998]:
+                - img [ref=f5e4000]
+                - generic [ref=f5e4005]:
+                  - generic [ref=f5e4006]: "2"
+                  - generic [ref=f5e4007]: Presenze
+              - generic [ref=f5e4008]:
+                - img [ref=f5e4010]
+                - generic [ref=f5e4013]:
+                  - generic [ref=f5e4014]: "0"
+                  - generic [ref=f5e4015]: Chiusure
+            - generic [ref=f5e4016]:
+              - generic [ref=f5e4017]: Mese di luglio
+              - generic [ref=f5e4018]: "App fissati: 20"
+              - generic [ref=f5e4019]:
+                - text: "% Conferma: 20%"
+                - generic [ref=f5e4020]: (4)
+              - generic [ref=f5e4021]:
+                - text: "% Presentati: 20%"
+                - generic [ref=f5e4022]: (4)
+              - generic [ref=f5e4023]: "Chiusi: 1"
+          - generic [ref=f5e63]:
+            - generic [ref=f5e66]:
+              - button "1ª Chiamata 56" [ref=f5e67]:
+                - text: 1ª Chiamata
+                - generic [ref=f5e68]: "56"
+              - button "2ª Chiamata 2" [ref=f5e69]:
+                - text: 2ª Chiamata
+                - generic [ref=f5e70]: "2"
+              - button "3ª Chiamata 32" [ref=f5e71]:
+                - text: 3ª Chiamata
+                - generic [ref=f5e72]: "32"
+              - button "4ª Recupero 46" [ref=f5e74]:
+                - img [ref=f5e75]
+                - text: 4ª Recupero
+                - generic [ref=f5e77]: "46"
+            - generic [ref=f5e79]:
+              - generic [ref=f5e82] [cursor=pointer]:
+                - generic [ref=f5e83]:
+                  - generic [ref=f5e85]:
+                    - text: Micol
+                    - generic "Lead Fenice" [ref=f5e86]: Fenice
+                  - generic [ref=f5e88]:
+                    - generic [ref=f5e89]:
+                      - img [ref=f5e90]
+                      - generic [ref=f5e92]: "3469527707"
+                      - button "Duplicato" [ref=f5e93]:
+                        - img [ref=f5e94]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e99]:
+                        - img [ref=f5e100]
+                    - generic [ref=f5e103]:
+                      - img [ref=f5e104]
+                      - generic "micol.leccioli@hotmail.it" [ref=f5e107]
+                      - button "Copia email" [ref=f5e108]:
+                        - img [ref=f5e109]
+                - generic [ref=f5e112]:
+                  - generic [ref=f5e113]: Leccioli
+                  - generic [ref=f5e114]: Nuovo
+                - generic [ref=f5e117]:
+                  - img [ref=f5e119]
+                  - generic [ref=f5e121]: Mai chiamato
+                - generic [ref=f5e122]:
+                  - button "Script" [ref=f5e123]:
+                    - img [ref=f5e124]
+                    - text: Script
+                  - button "Agenda" [ref=f5e127]:
+                    - img [ref=f5e128]
+                    - text: Agenda
+                  - generic [ref=f5e131]:
+                    - button "NR" [ref=f5e132]:
+                      - img [ref=f5e133]
+                      - text: NR
+                    - button "Scartato" [ref=f5e137]:
+                      - img [ref=f5e138]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e141]:
+                      - img [ref=f5e142]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e146]:
+                      - img [ref=f5e147]
+                      - text: App Preso
+              - generic [ref=f5e154] [cursor=pointer]:
+                - generic [ref=f5e155]:
+                  - generic [ref=f5e157]:
+                    - text: Emanuela
+                    - generic "Lead Fenice" [ref=f5e158]: Fenice
+                  - generic [ref=f5e160]:
+                    - generic [ref=f5e161]:
+                      - img [ref=f5e162]
+                      - generic [ref=f5e164]: "3319053268"
+                      - button "Duplicato" [ref=f5e165]:
+                        - img [ref=f5e166]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e171]:
+                        - img [ref=f5e172]
+                    - generic [ref=f5e175]:
+                      - img [ref=f5e176]
+                      - generic "emanuela.ghigliano@gmail.com" [ref=f5e179]
+                      - button "Copia email" [ref=f5e180]:
+                        - img [ref=f5e181]
+                - generic [ref=f5e184]:
+                  - generic [ref=f5e185]: Ghigliano
+                  - generic [ref=f5e186]: Nuovo
+                - generic [ref=f5e189]:
+                  - img [ref=f5e191]
+                  - generic [ref=f5e193]: Mai chiamato
+                - generic [ref=f5e194]:
+                  - button "Script" [ref=f5e195]:
+                    - img [ref=f5e196]
+                    - text: Script
+                  - button "Agenda" [ref=f5e199]:
+                    - img [ref=f5e200]
+                    - text: Agenda
+                  - generic [ref=f5e203]:
+                    - button "NR" [ref=f5e204]:
+                      - img [ref=f5e205]
+                      - text: NR
+                    - button "Scartato" [ref=f5e209]:
+                      - img [ref=f5e210]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e213]:
+                      - img [ref=f5e214]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e218]:
+                      - img [ref=f5e219]
+                      - text: App Preso
+              - generic [ref=f5e226] [cursor=pointer]:
+                - generic [ref=f5e227]:
+                  - generic [ref=f5e229]:
+                    - text: Luisella Prosdocimo
+                    - generic "Lead Fenice" [ref=f5e230]: Fenice
+                  - generic [ref=f5e232]:
+                    - generic [ref=f5e233]:
+                      - img [ref=f5e234]
+                      - generic [ref=f5e236]: "3479398023"
+                      - button "Duplicato" [ref=f5e237]:
+                        - img [ref=f5e238]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e243]:
+                        - img [ref=f5e244]
+                    - generic [ref=f5e247]:
+                      - img [ref=f5e248]
+                      - generic "luisella.prosdocimo@gmail.com" [ref=f5e251]
+                      - button "Copia email" [ref=f5e252]:
+                        - img [ref=f5e253]
+                - generic [ref=f5e256]:
+                  - generic [ref=f5e257]: Prosdocimo
+                  - generic [ref=f5e258]: Nuovo
+                - generic [ref=f5e261]:
+                  - img [ref=f5e263]
+                  - generic [ref=f5e265]: Mai chiamato
+                - generic [ref=f5e266]:
+                  - button "Script" [ref=f5e267]:
+                    - img [ref=f5e268]
+                    - text: Script
+                  - button "Agenda" [ref=f5e271]:
+                    - img [ref=f5e272]
+                    - text: Agenda
+                  - generic [ref=f5e275]:
+                    - button "NR" [ref=f5e276]:
+                      - img [ref=f5e277]
+                      - text: NR
+                    - button "Scartato" [ref=f5e281]:
+                      - img [ref=f5e282]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e285]:
+                      - img [ref=f5e286]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e290]:
+                      - img [ref=f5e291]
+                      - text: App Preso
+              - generic [ref=f5e298] [cursor=pointer]:
+                - generic [ref=f5e299]:
+                  - generic [ref=f5e301]:
+                    - text: Barti
+                    - generic "Lead Fenice" [ref=f5e302]: Fenice
+                  - generic [ref=f5e304]:
+                    - generic [ref=f5e305]:
+                      - img [ref=f5e306]
+                      - generic [ref=f5e308]: "3514744770"
+                      - button "Duplicato" [ref=f5e309]:
+                        - img [ref=f5e310]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e315]:
+                        - img [ref=f5e316]
+                    - generic [ref=f5e319]:
+                      - img [ref=f5e320]
+                      - generic "elenabarti.32@gmail.com" [ref=f5e323]
+                      - button "Copia email" [ref=f5e324]:
+                        - img [ref=f5e325]
+                - generic [ref=f5e328]:
+                  - generic [ref=f5e329]: Elena
+                  - generic [ref=f5e330]: Nuovo
+                - generic [ref=f5e333]:
+                  - img [ref=f5e335]
+                  - generic [ref=f5e337]: Mai chiamato
+                - generic [ref=f5e338]:
+                  - button "Script" [ref=f5e339]:
+                    - img [ref=f5e340]
+                    - text: Script
+                  - button "Agenda" [ref=f5e343]:
+                    - img [ref=f5e344]
+                    - text: Agenda
+                  - generic [ref=f5e347]:
+                    - button "NR" [ref=f5e348]:
+                      - img [ref=f5e349]
+                      - text: NR
+                    - button "Scartato" [ref=f5e353]:
+                      - img [ref=f5e354]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e357]:
+                      - img [ref=f5e358]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e362]:
+                      - img [ref=f5e363]
+                      - text: App Preso
+              - generic [ref=f5e370] [cursor=pointer]:
+                - generic [ref=f5e371]:
+                  - generic [ref=f5e373]:
+                    - text: Lucia
+                    - generic "Lead Fenice" [ref=f5e374]: Fenice
+                  - generic [ref=f5e376]:
+                    - generic [ref=f5e377]:
+                      - img [ref=f5e378]
+                      - generic [ref=f5e380]: "3428407623"
+                      - button "Duplicato" [ref=f5e381]:
+                        - img [ref=f5e382]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e387]:
+                        - img [ref=f5e388]
+                    - generic [ref=f5e391]:
+                      - img [ref=f5e392]
+                      - generic "lucia.totaro85@gmail.com" [ref=f5e395]
+                      - button "Copia email" [ref=f5e396]:
+                        - img [ref=f5e397]
+                - generic [ref=f5e400]:
+                  - generic [ref=f5e401]: Totaro
+                  - generic [ref=f5e402]: Nuovo
+                - generic [ref=f5e405]:
+                  - img [ref=f5e407]
+                  - generic [ref=f5e409]: Mai chiamato
+                - generic [ref=f5e410]:
+                  - button "Script" [ref=f5e411]:
+                    - img [ref=f5e412]
+                    - text: Script
+                  - button "Agenda" [ref=f5e415]:
+                    - img [ref=f5e416]
+                    - text: Agenda
+                  - generic [ref=f5e419]:
+                    - button "NR" [ref=f5e420]:
+                      - img [ref=f5e421]
+                      - text: NR
+                    - button "Scartato" [ref=f5e425]:
+                      - img [ref=f5e426]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e429]:
+                      - img [ref=f5e430]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e434]:
+                      - img [ref=f5e435]
+                      - text: App Preso
+              - generic [ref=f5e442] [cursor=pointer]:
+                - generic [ref=f5e443]:
+                  - generic [ref=f5e445]:
+                    - text: Glenda Bina
+                    - generic "Lead Fenice" [ref=f5e446]: Fenice
+                  - generic [ref=f5e448]:
+                    - generic [ref=f5e449]:
+                      - img [ref=f5e450]
+                      - generic [ref=f5e452]: "3402240286"
+                      - button "Duplicato" [ref=f5e453]:
+                        - img [ref=f5e454]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e459]:
+                        - img [ref=f5e460]
+                    - generic [ref=f5e463]:
+                      - img [ref=f5e464]
+                      - generic "glenda.bina@gmail.com" [ref=f5e467]
+                      - button "Copia email" [ref=f5e468]:
+                        - img [ref=f5e469]
+                - generic [ref=f5e472]:
+                  - generic [ref=f5e473]: Bina
+                  - generic [ref=f5e474]: Nuovo
+                - generic [ref=f5e477]:
+                  - img [ref=f5e479]
+                  - generic [ref=f5e481]: Mai chiamato
+                - generic [ref=f5e482]:
+                  - button "Script" [ref=f5e483]:
+                    - img [ref=f5e484]
+                    - text: Script
+                  - button "Agenda" [ref=f5e487]:
+                    - img [ref=f5e488]
+                    - text: Agenda
+                  - generic [ref=f5e491]:
+                    - button "NR" [ref=f5e492]:
+                      - img [ref=f5e493]
+                      - text: NR
+                    - button "Scartato" [ref=f5e497]:
+                      - img [ref=f5e498]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e501]:
+                      - img [ref=f5e502]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e506]:
+                      - img [ref=f5e507]
+                      - text: App Preso
+              - generic [ref=f5e514] [cursor=pointer]:
+                - generic [ref=f5e515]:
+                  - generic [ref=f5e517]:
+                    - text: Antares
+                    - generic "Lead Fenice" [ref=f5e518]: Fenice
+                  - generic [ref=f5e520]:
+                    - generic [ref=f5e521]:
+                      - img [ref=f5e522]
+                      - generic [ref=f5e524]: "3453279030"
+                      - button "Duplicato" [ref=f5e525]:
+                        - img [ref=f5e526]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e531]:
+                        - img [ref=f5e532]
+                    - generic [ref=f5e535]:
+                      - img [ref=f5e536]
+                      - generic "seraniacalliope@gmail.com" [ref=f5e539]
+                      - button "Copia email" [ref=f5e540]:
+                        - img [ref=f5e541]
+                - generic [ref=f5e544]:
+                  - generic [ref=f5e545]: Savio
+                  - generic [ref=f5e546]: Nuovo
+                - generic [ref=f5e549]:
+                  - img [ref=f5e551]
+                  - generic [ref=f5e553]: Mai chiamato
+                - generic [ref=f5e554]:
+                  - button "Script" [ref=f5e555]:
+                    - img [ref=f5e556]
+                    - text: Script
+                  - button "Agenda" [ref=f5e559]:
+                    - img [ref=f5e560]
+                    - text: Agenda
+                  - generic [ref=f5e563]:
+                    - button "NR" [ref=f5e564]:
+                      - img [ref=f5e565]
+                      - text: NR
+                    - button "Scartato" [ref=f5e569]:
+                      - img [ref=f5e570]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e573]:
+                      - img [ref=f5e574]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e578]:
+                      - img [ref=f5e579]
+                      - text: App Preso
+              - generic [ref=f5e586] [cursor=pointer]:
+                - generic [ref=f5e587]:
+                  - generic [ref=f5e589]:
+                    - text: Greta
+                    - generic "Appena arrivato (meno di 1 ora fa)" [ref=f5e4025]:
+                      - img [ref=f5e4026]
+                    - generic "Lead Fenice" [ref=f5e590]: Fenice
+                  - generic [ref=f5e592]:
+                    - generic [ref=f5e593]:
+                      - img [ref=f5e594]
+                      - generic [ref=f5e596]: "3272239569"
+                      - button "Copia numero" [ref=f5e597]:
+                        - img [ref=f5e598]
+                    - generic [ref=f5e601]:
+                      - img [ref=f5e602]
+                      - generic "bibigrece@gmail.com" [ref=f5e605]
+                      - button "Copia email" [ref=f5e606]:
+                        - img [ref=f5e607]
+                - generic [ref=f5e610]:
+                  - generic [ref=f5e611]: CORSO 10 ORE
+                  - generic [ref=f5e612]: Nuovo
+                - generic [ref=f5e615]:
+                  - img [ref=f5e617]
+                  - generic [ref=f5e619]: Mai chiamato
+                - generic [ref=f5e620]:
+                  - button "Script" [ref=f5e621]:
+                    - img [ref=f5e622]
+                    - text: Script
+                  - button "Agenda" [ref=f5e625]:
+                    - img [ref=f5e626]
+                    - text: Agenda
+                  - generic [ref=f5e629]:
+                    - button "NR" [ref=f5e630]:
+                      - img [ref=f5e631]
+                      - text: NR
+                    - button "Scartato" [ref=f5e635]:
+                      - img [ref=f5e636]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e639]:
+                      - img [ref=f5e640]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e644]:
+                      - img [ref=f5e645]
+                      - text: App Preso
+              - generic [ref=f5e652] [cursor=pointer]:
+                - generic [ref=f5e653]:
+                  - generic [ref=f5e655]:
+                    - text: Giuseppe Putone
+                    - generic "Lead Fenice" [ref=f5e656]: Fenice
+                  - generic [ref=f5e658]:
+                    - generic [ref=f5e659]:
+                      - img [ref=f5e660]
+                      - generic [ref=f5e662]: "3332770245"
+                      - button "Copia numero" [ref=f5e663]:
+                        - img [ref=f5e664]
+                    - generic [ref=f5e667]:
+                      - img [ref=f5e668]
+                      - generic "giusepult@gmail.com" [ref=f5e671]
+                      - button "Copia email" [ref=f5e672]:
+                        - img [ref=f5e673]
+                - generic [ref=f5e676]:
+                  - generic [ref=f5e677]: CORSO 10 ORE
+                  - generic [ref=f5e678]: Nuovo
+                - generic [ref=f5e681]:
+                  - img [ref=f5e683]
+                  - generic [ref=f5e685]: Mai chiamato
+                - generic [ref=f5e686]:
+                  - button "Script" [ref=f5e687]:
+                    - img [ref=f5e688]
+                    - text: Script
+                  - button "Agenda" [ref=f5e691]:
+                    - img [ref=f5e692]
+                    - text: Agenda
+                  - generic [ref=f5e695]:
+                    - button "NR" [ref=f5e696]:
+                      - img [ref=f5e697]
+                      - text: NR
+                    - button "Scartato" [ref=f5e701]:
+                      - img [ref=f5e702]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e705]:
+                      - img [ref=f5e706]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e710]:
+                      - img [ref=f5e711]
+                      - text: App Preso
+              - generic [ref=f5e718] [cursor=pointer]:
+                - generic [ref=f5e719]:
+                  - generic [ref=f5e721]:
+                    - text: Alina Elena Geangu Geangu
+                    - generic "Lead Fenice" [ref=f5e722]: Fenice
+                  - generic [ref=f5e724]:
+                    - generic [ref=f5e725]:
+                      - img [ref=f5e726]
+                      - generic [ref=f5e728]: "3271723397"
+                      - button "Copia numero" [ref=f5e729]:
+                        - img [ref=f5e730]
+                    - generic [ref=f5e733]:
+                      - img [ref=f5e734]
+                      - generic "aligiulia34@yahoo.it" [ref=f5e737]
+                      - button "Copia email" [ref=f5e738]:
+                        - img [ref=f5e739]
+                - generic [ref=f5e742]:
+                  - generic [ref=f5e743]: TELEGRAM
+                  - generic [ref=f5e744]: Nuovo
+                - generic [ref=f5e747]:
+                  - img [ref=f5e749]
+                  - generic [ref=f5e751]: Mai chiamato
+                - generic [ref=f5e752]:
+                  - button "Script" [ref=f5e753]:
+                    - img [ref=f5e754]
+                    - text: Script
+                  - button "Agenda" [ref=f5e757]:
+                    - img [ref=f5e758]
+                    - text: Agenda
+                  - generic [ref=f5e761]:
+                    - button "NR" [ref=f5e762]:
+                      - img [ref=f5e763]
+                      - text: NR
+                    - button "Scartato" [ref=f5e767]:
+                      - img [ref=f5e768]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e771]:
+                      - img [ref=f5e772]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e776]:
+                      - img [ref=f5e777]
+                      - text: App Preso
+              - generic [ref=f5e784] [cursor=pointer]:
+                - generic [ref=f5e785]:
+                  - generic [ref=f5e787]:
+                    - text: Michela
+                    - generic "Lead Fenice" [ref=f5e788]: Fenice
+                  - generic [ref=f5e790]:
+                    - generic [ref=f5e791]:
+                      - img [ref=f5e792]
+                      - generic [ref=f5e794]: "3208235295"
+                      - button "Copia numero" [ref=f5e795]:
+                        - img [ref=f5e796]
+                    - generic [ref=f5e799]:
+                      - img [ref=f5e800]
+                      - generic "monterossomichela1998@gmail.com" [ref=f5e803]
+                      - button "Copia email" [ref=f5e804]:
+                        - img [ref=f5e805]
+                - generic [ref=f5e808]:
+                  - generic [ref=f5e809]: JOB SIMULATOR
+                  - generic [ref=f5e810]: Nuovo
+                - generic [ref=f5e813]:
+                  - img [ref=f5e815]
+                  - generic [ref=f5e817]: Mai chiamato
+                - generic [ref=f5e818]:
+                  - button "Script" [ref=f5e819]:
+                    - img [ref=f5e820]
+                    - text: Script
+                  - button "Agenda" [ref=f5e823]:
+                    - img [ref=f5e824]
+                    - text: Agenda
+                  - generic [ref=f5e827]:
+                    - button "NR" [ref=f5e828]:
+                      - img [ref=f5e829]
+                      - text: NR
+                    - button "Scartato" [ref=f5e833]:
+                      - img [ref=f5e834]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e837]:
+                      - img [ref=f5e838]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e842]:
+                      - img [ref=f5e843]
+                      - text: App Preso
+              - generic [ref=f5e850] [cursor=pointer]:
+                - generic [ref=f5e851]:
+                  - generic [ref=f5e853]:
+                    - text: Cinzia Fedrizzi
+                    - generic "Lead Fenice" [ref=f5e854]: Fenice
+                  - generic [ref=f5e856]:
+                    - generic [ref=f5e857]:
+                      - img [ref=f5e858]
+                      - generic [ref=f5e860]: "3348925537"
+                      - button "Copia numero" [ref=f5e861]:
+                        - img [ref=f5e862]
+                    - generic [ref=f5e865]:
+                      - img [ref=f5e866]
+                      - generic "cinziafedrizzi@gmail.com" [ref=f5e869]
+                      - button "Copia email" [ref=f5e870]:
+                        - img [ref=f5e871]
+                - generic [ref=f5e874]:
+                  - generic [ref=f5e875]: JOB SIMULATOR
+                  - generic [ref=f5e876]: Nuovo
+                - generic [ref=f5e879]:
+                  - img [ref=f5e881]
+                  - generic [ref=f5e883]: Mai chiamato
+                - generic [ref=f5e884]:
+                  - button "Script" [ref=f5e885]:
+                    - img [ref=f5e886]
+                    - text: Script
+                  - button "Agenda" [ref=f5e889]:
+                    - img [ref=f5e890]
+                    - text: Agenda
+                  - generic [ref=f5e893]:
+                    - button "NR" [ref=f5e894]:
+                      - img [ref=f5e895]
+                      - text: NR
+                    - button "Scartato" [ref=f5e899]:
+                      - img [ref=f5e900]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e903]:
+                      - img [ref=f5e904]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e908]:
+                      - img [ref=f5e909]
+                      - text: App Preso
+              - generic [ref=f5e916] [cursor=pointer]:
+                - generic [ref=f5e917]:
+                  - generic [ref=f5e919]:
+                    - text: Assunta
+                    - generic "Lead Fenice" [ref=f5e920]: Fenice
+                  - generic [ref=f5e922]:
+                    - generic [ref=f5e923]:
+                      - img [ref=f5e924]
+                      - generic [ref=f5e926]: "3341436700"
+                      - button "Copia numero" [ref=f5e927]:
+                        - img [ref=f5e928]
+                    - generic [ref=f5e931]:
+                      - img [ref=f5e932]
+                      - generic "assuntaracioppoli911@gmail.com" [ref=f5e935]
+                      - button "Copia email" [ref=f5e936]:
+                        - img [ref=f5e937]
+                - generic [ref=f5e940]:
+                  - generic [ref=f5e941]: TELEGRAM
+                  - generic [ref=f5e942]: Nuovo
+                - generic [ref=f5e945]:
+                  - img [ref=f5e947]
+                  - generic [ref=f5e949]: Mai chiamato
+                - generic [ref=f5e950]:
+                  - button "Script" [ref=f5e951]:
+                    - img [ref=f5e952]
+                    - text: Script
+                  - button "Agenda" [ref=f5e955]:
+                    - img [ref=f5e956]
+                    - text: Agenda
+                  - generic [ref=f5e959]:
+                    - button "NR" [ref=f5e960]:
+                      - img [ref=f5e961]
+                      - text: NR
+                    - button "Scartato" [ref=f5e965]:
+                      - img [ref=f5e966]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e969]:
+                      - img [ref=f5e970]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e974]:
+                      - img [ref=f5e975]
+                      - text: App Preso
+              - generic [ref=f5e982] [cursor=pointer]:
+                - generic [ref=f5e983]:
+                  - generic [ref=f5e985]:
+                    - text: Domenica
+                    - generic "Lead Fenice" [ref=f5e986]: Fenice
+                  - generic [ref=f5e988]:
+                    - generic [ref=f5e989]:
+                      - img [ref=f5e990]
+                      - generic [ref=f5e992]: "333666999"
+                      - button "Duplicato" [ref=f5e993]:
+                        - img [ref=f5e994]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e999]:
+                        - img [ref=f5e1000]
+                    - generic [ref=f5e1003]:
+                      - img [ref=f5e1004]
+                      - generic "domenicacannizzaro16@gmail.com" [ref=f5e1007]
+                      - button "Copia email" [ref=f5e1008]:
+                        - img [ref=f5e1009]
+                - generic [ref=f5e1012]:
+                  - generic [ref=f5e1013]: JOB SIMULATOR
+                  - generic [ref=f5e1014]: Nuovo
+                - generic [ref=f5e1017]:
+                  - img [ref=f5e1019]
+                  - generic [ref=f5e1021]: Mai chiamato
+                - generic [ref=f5e1022]:
+                  - button "Script" [ref=f5e1023]:
+                    - img [ref=f5e1024]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1027]:
+                    - img [ref=f5e1028]
+                    - text: Agenda
+                  - generic [ref=f5e1031]:
+                    - button "NR" [ref=f5e1032]:
+                      - img [ref=f5e1033]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1037]:
+                      - img [ref=f5e1038]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1041]:
+                      - img [ref=f5e1042]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1046]:
+                      - img [ref=f5e1047]
+                      - text: App Preso
+              - generic [ref=f5e1054] [cursor=pointer]:
+                - generic [ref=f5e1055]:
+                  - generic [ref=f5e1057]:
+                    - text: Caterina Cirene
+                    - generic "Lead Fenice" [ref=f5e1058]: Fenice
+                  - generic [ref=f5e1060]:
+                    - generic [ref=f5e1061]:
+                      - img [ref=f5e1062]
+                      - generic [ref=f5e1064]: "3913894693"
+                      - button "Copia numero" [ref=f5e1065]:
+                        - img [ref=f5e1066]
+                    - generic [ref=f5e1069]:
+                      - img [ref=f5e1070]
+                      - generic "cirene565@gmail.com" [ref=f5e1073]
+                      - button "Copia email" [ref=f5e1074]:
+                        - img [ref=f5e1075]
+                - generic [ref=f5e1078]:
+                  - generic [ref=f5e1079]: JOB SIMULATOR
+                  - generic [ref=f5e1080]: Nuovo
+                - generic [ref=f5e1083]:
+                  - img [ref=f5e1085]
+                  - generic [ref=f5e1087]: Mai chiamato
+                - generic [ref=f5e1088]:
+                  - button "Script" [ref=f5e1089]:
+                    - img [ref=f5e1090]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1093]:
+                    - img [ref=f5e1094]
+                    - text: Agenda
+                  - generic [ref=f5e1097]:
+                    - button "NR" [ref=f5e1098]:
+                      - img [ref=f5e1099]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1103]:
+                      - img [ref=f5e1104]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1107]:
+                      - img [ref=f5e1108]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1112]:
+                      - img [ref=f5e1113]
+                      - text: App Preso
+              - generic [ref=f5e1120] [cursor=pointer]:
+                - generic [ref=f5e1121]:
+                  - generic [ref=f5e1123]:
+                    - text: Giulia Ippoliti
+                    - generic "Lead Fenice" [ref=f5e1124]: Fenice
+                  - generic [ref=f5e1126]:
+                    - generic [ref=f5e1127]:
+                      - img [ref=f5e1128]
+                      - generic [ref=f5e1130]: "3349454074"
+                      - button "Copia numero" [ref=f5e1131]:
+                        - img [ref=f5e1132]
+                    - generic [ref=f5e1135]:
+                      - img [ref=f5e1136]
+                      - generic "giulyippo@gmail.com" [ref=f5e1139]
+                      - button "Copia email" [ref=f5e1140]:
+                        - img [ref=f5e1141]
+                - generic [ref=f5e1144]:
+                  - generic [ref=f5e1145]: CORSO 10 ORE
+                  - generic [ref=f5e1146]: Nuovo
+                - generic [ref=f5e1149]:
+                  - img [ref=f5e1151]
+                  - generic [ref=f5e1153]: Mai chiamato
+                - generic [ref=f5e1154]:
+                  - button "Script" [ref=f5e1155]:
+                    - img [ref=f5e1156]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1159]:
+                    - img [ref=f5e1160]
+                    - text: Agenda
+                  - generic [ref=f5e1163]:
+                    - button "NR" [ref=f5e1164]:
+                      - img [ref=f5e1165]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1169]:
+                      - img [ref=f5e1170]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1173]:
+                      - img [ref=f5e1174]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1178]:
+                      - img [ref=f5e1179]
+                      - text: App Preso
+              - generic [ref=f5e1186] [cursor=pointer]:
+                - generic [ref=f5e1187]:
+                  - generic [ref=f5e1189]:
+                    - text: Iulia
+                    - generic "Lead Fenice" [ref=f5e1190]: Fenice
+                  - generic [ref=f5e1192]:
+                    - generic [ref=f5e1193]:
+                      - img [ref=f5e1194]
+                      - generic [ref=f5e1196]: "3887515589"
+                      - button "Copia numero" [ref=f5e1197]:
+                        - img [ref=f5e1198]
+                    - generic [ref=f5e1201]:
+                      - img [ref=f5e1202]
+                      - generic "ottoquattro13@icloud.com" [ref=f5e1205]
+                      - button "Copia email" [ref=f5e1206]:
+                        - img [ref=f5e1207]
+                - generic [ref=f5e1210]:
+                  - generic [ref=f5e1211]: CORSO 10 ORE
+                  - generic [ref=f5e1212]: Nuovo
+                - generic [ref=f5e1215]:
+                  - img [ref=f5e1217]
+                  - generic [ref=f5e1219]: Mai chiamato
+                - generic [ref=f5e1220]:
+                  - button "Script" [ref=f5e1221]:
+                    - img [ref=f5e1222]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1225]:
+                    - img [ref=f5e1226]
+                    - text: Agenda
+                  - generic [ref=f5e1229]:
+                    - button "NR" [ref=f5e1230]:
+                      - img [ref=f5e1231]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1235]:
+                      - img [ref=f5e1236]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1239]:
+                      - img [ref=f5e1240]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1244]:
+                      - img [ref=f5e1245]
+                      - text: App Preso
+              - generic [ref=f5e1252] [cursor=pointer]:
+                - generic [ref=f5e1253]:
+                  - generic [ref=f5e1255]:
+                    - text: Roberta Varotto
+                    - generic "Lead Fenice" [ref=f5e1256]: Fenice
+                  - generic [ref=f5e1258]:
+                    - generic [ref=f5e1259]:
+                      - img [ref=f5e1260]
+                      - generic [ref=f5e1262]: "3938809045"
+                      - button "Copia numero" [ref=f5e1263]:
+                        - img [ref=f5e1264]
+                    - generic [ref=f5e1267]:
+                      - img [ref=f5e1268]
+                      - generic "varottoroberta1980@libero.it" [ref=f5e1271]
+                      - button "Copia email" [ref=f5e1272]:
+                        - img [ref=f5e1273]
+                - generic [ref=f5e1276]:
+                  - generic [ref=f5e1277]: CORSO 10 ORE
+                  - generic [ref=f5e1278]: Nuovo
+                - generic [ref=f5e1281]:
+                  - img [ref=f5e1283]
+                  - generic [ref=f5e1285]: Mai chiamato
+                - generic [ref=f5e1286]:
+                  - button "Script" [ref=f5e1287]:
+                    - img [ref=f5e1288]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1291]:
+                    - img [ref=f5e1292]
+                    - text: Agenda
+                  - generic [ref=f5e1295]:
+                    - button "NR" [ref=f5e1296]:
+                      - img [ref=f5e1297]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1301]:
+                      - img [ref=f5e1302]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1305]:
+                      - img [ref=f5e1306]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1310]:
+                      - img [ref=f5e1311]
+                      - text: App Preso
+              - generic [ref=f5e1318] [cursor=pointer]:
+                - generic [ref=f5e1319]:
+                  - generic [ref=f5e1321]:
+                    - text: Scheyla Cristina Sabino Sabino
+                    - generic "Lead Fenice" [ref=f5e1322]: Fenice
+                  - generic [ref=f5e1324]:
+                    - generic [ref=f5e1325]:
+                      - img [ref=f5e1326]
+                      - generic [ref=f5e1328]: "3484882142"
+                      - button "Copia numero" [ref=f5e1329]:
+                        - img [ref=f5e1330]
+                    - generic [ref=f5e1333]:
+                      - img [ref=f5e1334]
+                      - generic "scheylasabino@gmail.com" [ref=f5e1337]
+                      - button "Copia email" [ref=f5e1338]:
+                        - img [ref=f5e1339]
+                - generic [ref=f5e1342]:
+                  - generic [ref=f5e1343]: TELEGRAM
+                  - generic [ref=f5e1344]: Nuovo
+                - generic [ref=f5e1347]:
+                  - img [ref=f5e1349]
+                  - generic [ref=f5e1351]: Mai chiamato
+                - generic [ref=f5e1352]:
+                  - button "Script" [ref=f5e1353]:
+                    - img [ref=f5e1354]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1357]:
+                    - img [ref=f5e1358]
+                    - text: Agenda
+                  - generic [ref=f5e1361]:
+                    - button "NR" [ref=f5e1362]:
+                      - img [ref=f5e1363]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1367]:
+                      - img [ref=f5e1368]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1371]:
+                      - img [ref=f5e1372]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1376]:
+                      - img [ref=f5e1377]
+                      - text: App Preso
+              - generic [ref=f5e1384] [cursor=pointer]:
+                - generic [ref=f5e1385]:
+                  - generic [ref=f5e1387]:
+                    - text: Luigi Bertoletti
+                    - generic "Lead Fenice" [ref=f5e1388]: Fenice
+                  - generic [ref=f5e1390]:
+                    - generic [ref=f5e1391]:
+                      - img [ref=f5e1392]
+                      - generic [ref=f5e1394]: "3488753119"
+                      - button "Copia numero" [ref=f5e1395]:
+                        - img [ref=f5e1396]
+                    - generic [ref=f5e1399]:
+                      - img [ref=f5e1400]
+                      - generic "luigi.bertoletti@icloud.com" [ref=f5e1403]
+                      - button "Copia email" [ref=f5e1404]:
+                        - img [ref=f5e1405]
+                - generic [ref=f5e1408]:
+                  - generic [ref=f5e1409]: CORSO 10 ORE
+                  - generic [ref=f5e1410]: Nuovo
+                - generic [ref=f5e1413]:
+                  - img [ref=f5e1415]
+                  - generic [ref=f5e1417]: Mai chiamato
+                - generic [ref=f5e1418]:
+                  - button "Script" [ref=f5e1419]:
+                    - img [ref=f5e1420]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1423]:
+                    - img [ref=f5e1424]
+                    - text: Agenda
+                  - generic [ref=f5e1427]:
+                    - button "NR" [ref=f5e1428]:
+                      - img [ref=f5e1429]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1433]:
+                      - img [ref=f5e1434]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1437]:
+                      - img [ref=f5e1438]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1442]:
+                      - img [ref=f5e1443]
+                      - text: App Preso
+              - generic [ref=f5e1450] [cursor=pointer]:
+                - generic [ref=f5e1451]:
+                  - generic [ref=f5e1453]:
+                    - text: Jaqueline
+                    - generic "Lead Fenice" [ref=f5e1454]: Fenice
+                  - generic [ref=f5e1456]:
+                    - generic [ref=f5e1457]:
+                      - img [ref=f5e1458]
+                      - generic [ref=f5e1460]: "+5531993195641"
+                      - button "Copia numero" [ref=f5e1461]:
+                        - img [ref=f5e1462]
+                    - generic [ref=f5e1465]:
+                      - img [ref=f5e1466]
+                      - generic "jackysimionato@gmail.com" [ref=f5e1469]
+                      - button "Copia email" [ref=f5e1470]:
+                        - img [ref=f5e1471]
+                - generic [ref=f5e1474]:
+                  - generic [ref=f5e1475]: TELEGRAM
+                  - generic [ref=f5e1476]: Nuovo
+                - generic [ref=f5e1479]:
+                  - img [ref=f5e1481]
+                  - generic [ref=f5e1483]: Mai chiamato
+                - generic [ref=f5e1484]:
+                  - button "Script" [ref=f5e1485]:
+                    - img [ref=f5e1486]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1489]:
+                    - img [ref=f5e1490]
+                    - text: Agenda
+                  - generic [ref=f5e1493]:
+                    - button "NR" [ref=f5e1494]:
+                      - img [ref=f5e1495]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1499]:
+                      - img [ref=f5e1500]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1503]:
+                      - img [ref=f5e1504]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1508]:
+                      - img [ref=f5e1509]
+                      - text: App Preso
+              - generic [ref=f5e1516] [cursor=pointer]:
+                - generic [ref=f5e1517]:
+                  - generic [ref=f5e1519]:
+                    - text: Annibale Bergamaschi
+                    - generic "Lead Fenice" [ref=f5e1520]: Fenice
+                  - generic [ref=f5e1522]:
+                    - generic [ref=f5e1523]:
+                      - img [ref=f5e1524]
+                      - generic [ref=f5e1526]: "3459734305"
+                      - button "Copia numero" [ref=f5e1527]:
+                        - img [ref=f5e1528]
+                    - generic [ref=f5e1531]:
+                      - img [ref=f5e1532]
+                      - generic "asbergamaschi@gmail.com" [ref=f5e1535]
+                      - button "Copia email" [ref=f5e1536]:
+                        - img [ref=f5e1537]
+                - generic [ref=f5e1540]:
+                  - generic [ref=f5e1541]: CORSO 10 ORE
+                  - generic [ref=f5e1542]: Nuovo
+                - generic [ref=f5e1545]:
+                  - img [ref=f5e1547]
+                  - generic [ref=f5e1549]: Mai chiamato
+                - generic [ref=f5e1550]:
+                  - button "Script" [ref=f5e1551]:
+                    - img [ref=f5e1552]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1555]:
+                    - img [ref=f5e1556]
+                    - text: Agenda
+                  - generic [ref=f5e1559]:
+                    - button "NR" [ref=f5e1560]:
+                      - img [ref=f5e1561]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1565]:
+                      - img [ref=f5e1566]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1569]:
+                      - img [ref=f5e1570]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1574]:
+                      - img [ref=f5e1575]
+                      - text: App Preso
+              - generic [ref=f5e1582] [cursor=pointer]:
+                - generic [ref=f5e1583]:
+                  - generic [ref=f5e1585]:
+                    - text: Imma
+                    - generic "Lead Fenice" [ref=f5e1586]: Fenice
+                  - generic [ref=f5e1588]:
+                    - generic [ref=f5e1589]:
+                      - img [ref=f5e1590]
+                      - generic [ref=f5e1592]: "3200212364"
+                      - button "Copia numero" [ref=f5e1593]:
+                        - img [ref=f5e1594]
+                    - generic [ref=f5e1597]:
+                      - img [ref=f5e1598]
+                      - generic "lanzilloimma43@gmail.com" [ref=f5e1601]
+                      - button "Copia email" [ref=f5e1602]:
+                        - img [ref=f5e1603]
+                - generic [ref=f5e1606]:
+                  - generic [ref=f5e1607]: TELEGRAM
+                  - generic [ref=f5e1608]: Nuovo
+                - generic [ref=f5e1611]:
+                  - img [ref=f5e1613]
+                  - generic [ref=f5e1615]: Mai chiamato
+                - generic [ref=f5e1616]:
+                  - button "Script" [ref=f5e1617]:
+                    - img [ref=f5e1618]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1621]:
+                    - img [ref=f5e1622]
+                    - text: Agenda
+                  - generic [ref=f5e1625]:
+                    - button "NR" [ref=f5e1626]:
+                      - img [ref=f5e1627]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1631]:
+                      - img [ref=f5e1632]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1635]:
+                      - img [ref=f5e1636]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1640]:
+                      - img [ref=f5e1641]
+                      - text: App Preso
+              - generic [ref=f5e1648] [cursor=pointer]:
+                - generic [ref=f5e1649]:
+                  - generic [ref=f5e1651]:
+                    - text: Alessandra Anna
+                    - generic "Lead Fenice" [ref=f5e1652]: Fenice
+                  - generic [ref=f5e1654]:
+                    - generic [ref=f5e1655]:
+                      - img [ref=f5e1656]
+                      - generic [ref=f5e1658]: "3482284301"
+                      - button "Copia numero" [ref=f5e1659]:
+                        - img [ref=f5e1660]
+                    - generic [ref=f5e1663]:
+                      - img [ref=f5e1664]
+                      - generic "infomeneghetti@yahoo.it" [ref=f5e1667]
+                      - button "Copia email" [ref=f5e1668]:
+                        - img [ref=f5e1669]
+                - generic [ref=f5e1672]:
+                  - generic [ref=f5e1673]: JOB SIMULATOR
+                  - generic [ref=f5e1674]: Nuovo
+                - generic [ref=f5e1677]:
+                  - img [ref=f5e1679]
+                  - generic [ref=f5e1681]: Mai chiamato
+                - generic [ref=f5e1682]:
+                  - button "Script" [ref=f5e1683]:
+                    - img [ref=f5e1684]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1687]:
+                    - img [ref=f5e1688]
+                    - text: Agenda
+                  - generic [ref=f5e1691]:
+                    - button "NR" [ref=f5e1692]:
+                      - img [ref=f5e1693]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1697]:
+                      - img [ref=f5e1698]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1701]:
+                      - img [ref=f5e1702]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1706]:
+                      - img [ref=f5e1707]
+                      - text: App Preso
+              - generic [ref=f5e1714] [cursor=pointer]:
+                - generic [ref=f5e1715]:
+                  - generic [ref=f5e1717]:
+                    - text: Tommaso Arrigoni
+                    - generic "Lead Fenice" [ref=f5e1718]: Fenice
+                  - generic [ref=f5e1720]:
+                    - generic [ref=f5e1721]:
+                      - img [ref=f5e1722]
+                      - generic [ref=f5e1724]: "3661605473"
+                      - button "Copia numero" [ref=f5e1725]:
+                        - img [ref=f5e1726]
+                    - generic [ref=f5e1729]:
+                      - img [ref=f5e1730]
+                      - generic "t.arrig@icloud.com" [ref=f5e1733]
+                      - button "Copia email" [ref=f5e1734]:
+                        - img [ref=f5e1735]
+                - generic [ref=f5e1738]:
+                  - generic [ref=f5e1739]: CORSO 10 ORE
+                  - generic [ref=f5e1740]: Nuovo
+                - generic [ref=f5e1743]:
+                  - img [ref=f5e1745]
+                  - generic [ref=f5e1747]: Mai chiamato
+                - generic [ref=f5e1748]:
+                  - button "Script" [ref=f5e1749]:
+                    - img [ref=f5e1750]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1753]:
+                    - img [ref=f5e1754]
+                    - text: Agenda
+                  - generic [ref=f5e1757]:
+                    - button "NR" [ref=f5e1758]:
+                      - img [ref=f5e1759]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1763]:
+                      - img [ref=f5e1764]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1767]:
+                      - img [ref=f5e1768]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1772]:
+                      - img [ref=f5e1773]
+                      - text: App Preso
+              - generic [ref=f5e1780] [cursor=pointer]:
+                - generic [ref=f5e1781]:
+                  - generic [ref=f5e1783]:
+                    - text: Galih Anggraini
+                    - generic "Lead Fenice" [ref=f5e1784]: Fenice
+                  - generic [ref=f5e1786]:
+                    - generic [ref=f5e1787]:
+                      - img [ref=f5e1788]
+                      - generic [ref=f5e1790]: "3518011235"
+                      - button "Copia numero" [ref=f5e1791]:
+                        - img [ref=f5e1792]
+                    - generic [ref=f5e1795]:
+                      - img [ref=f5e1796]
+                      - generic "gppanjianggraini@gmail.com" [ref=f5e1799]
+                      - button "Copia email" [ref=f5e1800]:
+                        - img [ref=f5e1801]
+                - generic [ref=f5e1804]:
+                  - generic [ref=f5e1805]: CORSO 10 ORE
+                  - generic [ref=f5e1806]: Nuovo
+                - generic [ref=f5e1809]:
+                  - img [ref=f5e1811]
+                  - generic [ref=f5e1813]: Mai chiamato
+                - generic [ref=f5e1814]:
+                  - button "Script" [ref=f5e1815]:
+                    - img [ref=f5e1816]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1819]:
+                    - img [ref=f5e1820]
+                    - text: Agenda
+                  - generic [ref=f5e1823]:
+                    - button "NR" [ref=f5e1824]:
+                      - img [ref=f5e1825]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1829]:
+                      - img [ref=f5e1830]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1833]:
+                      - img [ref=f5e1834]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1838]:
+                      - img [ref=f5e1839]
+                      - text: App Preso
+              - generic [ref=f5e1846] [cursor=pointer]:
+                - generic [ref=f5e1847]:
+                  - generic [ref=f5e1849]:
+                    - text: Ivan Facco Facco
+                    - generic "Lead Fenice" [ref=f5e1850]: Fenice
+                  - generic [ref=f5e1852]:
+                    - generic [ref=f5e1853]:
+                      - img [ref=f5e1854]
+                      - generic [ref=f5e1856]: "3713577762"
+                      - button "Copia numero" [ref=f5e1857]:
+                        - img [ref=f5e1858]
+                    - generic [ref=f5e1861]:
+                      - img [ref=f5e1862]
+                      - generic "faccoivan03@gmail.com" [ref=f5e1865]
+                      - button "Copia email" [ref=f5e1866]:
+                        - img [ref=f5e1867]
+                - generic [ref=f5e1870]:
+                  - generic [ref=f5e1871]: TELEGRAM
+                  - generic [ref=f5e1872]: Nuovo
+                - generic [ref=f5e1875]:
+                  - img [ref=f5e1877]
+                  - generic [ref=f5e1879]: Mai chiamato
+                - generic [ref=f5e1880]:
+                  - button "Script" [ref=f5e1881]:
+                    - img [ref=f5e1882]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1885]:
+                    - img [ref=f5e1886]
+                    - text: Agenda
+                  - generic [ref=f5e1889]:
+                    - button "NR" [ref=f5e1890]:
+                      - img [ref=f5e1891]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1895]:
+                      - img [ref=f5e1896]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1899]:
+                      - img [ref=f5e1900]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1904]:
+                      - img [ref=f5e1905]
+                      - text: App Preso
+              - generic [ref=f5e1912] [cursor=pointer]:
+                - generic [ref=f5e1913]:
+                  - generic [ref=f5e1915]:
+                    - text: Erna Christine Luber
+                    - generic "Lead Fenice" [ref=f5e1916]: Fenice
+                  - generic [ref=f5e1918]:
+                    - generic [ref=f5e1919]:
+                      - img [ref=f5e1920]
+                      - generic [ref=f5e1922]: "3383518264"
+                      - button "Copia numero" [ref=f5e1923]:
+                        - img [ref=f5e1924]
+                    - generic [ref=f5e1927]:
+                      - img [ref=f5e1928]
+                      - generic "echri.luber@gmail.com" [ref=f5e1931]
+                      - button "Copia email" [ref=f5e1932]:
+                        - img [ref=f5e1933]
+                - generic [ref=f5e1936]:
+                  - generic [ref=f5e1937]: JOB SIMULATOR
+                  - generic [ref=f5e1938]: Nuovo
+                - generic [ref=f5e1941]:
+                  - img [ref=f5e1943]
+                  - generic [ref=f5e1945]: Mai chiamato
+                - generic [ref=f5e1946]:
+                  - button "Script" [ref=f5e1947]:
+                    - img [ref=f5e1948]
+                    - text: Script
+                  - button "Agenda" [ref=f5e1951]:
+                    - img [ref=f5e1952]
+                    - text: Agenda
+                  - generic [ref=f5e1955]:
+                    - button "NR" [ref=f5e1956]:
+                      - img [ref=f5e1957]
+                      - text: NR
+                    - button "Scartato" [ref=f5e1961]:
+                      - img [ref=f5e1962]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e1965]:
+                      - img [ref=f5e1966]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e1970]:
+                      - img [ref=f5e1971]
+                      - text: App Preso
+              - generic [ref=f5e1978] [cursor=pointer]:
+                - generic [ref=f5e1979]:
+                  - generic [ref=f5e1981]:
+                    - text: Eva
+                    - generic "Lead Fenice" [ref=f5e1982]: Fenice
+                  - generic [ref=f5e1984]:
+                    - generic [ref=f5e1985]:
+                      - img [ref=f5e1986]
+                      - generic [ref=f5e1988]: "3479056650"
+                      - button "Copia numero" [ref=f5e1989]:
+                        - img [ref=f5e1990]
+                    - generic [ref=f5e1993]:
+                      - img [ref=f5e1994]
+                      - generic "evaoriggi@virgilio.it" [ref=f5e1997]
+                      - button "Copia email" [ref=f5e1998]:
+                        - img [ref=f5e1999]
+                - generic [ref=f5e2002]:
+                  - generic [ref=f5e2003]: JOB SIMULATOR
+                  - generic [ref=f5e2004]: Nuovo
+                - generic [ref=f5e2007]:
+                  - img [ref=f5e2009]
+                  - generic [ref=f5e2011]: Mai chiamato
+                - generic [ref=f5e2012]:
+                  - button "Script" [ref=f5e2013]:
+                    - img [ref=f5e2014]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2017]:
+                    - img [ref=f5e2018]
+                    - text: Agenda
+                  - generic [ref=f5e2021]:
+                    - button "NR" [ref=f5e2022]:
+                      - img [ref=f5e2023]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2027]:
+                      - img [ref=f5e2028]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2031]:
+                      - img [ref=f5e2032]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2036]:
+                      - img [ref=f5e2037]
+                      - text: App Preso
+              - generic [ref=f5e2044] [cursor=pointer]:
+                - generic [ref=f5e2045]:
+                  - generic [ref=f5e2047]:
+                    - text: Vers
+                    - generic "Lead Fenice" [ref=f5e2048]: Fenice
+                  - generic [ref=f5e2050]:
+                    - generic [ref=f5e2051]:
+                      - img [ref=f5e2052]
+                      - generic [ref=f5e2054]: "3284461947"
+                      - button "Copia numero" [ref=f5e2055]:
+                        - img [ref=f5e2056]
+                    - generic [ref=f5e2059]:
+                      - img [ref=f5e2060]
+                      - generic "vera.carp43@gmail.com" [ref=f5e2063]
+                      - button "Copia email" [ref=f5e2064]:
+                        - img [ref=f5e2065]
+                - generic [ref=f5e2068]:
+                  - generic [ref=f5e2069]: TELEGRAM
+                  - generic [ref=f5e2070]: Nuovo
+                - generic [ref=f5e2073]:
+                  - img [ref=f5e2075]
+                  - generic [ref=f5e2077]: Mai chiamato
+                - generic [ref=f5e2078]:
+                  - button "Script" [ref=f5e2079]:
+                    - img [ref=f5e2080]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2083]:
+                    - img [ref=f5e2084]
+                    - text: Agenda
+                  - generic [ref=f5e2087]:
+                    - button "NR" [ref=f5e2088]:
+                      - img [ref=f5e2089]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2093]:
+                      - img [ref=f5e2094]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2097]:
+                      - img [ref=f5e2098]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2102]:
+                      - img [ref=f5e2103]
+                      - text: App Preso
+              - generic [ref=f5e2110] [cursor=pointer]:
+                - generic [ref=f5e2111]:
+                  - generic [ref=f5e2113]:
+                    - text: Ilaria Ruiu
+                    - generic "Lead Fenice" [ref=f5e2114]: Fenice
+                  - generic [ref=f5e2116]:
+                    - generic [ref=f5e2117]:
+                      - img [ref=f5e2118]
+                      - generic [ref=f5e2120]: "3201741601"
+                      - button "Copia numero" [ref=f5e2121]:
+                        - img [ref=f5e2122]
+                    - generic [ref=f5e2125]:
+                      - img [ref=f5e2126]
+                      - generic "ilaria.ruiu1984@hotmail.it" [ref=f5e2129]
+                      - button "Copia email" [ref=f5e2130]:
+                        - img [ref=f5e2131]
+                - generic [ref=f5e2134]:
+                  - generic [ref=f5e2135]: JOB SIMULATOR
+                  - generic [ref=f5e2136]: Nuovo
+                - generic [ref=f5e2139]:
+                  - img [ref=f5e2141]
+                  - generic [ref=f5e2143]: Mai chiamato
+                - generic [ref=f5e2144]:
+                  - button "Script" [ref=f5e2145]:
+                    - img [ref=f5e2146]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2149]:
+                    - img [ref=f5e2150]
+                    - text: Agenda
+                  - generic [ref=f5e2153]:
+                    - button "NR" [ref=f5e2154]:
+                      - img [ref=f5e2155]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2159]:
+                      - img [ref=f5e2160]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2163]:
+                      - img [ref=f5e2164]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2168]:
+                      - img [ref=f5e2169]
+                      - text: App Preso
+              - generic [ref=f5e2176] [cursor=pointer]:
+                - generic [ref=f5e2177]:
+                  - generic [ref=f5e2179]:
+                    - text: Mary
+                    - generic "Lead Fenice" [ref=f5e2180]: Fenice
+                  - generic [ref=f5e2182]:
+                    - generic [ref=f5e2183]:
+                      - img [ref=f5e2184]
+                      - generic [ref=f5e2186]: "3398359964"
+                      - button "Copia numero" [ref=f5e2187]:
+                        - img [ref=f5e2188]
+                    - generic [ref=f5e2191]:
+                      - img [ref=f5e2192]
+                      - generic "mary@billone.it" [ref=f5e2195]
+                      - button "Copia email" [ref=f5e2196]:
+                        - img [ref=f5e2197]
+                - generic [ref=f5e2200]:
+                  - generic [ref=f5e2201]: TELEGRAM
+                  - generic [ref=f5e2202]: Nuovo
+                - generic [ref=f5e2205]:
+                  - img [ref=f5e2207]
+                  - generic [ref=f5e2209]: Mai chiamato
+                - generic [ref=f5e2210]:
+                  - button "Script" [ref=f5e2211]:
+                    - img [ref=f5e2212]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2215]:
+                    - img [ref=f5e2216]
+                    - text: Agenda
+                  - generic [ref=f5e2219]:
+                    - button "NR" [ref=f5e2220]:
+                      - img [ref=f5e2221]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2225]:
+                      - img [ref=f5e2226]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2229]:
+                      - img [ref=f5e2230]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2234]:
+                      - img [ref=f5e2235]
+                      - text: App Preso
+              - generic [ref=f5e2242] [cursor=pointer]:
+                - generic [ref=f5e2243]:
+                  - generic [ref=f5e2245]:
+                    - text: Giancarlo Pagliero
+                    - generic "Lead Fenice" [ref=f5e2246]: Fenice
+                  - generic [ref=f5e2248]:
+                    - generic [ref=f5e2249]:
+                      - img [ref=f5e2250]
+                      - generic [ref=f5e2252]: "3456705489"
+                      - button "Copia numero" [ref=f5e2253]:
+                        - img [ref=f5e2254]
+                    - generic [ref=f5e2257]:
+                      - img [ref=f5e2258]
+                      - generic "giancarlo.pagliero@libero.it" [ref=f5e2261]
+                      - button "Copia email" [ref=f5e2262]:
+                        - img [ref=f5e2263]
+                - generic [ref=f5e2266]:
+                  - generic [ref=f5e2267]: JOB SIMULATOR
+                  - generic [ref=f5e2268]: Nuovo
+                - generic [ref=f5e2271]:
+                  - img [ref=f5e2273]
+                  - generic [ref=f5e2275]: Mai chiamato
+                - generic [ref=f5e2276]:
+                  - button "Script" [ref=f5e2277]:
+                    - img [ref=f5e2278]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2281]:
+                    - img [ref=f5e2282]
+                    - text: Agenda
+                  - generic [ref=f5e2285]:
+                    - button "NR" [ref=f5e2286]:
+                      - img [ref=f5e2287]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2291]:
+                      - img [ref=f5e2292]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2295]:
+                      - img [ref=f5e2296]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2300]:
+                      - img [ref=f5e2301]
+                      - text: App Preso
+              - generic [ref=f5e2308] [cursor=pointer]:
+                - generic [ref=f5e2309]:
+                  - generic [ref=f5e2311]:
+                    - text: Davide
+                    - generic "Lead Fenice" [ref=f5e2312]: Fenice
+                  - generic [ref=f5e2314]:
+                    - generic [ref=f5e2315]:
+                      - img [ref=f5e2316]
+                      - generic [ref=f5e2318]: "3246168273"
+                      - button "Copia numero" [ref=f5e2319]:
+                        - img [ref=f5e2320]
+                    - generic [ref=f5e2323]:
+                      - img [ref=f5e2324]
+                      - generic "amadidavide76@gmail.com" [ref=f5e2327]
+                      - button "Copia email" [ref=f5e2328]:
+                        - img [ref=f5e2329]
+                - generic [ref=f5e2332]:
+                  - generic [ref=f5e2333]: CORSO 10 ORE
+                  - generic [ref=f5e2334]: Nuovo
+                - generic [ref=f5e2337]:
+                  - img [ref=f5e2339]
+                  - generic [ref=f5e2341]: Mai chiamato
+                - generic [ref=f5e2342]:
+                  - button "Script" [ref=f5e2343]:
+                    - img [ref=f5e2344]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2347]:
+                    - img [ref=f5e2348]
+                    - text: Agenda
+                  - generic [ref=f5e2351]:
+                    - button "NR" [ref=f5e2352]:
+                      - img [ref=f5e2353]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2357]:
+                      - img [ref=f5e2358]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2361]:
+                      - img [ref=f5e2362]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2366]:
+                      - img [ref=f5e2367]
+                      - text: App Preso
+              - generic [ref=f5e2374] [cursor=pointer]:
+                - generic [ref=f5e2375]:
+                  - generic [ref=f5e2377]:
+                    - text: mirella rizzo
+                    - generic "Lead Fenice" [ref=f5e2378]: Fenice
+                  - generic [ref=f5e2380]:
+                    - generic [ref=f5e2381]:
+                      - img [ref=f5e2382]
+                      - generic [ref=f5e2384]: "3806515261"
+                      - button "Copia numero" [ref=f5e2385]:
+                        - img [ref=f5e2386]
+                    - generic [ref=f5e2389]:
+                      - img [ref=f5e2390]
+                      - generic "mirella-rizzo@libero.it" [ref=f5e2393]
+                      - button "Copia email" [ref=f5e2394]:
+                        - img [ref=f5e2395]
+                - generic [ref=f5e2398]:
+                  - generic [ref=f5e2399]: JOB SIMULATOR
+                  - generic [ref=f5e2400]: Nuovo
+                - generic [ref=f5e2403]:
+                  - img [ref=f5e2405]
+                  - generic [ref=f5e2407]: Mai chiamato
+                - generic [ref=f5e2408]:
+                  - button "Script" [ref=f5e2409]:
+                    - img [ref=f5e2410]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2413]:
+                    - img [ref=f5e2414]
+                    - text: Agenda
+                  - generic [ref=f5e2417]:
+                    - button "NR" [ref=f5e2418]:
+                      - img [ref=f5e2419]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2423]:
+                      - img [ref=f5e2424]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2427]:
+                      - img [ref=f5e2428]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2432]:
+                      - img [ref=f5e2433]
+                      - text: App Preso
+              - generic [ref=f5e2440] [cursor=pointer]:
+                - generic [ref=f5e2441]:
+                  - generic [ref=f5e2443]:
+                    - text: Marco piredda piredda
+                    - generic "Lead Fenice" [ref=f5e2444]: Fenice
+                  - generic [ref=f5e2446]:
+                    - generic [ref=f5e2447]:
+                      - img [ref=f5e2448]
+                      - generic [ref=f5e2450]: "3453455472"
+                      - button "Copia numero" [ref=f5e2451]:
+                        - img [ref=f5e2452]
+                    - generic [ref=f5e2455]:
+                      - img [ref=f5e2456]
+                      - generic "monicapiredda53@gmail.com" [ref=f5e2459]
+                      - button "Copia email" [ref=f5e2460]:
+                        - img [ref=f5e2461]
+                - generic [ref=f5e2464]:
+                  - generic [ref=f5e2465]: TELEGRAM
+                  - generic [ref=f5e2466]: Nuovo
+                - generic [ref=f5e2469]:
+                  - img [ref=f5e2471]
+                  - generic [ref=f5e2473]: Mai chiamato
+                - generic [ref=f5e2474]:
+                  - button "Script" [ref=f5e2475]:
+                    - img [ref=f5e2476]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2479]:
+                    - img [ref=f5e2480]
+                    - text: Agenda
+                  - generic [ref=f5e2483]:
+                    - button "NR" [ref=f5e2484]:
+                      - img [ref=f5e2485]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2489]:
+                      - img [ref=f5e2490]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2493]:
+                      - img [ref=f5e2494]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2498]:
+                      - img [ref=f5e2499]
+                      - text: App Preso
+              - generic [ref=f5e2506] [cursor=pointer]:
+                - generic [ref=f5e2507]:
+                  - generic [ref=f5e2509]:
+                    - text: Claudia
+                    - generic "Lead Fenice" [ref=f5e2510]: Fenice
+                  - generic [ref=f5e2512]:
+                    - generic [ref=f5e2513]:
+                      - img [ref=f5e2514]
+                      - generic [ref=f5e2516]: "3206694260"
+                      - button "Copia numero" [ref=f5e2517]:
+                        - img [ref=f5e2518]
+                    - generic [ref=f5e2521]:
+                      - img [ref=f5e2522]
+                      - generic "momy77@outlook.it" [ref=f5e2525]
+                      - button "Copia email" [ref=f5e2526]:
+                        - img [ref=f5e2527]
+                - generic [ref=f5e2530]:
+                  - generic [ref=f5e2531]: TELEGRAM
+                  - generic [ref=f5e2532]: Nuovo
+                - generic [ref=f5e2535]:
+                  - img [ref=f5e2537]
+                  - generic [ref=f5e2539]: Mai chiamato
+                - generic [ref=f5e2540]:
+                  - button "Script" [ref=f5e2541]:
+                    - img [ref=f5e2542]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2545]:
+                    - img [ref=f5e2546]
+                    - text: Agenda
+                  - generic [ref=f5e2549]:
+                    - button "NR" [ref=f5e2550]:
+                      - img [ref=f5e2551]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2555]:
+                      - img [ref=f5e2556]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2559]:
+                      - img [ref=f5e2560]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2564]:
+                      - img [ref=f5e2565]
+                      - text: App Preso
+              - generic [ref=f5e2572] [cursor=pointer]:
+                - generic [ref=f5e2573]:
+                  - generic [ref=f5e2575]:
+                    - text: Anna Corazzari
+                    - generic "Lead Fenice" [ref=f5e2576]: Fenice
+                  - generic [ref=f5e2578]:
+                    - generic [ref=f5e2579]:
+                      - img [ref=f5e2580]
+                      - generic [ref=f5e2582]: "3292812978"
+                      - button "Copia numero" [ref=f5e2583]:
+                        - img [ref=f5e2584]
+                    - generic [ref=f5e2587]:
+                      - img [ref=f5e2588]
+                      - generic "annapoletti4@gmail.com" [ref=f5e2591]
+                      - button "Copia email" [ref=f5e2592]:
+                        - img [ref=f5e2593]
+                - generic [ref=f5e2596]:
+                  - generic [ref=f5e2597]: TELEGRAM-TK
+                  - generic [ref=f5e2598]: Nuovo
+                - generic [ref=f5e2601]:
+                  - img [ref=f5e2603]
+                  - generic [ref=f5e2605]: Mai chiamato
+                - generic [ref=f5e2606]:
+                  - button "Script" [ref=f5e2607]:
+                    - img [ref=f5e2608]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2611]:
+                    - img [ref=f5e2612]
+                    - text: Agenda
+                  - generic [ref=f5e2615]:
+                    - button "NR" [ref=f5e2616]:
+                      - img [ref=f5e2617]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2621]:
+                      - img [ref=f5e2622]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2625]:
+                      - img [ref=f5e2626]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2630]:
+                      - img [ref=f5e2631]
+                      - text: App Preso
+              - generic [ref=f5e2638] [cursor=pointer]:
+                - generic [ref=f5e2639]:
+                  - generic [ref=f5e2641]:
+                    - text: Marco Bosio Bosio
+                    - generic "Lead Fenice" [ref=f5e2642]: Fenice
+                  - generic [ref=f5e2644]:
+                    - generic [ref=f5e2645]:
+                      - img [ref=f5e2646]
+                      - generic [ref=f5e2648]: "3281679066"
+                      - button "Copia numero" [ref=f5e2649]:
+                        - img [ref=f5e2650]
+                    - generic [ref=f5e2653]:
+                      - img [ref=f5e2654]
+                      - generic "marco.bosio10040@gmail.com" [ref=f5e2657]
+                      - button "Copia email" [ref=f5e2658]:
+                        - img [ref=f5e2659]
+                - generic [ref=f5e2662]:
+                  - generic [ref=f5e2663]: TELEGRAM
+                  - generic [ref=f5e2664]: Nuovo
+                - generic [ref=f5e2667]:
+                  - img [ref=f5e2669]
+                  - generic [ref=f5e2671]: Mai chiamato
+                - generic [ref=f5e2672]:
+                  - button "Script" [ref=f5e2673]:
+                    - img [ref=f5e2674]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2677]:
+                    - img [ref=f5e2678]
+                    - text: Agenda
+                  - generic [ref=f5e2681]:
+                    - button "NR" [ref=f5e2682]:
+                      - img [ref=f5e2683]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2687]:
+                      - img [ref=f5e2688]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2691]:
+                      - img [ref=f5e2692]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2696]:
+                      - img [ref=f5e2697]
+                      - text: App Preso
+              - generic [ref=f5e2704] [cursor=pointer]:
+                - generic [ref=f5e2705]:
+                  - generic [ref=f5e2707]:
+                    - text: Fiorella Fedele
+                    - generic "Lead Fenice" [ref=f5e2708]: Fenice
+                  - generic [ref=f5e2710]:
+                    - generic [ref=f5e2711]:
+                      - img [ref=f5e2712]
+                      - generic [ref=f5e2714]: "3389095383"
+                      - button "Duplicato" [ref=f5e2715]:
+                        - img [ref=f5e2716]
+                        - text: Duplicato
+                      - button "Copia numero" [ref=f5e2721]:
+                        - img [ref=f5e2722]
+                    - generic [ref=f5e2725]:
+                      - img [ref=f5e2726]
+                      - generic "fiorella.fedele@libero.it" [ref=f5e2729]
+                      - button "Copia email" [ref=f5e2730]:
+                        - img [ref=f5e2731]
+                - generic [ref=f5e2734]:
+                  - generic [ref=f5e2735]: CORSO 10 ORE
+                  - generic [ref=f5e2736]: Nuovo
+                - generic [ref=f5e2739]:
+                  - img [ref=f5e2741]
+                  - generic [ref=f5e2743]: Mai chiamato
+                - generic [ref=f5e2744]:
+                  - button "Script" [ref=f5e2745]:
+                    - img [ref=f5e2746]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2749]:
+                    - img [ref=f5e2750]
+                    - text: Agenda
+                  - generic [ref=f5e2753]:
+                    - button "NR" [ref=f5e2754]:
+                      - img [ref=f5e2755]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2759]:
+                      - img [ref=f5e2760]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2763]:
+                      - img [ref=f5e2764]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2768]:
+                      - img [ref=f5e2769]
+                      - text: App Preso
+              - generic [ref=f5e2776] [cursor=pointer]:
+                - generic [ref=f5e2777]:
+                  - generic [ref=f5e2779]:
+                    - text: MariAngela
+                    - generic "Lead Fenice" [ref=f5e2780]: Fenice
+                  - generic [ref=f5e2782]:
+                    - generic [ref=f5e2783]:
+                      - img [ref=f5e2784]
+                      - generic [ref=f5e2786]: "3393725991"
+                      - button "Copia numero" [ref=f5e2787]:
+                        - img [ref=f5e2788]
+                    - generic [ref=f5e2791]:
+                      - img [ref=f5e2792]
+                      - generic "m.laterza1976@gmail.com" [ref=f5e2795]
+                      - button "Copia email" [ref=f5e2796]:
+                        - img [ref=f5e2797]
+                - generic [ref=f5e2800]:
+                  - generic [ref=f5e2801]: TELEGRAM
+                  - generic [ref=f5e2802]: Nuovo
+                - generic [ref=f5e2805]:
+                  - img [ref=f5e2807]
+                  - generic [ref=f5e2809]: Mai chiamato
+                - generic [ref=f5e2810]:
+                  - button "Script" [ref=f5e2811]:
+                    - img [ref=f5e2812]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2815]:
+                    - img [ref=f5e2816]
+                    - text: Agenda
+                  - generic [ref=f5e2819]:
+                    - button "NR" [ref=f5e2820]:
+                      - img [ref=f5e2821]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2825]:
+                      - img [ref=f5e2826]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2829]:
+                      - img [ref=f5e2830]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2834]:
+                      - img [ref=f5e2835]
+                      - text: App Preso
+              - generic [ref=f5e2842] [cursor=pointer]:
+                - generic [ref=f5e2843]:
+                  - generic [ref=f5e2845]:
+                    - text: Mariano Giannini Giannini
+                    - generic "Lead Fenice" [ref=f5e2846]: Fenice
+                  - generic [ref=f5e2848]:
+                    - generic [ref=f5e2849]:
+                      - img [ref=f5e2850]
+                      - generic [ref=f5e2852]: "3473317901"
+                      - button "Copia numero" [ref=f5e2853]:
+                        - img [ref=f5e2854]
+                    - generic [ref=f5e2857]:
+                      - img [ref=f5e2858]
+                      - generic "mariano.giannini@virgilio.it" [ref=f5e2861]
+                      - button "Copia email" [ref=f5e2862]:
+                        - img [ref=f5e2863]
+                - generic [ref=f5e2866]:
+                  - generic [ref=f5e2867]: TELEGRAM
+                  - generic [ref=f5e2868]: Nuovo
+                - generic [ref=f5e2871]:
+                  - img [ref=f5e2873]
+                  - generic [ref=f5e2875]: Mai chiamato
+                - generic [ref=f5e2876]:
+                  - button "Script" [ref=f5e2877]:
+                    - img [ref=f5e2878]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2881]:
+                    - img [ref=f5e2882]
+                    - text: Agenda
+                  - generic [ref=f5e2885]:
+                    - button "NR" [ref=f5e2886]:
+                      - img [ref=f5e2887]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2891]:
+                      - img [ref=f5e2892]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2895]:
+                      - img [ref=f5e2896]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2900]:
+                      - img [ref=f5e2901]
+                      - text: App Preso
+              - generic [ref=f5e2908] [cursor=pointer]:
+                - generic [ref=f5e2909]:
+                  - generic [ref=f5e2911]:
+                    - text: Rachid korso
+                    - generic "Lead Fenice" [ref=f5e2912]: Fenice
+                  - generic [ref=f5e2914]:
+                    - generic [ref=f5e2915]:
+                      - img [ref=f5e2916]
+                      - generic [ref=f5e2918]: "3296262909"
+                      - button "Copia numero" [ref=f5e2919]:
+                        - img [ref=f5e2920]
+                    - generic [ref=f5e2923]:
+                      - img [ref=f5e2924]
+                      - generic "rachidkorso0@gmail.com" [ref=f5e2927]
+                      - button "Copia email" [ref=f5e2928]:
+                        - img [ref=f5e2929]
+                - generic [ref=f5e2932]:
+                  - generic [ref=f5e2933]: JOB SIMULATOR
+                  - generic [ref=f5e2934]: Nuovo
+                - generic [ref=f5e2937]:
+                  - img [ref=f5e2939]
+                  - generic [ref=f5e2941]: Mai chiamato
+                - generic [ref=f5e2942]:
+                  - button "Script" [ref=f5e2943]:
+                    - img [ref=f5e2944]
+                    - text: Script
+                  - button "Agenda" [ref=f5e2947]:
+                    - img [ref=f5e2948]
+                    - text: Agenda
+                  - generic [ref=f5e2951]:
+                    - button "NR" [ref=f5e2952]:
+                      - img [ref=f5e2953]
+                      - text: NR
+                    - button "Scartato" [ref=f5e2957]:
+                      - img [ref=f5e2958]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e2961]:
+                      - img [ref=f5e2962]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e2966]:
+                      - img [ref=f5e2967]
+                      - text: App Preso
+              - generic [ref=f5e2974] [cursor=pointer]:
+                - generic [ref=f5e2975]:
+                  - generic [ref=f5e2977]:
+                    - text: Francesca Papi
+                    - generic "Lead Fenice" [ref=f5e2978]: Fenice
+                  - generic [ref=f5e2980]:
+                    - generic [ref=f5e2981]:
+                      - img [ref=f5e2982]
+                      - generic [ref=f5e2984]: "3336652881"
+                      - button "Copia numero" [ref=f5e2985]:
+                        - img [ref=f5e2986]
+                    - generic [ref=f5e2989]:
+                      - img [ref=f5e2990]
+                      - generic "papi.francesca@gmail.com" [ref=f5e2993]
+                      - button "Copia email" [ref=f5e2994]:
+                        - img [ref=f5e2995]
+                - generic [ref=f5e2998]:
+                  - generic [ref=f5e2999]: CORSO 10 ORE
+                  - generic [ref=f5e3000]: Nuovo
+                - generic [ref=f5e3003]:
+                  - img [ref=f5e3005]
+                  - generic [ref=f5e3007]: Mai chiamato
+                - generic [ref=f5e3008]:
+                  - button "Script" [ref=f5e3009]:
+                    - img [ref=f5e3010]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3013]:
+                    - img [ref=f5e3014]
+                    - text: Agenda
+                  - generic [ref=f5e3017]:
+                    - button "NR" [ref=f5e3018]:
+                      - img [ref=f5e3019]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3023]:
+                      - img [ref=f5e3024]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3027]:
+                      - img [ref=f5e3028]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3032]:
+                      - img [ref=f5e3033]
+                      - text: App Preso
+              - generic [ref=f5e3040] [cursor=pointer]:
+                - generic [ref=f5e3041]:
+                  - generic [ref=f5e3043]:
+                    - text: Andreea
+                    - generic "Lead Fenice" [ref=f5e3044]: Fenice
+                  - generic [ref=f5e3046]:
+                    - generic [ref=f5e3047]:
+                      - img [ref=f5e3048]
+                      - generic [ref=f5e3050]: "3669723285"
+                      - button "Copia numero" [ref=f5e3051]:
+                        - img [ref=f5e3052]
+                    - generic [ref=f5e3055]:
+                      - img [ref=f5e3056]
+                      - generic "rosuandreea122@gmail.com" [ref=f5e3059]
+                      - button "Copia email" [ref=f5e3060]:
+                        - img [ref=f5e3061]
+                - generic [ref=f5e3064]:
+                  - generic [ref=f5e3065]: TELEGRAM
+                  - generic [ref=f5e3066]: Nuovo
+                - generic [ref=f5e3069]:
+                  - img [ref=f5e3071]
+                  - generic [ref=f5e3073]: Mai chiamato
+                - generic [ref=f5e3074]:
+                  - button "Script" [ref=f5e3075]:
+                    - img [ref=f5e3076]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3079]:
+                    - img [ref=f5e3080]
+                    - text: Agenda
+                  - generic [ref=f5e3083]:
+                    - button "NR" [ref=f5e3084]:
+                      - img [ref=f5e3085]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3089]:
+                      - img [ref=f5e3090]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3093]:
+                      - img [ref=f5e3094]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3098]:
+                      - img [ref=f5e3099]
+                      - text: App Preso
+              - generic [ref=f5e3106] [cursor=pointer]:
+                - generic [ref=f5e3107]:
+                  - generic [ref=f5e3109]:
+                    - text: Deborah Pristerà Pristerà
+                    - generic "Lead Fenice" [ref=f5e3110]: Fenice
+                  - generic [ref=f5e3112]:
+                    - generic [ref=f5e3113]:
+                      - img [ref=f5e3114]
+                      - generic [ref=f5e3116]: "3513690572"
+                      - button "Copia numero" [ref=f5e3117]:
+                        - img [ref=f5e3118]
+                    - generic [ref=f5e3121]:
+                      - img [ref=f5e3122]
+                      - generic "deborah.pristera@hotmail.com" [ref=f5e3125]
+                      - button "Copia email" [ref=f5e3126]:
+                        - img [ref=f5e3127]
+                - generic [ref=f5e3130]:
+                  - generic [ref=f5e3131]: TELEGRAM
+                  - generic [ref=f5e3132]: Nuovo
+                - generic [ref=f5e3135]:
+                  - img [ref=f5e3137]
+                  - generic [ref=f5e3139]: Mai chiamato
+                - generic [ref=f5e3140]:
+                  - button "Script" [ref=f5e3141]:
+                    - img [ref=f5e3142]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3145]:
+                    - img [ref=f5e3146]
+                    - text: Agenda
+                  - generic [ref=f5e3149]:
+                    - button "NR" [ref=f5e3150]:
+                      - img [ref=f5e3151]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3155]:
+                      - img [ref=f5e3156]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3159]:
+                      - img [ref=f5e3160]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3164]:
+                      - img [ref=f5e3165]
+                      - text: App Preso
+              - generic [ref=f5e3172] [cursor=pointer]:
+                - generic [ref=f5e3173]:
+                  - generic [ref=f5e3175]:
+                    - text: Raffaella Zedda Zedda
+                    - generic "Lead Fenice" [ref=f5e3176]: Fenice
+                  - generic [ref=f5e3178]:
+                    - generic [ref=f5e3179]:
+                      - img [ref=f5e3180]
+                      - generic [ref=f5e3182]: "3464234365"
+                      - button "Copia numero" [ref=f5e3183]:
+                        - img [ref=f5e3184]
+                    - generic [ref=f5e3187]:
+                      - img [ref=f5e3188]
+                      - generic "raffyzedda87@gmail.com" [ref=f5e3191]
+                      - button "Copia email" [ref=f5e3192]:
+                        - img [ref=f5e3193]
+                - generic [ref=f5e3196]:
+                  - generic [ref=f5e3197]: TELEGRAM
+                  - generic [ref=f5e3198]: Nuovo
+                - generic [ref=f5e3201]:
+                  - img [ref=f5e3203]
+                  - generic [ref=f5e3205]: Mai chiamato
+                - generic [ref=f5e3206]:
+                  - button "Script" [ref=f5e3207]:
+                    - img [ref=f5e3208]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3211]:
+                    - img [ref=f5e3212]
+                    - text: Agenda
+                  - generic [ref=f5e3215]:
+                    - button "NR" [ref=f5e3216]:
+                      - img [ref=f5e3217]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3221]:
+                      - img [ref=f5e3222]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3225]:
+                      - img [ref=f5e3226]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3230]:
+                      - img [ref=f5e3231]
+                      - text: App Preso
+              - generic [ref=f5e3238] [cursor=pointer]:
+                - generic [ref=f5e3239]:
+                  - generic [ref=f5e3241]:
+                    - text: emilio
+                    - generic "Lead Fenice" [ref=f5e3242]: Fenice
+                  - generic [ref=f5e3244]:
+                    - generic [ref=f5e3245]:
+                      - img [ref=f5e3246]
+                      - generic [ref=f5e3248]: "3395742415"
+                      - button "Copia numero" [ref=f5e3249]:
+                        - img [ref=f5e3250]
+                    - generic [ref=f5e3253]:
+                      - img [ref=f5e3254]
+                      - generic "emilioserino.94@outlook.it" [ref=f5e3257]
+                      - button "Copia email" [ref=f5e3258]:
+                        - img [ref=f5e3259]
+                - generic [ref=f5e3262]:
+                  - generic [ref=f5e3263]: CORSO 10 ORE
+                  - generic [ref=f5e3264]: Nuovo
+                - generic [ref=f5e3267]:
+                  - img [ref=f5e3269]
+                  - generic [ref=f5e3271]: Mai chiamato
+                - generic [ref=f5e3272]:
+                  - button "Script" [ref=f5e3273]:
+                    - img [ref=f5e3274]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3277]:
+                    - img [ref=f5e3278]
+                    - text: Agenda
+                  - generic [ref=f5e3281]:
+                    - button "NR" [ref=f5e3282]:
+                      - img [ref=f5e3283]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3287]:
+                      - img [ref=f5e3288]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3291]:
+                      - img [ref=f5e3292]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3296]:
+                      - img [ref=f5e3297]
+                      - text: App Preso
+              - generic [ref=f5e3304] [cursor=pointer]:
+                - generic [ref=f5e3305]:
+                  - generic [ref=f5e3307]:
+                    - text: Eliana Pellegrini Pellegrini
+                    - generic "Lead Fenice" [ref=f5e3308]: Fenice
+                  - generic [ref=f5e3310]:
+                    - generic [ref=f5e3311]:
+                      - img [ref=f5e3312]
+                      - generic [ref=f5e3314]: "3394465579"
+                      - button "Copia numero" [ref=f5e3315]:
+                        - img [ref=f5e3316]
+                    - generic [ref=f5e3319]:
+                      - img [ref=f5e3320]
+                      - generic "pellegrini276@gmail.com" [ref=f5e3323]
+                      - button "Copia email" [ref=f5e3324]:
+                        - img [ref=f5e3325]
+                - generic [ref=f5e3328]:
+                  - generic [ref=f5e3329]: TELEGRAM
+                  - generic [ref=f5e3330]: Nuovo
+                - generic [ref=f5e3333]:
+                  - img [ref=f5e3335]
+                  - generic [ref=f5e3337]: Mai chiamato
+                - generic [ref=f5e3338]:
+                  - button "Script" [ref=f5e3339]:
+                    - img [ref=f5e3340]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3343]:
+                    - img [ref=f5e3344]
+                    - text: Agenda
+                  - generic [ref=f5e3347]:
+                    - button "NR" [ref=f5e3348]:
+                      - img [ref=f5e3349]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3353]:
+                      - img [ref=f5e3354]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3357]:
+                      - img [ref=f5e3358]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3362]:
+                      - img [ref=f5e3363]
+                      - text: App Preso
+              - generic [ref=f5e3370] [cursor=pointer]:
+                - generic [ref=f5e3371]:
+                  - generic [ref=f5e3373]:
+                    - text: Andrea Recupero
+                    - generic "Lead Fenice" [ref=f5e3374]: Fenice
+                  - generic [ref=f5e3376]:
+                    - generic [ref=f5e3377]:
+                      - img [ref=f5e3378]
+                      - generic [ref=f5e3380]: "3342027640"
+                      - button "Copia numero" [ref=f5e3381]:
+                        - img [ref=f5e3382]
+                    - generic [ref=f5e3385]:
+                      - img [ref=f5e3386]
+                      - generic "andrerecu@gmail.com" [ref=f5e3389]
+                      - button "Copia email" [ref=f5e3390]:
+                        - img [ref=f5e3391]
+                - generic [ref=f5e3394]:
+                  - generic [ref=f5e3395]: TELEGRAM
+                  - generic [ref=f5e3396]: Nuovo
+                - generic [ref=f5e3399]:
+                  - img [ref=f5e3401]
+                  - generic [ref=f5e3403]: Mai chiamato
+                - generic [ref=f5e3404]:
+                  - button "Script" [ref=f5e3405]:
+                    - img [ref=f5e3406]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3409]:
+                    - img [ref=f5e3410]
+                    - text: Agenda
+                  - generic [ref=f5e3413]:
+                    - button "NR" [ref=f5e3414]:
+                      - img [ref=f5e3415]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3419]:
+                      - img [ref=f5e3420]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3423]:
+                      - img [ref=f5e3424]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3428]:
+                      - img [ref=f5e3429]
+                      - text: App Preso
+              - generic [ref=f5e3436] [cursor=pointer]:
+                - generic [ref=f5e3437]:
+                  - generic [ref=f5e3439]:
+                    - text: Ketty
+                    - generic "Lead Fenice" [ref=f5e3440]: Fenice
+                  - generic [ref=f5e3442]:
+                    - generic [ref=f5e3443]:
+                      - img [ref=f5e3444]
+                      - generic [ref=f5e3446]: "3456671922"
+                      - button "Copia numero" [ref=f5e3447]:
+                        - img [ref=f5e3448]
+                    - generic [ref=f5e3451]:
+                      - img [ref=f5e3452]
+                      - generic "kfazzio22.kf@gmail.com" [ref=f5e3455]
+                      - button "Copia email" [ref=f5e3456]:
+                        - img [ref=f5e3457]
+                - generic [ref=f5e3460]:
+                  - generic [ref=f5e3461]: CORSO 10 ORE
+                  - generic [ref=f5e3462]: Nuovo
+                - generic [ref=f5e3465]:
+                  - img [ref=f5e3467]
+                  - generic [ref=f5e3469]: Mai chiamato
+                - generic [ref=f5e3470]:
+                  - button "Script" [ref=f5e3471]:
+                    - img [ref=f5e3472]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3475]:
+                    - img [ref=f5e3476]
+                    - text: Agenda
+                  - generic [ref=f5e3479]:
+                    - button "NR" [ref=f5e3480]:
+                      - img [ref=f5e3481]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3485]:
+                      - img [ref=f5e3486]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3489]:
+                      - img [ref=f5e3490]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3494]:
+                      - img [ref=f5e3495]
+                      - text: App Preso
+              - generic [ref=f5e3502] [cursor=pointer]:
+                - generic [ref=f5e3503]:
+                  - generic [ref=f5e3505]:
+                    - text: Marzia Chitussi
+                    - generic "Lead Fenice" [ref=f5e3506]: Fenice
+                  - generic [ref=f5e3508]:
+                    - generic [ref=f5e3509]:
+                      - img [ref=f5e3510]
+                      - generic [ref=f5e3512]: "3314364324"
+                      - button "Copia numero" [ref=f5e3513]:
+                        - img [ref=f5e3514]
+                    - generic [ref=f5e3517]:
+                      - img [ref=f5e3518]
+                      - generic "kitu_71@yahoo.com" [ref=f5e3521]
+                      - button "Copia email" [ref=f5e3522]:
+                        - img [ref=f5e3523]
+                - generic [ref=f5e3526]:
+                  - generic [ref=f5e3527]: JOB SIMULATOR
+                  - generic [ref=f5e3528]: Nuovo
+                - generic [ref=f5e3531]:
+                  - img [ref=f5e3533]
+                  - generic [ref=f5e3535]: Mai chiamato
+                - generic [ref=f5e3536]:
+                  - button "Script" [ref=f5e3537]:
+                    - img [ref=f5e3538]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3541]:
+                    - img [ref=f5e3542]
+                    - text: Agenda
+                  - generic [ref=f5e3545]:
+                    - button "NR" [ref=f5e3546]:
+                      - img [ref=f5e3547]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3551]:
+                      - img [ref=f5e3552]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3555]:
+                      - img [ref=f5e3556]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3560]:
+                      - img [ref=f5e3561]
+                      - text: App Preso
+              - generic [ref=f5e3568] [cursor=pointer]:
+                - generic [ref=f5e3569]:
+                  - generic [ref=f5e3571]:
+                    - text: angy
+                    - generic "Lead Fenice" [ref=f5e3572]: Fenice
+                  - generic [ref=f5e3574]:
+                    - generic [ref=f5e3575]:
+                      - img [ref=f5e3576]
+                      - generic [ref=f5e3578]: "+33333433343"
+                      - button "Copia numero" [ref=f5e3579]:
+                        - img [ref=f5e3580]
+                    - generic [ref=f5e3583]:
+                      - img [ref=f5e3584]
+                      - generic "angela76salsi@gmail.com" [ref=f5e3587]
+                      - button "Copia email" [ref=f5e3588]:
+                        - img [ref=f5e3589]
+                - generic [ref=f5e3592]:
+                  - generic [ref=f5e3593]: TELEGRAM
+                  - generic [ref=f5e3594]: Nuovo
+                - generic [ref=f5e3597]:
+                  - img [ref=f5e3599]
+                  - generic [ref=f5e3601]: Mai chiamato
+                - generic [ref=f5e3602]:
+                  - button "Script" [ref=f5e3603]:
+                    - img [ref=f5e3604]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3607]:
+                    - img [ref=f5e3608]
+                    - text: Agenda
+                  - generic [ref=f5e3611]:
+                    - button "NR" [ref=f5e3612]:
+                      - img [ref=f5e3613]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3617]:
+                      - img [ref=f5e3618]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3621]:
+                      - img [ref=f5e3622]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3626]:
+                      - img [ref=f5e3627]
+                      - text: App Preso
+              - generic [ref=f5e3634] [cursor=pointer]:
+                - generic [ref=f5e3635]:
+                  - generic [ref=f5e3637]:
+                    - text: Peroni Peroni
+                    - generic "Lead Fenice" [ref=f5e3638]: Fenice
+                  - generic [ref=f5e3640]:
+                    - generic [ref=f5e3641]:
+                      - img [ref=f5e3642]
+                      - generic [ref=f5e3644]: "3284810598"
+                      - button "Copia numero" [ref=f5e3645]:
+                        - img [ref=f5e3646]
+                    - generic [ref=f5e3649]:
+                      - img [ref=f5e3650]
+                      - generic "thomas.peroni25@gmail.com" [ref=f5e3653]
+                      - button "Copia email" [ref=f5e3654]:
+                        - img [ref=f5e3655]
+                - generic [ref=f5e3658]:
+                  - generic [ref=f5e3659]: JOB SIMULATOR
+                  - generic [ref=f5e3660]: Nuovo
+                - generic [ref=f5e3663]:
+                  - img [ref=f5e3665]
+                  - generic [ref=f5e3667]: Mai chiamato
+                - generic [ref=f5e3668]:
+                  - button "Script" [ref=f5e3669]:
+                    - img [ref=f5e3670]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3673]:
+                    - img [ref=f5e3674]
+                    - text: Agenda
+                  - generic [ref=f5e3677]:
+                    - button "NR" [ref=f5e3678]:
+                      - img [ref=f5e3679]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3683]:
+                      - img [ref=f5e3684]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3687]:
+                      - img [ref=f5e3688]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3692]:
+                      - img [ref=f5e3693]
+                      - text: App Preso
+              - generic [ref=f5e3700] [cursor=pointer]:
+                - generic [ref=f5e3701]:
+                  - generic [ref=f5e3703]:
+                    - text: Maria Mazza
+                    - generic "Lead Fenice" [ref=f5e3704]: Fenice
+                  - generic [ref=f5e3706]:
+                    - generic [ref=f5e3707]:
+                      - img [ref=f5e3708]
+                      - generic [ref=f5e3710]: "3881954603"
+                      - button "Copia numero" [ref=f5e3711]:
+                        - img [ref=f5e3712]
+                    - generic [ref=f5e3715]:
+                      - img [ref=f5e3716]
+                      - generic "mariacostanzamazza2@gmail.com" [ref=f5e3719]
+                      - button "Copia email" [ref=f5e3720]:
+                        - img [ref=f5e3721]
+                - generic [ref=f5e3724]:
+                  - generic [ref=f5e3725]: CORSO 10 ORE
+                  - generic [ref=f5e3726]: Nuovo
+                - generic [ref=f5e3729]:
+                  - img [ref=f5e3731]
+                  - generic [ref=f5e3733]: Mai chiamato
+                - generic [ref=f5e3734]:
+                  - button "Script" [ref=f5e3735]:
+                    - img [ref=f5e3736]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3739]:
+                    - img [ref=f5e3740]
+                    - text: Agenda
+                  - generic [ref=f5e3743]:
+                    - button "NR" [ref=f5e3744]:
+                      - img [ref=f5e3745]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3749]:
+                      - img [ref=f5e3750]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3753]:
+                      - img [ref=f5e3754]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3758]:
+                      - img [ref=f5e3759]
+                      - text: App Preso
+              - generic [ref=f5e3766] [cursor=pointer]:
+                - generic [ref=f5e3767]:
+                  - generic [ref=f5e3769]:
+                    - text: Cristina
+                    - generic "Lead Fenice" [ref=f5e3770]: Fenice
+                  - generic [ref=f5e3772]:
+                    - generic [ref=f5e3773]:
+                      - img [ref=f5e3774]
+                      - generic [ref=f5e3776]: "3479728872"
+                      - button "Copia numero" [ref=f5e3777]:
+                        - img [ref=f5e3778]
+                    - generic [ref=f5e3781]:
+                      - img [ref=f5e3782]
+                      - generic "cristina.cappelli67@gmail.com" [ref=f5e3785]
+                      - button "Copia email" [ref=f5e3786]:
+                        - img [ref=f5e3787]
+                - generic [ref=f5e3790]:
+                  - generic [ref=f5e3791]: JOB SIMULATOR
+                  - generic [ref=f5e3792]: Nuovo
+                - generic [ref=f5e3795]:
+                  - img [ref=f5e3797]
+                  - generic [ref=f5e3799]: Mai chiamato
+                - generic [ref=f5e3800]:
+                  - button "Script" [ref=f5e3801]:
+                    - img [ref=f5e3802]
+                    - text: Script
+                  - button "Agenda" [ref=f5e3805]:
+                    - img [ref=f5e3806]
+                    - text: Agenda
+                  - generic [ref=f5e3809]:
+                    - button "NR" [ref=f5e3810]:
+                      - img [ref=f5e3811]
+                      - text: NR
+                    - button "Scartato" [ref=f5e3815]:
+                      - img [ref=f5e3816]
+                      - text: Scartato
+                    - button "Richiamo" [ref=f5e3819]:
+                      - img [ref=f5e3820]
+                      - text: Richiamo
+                    - button "App Preso" [ref=f5e3824]:
+                      - img [ref=f5e3825]
+                      - text: App Preso
+  - button "Open Next.js Dev Tools" [ref=f5e3837] [cursor=pointer]:
+    - img [ref=f5e3838]
+  - alert [ref=f5e4029]

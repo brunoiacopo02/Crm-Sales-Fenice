@@ -1,0 +1,6 @@
+[    2860ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/b0e9dd92312f829e.js?dpl=dpl_EK6TFdqRcNDWTb3cxMKiFbsyNjnf:2
+[   80808ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/b0e9dd92312f829e.js?dpl=dpl_EK6TFdqRcNDWTb3cxMKiFbsyNjnf:2
+[  179261ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://crm-sales-fenice.vercel.app/unauthorized:0
+[  256905ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/b0e9dd92312f829e.js?dpl=dpl_2BLZAUNtCQno7AL5ghm13kdZuT4c:2
+[  256909ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/b0e9dd92312f829e.js?dpl=dpl_2BLZAUNtCQno7AL5ghm13kdZuT4c:2
+[  283742ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ https://crm-sales-fenice.vercel.app/_next/static/chunks/b0e9dd92312f829e.js?dpl=dpl_2BLZAUNtCQno7AL5ghm13kdZuT4c:2

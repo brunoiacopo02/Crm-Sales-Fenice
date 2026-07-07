@@ -1,0 +1,832 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - generic [ref=e996]:
+          - generic [ref=e997]: Admin
+          - link "Sales Manager" [ref=e998] [cursor=pointer]:
+            - /url: /panoramica-generale
+            - generic [ref=e999]:
+              - img [ref=e1000]
+              - generic [ref=e1003]: Sales Manager
+        - generic [ref=e1004]:
+          - generic [ref=e1006]: Operativo
+          - link "Dashboard Operativa" [ref=e1007] [cursor=pointer]:
+            - /url: /team
+            - generic [ref=e1008]:
+              - img [ref=e1009]
+              - generic [ref=e1021]: Dashboard Operativa
+          - link "Appuntamenti Oggi" [ref=e1022] [cursor=pointer]:
+            - /url: /appuntamenti-oggi
+            - generic [ref=e1023]:
+              - img [ref=e1024]
+              - generic [ref=e1026]: Appuntamenti Oggi
+          - link "Appuntamenti (Conferme)" [ref=e1027] [cursor=pointer]:
+            - /url: /conferme
+            - generic [ref=e1028]:
+              - img [ref=e1029]
+              - generic [ref=e1031]: Appuntamenti (Conferme)
+          - link "Monitor Vendite" [ref=e1032] [cursor=pointer]:
+            - /url: /monitor-vendite
+            - generic [ref=e1033]:
+              - img [ref=e1034]
+              - generic [ref=e1037]: Monitor Vendite
+          - link "Portafoglio Clienti" [ref=e1038] [cursor=pointer]:
+            - /url: /portafoglio-clienti
+            - generic [ref=e1039]:
+              - img [ref=e1040]
+              - generic [ref=e1043]: Portafoglio Clienti
+          - link "Monitor Pause" [ref=e1044] [cursor=pointer]:
+            - /url: /monitor-pause
+            - generic [ref=e1045]:
+              - img [ref=e1046]
+              - generic [ref=e1049]: Monitor Pause
+          - link "Importa Lead" [ref=e1050] [cursor=pointer]:
+            - /url: /import
+            - generic [ref=e1051]:
+              - img [ref=e1052]
+              - generic [ref=e1055]: Importa Lead
+          - link "Lead Automatici (AC)" [ref=e1056] [cursor=pointer]:
+            - /url: /lead-automatici
+            - generic [ref=e1057]:
+              - img [ref=e1058]
+              - generic [ref=e1060]: Lead Automatici (AC)
+          - link "Archivio Storico" [ref=e1061] [cursor=pointer]:
+            - /url: /archivio
+            - generic [ref=e1062]:
+              - img [ref=e1063]
+              - generic [ref=e1067]: Archivio Storico
+          - link "Scartati (Marketing)" [ref=e1068] [cursor=pointer]:
+            - /url: /scartati
+            - generic [ref=e1069]:
+              - img [ref=e1070]
+              - generic [ref=e1074]: Scartati (Marketing)
+        - generic [ref=e1075]:
+          - generic [ref=e1077]: KPI & Analytics
+          - link "KPI GDO" [ref=e1078] [cursor=pointer]:
+            - /url: /kpi-gdo
+            - generic [ref=e1079]:
+              - img [ref=e1080]
+              - generic [ref=e1085]: KPI GDO
+          - link "Operativa Team" [ref=e1086] [cursor=pointer]:
+            - /url: /operativa-team
+            - generic [ref=e1087]:
+              - img [ref=e1088]
+              - generic [ref=e1093]: Operativa Team
+          - link "KPI Venditori" [ref=e1094] [cursor=pointer]:
+            - /url: /kpi-venditori
+            - generic [ref=e1095]:
+              - img [ref=e1096]
+              - generic [ref=e1102]: KPI Venditori
+          - link "KPI Conferme" [ref=e1103] [cursor=pointer]:
+            - /url: /kpi-conferme
+            - generic [ref=e1104]:
+              - img [ref=e1105]
+              - generic [ref=e1110]: KPI Conferme
+          - link "Analytics Staffing Conferme" [ref=e1111] [cursor=pointer]:
+            - /url: /conferme/analytics
+            - generic [ref=e1112]:
+              - img [ref=e1113]
+              - generic [ref=e1118]: Analytics Staffing Conferme
+          - link "Marketing Analytics" [ref=e1119] [cursor=pointer]:
+            - /url: /marketing-analytics
+            - generic [ref=e1120]:
+              - img [ref=e1121]
+              - generic [ref=e1125]: Marketing Analytics
+          - link "Qualità Lead (Sondaggi)" [ref=e1126] [cursor=pointer]:
+            - /url: /qualita-lead
+            - generic [ref=e1127]:
+              - img [ref=e1128]
+              - generic [ref=e1131]: Qualità Lead (Sondaggi)
+          - link "Analisi Qualità" [ref=e1132] [cursor=pointer]:
+            - /url: /analisi-qualita
+            - generic [ref=e1133]:
+              - img [ref=e1134]
+              - generic [ref=e1137]: Analisi Qualità
+          - link "Performance GDO" [ref=e1138] [cursor=pointer]:
+            - /url: /manager-gdo-performance
+            - generic [ref=e1139]:
+              - img [ref=e1140]
+              - generic [ref=e1146]: Performance GDO
+        - generic [ref=e1147]:
+          - generic [ref=e1149]: Team & HR
+          - link "Target & Previsioni" [ref=e1150] [cursor=pointer]:
+            - /url: /manager-targets
+            - generic [ref=e1151]:
+              - img [ref=e1152]
+              - generic [ref=e1156]: Target & Previsioni
+          - link "Note GDO" [ref=e1157] [cursor=pointer]:
+            - /url: /note-gdo
+            - generic [ref=e1158]:
+              - img [ref=e1159]
+              - generic [ref=e1162]: Note GDO
+        - generic [ref=e1163]:
+          - generic [ref=e1164]: 🔥
+          - generic [ref=e1165]: Gamification
+          - link "Monitor RPG GDO" [ref=e1166] [cursor=pointer]:
+            - /url: /manager-rpg-monitor
+            - generic [ref=e1167]:
+              - img [ref=e1168]
+              - generic [ref=e1170]: Monitor RPG GDO
+          - link "Gestione Store" [ref=e1171] [cursor=pointer]:
+            - /url: /team/store
+            - generic [ref=e1172]:
+              - img [ref=e1173]
+              - generic [ref=e1177]: Gestione Store
+      - button "Disconnetti" [ref=e12]:
+        - img [ref=e13]
+        - generic [ref=e16]: Disconnetti
+    - generic [ref=e17]:
+      - banner [ref=e18]:
+        - generic [ref=e19]:
+          - button "Fenice Academy" [ref=e1178]:
+            - img [ref=e1179]
+            - generic [ref=e1183]: Fenice Academy
+            - img [ref=e1184]
+          - button [ref=e27]:
+            - img [ref=e28]
+          - generic [ref=e31]:
+            - generic [ref=e33]: QA Admin
+            - generic [ref=e35]: Q
+      - main [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e42]:
+            - heading "Cruscotto Gamification Team" [level=2] [ref=e43]:
+              - img [ref=e44]
+              - text: Cruscotto Gamification Team
+            - generic [ref=e46]: "Supervisione completa: Livelli, XP, Coins, Streak, Quest, Boss Battle e Eventi Stagionali"
+          - generic [ref=e47]:
+            - generic [ref=e48]:
+              - generic [ref=e49]:
+                - img [ref=e50]
+                - text: Team Attivo
+              - generic [ref=e55]: "18"
+              - generic [ref=e56]: GDO + Conferme
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - img [ref=e59]
+                - text: Quest Completate Oggi
+              - generic [ref=e63]: "3"
+              - generic [ref=e64]: totale team
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - img [ref=e67]
+                - text: Media Streak
+              - generic [ref=e69]: 2 gg
+              - generic [ref=e70]: giorni consecutivi
+            - generic [ref=e71]:
+              - generic [ref=e72]:
+                - img [ref=e73]
+                - text: Piu' Attivo Oggi
+              - generic [ref=e79]:
+                - generic [ref=e80]: Andrea (Conferme)
+                - generic [ref=e81]: 1 quest · CONFERME
+          - generic [ref=e82]:
+            - generic [ref=e84] [cursor=pointer]:
+              - generic [ref=e85]:
+                - img [ref=e87]
+                - generic [ref=e96]:
+                  - generic [ref=e97]: Boss Battle
+                  - generic [ref=e98]: Nessuna boss battle attiva
+              - img [ref=e99]
+            - generic [ref=e102] [cursor=pointer]:
+              - generic [ref=e103]:
+                - img [ref=e105]
+                - generic [ref=e108]:
+                  - generic [ref=e109]: Evento Stagionale
+                  - generic [ref=e110]: Nessun evento attivo
+              - img [ref=e111]
+          - table [ref=e115]:
+            - rowgroup [ref=e116]:
+              - row "Operatore Ruolo Livello XP Streak Quest Oggi Fenice Coins Azioni" [ref=e117]:
+                - columnheader "Operatore" [ref=e118]
+                - columnheader "Ruolo" [ref=e119]
+                - columnheader "Livello" [ref=e120]
+                - columnheader "XP" [ref=e121]
+                - columnheader "Streak" [ref=e122]
+                - columnheader "Quest Oggi" [ref=e123]
+                - columnheader "Fenice Coins" [ref=e124]
+                - columnheader "Azioni" [ref=e125]
+            - rowgroup [ref=e126]:
+              - row "F GDO 117 Fenice di Fuoco GDO Lv. 30 228 / 1492 2 0 15.206" [ref=e127]:
+                - cell "F GDO 117 Fenice di Fuoco" [ref=e128]:
+                  - generic [ref=e129]:
+                    - generic [ref=e130]: F
+                    - generic [ref=e131]:
+                      - generic [ref=e132]: GDO 117
+                      - generic [ref=e133]: Fenice di Fuoco
+                - cell "GDO" [ref=e134]:
+                  - generic [ref=e135]: GDO
+                - cell "Lv. 30" [ref=e136]:
+                  - generic [ref=e137]:
+                    - img [ref=e138]
+                    - text: Lv. 30
+                - cell "228 / 1492" [ref=e140]:
+                  - generic [ref=e142]: 228 / 1492
+                - cell "2" [ref=e145]:
+                  - generic [ref=e146]:
+                    - img [ref=e147]
+                    - generic [ref=e149]: "2"
+                - cell "0" [ref=e150]:
+                  - generic [ref=e151]: "0"
+                - cell "15.206" [ref=e152]:
+                  - generic [ref=e153]:
+                    - text: "15.206"
+                    - img [ref=e154]
+                - cell [ref=e159]:
+                  - generic [ref=e160]:
+                    - link "Vedi Profilo RPG" [ref=e161] [cursor=pointer]:
+                      - /url: /profilo/a121d86b-4d42-4bb8-9c8a-9de354b41043
+                      - img [ref=e162]
+                    - button "Aggiorna Stipendio Base" [ref=e165]:
+                      - img [ref=e166]
+                    - button "Invia Fenice Coins Extra" [ref=e169]:
+                      - img [ref=e170]
+              - row "F GDO 110 Fenice di Fuoco GDO Lv. 29 702 / 1416 2 0 1244" [ref=e175]:
+                - cell "F GDO 110 Fenice di Fuoco" [ref=e176]:
+                  - generic [ref=e177]:
+                    - generic [ref=e178]: F
+                    - generic [ref=e179]:
+                      - generic [ref=e180]: GDO 110
+                      - generic [ref=e181]: Fenice di Fuoco
+                - cell "GDO" [ref=e182]:
+                  - generic [ref=e183]: GDO
+                - cell "Lv. 29" [ref=e184]:
+                  - generic [ref=e185]:
+                    - img [ref=e186]
+                    - text: Lv. 29
+                - cell "702 / 1416" [ref=e188]:
+                  - generic [ref=e190]: 702 / 1416
+                - cell "2" [ref=e193]:
+                  - generic [ref=e194]:
+                    - img [ref=e195]
+                    - generic [ref=e197]: "2"
+                - cell "0" [ref=e198]:
+                  - generic [ref=e199]: "0"
+                - cell "1244" [ref=e200]:
+                  - generic [ref=e201]:
+                    - text: "1244"
+                    - img [ref=e202]
+                - cell [ref=e207]:
+                  - generic [ref=e208]:
+                    - link "Vedi Profilo RPG" [ref=e209] [cursor=pointer]:
+                      - /url: /profilo/11cea8c4-3985-4420-bdda-6e753e3fa55e
+                      - img [ref=e210]
+                    - button "Aggiorna Stipendio Base" [ref=e213]:
+                      - img [ref=e214]
+                    - button "Invia Fenice Coins Extra" [ref=e217]:
+                      - img [ref=e218]
+              - row "F GDO 119 Fenice di Fuoco GDO Lv. 28 1146 / 1342 2 1 15.866" [ref=e223]:
+                - cell "F GDO 119 Fenice di Fuoco" [ref=e224]:
+                  - generic [ref=e225]:
+                    - generic [ref=e226]: F
+                    - generic [ref=e227]:
+                      - generic [ref=e228]: GDO 119
+                      - generic [ref=e229]: Fenice di Fuoco
+                - cell "GDO" [ref=e230]:
+                  - generic [ref=e231]: GDO
+                - cell "Lv. 28" [ref=e232]:
+                  - generic [ref=e233]:
+                    - img [ref=e234]
+                    - text: Lv. 28
+                - cell "1146 / 1342" [ref=e236]:
+                  - generic [ref=e238]: 1146 / 1342
+                - cell "2" [ref=e241]:
+                  - generic [ref=e242]:
+                    - img [ref=e243]
+                    - generic [ref=e245]: "2"
+                - cell "1" [ref=e246]:
+                  - generic [ref=e247]:
+                    - img [ref=e248]
+                    - text: "1"
+                - cell "15.866" [ref=e250]:
+                  - generic [ref=e251]:
+                    - text: "15.866"
+                    - img [ref=e252]
+                - cell [ref=e257]:
+                  - generic [ref=e258]:
+                    - link "Vedi Profilo RPG" [ref=e259] [cursor=pointer]:
+                      - /url: /profilo/8b36ab29-ad9d-4965-aeed-e06d572b531f
+                      - img [ref=e260]
+                    - button "Aggiorna Stipendio Base" [ref=e263]:
+                      - img [ref=e264]
+                    - button "Invia Fenice Coins Extra" [ref=e267]:
+                      - img [ref=e268]
+              - row "F GDO 116 Fenice di Fuoco GDO Lv. 26 957 / 1200 1 0 346" [ref=e273]:
+                - cell "F GDO 116 Fenice di Fuoco" [ref=e274]:
+                  - generic [ref=e275]:
+                    - generic [ref=e276]: F
+                    - generic [ref=e277]:
+                      - generic [ref=e278]: GDO 116
+                      - generic [ref=e279]: Fenice di Fuoco
+                - cell "GDO" [ref=e280]:
+                  - generic [ref=e281]: GDO
+                - cell "Lv. 26" [ref=e282]:
+                  - generic [ref=e283]:
+                    - img [ref=e284]
+                    - text: Lv. 26
+                - cell "957 / 1200" [ref=e286]:
+                  - generic [ref=e288]: 957 / 1200
+                - cell "1" [ref=e291]:
+                  - generic [ref=e292]:
+                    - img [ref=e293]
+                    - generic [ref=e295]: "1"
+                - cell "0" [ref=e296]:
+                  - generic [ref=e297]: "0"
+                - cell "346" [ref=e298]:
+                  - generic [ref=e299]:
+                    - text: "346"
+                    - img [ref=e300]
+                - cell [ref=e305]:
+                  - generic [ref=e306]:
+                    - link "Vedi Profilo RPG" [ref=e307] [cursor=pointer]:
+                      - /url: /profilo/2b533491-51ec-47c5-83be-c1cf622a9bdf
+                      - img [ref=e308]
+                    - button "Aggiorna Stipendio Base" [ref=e311]:
+                      - img [ref=e312]
+                    - button "Invia Fenice Coins Extra" [ref=e315]:
+                      - img [ref=e316]
+              - row "F GDO 105 Fenice Giovane GDO Lv. 23 571 / 1002 6 0 11.015" [ref=e321]:
+                - cell "F GDO 105 Fenice Giovane" [ref=e322]:
+                  - generic [ref=e323]:
+                    - generic [ref=e324]: F
+                    - generic [ref=e325]:
+                      - generic [ref=e326]: GDO 105
+                      - generic [ref=e327]: Fenice Giovane
+                - cell "GDO" [ref=e328]:
+                  - generic [ref=e329]: GDO
+                - cell "Lv. 23" [ref=e330]:
+                  - generic [ref=e331]:
+                    - img [ref=e332]
+                    - text: Lv. 23
+                - cell "571 / 1002" [ref=e334]:
+                  - generic [ref=e336]: 571 / 1002
+                - cell "6" [ref=e339]:
+                  - generic [ref=e340]:
+                    - img [ref=e341]
+                    - generic [ref=e343]: "6"
+                - cell "0" [ref=e344]:
+                  - generic [ref=e345]: "0"
+                - cell "11.015" [ref=e346]:
+                  - generic [ref=e347]:
+                    - text: "11.015"
+                    - img [ref=e348]
+                - cell [ref=e353]:
+                  - generic [ref=e354]:
+                    - link "Vedi Profilo RPG" [ref=e355] [cursor=pointer]:
+                      - /url: /profilo/ef3988b2-d15e-4169-88a5-7516e6ddd146
+                      - img [ref=e356]
+                    - button "Aggiorna Stipendio Base" [ref=e359]:
+                      - img [ref=e360]
+                    - button "Invia Fenice Coins Extra" [ref=e363]:
+                      - img [ref=e364]
+              - row "F Alberto (Conferme) Fenice Giovane Conferme Lv. 22 291 / 940 2 1 5983" [ref=e369]:
+                - cell "F Alberto (Conferme) Fenice Giovane" [ref=e370]:
+                  - generic [ref=e371]:
+                    - generic [ref=e372]: F
+                    - generic [ref=e373]:
+                      - generic [ref=e374]: Alberto (Conferme)
+                      - generic [ref=e375]: Fenice Giovane
+                - cell "Conferme" [ref=e376]:
+                  - generic [ref=e377]: Conferme
+                - cell "Lv. 22" [ref=e378]:
+                  - generic [ref=e379]:
+                    - img [ref=e380]
+                    - text: Lv. 22
+                - cell "291 / 940" [ref=e382]:
+                  - generic [ref=e384]: 291 / 940
+                - cell "2" [ref=e387]:
+                  - generic [ref=e388]:
+                    - img [ref=e389]
+                    - generic [ref=e391]: "2"
+                - cell "1" [ref=e392]:
+                  - generic [ref=e393]:
+                    - img [ref=e394]
+                    - text: "1"
+                - cell "5983" [ref=e396]:
+                  - generic [ref=e397]:
+                    - text: "5983"
+                    - img [ref=e398]
+                - cell [ref=e403]:
+                  - generic [ref=e404]:
+                    - link "Vedi Profilo RPG" [ref=e405] [cursor=pointer]:
+                      - /url: /profilo/c8a8190f-7a3b-4946-9235-a3acea4459c7
+                      - img [ref=e406]
+                    - button "Aggiorna Stipendio Base" [ref=e409]:
+                      - img [ref=e410]
+                    - button "Invia Fenice Coins Extra" [ref=e413]:
+                      - img [ref=e414]
+              - row "F GDO 115 Fenice Giovane GDO Lv. 22 831 / 940 3 0 2780" [ref=e419]:
+                - cell "F GDO 115 Fenice Giovane" [ref=e420]:
+                  - generic [ref=e421]:
+                    - generic [ref=e422]: F
+                    - generic [ref=e423]:
+                      - generic [ref=e424]: GDO 115
+                      - generic [ref=e425]: Fenice Giovane
+                - cell "GDO" [ref=e426]:
+                  - generic [ref=e427]: GDO
+                - cell "Lv. 22" [ref=e428]:
+                  - generic [ref=e429]:
+                    - img [ref=e430]
+                    - text: Lv. 22
+                - cell "831 / 940" [ref=e432]:
+                  - generic [ref=e434]: 831 / 940
+                - cell "3" [ref=e437]:
+                  - generic [ref=e438]:
+                    - img [ref=e439]
+                    - generic [ref=e441]: "3"
+                - cell "0" [ref=e442]:
+                  - generic [ref=e443]: "0"
+                - cell "2780" [ref=e444]:
+                  - generic [ref=e445]:
+                    - text: "2780"
+                    - img [ref=e446]
+                - cell [ref=e451]:
+                  - generic [ref=e452]:
+                    - link "Vedi Profilo RPG" [ref=e453] [cursor=pointer]:
+                      - /url: /profilo/a2d174ce-916c-4d02-92f6-e5b7c6ef5adf
+                      - img [ref=e454]
+                    - button "Aggiorna Stipendio Base" [ref=e457]:
+                      - img [ref=e458]
+                    - button "Invia Fenice Coins Extra" [ref=e461]:
+                      - img [ref=e462]
+              - row "F GDO 106 Fenice Giovane GDO Lv. 19 341 / 766 4 0 4377" [ref=e467]:
+                - cell "F GDO 106 Fenice Giovane" [ref=e468]:
+                  - generic [ref=e469]:
+                    - generic [ref=e470]: F
+                    - generic [ref=e471]:
+                      - generic [ref=e472]: GDO 106
+                      - generic [ref=e473]: Fenice Giovane
+                - cell "GDO" [ref=e474]:
+                  - generic [ref=e475]: GDO
+                - cell "Lv. 19" [ref=e476]:
+                  - generic [ref=e477]:
+                    - img [ref=e478]
+                    - text: Lv. 19
+                - cell "341 / 766" [ref=e480]:
+                  - generic [ref=e482]: 341 / 766
+                - cell "4" [ref=e485]:
+                  - generic [ref=e486]:
+                    - img [ref=e487]
+                    - generic [ref=e489]: "4"
+                - cell "0" [ref=e490]:
+                  - generic [ref=e491]: "0"
+                - cell "4377" [ref=e492]:
+                  - generic [ref=e493]:
+                    - text: "4377"
+                    - img [ref=e494]
+                - cell [ref=e499]:
+                  - generic [ref=e500]:
+                    - link "Vedi Profilo RPG" [ref=e501] [cursor=pointer]:
+                      - /url: /profilo/a3b7d9da-94b7-4c48-983f-ee42e949c4e5
+                      - img [ref=e502]
+                    - button "Aggiorna Stipendio Base" [ref=e505]:
+                      - img [ref=e506]
+                    - button "Invia Fenice Coins Extra" [ref=e509]:
+                      - img [ref=e510]
+              - row "F GDO 118 Fenice Giovane GDO Lv. 19 762 / 766 1 0 3688" [ref=e515]:
+                - cell "F GDO 118 Fenice Giovane" [ref=e516]:
+                  - generic [ref=e517]:
+                    - generic [ref=e518]: F
+                    - generic [ref=e519]:
+                      - generic [ref=e520]: GDO 118
+                      - generic [ref=e521]: Fenice Giovane
+                - cell "GDO" [ref=e522]:
+                  - generic [ref=e523]: GDO
+                - cell "Lv. 19" [ref=e524]:
+                  - generic [ref=e525]:
+                    - img [ref=e526]
+                    - text: Lv. 19
+                - cell "762 / 766" [ref=e528]:
+                  - generic [ref=e530]: 762 / 766
+                - cell "1" [ref=e533]:
+                  - generic [ref=e534]:
+                    - img [ref=e535]
+                    - generic [ref=e537]: "1"
+                - cell "0" [ref=e538]:
+                  - generic [ref=e539]: "0"
+                - cell "3688" [ref=e540]:
+                  - generic [ref=e541]:
+                    - text: "3688"
+                    - img [ref=e542]
+                - cell [ref=e547]:
+                  - generic [ref=e548]:
+                    - link "Vedi Profilo RPG" [ref=e549] [cursor=pointer]:
+                      - /url: /profilo/34f09230-c04a-4f05-a285-035ff8dcf9b5
+                      - img [ref=e550]
+                    - button "Aggiorna Stipendio Base" [ref=e553]:
+                      - img [ref=e554]
+                    - button "Invia Fenice Coins Extra" [ref=e557]:
+                      - img [ref=e558]
+              - row "P GDO 109 Pulcino GDO Lv. 17 104 / 660 5 0 5711" [ref=e563]:
+                - cell "P GDO 109 Pulcino" [ref=e564]:
+                  - generic [ref=e565]:
+                    - generic [ref=e566]: P
+                    - generic [ref=e567]:
+                      - generic [ref=e568]: GDO 109
+                      - generic [ref=e569]: Pulcino
+                - cell "GDO" [ref=e570]:
+                  - generic [ref=e571]: GDO
+                - cell "Lv. 17" [ref=e572]:
+                  - generic [ref=e573]:
+                    - img [ref=e574]
+                    - text: Lv. 17
+                - cell "104 / 660" [ref=e576]:
+                  - generic [ref=e578]: 104 / 660
+                - cell "5" [ref=e581]:
+                  - generic [ref=e582]:
+                    - img [ref=e583]
+                    - generic [ref=e585]: "5"
+                - cell "0" [ref=e586]:
+                  - generic [ref=e587]: "0"
+                - cell "5711" [ref=e588]:
+                  - generic [ref=e589]:
+                    - text: "5711"
+                    - img [ref=e590]
+                - cell [ref=e595]:
+                  - generic [ref=e596]:
+                    - link "Vedi Profilo RPG" [ref=e597] [cursor=pointer]:
+                      - /url: /profilo/1ae804eb-9074-4bd9-a4f5-7e61e80425af
+                      - img [ref=e598]
+                    - button "Aggiorna Stipendio Base" [ref=e601]:
+                      - img [ref=e602]
+                    - button "Invia Fenice Coins Extra" [ref=e605]:
+                      - img [ref=e606]
+              - row "P GDO 114 Pulcino GDO Lv. 17 226 / 660 3 0 7127" [ref=e611]:
+                - cell "P GDO 114 Pulcino" [ref=e612]:
+                  - generic [ref=e613]:
+                    - generic [ref=e614]: P
+                    - generic [ref=e615]:
+                      - generic [ref=e616]: GDO 114
+                      - generic [ref=e617]: Pulcino
+                - cell "GDO" [ref=e618]:
+                  - generic [ref=e619]: GDO
+                - cell "Lv. 17" [ref=e620]:
+                  - generic [ref=e621]:
+                    - img [ref=e622]
+                    - text: Lv. 17
+                - cell "226 / 660" [ref=e624]:
+                  - generic [ref=e626]: 226 / 660
+                - cell "3" [ref=e629]:
+                  - generic [ref=e630]:
+                    - img [ref=e631]
+                    - generic [ref=e633]: "3"
+                - cell "0" [ref=e634]:
+                  - generic [ref=e635]: "0"
+                - cell "7127" [ref=e636]:
+                  - generic [ref=e637]:
+                    - text: "7127"
+                    - img [ref=e638]
+                - cell [ref=e643]:
+                  - generic [ref=e644]:
+                    - link "Vedi Profilo RPG" [ref=e645] [cursor=pointer]:
+                      - /url: /profilo/5fab6b1b-8bd7-49c7-b088-8a96efac8930
+                      - img [ref=e646]
+                    - button "Aggiorna Stipendio Base" [ref=e649]:
+                      - img [ref=e650]
+                    - button "Invia Fenice Coins Extra" [ref=e653]:
+                      - img [ref=e654]
+              - row "P GDO 112 Pulcino GDO Lv. 14 118 / 516 1 0 1494" [ref=e659]:
+                - cell "P GDO 112 Pulcino" [ref=e660]:
+                  - generic [ref=e661]:
+                    - generic [ref=e662]: P
+                    - generic [ref=e663]:
+                      - generic [ref=e664]: GDO 112
+                      - generic [ref=e665]: Pulcino
+                - cell "GDO" [ref=e666]:
+                  - generic [ref=e667]: GDO
+                - cell "Lv. 14" [ref=e668]:
+                  - generic [ref=e669]:
+                    - img [ref=e670]
+                    - text: Lv. 14
+                - cell "118 / 516" [ref=e672]:
+                  - generic [ref=e674]: 118 / 516
+                - cell "1" [ref=e677]:
+                  - generic [ref=e678]:
+                    - img [ref=e679]
+                    - generic [ref=e681]: "1"
+                - cell "0" [ref=e682]:
+                  - generic [ref=e683]: "0"
+                - cell "1494" [ref=e684]:
+                  - generic [ref=e685]:
+                    - text: "1494"
+                    - img [ref=e686]
+                - cell [ref=e691]:
+                  - generic [ref=e692]:
+                    - link "Vedi Profilo RPG" [ref=e693] [cursor=pointer]:
+                      - /url: /profilo/d7111e78-71f3-484f-a9db-4cb79484ad4b
+                      - img [ref=e694]
+                    - button "Aggiorna Stipendio Base" [ref=e697]:
+                      - img [ref=e698]
+                    - button "Invia Fenice Coins Extra" [ref=e701]:
+                      - img [ref=e702]
+              - row "P Andrea (Conferme) Pulcino Conferme Lv. 13 400 / 472 1 1 2130" [ref=e707]:
+                - cell "P Andrea (Conferme) Pulcino" [ref=e708]:
+                  - generic [ref=e709]:
+                    - generic [ref=e710]: P
+                    - generic [ref=e711]:
+                      - generic [ref=e712]: Andrea (Conferme)
+                      - generic [ref=e713]: Pulcino
+                - cell "Conferme" [ref=e714]:
+                  - generic [ref=e715]: Conferme
+                - cell "Lv. 13" [ref=e716]:
+                  - generic [ref=e717]:
+                    - img [ref=e718]
+                    - text: Lv. 13
+                - cell "400 / 472" [ref=e720]:
+                  - generic [ref=e722]: 400 / 472
+                - cell "1" [ref=e725]:
+                  - generic [ref=e726]:
+                    - img [ref=e727]
+                    - generic [ref=e729]: "1"
+                - cell "1" [ref=e730]:
+                  - generic [ref=e731]:
+                    - img [ref=e732]
+                    - text: "1"
+                - cell "2130" [ref=e734]:
+                  - generic [ref=e735]:
+                    - text: "2130"
+                    - img [ref=e736]
+                - cell [ref=e741]:
+                  - generic [ref=e742]:
+                    - link "Vedi Profilo RPG" [ref=e743] [cursor=pointer]:
+                      - /url: /profilo/1b7ea1b1-6abc-485b-b127-71d46cff3477
+                      - img [ref=e744]
+                    - button "Aggiorna Stipendio Base" [ref=e747]:
+                      - img [ref=e748]
+                    - button "Invia Fenice Coins Extra" [ref=e751]:
+                      - img [ref=e752]
+              - row "P GDO 108 Pulcino GDO Lv. 12 304 / 430 1 0 1546" [ref=e757]:
+                - cell "P GDO 108 Pulcino" [ref=e758]:
+                  - generic [ref=e759]:
+                    - generic [ref=e760]: P
+                    - generic [ref=e761]:
+                      - generic [ref=e762]: GDO 108
+                      - generic [ref=e763]: Pulcino
+                - cell "GDO" [ref=e764]:
+                  - generic [ref=e765]: GDO
+                - cell "Lv. 12" [ref=e766]:
+                  - generic [ref=e767]:
+                    - img [ref=e768]
+                    - text: Lv. 12
+                - cell "304 / 430" [ref=e770]:
+                  - generic [ref=e772]: 304 / 430
+                - cell "1" [ref=e775]:
+                  - generic [ref=e776]:
+                    - img [ref=e777]
+                    - generic [ref=e779]: "1"
+                - cell "0" [ref=e780]:
+                  - generic [ref=e781]: "0"
+                - cell "1546" [ref=e782]:
+                  - generic [ref=e783]:
+                    - text: "1546"
+                    - img [ref=e784]
+                - cell [ref=e789]:
+                  - generic [ref=e790]:
+                    - link "Vedi Profilo RPG" [ref=e791] [cursor=pointer]:
+                      - /url: /profilo/adf7f3de-fa68-4dec-b2b2-67393dc4e2f6
+                      - img [ref=e792]
+                    - button "Aggiorna Stipendio Base" [ref=e795]:
+                      - img [ref=e796]
+                    - button "Invia Fenice Coins Extra" [ref=e799]:
+                      - img [ref=e800]
+              - row "P GDO 107 Pulcino GDO Lv. 12 232 / 430 1 0 3048" [ref=e805]:
+                - cell "P GDO 107 Pulcino" [ref=e806]:
+                  - generic [ref=e807]:
+                    - generic [ref=e808]: P
+                    - generic [ref=e809]:
+                      - generic [ref=e810]: GDO 107
+                      - generic [ref=e811]: Pulcino
+                - cell "GDO" [ref=e812]:
+                  - generic [ref=e813]: GDO
+                - cell "Lv. 12" [ref=e814]:
+                  - generic [ref=e815]:
+                    - img [ref=e816]
+                    - text: Lv. 12
+                - cell "232 / 430" [ref=e818]:
+                  - generic [ref=e820]: 232 / 430
+                - cell "1" [ref=e823]:
+                  - generic [ref=e824]:
+                    - img [ref=e825]
+                    - generic [ref=e827]: "1"
+                - cell "0" [ref=e828]:
+                  - generic [ref=e829]: "0"
+                - cell "3048" [ref=e830]:
+                  - generic [ref=e831]:
+                    - text: "3048"
+                    - img [ref=e832]
+                - cell [ref=e837]:
+                  - generic [ref=e838]:
+                    - link "Vedi Profilo RPG" [ref=e839] [cursor=pointer]:
+                      - /url: /profilo/b26cf67d-ae8d-4634-83bf-4bb50dec2c22
+                      - img [ref=e840]
+                    - button "Aggiorna Stipendio Base" [ref=e843]:
+                      - img [ref=e844]
+                    - button "Invia Fenice Coins Extra" [ref=e847]:
+                      - img [ref=e848]
+              - row "U Christel (Conferme) Uovo Conferme Lv. 7 135 / 250 1 0 564" [ref=e853]:
+                - cell "U Christel (Conferme) Uovo" [ref=e854]:
+                  - generic [ref=e855]:
+                    - generic [ref=e856]: U
+                    - generic [ref=e857]:
+                      - generic [ref=e858]: Christel (Conferme)
+                      - generic [ref=e859]: Uovo
+                - cell "Conferme" [ref=e860]:
+                  - generic [ref=e861]: Conferme
+                - cell "Lv. 7" [ref=e862]:
+                  - generic [ref=e863]:
+                    - img [ref=e864]
+                    - text: Lv. 7
+                - cell "135 / 250" [ref=e866]:
+                  - generic [ref=e868]: 135 / 250
+                - cell "1" [ref=e871]:
+                  - generic [ref=e872]:
+                    - img [ref=e873]
+                    - generic [ref=e875]: "1"
+                - cell "0" [ref=e876]:
+                  - generic [ref=e877]: "0"
+                - cell "564" [ref=e878]:
+                  - generic [ref=e879]:
+                    - text: "564"
+                    - img [ref=e880]
+                - cell [ref=e885]:
+                  - generic [ref=e886]:
+                    - link "Vedi Profilo RPG" [ref=e887] [cursor=pointer]:
+                      - /url: /profilo/2dbda7e1-acb8-486c-a4fa-86fb2a40e14a
+                      - img [ref=e888]
+                    - button "Aggiorna Stipendio Base" [ref=e891]:
+                      - img [ref=e892]
+                    - button "Invia Fenice Coins Extra" [ref=e895]:
+                      - img [ref=e896]
+              - row "U Team Conferme Uovo Conferme Lv. 1 0 / 100 0 0 0" [ref=e901]:
+                - cell "U Team Conferme Uovo" [ref=e902]:
+                  - generic [ref=e903]:
+                    - generic [ref=e904]: U
+                    - generic [ref=e905]:
+                      - generic [ref=e906]: Team Conferme
+                      - generic [ref=e907]: Uovo
+                - cell "Conferme" [ref=e908]:
+                  - generic [ref=e909]: Conferme
+                - cell "Lv. 1" [ref=e910]:
+                  - generic [ref=e911]:
+                    - img [ref=e912]
+                    - text: Lv. 1
+                - cell "0 / 100" [ref=e914]:
+                  - generic [ref=e916]: 0 / 100
+                - cell "0" [ref=e918]:
+                  - generic [ref=e919]:
+                    - img [ref=e920]
+                    - generic [ref=e922]: "0"
+                - cell "0" [ref=e923]:
+                  - generic [ref=e924]: "0"
+                - cell "0" [ref=e925]:
+                  - generic [ref=e926]:
+                    - text: "0"
+                    - img [ref=e927]
+                - cell [ref=e932]:
+                  - generic [ref=e933]:
+                    - link "Vedi Profilo RPG" [ref=e934] [cursor=pointer]:
+                      - /url: /profilo/35c55ed9-58b3-4176-8873-6b5feef50b1e
+                      - img [ref=e935]
+                    - button "Aggiorna Stipendio Base" [ref=e938]:
+                      - img [ref=e939]
+                    - button "Invia Fenice Coins Extra" [ref=e942]:
+                      - img [ref=e943]
+              - row "U QA GDO Uovo GDO Lv. 1 0 / 100 1 0 15" [ref=e948]:
+                - cell "U QA GDO Uovo" [ref=e949]:
+                  - generic [ref=e950]:
+                    - generic [ref=e951]: U
+                    - generic [ref=e952]:
+                      - generic [ref=e953]: QA GDO
+                      - generic [ref=e954]: Uovo
+                - cell "GDO" [ref=e955]:
+                  - generic [ref=e956]: GDO
+                - cell "Lv. 1" [ref=e957]:
+                  - generic [ref=e958]:
+                    - img [ref=e959]
+                    - text: Lv. 1
+                - cell "0 / 100" [ref=e961]:
+                  - generic [ref=e963]: 0 / 100
+                - cell "1" [ref=e965]:
+                  - generic [ref=e966]:
+                    - img [ref=e967]
+                    - generic [ref=e969]: "1"
+                - cell "0" [ref=e970]:
+                  - generic [ref=e971]: "0"
+                - cell "15" [ref=e972]:
+                  - generic [ref=e973]:
+                    - text: "15"
+                    - img [ref=e974]
+                - cell [ref=e979]:
+                  - generic [ref=e980]:
+                    - link "Vedi Profilo RPG" [ref=e981] [cursor=pointer]:
+                      - /url: /profilo/b271500c-3b41-49b3-8a70-6ad87b80b564
+                      - img [ref=e982]
+                    - button "Aggiorna Stipendio Base" [ref=e985]:
+                      - img [ref=e986]
+                    - button "Invia Fenice Coins Extra" [ref=e989]:
+                      - img [ref=e990]
+  - alert [ref=e995]

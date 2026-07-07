@@ -1,0 +1,150 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - img [ref=e7]
+        - generic [ref=e15]: SerenaMentecrescita mentale
+      - button [ref=e16]:
+        - img [ref=e17]
+    - navigation
+    - button "Disconnetti" [ref=e21]:
+      - img [ref=e22]
+      - text: Disconnetti
+  - generic [ref=e25]:
+    - banner [ref=e26]:
+      - button [ref=e28]:
+        - img [ref=e29]
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - img [ref=e32]
+          - text: —
+        - button [ref=e37]:
+          - img [ref=e38]
+        - generic [ref=e41]:
+          - generic [ref=e43]: GDO
+          - generic [ref=e45]: U
+    - main [ref=e46]:
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - heading "Pipeline Chiamate" [level=1] [ref=e49]
+          - generic [ref=e50]: Benvenuto, GDO 114
+        - generic [ref=e51]:
+          - generic [ref=e54]:
+            - button "1ª Chiamata 3" [ref=e55]:
+              - text: 1ª Chiamata
+              - generic [ref=e56]: "3"
+            - button "2ª Chiamata 0" [ref=e57]:
+              - text: 2ª Chiamata
+              - generic [ref=e58]: "0"
+            - button "3ª Chiamata 0" [ref=e59]:
+              - text: 3ª Chiamata
+              - generic [ref=e60]: "0"
+          - generic [ref=e62]:
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - generic [ref=e68]: Mario Test Serenamente
+                - generic [ref=e69]:
+                  - generic [ref=e70]:
+                    - img [ref=e71]
+                    - generic [ref=e73]: "+393331234567"
+                    - button "Copia numero" [ref=e74]:
+                      - img [ref=e75]
+                  - generic [ref=e78]:
+                    - img [ref=e79]
+                    - generic "mariotest@serenatest.local" [ref=e82]
+                    - button "Copia email" [ref=e83]:
+                      - img [ref=e84]
+              - generic [ref=e87]:
+                - generic [ref=e88]: Rinascere in Amore
+                - generic [ref=e89]: Nuovo
+              - generic [ref=e91]:
+                - img [ref=e93]
+                - generic [ref=e95]: Mai chiamato
+              - generic [ref=e96]:
+                - button "Script" [ref=e97]:
+                  - img [ref=e98]
+                  - text: Script
+                - button "Agenda" [ref=e101]:
+                  - img [ref=e102]
+                  - text: Agenda
+                - generic [ref=e105]:
+                  - button "NR" [ref=e106]:
+                    - img [ref=e107]
+                    - text: NR
+                  - button "Scartato" [ref=e111]:
+                    - img [ref=e112]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e115]:
+                    - img [ref=e116]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e120]:
+                    - img [ref=e121]
+                    - text: App Preso
+            - generic [ref=e128]:
+              - generic [ref=e129]:
+                - generic [ref=e131]: tt
+                - generic [ref=e133]:
+                  - img [ref=e134]
+                  - generic [ref=e136]: "3517991411"
+                  - button "Copia numero" [ref=e137]:
+                    - img [ref=e138]
+              - generic [ref=e141]:
+                - generic [ref=e142]: test
+                - generic [ref=e143]: Nuovo
+              - generic [ref=e145]:
+                - img [ref=e147]
+                - generic [ref=e149]: Mai chiamato
+              - generic [ref=e150]:
+                - button "Script" [ref=e151]:
+                  - img [ref=e152]
+                  - text: Script
+                - button "Agenda" [ref=e155]:
+                  - img [ref=e156]
+                  - text: Agenda
+                - generic [ref=e159]:
+                  - button "NR" [ref=e160]:
+                    - img [ref=e161]
+                    - text: NR
+                  - button "Scartato" [ref=e165]:
+                    - img [ref=e166]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e169]:
+                    - img [ref=e170]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e174]:
+                    - img [ref=e175]
+                    - text: App Preso
+            - generic [ref=e182]:
+              - generic [ref=e183]:
+                - generic [ref=e185]: test
+                - generic [ref=e187]:
+                  - img [ref=e188]
+                  - generic [ref=e190]: "3476525616"
+                  - button "Copia numero" [ref=e191]:
+                    - img [ref=e192]
+              - generic [ref=e195]:
+                - generic [ref=e196]: test
+                - generic [ref=e197]: Nuovo
+              - generic [ref=e199]:
+                - img [ref=e201]
+                - generic [ref=e203]: Mai chiamato
+              - generic [ref=e204]:
+                - button "Script" [ref=e205]:
+                  - img [ref=e206]
+                  - text: Script
+                - button "Agenda" [ref=e209]:
+                  - img [ref=e210]
+                  - text: Agenda
+                - generic [ref=e213]:
+                  - button "NR" [ref=e214]:
+                    - img [ref=e215]
+                    - text: NR
+                  - button "Scartato" [ref=e219]:
+                    - img [ref=e220]
+                    - text: Scartato
+                  - button "Richiamo" [ref=e223]:
+                    - img [ref=e224]
+                    - text: Richiamo
+                  - button "App Preso" [ref=e228]:
+                    - img [ref=e229]
+                    - text: App Preso

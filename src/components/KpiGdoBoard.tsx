@@ -650,7 +650,7 @@ export function KpiGdoBoard() {
                             </table>
                         </div>
                         <div className="text-xs text-ash-400 mt-3">
-                            Numero di tentativo = posizione della chiamata nella storia del lead. Il tetto attuale resta 3 tentativi a vuoto.
+                            Numero di tentativo = posizione della chiamata nella storia del lead. Il tetto attuale resta 3 tentativi a vuoto. La card ignora il filtro "Solo ore lavoro".
                         </div>
                     </div>
                 )

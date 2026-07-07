@@ -1,0 +1,487 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - link "Dashboard Conferme" [ref=e105] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e106]:
+            - img [ref=e107]
+            - generic [ref=e109]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e111] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e112]:
+            - img [ref=e113]
+            - generic [ref=e118]: KPI Conferme
+        - link "Analytics Staffing" [ref=e120] [cursor=pointer]:
+          - /url: /conferme/analytics
+          - generic [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e127]: Analytics Staffing
+        - generic [ref=e128]:
+          - generic [ref=e129]: 🔥
+          - link "Il mio Profilo" [ref=e130] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=e131]:
+              - img [ref=e132]
+              - generic [ref=e134]: Il mio Profilo
+        - link "Classifica" [ref=e136] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e137]:
+            - img [ref=e138]
+            - generic [ref=e144]: Classifica
+        - link "Fenice Store" [ref=e146] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e147]:
+            - img [ref=e148]
+            - generic [ref=e152]: Fenice Store
+      - button "Disconnetti" [ref=e12]:
+        - img [ref=e13]
+        - generic [ref=e16]: Disconnetti
+    - generic [ref=e17]:
+      - banner [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - generic [ref=e153]:
+              - img [ref=e154]
+              - generic [ref=e158]: Fenice Academy
+            - button "Serenamente 6 app" [ref=e159]:
+              - img [ref=e160]
+              - generic [ref=e163]: Serenamente
+              - generic "6 appuntamenti oggi su Serenamente" [ref=e165]: 6 app
+          - button "20" [ref=e166]:
+            - img [ref=e28]
+            - generic [ref=e169]: "20"
+          - generic [ref=e31]:
+            - generic "I tuoi Fenice Coin" [ref=e170]:
+              - img "Fenice Coin" [ref=e171]
+              - generic [ref=e172]: "2266"
+            - generic [ref=e32]:
+              - generic [ref=e33]: Andrea
+              - generic [ref=e173]:
+                - generic [ref=e174]: Lv.14
+                - generic [ref=e177]: 52%
+            - generic [ref=e35]: A
+      - main [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e43]:
+            - generic "Realtime connesso" [ref=e178]:
+              - img [ref=e45]
+              - generic [ref=e50]: Radar
+            - generic [ref=e53]: Nessun altro collega online.
+          - generic [ref=e54]:
+            - heading "Dashboard Conferme" [level=1] [ref=e55]
+            - generic [ref=e56]:
+              - button "Agenda venditori" [ref=e57]:
+                - img [ref=e58]
+                - text: Agenda venditori
+              - generic [ref=e60]: Gestione appuntamenti centralizzata
+          - generic [ref=e61]:
+            - generic [ref=e62]:
+              - img [ref=e179]
+              - generic [ref=e183]: Obiettivo di Oggi
+            - generic [ref=e63]:
+              - generic [ref=e184]:
+                - img [ref=e185]
+                - generic [ref=e188]: Confermati oggi
+              - generic [ref=e189]:
+                - generic [ref=e190]:
+                  - generic [ref=e191]: "5"
+                  - generic [ref=e192]: / 8
+                - generic [ref=e196]: 63%
+          - generic [ref=e198]:
+            - generic [ref=e199]:
+              - img [ref=e201]
+              - generic [ref=e203]:
+                - generic [ref=e204]:
+                  - generic [ref=e205]: "0"
+                  - generic [ref=e206]: giorni
+                - generic [ref=e207]: Inizia la tua streak
+            - generic [ref=e211]:
+              - img [ref=e212]
+              - generic [ref=e215]: 3g a x1.5
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - button "Pomeriggio 14" [ref=e401]:
+                  - img [ref=e69]
+                  - text: Pomeriggio
+                  - generic [ref=e75]: "14"
+                - button "Mattina 7" [ref=e402]:
+                  - img [ref=e77]
+                  - text: Mattina
+                  - generic [ref=e82]: "7"
+                - button "Richiami 9" [ref=e403]:
+                  - img [ref=e84]
+                  - text: Richiami
+                  - generic [ref=e87]: "9"
+                - button "Storico" [ref=e88]:
+                  - img [ref=e89]
+                  - text: Storico
+              - generic [ref=e92]:
+                - generic [ref=e93]:
+                  - img [ref=e94]
+                  - textbox "Cerca per nome, email o telefono..." [ref=e97]
+                - button "Vista Globale DB" [ref=e98]
+            - generic [ref=e100]:
+              - generic [ref=e404]:
+                - button "15:00" [ref=e405]: 15:00
+                - button "16:00" [ref=e407]: 16:00
+                - button "17:00" [ref=e409]: 17:00
+                - button "18:00" [ref=e411]: 18:00
+                - button "19:00" [ref=e413]: 19:00
+                - button "20:00" [ref=e415]: 20:00
+                - button "21:00" [ref=e417]: 21:00
+              - generic [ref=e419]:
+                - generic [ref=e420]:
+                  - generic [ref=e421]:
+                    - generic [ref=e422] [cursor=pointer]:
+                      - text: Tutti
+                      - generic [ref=e423]: "1"
+                    - generic [ref=e424] [cursor=pointer]:
+                      - text: 0 Chiamate
+                      - generic [ref=e425]: "1"
+                    - generic [ref=e426] [cursor=pointer]:
+                      - text: 1 Chiamata
+                      - generic [ref=e427]: "0"
+                    - generic [ref=e428] [cursor=pointer]:
+                      - text: 2 Chiamate
+                      - generic [ref=e429]: "0"
+                    - generic [ref=e430] [cursor=pointer]:
+                      - text: 3 Chiamate
+                      - generic [ref=e431]: "0"
+                  - generic [ref=e434] [cursor=pointer]:
+                    - generic [ref=e435]:
+                      - generic:
+                        - generic:
+                          - text: Silvestro
+                          - generic "VSL NON Vista":
+                            - img
+                        - generic:
+                          - img
+                          - text: "3792535250"
+                        - generic:
+                          - generic: GDO 119
+                          - generic: SOCIAL
+                          - generic "Lead Fenice": Fenice
+                        - generic:
+                          - img
+                          - text: 19:00
+                      - generic [ref=e436]:
+                        - button "Avvia chiamata" [ref=e437]:
+                          - img [ref=e438]
+                          - text: Avvia chiamata
+                        - button "Annulla Snooze" [ref=e440]:
+                          - img [ref=e441]
+                          - text: Annulla Snooze
+                        - button "NR" [ref=e444]
+                        - button "Risentire Dopo" [ref=e446]:
+                          - img [ref=e447]
+                          - text: Risentire Dopo
+                        - button "Programma Richiamo" [ref=e451]:
+                          - img [ref=e452]
+                          - text: Programma Richiamo
+                    - generic:
+                      - generic:
+                        - generic: "Nota:"
+                        - generic: FIX DOMANI MATTINA
+                - generic [ref=e454]:
+                  - generic [ref=e455]:
+                    - heading "Richiamati In Giornata" [level=3] [ref=e456]:
+                      - img [ref=e457]
+                      - text: Richiamati In Giornata
+                    - generic [ref=e460]: Lead spostati temporaneamente ("Snooze"). Suonerà una sveglia all'orario stabilito.
+                  - generic [ref=e461]:
+                    - generic [ref=e463] [cursor=pointer]:
+                      - generic:
+                        - generic:
+                          - text: Hiroshi altomare altomare
+                          - generic "VSL NON Vista":
+                            - img
+                        - generic:
+                          - img
+                          - text: "3711198620"
+                        - generic:
+                          - img
+                          - text: 17:45
+                      - generic [ref=e464]:
+                        - button "Avvia chiamata" [ref=e465]:
+                          - img [ref=e466]
+                          - text: Avvia chiamata
+                        - button "Annulla Snooze" [ref=e468]:
+                          - img [ref=e469]
+                          - text: Annulla Snooze
+                        - button "NR" [ref=e472]
+                        - button "Risentire Dopo" [ref=e474]:
+                          - img [ref=e475]
+                          - text: Risentire Dopo
+                        - button "Programma Richiamo" [ref=e479]:
+                          - img [ref=e480]
+                          - text: Programma Richiamo
+                    - generic [ref=e482] [cursor=pointer]:
+                      - generic [ref=e483]:
+                        - generic:
+                          - generic:
+                            - text: Martin Landro Landro
+                            - generic "VSL NON Vista":
+                              - img
+                          - generic:
+                            - img
+                            - text: "3500345969"
+                          - generic:
+                            - img
+                            - text: 18:45
+                        - generic [ref=e484]:
+                          - button "Avvia chiamata" [ref=e485]:
+                            - img [ref=e486]
+                            - text: Avvia chiamata
+                          - button "Annulla Snooze" [ref=e488]:
+                            - img [ref=e489]
+                            - text: Annulla Snooze
+                          - button "NR" [ref=e492]
+                          - button "Risentire Dopo" [ref=e494]:
+                            - img [ref=e495]
+                            - text: Risentire Dopo
+                          - button "Programma Richiamo" [ref=e499]:
+                            - img [ref=e500]
+                            - text: Programma Richiamo
+                      - generic:
+                        - generic "ATTACCATO IN FACCIA, FORSE ERA LA MAMMA??? CHIEDERE A SIMONE":
+                          - generic: "Conferme:"
+                          - generic: ATTACCATO IN FACCIA, FORSE ERA LA MAMMA??? CHIEDERE A SIMONE
+                    - generic [ref=e502] [cursor=pointer]:
+                      - generic [ref=e503]:
+                        - generic:
+                          - generic:
+                            - text: Dina
+                            - generic "VSL NON Vista":
+                              - img
+                          - generic:
+                            - img
+                            - text: "3409947873"
+                          - generic: 1° Chiamata a vuoto
+                          - generic:
+                            - img
+                            - text: 18:45
+                        - generic [ref=e504]:
+                          - button "Avvia chiamata" [ref=e505]:
+                            - img [ref=e506]
+                            - text: Avvia chiamata
+                          - button "Annulla Snooze" [ref=e508]:
+                            - img [ref=e509]
+                            - text: Annulla Snooze
+                          - button "NR" [ref=e512]
+                          - button "Annulla NR" [ref=e513]:
+                            - img [ref=e514]
+                            - text: Annulla NR
+                          - button "Risentire Dopo" [ref=e518]:
+                            - img [ref=e519]
+                            - text: Risentire Dopo
+                          - button "Programma Richiamo" [ref=e523]:
+                            - img [ref=e524]
+                            - text: Programma Richiamo
+                      - generic:
+                        - generic:
+                          - generic: "Nota:"
+                          - generic: FIX APP H19
+                    - generic [ref=e527] [cursor=pointer]:
+                      - generic:
+                        - generic:
+                          - text: Marianna
+                          - generic "VSL NON Vista":
+                            - img
+                        - generic:
+                          - img
+                          - text: "3272128381"
+                        - generic:
+                          - img
+                          - text: 18:45
+                      - generic [ref=e528]:
+                        - button "Avvia chiamata" [ref=e529]:
+                          - img [ref=e530]
+                          - text: Avvia chiamata
+                        - button "Annulla Snooze" [ref=e532]:
+                          - img [ref=e533]
+                          - text: Annulla Snooze
+                        - button "NR" [ref=e536]
+                        - button "Risentire Dopo" [ref=e538]:
+                          - img [ref=e539]
+                          - text: Risentire Dopo
+                        - button "Programma Richiamo" [ref=e543]:
+                          - img [ref=e544]
+                          - text: Programma Richiamo
+                    - generic [ref=e547] [cursor=pointer]:
+                      - generic:
+                        - generic:
+                          - text: Davide Gaudenzi
+                          - generic "VSL NON Vista":
+                            - img
+                        - generic:
+                          - img
+                          - text: "3459276410"
+                        - generic:
+                          - img
+                          - text: 19:00
+                      - generic [ref=e548]:
+                        - button "Avvia chiamata" [ref=e549]:
+                          - img [ref=e550]
+                          - text: Avvia chiamata
+                        - button "Annulla Snooze" [ref=e552]:
+                          - img [ref=e553]
+                          - text: Annulla Snooze
+                        - button "NR" [ref=e556]
+                        - button "Risentire Dopo" [ref=e558]:
+                          - img [ref=e559]
+                          - text: Risentire Dopo
+                        - button "Programma Richiamo" [ref=e563]:
+                          - img [ref=e564]
+                          - text: Programma Richiamo
+                    - generic [ref=e566] [cursor=pointer]:
+                      - generic [ref=e567]:
+                        - generic:
+                          - generic:
+                            - text: Silvestro
+                            - generic "VSL NON Vista":
+                              - img
+                          - generic:
+                            - img
+                            - text: "3792535250"
+                          - generic:
+                            - img
+                            - text: 19:00
+                        - generic [ref=e568]:
+                          - button "Avvia chiamata" [ref=e569]:
+                            - img [ref=e570]
+                            - text: Avvia chiamata
+                          - button "Annulla Snooze" [ref=e572]:
+                            - img [ref=e573]
+                            - text: Annulla Snooze
+                          - button "NR" [ref=e576]
+                          - button "Risentire Dopo" [ref=e578]:
+                            - img [ref=e579]
+                            - text: Risentire Dopo
+                          - button "Programma Richiamo" [ref=e583]:
+                            - img [ref=e584]
+                            - text: Programma Richiamo
+                      - generic:
+                        - generic:
+                          - generic: "Nota:"
+                          - generic: FIX DOMANI MATTINA
+          - generic [ref=e218]:
+            - generic [ref=e219] [cursor=pointer]:
+              - generic [ref=e220]:
+                - img [ref=e222]
+                - generic [ref=e225]:
+                  - heading "Quest Attive" [level=3] [ref=e226]
+                  - generic [ref=e227]: 1/3 giornaliere · 1/2 settimanali
+              - generic [ref=e228]:
+                - generic [ref=e229]:
+                  - img [ref=e230]
+                  - text: 2 completate
+                - img [ref=e233]
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - generic [ref=e237]:
+                  - img [ref=e238]
+                  - generic [ref=e247]: Giornaliere
+                - generic [ref=e248]:
+                  - generic [ref=e250]:
+                    - generic [ref=e251]:
+                      - generic [ref=e252]:
+                        - generic [ref=e253]: Prime Presenze
+                        - generic [ref=e254]: Ottieni 3 presenze oggi
+                      - generic [ref=e255]:
+                        - generic [ref=e256]:
+                          - img [ref=e257]
+                          - text: "25"
+                        - generic [ref=e259]:
+                          - img [ref=e260]
+                          - text: "12"
+                    - generic [ref=e268]: 3/3
+                    - button "Riscuoti" [ref=e270]:
+                      - img [ref=e271]
+                      - text: Riscuoti
+                  - generic [ref=e275]:
+                    - generic [ref=e276]:
+                      - generic [ref=e277]:
+                        - generic [ref=e278]: Tutte Presenti!
+                        - generic [ref=e279]: Ottieni 7 presenze oggi
+                      - generic [ref=e280]:
+                        - generic [ref=e281]:
+                          - img [ref=e282]
+                          - text: "60"
+                        - generic [ref=e284]:
+                          - img [ref=e285]
+                          - text: "35"
+                    - generic [ref=e293]: 3/7
+                  - generic [ref=e295]:
+                    - generic [ref=e296]:
+                      - generic [ref=e297]:
+                        - generic [ref=e298]: Closer del Giorno
+                        - generic [ref=e299]: Ottieni 4 chiusure oggi
+                      - generic [ref=e300]:
+                        - generic [ref=e301]:
+                          - img [ref=e302]
+                          - text: "80"
+                        - generic [ref=e304]:
+                          - img [ref=e305]
+                          - text: "40"
+                    - generic [ref=e312]: 0/4
+              - generic [ref=e313]:
+                - generic [ref=e314]:
+                  - img [ref=e315]
+                  - generic [ref=e317]: Settimanali
+                - generic [ref=e318]:
+                  - generic [ref=e320]:
+                    - generic [ref=e321]:
+                      - generic [ref=e322]:
+                        - generic [ref=e323]: Settimana di Presenze
+                        - generic [ref=e324]: Ottieni 25 presenze questa settimana
+                      - generic [ref=e325]:
+                        - generic [ref=e326]:
+                          - img [ref=e327]
+                          - text: "120"
+                        - generic [ref=e329]:
+                          - img [ref=e330]
+                          - text: "60"
+                    - generic [ref=e338]: 14/25
+                  - generic [ref=e340]:
+                    - generic [ref=e341]:
+                      - generic [ref=e342]:
+                        - generic [ref=e343]: Settimana Operativa
+                        - generic [ref=e344]: Fai 70 interazioni questa settimana
+                      - generic [ref=e345]:
+                        - generic [ref=e346]:
+                          - img [ref=e347]
+                          - text: "100"
+                        - generic [ref=e349]:
+                          - img [ref=e350]
+                          - text: "60"
+                    - generic [ref=e358]: 72/70
+                    - button "Riscuoti" [ref=e360]:
+                      - img [ref=e361]
+                      - text: Riscuoti
+  - generic [ref=e368] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e369]:
+      - img [ref=e370]
+    - generic [ref=e373]:
+      - button "Open issues overlay" [ref=e374]:
+        - generic [ref=e375]:
+          - generic [ref=e376]: "0"
+          - generic [ref=e377]: "1"
+        - generic [ref=e378]: Issue
+      - button "Collapse issues badge" [ref=e379]:
+        - img [ref=e380]
+  - alert [ref=e382]
+  - generic [ref=e384]:
+    - img [ref=e386]
+    - generic [ref=e391]:
+      - generic [ref=e392]:
+        - generic [ref=e393]: FENICE
+        - generic [ref=e394]: Richiamo Conferme in arrivo
+      - generic [ref=e395]: Hiroshi altomare altomare · 3711198620
+      - generic [ref=e396]: 17/06/26, 17:45
+    - button "Nascondi" [ref=e397]:
+      - img [ref=e398]

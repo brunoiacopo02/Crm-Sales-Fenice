@@ -1,0 +1,24 @@
+[    5288ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[    5359ms] [LOG] [HMR] connected @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   18104ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   21194ms] [LOG] [Fast Refresh] done in 3196ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   21775ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   22384ms] [LOG] [Fast Refresh] done in 717ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   23071ms] [LOG] %c%s%c [PIPE] 2026-06-07T18:11:56.790Z u=gdo114@fenice.local 1ª=21 (lch=0) 2ª=62 ids1ª=[1604fd45/std,34afff49/std,af7ea429/std,7506e581/std,15a597e5/std,28478b4e/std,e6895fdf/std,c12cfcf1/std,418c1562/std,0dc6ef84/std,5e7e4ae3/std,0f474586/std,d2cf1678/std,fc70ad59/std,8e7cc850/std,be14b26a/std,5d3faccb/std,022ec308/std,3b9bde36/std,9edf908b/std,ed90f8ac/std] background: #e6e6e6;background: light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.25));color: #000000;color: light-dark(#000000, #ffffff);border-radius: 2px  Server   @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   23071ms] [LOG] %c%s%c [PIPE] 2026-06-07T18:11:56.797Z u=gdo114@fenice.local 1ª=21 (lch=0) 2ª=62 ids1ª=[1604fd45/std,34afff49/std,af7ea429/std,7506e581/std,15a597e5/std,28478b4e/std,e6895fdf/std,c12cfcf1/std,418c1562/std,0dc6ef84/std,5e7e4ae3/std,0f474586/std,d2cf1678/std,fc70ad59/std,8e7cc850/std,be14b26a/std,5d3faccb/std,022ec308/std,3b9bde36/std,9edf908b/std,ed90f8ac/std] background: #e6e6e6;background: light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.25));color: #000000;color: light-dark(#000000, #ffffff);border-radius: 2px  Server   @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   24556ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   24926ms] [LOG] [Fast Refresh] done in 481ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   31004ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   31886ms] [LOG] [Fast Refresh] done in 989ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   33810ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   33822ms] [LOG] %c%s%c [PIPE] 2026-06-07T18:12:07.121Z u=gdo114@fenice.local 1ª=3 (lch=0) 2ª=0 ids1ª=[49fa4214/std,30800ce1/std,fc32b94f/std] background: #e6e6e6;background: light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.25));color: #000000;color: light-dark(#000000, #ffffff);border-radius: 2px  Server   @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   33833ms] [LOG] [HMR] connected @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   33971ms] [WARNING] [realtime] subscription "user-notifications" CLOSED undefined @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   44120ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   44525ms] [LOG] [Fast Refresh] done in 517ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   91272ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[   91661ms] [LOG] [Fast Refresh] done in 501ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[  147743ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[  147974ms] [LOG] [Fast Refresh] done in 332ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[  188521ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[  188790ms] [LOG] [Fast Refresh] done in 380ms @ http://localhost:3010/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297

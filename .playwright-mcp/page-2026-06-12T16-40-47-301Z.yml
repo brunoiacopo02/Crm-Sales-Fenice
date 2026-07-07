@@ -1,0 +1,133 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - img [ref=e7]
+        - generic [ref=e15]:
+          - generic [ref=e16]: SerenaMente
+          - generic [ref=e17]: crescita mentale
+      - navigation [ref=e19]:
+        - link "Operativa Team" [ref=e78] [cursor=pointer]:
+          - /url: /operativa-team
+          - generic [ref=e79]:
+            - img [ref=e80]
+            - generic [ref=e85]: Operativa Team
+        - link "KPI GDO" [ref=e87] [cursor=pointer]:
+          - /url: /kpi-gdo
+          - generic [ref=e88]:
+            - img [ref=e89]
+            - generic [ref=e94]: KPI GDO
+        - link "Performance GDO" [ref=e96] [cursor=pointer]:
+          - /url: /manager-gdo-performance
+          - generic [ref=e97]:
+            - img [ref=e98]
+            - generic [ref=e104]: Performance GDO
+        - link "Richiami" [ref=e106] [cursor=pointer]:
+          - /url: /richiami
+          - generic [ref=e107]:
+            - img [ref=e108]
+            - generic [ref=e110]: Richiami
+        - link "Monitor Pause" [ref=e112] [cursor=pointer]:
+          - /url: /monitor-pause
+          - generic [ref=e113]:
+            - img [ref=e114]
+            - generic [ref=e117]: Monitor Pause
+        - link "Note GDO" [ref=e119] [cursor=pointer]:
+          - /url: /note-gdo
+          - generic [ref=e120]:
+            - img [ref=e121]
+            - generic [ref=e124]: Note GDO
+      - button "Disconnetti" [ref=e22]:
+        - img [ref=e23]
+        - generic [ref=e26]: Disconnetti
+    - generic [ref=e27]:
+      - banner [ref=e28]:
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e125]:
+              - img [ref=e126]
+              - generic [ref=e130]: Serenamente
+            - button "Fenice Academy 27 app 99 rich" [ref=e131]:
+              - img [ref=e132]
+              - generic [ref=e135]: Fenice Academy
+              - generic [ref=e136]:
+                - generic "27 appuntamenti oggi su Fenice Academy" [ref=e137]: 27 app
+                - generic "99 richiami in scadenza su Fenice Academy" [ref=e138]: 99 rich
+          - button [ref=e37]:
+            - img [ref=e38]
+          - generic [ref=e41]:
+            - generic [ref=e43]: TL GDO
+            - generic [ref=e45]: T
+      - main [ref=e49]:
+        - generic [ref=e50]:
+          - generic [ref=e52]:
+            - heading "Operativa Team" [level=1] [ref=e53]
+            - paragraph [ref=e54]: "Tabella mensile/trimestrale: ore lavorate, chiamate, lead gestiti per ogni operatore."
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "Parametri Manager" [level=2] [ref=e139]:
+                - img [ref=e140]
+                - text: Parametri Manager
+              - generic [ref=e145]:
+                - img [ref=e146]
+                - text: "Lead nuovi oggi: 8"
+                - generic [ref=e149]: (ORG 8)
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - generic [ref=e152]: App/gg per GDO (mese)
+                - generic [ref=e153]:
+                  - generic [ref=e154]: —
+                  - generic [ref=e155]: / ≥ 10
+              - generic [ref=e156]:
+                - generic [ref=e157]: "% Conferme media (mese)"
+                - generic [ref=e158]:
+                  - generic [ref=e159]: 12%
+                  - generic [ref=e160]: / ≥ 15%
+            - generic [ref=e161]:
+              - generic [ref=e162]:
+                - generic [ref=e163]:
+                  - generic [ref=e164]:
+                    - img [ref=e165]
+                    - text: Scorte lead lavorabili
+                  - generic [ref=e169]: "Non assegnati: 95"
+                - generic [ref=e170]: Nessun GDO attivo.
+              - generic [ref=e171]:
+                - generic [ref=e172]:
+                  - img [ref=e173]
+                  - text: GDO sotto target (settimana)
+                - generic [ref=e176]: ✓ Nessun GDO sotto il 50% del target app/giorno.
+          - generic [ref=e61]:
+            - generic [ref=e62]:
+              - generic [ref=e63]:
+                - heading "Dashboard Operativa Aziendale" [level=2] [ref=e64]:
+                  - img [ref=e65]
+                  - text: Dashboard Operativa Aziendale
+                - generic [ref=e67]: Monitoraggio volumi, tassi di risposta, appuntamenti e conversione oraria.
+              - generic [ref=e68]:
+                - button "Oggi" [ref=e69]
+                - button "Questo Mese" [ref=e70]
+                - button "Trimestre (90 gg)" [ref=e71]
+            - table [ref=e177]:
+              - rowgroup [ref=e178]:
+                - row "GDO Ore Lavorate Chiamate / Ora Chiamate Risposte Tasso Risp. App. Fissati % Fissaggio" [ref=e179]:
+                  - columnheader "GDO" [ref=e180]
+                  - columnheader "Ore Lavorate" [ref=e181]
+                  - columnheader "Chiamate / Ora" [ref=e182]
+                  - columnheader "Chiamate" [ref=e183]
+                  - columnheader "Risposte" [ref=e184]
+                  - columnheader "Tasso Risp." [ref=e185]
+                  - columnheader "App. Fissati" [ref=e186]
+                  - columnheader "% Fissaggio" [ref=e187]
+              - rowgroup [ref=e188]:
+                - row "TOTALE / MEDIA REPARTO 0.0h 0.0 0 0 0.0% 0 0.0%" [ref=e189]:
+                  - cell "TOTALE / MEDIA REPARTO" [ref=e190]
+                  - cell "0.0h" [ref=e191]
+                  - cell "0.0" [ref=e192]
+                  - cell "0" [ref=e193]
+                  - cell "0" [ref=e194]
+                  - cell "0.0%" [ref=e195]
+                  - cell "0" [ref=e196]
+                  - cell "0.0%" [ref=e197]
+                - row "Nessun dato registrato o operatori non attivi." [ref=e198]:
+                  - cell "Nessun dato registrato o operatori non attivi." [ref=e199]
+  - alert [ref=e76]

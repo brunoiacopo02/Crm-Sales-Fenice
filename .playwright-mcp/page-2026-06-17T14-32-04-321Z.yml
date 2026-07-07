@@ -1,0 +1,144 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e19]
+  - generic [ref=e20]:
+    - complementary [ref=e21]:
+      - generic [ref=e23]:
+        - img [ref=e25]
+        - generic [ref=e33]:
+          - generic [ref=e34]: SerenaMente
+          - generic [ref=e35]: crescita mentale
+      - navigation [ref=e37]:
+        - link "Dashboard Conferme" [ref=e39] [cursor=pointer]:
+          - /url: /conferme
+          - generic [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Dashboard Conferme
+        - link "KPI Conferme" [ref=e45] [cursor=pointer]:
+          - /url: /kpi-conferme
+          - generic [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e52]: KPI Conferme
+        - link "Analytics Staffing" [ref=e54] [cursor=pointer]:
+          - /url: /conferme/analytics
+          - generic [ref=e55]:
+            - img [ref=e56]
+            - generic [ref=e61]: Analytics Staffing
+        - generic [ref=e62]:
+          - generic [ref=e63]: 🔥
+          - link "Il mio Profilo" [ref=e64] [cursor=pointer]:
+            - /url: /profilo
+            - generic [ref=e65]:
+              - img [ref=e66]
+              - generic [ref=e68]: Il mio Profilo
+        - link "Classifica" [ref=e70] [cursor=pointer]:
+          - /url: /classifica
+          - generic [ref=e71]:
+            - img [ref=e72]
+            - generic [ref=e78]: Classifica
+        - link "SerenaMente Store" [ref=e80] [cursor=pointer]:
+          - /url: /store
+          - generic [ref=e81]:
+            - img [ref=e82]
+            - generic [ref=e86]: SerenaMente Store
+      - button "Disconnetti" [ref=e89]:
+        - img [ref=e90]
+        - generic [ref=e93]: Disconnetti
+    - generic [ref=e94]:
+      - banner [ref=e95]:
+        - generic [ref=e96]:
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - img [ref=e99]
+              - generic [ref=e103]: Serenamente
+            - button "Fenice Academy 39 app 1 rich" [ref=e104]:
+              - img [ref=e105]
+              - generic [ref=e108]: Fenice Academy
+              - generic [ref=e109]:
+                - generic "39 appuntamenti oggi su Fenice Academy" [ref=e110]: 39 app
+                - generic "1 richiami in scadenza su Fenice Academy" [ref=e111]: 1 rich
+          - button "20" [ref=e113]:
+            - img [ref=e114]
+            - generic [ref=e119]: "20"
+          - generic [ref=e120]:
+            - generic "I tuoi Fenice Coin" [ref=e121]:
+              - img "Fenice Coin" [ref=e122]
+              - generic [ref=e123]: "0"
+            - generic [ref=e125]: Andrea
+            - generic [ref=e127]: A
+      - main [ref=e129]:
+        - generic [ref=e130]:
+          - generic [ref=e133]:
+            - generic "Realtime connesso" [ref=e134]:
+              - img [ref=e135]
+              - generic [ref=e140]: Radar
+            - generic [ref=e143]:
+              - generic [ref=e147]:
+                - generic [ref=e148]: Alberto
+                - generic [ref=e149]: L-3600
+              - button "Invia Avviso P2P" [ref=e150]:
+                - img [ref=e151]
+          - generic [ref=e153]:
+            - heading "Dashboard Conferme" [level=1] [ref=e154]
+            - generic [ref=e155]:
+              - button "Agenda venditori" [ref=e156]:
+                - img [ref=e157]
+                - text: Agenda venditori
+              - generic [ref=e159]: Gestione appuntamenti centralizzata
+          - generic [ref=e160]:
+            - generic [ref=e161]:
+              - img [ref=e162]
+              - generic [ref=e166]: Obiettivo di Oggi
+            - generic [ref=e167]:
+              - generic [ref=e168]:
+                - img [ref=e169]
+                - generic [ref=e172]: Confermati oggi
+              - generic [ref=e173]:
+                - generic [ref=e174]:
+                  - generic [ref=e175]: "4"
+                  - generic [ref=e176]: / 8
+                - generic [ref=e180]: 50%
+          - generic [ref=e182]:
+            - generic [ref=e183]:
+              - img [ref=e185]
+              - generic [ref=e187]:
+                - generic [ref=e188]:
+                  - generic [ref=e189]: "0"
+                  - generic [ref=e190]: giorni
+                - generic [ref=e191]: Inizia la tua streak
+            - generic [ref=e195]:
+              - img [ref=e196]
+              - generic [ref=e199]: 3g a x1.5
+          - generic [ref=e201]:
+            - generic [ref=e202]:
+              - generic [ref=e203]:
+                - button "Pomeriggio 0" [ref=e204]:
+                  - img [ref=e205]
+                  - text: Pomeriggio
+                  - generic [ref=e211]: "0"
+                - button "Mattina 0" [ref=e212]:
+                  - img [ref=e213]
+                  - text: Mattina
+                  - generic [ref=e218]: "0"
+                - button "Richiami 0" [ref=e219]:
+                  - img [ref=e220]
+                  - text: Richiami
+                  - generic [ref=e223]: "0"
+                - button "Storico" [ref=e224]:
+                  - img [ref=e225]
+                  - text: Storico
+              - generic [ref=e228]:
+                - generic [ref=e229]:
+                  - img [ref=e230]
+                  - textbox "Cerca per nome, email o telefono..." [ref=e233]
+                - button "Vista Globale DB" [ref=e234]
+            - generic [ref=e238]: Caricamento...
+  - generic [ref=e241]:
+    - img [ref=e243]
+    - generic [ref=e248]:
+      - generic [ref=e249]:
+        - generic [ref=e250]: FENICE
+        - generic [ref=e251]: Richiamo Conferme ADESSO
+      - generic [ref=e252]: michele fiorenti · 3403385470
+      - generic [ref=e253]: 17/06/26, 16:30 — cambia azienda dal menu in alto per gestirlo
+    - button "Nascondi" [ref=e254]:
+      - img [ref=e255]

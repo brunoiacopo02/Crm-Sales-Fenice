@@ -1,0 +1,223 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: F
+        - generic [ref=e7]: Fenice CRM
+      - navigation [ref=e9]:
+        - generic [ref=e86]:
+          - generic [ref=e87]: Admin
+          - link "Sales Manager" [ref=e88] [cursor=pointer]:
+            - /url: /panoramica-generale
+            - generic [ref=e89]:
+              - img [ref=e90]
+              - generic [ref=e93]: Sales Manager
+        - generic [ref=e94]:
+          - generic [ref=e96]: Operativo
+          - link "Dashboard Operativa" [ref=e97] [cursor=pointer]:
+            - /url: /team
+            - generic [ref=e98]:
+              - img [ref=e99]
+              - generic [ref=e111]: Dashboard Operativa
+          - link "Appuntamenti Oggi" [ref=e112] [cursor=pointer]:
+            - /url: /appuntamenti-oggi
+            - generic [ref=e113]:
+              - img [ref=e114]
+              - generic [ref=e116]: Appuntamenti Oggi
+          - link "Appuntamenti (Conferme)" [ref=e117] [cursor=pointer]:
+            - /url: /conferme
+            - generic [ref=e118]:
+              - img [ref=e119]
+              - generic [ref=e121]: Appuntamenti (Conferme)
+          - link "Monitor Vendite" [ref=e122] [cursor=pointer]:
+            - /url: /monitor-vendite
+            - generic [ref=e123]:
+              - img [ref=e124]
+              - generic [ref=e127]: Monitor Vendite
+          - link "Portafoglio Clienti" [ref=e128] [cursor=pointer]:
+            - /url: /portafoglio-clienti
+            - generic [ref=e129]:
+              - img [ref=e130]
+              - generic [ref=e133]: Portafoglio Clienti
+          - link "Monitor Pause" [ref=e134] [cursor=pointer]:
+            - /url: /monitor-pause
+            - generic [ref=e135]:
+              - img [ref=e136]
+              - generic [ref=e139]: Monitor Pause
+          - link "Importa Lead" [ref=e140] [cursor=pointer]:
+            - /url: /import
+            - generic [ref=e141]:
+              - img [ref=e142]
+              - generic [ref=e145]: Importa Lead
+          - link "Lead Automatici (AC)" [ref=e146] [cursor=pointer]:
+            - /url: /lead-automatici
+            - generic [ref=e147]:
+              - img [ref=e148]
+              - generic [ref=e150]: Lead Automatici (AC)
+          - link "Archivio Storico" [ref=e151] [cursor=pointer]:
+            - /url: /archivio
+            - generic [ref=e152]:
+              - img [ref=e153]
+              - generic [ref=e157]: Archivio Storico
+          - link "Scartati (Marketing)" [ref=e158] [cursor=pointer]:
+            - /url: /scartati
+            - generic [ref=e159]:
+              - img [ref=e160]
+              - generic [ref=e164]: Scartati (Marketing)
+        - generic [ref=e165]:
+          - generic [ref=e167]: KPI & Analytics
+          - link "KPI GDO" [ref=e168] [cursor=pointer]:
+            - /url: /kpi-gdo
+            - generic [ref=e169]:
+              - img [ref=e170]
+              - generic [ref=e175]: KPI GDO
+          - link "Operativa Team" [ref=e176] [cursor=pointer]:
+            - /url: /operativa-team
+            - generic [ref=e177]:
+              - img [ref=e178]
+              - generic [ref=e183]: Operativa Team
+          - link "KPI Venditori" [ref=e184] [cursor=pointer]:
+            - /url: /kpi-venditori
+            - generic [ref=e185]:
+              - img [ref=e186]
+              - generic [ref=e192]: KPI Venditori
+          - link "KPI Conferme" [ref=e193] [cursor=pointer]:
+            - /url: /kpi-conferme
+            - generic [ref=e194]:
+              - img [ref=e195]
+              - generic [ref=e200]: KPI Conferme
+          - link "Analytics Staffing Conferme" [ref=e201] [cursor=pointer]:
+            - /url: /conferme/analytics
+            - generic [ref=e202]:
+              - img [ref=e203]
+              - generic [ref=e208]: Analytics Staffing Conferme
+          - link "Marketing Analytics" [ref=e209] [cursor=pointer]:
+            - /url: /marketing-analytics
+            - generic [ref=e210]:
+              - img [ref=e211]
+              - generic [ref=e215]: Marketing Analytics
+          - link "Qualità Lead (Sondaggi)" [ref=e216] [cursor=pointer]:
+            - /url: /qualita-lead
+            - generic [ref=e217]:
+              - img [ref=e218]
+              - generic [ref=e221]: Qualità Lead (Sondaggi)
+          - link "Analisi Qualità" [ref=e222] [cursor=pointer]:
+            - /url: /analisi-qualita
+            - generic [ref=e223]:
+              - img [ref=e224]
+              - generic [ref=e227]: Analisi Qualità
+          - link "Performance GDO" [ref=e228] [cursor=pointer]:
+            - /url: /manager-gdo-performance
+            - generic [ref=e229]:
+              - img [ref=e230]
+              - generic [ref=e236]: Performance GDO
+        - generic [ref=e237]:
+          - generic [ref=e239]: Team & HR
+          - link "Target & Previsioni" [ref=e240] [cursor=pointer]:
+            - /url: /manager-targets
+            - generic [ref=e241]:
+              - img [ref=e242]
+              - generic [ref=e246]: Target & Previsioni
+          - link "Note GDO" [ref=e247] [cursor=pointer]:
+            - /url: /note-gdo
+            - generic [ref=e248]:
+              - img [ref=e249]
+              - generic [ref=e252]: Note GDO
+        - generic [ref=e253]:
+          - generic [ref=e254]: 🔥
+          - generic [ref=e255]: Gamification
+          - link "Monitor RPG GDO" [ref=e256] [cursor=pointer]:
+            - /url: /manager-rpg-monitor
+            - generic [ref=e257]:
+              - img [ref=e258]
+              - generic [ref=e260]: Monitor RPG GDO
+          - link "Gestione Store" [ref=e261] [cursor=pointer]:
+            - /url: /team/store
+            - generic [ref=e262]:
+              - img [ref=e263]
+              - generic [ref=e267]: Gestione Store
+      - button "Disconnetti" [ref=e12]:
+        - img [ref=e13]
+        - generic [ref=e16]: Disconnetti
+    - generic [ref=e17]:
+      - banner [ref=e18]:
+        - generic [ref=e19]:
+          - button "Fenice Academy" [ref=e268]:
+            - img [ref=e269]
+            - generic [ref=e273]: Fenice Academy
+            - img [ref=e274]
+          - button [ref=e27]:
+            - img [ref=e28]
+          - generic [ref=e31]:
+            - generic [ref=e33]: QA Admin
+            - generic [ref=e35]: Q
+      - main [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - generic [ref=e42]:
+              - heading "Importa Lead tramite CSV" [level=1] [ref=e43]
+              - paragraph [ref=e44]: Carica l'export con le colonne richieste per popolare il CRM.
+            - button "Aggiungi Lead Singolo" [ref=e45]:
+              - img [ref=e46]
+              - text: Aggiungi Lead Singolo
+          - generic [ref=e49]:
+            - generic [ref=e50]:
+              - generic [ref=e51]:
+                - generic [ref=e52]: "1"
+                - heading "Carica File" [level=3] [ref=e53]
+              - generic [ref=e54] [cursor=pointer]:
+                - img [ref=e55]
+                - paragraph [ref=e59]: Clicca qui per caricare
+                - paragraph [ref=e60]: Solo formati CSV, TXT supportati
+              - generic [ref=e61]:
+                - paragraph [ref=e62]:
+                  - img [ref=e63]
+                  - text: "Requisiti CSV:"
+                - list [ref=e65]:
+                  - listitem [ref=e66]: Separatore gestito in automatico ( Virgola o Punto e Virgola ).
+                  - listitem [ref=e67]:
+                    - text: "Le colonne indispensabili sono:"
+                    - strong [ref=e68]: Telefono1
+                    - text: e
+                    - strong [ref=e69]: Cognome
+                    - text: .
+                  - listitem [ref=e70]:
+                    - text: Il
+                    - strong [ref=e71]: Cognome
+                    - text: verrà mappato come Funnel di provenienza.
+                  - listitem [ref=e72]:
+                    - strong [ref=e73]: Nome
+                    - text: ed
+                    - strong [ref=e74]: Email
+                    - text: sono facoltativi.
+                  - listitem [ref=e75]: Le colonne superflue (es. Info, Unnamed) verranno ignorate.
+            - generic [ref=e76]:
+              - generic [ref=e78]:
+                - generic [ref=e79]: "2"
+                - heading "Preview & Validazione" [level=3] [ref=e80]
+              - generic [ref=e81]:
+                - img [ref=e82]
+                - paragraph [ref=e85]: In attesa del file CSV...
+          - generic [ref=e276]:
+            - generic [ref=e277]:
+              - img [ref=e278]
+              - heading "Ridistribuisci / Assegna lead" [level=3] [ref=e284]
+              - generic [ref=e285]: Admin only
+            - paragraph [ref=e286]:
+              - text: Sposta in blocco i lead di una sezione verso uno o più GDO. Seleziona
+              - strong [ref=e287]: "\"Da assegnare\""
+              - text: come sorgente per distribuire i lead non ancora assegnati. Lo stato del lead (callCount, recall, note) resta invariato.
+            - generic [ref=e288]:
+              - generic [ref=e289]:
+                - generic [ref=e290]: GDO sorgente
+                - combobox [ref=e291]:
+                  - option "— Scegli GDO —" [selected]
+                  - option "📥 Da assegnare (lead non assegnati)"
+              - generic [ref=e292]:
+                - generic [ref=e293]: Sezione
+                - generic [ref=e294]:
+                  - button "1ª chiamata" [ref=e295]
+                  - button "2ª chiamata" [ref=e296]
+                  - button "3ª chiamata" [ref=e297]
+                  - button "Richiami" [ref=e298]
+  - alert [ref=e299]

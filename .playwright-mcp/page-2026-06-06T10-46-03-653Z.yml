@@ -1,0 +1,119 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e5]: Pagina 2 di 3.
+    - generic [ref=e8]:
+      - banner [ref=e9]:
+        - generic [ref=e12]:
+          - group [ref=e13]:
+            - link "Canva ⁠ (si apre in una nuova scheda o finestra)" [ref=e16] [cursor=pointer]:
+              - /url: https://www.canva.com
+              - generic [ref=e17]: Canva
+              - generic:
+                - text: ⁠
+                - generic [ref=e19]: (si apre in una nuova scheda o finestra)
+          - group [ref=e20]:
+            - button "Condividi" [ref=e21] [cursor=pointer]:
+              - generic [ref=e22]:
+                - generic:
+                  - img
+              - generic [ref=e23]: Condividi
+            - button "Crea con Canva" [ref=e24] [cursor=pointer]:
+              - generic [ref=e25]: Crea con Canva
+      - main [ref=e26]:
+        - generic [ref=e27]:
+          - generic [ref=e166]:
+            - generic [ref=e168]:
+              - generic [ref=e179]:
+                - img
+              - generic [ref=e186]:
+                - img
+              - paragraph [ref=e193]: TIPOGRAFIA
+              - paragraph [ref=e200]: "Font family: Sora"
+              - paragraph [ref=e211]: <p> corpo del testo
+              - generic [ref=e217]:
+                - paragraph [ref=e218]: "Font size: 30"
+                - paragraph [ref=e219]: "Font style: normal"
+                - paragraph [ref=e220]: "Font colour: #191970"
+                - paragraph [ref=e221]: "Font-weight: regular"
+              - paragraph [ref=e232]: <H1> titolo del testo
+              - generic [ref=e238]:
+                - paragraph [ref=e239]: "Font size: 70"
+                - paragraph [ref=e240]: "Font style: normal"
+                - paragraph [ref=e241]: "Font colour: #191970"
+                - paragraph [ref=e242]: "Font-weight: bold"
+              - paragraph [ref=e249]: Serena Mente S.r.l.
+            - region "Contenuto della pagina" [ref=e250]:
+              - group "Pagina 2" [ref=e251]:
+                - img "transparent orange gradient" [ref=e252]
+                - group "Elemento" [ref=e253]:
+                  - paragraph [ref=e254]:
+                    - strong [ref=e255]: TIPOGRAFIA
+                - group "Elemento" [ref=e256]:
+                  - paragraph [ref=e257]:
+                    - strong [ref=e258]: "Font family: Sora"
+                - img "Verde spento e Rettangolo" [ref=e259]
+                - group "Elemento" [ref=e260]:
+                  - paragraph [ref=e261]: <p> corpo del testo
+                - group "Elemento" [ref=e262]:
+                  - paragraph [ref=e263]: "Font size: 30"
+                  - paragraph [ref=e264]: "Font style: normal"
+                  - paragraph [ref=e265]: "Font colour: #191970"
+                  - paragraph [ref=e266]: "Font-weight: regular"
+                - img "Verde spento e Rettangolo" [ref=e267]
+                - group "Elemento" [ref=e268]:
+                  - paragraph [ref=e269]: <H1> titolo del testo
+                - group "Elemento" [ref=e270]:
+                  - paragraph [ref=e271]: "Font size: 70"
+                  - paragraph [ref=e272]: "Font style: normal"
+                  - paragraph [ref=e273]: "Font colour: #191970"
+                  - paragraph [ref=e274]: "Font-weight: bold"
+                - img "transparent orange gradient" [ref=e275]
+                - group "Elemento" [ref=e276]:
+                  - paragraph [ref=e277]: Serena Mente S.r.l.
+          - generic [ref=e279]:
+            - generic:
+              - img
+          - generic [ref=e82]:
+            - generic:
+              - img
+      - contentinfo "Controlli della pagina" [ref=e83]:
+        - generic [ref=e86]:
+          - slider "Cursore per il progetto" [ref=e88] [cursor=pointer]
+          - region "Barra degli strumenti" [ref=e99]:
+            - group "Barra degli strumenti" [ref=e100]:
+              - navigation "Scorrimento" [ref=e101]:
+                - button "Pagina precedente" [ref=e103] [cursor=pointer]:
+                  - generic [ref=e104]:
+                    - generic:
+                      - img
+                - button "Vai a pagina" [ref=e107] [cursor=pointer]:
+                  - generic [ref=e109]:
+                    - paragraph [ref=e112]: "2"
+                    - paragraph [ref=e113]: /
+                    - paragraph [ref=e114]: "3"
+                - button "Pagina successiva" [active] [ref=e116] [cursor=pointer]:
+                  - generic [ref=e117]:
+                    - generic:
+                      - img
+            - group "Barra degli strumenti" [ref=e118]:
+              - button "Ingrandisci e rimpicciolisci" [ref=e121] [cursor=pointer]:
+                - generic [ref=e122]:
+                  - generic:
+                    - img
+              - button "Altro" [ref=e127] [cursor=pointer]:
+                - generic [ref=e128]:
+                  - generic:
+                    - img
+              - button "Avvia modalità a schermo intero" [ref=e130] [cursor=pointer]:
+                - generic [ref=e131]:
+                  - generic:
+                    - img
+    - text: AA
+  - generic [ref=e132]: Controlli della pagina
+  - generic [ref=e133]: Barra degli strumenti
+  - generic [ref=e134]: Pagina precedente
+  - generic [ref=e135]: Vai a pagina
+  - generic [ref=e136]: Pagina successiva
+  - generic [ref=e137]: Ingrandisci e rimpicciolisci
+  - generic [ref=e138]: Altro
+  - generic [ref=e139]: Avvia modalità a schermo intero
