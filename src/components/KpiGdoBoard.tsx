@@ -59,6 +59,10 @@ export function KpiGdoBoard() {
             return
         }
 
+        // Guardia anti-stale per il fetch di attemptMetrics: con cambi rapidi di
+        // filtro la risposta vecchia non deve sovrascrivere quella nuova.
+        let cancelled = false
+
         async function fetchKpi() {
             setLoading(true)
             try {
@@ -120,7 +124,7 @@ export function KpiGdoBoard() {
                     endDate: end,
                     funnel: funnelFilter !== "ALL" ? funnelFilter : undefined,
                     gdoId: gdoFilter !== "ALL" ? gdoFilter : undefined,
-                }).then(setAttemptMetrics).catch(e => console.error(e))
+                }).then(res => { if (!cancelled) setAttemptMetrics(res) }).catch(e => console.error(e))
 
                 if (gdoFilter !== "ALL") {
                     const tRes = await getGdoTargetsProgress(gdoFilter)
@@ -143,7 +147,10 @@ export function KpiGdoBoard() {
         const handleRealtimeUpdate = () => fetchKpi()
         window.addEventListener('realtime_update', handleRealtimeUpdate)
 
-        return () => window.removeEventListener('realtime_update', handleRealtimeUpdate)
+        return () => {
+            cancelled = true
+            window.removeEventListener('realtime_update', handleRealtimeUpdate)
+        }
     }, [dateRange, customStart, customEnd, funnelFilter, gdoFilter, workingHoursOnly, session?.user?.id, isAdminOrManager])
 
     // Throughput rolling 30gg — finestra fissa, NON dipende da dateRange/funnelFilter.
