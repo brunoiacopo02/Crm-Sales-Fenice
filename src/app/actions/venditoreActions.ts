@@ -193,7 +193,7 @@ export async function getVenditoreFollowUps(sellerId: string) {
 
 // Funzione per registrare l'esito
 export async function saveVenditoreOutcome(leadId: string, payload: {
-    outcome: string, // "Chiuso" | "Non chiuso" | "Perso" | "Sparito"
+    outcome: string, // "Chiuso" | "Non chiuso" | "Sparito" ("Perso" rimosso 2026-07-08: doppione di Non chiuso)
     notes?: string,
     closeProduct?: string,
     closeAmountEur?: number,
@@ -267,9 +267,9 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         if (!check.ok) return { success: false, error: check.error };
     }
 
-    // GUARDIA 4: motivo obbligatorio su esiti non-chiusura (Non chiuso / Perso).
-    if (!isStaff && (payload.outcome === 'Non chiuso' || payload.outcome === 'Perso') && !payload.notClosedReason) {
-        return { success: false, error: 'Seleziona una motivazione per un esito Non chiuso o Perso.' };
+    // GUARDIA 4: motivo obbligatorio su esito Non chiuso.
+    if (!isStaff && payload.outcome === 'Non chiuso' && !payload.notClosedReason) {
+        return { success: false, error: 'Seleziona una motivazione per un esito Non chiuso.' };
     }
 
     // Scrittura atomica: update leads + insert salesAttempts + insert leadEvents.

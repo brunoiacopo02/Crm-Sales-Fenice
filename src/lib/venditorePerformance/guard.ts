@@ -1,19 +1,26 @@
 export const MAX_FOLLOW_UPS = 3;
 
 // Regole (solo ruolo VENDITORE; MANAGER/ADMIN esenti a monte):
-// - 'Non chiuso' richiede una data di follow-up e non è ammesso oltre il tetto.
-// - 'Chiuso' | 'Perso' | 'Sparito' sono terminali, nessun follow-up richiesto.
+// - 'Non chiuso' è sempre ammesso; il follow-up è FACOLTATIVO (decisione PO 2026-07-08).
+// - Un NUOVO follow-up non è ammesso oltre il tetto di MAX_FOLLOW_UPS: l'esito
+//   passa comunque, ma senza pianificare l'ennesimo richiamo.
+// - 'Chiuso' | 'Sparito' sono terminali, nessun follow-up richiesto.
+// - 'Perso' è stato rimosso (era un doppione di 'Non chiuso' e veniva mostrato
+//   come "Sparito" in Conferme + escluso dai presenziati).
 export function validateOutcomeTransition(input: {
     outcome: string;
     nextFollowUpDate: Date | null;
     priorNonClosedCount: number;
 }): { ok: true } | { ok: false; error: string } {
-    if (input.outcome === 'Non chiuso') {
-        if (input.priorNonClosedCount >= MAX_FOLLOW_UPS) {
-            return { ok: false, error: `Raggiunto il numero massimo di follow-up (${MAX_FOLLOW_UPS}). Registra un esito definitivo: Chiuso o Perso.` };
-        }
+    if (input.outcome === 'Perso') {
+        return { ok: false, error: `L'esito "Perso" non esiste più: usa "Non chiuso" (con o senza follow-up).` };
+    }
+    if (input.outcome === 'Non chiuso' && input.nextFollowUpDate !== null) {
         if (!(input.nextFollowUpDate instanceof Date) || isNaN(input.nextFollowUpDate.getTime())) {
-            return { ok: false, error: 'Dopo un "Non chiuso" devi impostare la data del prossimo follow-up.' };
+            return { ok: false, error: 'Data follow-up non valida.' };
+        }
+        if (input.priorNonClosedCount >= MAX_FOLLOW_UPS) {
+            return { ok: false, error: `Raggiunto il numero massimo di follow-up (${MAX_FOLLOW_UPS}): registra l'esito senza pianificare un nuovo follow-up.` };
         }
     }
     return { ok: true };

@@ -9,12 +9,11 @@ interface Props {
     initialYearMonth: string
 }
 
-const OUTCOMES = ['Chiuso', 'Non chiuso', 'Perso', 'Sparito'] as const
+const OUTCOMES = ['Chiuso', 'Non chiuso', 'Sparito'] as const
 
 const OUTCOME_BADGE: Record<string, string> = {
     'Chiuso': 'bg-green-100 text-green-800',
     'Non chiuso': 'bg-amber-100 text-amber-800',
-    'Perso': 'bg-red-100 text-red-800',
     'Sparito': 'bg-gray-100 text-gray-600',
 }
 

@@ -130,6 +130,12 @@ export function FomoToast() {
                 const mapped = FOMO_EVENT_MAP[detail.eventType];
                 if (!mapped) return;
 
+                // 'conferme_outcome_set' viene emesso anche per gli SCARTI: il toast
+                // "ha confermato" va mostrato solo per esito 'confermato'. Il payload
+                // del trigger (migrazione 0022) include metadata->>'outcome'; se manca
+                // (trigger vecchio) meglio nessun toast che un falso "confermato".
+                if (detail.eventType === 'conferme_outcome_set' && detail.outcome !== 'confermato') return;
+
                 const displayName = userInfo.displayName || userInfo.name;
                 addToast(mapped.type, displayName, mapped.message);
             } catch { /* silent fail */ }
