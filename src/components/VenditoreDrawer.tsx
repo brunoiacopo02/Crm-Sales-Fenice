@@ -30,14 +30,21 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
     const [outcome, setOutcome] = useState<string>(lead?.salespersonOutcome || "")
     const [closeProduct, setCloseProduct] = useState(lead?.closeProduct || "advance")
     const [closeAmountEur, setCloseAmountEur] = useState(lead?.closeAmountEur?.toString() || "")
-    // Data effettiva di chiusura (es. firma sabato ma esito segnato lunedì).
-    // Default = oggi; il venditore può anteciparla. Formato datetime-local
-    // SEMPRE interpretato come Europe/Rome (Sprint 2.4).
-    const [closeDate, setCloseDate] = useState<string>(
-        lead?.salespersonOutcomeAt
-            ? toRomeDatetimeLocal(new Date(lead.salespersonOutcomeAt))
-            : toRomeDatetimeLocal(new Date())
-    )
+    // Data effettiva dell'esito (es. firma sabato ma esito segnato lunedì).
+    // Vale per TUTTI gli esiti, non solo Chiuso: i KPI mensili (presenziati)
+    // usano questa data. Formato datetime-local SEMPRE Europe/Rome (Sprint 2.4).
+    // Default: esito precedente se esiste; altrimenti, se l'appuntamento è di un
+    // giorno passato (esito arretrato), la data dell'appuntamento — così le
+    // presenze finiscono nel mese in cui la trattativa è davvero avvenuta.
+    const [closeDate, setCloseDate] = useState<string>(() => {
+        if (lead?.salespersonOutcomeAt) return toRomeDatetimeLocal(new Date(lead.salespersonOutcomeAt))
+        const now = new Date()
+        const appt = lead?.appointmentDate ? new Date(lead.appointmentDate) : null
+        if (appt && toRomeDatetimeLocal(appt).slice(0, 10) < toRomeDatetimeLocal(now).slice(0, 10)) {
+            return toRomeDatetimeLocal(appt)
+        }
+        return toRomeDatetimeLocal(now)
+    })
     const [notClosedReason, setNotClosedReason] = useState(lead?.notClosedReason || "")
     const [notes, setNotes] = useState(lead?.salespersonOutcomeNotes || "")
 
@@ -126,7 +133,9 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                 closeAmountEur: outcome === "Chiuso" ? parseFloat(closeAmountEur) : undefined,
                 // Tutti i datetime-local sono interpretati come Europe/Rome (Sprint 2.4):
                 // evita che chiusure registrate sera/notte cadano nella settimana sbagliata.
-                outcomeAt: outcome === "Chiuso" && closeDate ? (parseRomeDatetimeLocal(closeDate) || undefined) : undefined,
+                // Inviata per OGNI esito: un "Non chiuso" registrato in ritardo deve
+                // contare come presenza nel mese della trattativa, non in quello odierno.
+                outcomeAt: closeDate ? (parseRomeDatetimeLocal(closeDate) || undefined) : undefined,
                 notClosedReason: (outcome === "Non chiuso" || outcome === "Perso") ? notClosedReason : undefined,
                 nextFollowUpDate: outcome === "Non chiuso" && nextFollowUpDate ? parseRomeDatetimeLocal(nextFollowUpDate) : null,
             }, lead.version)
@@ -400,6 +409,24 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                                 </select>
                             </div>
                             <p className="text-xs text-red-700">Esito definitivo: il lead è perso e non verranno richiesti altri follow-up.</p>
+                        </div>
+                    )}
+
+                    {/* DATA EFFETTIVA ESITO — per gli esiti non-Chiuso (Chiuso ha il suo campo dedicato).
+                        I KPI mensili (Trattative presenziate) usano questa data: se l'esito viene
+                        registrato in ritardo, deve restare attribuito al giorno reale della trattativa. */}
+                    {outcome && outcome !== "Chiuso" && (
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 animate-fade-in">
+                            <label className="block text-sm font-medium text-gray-900 mb-1">Data effettiva esito *</label>
+                            <input
+                                type="datetime-local"
+                                value={closeDate}
+                                onChange={e => setCloseDate(e.target.value)}
+                                className="input-fenice text-sm !p-1.5 w-full"
+                            />
+                            <div className="text-xs text-gray-500 mt-1">
+                                Se stai registrando ora l&apos;esito di una trattativa avvenuta in passato, imposta la data reale della trattativa: i KPI mensili contano la presenza su questa data.
+                            </div>
                         </div>
                     )}
 
