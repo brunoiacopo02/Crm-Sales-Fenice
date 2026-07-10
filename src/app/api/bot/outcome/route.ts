@@ -71,6 +71,8 @@ export async function POST(req: NextRequest) {
         id: leads.id,
         companyId: leads.companyId,
         assignedToId: leads.assignedToId,
+        status: leads.status,
+        confNeedsReschedule: leads.confNeedsReschedule,
     }).from(leads).where(eq(leads.id, leadId)).limit(1);
 
     if (!lead) {
@@ -85,6 +87,16 @@ export async function POST(req: NextRequest) {
         : [undefined];
     if (!assignee || !assignee.isBot) {
         return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
+    }
+
+    // Idempotenza anti ri-fissaggio. Il bot esterno ri-notifica lo stesso
+    // APPUNTAMENTO ~ogni ora per lead già appuntati: senza guardia, updateLeadOutcome
+    // ri-timbra appointmentCreatedAt=now (inquina "app fissati oggi") e gonfia
+    // callCount (visti valori fino a 298). Un lead già in APPOINTMENT e non in
+    // attesa di rifissaggio (i rifissaggi legittimi passano dalle Conferme, che
+    // settano confNeedsReschedule) NON va ri-processato: no-op senza scritture DB.
+    if (typedOutcome === 'APPUNTAMENTO' && lead.status === 'APPOINTMENT' && !lead.confNeedsReschedule) {
+        return NextResponse.json({ ok: true, deduped: true });
     }
 
     // Persisti il report (se presente) e logga un evento di audit.
