@@ -413,6 +413,7 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
     const toInsert: NewLeadRow[] = []
     const importedContactIds: string[] = []
 
+    let hitPaginationCap = true
     try {
         // status=1 = iscrizione attiva alla lista. Paginazione difensiva:
         // hard-cap 20.000 contatti (200 pagine) per evitare loop su risposte anomale.
@@ -420,7 +421,7 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
             const page = await acGet(`/contacts?listid=${listId}&status=1&limit=100&offset=${offset}`)
             const contacts = Array.isArray(page.contacts) ? page.contacts : []
             if (offset === 0) report.totalOnList = Number(page?.meta?.total ?? contacts.length) || contacts.length
-            if (contacts.length === 0) break
+            if (contacts.length === 0) { hitPaginationCap = false; break }
 
             for (const c of contacts) {
                 const contactId = String(c?.id ?? '')
@@ -457,12 +458,45 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
                     companyId: ctx.companyId,
                 })
             }
-            if (contacts.length < 100) break
+            if (contacts.length < 100) { hitPaginationCap = false; break }
+        }
+        if (hitPaginationCap) {
+            report.errors.push('Attenzione: raggiunto il limite di sicurezza di 20.000 contatti — lista non scaricata per intero, riclicca per verificare.')
         }
     } catch (e: any) {
         // Fallimento a metà: inseriamo comunque quanto raccolto (idempotente:
         // ri-cliccare riprende dai mancanti) e riportiamo l'errore.
         report.errors.push(`Errore AC durante il download dei contatti: ${e?.message || e} — importati quelli scaricati finora, riclicca per riprendere.`)
+    }
+
+    // Re-check pre-insert: finestra di race col doppio sync ristretta a ms
+    // (nessun vincolo unique possibile: il webhook consente duplicati
+    // intenzionali di acContactId). existingIds è uno snapshot preso a inizio
+    // funzione; nel frattempo il download AC (15-60s) può far correre due sync
+    // in parallelo che non si vedono a vicenda. Ultimo controllo DB immediatamente
+    // prima dell'insert per scartare i contatti nel frattempo già importati.
+    if (toInsert.length > 0 && importedContactIds.length > 0) {
+        const recheck = new Set<string>()
+        for (let i = 0; i < importedContactIds.length; i += 500) {
+            const rows = await db
+                .select({ acContactId: leads.acContactId })
+                .from(leads)
+                .where(and(
+                    eq(leads.companyId, ctx.companyId),
+                    inArray(leads.acContactId, importedContactIds.slice(i, i + 500)),
+                ))
+            for (const r of rows) if (r.acContactId) recheck.add(r.acContactId)
+        }
+        if (recheck.size > 0) {
+            const before = toInsert.length
+            for (let i = toInsert.length - 1; i >= 0; i--) {
+                if (recheck.has(toInsert[i].acContactId as string)) toInsert.splice(i, 1)
+            }
+            report.skippedExisting += before - toInsert.length
+            for (let i = importedContactIds.length - 1; i >= 0; i--) {
+                if (recheck.has(importedContactIds[i])) importedContactIds.splice(i, 1)
+            }
+        }
     }
 
     // Insert a chunk da 500 (niente eventi per-lead: vedi Global Constraints)
