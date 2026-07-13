@@ -405,13 +405,18 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
         return report
     }
 
-    // acContactId già presenti (qualunque bucket/stato: mai due lead dallo
-    // stesso contatto AC via sync). Solo la colonna, per non caricare righe intere.
+    // acContactId già nel pool Black Summer: la dedup è SOLO sul bucket
+    // (idempotenza del re-click), NON su tutto il DB. Un contatto già presente
+    // nel CRM da altri funnel va importato lo stesso come duplicato voluto —
+    // richiesta esplicita PO 2026-07-13: "vanno chiamati lo stesso" (il webhook
+    // AC consente già duplicati intenzionali). Solo la colonna, per non
+    // caricare righe intere.
     const existingRows = await db
         .select({ acContactId: leads.acContactId })
         .from(leads)
         .where(and(
             eq(leads.companyId, ctx.companyId),
+            eq(leads.launchBucket, BLACK_SUMMER_BUCKET),
             isNotNull(leads.acContactId),
         ))
     const existingIds = new Set(existingRows.map(r => r.acContactId as string))
@@ -422,10 +427,13 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
 
     let hitPaginationCap = true
     try {
-        // status=1 = iscrizione attiva alla lista. Paginazione difensiva:
-        // hard-cap 20.000 contatti (200 pagine) per evitare loop su risposte anomale.
+        // status=-1 = QUALUNQUE stato di iscrizione alla lista, inclusi gli
+        // unsubscribed — richiesta esplicita PO 2026-07-13: chi si è iscritto
+        // e poi ha fatto unsubscribe va chiamato lo stesso. Paginazione
+        // difensiva: hard-cap 20.000 contatti (200 pagine) per evitare loop
+        // su risposte anomale.
         for (let offset = 0; offset < 20000; offset += 100) {
-            const page = await acGet(`/contacts?listid=${listId}&status=1&limit=100&offset=${offset}`)
+            const page = await acGet(`/contacts?listid=${listId}&status=-1&limit=100&offset=${offset}`)
             const contacts = Array.isArray(page.contacts) ? page.contacts : []
             if (offset === 0) report.totalOnList = Number(page?.meta?.total ?? contacts.length) || contacts.length
             if (contacts.length === 0) { hitPaginationCap = false; break }
@@ -490,6 +498,7 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
                 .from(leads)
                 .where(and(
                     eq(leads.companyId, ctx.companyId),
+                    eq(leads.launchBucket, BLACK_SUMMER_BUCKET),
                     inArray(leads.acContactId, importedContactIds.slice(i, i + 500)),
                 ))
             for (const r of rows) if (r.acContactId) recheck.add(r.acContactId)
