@@ -10,6 +10,8 @@ export type BlackSummerStageStats = {
     fissati: number
     confermati: number
     chiusi: number
+    /** Somma closeAmountEur dei lead chiusi dello stadio (0 se nessuno). */
+    fatturatoEur: number
 }
 
 export type BlackSummerLaunchStats = {
@@ -43,6 +45,8 @@ export async function getBlackSummerLaunchStats(todayStart: Date, todayEnd: Date
             fissatiOggi: sql<number>`count(*) FILTER (WHERE ${leads.appointmentCreatedAt} >= ${todayStart} AND ${leads.appointmentCreatedAt} <= ${todayEnd})::int`,
             confermatiOggi: sql<number>`count(*) FILTER (WHERE ${leads.confirmationsOutcome} = 'confermato' AND ${leads.confirmationsTimestamp} >= ${todayStart} AND ${leads.confirmationsTimestamp} <= ${todayEnd})::int`,
             chiusiOggi: sql<number>`count(*) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso' AND ${leads.salespersonOutcomeAt} >= ${todayStart} AND ${leads.salespersonOutcomeAt} <= ${todayEnd})::int`,
+            fatturatoTot: sql<number>`COALESCE(sum(${leads.closeAmountEur}) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso'), 0)::float`,
+            fatturatoOggi: sql<number>`COALESCE(sum(${leads.closeAmountEur}) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso' AND ${leads.salespersonOutcomeAt} >= ${todayStart} AND ${leads.salespersonOutcomeAt} <= ${todayEnd}), 0)::float`,
         })
         .from(leads)
         .where(base)
@@ -67,12 +71,14 @@ export async function getBlackSummerLaunchStats(todayStart: Date, todayEnd: Date
             fissati: agg?.fissatiOggi ?? 0,
             confermati: agg?.confermatiOggi ?? 0,
             chiusi: agg?.chiusiOggi ?? 0,
+            fatturatoEur: agg?.fatturatoOggi ?? 0,
         },
         totaleLancio: {
             chiamati: agg?.chiamatiTot ?? 0,
             fissati: agg?.fissatiTot ?? 0,
             confermati: agg?.confermatiTot ?? 0,
             chiusi: agg?.chiusiTot ?? 0,
+            fatturatoEur: agg?.fatturatoTot ?? 0,
         },
     }
 }

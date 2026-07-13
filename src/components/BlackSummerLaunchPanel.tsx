@@ -6,13 +6,17 @@ function pct(num: number, den: number): string {
     return `${Math.round((num / den) * 100)}%`
 }
 
+function eur(amount: number): string {
+    return amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+}
+
 function StageRow({ label, stats, denomChiamati }: { label: string; stats: BlackSummerStageStats; denomChiamati: number }) {
     const cells = [
         { icon: PhoneCall, name: 'Chiamati ≥1', value: stats.chiamati, sub: denomChiamati > 0 ? `${pct(stats.chiamati, denomChiamati)} degli assegnati` : null, color: 'text-sky-600' },
         { icon: CalendarCheck, name: 'Fissati', value: stats.fissati, sub: `${pct(stats.fissati, stats.chiamati)} dei chiamati`, color: 'text-amber-600' },
         { icon: BadgeCheck, name: 'Confermati', value: stats.confermati, sub: `${pct(stats.confermati, stats.fissati)} dei fissati`, color: 'text-emerald-600' },
-        { icon: Trophy, name: 'Chiusi', value: stats.chiusi, sub: `${pct(stats.chiusi, stats.fissati)} dei fissati`, color: 'text-purple-600' },
-    ]
+        { icon: Trophy, name: 'Chiusi', value: stats.chiusi, sub: `${pct(stats.chiusi, stats.fissati)} dei fissati`, color: 'text-purple-600', extra: eur(stats.fatturatoEur) },
+    ] as Array<{ icon: typeof Trophy; name: string; value: number; sub: string | null; color: string; extra?: string }>
     return (
         <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">{label}</h3>
@@ -23,7 +27,10 @@ function StageRow({ label, stats, denomChiamati }: { label: string; stats: Black
                             <c.icon className={`h-3.5 w-3.5 ${c.color}`} />
                             {c.name}
                         </div>
-                        <div className="text-2xl font-black text-ash-900 mt-1">{c.value}</div>
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <div className="text-2xl font-black text-ash-900">{c.value}</div>
+                            {c.extra && <div className="text-sm font-bold text-emerald-700">{c.extra}</div>}
+                        </div>
                         {c.sub && <div className="text-[11px] text-ash-500 mt-0.5">{c.sub}</div>}
                     </div>
                 ))}
