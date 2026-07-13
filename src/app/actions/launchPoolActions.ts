@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { leads } from "@/db/schema"
-import { and, eq, isNull, isNotNull, sql } from "drizzle-orm"
+import { leads, acIntakeFailures } from "@/db/schema"
+import { and, eq, isNull, isNotNull, sql, like } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { users } from "@/db/schema"
 import { inArray } from "drizzle-orm"
@@ -10,6 +10,8 @@ import { revalidatePath } from "next/cache"
 import { logLeadEvent } from "@/lib/eventLogger"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import crypto from "crypto"
+import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize"
 
 type BucketRequest = { bucket: string; count: number }
 type PickAssignResult = {
@@ -315,5 +317,176 @@ export async function assignFromBlackSummerPool(input: { count: number; gdoIds: 
     if (report.totalAssigned === 0 && report.errors.length === 0) {
         report.errors.push("Nessun lead pescato (il pool potrebbe essere vuoto).")
     }
+    return report
+}
+
+// Client AC minimale con retry/backoff anti-429 — stessa logica dell'acGet
+// del webhook Fenice (non esportato da lì: route handler). ~5 req/s per
+// account, il backoff rispetta Retry-After.
+const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com'
+const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || ''
+const AC_MAX_RETRIES = 4
+const BLACK_SUMMER_LIST_NAME_NORMALIZED = 'lead lancio black summer 2026'
+
+async function acGet(path: string, attempt = 0): Promise<any> {
+    const res = await fetch(`${AC_URL}/api/3${path}`, {
+        headers: { 'Api-Token': AC_KEY, 'Content-Type': 'application/json' },
+    })
+    if ((res.status === 429 || (res.status >= 500 && res.status < 600)) && attempt < AC_MAX_RETRIES) {
+        const retryAfter = Number(res.headers.get('retry-after'))
+        const backoffMs = Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(retryAfter * 1000, 10000)
+            : Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250)
+        await new Promise((r) => setTimeout(r, backoffMs))
+        return acGet(path, attempt + 1)
+    }
+    if (!res.ok) throw new Error(`AC API ${res.status}: ${await res.text()}`)
+    return res.json()
+}
+
+async function findBlackSummerListId(): Promise<string | null> {
+    for (let offset = 0; offset < 500; offset += 100) {
+        const res = await acGet(`/lists?limit=100&offset=${offset}`)
+        const lists = Array.isArray(res.lists) ? res.lists : []
+        if (lists.length === 0) break
+        for (const l of lists) {
+            const nameNorm = String(l?.name ?? '').trim().toLowerCase()
+            if (nameNorm === BLACK_SUMMER_LIST_NAME_NORMALIZED && l?.id != null) return String(l.id)
+        }
+        if (lists.length < 100) break
+    }
+    return null
+}
+
+export type BlackSummerSyncReport = {
+    ok: boolean
+    imported: number
+    skippedExisting: number
+    skippedNoPhone: number
+    totalOnList: number
+    errors: string[]
+}
+
+export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const report: BlackSummerSyncReport = {
+        ok: false, imported: 0, skippedExisting: 0, skippedNoPhone: 0, totalOnList: 0, errors: [],
+    }
+    if (ctx.companyId !== BLACK_SUMMER_COMPANY) {
+        report.errors.push("Il sync Black Summer è disponibile solo con azienda attiva Fenice.")
+        return report
+    }
+    if (!AC_KEY) {
+        report.errors.push("ACTIVECAMPAIGN_API_KEY non configurata sul server.")
+        return report
+    }
+
+    const supabase = await createClient()
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+    const adminId = supabaseUser?.id ?? null
+
+    let listId: string | null = null
+    try {
+        listId = await findBlackSummerListId()
+    } catch (e: any) {
+        report.errors.push(`Errore AC durante la ricerca della lista: ${e?.message || e}`)
+        return report
+    }
+    if (!listId) {
+        report.errors.push(`Lista "Lead Lancio Black Summer 2026" non trovata su ActiveCampaign.`)
+        return report
+    }
+
+    // acContactId già presenti (qualunque bucket/stato: mai due lead dallo
+    // stesso contatto AC via sync). Solo la colonna, per non caricare righe intere.
+    const existingRows = await db
+        .select({ acContactId: leads.acContactId })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            isNotNull(leads.acContactId),
+        ))
+    const existingIds = new Set(existingRows.map(r => r.acContactId as string))
+
+    type NewLeadRow = typeof leads.$inferInsert
+    const toInsert: NewLeadRow[] = []
+    const importedContactIds: string[] = []
+
+    try {
+        // status=1 = iscrizione attiva alla lista. Paginazione difensiva:
+        // hard-cap 20.000 contatti (200 pagine) per evitare loop su risposte anomale.
+        for (let offset = 0; offset < 20000; offset += 100) {
+            const page = await acGet(`/contacts?listid=${listId}&status=1&limit=100&offset=${offset}`)
+            const contacts = Array.isArray(page.contacts) ? page.contacts : []
+            if (offset === 0) report.totalOnList = Number(page?.meta?.total ?? contacts.length) || contacts.length
+            if (contacts.length === 0) break
+
+            for (const c of contacts) {
+                const contactId = String(c?.id ?? '')
+                if (!contactId) continue
+                if (existingIds.has(contactId)) { report.skippedExisting++; continue }
+
+                const rawPhone = String(c?.phone || '').trim()
+                const phoneStrict = normalizePhoneStrict(rawPhone)
+                const phoneFinalNormalized = phoneStrict ?? normalizePhoneLenient(rawPhone)
+                const phoneFinal = phoneFinalNormalized?.startsWith('+39')
+                    ? phoneFinalNormalized.slice(3)
+                    : phoneFinalNormalized
+                if (!rawPhone || !phoneFinal) { report.skippedNoPhone++; continue }
+
+                const firstName = String(c?.firstName || '').trim()
+                const lastName = String(c?.lastName || '').trim()
+                const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome'
+                const email = String(c?.email || '').trim() || null
+
+                existingIds.add(contactId) // dedup anche intra-sync
+                importedContactIds.push(contactId)
+                toInsert.push({
+                    id: crypto.randomUUID(),
+                    name: fullName,
+                    email,
+                    phone: phoneFinal,
+                    phoneSuspicious: !isPlausiblePhone(phoneStrict),
+                    funnel: 'Black Summer',
+                    source: 'activecampaign',
+                    acContactId: contactId,
+                    launchBucket: BLACK_SUMMER_BUCKET,
+                    status: 'NEW',
+                    assignedToId: null,
+                    companyId: ctx.companyId,
+                })
+            }
+            if (contacts.length < 100) break
+        }
+    } catch (e: any) {
+        // Fallimento a metà: inseriamo comunque quanto raccolto (idempotente:
+        // ri-cliccare riprende dai mancanti) e riportiamo l'errore.
+        report.errors.push(`Errore AC durante il download dei contatti: ${e?.message || e} — importati quelli scaricati finora, riclicca per riprendere.`)
+    }
+
+    // Insert a chunk da 500 (niente eventi per-lead: vedi Global Constraints)
+    for (let i = 0; i < toInsert.length; i += 500) {
+        await db.insert(leads).values(toInsert.slice(i, i + 500))
+        report.imported += Math.min(500, toInsert.length - i)
+    }
+
+    // Risolvi le failure "blocked_list" dei contatti ora importati, così
+    // spariscono dal tab Bloccati di /lead-automatici.
+    if (importedContactIds.length > 0) {
+        for (let i = 0; i < importedContactIds.length; i += 500) {
+            await db.update(acIntakeFailures)
+                .set({ resolvedAt: new Date(), resolvedBy: adminId })
+                .where(and(
+                    eq(acIntakeFailures.companyId, ctx.companyId),
+                    like(acIntakeFailures.reason, 'blocked_list:%'),
+                    sql`${acIntakeFailures.resolvedAt} IS NULL`,
+                    inArray(acIntakeFailures.acContactId, importedContactIds.slice(i, i + 500)),
+                ))
+        }
+    }
+
+    revalidatePath('/', 'layout')
+    report.ok = report.errors.length === 0
     return report
 }
