@@ -18,9 +18,13 @@ interface VenditoreDrawerProps {
     // Check-in trattativa avviabile direttamente dalla scheda (oltre che dalla riga).
     onStartNegotiation?: () => void
     isStarting?: boolean
+    // Aperto dalla tab Follow-up: il form parte pulito (l'esito registrato è
+    // quello della NUOVA chiamata, non una modifica del tentativo precedente)
+    // e il tentativo precedente viene mostrato come recap read-only.
+    followUpMode?: boolean
 }
 
-export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, isStarting }: VenditoreDrawerProps) {
+export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, isStarting, followUpMode = false }: VenditoreDrawerProps) {
     // Trattativa avviata? Telefono e form esito sono sbloccati solo dopo il check-in
     // "Inizia trattativa" (regola remoto-only). Riflette anche l'avvio appena fatto.
     const isStarted = !!lead?.negotiationStartedAt
@@ -29,7 +33,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
     // un ennesimo follow-up ("Perso" rimosso: era un doppione di Non chiuso).
     const followUpCapReached = priorNonClosedCount >= MAX_FOLLOW_UPS
     const OUTCOME_OPTIONS = ["Chiuso", "Non chiuso", "Sparito"]
-    const [outcome, setOutcome] = useState<string>(lead?.salespersonOutcome || "")
+    const [outcome, setOutcome] = useState<string>(followUpMode ? "" : lead?.salespersonOutcome || "")
     const [closeProduct, setCloseProduct] = useState(lead?.closeProduct || "advance")
     const [closeAmountEur, setCloseAmountEur] = useState(lead?.closeAmountEur?.toString() || "")
     // Data effettiva dell'esito (es. firma sabato ma esito segnato lunedì).
@@ -39,6 +43,9 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
     // giorno passato (esito arretrato), la data dell'appuntamento — così le
     // presenze finiscono nel mese in cui la trattativa è davvero avvenuta.
     const [closeDate, setCloseDate] = useState<string>(() => {
+        // Follow-up: l'esito è della chiamata che avviene ADESSO, non della
+        // trattativa originale — niente prefill da esito/appuntamento passati.
+        if (followUpMode) return toRomeDatetimeLocal(new Date())
         if (lead?.salespersonOutcomeAt) return toRomeDatetimeLocal(new Date(lead.salespersonOutcomeAt))
         const now = new Date()
         const appt = lead?.appointmentDate ? new Date(lead.appointmentDate) : null
@@ -47,10 +54,17 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
         }
         return toRomeDatetimeLocal(now)
     })
-    const [notClosedReason, setNotClosedReason] = useState(lead?.notClosedReason || "")
-    const [notes, setNotes] = useState(lead?.salespersonOutcomeNotes || "")
+    const [notClosedReason, setNotClosedReason] = useState(followUpMode ? "" : lead?.notClosedReason || "")
+    const [notes, setNotes] = useState(followUpMode ? "" : lead?.salespersonOutcomeNotes || "")
 
-    const [nextFollowUpDate, setNextFollowUpDate] = useState(lead?.nextFollowUpDate ? toRomeDatetimeLocal(new Date(lead.nextFollowUpDate)) : "")
+    // Mai precompilare con una data già passata: risalvando "Non chiuso" si
+    // ripianificherebbe un follow-up nel passato → il lead resta in "Scaduti"
+    // per sempre e brucia uno dei follow-up disponibili.
+    const [nextFollowUpDate, setNextFollowUpDate] = useState(() => {
+        if (followUpMode) return ""
+        const fu = lead?.nextFollowUpDate ? new Date(lead.nextFollowUpDate) : null
+        return fu && fu.getTime() > Date.now() ? toRomeDatetimeLocal(fu) : ""
+    })
 
     const [isSaving, setIsSaving] = useState(false)
 
@@ -162,10 +176,17 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
         <div className="flex flex-col h-full bg-white">
             {/* Header - sticky with glass effect */}
             <div className="px-4 sm:px-6 py-4 drawer-header flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <User className="h-5 w-5 text-gray-400" />
-                    Scheda Appuntamento
-                </h2>
+                <div>
+                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        <User className="h-5 w-5 text-gray-400" />
+                        {followUpMode ? "Esito Follow-up" : "Scheda Appuntamento"}
+                    </h2>
+                    {followUpMode && (
+                        <div className="text-xs text-ash-500 mt-0.5 ml-7">
+                            Follow-up {Math.min(priorNonClosedCount, MAX_FOLLOW_UPS)} di {MAX_FOLLOW_UPS} — registra com&apos;è andata la chiamata
+                        </div>
+                    )}
+                </div>
                 <button
                     onClick={onClose}
                     className="p-2 text-ash-400 hover:text-ash-600 hover:bg-ash-100 rounded-full transition-colors"
@@ -259,8 +280,33 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                 )}
 
                 {isStarted && (<>
-                {/* Banner lead già esitato */}
-                {lead?.salespersonOutcome && (
+                {/* Follow-up: recap read-only del tentativo precedente */}
+                {followUpMode && lead?.salespersonOutcome && (
+                    <div className="bg-ash-50 border border-ash-200 rounded-xl p-4">
+                        <h4 className="text-xs font-bold text-ash-500 uppercase tracking-widest mb-2">Tentativo precedente</h4>
+                        <div className="text-sm text-ash-700 space-y-1">
+                            <div>Esito: <strong>{lead.salespersonOutcome}</strong>
+                                {lead.notClosedReason && <> — Motivo: <strong>{lead.notClosedReason}</strong></>}
+                            </div>
+                            {lead.salespersonOutcomeAt && (
+                                <div className="text-xs text-ash-500">
+                                    Registrato il {format(new Date(lead.salespersonOutcomeAt), "dd MMM yyyy - HH:mm", { locale: it })}
+                                </div>
+                            )}
+                            {lead.nextFollowUpDate && (
+                                <div className="text-xs text-ash-500">
+                                    Follow-up pianificato: {format(new Date(lead.nextFollowUpDate), "dd MMM yyyy - HH:mm", { locale: it })}
+                                </div>
+                            )}
+                            {lead.salespersonOutcomeNotes && (
+                                <div className="text-xs text-ash-500">Note: {lead.salespersonOutcomeNotes}</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Banner lead già esitato (solo fuori dal flusso follow-up) */}
+                {!followUpMode && lead?.salespersonOutcome && (
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
                         <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                         <div>
@@ -278,12 +324,12 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
 
                 {/* Form Esito */}
                 <div className="space-y-6">
-                    <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">Esito Vendita</h3>
+                    <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">{followUpMode ? "Esito della chiamata di follow-up" : "Esito Vendita"}</h3>
 
                     {/* Select Esito */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Seleziona l'esito dell'appuntamento *
+                            {followUpMode ? "Seleziona l'esito della chiamata *" : "Seleziona l'esito dell'appuntamento *"}
                         </label>
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             {OUTCOME_OPTIONS.map(o => (
@@ -461,7 +507,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                     ) : (
                         <Save className="h-4 w-4" />
                     )}
-                    {isSaving ? "Salvataggio..." : "Salva Esito"}
+                    {isSaving ? "Salvataggio..." : followUpMode ? "Salva esito follow-up" : "Salva Esito"}
                 </button>
             </div>
             )}

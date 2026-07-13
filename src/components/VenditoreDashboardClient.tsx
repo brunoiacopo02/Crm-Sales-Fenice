@@ -38,6 +38,9 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     // Drawer state
     const [selectedLead, setSelectedLead] = useState<any>(null)
+    // true quando il lead è stato aperto dalla tab Follow-up: il drawer parte
+    // in modalità "Esito Follow-up" (form pulito + recap tentativo precedente).
+    const [drawerFollowUpMode, setDrawerFollowUpMode] = useState(false)
     const [activeBriefing, setActiveBriefing] = useState<LeadBriefing | null | undefined>(undefined)
     const [isPending, startTransitionNeg] = useTransition()
     const [pendingLeadId, setPendingLeadId] = useState<string | null>(null)
@@ -66,7 +69,8 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     // Apre la scheda del lead. Se la trattativa è già avviata, ricarica il briefing
     // così la card torna visibile alla riapertura (prima restava nascosta).
-    const openLead = (app: any) => {
+    const openLead = (app: any, fromFollowUp = false) => {
+        setDrawerFollowUpMode(fromFollowUp)
         setSelectedLead(app)
         if (app.negotiationStartedAt) {
             setActiveBriefing(undefined)
@@ -80,6 +84,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const closeDrawer = () => {
         setSelectedLead(null)
         setActiveBriefing(undefined)
+        setDrawerFollowUpMode(false)
     }
 
     const fetchAppointments = async () => {
@@ -400,8 +405,8 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                             {items.map((f, idx) => (
                                                 <div
                                                     key={f.id}
-                                                    onClick={() => openLead(f)}
-                                                    className="w-full text-left bg-white border border-ash-200/60 rounded-lg p-4 hover:border-brand-orange/40 hover:shadow-card transition-all cursor-pointer flex items-center justify-between animate-fade-in"
+                                                    onClick={() => openLead(f, true)}
+                                                    className="w-full text-left bg-white border border-ash-200/60 rounded-lg p-4 hover:border-brand-orange/40 hover:shadow-card transition-all cursor-pointer flex items-center justify-between gap-4 animate-fade-in"
                                                     style={{ animationDelay: `${Math.min(idx * 30, 300)}ms`, animationFillMode: 'backwards' }}
                                                 >
                                                     <div>
@@ -410,7 +415,16 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                                             {f.funnel || 'Sconosciuto'} · Follow-up: {format(new Date(f.nextFollowUpDate), "dd MMM yyyy - HH:mm", { locale: it })}
                                                         </div>
                                                     </div>
-                                                    <div className="text-xs text-ash-400">Tentativi: {f.attemptCount}</div>
+                                                    <div className="flex items-center gap-3 shrink-0">
+                                                        <div className="text-xs text-ash-400">Tentativi: {f.attemptCount}</div>
+                                                        <button
+                                                            onClick={e => { e.stopPropagation(); openLead(f, true) }}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-orange-600 text-white hover:bg-brand-orange-700 transition-colors"
+                                                        >
+                                                            <Phone className="h-3.5 w-3.5" />
+                                                            Registra esito
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -519,6 +533,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                             <VenditoreDrawer
                                 lead={selectedLead}
                                 onClose={closeDrawer}
+                                followUpMode={drawerFollowUpMode}
                                 onStartNegotiation={() => handleStartNegotiation(selectedLead)}
                                 isStarting={isPending && pendingLeadId === selectedLead?.id}
                                 onSaved={() => {
