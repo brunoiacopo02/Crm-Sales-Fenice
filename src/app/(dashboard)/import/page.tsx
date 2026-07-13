@@ -2,6 +2,9 @@ import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { ImportClient } from "./ImportClient"
 
+// sync AC Black Summer: ~35 chiamate sequenziali, il default Vercel può ucciderlo.
+export const maxDuration = 300
+
 /**
  * Guard server-side: /import è riservata ad ADMIN, MANAGER e TL (GDO). Prima la
  * pagina era un client component senza alcun check di ruolo: qualsiasi utente

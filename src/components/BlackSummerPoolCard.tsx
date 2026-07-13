@@ -57,6 +57,15 @@ export function BlackSummerPoolCard() {
             const fresh = await getBlackSummerPoolStatus()
             setStatus(fresh)
             router.refresh()
+        } catch (e) {
+            setSyncReport({
+                ok: false,
+                imported: 0,
+                skippedExisting: 0,
+                skippedNoPhone: 0,
+                totalOnList: 0,
+                errors: ['Errore imprevisto durante il sync: ' + String(e)],
+            })
         } finally {
             setSyncing(false)
         }
@@ -76,6 +85,13 @@ export function BlackSummerPoolCard() {
                 setCount(0)
                 router.refresh()
             }
+        } catch (e) {
+            setReport({
+                ok: false,
+                errors: ['Errore imprevisto durante l\'assegnazione: ' + String(e)],
+                perGdo: {},
+                totalAssigned: 0,
+            })
         } finally {
             setLoading(false)
         }

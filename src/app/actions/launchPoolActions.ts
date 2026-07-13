@@ -1,13 +1,12 @@
 "use server"
 
 import { db } from "@/db"
-import { leads, acIntakeFailures } from "@/db/schema"
+import { leads, acIntakeFailures, leadEvents } from "@/db/schema"
 import { and, eq, isNull, isNotNull, sql, like } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { users } from "@/db/schema"
 import { inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { logLeadEvent } from "@/lib/eventLogger"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import crypto from "crypto"
@@ -85,7 +84,10 @@ async function pickAndAssignBuckets(params: {
         }
     })
 
-    // Log eventi ASSIGNED (fuori dalla tx per non bloccarla)
+    // Log eventi ASSIGNED (fuori dalla tx per non bloccarla). Bulk a chunk: 3000
+    // insert sequenziali post-tx morivano a metà — lezione review finale. Righe
+    // costruite a mano per replicare ESATTAMENTE la shape di logLeadEvent
+    // (che qui fa solo un insert singolo su leadEvents, nessun side-effect).
     for (const [bucket, ids] of Object.entries(pickedByBucket)) {
         if (ids.length === 0) continue
         const assignedRows = await db
@@ -95,14 +97,19 @@ async function pickAndAssignBuckets(params: {
                 eq(leads.companyId, companyId),
                 inArray(leads.id, ids),
             ))
-        for (const row of assignedRows) {
-            await logLeadEvent({
-                leadId: row.id,
-                eventType: 'ASSIGNED',
-                userId: adminId,
-                metadata: { source: 'launch_pool', bucket, assignedToUser: row.assignedToId },
-                companyId,
-            })
+        const eventRows = assignedRows.map((row) => ({
+            id: crypto.randomUUID(),
+            leadId: row.id,
+            eventType: 'ASSIGNED' as const,
+            userId: adminId || null,
+            fromSection: null,
+            toSection: null,
+            metadata: { source: 'launch_pool', bucket, assignedToUser: row.assignedToId },
+            timestamp: new Date(),
+            companyId,
+        }))
+        for (let i = 0; i < eventRows.length; i += 500) {
+            await db.insert(leadEvents).values(eventRows.slice(i, i + 500))
         }
     }
 
