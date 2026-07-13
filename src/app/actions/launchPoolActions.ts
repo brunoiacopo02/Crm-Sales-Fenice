@@ -421,6 +421,20 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
         ))
     const existingIds = new Set(existingRows.map(r => r.acContactId as string))
 
+    // Dedup anche per TELEFONO all'interno del lancio (funnel Black Summer,
+    // qualunque bucket/assegnazione): il TL carica lead della stessa lista a
+    // mano (senza acContactId) e le copie pool duplicate sono state eliminate
+    // il 2026-07-13 — senza questo controllo un re-click del sync le
+    // reimporterebbe. I duplicati cross-funnel restano permessi.
+    const existingPhoneRows = await db
+        .select({ phone: leads.phone })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.funnel, 'Black Summer'),
+        ))
+    const existingPhones = new Set(existingPhoneRows.map(r => r.phone))
+
     type NewLeadRow = typeof leads.$inferInsert
     const toInsert: NewLeadRow[] = []
     const importedContactIds: string[] = []
@@ -450,6 +464,7 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
                     ? phoneFinalNormalized.slice(3)
                     : phoneFinalNormalized
                 if (!rawPhone || !phoneFinal) { report.skippedNoPhone++; continue }
+                if (existingPhones.has(phoneFinal)) { report.skippedExisting++; continue }
 
                 const firstName = String(c?.firstName || '').trim()
                 const lastName = String(c?.lastName || '').trim()
@@ -457,6 +472,7 @@ export async function syncBlackSummerPool(): Promise<BlackSummerSyncReport> {
                 const email = String(c?.email || '').trim() || null
 
                 existingIds.add(contactId) // dedup anche intra-sync
+                existingPhones.add(phoneFinal) // idem per telefono
                 importedContactIds.push(contactId)
                 toInsert.push({
                     id: crypto.randomUUID(),
