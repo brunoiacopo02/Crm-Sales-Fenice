@@ -5,6 +5,8 @@ import { leads, users } from "@/db/schema"
 import { eq, gte, lte, and, isNotNull, asc } from "drizzle-orm"
 import { CalendarCheck, Phone, Mail, User as UserIcon, Clock } from "lucide-react"
 import { AdminCancelApptButton } from "@/components/AdminCancelApptButton"
+import { getBlackSummerLaunchStats } from "@/lib/blackSummerStats"
+import { BlackSummerLaunchPanel } from "@/components/BlackSummerLaunchPanel"
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +54,8 @@ export default async function AppuntamentiOggiPage() {
         )
         .orderBy(asc(leads.appointmentDate))
 
+    const bsStats = await getBlackSummerLaunchStats(todayStart, todayEnd)
+
     // Raggruppa per GDO
     const groupedByGdo = todayAppointments.reduce<Record<string, typeof todayAppointments>>((acc, appt) => {
         const key = appt.assignedToId || 'unknown'
@@ -87,6 +91,8 @@ export default async function AppuntamentiOggiPage() {
                     </div>
                 </div>
             </div>
+
+            <BlackSummerLaunchPanel stats={bsStats} />
 
             {/* Lista appuntamenti */}
             {totalCount === 0 ? (
