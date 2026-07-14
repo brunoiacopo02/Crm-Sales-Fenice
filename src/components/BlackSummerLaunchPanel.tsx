@@ -15,7 +15,7 @@ function StageRow({ label, stats, denomChiamati }: { label: string; stats: Black
         { icon: PhoneCall, name: 'Chiamati ≥1', value: stats.chiamati, sub: denomChiamati > 0 ? `${pct(stats.chiamati, denomChiamati)} degli assegnati` : null, color: 'text-sky-600' },
         { icon: CalendarCheck, name: 'Fissati', value: stats.fissati, sub: `${pct(stats.fissati, stats.chiamati)} dei chiamati`, color: 'text-amber-600' },
         { icon: BadgeCheck, name: 'Confermati', value: stats.confermati, sub: `${pct(stats.confermati, stats.fissati)} dei fissati`, color: 'text-emerald-600' },
-        { icon: Trophy, name: 'Chiusi', value: stats.chiusi, sub: `${pct(stats.chiusi, stats.fissati)} dei fissati`, color: 'text-purple-600', extra: eur(stats.fatturatoEur) },
+        { icon: Trophy, name: 'Chiusi', value: stats.chiusi, sub: `${pct(stats.chiusi, stats.confermati)} dei confermati`, color: 'text-purple-600', extra: eur(stats.fatturatoEur) },
     ] as Array<{ icon: typeof Trophy; name: string; value: number; sub: string | null; color: string; extra?: string }>
     return (
         <div>
