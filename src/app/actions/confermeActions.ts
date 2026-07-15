@@ -2,7 +2,7 @@
 import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
-import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents } from "@/db/schema"
+import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents, salesAttempts } from "@/db/schema"
 import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, inArray, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent, checkFreeBusy, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
@@ -703,6 +703,34 @@ export async function setSalespersonOutcome(
 
         if (updated.length === 0) {
             return { success: false, error: 'CONCURRENCY_ERROR' }
+        }
+
+        // Storico tentativi: /performance-venditori legge SOLO salesAttempts, quindi
+        // anche l'esito registrato dalle Conferme va specchiato lì (stessa semantica
+        // di saveVenditoreOutcome). "Lead non presenziato" non è una trattativa e
+        // resta fuori; senza venditore assegnato la riga non è attribuibile.
+        if (oldLead.salespersonUserId && outcome !== 'Lead non presenziato') {
+            const priorAttempts = await db.select({ id: salesAttempts.id })
+                .from(salesAttempts)
+                .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)))
+            try {
+                await db.insert(salesAttempts).values({
+                    id: crypto.randomUUID(),
+                    leadId,
+                    salesUserId: oldLead.salespersonUserId,
+                    attemptNumber: priorAttempts.length,
+                    outcome,
+                    notClosedReason: null,
+                    nextFollowUpDate: null,
+                    closeProduct: null,
+                    closeAmountEur: (outcome === 'Chiuso' && typeof closeAmountEur === 'number' && closeAmountEur > 0) ? closeAmountEur : null,
+                    outcomeAt,
+                    companyId: ctx.companyId,
+                })
+            } catch (e) {
+                // Non blocca l'esito: il mirror fallito si recupera col backfill.
+                console.error("setSalespersonOutcome salesAttempts mirror err:", e)
+            }
         }
 
         // Marketing webhook: deal closed (won/lost based on outcome)

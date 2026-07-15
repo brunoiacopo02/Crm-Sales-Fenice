@@ -9,7 +9,9 @@ export default async function KpiGdoPage() {
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
 
-    await requireRole(session, ['ADMIN', 'MANAGER', 'TL'])
+    // GDO incluso: questa route è anche "Le mie Performance" della sidebar GDO
+    // (il board forza il filtro al proprio id per i GDO operativi).
+    await requireRole(session, ['ADMIN', 'MANAGER', 'TL', 'GDO'])
 
     return (
         <div className="space-y-6">
