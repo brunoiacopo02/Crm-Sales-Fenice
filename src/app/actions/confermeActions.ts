@@ -691,6 +691,14 @@ export async function setSalespersonOutcome(
             salespersonOutcome: outcome,
             salespersonOutcomeNotes: notes || null,
             salespersonOutcomeAt: outcomeAt,
+            // Latch presenza (PO 2026-07-17): prima presenza → giorno dell'appuntamento;
+            // mai sovrascritto. Un esito successivo (anche "Lead non presenziato")
+            // NON toglie una presenza già maturata.
+            presentedAt: oldLead.presentedAt ?? (
+                (outcome === 'Chiuso' || outcome === 'Non chiuso')
+                    ? (oldLead.appointmentDate ?? outcomeAt)
+                    : null
+            ),
             version: oldLead.version + 1,
             updatedAt: new Date(),
             ...closeAmountPatch,

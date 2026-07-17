@@ -73,6 +73,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         // Necessari per % Conferme / % Presenziati nel ranking GDO
         confirmationsOutcome: leads.confirmationsOutcome,
         salespersonOutcome: leads.salespersonOutcome,
+        presentedAt: leads.presentedAt,
     }).from(leads)
 
     // Apply lead-level filters
@@ -232,12 +233,13 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     const WORKING_HOURS_PER_DAY = 6.5
 
-    // Mappa leadId → outcome per il calcolo % Conferme / % Presenziati per GDO
-    const leadOutcomeMap = new Map<string, { conf: string | null; sales: string | null }>()
+    // Mappa leadId → outcome per il calcolo % Conferme / % Presenziati per GDO.
+    // Presenza = latch `presentedAt` (PO 2026-07-17): non sparisce se il venditore
+    // registra "Sparito" a un follow-up successivo.
+    const leadOutcomeMap = new Map<string, { conf: string | null; presented: boolean }>()
     for (const l of allLeads) {
-        leadOutcomeMap.set(l.id, { conf: l.confirmationsOutcome ?? null, sales: l.salespersonOutcome ?? null })
+        leadOutcomeMap.set(l.id, { conf: l.confirmationsOutcome ?? null, presented: l.presentedAt !== null })
     }
-    const PRESENZIATI_OUTCOMES = new Set(['Chiuso', 'Non chiuso'])
 
     const gdoStats = Object.values(gdoStatsMap).map(st => {
         const responseRate = st.calls > 0 ? Math.round((st.answers / st.calls) * 100) : 0
@@ -255,8 +257,8 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         const productivityCoeff = callsPerHour * (apptRate / 100)
 
         // % Conferme: quanti degli app fissati sono stati confermati dalle Conferme.
-        // % Presenziati: quanti il venditore ha effettivamente visto in chiamata
-        // (Chiuso o Non chiuso, esclude Sparito / Lead non presenziato).
+        // % Presenziati: quanti hanno effettivamente presenziato (latch presentedAt;
+        // un "Sparito" a un follow-up successivo non toglie la presenza).
         // App ancora pending (in attesa) restano al denominatore ma non al numeratore.
         let confirmed = 0
         let presenziati = 0
@@ -264,7 +266,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             const o = leadOutcomeMap.get(lid)
             if (!o) continue
             if (o.conf === 'confermato') confirmed++
-            if (o.sales && PRESENZIATI_OUTCOMES.has(o.sales)) presenziati++
+            if (o.presented) presenziati++
         }
         const confermePerc = appointments > 0 ? Math.round((confirmed / appointments) * 100) : 0
         const presenziatiPerc = appointments > 0 ? Math.round((presenziati / appointments) * 100) : 0

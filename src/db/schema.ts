@@ -171,6 +171,12 @@ export const leads = pgTable('leads', {
     salespersonOutcome: text('salespersonOutcome'), // 'Chiuso' | 'Non chiuso' | 'Sparito'
     salespersonOutcomeNotes: text('salespersonOutcomeNotes'),
     salespersonOutcomeAt: timestamp('salespersonOutcomeAt', { withTimezone: true, mode: 'date' }),
+    // Latch presenza (decisione PO 2026-07-17): settato alla PRIMA registrazione di
+    // un esito Chiuso/Non chiuso, valore = appointmentDate del lead (il giorno in cui
+    // ha presenziato). NON viene mai sovrascritto dai path di esito: uno "Sparito" a
+    // un follow-up successivo NON cancella la presenza. È la base canonica di TUTTI
+    // i conteggi presenze (bonus bisettimanale incluso).
+    presentedAt: timestamp('presentedAt', { withTimezone: true, mode: 'date' }),
     closeProduct: text('closeProduct'), // 'advance' | 'gold' | 'exclusive'
     closeAmountEur: real('closeAmountEur'),
     notClosedReason: text('notClosedReason'),

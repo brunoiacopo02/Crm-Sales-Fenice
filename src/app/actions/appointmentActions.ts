@@ -207,6 +207,8 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             salespersonOutcome: null,
             salespersonOutcomeNotes: null,
             salespersonOutcomeAt: null,
+            // L'annullamento admin cancella l'intera storia appuntamento, presenza inclusa.
+            presentedAt: null,
             // Rimette il lead in pipeline come "in lavorazione" (callCount preservato)
             status: lead.callCount > 0 ? 'IN_PROGRESS' : 'NEW',
             version: lead.version + 1,

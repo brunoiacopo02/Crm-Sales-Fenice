@@ -287,6 +287,13 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
                 followUp1Date: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
                 followUp2Date: null,
                 salespersonOutcomeAt: effectiveOutcomeAt,
+                // Latch presenza (PO 2026-07-17): prima presenza → giorno dell'appuntamento;
+                // mai sovrascritto. "Sparito" a un follow-up NON toglie la presenza.
+                presentedAt: oldLead.presentedAt ?? (
+                    (payload.outcome === 'Chiuso' || payload.outcome === 'Non chiuso')
+                        ? (oldLead.appointmentDate ?? effectiveOutcomeAt)
+                        : null
+                ),
                 version: oldLead.version + 1,
             })
             .where(and(

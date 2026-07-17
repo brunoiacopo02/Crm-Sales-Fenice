@@ -1,4 +1,9 @@
 // Esiti venditore che contano come "presenziato" (decisione PO 2026-07-05).
+// ⚠️ DEPRECATO per i CONTEGGI presenze (PO 2026-07-17): la base canonica è il
+// latch `leads.presentedAt` (giorno dell'appuntamento, settato alla prima
+// registrazione di Chiuso/Non chiuso, mai sovrascritto — uno "Sparito" a un
+// follow-up non toglie la presenza). Questa whitelist resta solo per viste
+// legacy non ancora migrate e per decidere QUANDO scatta il latch.
 export const PRESENZIATO_OUTCOMES = ['Chiuso', 'Non chiuso'] as const
 export function isPresenziato(outcome: string | null): boolean {
     return outcome === 'Chiuso' || outcome === 'Non chiuso'

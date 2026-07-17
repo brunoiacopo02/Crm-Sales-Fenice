@@ -1,14 +1,17 @@
 /**
  * Helper unificato per il conteggio "presenze GDO" usato da:
- *  - widget Tracker Bisettimanale (`getCurrentBiweeklyBonusState`)
+ *  - widget Tracker Bisettimanale (`getCurrentGdoGamificationState`)
  *  - tabella storico cicli (`getBiweeklyHistory`)
- *  - KPI `getGdoLeadOutcomeMetrics` (modalità 'outcome')
  *
- * Definizione canonica (Sprint 1.5 estesa):
+ * Definizione canonica (PO 2026-07-17, latch `presentedAt`):
  *   - Lead `assignedToId = userId`
- *   - `salespersonOutcome IN ('Chiuso','Non chiuso')` → `isPresenziato`
- *   - `salespersonOutcomeAt` ∈ [start, end)
+ *   - `presentedAt IS NOT NULL` ∈ [start, end)
  *   - + somma `manualAdjustments` (`type='presenze'`, `createdAt` nel range)
+ *
+ * `presentedAt` è il giorno dell'APPUNTAMENTO in cui il lead ha presenziato,
+ * settato alla prima registrazione di un esito Chiuso/Non chiuso e mai più
+ * sovrascritto: una presenza maturata non sparisce (nemmeno con "Sparito" a
+ * un follow-up) e non migra mai di ciclo.
  *
  * Usare `gte(start) AND lt(end)` (end exclusive) per evitare off-by-one
  * ai bordi del ciclo bisettimanale.
@@ -16,9 +19,7 @@
 
 import { db } from "@/db";
 import { leads, manualAdjustments } from "@/db/schema";
-import { and, eq, gte, lt, inArray, isNotNull } from "drizzle-orm";
-
-const PRESENCE_OUTCOMES = ['Chiuso', 'Non chiuso'] as const;
+import { and, eq, gte, lt, isNotNull } from "drizzle-orm";
 
 export interface PresenceCount {
     /** Presenze effettive (lead `Chiuso`/`Non chiuso` esitate nel range). */
@@ -43,10 +44,9 @@ export async function countPresences(
         db.select({ id: leads.id }).from(leads).where(and(
             eq(leads.companyId, companyId),
             eq(leads.assignedToId, userId),
-            inArray(leads.salespersonOutcome, PRESENCE_OUTCOMES as unknown as string[]),
-            isNotNull(leads.salespersonOutcomeAt),
-            gte(leads.salespersonOutcomeAt, start),
-            lt(leads.salespersonOutcomeAt, end),
+            isNotNull(leads.presentedAt),
+            gte(leads.presentedAt, start),
+            lt(leads.presentedAt, end),
         )),
         db.select({ count: manualAdjustments.count }).from(manualAdjustments).where(and(
             eq(manualAdjustments.companyId, companyId),

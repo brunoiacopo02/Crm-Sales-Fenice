@@ -44,10 +44,6 @@ export async function saveGamificationRule(input: GamificationTargetInput) {
         });
 }
 
-function isPresenziato(outcome: string | null) {
-    // Definizione canonica (Sprint 1.5): whitelist 'Chiuso' / 'Non chiuso'.
-    return outcome === 'Chiuso' || outcome === 'Non chiuso';
-}
 
 /**
  * Funzione Helper: Divide il mese in blocchi di settimane solari (Lunedì-Domenica).
@@ -112,7 +108,7 @@ export async function getManagerGdoTables(monthString: string) {
     // Bounds Europe/Rome (end esclusivo): prima usava componenti Date locali (UTC su Vercel).
     const { start: startObj, end: endObj } = monthBoundsRome(monthString);
 
-    const [monthLeads, assignedLeadsRaw] = await Promise.all([
+    const [monthLeads, assignedLeadsRaw, presenceLeads] = await Promise.all([
         db.select().from(leads).where(
             and(
                 eq(leads.companyId, ctx.companyId),
@@ -130,6 +126,20 @@ export async function getManagerGdoTables(monthString: string) {
                 isNotNull(leads.assignedToId),
                 gte(leads.createdAt, startObj),
                 lt(leads.createdAt, endObj)
+            )),
+        // Presenze del mese (PO 2026-07-17): base `presentedAt` (giorno dell'appuntamento
+        // in cui il lead ha presenziato, latch immutabile) — NON il cohort dei fissati.
+        // Un lead fissato a giugno che presenzia a luglio conta nelle presenze di luglio.
+        db.select({
+            assignedToId: leads.assignedToId,
+            funnel: leads.funnel,
+            presentedAt: leads.presentedAt,
+        }).from(leads)
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                isNotNull(leads.presentedAt),
+                gte(leads.presentedAt, startObj),
+                lt(leads.presentedAt, endObj)
             ))
     ]);
 
@@ -167,7 +177,6 @@ export async function getManagerGdoTables(monthString: string) {
         }
 
         const isConfermato = lead.confirmationsOutcome === 'confermato';
-        const isPresenziatoFlag = isPresenziato(lead.salespersonOutcome);
         const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
 
         // 1. DIMENSIONE FUNNEL
@@ -177,10 +186,6 @@ export async function getManagerGdoTables(monthString: string) {
         if (isConfermato) {
             gdoStats.funnelStats[f].confermati++;
             gdoStats.totalStats.confermati++;
-        }
-        if (isPresenziatoFlag) {
-            gdoStats.funnelStats[f].presenziati++;
-            gdoStats.totalStats.presenziati++;
         }
         if (isChiuso) {
             gdoStats.funnelStats[f].chiusi++;
@@ -199,11 +204,25 @@ export async function getManagerGdoTables(monthString: string) {
             const wIndex = weeks.findIndex(w => isWithinInterval(setAt, { start: w.start, end: w.end }));
             if (wIndex !== -1) {
                 if (isConfermato) gdoStats.calendarStats.confermati[wIndex]++;
-                if (isPresenziatoFlag) gdoStats.calendarStats.presenziati[wIndex]++;
                 if (isChiuso) gdoStats.calendarStats.chiusi[wIndex]++;
             }
         }
     });
+
+    // PRESENZE (PO 2026-07-17): contate nel giorno dell'appuntamento (`presentedAt`),
+    // sganciate dal cohort dei fissati. Bucket settimanale sulla stessa data.
+    for (const lead of presenceLeads) {
+        if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId] || !lead.presentedAt) continue;
+        const gdoStats = gdoStatsMap[lead.assignedToId];
+        const f = lead.funnel || 'ALTRO';
+        if (!gdoStats.funnelStats[f]) {
+            gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
+        }
+        gdoStats.funnelStats[f].presenziati++;
+        gdoStats.totalStats.presenziati++;
+        const wIndex = weeks.findIndex(w => isWithinInterval(lead.presentedAt!, { start: w.start, end: w.end }));
+        if (wIndex !== -1) gdoStats.calendarStats.presenziati[wIndex]++;
+    }
 
     // Count leads assigned to each GDO in the month (totali + per-funnel)
     for (const lead of assignedLeadsRaw) {
@@ -446,6 +465,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         appointmentDate: leads.appointmentDate,
         confirmationsOutcome: leads.confirmationsOutcome,
         salespersonOutcome: leads.salespersonOutcome,
+        presentedAt: leads.presentedAt,
     }).from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
@@ -464,7 +484,8 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
 
     for (const lead of gdoLeads) {
         const isConfermato = lead.confirmationsOutcome === 'confermato';
-        const isPresenziatoFlag = isPresenziato(lead.salespersonOutcome);
+        // Presenza = latch presentedAt (PO 2026-07-17): non sparisce con "Sparito" al follow-up.
+        const isPresenziatoFlag = lead.presentedAt !== null;
         const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
 
         const apptAt = lead.appointmentDate ? new Date(lead.appointmentDate) : null;
