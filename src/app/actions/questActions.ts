@@ -262,18 +262,19 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
             return result[0]?.value ?? 0;
         }
         case 'conferme_presenze': {
-            const presenze = await db.select({ outcome: leads.salespersonOutcome })
+            // Latch presentedAt (PO 2026-07-17): presenza al giorno dell'appuntamento,
+            // non sparisce con "Sparito" a un follow-up successivo.
+            const presenze = await db.select({ value: count() })
                 .from(leads)
                 .where(and(
                     eq(leads.companyId, companyId),
                     isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
-                    isNotNull(leads.salespersonOutcome),
-                    isNotNull(leads.salespersonOutcomeAt),
-                    gte(leads.salespersonOutcomeAt, start),
-                    lte(leads.salespersonOutcomeAt, end)
+                    isNotNull(leads.presentedAt),
+                    gte(leads.presentedAt, start),
+                    lte(leads.presentedAt, end)
                 ));
-            return presenze.filter(l => l.outcome !== 'Sparito').length;
+            return presenze[0]?.value ?? 0;
         }
         case 'conferme_chiusure': {
             const result = await db.select({ value: count() })

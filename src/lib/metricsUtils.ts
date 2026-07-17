@@ -13,7 +13,7 @@
  *   M1 LEAD_NUOVI    → leads.createdAt              + funnel NOT IN ('TEST','BLT','')
  *   M2 APP_FISSATI   → COALESCE(appointmentCreatedAt, appointmentDate) + appointmentDate NOT NULL
  *   M3 CONFERMATI    → confirmationsTimestamp       + confirmationsOutcome='confermato'
- *   M4 PRESENZIATI   → salespersonOutcomeAt         + salespersonOutcome IN ('Chiuso','Non chiuso')
+ *   M4 PRESENZIATI   → presentedAt (latch, giorno appuntamento — PO 2026-07-17) + presentedAt NOT NULL
  *   M5 CHIUSURE      → salespersonOutcomeAt         + salespersonOutcome='Chiuso'
  *   M6 FATTURATO     → salespersonOutcomeAt         + salespersonOutcome='Chiuso' → SUM(closeAmountEur)
  *
@@ -109,8 +109,10 @@ function buildConditions(metric: MetricId, scope: MetricScope | undefined, start
             break;
 
         case 'M4_PRESENZIATI':
-            conds.push(sql`${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')`);
-            conds.push(gte(leads.salespersonOutcomeAt, start), lt(leads.salespersonOutcomeAt, end));
+            // Latch presentedAt (PO 2026-07-17): presenza al giorno dell'appuntamento,
+            // immutabile — "Sparito" a un follow-up non la toglie.
+            conds.push(isNotNull(leads.presentedAt));
+            conds.push(gte(leads.presentedAt, start), lt(leads.presentedAt, end));
             break;
 
         case 'M5_CHIUSURE':

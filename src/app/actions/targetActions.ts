@@ -323,6 +323,7 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
                 and(gte(leads.appointmentDate, startDate), lt(leads.appointmentDate, endDate)),
                 and(gte(leads.confirmationsTimestamp, startDate), lt(leads.confirmationsTimestamp, endDate)),
                 and(gte(leads.salespersonOutcomeAt, startDate), lt(leads.salespersonOutcomeAt, endDate)),
+                and(gte(leads.presentedAt, startDate), lt(leads.presentedAt, endDate)),
             )
         )
     );
@@ -384,12 +385,12 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
             }
         }
 
-        // Presenziati: whitelist Chiuso/Non chiuso, outcome date nel mese
-        const isPresenziato = lead.salespersonOutcome === 'Chiuso' || lead.salespersonOutcome === 'Non chiuso';
-        if (isPresenziato && inMonth(lead.salespersonOutcomeAt)) {
+        // Presenziati: latch presentedAt (PO 2026-07-17) — presenza contata nel
+        // giorno dell'appuntamento, non sparisce con esiti successivi.
+        if (lead.presentedAt && inMonth(lead.presentedAt)) {
             actAppsPresenziati++;
             bucket.presenziati++;
-            if (inToday(lead.salespersonOutcomeAt)) {
+            if (inToday(lead.presentedAt)) {
                 todayPresenziati++;
             }
         }

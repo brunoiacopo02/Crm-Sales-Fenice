@@ -213,21 +213,31 @@ async function cardsForCompany(
             ),
         ));
 
-    // Esiti venditore del mese: trattative (Chiuso/Non chiuso), chiusure, valore contratti.
-    const outcomeRows = await db
-        .select({
-            salespersonOutcome: leads.salespersonOutcome,
+    // Trattative del mese: latch presentedAt (PO 2026-07-17) — presenza contata
+    // nel giorno dell'appuntamento, immutabile. Chiusure/valore restano invece
+    // datate alla data dell'esito venditore (salespersonOutcomeAt).
+    const [presRows, closeRows] = await Promise.all([
+        db.select({ presentedAt: leads.presentedAt })
+            .from(leads)
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                isNotNull(leads.presentedAt),
+                gte(leads.presentedAt, monthStartUtc),
+                lt(leads.presentedAt, monthEndUtc),
+            )),
+        db.select({
             salespersonOutcomeAt: leads.salespersonOutcomeAt,
             closeAmountEur: leads.closeAmountEur,
         })
-        .from(leads)
-        .where(and(
-            eq(leads.companyId, ctx.companyId),
-            isNotNull(leads.salespersonOutcomeAt),
-            gte(leads.salespersonOutcomeAt, monthStartUtc),
-            lt(leads.salespersonOutcomeAt, monthEndUtc),
-            inArray(leads.salespersonOutcome, ['Chiuso', 'Non chiuso']),
-        ));
+            .from(leads)
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.salespersonOutcome, 'Chiuso'),
+                isNotNull(leads.salespersonOutcomeAt),
+                gte(leads.salespersonOutcomeAt, monthStartUtc),
+                lt(leads.salespersonOutcomeAt, monthEndUtc),
+            )),
+    ]);
 
     const apptByDay = new Array<number>(daysSoFar + 1).fill(0);
     for (const r of apptRows) {
@@ -238,14 +248,15 @@ async function cardsForCompany(
     const trattByDay = new Array<number>(daysSoFar + 1).fill(0);
     const closeByDay = new Array<number>(daysSoFar + 1).fill(0);
     const valoreByDay = new Array<number>(daysSoFar + 1).fill(0);
-    for (const r of outcomeRows) {
+    for (const r of presRows) {
+        const d = dayIndex(r.presentedAt);
+        if (d !== null) trattByDay[d] += 1;
+    }
+    for (const r of closeRows) {
         const d = dayIndex(r.salespersonOutcomeAt);
         if (d === null) continue;
-        trattByDay[d] += 1;
-        if (r.salespersonOutcome === 'Chiuso') {
-            closeByDay[d] += 1;
-            valoreByDay[d] += r.closeAmountEur || 0;
-        }
+        closeByDay[d] += 1;
+        valoreByDay[d] += r.closeAmountEur || 0;
     }
 
     // Spesa Meta giornaliera (per ROAS) — stessi account del route marketing.

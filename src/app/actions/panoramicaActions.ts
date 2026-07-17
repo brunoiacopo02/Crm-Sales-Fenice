@@ -543,7 +543,8 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
         //  - APP: appointmentCreatedAt = oggi (fissaggi GDO eseguiti oggi per giorni futuri)
         //  - Conferme: appointmentDate = oggi AND confirmationsOutcome = 'confermato'
         //    (gli appuntamenti che il team Conferme deve sciogliere oggi)
-        //  - Presenziati: appointmentDate = oggi (il meeting è fisicamente di oggi)
+        //  - Presenziati: presentedAt = oggi (latch al giorno dell'appuntamento —
+        //    PO 2026-07-17: la presenza non sparisce né migra con esiti successivi)
         //  - Close/Valore: salespersonOutcomeAt = oggi (la chiusura è stata fatta
         //    oggi, indipendentemente da quando era l'appuntamento — il venditore
         //    può chiudere oggi un deal il cui meeting era ieri).
@@ -561,9 +562,8 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 eq(leads.companyId, ctx.companyId),
-                gte(leads.appointmentDate, todayStart),
-                lt(leads.appointmentDate, todayEnd),
-                sql`${leads.salespersonOutcome} IN ('Chiuso', 'Non chiuso')`,
+                gte(leads.presentedAt, todayStart),
+                lt(leads.presentedAt, todayEnd),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 eq(leads.companyId, ctx.companyId),

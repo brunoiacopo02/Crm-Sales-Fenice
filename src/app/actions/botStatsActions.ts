@@ -5,11 +5,6 @@ import { leads, users, callLogs, leadEvents } from "@/db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
-function isPresenziato(outcome: string | null) {
-    // Definizione canonica (Sprint 1.5): whitelist 'Chiuso' / 'Non chiuso'.
-    return outcome === 'Chiuso' || outcome === 'Non chiuso';
-}
-
 export interface BotFissatoreStats {
     botName: string;
     days: number;
@@ -175,13 +170,15 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
         const fissatiLeads = await db.select({
             confirmationsOutcome: leads.confirmationsOutcome,
             salespersonOutcome: leads.salespersonOutcome,
+            presentedAt: leads.presentedAt,
         }).from(leads).where(and(
             eq(leads.companyId, ctx.companyId),
             inArray(leads.id, [...fissatiSet]),
         ));
         for (const l of fissatiLeads) {
             if (l.confirmationsOutcome === 'confermato') confermati++;
-            if (isPresenziato(l.salespersonOutcome)) presenziati++;
+            // Latch presentedAt (PO 2026-07-17): la presenza non sparisce con esiti successivi.
+            if (l.presentedAt !== null) presenziati++;
             if (l.salespersonOutcome?.toLowerCase() === 'chiuso') chiusi++;
         }
     }

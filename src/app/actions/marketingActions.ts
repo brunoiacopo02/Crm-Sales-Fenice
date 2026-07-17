@@ -86,6 +86,7 @@ export async function getMarketingStats(monthString: string) {
                 and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
                 and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
                 and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
+                and(gte(leads.presentedAt, startDate), lte(leads.presentedAt, endDate)),
             )
         )
     );
@@ -139,15 +140,15 @@ export async function getMarketingStats(monthString: string) {
             g.conferme++;
         }
 
-        // Trattative / Close: data dell'azione = salespersonOutcomeAt.
-        // Presenziato canonico = whitelist Chiuso/Non chiuso (Sprint 1.5).
-        const showUp = l.salespersonOutcome === 'Chiuso' || l.salespersonOutcome === 'Non chiuso';
-        if (l.appointmentDate && showUp && inMonth(l.salespersonOutcomeAt)) {
+        // Trattative: latch presentedAt (PO 2026-07-17) — presenza contata nel giorno
+        // dell'appuntamento, non sparisce con esiti successivi.
+        if (l.presentedAt && inMonth(l.presentedAt)) {
             g.trattative++;
-            if (l.salespersonOutcome === 'Chiuso') {
-                g.close++;
-                g.fatturato += l.closeAmountEur || 0;
-            }
+        }
+        // Close: data dell'azione = salespersonOutcomeAt.
+        if (l.appointmentDate && l.salespersonOutcome === 'Chiuso' && inMonth(l.salespersonOutcomeAt)) {
+            g.close++;
+            g.fatturato += l.closeAmountEur || 0;
         }
     }
 
@@ -238,6 +239,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
                 and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
                 and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
                 and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
+                and(gte(leads.presentedAt, startDate), lte(leads.presentedAt, endDate)),
             )
         )
     );
@@ -303,14 +305,15 @@ export async function getMarketingStatsByGdo(monthString: string) {
             gdoStat.appsConfermati++;
         }
 
-        // Presenziato canonico = whitelist Chiuso/Non chiuso (Sprint 1.5).
-        const showUp = l.salespersonOutcome === 'Chiuso' || l.salespersonOutcome === 'Non chiuso';
-        if (l.appointmentDate && showUp && inMonth(l.salespersonOutcomeAt)) {
+        // Presenziato: latch presentedAt (PO 2026-07-17) — giorno dell'appuntamento,
+        // non sparisce con esiti successivi.
+        if (l.presentedAt && inMonth(l.presentedAt)) {
             gdoStat.appsPresenziati++;
-            if (l.salespersonOutcome === 'Chiuso') {
-                gdoStat.closed++;
-                gdoStat.fatturato += l.closeAmountEur || 0;
-            }
+        }
+        // Close: data dell'azione = salespersonOutcomeAt.
+        if (l.appointmentDate && l.salespersonOutcome === 'Chiuso' && inMonth(l.salespersonOutcomeAt)) {
+            gdoStat.closed++;
+            gdoStat.fatturato += l.closeAmountEur || 0;
         }
     }
 

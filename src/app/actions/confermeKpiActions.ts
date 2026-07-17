@@ -278,16 +278,19 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const todayConfirmed = dailyStats.find(d => d.date === toRomeDateStr(new Date()))?.confirmed || 0
 
     // === TRATTATIVE & CHIUSURE MENSILI — DATI REALI ===
-    // Conteggi attribuiti per data dell'esito venditore (salespersonOutcomeAt) nel mese.
+    // Trattative: latch presentedAt (PO 2026-07-17) — presenza contata nel giorno
+    // dell'appuntamento, immutabile. Chiusure: data esito venditore (salespersonOutcomeAt).
     const monthlyOutcomeRows = await db.select({
         outcome: leads.salespersonOutcome,
         outcomeAt: leads.salespersonOutcomeAt,
+        presentedAt: leads.presentedAt,
         amount: leads.closeAmountEur,
     }).from(leads).where(and(
         companyScope(ctx, leads.companyId),
-        isNotNull(leads.salespersonOutcomeAt),
-        gte(leads.salespersonOutcomeAt, start),
-        lt(leads.salespersonOutcomeAt, end),
+        or(
+            and(isNotNull(leads.presentedAt), gte(leads.presentedAt, start), lt(leads.presentedAt, end)),
+            and(isNotNull(leads.salespersonOutcomeAt), gte(leads.salespersonOutcomeAt, start), lt(leads.salespersonOutcomeAt, end)),
+        ),
     ))
 
     const todayStr = toRomeDateStr(new Date())
@@ -297,15 +300,15 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     let todayClosedReal = 0
 
     for (const r of monthlyOutcomeRows) {
-        const isPresenziato = r.outcome === 'Chiuso' || r.outcome === 'Non chiuso'
-        const isToday = !!r.outcomeAt && toRomeDateStr(new Date(r.outcomeAt)) === todayStr
-        if (isPresenziato) {
+        const presAt = r.presentedAt ? new Date(r.presentedAt) : null
+        if (presAt && presAt >= start && presAt < end) {
             actTrattative++
-            if (isToday) todayTrat++
-            if (r.outcome === 'Chiuso') {
-                actClosedMonth++
-                if (isToday) todayClosedReal++
-            }
+            if (toRomeDateStr(presAt) === todayStr) todayTrat++
+        }
+        const closeAt = r.outcomeAt ? new Date(r.outcomeAt) : null
+        if (r.outcome === 'Chiuso' && closeAt && closeAt >= start && closeAt < end) {
+            actClosedMonth++
+            if (toRomeDateStr(closeAt) === todayStr) todayClosedReal++
         }
     }
 
@@ -524,6 +527,7 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         confirmationsTimestamp: leads.confirmationsTimestamp,
         salespersonOutcome: leads.salespersonOutcome,
         salespersonOutcomeAt: leads.salespersonOutcomeAt,
+        presentedAt: leads.presentedAt,
         amount: leads.closeAmountEur,
     }).from(leads).where(and(
         companyScope(ctx, leads.companyId),
@@ -538,6 +542,11 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
                 isNotNull(leads.salespersonOutcomeAt),
                 gte(leads.salespersonOutcomeAt, start),
                 lt(leads.salespersonOutcomeAt, end),
+            ),
+            and(
+                isNotNull(leads.presentedAt),
+                gte(leads.presentedAt, start),
+                lt(leads.presentedAt, end),
             ),
         ),
     ))
@@ -556,19 +565,21 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
 
         const cur = statsMap.get(sid) || { assigned: 0, trattative: 0, chiusure: 0, revenue: 0 }
         cur.assigned++
-        const isPresenziatoFlag = r.salespersonOutcome === 'Chiuso' || r.salespersonOutcome === 'Non chiuso'
-        // Trattative/chiusure: contano solo se l'esito è stato registrato NEL MESE.
-        // (un lead confermato a maggio ma chiuso a giugno → conta come Asgn maggio,
-        //  ma Tratt/Chius lo prenderà giugno.)
+        // Trattative: latch presentedAt (PO 2026-07-17) — contano nel mese del giorno
+        // dell'appuntamento presenziato. Chiusure: contano nel mese dell'esito venditore.
+        // (un lead confermato a maggio ma chiuso a giugno → Asgn maggio, Chius giugno.)
+        const presInMonth = r.presentedAt
+            && new Date(r.presentedAt) >= start
+            && new Date(r.presentedAt) < end
+        if (presInMonth) {
+            cur.trattative++
+        }
         const outcomeInMonth = r.salespersonOutcomeAt
             && new Date(r.salespersonOutcomeAt) >= start
             && new Date(r.salespersonOutcomeAt) < end
-        if (isPresenziatoFlag && outcomeInMonth) {
-            cur.trattative++
-            if (r.salespersonOutcome === 'Chiuso') {
-                cur.chiusure++
-                cur.revenue += r.amount || 0
-            }
+        if (r.salespersonOutcome === 'Chiuso' && outcomeInMonth) {
+            cur.chiusure++
+            cur.revenue += r.amount || 0
         }
         statsMap.set(sid, cur)
     }

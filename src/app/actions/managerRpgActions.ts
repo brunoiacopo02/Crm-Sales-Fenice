@@ -9,11 +9,6 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 
 // ---- Helpers replicated from gdoPerformanceActions to avoid circular deps ----
 
-function isPresenziato(outcome: string | null) {
-    // Definizione canonica (Sprint 1.5): whitelist 'Chiuso' / 'Non chiuso'.
-    return outcome === 'Chiuso' || outcome === 'Non chiuso';
-}
-
 function getMonthWeeks(monthStr: string) {
     const startObj = parseISO(`${monthStr}-01T00:00:00`);
     const endObj = endOfMonth(startObj);
@@ -86,14 +81,15 @@ async function batchComputeRpgProfiles(
         gdoUserIds.length > 0
             ? db.select({
                 assignedToId: leads.assignedToId,
-                salespersonOutcome: leads.salespersonOutcome,
             }).from(leads).where(
                 and(
                     eq(leads.companyId, companyId),
                     inArray(leads.assignedToId, gdoUserIds),
-                    isNotNull(leads.appointmentDate),
-                    gte(leads.appointmentDate, currentWeekStart),
-                    lte(leads.appointmentDate, currentWeekEnd)
+                    // Latch presentedAt (PO 2026-07-17): presenza al giorno dell'appuntamento,
+                    // non sparisce con "Sparito" a un follow-up successivo.
+                    isNotNull(leads.presentedAt),
+                    gte(leads.presentedAt, currentWeekStart),
+                    lte(leads.presentedAt, currentWeekEnd)
                 )
             )
             : Promise.resolve([]),
@@ -135,9 +131,7 @@ async function batchComputeRpgProfiles(
     const gdoPresenceMap = new Map<string, number>();
     for (const lead of gdoLeads) {
         if (!lead.assignedToId) continue;
-        if (isPresenziato(lead.salespersonOutcome)) {
-            gdoPresenceMap.set(lead.assignedToId, (gdoPresenceMap.get(lead.assignedToId) || 0) + 1);
-        }
+        gdoPresenceMap.set(lead.assignedToId, (gdoPresenceMap.get(lead.assignedToId) || 0) + 1);
     }
 
     const confermePresenceMap = new Map<string, number>();
