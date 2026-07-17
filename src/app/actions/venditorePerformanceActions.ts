@@ -6,7 +6,6 @@ import { and, eq, gte, lt, desc, sql } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { monthBoundsRome } from "@/lib/dateUtils"
 import { createClient } from "@/utils/supabase/server"
-import { isConfermeTl } from "@/lib/confermeTl"
 import {
     reasonDistribution, topReason, followUpFunnel, closingStats,
     attemptsToClose, monthlyTrend, type AttemptInput,
@@ -41,8 +40,9 @@ export async function getVenditorePerformance(input: { salesUserId: string; year
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const role = user?.user_metadata?.role
-    const email = user?.user_metadata?.email ?? user?.email
-    const isStaff = role === 'MANAGER' || role === 'ADMIN' || (role === 'CONFERME' && isConfermeTl(email))
+    // Swap PO 2026-07-17: il TL Conferme non accede più a Performance Venditori
+    // (ora ha il Monitor Vendite).
+    const isStaff = role === 'MANAGER' || role === 'ADMIN'
     if (!isStaff && input.salesUserId !== ctx.userId) throw new Error('Forbidden')
 
     const rows = await db.select({
@@ -120,8 +120,9 @@ export async function getVenditoriRisposte(input: { yearMonth: string; salesUser
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const role = user?.user_metadata?.role
-    const email = user?.user_metadata?.email ?? user?.email
-    const isStaff = role === 'MANAGER' || role === 'ADMIN' || (role === 'CONFERME' && isConfermeTl(email))
+    // Swap PO 2026-07-17: il TL Conferme non accede più a Performance Venditori
+    // (ora ha il Monitor Vendite).
+    const isStaff = role === 'MANAGER' || role === 'ADMIN'
     if (!isStaff) throw new Error('Forbidden')
 
     const { start, end } = monthBoundsRome(input.yearMonth)

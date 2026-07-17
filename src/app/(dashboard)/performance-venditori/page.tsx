@@ -1,6 +1,5 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
-import { isConfermeTl } from "@/lib/confermeTl"
 import { currentYearMonthRome, currentWeekStartRome } from "@/lib/workingDaysUtils"
 import { listVenditori } from "@/app/actions/salesWeeklyFocusActions"
 import { PerformanceVenditoriClient } from "./PerformanceVenditoriClient"
@@ -13,10 +12,10 @@ export default async function PerformanceVenditoriPage() {
     if (!user) redirect('/login')
 
     const role = user.user_metadata?.role
-    const isTlConfermeViewer = role === 'CONFERME' && isConfermeTl(user.email)
-    if (role !== 'ADMIN' && role !== 'MANAGER' && !isTlConfermeViewer) redirect('/')
+    // Swap PO 2026-07-17: il TL Conferme non vede più questa pagina (ora ha Monitor Vendite).
+    if (role !== 'ADMIN' && role !== 'MANAGER') redirect('/')
 
-    const readOnly = isTlConfermeViewer
+    const readOnly = false
     const venditori = await listVenditori()
 
     return (

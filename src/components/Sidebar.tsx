@@ -89,7 +89,9 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             ...(isConfermeTl(session?.user?.email) ? [
                 { name: "Panoramica TL", href: "/conferme/panoramica-tl", icon: Compass },
                 { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
-                { name: "Performance Venditori", href: "/performance-venditori", icon: Trophy },
+                // Swap PO 2026-07-17: al TL Conferme serve il Monitor Vendite
+                // (appuntamenti/follow-up operativi), non Performance Venditori.
+                { name: "Monitor Vendite", href: "/monitor-vendite", icon: Trophy },
                 { name: "Qualità Lead (Sondaggi)", href: "/qualita-lead", icon: ClipboardList },
             ] : []),
             { name: "KPI Conferme", href: "/kpi-conferme", icon: LayoutDashboard },

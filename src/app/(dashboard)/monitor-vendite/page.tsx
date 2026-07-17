@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/utils/supabase/server"
+import { isConfermeTl } from "@/lib/confermeTl"
 import { getVenditoriMonitor } from "@/app/actions/venditoriMonitorActions"
 import { MonitorVenditeClient } from "./MonitorVenditeClient"
 
@@ -7,7 +8,10 @@ export default async function MonitorVenditePage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const role = (user?.user_metadata?.role as string) || ""
-    if (!user || !["ADMIN", "MANAGER"].includes(role)) {
+    // Il TL del team Conferme (Alberto, gating per email) può consultare il monitor
+    // (swap PO 2026-07-17: sostituisce il suo accesso a Performance Venditori).
+    const isTlConfermeViewer = role === "CONFERME" && isConfermeTl(user?.email)
+    if (!user || (!["ADMIN", "MANAGER"].includes(role) && !isTlConfermeViewer)) {
         redirect("/")
     }
 

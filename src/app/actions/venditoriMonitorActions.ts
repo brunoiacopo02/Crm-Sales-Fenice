@@ -5,12 +5,16 @@ import { leads, users, salesAttempts } from "@/db/schema"
 import { and, eq, isNotNull, gte, lte, or, asc, inArray, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
+import { isConfermeTl } from "@/lib/confermeTl"
 
 async function requireAdminOrManager(): Promise<{ id: string; role: string; ctx: TenantContext }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const role = user?.user_metadata?.role as string | undefined
-    if (!user || !role || !["ADMIN", "MANAGER"].includes(role)) {
+    // TL Conferme (Alberto, gating email) ammesso in lettura al Monitor Vendite
+    // (swap PO 2026-07-17: sostituisce il suo accesso a Performance Venditori).
+    const isTlConfermeViewer = role === "CONFERME" && isConfermeTl(user?.email)
+    if (!user || !role || (!["ADMIN", "MANAGER"].includes(role) && !isTlConfermeViewer)) {
         throw new Error("Unauthorized")
     }
     const ctx = await currentTenant()
