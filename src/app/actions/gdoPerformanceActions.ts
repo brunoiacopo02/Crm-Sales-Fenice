@@ -7,7 +7,7 @@ import { isWithinInterval } from "date-fns";
 import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
-import { isRealGdo, DEFAULT_DAILY_APPT_TARGET, apptSetAt } from "@/lib/kpi/canon";
+import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
 import { monthBoundsRome, dayBoundsRome, weekBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 
 export interface GamificationTargetInput {
@@ -108,7 +108,7 @@ export async function getManagerGdoTables(monthString: string) {
     // Bounds Europe/Rome (end esclusivo): prima usava componenti Date locali (UTC su Vercel).
     const { start: startObj, end: endObj } = monthBoundsRome(monthString);
 
-    const [monthLeads, assignedLeadsRaw, presenceLeads] = await Promise.all([
+    const [monthLeads, assignedLeadsRaw, presenceLeads, confirmedLeads, closedLeads] = await Promise.all([
         db.select().from(leads).where(
             and(
                 eq(leads.companyId, ctx.companyId),
@@ -140,6 +140,35 @@ export async function getManagerGdoTables(monthString: string) {
                 isNotNull(leads.presentedAt),
                 gte(leads.presentedAt, startObj),
                 lt(leads.presentedAt, endObj)
+            )),
+        // Confermati del mese (allineamento PO 2026-07-17): attribuiti al giorno
+        // dell'APPUNTAMENTO confermato — stessa dimensione delle presenze, così
+        // sulle righe settimanali conferme e presenze sono confrontabili
+        // (conferme ≥ presenze vale riga per riga).
+        db.select({
+            assignedToId: leads.assignedToId,
+            funnel: leads.funnel,
+            appointmentDate: leads.appointmentDate,
+        }).from(leads)
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.confirmationsOutcome, 'confermato'),
+                isNotNull(leads.appointmentDate),
+                gte(leads.appointmentDate, startObj),
+                lt(leads.appointmentDate, endObj)
+            )),
+        // Chiusure del mese: data esito venditore (regola canonica chiusure).
+        db.select({
+            assignedToId: leads.assignedToId,
+            funnel: leads.funnel,
+            salespersonOutcomeAt: leads.salespersonOutcomeAt,
+        }).from(leads)
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                sql`LOWER(${leads.salespersonOutcome}) = 'chiuso'`,
+                isNotNull(leads.salespersonOutcomeAt),
+                gte(leads.salespersonOutcomeAt, startObj),
+                lt(leads.salespersonOutcomeAt, endObj)
             ))
     ]);
 
@@ -176,53 +205,39 @@ export async function getManagerGdoTables(monthString: string) {
             gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
         }
 
-        const isConfermato = lead.confirmationsOutcome === 'confermato';
-        const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
-
-        // 1. DIMENSIONE FUNNEL
+        // FISSATI: unica metrica che resta attribuita alla data di fissaggio
+        // (apptSetAt) — decisione PO 2026-07-17: "gli app fissati non si toccano".
         gdoStats.funnelStats[f].fissati++;
         gdoStats.totalStats.fissati++;
-
-        if (isConfermato) {
-            gdoStats.funnelStats[f].confermati++;
-            gdoStats.totalStats.confermati++;
-        }
-        if (isChiuso) {
-            gdoStats.funnelStats[f].chiusi++;
-            gdoStats.totalStats.chiusi++;
-        }
-
-        // 2. DIMENSIONE WEEKLY (Calendar)
-        // Bucketing per la STESSA data canonica del filtro mensile (fissaggio,
-        // non data del meeting): altrimenti un lead fissato a fine mese per un
-        // meeting nel mese successivo entra in monthLeads/totalStats ma la sua
-        // settimana (calcolata su appointmentDate) può non esistere in weeks
-        // (mese diverso) → wIndex=-1 e sparisce dalle righe settimanali pur
-        // essendo contato in testata.
-        const setAt = apptSetAt(lead);
-        if (setAt) {
-            const wIndex = weeks.findIndex(w => isWithinInterval(setAt, { start: w.start, end: w.end }));
-            if (wIndex !== -1) {
-                if (isConfermato) gdoStats.calendarStats.confermati[wIndex]++;
-                if (isChiuso) gdoStats.calendarStats.chiusi[wIndex]++;
-            }
-        }
     });
 
-    // PRESENZE (PO 2026-07-17): contate nel giorno dell'appuntamento (`presentedAt`),
-    // sganciate dal cohort dei fissati. Bucket settimanale sulla stessa data.
-    for (const lead of presenceLeads) {
-        if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId] || !lead.presentedAt) continue;
-        const gdoStats = gdoStatsMap[lead.assignedToId];
-        const f = lead.funnel || 'ALTRO';
-        if (!gdoStats.funnelStats[f]) {
-            gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
+    // Allineamento dimensioni (PO 2026-07-17): confermati e presenze al giorno
+    // dell'APPUNTAMENTO, chiusure alla data dell'esito venditore. Così sulle
+    // righe settimanali conferme e presenze sono confrontabili riga per riga.
+    const bucketInto = <T extends { assignedToId: string | null; funnel: string | null }>(
+        arr: T[],
+        dateOf: (lead: T) => Date | null,
+        key: 'confermati' | 'presenziati' | 'chiusi',
+    ) => {
+        for (const lead of arr) {
+            if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId]) continue;
+            const d = dateOf(lead);
+            if (!d) continue;
+            const gdoStats = gdoStatsMap[lead.assignedToId];
+            const f = lead.funnel || 'ALTRO';
+            if (!gdoStats.funnelStats[f]) {
+                gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
+            }
+            gdoStats.funnelStats[f][key]++;
+            gdoStats.totalStats[key]++;
+            const wIndex = weeks.findIndex(w => isWithinInterval(d, { start: w.start, end: w.end }));
+            if (wIndex !== -1) gdoStats.calendarStats[key][wIndex]++;
         }
-        gdoStats.funnelStats[f].presenziati++;
-        gdoStats.totalStats.presenziati++;
-        const wIndex = weeks.findIndex(w => isWithinInterval(lead.presentedAt!, { start: w.start, end: w.end }));
-        if (wIndex !== -1) gdoStats.calendarStats.presenziati[wIndex]++;
-    }
+    };
+
+    bucketInto(confirmedLeads, l => l.appointmentDate, 'confermati');
+    bucketInto(presenceLeads, l => l.presentedAt, 'presenziati');
+    bucketInto(closedLeads, l => l.salespersonOutcomeAt, 'chiusi');
 
     // Count leads assigned to each GDO in the month (totali + per-funnel)
     for (const lead of assignedLeadsRaw) {
