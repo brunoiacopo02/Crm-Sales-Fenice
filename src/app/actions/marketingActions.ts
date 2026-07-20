@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { leads, marketingBudgets } from "@/db/schema";
-import { and, eq, ne, isNotNull, gte, lte, or } from "drizzle-orm";
+import { and, eq, ne, isNotNull, isNull, gte, lte, or } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 
 const OFFICIAL_FUNNELS = [
@@ -81,6 +81,9 @@ export async function getMarketingStats(monthString: string) {
             isNotNull(leads.funnel),
             ne(leads.funnel, 'BLT'),
             ne(leads.funnel, ''),
+            // Lead dei pool /import (launchBucket) non ancora assegnati =
+            // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+            or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             or(
                 and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
                 and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
@@ -234,6 +237,9 @@ export async function getMarketingStatsByGdo(monthString: string) {
             isNotNull(leads.funnel),
             ne(leads.funnel, 'BLT'),
             ne(leads.funnel, ''),
+            // Lead dei pool /import (launchBucket) non ancora assegnati =
+            // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+            or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             or(
                 and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
                 and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),

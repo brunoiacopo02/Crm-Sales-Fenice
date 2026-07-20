@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { leads, monthlyLeadTargets, monthlyFunnelBaselines } from "@/db/schema";
-import { and, gte, lt, sql, eq, or } from "drizzle-orm";
+import { and, gte, lt, sql, eq, or, isNull, isNotNull } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from '@/lib/tenancy';
 import { isConfermeTl } from "@/lib/confermeTl";
@@ -136,7 +136,10 @@ async function leadOverviewForCompany(ctx: TenantContext, ym: string): Promise<L
             .where(and(
                 eq(leads.companyId, ctx.companyId),
                 gte(leads.createdAt, monthStart),
-                lt(leads.createdAt, monthEnd)
+                lt(leads.createdAt, monthEnd),
+                // Lead dei pool /import (launchBucket) non ancora assegnati =
+                // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+                or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             ))
             .groupBy(sql`LOWER(COALESCE(${leads.funnel}, '')) = 'database'`);
 

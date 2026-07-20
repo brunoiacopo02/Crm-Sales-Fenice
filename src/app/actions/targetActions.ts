@@ -317,6 +317,9 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         and(
             eq(leads.companyId, ctx.companyId),
             or(sql`${leads.funnel} IS NULL`, sql`${leads.funnel} != 'BLT'`),
+            // Lead dei pool /import (launchBucket) non ancora assegnati =
+            // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+            or(sql`${leads.launchBucket} IS NULL`, isNotNull(leads.assignedToId)),
             or(
                 and(gte(leads.createdAt, startDate), lt(leads.createdAt, endDate)),
                 and(gte(leads.appointmentCreatedAt, startDate), lt(leads.appointmentCreatedAt, endDate)),

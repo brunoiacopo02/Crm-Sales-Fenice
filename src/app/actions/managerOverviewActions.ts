@@ -209,6 +209,9 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
                 eq(leads.companyId, ctx.companyId),
                 gte(leads.createdAt, todayStart),
                 lte(leads.createdAt, todayEnd),
+                // Lead dei pool /import (launchBucket) non ancora assegnati =
+                // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+                or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             ));
         const byFunnelMap = new Map<string, number>();
         for (const r of newRows) {

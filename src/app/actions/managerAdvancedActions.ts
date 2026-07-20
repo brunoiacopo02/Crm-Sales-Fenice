@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { appSettings, callLogs, leads, users } from "@/db/schema"
-import { and, eq, gte, lte } from "drizzle-orm"
+import { and, eq, gte, lte, or, isNull, isNotNull } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
@@ -140,7 +140,14 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
         }).from(leads)
-            .where(and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate), eq(leads.companyId, ctx.companyId))),
+            // Lead dei pool /import (launchBucket) non ancora assegnati =
+            // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+            .where(and(
+                gte(leads.createdAt, startDate),
+                lte(leads.createdAt, endDate),
+                eq(leads.companyId, ctx.companyId),
+                or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+            )),
 
         readCplEur(),
     ])
