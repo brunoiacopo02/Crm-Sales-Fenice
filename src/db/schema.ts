@@ -944,6 +944,27 @@ export const salesWeeklyFocus = pgTable('salesWeeklyFocus', {
     };
 });
 
+// Registro dei pool di /import (spec 2026-07-20-database-month-pools).
+// Una riga per bucket: i DATABASE_MONTH sono creati dal sync AC per mese
+// ('DB_2025_09'...), BLACK_SUMMER è backfillata dalla migrazione 0023.
+// archivedAt != null = card nascosta su /import; i lead del bucket non si toccano.
+export const launchPools = pgTable('launchPools', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    bucket: text('bucket').notNull(),
+    kind: text('kind').notNull(), // 'DATABASE_MONTH' | 'LAUNCH'
+    label: text('label').notNull(),
+    monthKey: text('monthKey'), // 'YYYY-MM' per i DATABASE_MONTH, null per i lanci
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    createdBy: text('createdBy'),
+    archivedAt: timestamp('archivedAt', { withTimezone: true, mode: 'date' }),
+    archivedBy: text('archivedBy'),
+}, (table) => {
+    return {
+        bucketUnique: uniqueIndex('launch_pools_company_bucket_uq').on(table.companyId, table.bucket),
+    };
+});
+
 // Per-funnel monthly baseline table shown in "Panoramica Generale".
 // - leadCount / fatturatoEur / spesaEur are ABSOLUTE values (edited directly).
 // - appDelta / confermeDelta / trattativeDelta / closeDelta are DELTAS summed
