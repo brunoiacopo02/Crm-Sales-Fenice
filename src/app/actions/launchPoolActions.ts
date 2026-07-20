@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { leads, acIntakeFailures } from "@/db/schema"
+import { leads, acIntakeFailures, launchPools } from "@/db/schema"
 import { and, eq, isNull, isNotNull, sql, like } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { users } from "@/db/schema"
@@ -144,6 +144,15 @@ export async function getBlackSummerPoolStatus(): Promise<{ available: number } 
     assertSalesArea(ctx)
     // La lista vive sull'account AC Fenice: con altra azienda attiva la card si nasconde.
     if (ctx.companyId !== BLACK_SUMMER_COMPANY) return null
+
+    // Pool rimosso dal TL (registro launchPools, spec 2026-07-20): card nascosta.
+    const [poolRow] = await db.select({ archivedAt: launchPools.archivedAt })
+        .from(launchPools)
+        .where(and(
+            eq(launchPools.companyId, ctx.companyId),
+            eq(launchPools.bucket, BLACK_SUMMER_BUCKET),
+        )).limit(1)
+    if (poolRow?.archivedAt) return null
 
     const rows = await db
         .select({ count: sql<number>`count(*)::int` })

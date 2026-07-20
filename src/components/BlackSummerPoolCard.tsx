@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Sun, RefreshCw, Users, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { Sun, RefreshCw, Users, AlertCircle, CheckCircle2, Loader2, Trash2 } from "lucide-react"
 import {
     getBlackSummerPoolStatus,
     syncBlackSummerPool,
@@ -11,6 +11,7 @@ import {
     type BlackSummerSyncReport,
 } from "@/app/actions/launchPoolActions"
 import { getActiveGdosForImport } from "@/app/actions/importLeads"
+import { archiveLaunchPool } from "@/app/actions/databasePoolActions"
 
 type GdoInfo = { id: string, name: string | null, displayName: string | null, gdoCode: string | null, isActive: boolean | null }
 
@@ -22,6 +23,7 @@ export function BlackSummerPoolCard() {
     const [selectedGdoIds, setSelectedGdoIds] = useState<Set<string>>(new Set())
     const [loading, setLoading] = useState(false)
     const [syncing, setSyncing] = useState(false)
+    const [archiving, setArchiving] = useState(false)
     const [report, setReport] = useState<BlackSummerAssignReport | null>(null)
     const [syncReport, setSyncReport] = useState<BlackSummerSyncReport | null>(null)
 
@@ -97,6 +99,19 @@ export function BlackSummerPoolCard() {
         }
     }
 
+    const handleArchive = async () => {
+        if (archiving || status.available > 0) return
+        if (!confirm("Rimuovere il pool Black Summer da /import? I lead già assegnati e le loro statistiche restano intatti.")) return
+        setArchiving(true)
+        try {
+            const res = await archiveLaunchPool('BLACK_SUMMER')
+            if (!res.ok) alert(res.error || 'Rimozione non riuscita.')
+            else { setStatus(null); router.refresh() }
+        } finally {
+            setArchiving(false)
+        }
+    }
+
     return (
         <div className="bg-gradient-to-br from-amber-50 to-white rounded-xl border-2 border-amber-300 shadow-sm p-6 space-y-5 mt-8">
             <div className="flex items-center justify-between gap-3 border-b border-amber-100 pb-4">
@@ -109,15 +124,25 @@ export function BlackSummerPoolCard() {
                         <p className="text-xs text-ash-500">Lista d&apos;attesa AC — bucket unico, nessuna distinzione webinar. Funnel: Black Summer.</p>
                     </div>
                 </div>
-                <button
-                    onClick={handleSync}
-                    disabled={syncing || loading}
-                    className="flex items-center gap-2 py-2 px-4 rounded-lg text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 hover:bg-amber-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                    {syncing
-                        ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sincronizzazione...</>
-                        : <><RefreshCw className="h-3.5 w-3.5" /> Sincronizza da ActiveCampaign</>}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleArchive}
+                        disabled={archiving || syncing || loading || status.available > 0}
+                        title={status.available > 0 ? "Assegna tutti i lead per poter rimuovere il pool" : "Rimuovi il pool da questa pagina"}
+                        className="flex items-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" /> Rimuovi pool
+                    </button>
+                    <button
+                        onClick={handleSync}
+                        disabled={syncing || loading}
+                        className="flex items-center gap-2 py-2 px-4 rounded-lg text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 hover:bg-amber-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                        {syncing
+                            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sincronizzazione...</>
+                            : <><RefreshCw className="h-3.5 w-3.5" /> Sincronizza da ActiveCampaign</>}
+                    </button>
+                </div>
             </div>
 
             {syncReport && (
