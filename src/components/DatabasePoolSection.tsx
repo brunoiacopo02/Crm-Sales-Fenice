@@ -31,6 +31,7 @@ export function DatabasePoolSection() {
     const [syncMonth, setSyncMonth] = useState<string>('') // 'YYYY-MM' da <input type="month">
     const [syncing, setSyncing] = useState(false)
     const [syncReport, setSyncReport] = useState<DatabaseSyncReport | null>(null)
+    const maxMonth = new Date().toISOString().slice(0, 7) // mese corrente: niente pool futuri
 
     const reload = async () => {
         const fresh = await getDatabasePoolStats()
@@ -86,6 +87,7 @@ export function DatabasePoolSection() {
                         type="month"
                         value={syncMonth}
                         onChange={(e) => setSyncMonth(e.target.value)}
+                        max={maxMonth}
                         disabled={syncing}
                         className="h-9 px-2 border border-blue-200 rounded-lg text-xs focus:ring-blue-500 focus:border-blue-500 disabled:bg-ash-100"
                     />

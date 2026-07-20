@@ -151,6 +151,13 @@ export async function syncDatabaseMonthPool(monthKey: string): Promise<DatabaseS
         report.errors.push("ACTIVECAMPAIGN_API_KEY non configurata sul server.")
         return report
     }
+    // Guardia temporanea (review finale 2026-07-20): finché l'esclusione "già
+    // clienti" non è configurata (Task 7, conferma PO), il sync è disabilitato —
+    // un import senza esclusioni sarebbe irreversibile e contraddirebbe la UI.
+    if (CLIENT_TAG_NAMES_NORMALIZED.length === 0 && CLIENT_LIST_NAMES_NORMALIZED.length === 0) {
+        report.errors.push("Esclusione già clienti non ancora configurata: sync disabilitato fino alla conferma dei tag/liste clienti (in arrivo).")
+        return report
+    }
 
     const bucket = bucketForMonth(monthKey)
 
@@ -284,20 +291,23 @@ export async function syncDatabaseMonthPool(monthKey: string): Promise<DatabaseS
         report.skippedExisting += chunk.length - inserted.length
     }
 
-    // Upsert atomico sul vincolo (companyId, bucket): il primo sync crea la
-    // riga, i successivi (o un mese rimosso e ri-sincronizzato) la de-archiviano.
-    await db.insert(launchPools).values({
-        id: crypto.randomUUID(),
-        companyId: ctx.companyId,
-        bucket,
-        kind: 'DATABASE_MONTH',
-        label: labelForMonth(monthKey),
-        monthKey,
-        createdBy: ctx.userId,
-    }).onConflictDoUpdate({
-        target: [launchPools.companyId, launchPools.bucket],
-        set: { archivedAt: null, archivedBy: null },
-    })
+    // Niente riga registro per sync falliti a vuoto o mesi senza contatti.
+    if (report.imported > 0 || report.totalMonth > 0) {
+        // Upsert atomico sul vincolo (companyId, bucket): il primo sync crea la
+        // riga, i successivi (o un mese rimosso e ri-sincronizzato) la de-archiviano.
+        await db.insert(launchPools).values({
+            id: crypto.randomUUID(),
+            companyId: ctx.companyId,
+            bucket,
+            kind: 'DATABASE_MONTH',
+            label: labelForMonth(monthKey),
+            monthKey,
+            createdBy: ctx.userId,
+        }).onConflictDoUpdate({
+            target: [launchPools.companyId, launchPools.bucket],
+            set: { archivedAt: null, archivedBy: null },
+        })
+    }
 
     revalidatePath('/', 'layout')
     report.ok = report.errors.length === 0
