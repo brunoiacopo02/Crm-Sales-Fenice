@@ -40,6 +40,9 @@ export async function getActiveGdosForImport() {
         .from(users)
         .where(and(
             eq(users.role, 'GDO'),
+            // Il bot fissatore (GDO 201) riceve lead solo dal round-robin del
+            // webhook AC: mai assegnabile a mano da /import.
+            eq(users.isBot, false),
             // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
             // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
             or(
@@ -125,6 +128,9 @@ export async function processCsvImport(
     const activeGdos = (await db.select().from(users)
         .where(and(
             eq(users.role, 'GDO'),
+            // Il bot fissatore (GDO 201) riceve lead solo dal round-robin del
+            // webhook AC: mai assegnabile a mano da /import.
+            eq(users.isBot, false),
             // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
             // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
             or(
@@ -358,6 +364,9 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
     const activeGdos = (await db.select().from(users)
         .where(and(
             eq(users.role, 'GDO'),
+            // Il bot fissatore (GDO 201) riceve lead solo dal round-robin del
+            // webhook AC: mai assegnabile a mano da /import.
+            eq(users.isBot, false),
             // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
             // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
             or(
