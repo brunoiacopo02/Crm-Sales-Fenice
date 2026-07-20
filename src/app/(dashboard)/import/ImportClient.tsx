@@ -18,6 +18,7 @@ import { AddLeadModal } from "@/components/AddLeadModal"
 import { LeadRedistributionCard } from "@/components/LeadRedistributionCard"
 import { LaunchPoolCard } from "@/components/LaunchPoolCard"
 import { BlackSummerPoolCard } from "@/components/BlackSummerPoolCard"
+import { DatabasePoolSection } from "@/components/DatabasePoolSection"
 
 export function ImportClient() {
     const router = useRouter()
@@ -538,6 +539,7 @@ export function ImportClient() {
             <LeadRedistributionCard />
             <LaunchPoolCard />
             <BlackSummerPoolCard />
+            <DatabasePoolSection />
         </div>
     )
 }
