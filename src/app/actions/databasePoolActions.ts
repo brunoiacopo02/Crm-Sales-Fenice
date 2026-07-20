@@ -6,7 +6,7 @@ import { and, eq, isNull, sql, inArray, asc } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 import crypto from "crypto"
-import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
+import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from "@/lib/tenancy"
 import { pickAndAssignBuckets, acGet, AC_KEY } from "@/lib/launchPoolShared"
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize"
 
@@ -133,7 +133,10 @@ export async function syncDatabaseMonthPool(monthKey: string): Promise<DatabaseS
         skippedNoPhone: 0, totalMonth: 0, errors: [],
     }
     let ctx: TenantContext
-    try { ctx = await requireDbPoolCtx() } catch (e: any) {
+    try {
+        ctx = await requireDbPoolCtx()
+        assertSingleCompany(ctx) // scrittura: bloccata in modalità "Tutte le aziende"
+    } catch (e: any) {
         report.errors.push(String(e?.message || e)); return report
     }
     if (ctx.companyId !== DB_POOL_COMPANY) {
@@ -270,30 +273,31 @@ export async function syncDatabaseMonthPool(monthKey: string): Promise<DatabaseS
     }
 
     for (let i = 0; i < toInsert.length; i += 500) {
-        await db.insert(leads).values(toInsert.slice(i, i + 500))
-        report.imported += Math.min(500, toInsert.length - i)
+        const chunk = toInsert.slice(i, i + 500)
+        // ON CONFLICT DO NOTHING sull'indice parziale: un sync concorrente che
+        // ha vinto la corsa non fa fallire questo, e imported conta i soli
+        // inserimenti reali.
+        const inserted = await db.insert(leads).values(chunk)
+            .onConflictDoNothing()
+            .returning({ id: leads.id })
+        report.imported += inserted.length
+        report.skippedExisting += chunk.length - inserted.length
     }
 
-    // Upsert riga registro (de-archivia se il TL ri-sincronizza un mese rimosso).
-    const [poolRow] = await db.select().from(launchPools).where(and(
-        eq(launchPools.companyId, ctx.companyId),
-        eq(launchPools.bucket, bucket),
-    )).limit(1)
-    if (poolRow) {
-        await db.update(launchPools)
-            .set({ archivedAt: null, archivedBy: null })
-            .where(eq(launchPools.id, poolRow.id))
-    } else {
-        await db.insert(launchPools).values({
-            id: crypto.randomUUID(),
-            companyId: ctx.companyId,
-            bucket,
-            kind: 'DATABASE_MONTH',
-            label: labelForMonth(monthKey),
-            monthKey,
-            createdBy: ctx.userId,
-        })
-    }
+    // Upsert atomico sul vincolo (companyId, bucket): il primo sync crea la
+    // riga, i successivi (o un mese rimosso e ri-sincronizzato) la de-archiviano.
+    await db.insert(launchPools).values({
+        id: crypto.randomUUID(),
+        companyId: ctx.companyId,
+        bucket,
+        kind: 'DATABASE_MONTH',
+        label: labelForMonth(monthKey),
+        monthKey,
+        createdBy: ctx.userId,
+    }).onConflictDoUpdate({
+        target: [launchPools.companyId, launchPools.bucket],
+        set: { archivedAt: null, archivedBy: null },
+    })
 
     revalidatePath('/', 'layout')
     report.ok = report.errors.length === 0
@@ -325,6 +329,8 @@ export type DatabasePoolRow = {
  */
 export async function getDatabasePoolStats(): Promise<DatabasePoolRow[] | null> {
     const ctx = await requireDbPoolCtx()
+    // Sezione operativa: nascosta in modalità "Tutte le aziende" (sola lettura, no assertSingleCompany).
+    if (ctx.isAllCompanies) return null
     if (ctx.companyId !== DB_POOL_COMPANY) return null
 
     const pools = await db.select().from(launchPools).where(and(
@@ -383,7 +389,10 @@ export type DatabaseAssignReport = {
 export async function assignFromDatabasePool(input: { bucket: string; count: number; gdoIds: string[] }): Promise<DatabaseAssignReport> {
     const report: DatabaseAssignReport = { ok: false, errors: [], perGdo: {}, totalAssigned: 0 }
     let ctx: TenantContext
-    try { ctx = await requireDbPoolCtx() } catch (e: any) {
+    try {
+        ctx = await requireDbPoolCtx()
+        assertSingleCompany(ctx) // scrittura: bloccata in modalità "Tutte le aziende"
+    } catch (e: any) {
         report.errors.push(String(e?.message || e)); return report
     }
     if (ctx.companyId !== DB_POOL_COMPANY) {
@@ -461,7 +470,10 @@ export async function assignFromDatabasePool(input: { bucket: string; count: num
  */
 export async function archiveLaunchPool(bucket: string): Promise<{ ok: boolean; error?: string }> {
     let ctx: TenantContext
-    try { ctx = await requireDbPoolCtx() } catch (e: any) {
+    try {
+        ctx = await requireDbPoolCtx()
+        assertSingleCompany(ctx) // scrittura: bloccata in modalità "Tutte le aziende"
+    } catch (e: any) {
         return { ok: false, error: String(e?.message || e) }
     }
     if (ctx.companyId !== DB_POOL_COMPANY) {

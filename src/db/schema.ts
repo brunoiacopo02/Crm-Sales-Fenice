@@ -202,6 +202,13 @@ export const leads = pgTable('leads', {
         // Poll richiami Conferme (~150k query/g): senza questo indice partiva un seq scan a chiamata
         confSnoozeIdx: index('leads_conf_snooze_idx').on(table.companyId, table.confSnoozeAt)
             .where(sql`"confirmationsOutcome" IS NULL AND "confSnoozeAt" IS NOT NULL`),
+        // Idempotenza hard dei sync pool (review Task 3, spec 2026-07-20): due sync
+        // concorrenti dello stesso mese non possono duplicare un contatto AC nel
+        // bucket. Parziale: lead senza bucket o senza acContactId (import manuali,
+        // webhook con duplicati voluti) restano liberi.
+        bucketAcContactUq: uniqueIndex('leads_company_bucket_accontact_uq')
+            .on(table.companyId, table.launchBucket, table.acContactId)
+            .where(sql`"launchBucket" IS NOT NULL AND "acContactId" IS NOT NULL`),
     };
 });
 
