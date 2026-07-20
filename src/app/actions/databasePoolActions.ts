@@ -18,10 +18,37 @@ const DB_POOL_ROLES = ['ADMIN', 'MANAGER', 'TL']
 // Nomi normalizzati (trim+lowercase) di tag e liste AC che identificano un
 // cliente: i loro membri NON entrano mai nei pool database. Config nel codice
 // come BLOCKED_LIST_NAMES_NORMALIZED del webhook (default di prodotto, non env).
-// DA COMPILARE dopo l'esplorazione AC con conferma PO (spec §4) — finché sono
-// vuoti il sync non esclude nessuno.
-const CLIENT_TAG_NAMES_NORMALIZED: string[] = []
-const CLIENT_LIST_NAMES_NORMALIZED: string[] = []
+// Confermati dal PO 2026-07-20 (esplorazione AC: union 2.625+ contatti;
+// validazione set 2025: 6.392 nel mese, ~90 clienti esclusi → ~6.272
+// importabili, coerente con l'atteso ~6.300 del PO).
+const CLIENT_TAG_NAMES_NORMALIZED: string[] = [
+    'cliente',
+    'corso-finito',
+    'gold',
+    'exclusive',
+    'advance',
+    'sondaggio-cliente',
+]
+const CLIENT_LIST_NAMES_NORMALIZED: string[] = [
+    'clienti',
+    'clienti-save',
+    'studenti - social media manager',
+    'studenti - copywriter',
+    'studenti - sales rappresentative',
+    'studenti - e-commerce manager',
+    'collocamento studente',
+    'clienti lancio nuovo corso 497',
+    'iscritti nuovo percorso 497',
+    'clienti corso intelligenza artificiale nuovo',
+    'clienti black friday 2025 (masterclass con il commercialista)',
+    'clienti data analyst lezione live',
+    'lista studenti corso data analyst (per mail lezioni live)',
+    'studenti corso project manager',
+    'studenti abb',
+    "studenti iscritti all'abbonamento mensile",
+    'clienti data analyst 2026 (marta)',
+    'lista stage',
+]
 
 const MESI_IT = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
     'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
