@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GamificationTargetInput, saveGamificationRule } from '@/app/actions/gdoPerformanceActions';
-import { Target, CalendarDays, DollarSign, Award, Trophy, BookOpen } from 'lucide-react';
+import { Target, CalendarDays, DollarSign, Award, Trophy, BookOpen, FileText } from 'lucide-react';
+import GdoQualityReportModal from './GdoQualityReportModal';
 
 interface Props {
     initialData: any[]; // getManagerGdoTables result
@@ -17,6 +18,7 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
     const [monthInput, setMonthInput] = useState(selectedMonth);
     const [isSaving, setIsSaving] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
+    const [reportGdo, setReportGdo] = useState<{ id: string; name: string } | null>(null);
 
     const [formData, setFormData] = useState<GamificationTargetInput>({
         month: selectedMonth,
@@ -153,6 +155,16 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                                         </div>
                                     );
                                 })()}
+                                {gdoData.gdoId && (
+                                    <div className="flex items-center">
+                                        <button
+                                            onClick={() => setReportGdo({ id: gdoData.gdoId, name: gdoData.gdoName })}
+                                            className="inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 h-8 px-3 transition-all"
+                                        >
+                                            <FileText className="w-3.5 h-3.5" /> Report qualità
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -231,6 +243,14 @@ export default function ManagerGdoClient({ initialData, selectedMonth, role, scr
                     </div>
                 ))}
             </div>
+
+            {reportGdo && (
+                <GdoQualityReportModal
+                    gdoId={reportGdo.id}
+                    gdoName={reportGdo.name}
+                    onClose={() => setReportGdo(null)}
+                />
+            )}
 
         </div>
     );

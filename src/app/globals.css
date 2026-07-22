@@ -2264,3 +2264,22 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   border-color: rgba(201,162,75,0.45);
   box-shadow: 0 0 0 1px rgba(201,162,75,0.25), 0 8px 24px -12px rgba(206,139,166,0.3);
 }
+/* ── Report Qualità GDO — stampa PDF (spec 2026-07-22) ──────────────
+   In stampa resta visibile SOLO l'area report della modale: il resto
+   della pagina viene nascosto col pattern visibility (il display:none
+   sul body romperebbe il layout dell'area assoluta). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .gdo-report-print-area,
+  .gdo-report-print-area * {
+    visibility: visible;
+  }
+  .gdo-report-print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+  }
+}
