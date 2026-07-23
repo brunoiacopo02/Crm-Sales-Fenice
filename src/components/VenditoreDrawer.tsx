@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { saveVenditoreOutcome } from "@/app/actions/venditoreActions"
+import { saveVenditoreOutcome, rescheduleFollowUp } from "@/app/actions/venditoreActions"
 import { saveSalesSurvey, getSalesSurveyByLead } from "@/app/actions/surveyActions"
-import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle, Lock, Play } from "lucide-react"
+import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle, Lock, Play, CalendarClock } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
@@ -57,6 +57,11 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
     const [notClosedReason, setNotClosedReason] = useState(followUpMode ? "" : lead?.notClosedReason || "")
     const [notes, setNotes] = useState(followUpMode ? "" : lead?.salespersonOutcomeNotes || "")
 
+    // Sposta follow-up senza esito (spec 2026-07-23)
+    const [showReschedule, setShowReschedule] = useState(false)
+    const [rescheduleValue, setRescheduleValue] = useState("")
+    const [isRescheduling, setIsRescheduling] = useState(false)
+
     // Mai precompilare con una data già passata: risalvando "Non chiuso" si
     // ripianificherebbe un follow-up nel passato → il lead resta in "Scaduti"
     // per sempre e brucia uno dei follow-up disponibili.
@@ -103,6 +108,20 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
             }
         })()
     }, [lead?.id])
+
+    const handleReschedule = async () => {
+        if (!rescheduleValue) return
+        const parsedDate = parseRomeDatetimeLocal(rescheduleValue)
+        if (!parsedDate) { alert("Data follow-up non valida"); return }
+        setIsRescheduling(true)
+        try {
+            const res = await rescheduleFollowUp(lead.id, parsedDate)
+            if (!res.success) { alert(res.error || "Errore durante lo spostamento del follow-up"); return }
+            onSaved()
+        } finally {
+            setIsRescheduling(false)
+        }
+    }
 
     const handleSave = async () => {
         if (!outcome) {
@@ -300,6 +319,48 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                             )}
                             {lead.salespersonOutcomeNotes && (
                                 <div className="text-xs text-ash-500">Note: {lead.salespersonOutcomeNotes}</div>
+                            )}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-ash-200">
+                            {!showReschedule ? (
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowReschedule(true)
+                                            setRescheduleValue(lead?.nextFollowUpDate ? toRomeDatetimeLocal(new Date(lead.nextFollowUpDate)) : toRomeDatetimeLocal(new Date()))
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-brand-orange/40 hover:text-brand-orange transition-colors"
+                                    >
+                                        <CalendarClock className="h-3.5 w-3.5" />
+                                        Sposta follow-up
+                                    </button>
+                                    <div className="text-[11px] text-ash-400">Il lead ha spostato? Cambia solo l&apos;orario: non consuma un follow-up.</div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <input
+                                        type="datetime-local"
+                                        value={rescheduleValue}
+                                        onChange={e => setRescheduleValue(e.target.value)}
+                                        className="bg-white border border-ash-200 rounded-lg text-xs p-1.5 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleReschedule}
+                                        disabled={isRescheduling || !rescheduleValue}
+                                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                    >
+                                        {isRescheduling ? "Salvataggio…" : "Conferma nuova data"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowReschedule(false)}
+                                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-ash-100 text-ash-600 hover:bg-ash-200 transition-colors"
+                                    >
+                                        Annulla
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
