@@ -445,3 +445,230 @@ export async function getLeadBriefing(leadId: string) {
     const { normalizeBriefing } = await import("@/lib/briefing/normalize");
     return normalizeBriefing(scheda as any, lead?.botReport);
 }
+
+// ── Follow-up lifecycle (spec 2026-07-23) ────────────────────────────────────
+
+// Auth comune alle azioni sul singolo lead: il venditore opera solo sui propri
+// lead; MANAGER/ADMIN senza vincolo. Ritorna lead + userId o un errore.
+async function requireOwnLead(leadId: string) {
+    const supabase = await createClient();
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const role = supabaseUser?.user_metadata?.role;
+    if (!supabaseUser || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(role)) {
+        return { ok: false as const, error: 'Unauthorized' };
+    }
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+    const lead = (await db.select().from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.id, leadId),
+    )))[0];
+    if (!lead) return { ok: false as const, error: 'Lead non trovato' };
+    const isStaff = role === 'MANAGER' || role === 'ADMIN';
+    if (!isStaff && lead.salespersonUserId !== supabaseUser.id) {
+        return { ok: false as const, error: 'Lead non assegnato' };
+    }
+    return { ok: true as const, lead, ctx, userId: supabaseUser.id };
+}
+
+// Sposta SOLO data/ora del follow-up (il lead ha spostato la chiamata): nessun
+// nuovo salesAttempt, il tetto dei 3 follow-up non viene toccato. Serve anche
+// da "Fissa follow-up" per i lead In lavorazione e per quelli appena riaperti.
+export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise<{ success: boolean; error?: string }> {
+    const auth = await requireOwnLead(leadId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { lead, ctx, userId } = auth;
+
+    if (!(newDate instanceof Date) || isNaN(newDate.getTime())) {
+        return { success: false, error: 'Data follow-up non valida.' };
+    }
+    if (!lead.followUp1Date && !lead.inLavorazioneAt) {
+        return { success: false, error: 'Nessun follow-up pendente da spostare per questo lead.' };
+    }
+
+    // Ultimo attempt 'Non chiuso' del ciclo corrente: teniamo coerente anche la
+    // storia (nextFollowUpDate) usata da analytics e Monitor Vendite.
+    const attempts = await db.select({
+        id: salesAttempts.id,
+        outcome: salesAttempts.outcome,
+        outcomeAt: salesAttempts.outcomeAt,
+    }).from(salesAttempts)
+        .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)))
+        .orderBy(desc(salesAttempts.outcomeAt));
+    const cycleStart = lead.salesCycleStartAt ?? null;
+    const lastNonClosed = attempts.find(a =>
+        a.outcome === 'Non chiuso' && (!cycleStart || (a.outcomeAt !== null && a.outcomeAt >= cycleStart)));
+
+    await db.transaction(async (tx) => {
+        await tx.update(leads)
+            .set({ followUp1Date: newDate, inLavorazioneAt: null })
+            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+        if (lastNonClosed) {
+            await tx.update(salesAttempts)
+                .set({ nextFollowUpDate: newDate })
+                .where(eq(salesAttempts.id, lastNonClosed.id));
+        }
+        await tx.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'followup_rescheduled',
+            userId,
+            timestamp: new Date(),
+            metadata: { oldDate: lead.followUp1Date, newDate },
+            companyId: ctx.companyId,
+        });
+    });
+
+    revalidatePath('/venditore');
+    return { success: true };
+}
+
+// Parcheggia un lead con follow-up pendente in "In lavorazione" (niente data
+// precisa). Non consuma tentativi e non registra esiti.
+export async function parkLead(leadId: string): Promise<{ success: boolean; error?: string }> {
+    const auth = await requireOwnLead(leadId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { lead, ctx, userId } = auth;
+
+    if (lead.inLavorazioneAt) return { success: false, error: 'Lead già in lavorazione.' };
+    if (!lead.followUp1Date) {
+        return { success: false, error: 'Solo un lead con follow-up pendente può andare in lavorazione.' };
+    }
+
+    await db.transaction(async (tx) => {
+        await tx.update(leads)
+            .set({ inLavorazioneAt: new Date() })
+            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+        await tx.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'lead_parked',
+            userId,
+            timestamp: new Date(),
+            metadata: { previousFollowUpDate: lead.followUp1Date },
+            companyId: ctx.companyId,
+        });
+    });
+
+    revalidatePath('/venditore');
+    return { success: true };
+}
+
+// Riapre una trattativa non-Chiusa dallo Storico: nuovo ciclo, tetto 3 pieno.
+// La storia salesAttempts resta intatta; il lead torna in "In lavorazione".
+// Il check-in trattativa NON va rifatto (negotiationStartedAt resta).
+export async function reopenNegotiation(leadId: string): Promise<{ success: boolean; error?: string }> {
+    const auth = await requireOwnLead(leadId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { lead, ctx, userId } = auth;
+
+    if (!lead.salespersonOutcome) return { success: false, error: 'La trattativa è già aperta.' };
+    if (lead.salespersonOutcome === 'Chiuso') {
+        return { success: false, error: 'Un lead Chiuso non è riapribile.' };
+    }
+
+    const now = new Date();
+    await db.transaction(async (tx) => {
+        await tx.update(leads)
+            .set({
+                salesCycleStartAt: now,
+                inLavorazioneAt: now,
+                salespersonOutcome: null,
+                salespersonOutcomeNotes: null,
+                notClosedReason: null,
+                followUp1Date: null,
+                followUp2Date: null,
+                version: lead.version + 1,
+            })
+            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+        await tx.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'negotiation_reopened',
+            userId,
+            timestamp: now,
+            metadata: { previousOutcome: lead.salespersonOutcome, previousNotClosedReason: lead.notClosedReason },
+            companyId: ctx.companyId,
+        });
+    });
+
+    revalidatePath('/venditore');
+    return { success: true };
+}
+
+// Storico trattative: lead del venditore con esito finale, usciti dalle viste
+// operative (niente follow-up pendente, non in lavorazione). Include la storia
+// completa dei tentativi per il dettaglio espandibile.
+export async function getVenditoreStorico(sellerId: string) {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const isStaff = await resolveIsStaff()
+    if (!isStaff && sellerId !== ctx.userId) throw new Error('Forbidden')
+
+    const rows = await db.select({
+        id: leads.id,
+        name: leads.name,
+        email: leads.email,
+        phone: leads.phone,
+        funnel: leads.funnel,
+        appointmentDate: leads.appointmentDate,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
+        salespersonOutcome: leads.salespersonOutcome,
+        salespersonOutcomeAt: leads.salespersonOutcomeAt,
+        salespersonOutcomeNotes: leads.salespersonOutcomeNotes,
+        followUp1Date: leads.followUp1Date,
+        followUp2Date: leads.followUp2Date,
+        gdoUserId: leads.assignedToId,
+        gdoName: users.displayName,
+        gdoCode: users.gdoCode,
+        appointmentNote: leads.appointmentNote,
+        version: leads.version,
+        closeProduct: leads.closeProduct,
+        closeAmountEur: leads.closeAmountEur,
+        notClosedReason: leads.notClosedReason,
+        negotiationStartedAt: leads.negotiationStartedAt,
+    })
+        .from(leads)
+        .leftJoin(users, eq(leads.assignedToId, users.id))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.salespersonUserId, sellerId),
+            isNotNull(leads.salespersonOutcome),
+            isNull(leads.inLavorazioneAt),
+            // 'Non chiuso' CON follow-up pendente sta nella tab Follow-up, non qui.
+            or(ne(leads.salespersonOutcome, 'Non chiuso'), isNull(leads.followUp1Date)),
+        ))
+        .orderBy(desc(leads.salespersonOutcomeAt))
+
+    const leadIds = rows.map(r => r.id)
+    const attemptRows = leadIds.length
+        ? await db.select({
+            leadId: salesAttempts.leadId,
+            attemptNumber: salesAttempts.attemptNumber,
+            outcome: salesAttempts.outcome,
+            notClosedReason: salesAttempts.notClosedReason,
+            closeProduct: salesAttempts.closeProduct,
+            closeAmountEur: salesAttempts.closeAmountEur,
+            outcomeAt: salesAttempts.outcomeAt,
+            nextFollowUpDate: salesAttempts.nextFollowUpDate,
+        }).from(salesAttempts)
+            .where(and(
+                eq(salesAttempts.companyId, ctx.companyId),
+                inArray(salesAttempts.leadId, leadIds),
+            ))
+            .orderBy(asc(salesAttempts.attemptNumber))
+        : []
+
+    const byLead = new Map<string, typeof attemptRows>()
+    for (const a of attemptRows) {
+        const list = byLead.get(a.leadId) ?? []
+        list.push(a)
+        byLead.set(a.leadId, list)
+    }
+
+    return rows.map(r => ({
+        ...r,
+        phone: r.negotiationStartedAt ? r.phone : null,
+        attempts: byLead.get(r.id) ?? [],
+    }))
+}
