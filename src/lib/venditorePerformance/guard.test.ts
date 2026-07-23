@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateOutcomeTransition, countCycleNonClosed } from './guard.ts';
+import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed } from './guard.ts';
 
 test('Non chiuso senza follow-up → ok (follow-up facoltativo)', () => {
     const r = validateOutcomeTransition({ outcome: 'Non chiuso', nextFollowUpDate: null, priorNonClosedCount: 0 });
@@ -64,4 +64,38 @@ test('countCycleNonClosed: outcomeAt null con ciclo attivo NON conta', () => {
         { outcome: 'Non chiuso', outcomeAt: null },
     ], new Date('2026-07-15T00:00:00Z'));
     assert.equal(n, 0);
+});
+
+test('findLastCycleNonClosed senza ciclo → sceglie attemptNumber massimo tra i Non chiuso', () => {
+    const r = findLastCycleNonClosed([
+        { outcome: 'Non chiuso', outcomeAt: new Date('2026-07-01T10:00:00Z'), attemptNumber: 1 },
+        { outcome: 'Chiuso', outcomeAt: new Date('2026-07-10T10:00:00Z'), attemptNumber: 3 },
+        { outcome: 'Non chiuso', outcomeAt: new Date('2026-07-05T10:00:00Z'), attemptNumber: 2 },
+    ], null);
+    assert.equal(r?.attemptNumber, 2);
+});
+
+test('findLastCycleNonClosed con ciclo → esclude gli attempt precedenti la riapertura', () => {
+    const cycleStart = new Date('2026-07-15T00:00:00Z');
+    const r = findLastCycleNonClosed([
+        { outcome: 'Non chiuso', outcomeAt: new Date('2026-07-01T10:00:00Z'), attemptNumber: 1 },
+        { outcome: 'Non chiuso', outcomeAt: new Date('2026-07-05T10:00:00Z'), attemptNumber: 2 },
+        { outcome: 'Non chiuso', outcomeAt: new Date('2026-07-20T10:00:00Z'), attemptNumber: 3 },
+    ], cycleStart);
+    assert.equal(r?.attemptNumber, 3);
+});
+
+test('findLastCycleNonClosed: nessun Non chiuso → null', () => {
+    const r = findLastCycleNonClosed([
+        { outcome: 'Chiuso', outcomeAt: new Date('2026-07-01T10:00:00Z'), attemptNumber: 1 },
+        { outcome: 'Sparito', outcomeAt: new Date('2026-07-05T10:00:00Z'), attemptNumber: 2 },
+    ], null);
+    assert.equal(r, null);
+});
+
+test('findLastCycleNonClosed: outcomeAt null con ciclo attivo escluso', () => {
+    const r = findLastCycleNonClosed([
+        { outcome: 'Non chiuso', outcomeAt: null, attemptNumber: 1 },
+    ], new Date('2026-07-15T00:00:00Z'));
+    assert.equal(r, null);
 });

@@ -11,7 +11,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { dayBoundsRome } from "@/lib/dateUtils"
 import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
-import { validateOutcomeTransition, countCycleNonClosed } from "@/lib/venditorePerformance/guard"
+import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed } from "@/lib/venditorePerformance/guard"
 import { isConfermeTl } from "@/lib/confermeTl"
 // Gamification disabled for VENDITORE role — import removed
 
@@ -53,6 +53,7 @@ export async function getVenditoreAppointments(sellerId: string) {
             closeAmountEur: leads.closeAmountEur,
             notClosedReason: leads.notClosedReason,
             negotiationStartedAt: leads.negotiationStartedAt,
+            salesCycleStartAt: leads.salesCycleStartAt,
         })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
@@ -70,17 +71,18 @@ export async function getVenditoreAppointments(sellerId: string) {
             outcome: salesAttempts.outcome,
             nextFollowUpDate: salesAttempts.nextFollowUpDate,
             createdAt: salesAttempts.createdAt,
+            outcomeAt: salesAttempts.outcomeAt,
         }).from(salesAttempts).where(and(
             eq(salesAttempts.companyId, ctx.companyId),
             eq(salesAttempts.salesUserId, sellerId),
         ))
         : [];
 
-    const byLead = new Map<string, { attemptCount: number; priorNonClosedCount: number; nextFollowUpDate: Date | null; lastAt: number }>();
+    const byLead = new Map<string, { attemptCount: number; nextFollowUpDate: Date | null; lastAt: number; attempts: { outcome: string; outcomeAt: Date | null }[] }>();
     for (const r of attemptRows) {
-        const cur = byLead.get(r.leadId) ?? { attemptCount: 0, priorNonClosedCount: 0, nextFollowUpDate: null, lastAt: 0 };
+        const cur = byLead.get(r.leadId) ?? { attemptCount: 0, nextFollowUpDate: null, lastAt: 0, attempts: [] };
         cur.attemptCount += 1;
-        if (r.outcome === 'Non chiuso') cur.priorNonClosedCount += 1;
+        cur.attempts.push({ outcome: r.outcome, outcomeAt: r.outcomeAt });
         const ts = r.createdAt ? new Date(r.createdAt).getTime() : 0;
         if (ts >= cur.lastAt) { cur.lastAt = ts; cur.nextFollowUpDate = r.outcome === 'Non chiuso' ? r.nextFollowUpDate : null; }
         byLead.set(r.leadId, cur);
@@ -97,7 +99,7 @@ export async function getVenditoreAppointments(sellerId: string) {
             ...r,
             phone: r.negotiationStartedAt ? r.phone : null,
             attemptCount: agg?.attemptCount ?? 0,
-            priorNonClosedCount: agg?.priorNonClosedCount ?? 0,
+            priorNonClosedCount: countCycleNonClosed(agg?.attempts ?? [], r.salesCycleStartAt ?? null),
             nextFollowUpDate: agg?.nextFollowUpDate ?? null,
         };
     })
@@ -146,6 +148,11 @@ export async function getVenditoreFollowUps(sellerId: string) {
             or(
                 isNotNull(leads.inLavorazioneAt),
                 and(eq(leads.salespersonOutcome, 'Non chiuso'), isNotNull(leads.followUp1Date)),
+                // Ciclo riaperto senza esito ancora registrato: salespersonOutcome è
+                // stato azzerato da reopenNegotiation ma è già stata fissata una data
+                // di follow-up. Senza questo ramo il lead non matcha nessun altro caso
+                // e sparisce da tutte le viste (C1).
+                and(isNull(leads.salespersonOutcome), isNotNull(leads.salesCycleStartAt), isNotNull(leads.followUp1Date)),
             ),
         ))
 
@@ -284,7 +291,13 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     // Scrittura atomica: update leads + insert salesAttempts + insert leadEvents.
     // Se l'update version-guarded non trova righe (conflitto concorrente), non
     // inseriamo lo storico: la transazione va in rollback ed emerge CONCURRENCY_ERROR.
-    const effectiveOutcomeAt = payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date();
+    let effectiveOutcomeAt = payload.outcomeAt instanceof Date && !isNaN(payload.outcomeAt.getTime()) ? payload.outcomeAt : new Date();
+    // Un esito retrodatato di un ciclo riaperto non può precedere la riapertura,
+    // altrimenti sfugge al conteggio del tetto del nuovo ciclo (countCycleNonClosed
+    // filtra su outcomeAt >= cycleStartAt).
+    if (oldLead.salesCycleStartAt && effectiveOutcomeAt < oldLead.salesCycleStartAt) {
+        effectiveOutcomeAt = oldLead.salesCycleStartAt;
+    }
     const txResult = await db.transaction(async (tx) => {
         const updated = await tx.update(leads)
             .set({
@@ -488,17 +501,18 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
 
     const txResult = await db.transaction(async (tx) => {
         // Ultimo attempt 'Non chiuso' del ciclo corrente: teniamo coerente anche la
-        // storia (nextFollowUpDate) usata da analytics e Monitor Vendite.
+        // storia (nextFollowUpDate) usata da analytics e Monitor Vendite. Scelta
+        // deterministica per attemptNumber massimo (findLastCycleNonClosed), stesso
+        // criterio del Monitor Vendite, anche con outcomeAt retrodatati o null.
         const attempts = await tx.select({
             id: salesAttempts.id,
             outcome: salesAttempts.outcome,
             outcomeAt: salesAttempts.outcomeAt,
+            attemptNumber: salesAttempts.attemptNumber,
         }).from(salesAttempts)
-            .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)))
-            .orderBy(desc(salesAttempts.outcomeAt));
+            .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)));
         const cycleStart = lead.salesCycleStartAt ?? null;
-        const lastNonClosed = attempts.find(a =>
-            a.outcome === 'Non chiuso' && (!cycleStart || (a.outcomeAt !== null && a.outcomeAt >= cycleStart)));
+        const lastNonClosed = findLastCycleNonClosed(attempts, cycleStart);
 
         const updated = await tx.update(leads)
             .set({ followUp1Date: newDate, inLavorazioneAt: null, version: lead.version + 1 })
@@ -691,6 +705,7 @@ export async function getVenditoreStorico(sellerId: string) {
     const leadIds = rows.map(r => r.id)
     const attemptRows = leadIds.length
         ? await db.select({
+            id: salesAttempts.id,
             leadId: salesAttempts.leadId,
             attemptNumber: salesAttempts.attemptNumber,
             outcome: salesAttempts.outcome,

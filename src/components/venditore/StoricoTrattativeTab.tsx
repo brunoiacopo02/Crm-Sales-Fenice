@@ -141,7 +141,7 @@ export function StoricoTrattativeTab({ sellerId, onReopened }: { sellerId: strin
                                         ) : (
                                             <div className="space-y-1.5">
                                                 {r.attempts.map((a: any) => (
-                                                    <div key={`${r.id}-${a.attemptNumber}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ash-600">
+                                                    <div key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ash-600">
                                                         <span className="font-bold text-ash-400 w-24 shrink-0">
                                                             {a.attemptNumber === 0 ? "Appuntamento" : `Follow-up ${a.attemptNumber}`}
                                                         </span>

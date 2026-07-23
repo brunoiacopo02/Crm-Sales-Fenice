@@ -39,3 +39,18 @@ export function countCycleNonClosed(
         && (!cycleStartAt || (a.outcomeAt !== null && a.outcomeAt >= cycleStartAt))
     ).length;
 }
+
+// Ultimo attempt 'Non chiuso' del ciclo corrente, scelto per attemptNumber
+// massimo (deterministico anche con outcomeAt retrodatati o null — stesso
+// criterio del Monitor Vendite).
+export function findLastCycleNonClosed<T extends { outcome: string; outcomeAt: Date | null; attemptNumber: number }>(
+    attempts: T[],
+    cycleStartAt: Date | null,
+): T | null {
+    const inCycle = attempts.filter(a =>
+        a.outcome === 'Non chiuso'
+        && (!cycleStartAt || (a.outcomeAt !== null && a.outcomeAt >= cycleStartAt))
+    );
+    if (!inCycle.length) return null;
+    return inCycle.reduce((best, a) => (a.attemptNumber > best.attemptNumber ? a : best));
+}
