@@ -182,6 +182,12 @@ export const leads = pgTable('leads', {
     notClosedReason: text('notClosedReason'),
     followUp1Date: timestamp('followUp1Date', { withTimezone: true, mode: 'date' }),
     followUp2Date: timestamp('followUp2Date', { withTimezone: true, mode: 'date' }),
+    // "In lavorazione" (spec 2026-07-23): se valorizzato il lead è parcheggiato
+    // senza data follow-up precisa ed esce dai bucket Scaduti/Oggi/Prossimi.
+    inLavorazioneAt: timestamp('inLavorazioneAt', { withTimezone: true, mode: 'date' }),
+    // Riapertura trattativa dallo Storico: inizio del ciclo corrente. Il tetto
+    // dei 3 follow-up conta solo gli attempt con outcomeAt >= questa data.
+    salesCycleStartAt: timestamp('salesCycleStartAt', { withTimezone: true, mode: 'date' }),
 
     // Optimistic Concurrency
     version: integer('version').default(1).notNull(),
