@@ -237,7 +237,6 @@ export function ContactDrawer({
             case 'contact_info_edited': return 'Dati Contatto Modificati'
             case 'followup_rescheduled': return 'Follow-up spostato'
             case 'lead_parked': return 'Messo in lavorazione'
-            case 'negotiation_reopened': return 'Trattativa riaperta'
             default: return 'Evento Sconosciuto'
         }
     }

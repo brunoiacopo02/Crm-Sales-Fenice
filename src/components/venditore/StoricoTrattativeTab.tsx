@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getVenditoreStorico, reopenNegotiation } from "@/app/actions/venditoreActions"
+import { getVenditoreStorico, saveVenditoreOutcome } from "@/app/actions/venditoreActions"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
-import { Search, RotateCcw, ChevronDown, ChevronUp } from "lucide-react"
+import { Search, BadgeCheck, ChevronDown, ChevronUp } from "lucide-react"
+import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
 
 const OUTCOME_FILTERS = ["Tutti", "Chiuso", "Non chiuso", "Sparito"] as const
 type OutcomeFilter = (typeof OUTCOME_FILTERS)[number]
@@ -20,13 +21,17 @@ const outcomeBadgeClass = (o: string) =>
             ? "bg-ash-100 text-ash-600 border-ash-200"
             : "bg-amber-100 text-amber-700 border-amber-200"
 
-export function StoricoTrattativeTab({ sellerId, onReopened }: { sellerId: string; onReopened: () => void }) {
+export function StoricoTrattativeTab({ sellerId, onChanged }: { sellerId: string; onChanged: () => void }) {
     const [rows, setRows] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [filter, setFilter] = useState<OutcomeFilter>("Tutti")
     const [search, setSearch] = useState("")
     const [expandedId, setExpandedId] = useState<string | null>(null)
-    const [reopeningId, setReopeningId] = useState<string | null>(null)
+    const [closingId, setClosingId] = useState<string | null>(null)
+    const [isClosing, setIsClosing] = useState(false)
+    const [closeProduct, setCloseProduct] = useState("")
+    const [closeAmount, setCloseAmount] = useState("")
+    const [closeDate, setCloseDate] = useState(() => toRomeDatetimeLocal(new Date()))
 
     const load = () => {
         setIsLoading(true)
@@ -47,17 +52,31 @@ export function StoricoTrattativeTab({ sellerId, onReopened }: { sellerId: strin
     const countFor = (f: OutcomeFilter) =>
         f === "Tutti" ? rows.length : rows.filter(r => effectiveOutcome(r.salespersonOutcome) === f).length
 
-    const handleReopen = async (r: any) => {
-        if (!confirm(`Riaprire la trattativa con ${r.name}? Il ciclo follow-up riparte da zero e il lead torna in "In lavorazione".`)) return
-        setReopeningId(r.id)
+    const handleStartClose = (r: any) => {
+        setExpandedId(r.id)
+        setClosingId(r.id)
+        setCloseProduct("")
+        setCloseAmount("")
+        setCloseDate(toRomeDatetimeLocal(new Date()))
+    }
+
+    const handleConfirmClose = async (r: any) => {
+        const parsed = parseRomeDatetimeLocal(closeDate)
+        if (!parsed) { alert("Data non valida"); return }
+        setIsClosing(true)
         try {
-            const res = await reopenNegotiation(r.id)
-            if (!res.success) { alert(res.error || "Errore durante la riapertura"); return }
-            load()
-            onReopened()
-        } finally {
-            setReopeningId(null)
-        }
+            const res = await saveVenditoreOutcome(r.id, {
+                outcome: 'Chiuso',
+                closeProduct,
+                closeAmountEur: Number(closeAmount),
+                outcomeAt: parsed,
+            }, r.version)
+            if (!res.success) {
+                alert(res.error === 'CONCURRENCY_ERROR' ? 'Il lead è stato modificato da un altro utente: ricarica la pagina e riprova.' : (res.error || 'Errore durante la chiusura'))
+                return
+            }
+            setClosingId(null); load(); onChanged()
+        } finally { setIsClosing(false) }
     }
 
     return (
@@ -68,6 +87,7 @@ export function StoricoTrattativeTab({ sellerId, onReopened }: { sellerId: strin
                     {OUTCOME_FILTERS.map(f => (
                         <button
                             key={f}
+                            type="button"
                             onClick={() => setFilter(f)}
                             className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filter === f
                                 ? "bg-brand-orange-600 text-white border-brand-orange-600"
@@ -99,6 +119,7 @@ export function StoricoTrattativeTab({ sellerId, onReopened }: { sellerId: strin
                     {filtered.map(r => {
                         const outcome = effectiveOutcome(r.salespersonOutcome)
                         const expanded = expandedId === r.id
+                        const isClosingThis = closingId === r.id
                         return (
                             <div key={r.id} className="bg-white border border-ash-200/60 rounded-lg overflow-hidden">
                                 <div
@@ -121,12 +142,13 @@ export function StoricoTrattativeTab({ sellerId, onReopened }: { sellerId: strin
                                         {outcome !== "Chiuso" && (
                                             <div onClick={e => e.stopPropagation()}>
                                                 <button
-                                                    onClick={() => handleReopen(r)}
-                                                    disabled={reopeningId === r.id}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-brand-orange/40 hover:text-brand-orange disabled:opacity-50 transition-colors"
+                                                    type="button"
+                                                    onClick={() => handleStartClose(r)}
+                                                    disabled={isClosingThis && isClosing}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-50 transition-colors"
                                                 >
-                                                    <RotateCcw className="h-3.5 w-3.5" />
-                                                    {reopeningId === r.id ? "Riapertura…" : "Riapri trattativa"}
+                                                    <BadgeCheck className="h-3.5 w-3.5" />
+                                                    Registra chiusura
                                                 </button>
                                             </div>
                                         )}
@@ -135,6 +157,57 @@ export function StoricoTrattativeTab({ sellerId, onReopened }: { sellerId: strin
                                 </div>
                                 {expanded && (
                                     <div className="border-t border-ash-100 bg-ash-50/40 p-4">
+                                        {isClosingThis && (
+                                            <div onClick={e => e.stopPropagation()} className="mb-4 p-4 bg-white border border-emerald-200 rounded-lg space-y-3">
+                                                <p className="text-xs text-ash-500">
+                                                    L&apos;esito verrà aggiornato subito a Chiuso. Non è possibile lasciare il lead senza esito o segnarlo Sparito.
+                                                </p>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                    <select
+                                                        value={closeProduct}
+                                                        onChange={e => setCloseProduct(e.target.value)}
+                                                        className="px-3 py-2 border border-ash-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400"
+                                                    >
+                                                        <option value="">Prodotto…</option>
+                                                        <option value="advance">Advance</option>
+                                                        <option value="gold">Gold</option>
+                                                        <option value="exclusive">Exclusive</option>
+                                                    </select>
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        placeholder="Importo €"
+                                                        value={closeAmount}
+                                                        onChange={e => setCloseAmount(e.target.value)}
+                                                        className="px-3 py-2 border border-ash-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400"
+                                                    />
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={closeDate}
+                                                        onChange={e => setCloseDate(e.target.value)}
+                                                        className="px-3 py-2 border border-ash-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleConfirmClose(r)}
+                                                        disabled={!closeProduct || !(Number(closeAmount) > 0) || isClosing}
+                                                        className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {isClosing ? "Salvataggio…" : "Conferma chiusura"}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setClosingId(null)}
+                                                        disabled={isClosing}
+                                                        className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-600 hover:border-ash-300 disabled:opacity-50 transition-colors"
+                                                    >
+                                                        Annulla
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                         <h4 className="text-xs font-bold text-ash-500 uppercase tracking-widest mb-2">Storia dei tentativi</h4>
                                         {r.attempts.length === 0 ? (
                                             <div className="text-xs text-ash-400">Nessun tentativo registrato.</div>

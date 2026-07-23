@@ -600,64 +600,6 @@ export async function parkLead(leadId: string): Promise<{ success: boolean; erro
     return { success: true };
 }
 
-// Riapre una trattativa non-Chiusa dallo Storico: nuovo ciclo, tetto 3 pieno.
-// La storia salesAttempts resta intatta; il lead torna in "In lavorazione".
-// Il check-in trattativa NON va rifatto (negotiationStartedAt resta).
-export async function reopenNegotiation(leadId: string): Promise<{ success: boolean; error?: string }> {
-    const auth = await requireOwnLead(leadId);
-    if (!auth.ok) return { success: false, error: auth.error };
-    const { lead, ctx, userId } = auth;
-
-    if (!lead.salespersonOutcome) return { success: false, error: 'La trattativa è già aperta.' };
-    if (lead.salespersonOutcome === 'Chiuso') {
-        return { success: false, error: 'Un lead Chiuso non è riapribile.' };
-    }
-
-    const now = new Date();
-    const txResult = await db.transaction(async (tx) => {
-        const updated = await tx.update(leads)
-            .set({
-                salesCycleStartAt: now,
-                inLavorazioneAt: now,
-                salespersonOutcome: null,
-                salespersonOutcomeNotes: null,
-                notClosedReason: null,
-                followUp1Date: null,
-                followUp2Date: null,
-                version: lead.version + 1,
-            })
-            .where(and(
-                eq(leads.companyId, ctx.companyId),
-                eq(leads.id, leadId),
-                eq(leads.version, lead.version),
-            ))
-            .returning({ id: leads.id });
-
-        if (updated.length === 0) {
-            return { success: false as const, error: 'Il lead è stato modificato da un altro utente: ricarica la pagina e riprova.' as const };
-        }
-
-        await tx.insert(leadEvents).values({
-            id: crypto.randomUUID(),
-            leadId,
-            eventType: 'negotiation_reopened',
-            userId,
-            timestamp: now,
-            metadata: { previousOutcome: lead.salespersonOutcome, previousNotClosedReason: lead.notClosedReason },
-            companyId: ctx.companyId,
-        });
-
-        return { success: true as const };
-    });
-
-    if (!txResult.success) {
-        return { success: false, error: txResult.error };
-    }
-
-    revalidatePath('/venditore');
-    return { success: true };
-}
-
 // Storico trattative: lead del venditore con esito finale, usciti dalle viste
 // operative (niente follow-up pendente, non in lavorazione). Include la storia
 // completa dei tentativi per il dettaglio espandibile.

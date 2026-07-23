@@ -674,7 +674,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                         </div>
                     </div>
                 ) : view === 'STORICO' ? (
-                    <StoricoTrattativeTab sellerId={sellerId} onReopened={() => { fetchFollowUps(); fetchAppointments() }} />
+                    <StoricoTrattativeTab sellerId={sellerId} onChanged={() => { fetchFollowUps(); fetchAppointments() }} />
                 ) : (
                     <div className="p-2 sm:p-6 bg-gradient-to-b from-ash-50/50 to-white">
                         <KpiVenditoriClient currentUserRole="VENDITORE" currentUserId={sellerId} />
