@@ -97,6 +97,14 @@ salesCycleStartAt timestamptz NULL  -- valorizzato alla riapertura: inizio del c
 - Realtime: nessun canale nuovo; si riusano i refresh esistenti della dashboard venditore.
 - 'Perso' non torna: gli esiti restano Chiuso · Non chiuso · Sparito.
 
+## Addendum — Decisione PO 2026-07-23 (post-review): niente riapertura
+
+La "riapertura trattativa" descritta sopra è stata **eliminata prima del deploy**: azzerare `salespersonOutcome` toglieva il lead dai totali esitati di /kpi-venditori (closing rate gonfiato). Regole finali:
+
+- Dallo Storico, un lead con esito ≠ Chiuso può SOLO essere **aggiornato subito a "Chiuso"** (bottone "Registra chiusura": prodotto + importo + data → `saveVenditoreOutcome` con OCC). Mai stato senza esito, mai cambio a Sparito.
+- I lead "In lavorazione" mantengono l'esito `Non chiuso` (il parcheggio non tocca l'esito) → contano come non chiusi nei KPI.
+- `reopenNegotiation` rimossa; `salesCycleStartAt` e la logica ciclo-aware (guard, clamp, ramo query difensivo) restano nel codice ma inerti: nulla valorizza più la colonna.
+
 ## Testing
 
 - Unit: guard con `salesCycleStartAt` (ciclo nuovo → tetto ripartito; null → identico a oggi) in `guard.test.ts`.
