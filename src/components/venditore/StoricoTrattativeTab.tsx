@@ -123,7 +123,7 @@ export function StoricoTrattativeTab({ sellerId, onChanged }: { sellerId: string
                         return (
                             <div key={r.id} className="bg-white border border-ash-200/60 rounded-lg overflow-hidden">
                                 <div
-                                    onClick={() => setExpandedId(expanded ? null : r.id)}
+                                    onClick={() => { setExpandedId(expanded ? null : r.id); if (expanded) setClosingId(null) }}
                                     className="p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-ash-50/50 transition-colors"
                                 >
                                     <div className="min-w-0">
