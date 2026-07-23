@@ -486,23 +486,33 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
         return { success: false, error: 'Nessun follow-up pendente da spostare per questo lead.' };
     }
 
-    // Ultimo attempt 'Non chiuso' del ciclo corrente: teniamo coerente anche la
-    // storia (nextFollowUpDate) usata da analytics e Monitor Vendite.
-    const attempts = await db.select({
-        id: salesAttempts.id,
-        outcome: salesAttempts.outcome,
-        outcomeAt: salesAttempts.outcomeAt,
-    }).from(salesAttempts)
-        .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)))
-        .orderBy(desc(salesAttempts.outcomeAt));
-    const cycleStart = lead.salesCycleStartAt ?? null;
-    const lastNonClosed = attempts.find(a =>
-        a.outcome === 'Non chiuso' && (!cycleStart || (a.outcomeAt !== null && a.outcomeAt >= cycleStart)));
+    const txResult = await db.transaction(async (tx) => {
+        // Ultimo attempt 'Non chiuso' del ciclo corrente: teniamo coerente anche la
+        // storia (nextFollowUpDate) usata da analytics e Monitor Vendite.
+        const attempts = await tx.select({
+            id: salesAttempts.id,
+            outcome: salesAttempts.outcome,
+            outcomeAt: salesAttempts.outcomeAt,
+        }).from(salesAttempts)
+            .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)))
+            .orderBy(desc(salesAttempts.outcomeAt));
+        const cycleStart = lead.salesCycleStartAt ?? null;
+        const lastNonClosed = attempts.find(a =>
+            a.outcome === 'Non chiuso' && (!cycleStart || (a.outcomeAt !== null && a.outcomeAt >= cycleStart)));
 
-    await db.transaction(async (tx) => {
-        await tx.update(leads)
-            .set({ followUp1Date: newDate, inLavorazioneAt: null })
-            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+        const updated = await tx.update(leads)
+            .set({ followUp1Date: newDate, inLavorazioneAt: null, version: lead.version + 1 })
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.id, leadId),
+                eq(leads.version, lead.version),
+            ))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false as const, error: 'Il lead è stato modificato da un altro utente: ricarica la pagina e riprova.' as const };
+        }
+
         if (lastNonClosed) {
             await tx.update(salesAttempts)
                 .set({ nextFollowUpDate: newDate })
@@ -517,7 +527,13 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
             metadata: { oldDate: lead.followUp1Date, newDate },
             companyId: ctx.companyId,
         });
+
+        return { success: true as const };
     });
+
+    if (!txResult.success) {
+        return { success: false, error: txResult.error };
+    }
 
     revalidatePath('/venditore');
     return { success: true };
@@ -535,10 +551,20 @@ export async function parkLead(leadId: string): Promise<{ success: boolean; erro
         return { success: false, error: 'Solo un lead con follow-up pendente può andare in lavorazione.' };
     }
 
-    await db.transaction(async (tx) => {
-        await tx.update(leads)
-            .set({ inLavorazioneAt: new Date() })
-            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+    const txResult = await db.transaction(async (tx) => {
+        const updated = await tx.update(leads)
+            .set({ inLavorazioneAt: new Date(), version: lead.version + 1 })
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.id, leadId),
+                eq(leads.version, lead.version),
+            ))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false as const, error: 'Il lead è stato modificato da un altro utente: ricarica la pagina e riprova.' as const };
+        }
+
         await tx.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
@@ -548,7 +574,13 @@ export async function parkLead(leadId: string): Promise<{ success: boolean; erro
             metadata: { previousFollowUpDate: lead.followUp1Date },
             companyId: ctx.companyId,
         });
+
+        return { success: true as const };
     });
+
+    if (!txResult.success) {
+        return { success: false, error: txResult.error };
+    }
 
     revalidatePath('/venditore');
     return { success: true };
@@ -568,8 +600,8 @@ export async function reopenNegotiation(leadId: string): Promise<{ success: bool
     }
 
     const now = new Date();
-    await db.transaction(async (tx) => {
-        await tx.update(leads)
+    const txResult = await db.transaction(async (tx) => {
+        const updated = await tx.update(leads)
             .set({
                 salesCycleStartAt: now,
                 inLavorazioneAt: now,
@@ -580,7 +612,17 @@ export async function reopenNegotiation(leadId: string): Promise<{ success: bool
                 followUp2Date: null,
                 version: lead.version + 1,
             })
-            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)));
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.id, leadId),
+                eq(leads.version, lead.version),
+            ))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false as const, error: 'Il lead è stato modificato da un altro utente: ricarica la pagina e riprova.' as const };
+        }
+
         await tx.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
@@ -590,7 +632,13 @@ export async function reopenNegotiation(leadId: string): Promise<{ success: bool
             metadata: { previousOutcome: lead.salespersonOutcome, previousNotClosedReason: lead.notClosedReason },
             companyId: ctx.companyId,
         });
+
+        return { success: true as const };
     });
+
+    if (!txResult.success) {
+        return { success: false, error: txResult.error };
+    }
 
     revalidatePath('/venditore');
     return { success: true };
