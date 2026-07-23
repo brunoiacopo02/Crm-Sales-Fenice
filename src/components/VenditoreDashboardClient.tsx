@@ -14,6 +14,7 @@ import { LeadBriefingCard } from "@/components/venditore/LeadBriefingCard"
 import { VenditorePerformanceView } from "@/components/venditore-performance/VenditorePerformanceView"
 import { WeeklyFocusBanner } from "@/components/venditore-performance/WeeklyFocusBanner"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
+import { StoricoTrattativeTab } from "@/components/venditore/StoricoTrattativeTab"
 
 const VenditoreDrawer = dynamic(
   () => import("@/components/VenditoreDrawer").then(mod => mod.VenditoreDrawer),
@@ -24,7 +25,7 @@ import { getGoogleAuthUrl, checkGoogleCalendarConnection, disconnectGoogleCalend
 import { onBusEvent } from "@/lib/realtimeBus"
 
 export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
-    const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA' | 'PERFORMANCE'>('LISTA')
+    const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA' | 'PERFORMANCE' | 'STORICO'>('LISTA')
     const [appointments, setAppointments] = useState<any[]>([])
     const [followUps, setFollowUps] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -248,6 +249,13 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                         {overdueCount > 0 && (
                             <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold">{overdueCount}</span>
                         )}
+                    </button>
+                    <button
+                        onClick={() => setView('STORICO')}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${view === 'STORICO' ? 'bg-white shadow-soft text-brand-charcoal' : 'text-ash-500 hover:text-ash-700'}`}
+                    >
+                        <History className="h-4 w-4" />
+                        Storico
                     </button>
                     <button
                         onClick={() => setView('AGENDA')}
@@ -665,6 +673,8 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                             {perfData ? <VenditorePerformanceView data={perfData} /> : <div className="text-center text-ash-400 py-12">Caricamento…</div>}
                         </div>
                     </div>
+                ) : view === 'STORICO' ? (
+                    <StoricoTrattativeTab sellerId={sellerId} onReopened={() => { fetchFollowUps(); fetchAppointments() }} />
                 ) : (
                     <div className="p-2 sm:p-6 bg-gradient-to-b from-ash-50/50 to-white">
                         <KpiVenditoriClient currentUserRole="VENDITORE" currentUserId={sellerId} />
