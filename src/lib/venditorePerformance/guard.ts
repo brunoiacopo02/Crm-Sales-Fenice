@@ -25,3 +25,17 @@ export function validateOutcomeTransition(input: {
     }
     return { ok: true };
 }
+
+// Conta i 'Non chiuso' del CICLO CORRENTE: dopo una riapertura dallo Storico
+// (leads.salesCycleStartAt valorizzato) il tetto MAX_FOLLOW_UPS riparte,
+// contando solo gli attempt con outcomeAt >= cycleStartAt. cycleStartAt null
+// = nessuna riapertura = comportamento storico (conta tutto).
+export function countCycleNonClosed(
+    attempts: Array<{ outcome: string; outcomeAt: Date | null }>,
+    cycleStartAt: Date | null,
+): number {
+    return attempts.filter(a =>
+        a.outcome === 'Non chiuso'
+        && (!cycleStartAt || (a.outcomeAt !== null && a.outcomeAt >= cycleStartAt))
+    ).length;
+}
