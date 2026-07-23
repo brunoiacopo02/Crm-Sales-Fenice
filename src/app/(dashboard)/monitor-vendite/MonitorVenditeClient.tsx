@@ -168,6 +168,34 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                 </section>
             )}
 
+            {/* Lead in lavorazione (parcheggiati senza data follow-up) */}
+            {data.inLavorazione.length > 0 && (
+                <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 shadow-sm">
+                    <h2 className="text-sm font-bold text-blue-900 mb-3">
+                        Lead in lavorazione (senza data follow-up)
+                        <span className="ml-2 rounded-full bg-blue-200 text-blue-800 px-2 py-0.5 text-[11px] font-bold">
+                            {data.inLavorazione.reduce((s, v) => s + v.count, 0)}
+                        </span>
+                    </h2>
+                    <div className="flex flex-wrap gap-2">
+                        {data.inLavorazione.map(v => (
+                            <div
+                                key={v.venditoreId}
+                                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${v.maxDays > 14
+                                    ? 'border-rose-200 bg-rose-50 text-rose-800'
+                                    : v.maxDays > 7
+                                        ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                        : 'border-ash-200 bg-white text-ash-700'}`}
+                            >
+                                <span className="font-bold">{v.venditoreName}</span>
+                                <span>{v.count} lead</span>
+                                <span className="text-[10px] opacity-70">max {v.maxDays} gg</span>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
             {/* Overdue follow-ups — alert */}
             {data.overdueFollowUps.length > 0 && (
                 <section className="rounded-2xl border border-rose-200 bg-rose-50/50 shadow-sm">

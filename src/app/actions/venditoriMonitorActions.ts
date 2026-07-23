@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { leads, users, salesAttempts } from "@/db/schema"
-import { and, eq, isNotNull, gte, lte, or, asc, inArray, sql } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, gte, lte, or, asc, inArray, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -53,11 +53,19 @@ export interface FollowUpRow {
     salespersonOutcomeNotes: string | null
 }
 
+export interface InLavorazioneSummary {
+    venditoreId: string
+    venditoreName: string
+    count: number
+    maxDays: number
+}
+
 export interface VenditoriMonitorData {
     venditori: VenditoreLite[]
     appointments: AppointmentRow[]
     upcomingFollowUps: FollowUpRow[]
     overdueFollowUps: FollowUpRow[]
+    inLavorazione: InLavorazioneSummary[]
 }
 
 export async function listVenditori(): Promise<VenditoreLite[]> {
@@ -98,7 +106,7 @@ export async function getVenditoriMonitor(filters: {
         : venditori.map(v => v.id)
 
     if (targetIds.length === 0) {
-        return { venditori, appointments: [], upcomingFollowUps: [], overdueFollowUps: [] }
+        return { venditori, appointments: [], upcomingFollowUps: [], overdueFollowUps: [], inLavorazione: [] }
     }
 
     const nameOf = new Map(venditori.map(v => [v.id, v.name]))
@@ -159,6 +167,7 @@ export async function getVenditoriMonitor(filters: {
           eq(leads.companyId, ctx.companyId),
           inArray(leads.salespersonUserId, targetIds),
           eq(leads.salespersonOutcome, 'Non chiuso'),
+          isNull(leads.inLavorazioneAt),
       ))
 
     // Tengo, per ogni lead, solo il tentativo con attemptNumber massimo
@@ -199,5 +208,33 @@ export async function getVenditoriMonitor(filters: {
     upcoming.sort((a, b) => a.followUpDate.getTime() - b.followUpDate.getTime())
     overdue.sort((a, b) => a.followUpDate.getTime() - b.followUpDate.getTime())
 
-    return { venditori, appointments, upcomingFollowUps: upcoming, overdueFollowUps: overdue }
+    // Lead parcheggiati "In lavorazione" (senza data follow-up) per venditore.
+    const parkedRows = await db.select({
+        salespersonUserId: leads.salespersonUserId,
+        inLavorazioneAt: leads.inLavorazioneAt,
+    }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        inArray(leads.salespersonUserId, targetIds),
+        isNotNull(leads.inLavorazioneAt),
+    ))
+
+    const parkedByVenditore = new Map<string, { count: number; maxDays: number }>()
+    for (const r of parkedRows) {
+        if (!r.salespersonUserId || !r.inLavorazioneAt) continue
+        const days = Math.floor((now.getTime() - r.inLavorazioneAt.getTime()) / 86_400_000)
+        const cur = parkedByVenditore.get(r.salespersonUserId) ?? { count: 0, maxDays: 0 }
+        cur.count += 1
+        cur.maxDays = Math.max(cur.maxDays, days)
+        parkedByVenditore.set(r.salespersonUserId, cur)
+    }
+    const inLavorazione: InLavorazioneSummary[] = [...parkedByVenditore.entries()]
+        .map(([venditoreId, v]) => ({
+            venditoreId,
+            venditoreName: nameOf.get(venditoreId) || '—',
+            count: v.count,
+            maxDays: v.maxDays,
+        }))
+        .sort((a, b) => b.maxDays - a.maxDays)
+
+    return { venditori, appointments, upcomingFollowUps: upcoming, overdueFollowUps: overdue, inLavorazione }
 }
