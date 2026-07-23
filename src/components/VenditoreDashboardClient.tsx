@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
-import { getVenditoreAppointments, getVenditoreFollowUps, saveVenditoreOutcome, startNegotiation, getLeadBriefing } from "@/app/actions/venditoreActions"
+import { getVenditoreAppointments, getVenditoreFollowUps, saveVenditoreOutcome, startNegotiation, getLeadBriefing, rescheduleFollowUp, parkLead } from "@/app/actions/venditoreActions"
 import { getVenditorePerformance } from "@/app/actions/venditorePerformanceActions"
-import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3 } from "lucide-react"
+import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History } from "lucide-react"
+import { toRomeDatetimeLocal, parseRomeDatetimeLocal } from "@/lib/dateUtils"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
 import dynamic from "next/dynamic"
@@ -41,6 +42,10 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     // true quando il lead è stato aperto dalla tab Follow-up: il drawer parte
     // in modalità "Esito Follow-up" (form pulito + recap tentativo precedente).
     const [drawerFollowUpMode, setDrawerFollowUpMode] = useState(false)
+    // Sposta/parcheggia follow-up (spec 2026-07-23)
+    const [reschedulingId, setReschedulingId] = useState<string | null>(null)
+    const [rescheduleValue, setRescheduleValue] = useState("")
+    const [busyLeadId, setBusyLeadId] = useState<string | null>(null)
     const [activeBriefing, setActiveBriefing] = useState<LeadBriefing | null | undefined>(undefined)
     const [isPending, startTransitionNeg] = useTransition()
     const [pendingLeadId, setPendingLeadId] = useState<string | null>(null)
@@ -85,6 +90,38 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         setSelectedLead(null)
         setActiveBriefing(undefined)
         setDrawerFollowUpMode(false)
+    }
+
+    const openReschedule = (f: any) => {
+        setReschedulingId(f.id)
+        setRescheduleValue(f.nextFollowUpDate ? toRomeDatetimeLocal(new Date(f.nextFollowUpDate)) : toRomeDatetimeLocal(new Date()))
+    }
+
+    const confirmReschedule = async (leadId: string) => {
+        if (!rescheduleValue) return
+        const parsedDate = parseRomeDatetimeLocal(rescheduleValue)
+        if (!parsedDate) { alert("Data follow-up non valida"); return }
+        setBusyLeadId(leadId)
+        try {
+            const res = await rescheduleFollowUp(leadId, parsedDate)
+            if (!res.success) { alert(res.error || "Errore durante lo spostamento del follow-up"); return }
+            setReschedulingId(null)
+            fetchFollowUps()
+            fetchAppointments()
+        } finally {
+            setBusyLeadId(null)
+        }
+    }
+
+    const handlePark = async (leadId: string) => {
+        setBusyLeadId(leadId)
+        try {
+            const res = await parkLead(leadId)
+            if (!res.success) { alert(res.error || "Errore durante il parcheggio del lead"); return }
+            fetchFollowUps()
+        } finally {
+            setBusyLeadId(null)
+        }
     }
 
     const fetchAppointments = async () => {
@@ -415,15 +452,58 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                                             {f.funnel || 'Sconosciuto'} · Follow-up: {format(new Date(f.nextFollowUpDate), "dd MMM yyyy - HH:mm", { locale: it })}
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-3 shrink-0">
-                                                        <div className="text-xs text-ash-400">Tentativi: {f.attemptCount}</div>
-                                                        <button
-                                                            onClick={e => { e.stopPropagation(); openLead(f, true) }}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-orange-600 text-white hover:bg-brand-orange-700 transition-colors"
-                                                        >
-                                                            <Phone className="h-3.5 w-3.5" />
-                                                            Registra esito
-                                                        </button>
+                                                    <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                                                        <div className="text-xs text-ash-400 mr-1">Tentativi: {f.attemptCount}</div>
+                                                        {reschedulingId === f.id ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <input
+                                                                    type="datetime-local"
+                                                                    value={rescheduleValue}
+                                                                    onChange={e => setRescheduleValue(e.target.value)}
+                                                                    className="bg-ash-50 border border-ash-200 rounded-lg text-xs p-1.5 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                                                                />
+                                                                <button
+                                                                    onClick={() => confirmReschedule(f.id)}
+                                                                    disabled={busyLeadId === f.id}
+                                                                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                                                >
+                                                                    Conferma
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setReschedulingId(null)}
+                                                                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-ash-100 text-ash-600 hover:bg-ash-200 transition-colors"
+                                                                >
+                                                                    Annulla
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => openReschedule(f)}
+                                                                    title="Il lead ha spostato? Cambia solo data/ora: non consuma un follow-up"
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-brand-orange/40 hover:text-brand-orange transition-colors"
+                                                                >
+                                                                    <CalendarClock className="h-3.5 w-3.5" />
+                                                                    Sposta
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handlePark(f.id)}
+                                                                    disabled={busyLeadId === f.id}
+                                                                    title="Nessuna data precisa? Sposta il lead in In lavorazione"
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-blue-400 hover:text-blue-600 disabled:opacity-50 transition-colors"
+                                                                >
+                                                                    <PauseCircle className="h-3.5 w-3.5" />
+                                                                    In lavorazione
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => openLead(f, true)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-orange-600 text-white hover:bg-brand-orange-700 transition-colors"
+                                                                >
+                                                                    <Phone className="h-3.5 w-3.5" />
+                                                                    Registra esito
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -431,6 +511,87 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                     </div>
                                 )
                             })}
+                            {(() => {
+                                const parked = followUps.filter(f => f.bucket === 'parked')
+                                if (!parked.length) return null
+                                return (
+                                    <div>
+                                        <h3 className="text-sm font-bold uppercase tracking-wider mb-2 text-blue-600">In lavorazione ({parked.length})</h3>
+                                        <p className="text-xs text-ash-400 mb-2">Lead senza data/ora precisa di follow-up: fissa una data appena il lead te la dà.</p>
+                                        <div className="space-y-2">
+                                            {parked.map((f, idx) => {
+                                                const days = f.parkedDays ?? 0
+                                                const ageClass = days > 14
+                                                    ? 'bg-red-100 text-red-700 border-red-200'
+                                                    : days > 7
+                                                        ? 'bg-amber-100 text-amber-700 border-amber-200'
+                                                        : 'bg-ash-100 text-ash-600 border-ash-200'
+                                                return (
+                                                    <div
+                                                        key={f.id}
+                                                        onClick={() => openLead(f, true)}
+                                                        className="w-full text-left bg-white border border-ash-200/60 rounded-lg p-4 hover:border-blue-400/40 hover:shadow-card transition-all cursor-pointer flex items-center justify-between gap-4 animate-fade-in"
+                                                        style={{ animationDelay: `${Math.min(idx * 30, 300)}ms`, animationFillMode: 'backwards' }}
+                                                    >
+                                                        <div>
+                                                            <div className="font-semibold text-ash-800">{f.name}</div>
+                                                            <div className="text-xs text-ash-500 mt-1 flex items-center gap-2">
+                                                                <span>{f.funnel || 'Sconosciuto'}</span>
+                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${ageClass}`}>
+                                                                    In lavorazione da {days} {days === 1 ? 'giorno' : 'giorni'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                                                            <div className="text-xs text-ash-400 mr-1">Tentativi: {f.attemptCount}</div>
+                                                            {reschedulingId === f.id ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="datetime-local"
+                                                                        value={rescheduleValue}
+                                                                        onChange={e => setRescheduleValue(e.target.value)}
+                                                                        className="bg-ash-50 border border-ash-200 rounded-lg text-xs p-1.5 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => confirmReschedule(f.id)}
+                                                                        disabled={busyLeadId === f.id}
+                                                                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                                                    >
+                                                                        Conferma
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setReschedulingId(null)}
+                                                                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-ash-100 text-ash-600 hover:bg-ash-200 transition-colors"
+                                                                    >
+                                                                        Annulla
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <>
+                                                                    <button
+                                                                        onClick={() => openReschedule(f)}
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-brand-orange/40 hover:text-brand-orange transition-colors"
+                                                                    >
+                                                                        <CalendarClock className="h-3.5 w-3.5" />
+                                                                        Fissa follow-up
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => openLead(f, true)}
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-orange-600 text-white hover:bg-brand-orange-700 transition-colors"
+                                                                    >
+                                                                        <Phone className="h-3.5 w-3.5" />
+                                                                        Registra esito
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
                             {followUps.length === 0 && (
                                 <div className="text-center text-ash-400 py-12">Nessun follow-up in sospeso 🎉</div>
                             )}
