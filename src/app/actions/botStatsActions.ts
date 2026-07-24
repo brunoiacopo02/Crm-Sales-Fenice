@@ -22,6 +22,16 @@ export interface BotFissatoreStats {
     inLavorazione: number;    // ricevuti - (fissati ∪ ridati ∪ scartati)
     // Riassegnati
     fissatiRidatiGdo: number; // ridati poi fissati da un GDO umano dopo la riassegnazione
+    fissatiRidatiMaiRisposto: number;    // split dei ripresi: motivo mai_risposto
+    fissatiRidatiChatInterrotta: number; // split dei ripresi: motivo chat_interrotta
+    // Funnel dei ridati (lavorazione GDO post-riassegnazione)
+    ridatiLavoratiGdo: number;   // ridati con almeno una chiamata umana dopo la riassegnazione
+    ridatiChiamateGdo: number;   // chiamate umane totali spese sui ridati
+    ridatiScartatiGdo: number;   // ridati scartati da un GDO umano
+    ridatiConfermati: number;    // ridati fissati da GDO poi confermati dalle Conferme
+    ridatiPresenziati: number;   // ridati fissati da GDO poi presenziati
+    ridatiChiusi: number;        // ridati fissati da GDO poi chiusi dal venditore
+    ridatiFatturatoEur: number;  // fatturato generato dai ridati chiusi
     // A valle dei fissati del bot
     confermati: number;
     presenziati: number;
@@ -122,10 +132,12 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
     }
 
     const reassignFirst = new Map<string, number>();
+    const reassignReason = new Map<string, string | null>();
     let ridatiMaiRisposto = 0, ridatiChatInterrotta = 0;
     for (const r of reassignRows) {
         if (!r.leadId || !cohort.has(r.leadId)) continue;
         reassignFirst.set(r.leadId, new Date(r.first).getTime());
+        reassignReason.set(r.leadId, r.reason);
         if (r.reason === 'mai_risposto') ridatiMaiRisposto++;
         else if (r.reason === 'chat_interrotta') ridatiChatInterrotta++;
     }
@@ -139,29 +151,65 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
         else if (r.hasScarto && !reassignFirst.has(r.leadId)) scartatiSet.add(r.leadId);
     }
 
-    // Ridati poi fissati da un GDO umano: call log APPUNTAMENTO di un altro
-    // utente successivo alla riassegnazione (il fissaggio pre-bot non conta).
+    // Funnel dei ridati: tutti i call log umani successivi alla riassegnazione
+    // (il fissaggio pre-bot non conta). Da qui: lead lavorati, chiamate spese,
+    // fissati (con split per motivo di ritorno), scartati, ed esiti a valle
+    // dei fissati (conferme, presenze, chiusure con fatturato).
     let fissatiRidatiGdo = 0;
+    let fissatiRidatiMaiRisposto = 0, fissatiRidatiChatInterrotta = 0;
+    let ridatiLavoratiGdo = 0, ridatiChiamateGdo = 0, ridatiScartatiGdo = 0;
+    let ridatiConfermati = 0, ridatiPresenziati = 0, ridatiChiusi = 0, ridatiFatturatoEur = 0;
     const ridatiIds = [...reassignFirst.keys()];
     if (ridatiIds.length > 0) {
-        const humanFixRows = await db.select({
+        const humanCallRows = await db.select({
             leadId: callLogs.leadId,
             userId: callLogs.userId,
+            outcome: callLogs.outcome,
             at: callLogs.createdAt,
         }).from(callLogs).where(and(
             eq(callLogs.companyId, ctx.companyId),
-            eq(callLogs.outcome, 'APPUNTAMENTO'),
             inArray(callLogs.leadId, ridatiIds),
         ));
+        const workedLeads = new Set<string>();
         const fixedAfterReassign = new Set<string>();
-        for (const r of humanFixRows) {
+        const discardedByGdo = new Set<string>();
+        for (const r of humanCallRows) {
             if (!r.leadId || r.userId === bot.id) continue;
             const reassignedAt = reassignFirst.get(r.leadId);
-            if (reassignedAt !== undefined && r.at && r.at.getTime() >= reassignedAt) {
-                fixedAfterReassign.add(r.leadId);
+            if (reassignedAt === undefined || !r.at || r.at.getTime() < reassignedAt) continue;
+            workedLeads.add(r.leadId);
+            ridatiChiamateGdo++;
+            if (r.outcome === 'APPUNTAMENTO') fixedAfterReassign.add(r.leadId);
+            else if (r.outcome === 'DA_SCARTARE') discardedByGdo.add(r.leadId);
+        }
+        ridatiLavoratiGdo = workedLeads.size;
+        ridatiScartatiGdo = discardedByGdo.size;
+        fissatiRidatiGdo = fixedAfterReassign.size;
+        for (const id of fixedAfterReassign) {
+            const reason = reassignReason.get(id);
+            if (reason === 'mai_risposto') fissatiRidatiMaiRisposto++;
+            else if (reason === 'chat_interrotta') fissatiRidatiChatInterrotta++;
+        }
+
+        if (fixedAfterReassign.size > 0) {
+            const ridatiFissatiLeads = await db.select({
+                confirmationsOutcome: leads.confirmationsOutcome,
+                salespersonOutcome: leads.salespersonOutcome,
+                presentedAt: leads.presentedAt,
+                closeAmountEur: leads.closeAmountEur,
+            }).from(leads).where(and(
+                eq(leads.companyId, ctx.companyId),
+                inArray(leads.id, [...fixedAfterReassign]),
+            ));
+            for (const l of ridatiFissatiLeads) {
+                if (l.confirmationsOutcome === 'confermato') ridatiConfermati++;
+                if (l.presentedAt !== null) ridatiPresenziati++;
+                if (l.salespersonOutcome?.toLowerCase() === 'chiuso') {
+                    ridatiChiusi++;
+                    ridatiFatturatoEur += l.closeAmountEur ?? 0;
+                }
             }
         }
-        fissatiRidatiGdo = fixedAfterReassign.size;
     }
 
     // Esiti a valle dei fissati del bot: conferme, presenze e chiusure.
@@ -207,6 +255,15 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
         scartati,
         inLavorazione: ricevuti - lavorati,
         fissatiRidatiGdo,
+        fissatiRidatiMaiRisposto,
+        fissatiRidatiChatInterrotta,
+        ridatiLavoratiGdo,
+        ridatiChiamateGdo,
+        ridatiScartatiGdo,
+        ridatiConfermati,
+        ridatiPresenziati,
+        ridatiChiusi,
+        ridatiFatturatoEur,
         confermati,
         presenziati,
         chiusi,

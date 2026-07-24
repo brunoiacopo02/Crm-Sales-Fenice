@@ -44,6 +44,8 @@ export default async function StatisticheFissatorePage({
     }
 
     const fmt = (iso: string) => new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const pct = (num: number, den: number) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '-';
+    const eur = (v: number) => '€ ' + Math.round(v).toLocaleString('it-IT');
 
     return (
         <div className="p-6 lg:p-8 space-y-8">
@@ -121,7 +123,7 @@ export default async function StatisticheFissatorePage({
                     <StatCard
                         label="Ridati poi fissati dai GDO"
                         value={`${stats.fissatiRidatiGdo} (${stats.percRidatiFissati})`}
-                        sub={`sui ${stats.ridati} lead restituiti al team`}
+                        sub={`${stats.fissatiRidatiMaiRisposto} da mai risposto · ${stats.fissatiRidatiChatInterrotta} da chat interrotta`}
                         accent="text-amber-500"
                     />
                 </div>
@@ -165,6 +167,57 @@ export default async function StatisticheFissatorePage({
                         <div className="flex items-center justify-between p-4">
                             <div className="text-sm text-ash-600">Chiusi</div>
                             <div className="font-bold text-emerald-600">{stats.chiusi} <span className="text-ash-400 font-normal text-sm">({stats.percChiusi})</span></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            {/* Funnel dei ridati: quanto costano e quanto rendono i lead restituiti ai GDO */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <section>
+                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <Undo2 className="w-4 h-4 text-brand-orange" /> Lavorazione GDO sui ridati ({stats.ridati})
+                    </h2>
+                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft divide-y divide-ash-100">
+                        <div className="flex items-center justify-between p-4">
+                            <div className="text-sm text-ash-600">Lavorati (almeno 1 chiamata)</div>
+                            <div className="font-bold text-brand-charcoal">{stats.ridatiLavoratiGdo} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiLavoratiGdo, stats.ridati)})</span></div>
+                        </div>
+                        <div className="flex items-center justify-between p-4">
+                            <div className="text-sm text-ash-600">Chiamate GDO spese</div>
+                            <div className="font-bold text-brand-charcoal">{stats.ridatiChiamateGdo} <span className="text-ash-400 font-normal text-sm">({stats.ridatiLavoratiGdo > 0 ? (stats.ridatiChiamateGdo / stats.ridatiLavoratiGdo).toFixed(1) : '-'} per lead)</span></div>
+                        </div>
+                        <div className="flex items-center justify-between p-4">
+                            <div className="text-sm text-ash-600">Fissati dai GDO</div>
+                            <div className="font-bold text-amber-500">{stats.fissatiRidatiGdo} <span className="text-ash-400 font-normal text-sm">({stats.percRidatiFissati})</span></div>
+                        </div>
+                        <div className="flex items-center justify-between p-4">
+                            <div className="text-sm text-ash-600">Scartati dai GDO</div>
+                            <div className="font-bold text-red-500">{stats.ridatiScartatiGdo} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiScartatiGdo, stats.ridati)})</span></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <CalendarCheck className="w-4 h-4 text-brand-orange" /> A valle dei ridati fissati ({stats.fissatiRidatiGdo})
+                    </h2>
+                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft divide-y divide-ash-100">
+                        <div className="flex items-center justify-between p-4">
+                            <div className="text-sm text-ash-600">Confermati (Conferme)</div>
+                            <div className="font-bold text-sky-600">{stats.ridatiConfermati} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiConfermati, stats.fissatiRidatiGdo)})</span></div>
+                        </div>
+                        <div className="flex items-center justify-between p-4">
+                            <div className="text-sm text-ash-600">Presenziati (Venditore)</div>
+                            <div className="font-bold text-brand-charcoal">{stats.ridatiPresenziati} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiPresenziati, stats.fissatiRidatiGdo)})</span></div>
+                        </div>
+                        <div className="flex items-center justify-between p-4">
+                            <div className="text-sm text-ash-600">Chiusi</div>
+                            <div className="font-bold text-emerald-600">{stats.ridatiChiusi} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiChiusi, stats.fissatiRidatiGdo)})</span></div>
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-ash-50/50">
+                            <div className="text-sm font-semibold text-ash-700">Fatturato dai ridati</div>
+                            <div className="font-bold text-emerald-600">{eur(stats.ridatiFatturatoEur)}</div>
                         </div>
                     </div>
                 </section>
