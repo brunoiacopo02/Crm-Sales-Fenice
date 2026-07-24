@@ -33,7 +33,7 @@ const DEFAULT_FUNNEL = 'SCONOSCIUTO';
 // Per Serenamente esisterà un endpoint separato (/serenamente) con secret e
 // AC account distinti e companyId='serenamente' hardcoded. Vedi design doc §11.
 const FENICE_COMPANY = 'fenice';
-const BOT_DAILY_CAP = 20; // max lead/giorno (Europe/Rome) per account isBot nel round-robin
+const BOT_DAILY_CAP = 50; // max lead/giorno (Europe/Rome) per account isBot nel round-robin (20→50 il 2026-07-24, decisione PO)
 
 // Liste AC da NON importare nel CRM (es. campagne di raccolta lead per
 // lanci futuri: i lead devono restare in AC finché non decidiamo di
