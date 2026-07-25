@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '@/db';
-import { leads, users, leadEvents } from '@/db/schema';
+import { leads, users, leadEvents, notifications } from '@/db/schema';
 import { verifySignature } from '@/lib/marketing-webhooks/signing';
 import { updateLeadOutcome } from '@/app/actions/pipelineActions';
 import { reassignBotLeadToHumanPool } from '@/lib/bot-fissatore/reassign';
@@ -10,7 +10,9 @@ import type { BotReport } from '@/lib/bot-fissatore/types';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
-const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO'] as const;
+// NOTA (contratto v1.2): annotazione senza transizione di stato — canale per disdette/
+// spostamenti comunicati in chat su lead già appuntati, che il bot non può declassare.
+const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA'] as const;
 type BotOutcome = typeof VALID_OUTCOMES[number];
 
 interface BotOutcomeBody {
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
     // Carica il lead + verifica che appartenga a un account bot Fenice.
     const [lead] = await db.select({
         id: leads.id,
+        name: leads.name,
         companyId: leads.companyId,
         assignedToId: leads.assignedToId,
         status: leads.status,
@@ -111,6 +114,52 @@ export async function POST(req: NextRequest) {
             metadata: report as Record<string, unknown>,
             companyId: 'fenice',
         }).catch((e) => console.error('[bot-fissatore] BOT_REPORT event err', e));
+    }
+
+    // NOTA: solo annotazione, zero scritture su leads (né stato, né appuntamento,
+    // né version). Evento in timeline + notifica alle Conferme se il lead è
+    // appuntato (disdetta/spostamento comunicati in chat → qualcuno deve saperlo
+    // PRIMA della chiamata di conferma). Su lead non appuntati niente notifica:
+    // l'evento in timeline basta e non spamma la campanella.
+    if (typedOutcome === 'NOTA') {
+        const text = (note ?? '').trim();
+        if (!text) {
+            return NextResponse.json({ error: 'bad_request', detail: 'note richiesta per esito NOTA' }, { status: 400 });
+        }
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'BOT_NOTE',
+            userId: assignee.id,
+            timestamp: new Date(),
+            metadata: { note: text },
+            companyId: 'fenice',
+        });
+
+        if (lead.status === 'APPOINTMENT') {
+            const confermeUsers = await db.select({ id: users.id }).from(users).where(and(
+                eq(users.companyId, 'fenice'),
+                eq(users.role, 'CONFERME'),
+                eq(users.isActive, true),
+            ));
+            if (confermeUsers.length > 0) {
+                const now = new Date();
+                await db.insert(notifications).values(confermeUsers.map(u => ({
+                    id: crypto.randomUUID(),
+                    recipientUserId: u.id,
+                    type: 'bot_note',
+                    title: '📋 Nota dal Fissatore',
+                    body: `${lead.name}: ${text.length > 200 ? text.slice(0, 200) + '…' : text}`,
+                    metadata: { leadId },
+                    status: 'unread',
+                    createdAt: now,
+                    companyId: 'fenice',
+                }))).catch((e) => console.error('[bot-fissatore] NOTA notify err', e));
+            }
+        }
+
+        return NextResponse.json({ ok: true, noted: true });
     }
 
     // Ritorno al pool umano: il bot non ha convertito ma non c'è obiezione ferrea

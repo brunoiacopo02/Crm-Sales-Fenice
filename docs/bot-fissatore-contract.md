@@ -1,7 +1,7 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.1 — 2026-06-23 (aggiunto esito `INTERROTTO`; `NON_RISPOSTO` ora riassegna a operatore umano).
+> **Versione:** 1.2 — 2026-07-25 (aggiunto esito `NOTA` per annotazioni senza transizione di stato — es. disdette; cap giornaliero 20 → 50).
 
 ---
 
@@ -181,14 +181,14 @@ x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
 ```ts
 interface BotOutcomeBody {
   leadId:         string;     // Obbligatorio — UUID ricevuto nel push
-  outcome:        BotOutcome; // Obbligatorio — uno dei 5 valori sotto
+  outcome:        BotOutcome; // Obbligatorio — uno dei 6 valori sotto
   date?:          string;     // Obbligatorio per APPUNTAMENTO e RICHIAMO (ISO 8601 con offset)
-  note?:          string;     // Note libere sull'interazione
+  note?:          string;     // Note libere sull'interazione (obbligatoria per NOTA)
   discardReason?: string;     // Motivo scarto (usato per DA_SCARTARE)
   report?:        BotReport;  // Report strutturato (opzionale ma raccomandato)
 }
 
-type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO';
+type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA';
 ```
 
 ### Valori `outcome`
@@ -200,12 +200,21 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 | `DA_SCARTARE` | **Obiezione ferrea reale** (es. "non ho soldi", "non mi interessa") | No | **Scarto definitivo** |
 | `NON_RISPOSTO` | Non ha **mai risposto** dopo il ciclo di solleciti | No | **Riassegnato a un operatore umano** (round-robin) |
 | `INTERROTTO` | Chat **avviata ma interrotta senza obiezione ferrea** | No | **Riassegnato a un operatore umano** (round-robin) |
+| `NOTA` | **Annotazione senza cambio di stato** (es. disdetta o richiesta di spostamento su lead già appuntato) | No | Nota in timeline + **notifica al team Conferme** se il lead è appuntato. Non tocca stato, appuntamento né assegnazione |
 
 > **Importante (cambio rispetto alla v1.0):** `NON_RISPOSTO` non scarta più il lead — lo
 > **restituisce** al CRM, che lo riassegna a un GDO umano. Il nuovo esito `INTERROTTO` ha lo
 > stesso effetto. Usare `DA_SCARTARE` **solo** quando c'è un'obiezione ferrea reale: tutto ciò
 > che non è un "no" netto (silenzio, chat che si spegne, tentennamenti) va in `NON_RISPOSTO` /
 > `INTERROTTO` così la persona viene rilavorata a voce da un operatore.
+
+> **Quando usare `NOTA` (nuovo in v1.2):** per far arrivare al team Conferme informazioni su un
+> lead **già appuntato** senza registrare un nuovo appuntamento — il caso tipico è la disdetta
+> o la richiesta di spostamento comunicata in chat. Il campo `note` è **obbligatorio** (400 se
+> vuoto). `NOTA` non modifica MAI lo stato del lead: se il lead vuole rifissare, la nuova data
+> va comunicata da una persona (o, quando concordato, con un nuovo `APPUNTAMENTO`). Risposta:
+> `{ ok: true, noted: true }`. Vale la regola generale: il lead deve essere ancora assegnato
+> all'account bot, altrimenti 403.
 
 > **Formato `date`:** ISO 8601 con offset di fuso orario **obbligatorio** (`Z` oppure `±HH:MM`).
 > L'endpoint verifica attivamente la presenza dell'offset: una data priva di fuso viene
@@ -242,7 +251,7 @@ dashboard Conferme. È fortemente raccomandato per aiutare il team Conferme e i 
 |---|---|---|
 | `200` | — (`{ ok: true }`) | Outcome registrato correttamente |
 | `400` | `invalid_json` | Body non è JSON valido (parsing fallito) |
-| `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO |
+| `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO; `note` vuota per NOTA |
 | `401` | `invalid_signature` | Firma HMAC assente o non corrispondente |
 | `403` | `forbidden` | Lead non appartiene all'azienda `fenice`, oppure non è assegnato a un account bot |
 | `404` | `lead_not_found` | `leadId` non esiste nel DB |
@@ -255,12 +264,12 @@ dashboard Conferme. È fortemente raccomandato per aiutare il team Conferme e i 
 
 ### Cap giornaliero di assegnazioni (soft cap)
 
-Il CRM applica un limite di **20 assegnazioni al giorno** all'account bot (`GDO 201`),
-calcolato sul fuso orario `Europe/Rome`.
+Il CRM applica un limite di **50 assegnazioni al giorno** all'account bot (`GDO 201`),
+calcolato sul fuso orario `Europe/Rome` (alzato da 20 a 50 il 2026-07-24).
 
 **Questo è un soft cap:** in caso di burst di assegnazioni concorrenti, il contatore
-potrebbe essere superato di 1–2 lead. Questo è accettabile nella fase di test.
-Il bot deve essere in grado di gestire volumi leggermente superiori a 20 senza errori.
+potrebbe essere superato di 1–2 lead. Il bot deve essere in grado di gestire volumi
+leggermente superiori a 50 senza errori.
 
 ### Push best-effort
 
