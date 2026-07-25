@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { saveVenditoreOutcome, rescheduleFollowUp } from "@/app/actions/venditoreActions"
 import { saveSalesSurvey, getSalesSurveyByLead } from "@/app/actions/surveyActions"
-import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle, Lock, Play, CalendarClock } from "lucide-react"
+import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle, Lock, Play, CalendarClock, Pencil } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
@@ -29,9 +29,20 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
     // "Inizia trattativa" (regola remoto-only). Riflette anche l'avvio appena fatto.
     const isStarted = !!lead?.negotiationStartedAt
     const priorNonClosedCount = lead?.priorNonClosedCount ?? 0
+    // Correzione esplicita dell'ultimo tentativo. Senza questa scelta dichiarata,
+    // ri-registrare un esito dalla card follow-up creava un tentativo in più:
+    // dallo stato del lead il caso è indistinguibile da un follow-up davvero
+    // svolto, quindi l'intenzione deve arrivare dall'utente.
+    const [correctingPrev, setCorrectingPrev] = useState(false)
+    // Il tentativo che si sta correggendo non è un "pregresso": va scalato dal
+    // tetto, altrimenti correggere il 3° follow-up nasconderebbe il campo data.
+    // Stessa esclusione che fa il server in modalità update.
+    const effectivePriorNonClosed = correctingPrev && lead?.salespersonOutcome === "Non chiuso"
+        ? Math.max(0, priorNonClosedCount - 1)
+        : priorNonClosedCount
     // Oltre il tetto si può ancora esitare "Non chiuso", ma senza pianificare
     // un ennesimo follow-up ("Perso" rimosso: era un doppione di Non chiuso).
-    const followUpCapReached = priorNonClosedCount >= MAX_FOLLOW_UPS
+    const followUpCapReached = effectivePriorNonClosed >= MAX_FOLLOW_UPS
     const OUTCOME_OPTIONS = ["Chiuso", "Non chiuso", "Sparito"]
     const [outcome, setOutcome] = useState<string>(followUpMode ? "" : lead?.salespersonOutcome || "")
     const [closeProduct, setCloseProduct] = useState(lead?.closeProduct || "advance")
@@ -123,6 +134,35 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
         }
     }
 
+    // Passa il form dalla "nuova chiamata" alla riscrittura del tentativo già
+    // registrato, ricaricandone i valori.
+    const startCorrection = () => {
+        setCorrectingPrev(true)
+        setShowReschedule(false)
+        setOutcome(lead?.salespersonOutcome || "")
+        setNotClosedReason(lead?.notClosedReason || "")
+        setNotes(lead?.salespersonOutcomeNotes || "")
+        setCloseProduct(lead?.closeProduct || "advance")
+        setCloseAmountEur(lead?.closeAmountEur?.toString() || "")
+        setCloseDate(lead?.salespersonOutcomeAt
+            ? toRomeDatetimeLocal(new Date(lead.salespersonOutcomeAt))
+            : toRomeDatetimeLocal(new Date()))
+        // Stessa cautela del prefill normale: mai riproporre una data già
+        // passata, altrimenti si ripianifica un follow-up scaduto.
+        const fu = lead?.nextFollowUpDate ? new Date(lead.nextFollowUpDate) : null
+        setNextFollowUpDate(fu && fu.getTime() > Date.now() ? toRomeDatetimeLocal(fu) : "")
+    }
+
+    const cancelCorrection = () => {
+        setCorrectingPrev(false)
+        setOutcome("")
+        setNotClosedReason("")
+        setNotes("")
+        setCloseAmountEur("")
+        setCloseDate(toRomeDatetimeLocal(new Date()))
+        setNextFollowUpDate("")
+    }
+
     const handleSave = async () => {
         if (!outcome) {
             alert("Seleziona un Esito Vendita")
@@ -169,14 +209,15 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                 outcomeAt: closeDate ? (parseRomeDatetimeLocal(closeDate) || undefined) : undefined,
                 notClosedReason: outcome === "Non chiuso" ? notClosedReason : undefined,
                 nextFollowUpDate: outcome === "Non chiuso" && !followUpCapReached && nextFollowUpDate ? parseRomeDatetimeLocal(nextFollowUpDate) : null,
-                // 'current' (correzione) SOLO quando è certo che non ci sia una
-                // nuova occasione in ballo: non siamo in followUpMode e il lead
-                // non ha un follow-up pendente. Se un follow-up è pendente il
-                // salvataggio può esserne l'esito anche partendo dalla riga
-                // appuntamento, quindi si resta sul comportamento storico ('new').
-                // Il doppio conteggio del fatturato è comunque impossibile:
-                // resolveAttemptWrite ammette una sola chiusura per ciclo.
-                occasion: (followUpMode || lead?.nextFollowUpDate) ? 'new' : 'current',
+                // 'current' (correzione) quando l'utente l'ha chiesto esplicitamente
+                // col bottone "Correggi questo esito", oppure quando è certo che non
+                // ci sia una nuova occasione in ballo: fuori da followUpMode e senza
+                // follow-up pendente. Se un follow-up è pendente il salvataggio può
+                // esserne l'esito anche partendo dalla riga appuntamento, quindi si
+                // resta sul comportamento storico ('new'). Il doppio conteggio del
+                // fatturato è comunque impossibile: resolveAttemptWrite ammette una
+                // sola chiusura per ciclo.
+                occasion: (correctingPrev || !(followUpMode || lead?.nextFollowUpDate)) ? 'current' : 'new',
             }, lead.version)
 
             if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
@@ -206,11 +247,13 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                 <div>
                     <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                         <User className="h-5 w-5 text-gray-400" />
-                        {followUpMode ? "Esito Follow-up" : "Scheda Appuntamento"}
+                        {correctingPrev ? "Correzione esito" : followUpMode ? "Esito Follow-up" : "Scheda Appuntamento"}
                     </h2>
                     {followUpMode && (
                         <div className="text-xs text-ash-500 mt-0.5 ml-7">
-                            Follow-up {Math.min(priorNonClosedCount, MAX_FOLLOW_UPS)} di {MAX_FOLLOW_UPS} — registra com&apos;è andata la chiamata
+                            {correctingPrev
+                                ? "Riscrivi l'ultimo tentativo registrato — non ne crea uno nuovo"
+                                : <>Follow-up {Math.min(priorNonClosedCount, MAX_FOLLOW_UPS)} di {MAX_FOLLOW_UPS} — registra com&apos;è andata la chiamata</>}
                         </div>
                     )}
                 </div>
@@ -330,8 +373,21 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                             )}
                         </div>
                         <div className="mt-3 pt-3 border-t border-ash-200">
-                            {!showReschedule ? (
-                                <div className="flex items-center gap-2">
+                            {correctingPrev ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="text-[11px] text-amber-700 font-semibold">
+                                        Stai correggendo questo tentativo: il salvataggio lo riscrive, non ne aggiunge uno nuovo.
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={cancelCorrection}
+                                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-ash-100 text-ash-600 hover:bg-ash-200 transition-colors"
+                                    >
+                                        Annulla correzione
+                                    </button>
+                                </div>
+                            ) : !showReschedule ? (
+                                <div className="flex flex-wrap items-center gap-2">
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -342,6 +398,14 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                                     >
                                         <CalendarClock className="h-3.5 w-3.5" />
                                         Sposta follow-up
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={startCorrection}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-brand-orange/40 hover:text-brand-orange transition-colors"
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                        Correggi questo esito
                                     </button>
                                     <div className="text-[11px] text-ash-400">Il lead ha spostato? Cambia solo l&apos;orario: non consuma un follow-up.</div>
                                 </div>
@@ -393,7 +457,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
 
                 {/* Form Esito */}
                 <div className="space-y-6">
-                    <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">{followUpMode ? "Esito della chiamata di follow-up" : "Esito Vendita"}</h3>
+                    <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">{correctingPrev ? "Correzione dell'ultimo esito" : followUpMode ? "Esito della chiamata di follow-up" : "Esito Vendita"}</h3>
 
                     {/* Select Esito */}
                     <div>
@@ -576,7 +640,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                     ) : (
                         <Save className="h-4 w-4" />
                     )}
-                    {isSaving ? "Salvataggio..." : followUpMode ? "Salva esito follow-up" : "Salva Esito"}
+                    {isSaving ? "Salvataggio..." : correctingPrev ? "Salva correzione" : followUpMode ? "Salva esito follow-up" : "Salva Esito"}
                 </button>
             </div>
             )}
