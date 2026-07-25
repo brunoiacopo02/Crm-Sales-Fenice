@@ -72,17 +72,69 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
     const to = new Date();
     const from = new Date(to.getTime() - safeDays * 24 * 60 * 60 * 1000);
 
-    const [bot] = await db.select({ id: users.id, displayName: users.displayName })
-        .from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.isBot, true)))
-        .limit(1);
+    const bot = await findBot(ctx.companyId);
     if (!bot) return null;
 
+    return computeWindowStats(ctx.companyId, bot, from, to, safeDays);
+}
+
+/** Mezzanotte Europe/Rome del 2026-07-24: go-live delle modifiche del fornitore bot
+ *  (sequenza estesa 12gg, scarto numeri mai consegnati, riaggancio chat interrotte). */
+const BOT_CUTOVER = new Date('2026-07-23T22:00:00Z');
+
+export interface BotCutoverComparison {
+    cutoverIso: string;
+    postDays: number;         // età in giorni della coorte post (per il caveat maturazione)
+    pre: BotFissatoreStats;   // coorte: 30 giorni prima del cutover
+    post: BotFissatoreStats;  // coorte: dal cutover a ora
+}
+
+/**
+ * Confronto coorti pre/post modifiche del fornitore (24/07) per il report
+ * quindicinale concordato: target ridati ≤50% e fissati ≥8% senza cali.
+ * NB: con le sequenze da 12 giorni la coorte post matura in ~14 giorni —
+ * i numeri sono indicativi finché postDays < 14 (la UI mostra il caveat).
+ */
+export async function getBotFissatoreCutoverComparison(): Promise<BotCutoverComparison | null> {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
+    const bot = await findBot(ctx.companyId);
+    if (!bot) return null;
+
+    const now = new Date();
+    if (now.getTime() <= BOT_CUTOVER.getTime()) return null;
+    const postDays = Math.max(1, Math.ceil((now.getTime() - BOT_CUTOVER.getTime()) / 86400000));
+    const preFrom = new Date(BOT_CUTOVER.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [pre, post] = await Promise.all([
+        computeWindowStats(ctx.companyId, bot, preFrom, BOT_CUTOVER, 30),
+        computeWindowStats(ctx.companyId, bot, BOT_CUTOVER, now, postDays),
+    ]);
+
+    return { cutoverIso: BOT_CUTOVER.toISOString(), postDays, pre, post };
+}
+
+async function findBot(companyId: string): Promise<{ id: string; displayName: string | null } | null> {
+    const [bot] = await db.select({ id: users.id, displayName: users.displayName })
+        .from(users)
+        .where(and(eq(users.companyId, companyId), eq(users.isBot, true)))
+        .limit(1);
+    return bot ?? null;
+}
+
+async function computeWindowStats(
+    companyId: string,
+    bot: { id: string; displayName: string | null },
+    from: Date,
+    to: Date,
+    days: number,
+): Promise<BotFissatoreStats> {
     const [pushRows, reassignRows, botCallRows] = await Promise.all([
         db.select({ leadId: leadEvents.leadId, first: sql<string>`min(${leadEvents.timestamp})` })
             .from(leadEvents)
             .where(and(
-                eq(leadEvents.companyId, ctx.companyId),
+                eq(leadEvents.companyId, companyId),
                 eq(leadEvents.eventType, 'BOT_PUSHED'),
                 sql`${leadEvents.metadata}->>'result' = 'sent'`,
             ))
@@ -94,7 +146,7 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
         })
             .from(leadEvents)
             .where(and(
-                eq(leadEvents.companyId, ctx.companyId),
+                eq(leadEvents.companyId, companyId),
                 eq(leadEvents.eventType, 'REASSIGNED_FROM_BOT'),
             ))
             .groupBy(leadEvents.leadId),
@@ -106,7 +158,7 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
         })
             .from(callLogs)
             .where(and(
-                eq(callLogs.companyId, ctx.companyId),
+                eq(callLogs.companyId, companyId),
                 eq(callLogs.userId, bot.id),
             ))
             .groupBy(callLogs.leadId),
@@ -167,7 +219,7 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
             outcome: callLogs.outcome,
             at: callLogs.createdAt,
         }).from(callLogs).where(and(
-            eq(callLogs.companyId, ctx.companyId),
+            eq(callLogs.companyId, companyId),
             inArray(callLogs.leadId, ridatiIds),
         ));
         const workedLeads = new Set<string>();
@@ -198,7 +250,7 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
                 presentedAt: leads.presentedAt,
                 closeAmountEur: leads.closeAmountEur,
             }).from(leads).where(and(
-                eq(leads.companyId, ctx.companyId),
+                eq(leads.companyId, companyId),
                 inArray(leads.id, [...fixedAfterReassign]),
             ));
             for (const l of ridatiFissatiLeads) {
@@ -220,7 +272,7 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
             salespersonOutcome: leads.salespersonOutcome,
             presentedAt: leads.presentedAt,
         }).from(leads).where(and(
-            eq(leads.companyId, ctx.companyId),
+            eq(leads.companyId, companyId),
             inArray(leads.id, [...fissatiSet]),
         ));
         for (const l of fissatiLeads) {
@@ -242,7 +294,7 @@ export async function getBotFissatoreStats(days: number): Promise<BotFissatoreSt
 
     return {
         botName: bot.displayName || 'Fissatore',
-        days: safeDays,
+        days,
         from: from.toISOString(),
         to: to.toISOString(),
         ricevuti,

@@ -1,8 +1,8 @@
-import { getBotFissatoreStats } from '@/app/actions/botStatsActions';
+import { getBotFissatoreStats, getBotFissatoreCutoverComparison } from '@/app/actions/botStatsActions';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server";
 import Link from 'next/link';
-import { Activity, ArrowRightLeft, CalendarCheck, Undo2 } from 'lucide-react';
+import { Activity, ArrowRightLeft, CalendarCheck, TrendingUp, Undo2 } from 'lucide-react';
 
 const PRESETS = [7, 14, 30, 60, 90];
 
@@ -30,7 +30,10 @@ export default async function StatisticheFissatorePage({
     }
 
     const days = Math.min(Math.max(parseInt(searchParams.days || '30', 10) || 30, 1), 365);
-    const stats = await getBotFissatoreStats(days);
+    const [stats, cutover] = await Promise.all([
+        getBotFissatoreStats(days),
+        getBotFissatoreCutoverComparison(),
+    ]);
 
     if (!stats) {
         return (
@@ -222,6 +225,59 @@ export default async function StatisticheFissatorePage({
                     </div>
                 </section>
             </div>
+
+            {/* Confronto coorti pre/post modifiche fornitore del 24/07 (report quindicinale) */}
+            {cutover && (
+                <section>
+                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-brand-orange" /> Pre/post modifiche fissatore (24/07) — target ridati ≤50%, fissati ≥8%
+                    </h2>
+                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-ash-100 text-xs font-semibold text-ash-500 uppercase tracking-wider">
+                                    <th className="text-left p-4">Metrica</th>
+                                    <th className="text-right p-4">Pre (30gg fino al 23/07)</th>
+                                    <th className="text-right p-4">Post (dal 24/07 · {cutover.postDays} gg)</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-ash-100">
+                                <tr>
+                                    <td className="p-4 text-ash-600">Ricevuti</td>
+                                    <td className="p-4 text-right font-bold text-brand-charcoal">{cutover.pre.ricevuti}</td>
+                                    <td className="p-4 text-right font-bold text-brand-charcoal">{cutover.post.ricevuti}</td>
+                                </tr>
+                                <tr>
+                                    <td className="p-4 text-ash-600">Ridati ai GDO</td>
+                                    <td className="p-4 text-right font-bold text-amber-500">{cutover.pre.ridati} <span className="text-ash-400 font-normal text-xs">({cutover.pre.percRidati})</span></td>
+                                    <td className="p-4 text-right font-bold text-amber-500">{cutover.post.ridati} <span className="text-ash-400 font-normal text-xs">({cutover.post.percRidati})</span></td>
+                                </tr>
+                                <tr>
+                                    <td className="p-4 text-ash-600">Fissati dal fissatore</td>
+                                    <td className="p-4 text-right font-bold text-emerald-600">{cutover.pre.fissati} <span className="text-ash-400 font-normal text-xs">({cutover.pre.percFissRicevuti})</span></td>
+                                    <td className="p-4 text-right font-bold text-emerald-600">{cutover.post.fissati} <span className="text-ash-400 font-normal text-xs">({cutover.post.percFissRicevuti})</span></td>
+                                </tr>
+                                <tr>
+                                    <td className="p-4 text-ash-600">Scartati (obiezione ferrea)</td>
+                                    <td className="p-4 text-right font-bold text-red-500">{cutover.pre.scartati} <span className="text-ash-400 font-normal text-xs">({cutover.pre.percScartati})</span></td>
+                                    <td className="p-4 text-right font-bold text-red-500">{cutover.post.scartati} <span className="text-ash-400 font-normal text-xs">({cutover.post.percScartati})</span></td>
+                                </tr>
+                                <tr>
+                                    <td className="p-4 text-ash-600">In lavorazione</td>
+                                    <td className="p-4 text-right font-bold text-sky-600">{cutover.pre.inLavorazione}</td>
+                                    <td className="p-4 text-right font-bold text-sky-600">{cutover.post.inLavorazione}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    {cutover.postDays < 14 && (
+                        <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200/60 rounded-lg px-3 py-2">
+                            ⚠️ Con le sequenze da 12 giorni la coorte post matura in ~14 giorni: molti lead post-24/07 sono
+                            ancora in lavorazione e le percentuali di ridati/fissati sono provvisorie (attesi numeri stabili da metà agosto).
+                        </div>
+                    )}
+                </section>
+            )}
 
             <p className="text-xs text-ash-400">
                 Nota: la coorte è per data di presa in carico (primo push riuscito, riassegnazione o chiamata registrata).
