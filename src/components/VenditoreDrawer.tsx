@@ -169,6 +169,14 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                 outcomeAt: closeDate ? (parseRomeDatetimeLocal(closeDate) || undefined) : undefined,
                 notClosedReason: outcome === "Non chiuso" ? notClosedReason : undefined,
                 nextFollowUpDate: outcome === "Non chiuso" && !followUpCapReached && nextFollowUpDate ? parseRomeDatetimeLocal(nextFollowUpDate) : null,
+                // 'current' (correzione) SOLO quando è certo che non ci sia una
+                // nuova occasione in ballo: non siamo in followUpMode e il lead
+                // non ha un follow-up pendente. Se un follow-up è pendente il
+                // salvataggio può esserne l'esito anche partendo dalla riga
+                // appuntamento, quindi si resta sul comportamento storico ('new').
+                // Il doppio conteggio del fatturato è comunque impossibile:
+                // resolveAttemptWrite ammette una sola chiusura per ciclo.
+                occasion: (followUpMode || lead?.nextFollowUpDate) ? 'new' : 'current',
             }, lead.version)
 
             if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {

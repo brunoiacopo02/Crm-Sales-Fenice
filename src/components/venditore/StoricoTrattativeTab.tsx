@@ -70,6 +70,11 @@ export function StoricoTrattativeTab({ sellerId, onChanged }: { sellerId: string
                 closeProduct,
                 closeAmountEur: Number(closeAmount),
                 outcomeAt: parsed,
+                // Chiusura diretta di un lead già esitato: è un tentativo in più,
+                // il "Non chiuso" precedente resta nella storia. Se il lead era
+                // già chiuso, resolveAttemptWrite corregge la chiusura esistente
+                // invece di crearne una seconda (una sola chiusura per ciclo).
+                occasion: 'new',
             }, r.version)
             if (!res.success) {
                 alert(res.error === 'CONCURRENCY_ERROR' ? 'Il lead è stato modificato da un altro utente: ricarica la pagina e riprova.' : (res.error || 'Errore durante la chiusura'))

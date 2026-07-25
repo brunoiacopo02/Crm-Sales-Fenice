@@ -11,7 +11,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { dayBoundsRome } from "@/lib/dateUtils"
 import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
-import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed } from "@/lib/venditorePerformance/guard"
+import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed, resolveAttemptWrite, type OutcomeOccasion } from "@/lib/venditorePerformance/guard"
 import { isConfermeTl } from "@/lib/confermeTl"
 // Gamification disabled for VENDITORE role — import removed
 
@@ -220,7 +220,12 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     notClosedReason?: string,
     followUp1Date?: Date | null,
     followUp2Date?: Date | null,
-    nextFollowUpDate?: Date | null
+    nextFollowUpDate?: Date | null,
+    // Occasione del salvataggio: 'new' = nuovo tentativo (esito di un follow-up,
+    // chiusura diretta dallo Storico), 'current' = correzione dell'esito già
+    // registrato. Default 'new' = comportamento storico, così un chiamante che
+    // non la dichiara non cambia semantica. Vedi resolveAttemptWrite.
+    occasion?: OutcomeOccasion
 }, currentVersion?: number) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -267,11 +272,28 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     // Conteggio tentativi pregressi sul lead (per attemptNumber e tetto follow-up).
     // Il tetto conta solo il ciclo corrente: dopo una riapertura dallo Storico
     // (salesCycleStartAt) i 3 follow-up ripartono da zero.
-    const priorAttempts = await db.select({ outcome: salesAttempts.outcome, outcomeAt: salesAttempts.outcomeAt })
+    const priorAttempts = await db.select({
+        id: salesAttempts.id,
+        attemptNumber: salesAttempts.attemptNumber,
+        outcome: salesAttempts.outcome,
+        outcomeAt: salesAttempts.outcomeAt,
+    })
         .from(salesAttempts)
         .where(and(eq(salesAttempts.companyId, ctx.companyId), eq(salesAttempts.leadId, leadId)));
-    const attemptNumber = priorAttempts.length;
-    const priorNonClosedCount = countCycleNonClosed(priorAttempts, oldLead.salesCycleStartAt ?? null);
+    // Nuovo tentativo o correzione di quello esistente? Deciso prima delle
+    // guardie perché in correzione il tentativo riscritto NON deve contare come
+    // "pregresso": altrimenti correggere il 3° follow-up risulterebbe oltre il tetto.
+    const attemptWrite = resolveAttemptWrite({
+        attempts: priorAttempts,
+        outcome: payload.outcome,
+        cycleStartAt: oldLead.salesCycleStartAt ?? null,
+        leadHasOutcome: !!oldLead.salespersonOutcome,
+        occasion: payload.occasion ?? 'new',
+    });
+    const countableAttempts = attemptWrite.mode === 'update'
+        ? priorAttempts.filter(a => a.id !== attemptWrite.id)
+        : priorAttempts;
+    const priorNonClosedCount = countCycleNonClosed(countableAttempts, oldLead.salesCycleStartAt ?? null);
 
     // GUARDIA 3: follow-up obbligatorio dopo "Non chiuso" + tetto a 3 (solo VENDITORE).
     if (!isStaff) {
@@ -331,29 +353,46 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             return { success: false as const, error: 'CONCURRENCY_ERROR' as const }
         }
 
-        // Storia: registra questo tentativo/esito.
-        await tx.insert(salesAttempts).values({
-            id: crypto.randomUUID(),
-            leadId,
-            salesUserId: oldLead.salespersonUserId ?? session.user.id,
-            attemptNumber,
+        // Storia: nuovo tentativo, oppure riscrittura di quello esistente quando
+        // il salvataggio è una correzione (vedi resolveAttemptWrite). Senza
+        // questo ramo ogni correzione duplicava il tentativo e — sulle chiusure —
+        // il fatturato veniva contato due volte nelle viste su salesAttempts.
+        const attemptValues = {
             outcome: payload.outcome,
             notClosedReason: payload.notClosedReason || null,
             nextFollowUpDate: payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null,
             closeProduct: payload.closeProduct || null,
             closeAmountEur: payload.closeAmountEur || null,
             outcomeAt: effectiveOutcomeAt,
-            companyId: ctx.companyId,
-        });
+        };
+        if (attemptWrite.mode === 'update') {
+            await tx.update(salesAttempts)
+                .set({ ...attemptValues, salesUserId: oldLead.salespersonUserId ?? session.user.id })
+                .where(and(
+                    eq(salesAttempts.companyId, ctx.companyId),
+                    eq(salesAttempts.id, attemptWrite.id),
+                ));
+        } else {
+            await tx.insert(salesAttempts).values({
+                ...attemptValues,
+                id: crypto.randomUUID(),
+                leadId,
+                salesUserId: oldLead.salespersonUserId ?? session.user.id,
+                attemptNumber: attemptWrite.attemptNumber,
+                companyId: ctx.companyId,
+            });
+        }
 
-        // 1. Audit Log per la cronologia completa (Timeline)
+        // 1. Audit Log per la cronologia completa (Timeline).
+        // Registrato SEMPRE, anche in correzione: la timeline deve mostrare che
+        // l'esito è stato riscritto, anche se il tentativo resta uno solo.
         await tx.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
             eventType: "salesperson_outcome_set",
             userId: session.user.id,
             timestamp: new Date(),
-            metadata: { ...payload, attemptNumber },
+            metadata: { ...payload, attemptWrite },
             companyId: ctx.companyId,
         })
 
