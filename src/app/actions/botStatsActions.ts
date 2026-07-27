@@ -4,6 +4,18 @@ import { db } from "@/db";
 import { leads, users, callLogs, leadEvents } from "@/db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { toRomeDateStr } from "@/lib/dateUtils";
+
+/** Una riga per giorno di presa in carico: mostra come si smaltisce la coorte.
+ *  Serve a leggere "in lavorazione" — che è un residuo, non un conteggio. */
+export interface BotDailyCohortRow {
+    day: string;           // YYYY-MM-DD (Europe/Rome)
+    ricevuti: number;
+    ridati: number;
+    fissati: number;
+    scartati: number;
+    inLavorazione: number;
+}
 
 export interface BotFissatoreStats {
     botName: string;
@@ -45,6 +57,8 @@ export interface BotFissatoreStats {
     percConfermati: string;      // confermati / fissati
     percPresenziati: string;     // presenziati / fissati
     percChiusi: string;          // chiusi / fissati
+    // Drill-down: la stessa coorte spaccata per giorno di presa in carico
+    dailyCohort: BotDailyCohortRow[]; // ordine decrescente per data
 }
 
 const pct = (num: number, den: number) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '-';
@@ -292,6 +306,28 @@ async function computeWindowStats(
     // Union esplicita: un lead può essere sia fissato che ridato (visto in prod).
     const lavorati = new Set<string>([...fissatiSet, ...reassignFirst.keys(), ...scartatiSet]).size;
 
+    // Spaccatura per giorno di presa in carico. Stessi criteri degli aggregati,
+    // così le colonne sommano esattamente alle card del flusso: un lead conta in
+    // "in lavorazione" solo se non è né fissato, né ridato, né scartato.
+    const dailyMap = new Map<string, BotDailyCohortRow>();
+    for (const leadId of cohort) {
+        const day = toRomeDateStr(new Date(firstTouch.get(leadId)!));
+        let row = dailyMap.get(day);
+        if (!row) {
+            row = { day, ricevuti: 0, ridati: 0, fissati: 0, scartati: 0, inLavorazione: 0 };
+            dailyMap.set(day, row);
+        }
+        row.ricevuti++;
+        const isFissato = fissatiSet.has(leadId);
+        const isRidato = reassignFirst.has(leadId);
+        const isScartato = scartatiSet.has(leadId);
+        if (isRidato) row.ridati++;
+        if (isFissato) row.fissati++;
+        if (isScartato) row.scartati++;
+        if (!isFissato && !isRidato && !isScartato) row.inLavorazione++;
+    }
+    const dailyCohort = [...dailyMap.values()].sort((a, b) => b.day.localeCompare(a.day));
+
     return {
         botName: bot.displayName || 'Fissatore',
         days,
@@ -327,5 +363,6 @@ async function computeWindowStats(
         percConfermati: pct(confermati, fissati),
         percPresenziati: pct(presenziati, fissati),
         percChiusi: pct(chiusi, fissati),
+        dailyCohort,
     };
 }

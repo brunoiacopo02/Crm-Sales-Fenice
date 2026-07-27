@@ -2,9 +2,16 @@ import { getBotFissatoreStats, getBotFissatoreCutoverComparison } from '@/app/ac
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server";
 import Link from 'next/link';
-import { Activity, ArrowRightLeft, CalendarCheck, TrendingUp, Undo2 } from 'lucide-react';
+import { Activity, ArrowRightLeft, CalendarCheck, CalendarDays, TrendingUp, Undo2 } from 'lucide-react';
 
 const PRESETS = [7, 14, 30, 60, 90];
+
+/** "2026-07-24" → "gio 24/07". Mezzogiorno per non farsi sfasare dal fuso. */
+function dayLabel(day: string): string {
+    const d = new Date(`${day}T12:00:00`);
+    const wd = d.toLocaleDateString('it-IT', { weekday: 'short' });
+    return `${wd} ${d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}`;
+}
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: string }) {
     return (
@@ -101,7 +108,55 @@ export default async function StatisticheFissatorePage({
                     <StatCard label="Tenuti" value={stats.tenuti} sub="mai ridistribuiti" />
                     <StatCard label="Fissati" value={stats.fissati} sub={`${stats.percFissRicevuti} dei ricevuti`} accent="text-emerald-600" />
                     <StatCard label="Scartati" value={stats.scartati} sub={`obiezione ferrea · ${stats.percScartati}`} accent="text-red-500" />
-                    <StatCard label="In lavorazione" value={stats.inLavorazione} sub="ancora in chat" accent="text-sky-600" />
+                    <StatCard label="In lavorazione" value={stats.inLavorazione} sub="nessun esito, ancora al bot" accent="text-sky-600" />
+                </div>
+            </section>
+
+            {/* Drill-down della coorte: quanto ci mette il bot a smaltire ogni giornata.
+                È la lettura corretta di "in lavorazione", che è un residuo e non un conteggio. */}
+            <section>
+                <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-brand-orange" /> Smaltimento per giorno di presa in carico
+                </h2>
+                <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft overflow-hidden">
+                    <div className="max-h-[26rem] overflow-y-auto overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="sticky top-0 z-10 bg-white">
+                                <tr className="border-b border-ash-100 text-xs font-semibold text-ash-500 uppercase tracking-wider">
+                                    <th className="text-left p-3">Giorno</th>
+                                    <th className="text-right p-3">Ricevuti</th>
+                                    <th className="text-right p-3">Ridati</th>
+                                    <th className="text-right p-3">Fissati</th>
+                                    <th className="text-right p-3">Scartati</th>
+                                    <th className="text-right p-3">In lavorazione</th>
+                                    <th className="text-right p-3">% aperta</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-ash-100">
+                                {stats.dailyCohort.map(r => (
+                                    <tr key={r.day} className="hover:bg-ash-50/50">
+                                        <td className="p-3 font-medium text-brand-charcoal whitespace-nowrap">{dayLabel(r.day)}</td>
+                                        <td className="p-3 text-right text-ash-600">{r.ricevuti}</td>
+                                        <td className="p-3 text-right font-medium text-amber-500">{r.ridati}</td>
+                                        <td className="p-3 text-right font-medium text-emerald-600">{r.fissati}</td>
+                                        <td className="p-3 text-right font-medium text-red-500">{r.scartati}</td>
+                                        <td className="p-3 text-right font-bold text-sky-600">{r.inLavorazione}</td>
+                                        <td className="p-3 text-right text-ash-500">{pct(r.inLavorazione, r.ricevuti)}</td>
+                                    </tr>
+                                ))}
+                                {stats.dailyCohort.length === 0 && (
+                                    <tr><td colSpan={7} className="p-8 text-center text-ash-400">Nessun lead preso in carico nel periodo.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div className="mt-2 text-xs text-ash-500 bg-ash-50/60 border border-ash-200/60 rounded-lg px-3 py-2">
+                    Come leggerla: <strong>&ldquo;in lavorazione&rdquo; è un residuo</strong> (ricevuti meno fissati, ridati e scartati), non un
+                    conteggio di chat attive. Le giornate recenti hanno per forza una % aperta alta: con la sequenza da 12 giorni
+                    introdotta il 24/07 il bot non restituisce più i lead entro 24-48h come faceva prima, quindi il magazzino
+                    si riempie prima di svuotarsi. Una % aperta alta su giornate <strong>più vecchie di 12 giorni</strong> è invece
+                    un&apos;anomalia: sono lead che il fissatore non ha mai né chiuso né ridato.
                 </div>
             </section>
 
