@@ -199,6 +199,8 @@ export function PanoramicaTlClient({
                     <Filter className="h-3.5 w-3.5 text-brand-orange" /> Rendimento per funnel
                 </div>
                 <p className="mb-3 text-[11px] text-ash-400">
+                    I 5 funnel con più appuntamenti fissati nel mese selezionato; la coda è accorpata
+                    in &ldquo;Altri&rdquo;, così le colonne sommano sempre al TOTALE.
                     &ldquo;Fissato→Chiuso&rdquo; e &ldquo;€/fissato&rdquo; sono le colonne confrontabili: dicono quanto vale
                     un appuntamento di quel funnel, al netto dei volumi.
                 </p>
@@ -221,8 +223,17 @@ export function PanoramicaTlClient({
                         </thead>
                         <tbody>
                             {perFunnel.map(row => (
-                                <tr key={row.funnel} className="border-b border-gray-100">
-                                    <td className="py-2 pr-4 font-medium text-ash-800">{prettyFunnel(row.funnel)}</td>
+                                <tr key={row.funnel} className={`border-b border-gray-100 ${row.isOther ? "text-ash-500" : ""}`}>
+                                    <td className="py-2 pr-4 font-medium text-ash-800">
+                                        {row.isOther ? (
+                                            <span
+                                                className="cursor-help text-ash-500"
+                                                title={row.otherFunnels?.map(prettyFunnel).join(", ")}
+                                            >
+                                                Altri ({row.otherFunnels?.length ?? 0} funnel)
+                                            </span>
+                                        ) : prettyFunnel(row.funnel)}
+                                    </td>
                                     <td className="py-2 pr-3 text-right text-ash-600">{fmtNum(row.fissati)}</td>
                                     <td className="py-2 pr-3 text-right text-ash-600">{fmtNum(row.confermati)}</td>
                                     <td className="py-2 pr-3 text-right font-semibold text-ash-800">{fmtPct(row.pctConf, 1)}</td>

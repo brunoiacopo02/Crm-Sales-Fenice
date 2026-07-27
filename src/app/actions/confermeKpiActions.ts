@@ -372,7 +372,19 @@ export type TlFunnelRow = {
     pctChius: number | null           // chiusi / presenziati
     pctFissatoChiuso: number | null   // chiusi / fissati
     eurPerFissato: number | null      // fatturato / fissati
+    /** true sulla riga di coda aggregata: i funnel sotto la top-N del mese. */
+    isOther?: boolean
+    /** Solo sulla riga "Altri": nomi dei funnel accorpati. */
+    otherFunnels?: string[]
 }
+
+/**
+ * Quanti funnel mostrare per esteso. La coda finisce in una riga "Altri" invece
+ * di sparire: così le colonne sommano sempre alla riga TOTALE.
+ * Selezione DINAMICA per mese, mai una lista fissa (PO 2026-07-27): a maggio
+ * 2026 ORG valeva il 54% dei fissati, a luglio lo 0,4%.
+ */
+const TL_FUNNEL_TOP_N = 5
 
 export type ConfermeTlOverview =
     | {
@@ -559,10 +571,34 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             }
         }
 
-        const perFunnel = [...byFunnel.values()]
+        // Top-N per volume di appuntamenti fissati (è ciò che occupa il tempo
+        // del team Conferme); la coda si accorpa in una riga "Altri" così i
+        // totali di colonna restano quadrati con la riga TOTALE.
+        const active = [...byFunnel.values()]
             .filter(r => r.fissati > 0 || r.confermati > 0 || r.presenziati > 0 || r.chiusi > 0)
+        const ranked = [...active].sort((a, b) => b.fissati - a.fissati || b.fatturatoEur - a.fatturatoEur)
+        const head = ranked.slice(0, TL_FUNNEL_TOP_N)
+        const tail = ranked.slice(TL_FUNNEL_TOP_N)
+
+        const perFunnel = head
             .map(withRatios)
             .sort((a, b) => b.fatturatoEur - a.fatturatoEur || b.fissati - a.fissati)
+
+        if (tail.length > 0) {
+            const other = tail.reduce((acc, r) => {
+                acc.fissati += r.fissati
+                acc.confermati += r.confermati
+                acc.presenziati += r.presenziati
+                acc.chiusi += r.chiusi
+                acc.fatturatoEur += r.fatturatoEur
+                return acc
+            }, emptyRow('ALTRI'))
+            perFunnel.push({
+                ...withRatios(other),
+                isOther: true,
+                otherFunnels: tail.map(r => r.funnel).sort(),
+            })
+        }
         const totalsRow = withRatios(totals)
         const prevRow = withRatios(prevTotals)
 
