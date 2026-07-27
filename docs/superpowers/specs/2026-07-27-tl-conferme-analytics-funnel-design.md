@@ -63,6 +63,14 @@ Fatturato | €/fissato. Ordinata per fatturato desc, riga TOTALE in fondo.
 `Fissato→Chiuso` e `€/fissato` sono le due colonne che rendono i funnel confrontabili in una
 riga sola: a luglio un appuntamento Black Summer vale €243, uno Database €47.
 
+**Solo i 5 funnel più grossi del mese (PO 2026-07-27).** Sotto una decina di appuntamenti la
+percentuale non informa (su 1 fissato è 0% o 100%). Selezione **dinamica per mese**, mai una lista
+fissa: a maggio 2026 `ORG` valeva il 53,9% dei fissati (867), a luglio lo 0,4% — una top-5
+hardcodata su luglio farebbe sparire da maggio il funnel principale di quel mese.
+Criterio: top 5 per appuntamenti fissati (è ciò che consuma il tempo delle Conferme), righe
+ordinate per fatturato. La coda si accorpa in una riga `Altri (n funnel)` invece di sparire, così
+le colonne sommano sempre alla riga TOTALE.
+
 ### 3.2 Motivi di scarto
 
 Scarti con `confirmationsTimestamp` nel mese, raggruppati per `confirmationsDiscardReason`,
