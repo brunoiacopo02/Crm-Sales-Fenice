@@ -4,7 +4,7 @@ import { db } from "@/db"
 import { leads, users, monthlyLeadTargets } from "@/db/schema"
 import { eq, and, gte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
 import { format } from "date-fns"
-import { weekBoundsRome, monthBoundsRome, dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
+import { weekBoundsRome, monthBoundsRome, dayBoundsRome, toRomeDateStr, previousYearMonth } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isConfermeTl } from '@/lib/confermeTl'
 
@@ -342,12 +342,44 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
 }
 
 // ── Panoramica TL Conferme ───────────────────────────────────────────────────
-// Dashboard generale per il TL del team Conferme (richiesta 2026-06-12):
-// %conferme, %presenze, %chiusure, numero chiusure e fatturato settimanale.
+// Dashboard generale per il TL del team Conferme (richiesta 2026-06-12,
+// estesa 2026-07-27 con analytics per funnel — vedi
+// docs/superpowers/specs/2026-07-27-tl-conferme-analytics-funnel-design.md).
+//
+// METODO: attribuzione CANON action-date, identica a getMarketingStatsByGdo e
+// a src/lib/metricsUtils.ts. Ogni metrica è contata nel mese in cui è avvenuta
+// QUELLA azione, con la sua data sorgente:
+//   Fissati    → COALESCE(appointmentCreatedAt, appointmentDate), appointmentDate NOT NULL
+//   Confermati → confirmationsTimestamp + confirmationsOutcome='confermato'
+//   Presenziati→ presentedAt (latch giorno appuntamento, PO 2026-07-17)
+//   Chiusi     → salespersonOutcomeAt + salespersonOutcome='Chiuso'
+// Funnel esclusi: TEST, BLT, vuoto. La lista funnel è DERIVATA DAI DATI, non
+// da OFFICIAL_FUNNELS (che non contiene BLACK SUMMER).
+//
+// COSTO: una sola query su leads per mese selezionato + mese precedente, poi
+// tutta l'aggregazione in memoria (budget Disk IO — vedi incident 2026-06-27).
+
+/** Riga della tabella per funnel (e riga TOTALE, con funnel='TOTALE'). */
+export type TlFunnelRow = {
+    funnel: string
+    fissati: number
+    confermati: number
+    presenziati: number
+    chiusi: number
+    fatturatoEur: number
+    pctConf: number | null            // confermati / fissati
+    pctPres: number | null            // presenziati / confermati
+    pctChius: number | null           // chiusi / presenziati
+    pctFissatoChiuso: number | null   // chiusi / fissati
+    eurPerFissato: number | null      // fatturato / fissati
+}
 
 export type ConfermeTlOverview =
     | {
         success: true
+        yearMonth: string
+        currentYearMonth: string
+        isCurrentMonth: boolean
         month: {
             fissati: number
             confermati: number
@@ -359,22 +391,110 @@ export type ConfermeTlOverview =
             pctPresenze: number | null   // presentati / confermati
             pctChiusure: number | null   // chiusure / presentati
         }
+        /** Differenza in PUNTI percentuali (o valore assoluto) vs mese precedente intero. */
+        deltaVsPrev: {
+            pctConferme: number | null
+            pctPresenze: number | null
+            pctChiusure: number | null
+            chiusure: number
+            fatturatoEur: number
+        }
         week: {
             chiusure: number
             fatturatoEur: number
         }
+        perFunnel: TlFunnelRow[]
+        totals: TlFunnelRow
+        discardReasons: Array<{ reason: string; count: number; pct: number }>
+        scartiTotali: number
+        /** Coorte dei fissati del mese, per distanza fissaggio → appuntamento. */
+        leadTime: Array<{
+            bucket: string
+            fissati: number
+            confermati: number
+            presenziati: number
+            pctConf: number | null
+            pctPres: number | null
+        }>
+        weekly: Array<{
+            label: string
+            range: string
+            fissati: number
+            confermati: number
+            presenziati: number
+            chiusi: number
+            pctConf: number | null
+            pctPres: number | null
+            pctChius: number | null
+            isCurrent: boolean
+        }>
         perOperator: Array<{
             userId: string
             name: string
             confermati: number
             scartati: number
+            presenziati: number
             chiusure: number
             fatturatoEur: number
+            pctPresenze: number | null    // presenziati / confermati
+            pctChiusure: number | null    // chiusure / presenziati
+            eurPerConferma: number | null
         }>
     }
     | { success: false; error: string }
 
-export async function getConfermeTlOverview(monthDate: Date = new Date()): Promise<ConfermeTlOverview> {
+/** Riga leads con i soli campi usati dall'aggregazione TL. */
+type TlLeadRow = {
+    funnel: string | null
+    appointmentDate: Date | null
+    appointmentCreatedAt: Date | null
+    confirmationsOutcome: string | null
+    confirmationsTimestamp: Date | null
+    confirmationsUserId: string | null
+    confirmationsDiscardReason: string | null
+    presentedAt: Date | null
+    salespersonOutcome: string | null
+    salespersonOutcomeAt: Date | null
+    amount: number | null
+}
+
+const inRange = (d: Date | null | undefined, s: Date, e: Date): boolean =>
+    !!d && d >= s && d < e
+
+/** Data canonica di fissaggio (M2): appointmentCreatedAt, fallback appointmentDate. */
+const apptSetAt = (r: TlLeadRow): Date | null =>
+    r.appointmentDate ? (r.appointmentCreatedAt || r.appointmentDate) : null
+
+function emptyRow(funnel: string): TlFunnelRow {
+    return {
+        funnel, fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, fatturatoEur: 0,
+        pctConf: null, pctPres: null, pctChius: null, pctFissatoChiuso: null, eurPerFissato: null,
+    }
+}
+
+function withRatios(r: TlFunnelRow): TlFunnelRow {
+    return {
+        ...r,
+        pctConf: r.fissati > 0 ? r.confermati / r.fissati : null,
+        pctPres: r.confermati > 0 ? r.presenziati / r.confermati : null,
+        pctChius: r.presenziati > 0 ? r.chiusi / r.presenziati : null,
+        pctFissatoChiuso: r.fissati > 0 ? r.chiusi / r.fissati : null,
+        eurPerFissato: r.fissati > 0 ? r.fatturatoEur / r.fissati : null,
+    }
+}
+
+/** Accumula le 4 metriche canoniche di `row` (se nel range) dentro `acc`. */
+function accumulate(acc: TlFunnelRow, r: TlLeadRow, s: Date, e: Date): void {
+    if (inRange(apptSetAt(r), s, e)) acc.fissati++
+    if (r.confirmationsOutcome === 'confermato' && inRange(r.confirmationsTimestamp, s, e)) acc.confermati++
+    if (inRange(r.presentedAt, s, e)) acc.presenziati++
+    if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, s, e)) {
+        acc.chiusi++
+        acc.fatturatoEur += r.amount || 0
+    }
+}
+
+export async function getConfermeTlOverview(yearMonth?: string): Promise<ConfermeTlOverview> {
     try {
         const ctx = await currentTenant()
         assertSalesArea(ctx)
@@ -382,104 +502,251 @@ export async function getConfermeTlOverview(monthDate: Date = new Date()): Promi
             || (ctx.role === 'CONFERME' && isConfermeTl(ctx.email))
         if (!authorized) return { success: false, error: 'Non autorizzato' }
 
-        // Bounds Europe/Rome (end esclusivo): prima startOfMonth/endOfMonth
-        // interpretavano monthDate nel fuso del server (UTC su Vercel).
-        const { start, end } = monthBoundsRome(toRomeDateStr(monthDate).slice(0, 7))
+        const currentYearMonth = toRomeDateStr(new Date()).slice(0, 7)
+        const ym = /^\d{4}-\d{2}$/.test(yearMonth || '') ? yearMonth! : currentYearMonth
+        const isCurrentMonth = ym === currentYearMonth
 
-        // Funnel mese — fissati = appuntamenti SCHEDULATI nel mese
-        // (appointmentDate, stessa definizione del calendario KPI Conferme).
-        const apptRows = await db.select({
-            outcome: leads.confirmationsOutcome,
+        const { start, end } = monthBoundsRome(ym)
+        const prev = monthBoundsRome(previousYearMonth(ym))
+        // Settimana corrente (solo sul mese in corso): può sconfinare nel mese
+        // successivo, quindi allarga la finestra di fetch.
+        const wk = weekBoundsRome(new Date())
+        const fetchStart = prev.start
+        const fetchEnd = isCurrentMonth && wk.end > end ? wk.end : end
+
+        const rows: TlLeadRow[] = await db.select({
+            funnel: leads.funnel,
+            appointmentDate: leads.appointmentDate,
+            appointmentCreatedAt: leads.appointmentCreatedAt,
+            confirmationsOutcome: leads.confirmationsOutcome,
+            confirmationsTimestamp: leads.confirmationsTimestamp,
             confirmationsUserId: leads.confirmationsUserId,
-        }).from(leads).where(and(
-            companyScope(ctx, leads.companyId),
-            gte(leads.appointmentDate, start),
-            lt(leads.appointmentDate, end),
-        ))
-        const fissati = apptRows.length
-        const confermati = apptRows.filter(r => r.outcome === 'confermato').length
-        const scartati = apptRows.filter(r => r.outcome === 'scartato').length
-
-        // Presenze/chiusure mese — solo lead passati dalle Conferme
-        // (confirmationsOutcome='confermato' + confirmationsUserId), esito
-        // venditore registrato nel mese. Presentato = Chiuso | Non chiuso.
-        const outcomeRows = await db.select({
-            outcome: leads.salespersonOutcome,
+            confirmationsDiscardReason: leads.confirmationsDiscardReason,
+            presentedAt: leads.presentedAt,
+            salespersonOutcome: leads.salespersonOutcome,
+            salespersonOutcomeAt: leads.salespersonOutcomeAt,
             amount: leads.closeAmountEur,
-            confirmationsUserId: leads.confirmationsUserId,
         }).from(leads).where(and(
             companyScope(ctx, leads.companyId),
-            eq(leads.confirmationsOutcome, 'confermato'),
-            isNotNull(leads.confirmationsUserId),
-            isNotNull(leads.salespersonOutcomeAt),
-            gte(leads.salespersonOutcomeAt, start),
-            lt(leads.salespersonOutcomeAt, end),
+            sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', 'BLT', '')`,
+            or(
+                and(isNotNull(leads.appointmentDate),
+                    sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${fetchStart}`,
+                    sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) <  ${fetchEnd}`),
+                and(gte(leads.confirmationsTimestamp, fetchStart), lt(leads.confirmationsTimestamp, fetchEnd)),
+                and(gte(leads.presentedAt, fetchStart), lt(leads.presentedAt, fetchEnd)),
+                and(gte(leads.salespersonOutcomeAt, fetchStart), lt(leads.salespersonOutcomeAt, fetchEnd)),
+            ),
         ))
-        let presentati = 0
-        let chiusureMese = 0
-        let fatturatoMese = 0
-        for (const r of outcomeRows) {
-            if (r.outcome === 'Chiuso' || r.outcome === 'Non chiuso') {
-                presentati++
-                if (r.outcome === 'Chiuso') {
-                    chiusureMese++
-                    fatturatoMese += r.amount || 0
+
+        // ── Totali mese + breakdown per funnel ──────────────────────────────
+        const totals = emptyRow('TOTALE')
+        const prevTotals = emptyRow('TOTALE')
+        const byFunnel = new Map<string, TlFunnelRow>()
+        let scartatiMese = 0
+
+        for (const r of rows) {
+            accumulate(totals, r, start, end)
+            accumulate(prevTotals, r, prev.start, prev.end)
+
+            const key = (r.funnel || '').toUpperCase()
+            let acc = byFunnel.get(key)
+            if (!acc) { acc = emptyRow(key); byFunnel.set(key, acc) }
+            accumulate(acc, r, start, end)
+
+            if (r.confirmationsOutcome === 'scartato' && inRange(r.confirmationsTimestamp, start, end)) {
+                scartatiMese++
+            }
+        }
+
+        const perFunnel = [...byFunnel.values()]
+            .filter(r => r.fissati > 0 || r.confermati > 0 || r.presenziati > 0 || r.chiusi > 0)
+            .map(withRatios)
+            .sort((a, b) => b.fatturatoEur - a.fatturatoEur || b.fissati - a.fissati)
+        const totalsRow = withRatios(totals)
+        const prevRow = withRatios(prevTotals)
+
+        // ── Motivi di scarto (scarti registrati nel mese) ────────────────────
+        const reasonMap = new Map<string, number>()
+        for (const r of rows) {
+            if (r.confirmationsOutcome !== 'scartato') continue
+            if (!inRange(r.confirmationsTimestamp, start, end)) continue
+            const key = r.confirmationsDiscardReason?.trim() || 'Senza motivo'
+            reasonMap.set(key, (reasonMap.get(key) || 0) + 1)
+        }
+        const discardReasons = [...reasonMap.entries()]
+            .map(([reason, count]) => ({
+                reason,
+                count,
+                pct: scartatiMese > 0 ? count / scartatiMese : 0,
+            }))
+            .sort((a, b) => b.count - a.count)
+
+        // ── Lead time fissaggio → appuntamento ──────────────────────────────
+        // NB: unico blocco per-appuntamento (coorte dei fissati del mese seguita
+        // fino a conferma/presenza), non action-date. Etichettato come tale in UI.
+        const LT_BUCKETS = ['0 gg', '1 gg', '2-3 gg', '4-7 gg', '8+ gg'] as const
+        const ltMap = new Map<string, { fissati: number; confermati: number; presenziati: number }>(
+            LT_BUCKETS.map(b => [b, { fissati: 0, confermati: 0, presenziati: 0 }]),
+        )
+        const dayIndex = (d: Date): number =>
+            Math.floor(Date.parse(`${toRomeDateStr(d)}T00:00:00Z`) / 86400000)
+        for (const r of rows) {
+            const setAt = apptSetAt(r)
+            if (!setAt || !inRange(setAt, start, end) || !r.appointmentDate) continue
+            const gap = Math.max(0, dayIndex(r.appointmentDate) - dayIndex(setAt))
+            const bucket = gap === 0 ? '0 gg'
+                : gap === 1 ? '1 gg'
+                : gap <= 3 ? '2-3 gg'
+                : gap <= 7 ? '4-7 gg'
+                : '8+ gg'
+            const acc = ltMap.get(bucket)!
+            acc.fissati++
+            if (r.confirmationsOutcome === 'confermato') acc.confermati++
+            if (r.presentedAt) acc.presenziati++
+        }
+        const leadTime = LT_BUCKETS.map(b => {
+            const a = ltMap.get(b)!
+            return {
+                bucket: b,
+                fissati: a.fissati,
+                confermati: a.confermati,
+                presenziati: a.presenziati,
+                pctConf: a.fissati > 0 ? a.confermati / a.fissati : null,
+                pctPres: a.confermati > 0 ? a.presenziati / a.confermati : null,
+            }
+        }).filter(b => b.fissati > 0)
+
+        // ── Trend settimanale (settimane ISO clampate al mese) ───────────────
+        const weeklyRows: Array<{
+            label: string; range: string; fissati: number; confermati: number
+            presenziati: number; chiusi: number
+            pctConf: number | null; pctPres: number | null; pctChius: number | null
+            isCurrent: boolean
+        }> = []
+        const now = new Date()
+        let cursor = weekBoundsRome(new Date(start.getTime() + 12 * 3600_000)).start
+        let wIdx = 0
+        while (cursor < end) {
+            const wEnd = weekBoundsRome(new Date(cursor.getTime() + 12 * 3600_000)).end
+            const s = cursor > start ? cursor : start
+            const e = wEnd < end ? wEnd : end
+            const acc = emptyRow(`w${wIdx}`)
+            for (const r of rows) accumulate(acc, r, s, e)
+            const fmt = (d: Date) => { const [, M, D] = toRomeDateStr(d).split('-'); return `${D}/${M}` }
+            weeklyRows.push({
+                label: `Sett. ${wIdx + 1}`,
+                range: `${fmt(s)} - ${fmt(new Date(e.getTime() - 12 * 3600_000))}`,
+                fissati: acc.fissati,
+                confermati: acc.confermati,
+                presenziati: acc.presenziati,
+                chiusi: acc.chiusi,
+                pctConf: acc.fissati > 0 ? acc.confermati / acc.fissati : null,
+                pctPres: acc.confermati > 0 ? acc.presenziati / acc.confermati : null,
+                pctChius: acc.presenziati > 0 ? acc.chiusi / acc.presenziati : null,
+                isCurrent: now >= s && now < e,
+            })
+            cursor = weekBoundsRome(new Date(cursor.getTime() + 7 * 86400_000 + 12 * 3600_000)).start
+            wIdx++
+        }
+
+        // ── Chiusure + fatturato della settimana corrente (canon: tutte le
+        //    chiusure della settimana, come Marketing/KPI GDO) ───────────────
+        let chiusureSettimana = 0
+        let fatturatoSettimana = 0
+        if (isCurrentMonth) {
+            for (const r of rows) {
+                if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, wk.start, wk.end)) {
+                    chiusureSettimana++
+                    fatturatoSettimana += r.amount || 0
                 }
             }
         }
 
-        // Chiusure + fatturato della settimana corrente (lun-dom Europe/Rome).
-        const wk = weekBoundsRome(new Date())
-        const weekRows = await db.select({ amount: leads.closeAmountEur }).from(leads).where(and(
-            companyScope(ctx, leads.companyId),
-            eq(leads.salespersonOutcome, 'Chiuso'),
-            eq(leads.confirmationsOutcome, 'confermato'),
-            isNotNull(leads.confirmationsUserId),
-            gte(leads.salespersonOutcomeAt, wk.start),
-            lt(leads.salespersonOutcomeAt, wk.end),
-        ))
-        const chiusureSettimana = weekRows.length
-        const fatturatoSettimana = weekRows.reduce((s, r) => s + (r.amount || 0), 0)
-
-        // Breakdown per operatore Conferme (mese): confermati/scartati lavorati
-        // da lui + chiusure/fatturato dei lead che ha confermato.
-        const operators = await db.select({
+        // ── Breakdown per operatore Conferme ─────────────────────────────────
+        // Righe: utenti CONFERME attivi + chiunque abbia lavorato ≥1 esito nel
+        // mese (es. un admin che ha confermato al posto del team).
+        const companyUsers = await db.select({
             id: users.id,
             name: users.name,
             displayName: users.displayName,
-        }).from(users).where(and(
-            eq(users.role, 'CONFERME'),
-            companyScope(ctx, users.companyId),
-            eq(users.isActive, true),
-        ))
-        const perOperator = operators.map(op => {
-            const confirmedBy = apptRows.filter(r => r.confirmationsUserId === op.id)
-            const closedBy = outcomeRows.filter(r =>
-                r.confirmationsUserId === op.id && r.outcome === 'Chiuso')
+            role: users.role,
+            isActive: users.isActive,
+        }).from(users).where(companyScope(ctx, users.companyId))
+        const userMap = new Map(companyUsers.map(u => [u.id, u]))
+
+        const opIds = new Set<string>(
+            companyUsers.filter(u => u.role === 'CONFERME' && u.isActive).map(u => u.id),
+        )
+        for (const r of rows) {
+            if (!r.confirmationsUserId) continue
+            const worked = (r.confirmationsOutcome === 'confermato' || r.confirmationsOutcome === 'scartato')
+                && inRange(r.confirmationsTimestamp, start, end)
+            if (worked) opIds.add(r.confirmationsUserId)
+        }
+
+        const perOperator = [...opIds].map(id => {
+            const u = userMap.get(id)
+            let confermati = 0, scartati = 0, presenziati = 0, chiusure = 0, fatturatoEur = 0
+            for (const r of rows) {
+                if (r.confirmationsUserId !== id) continue
+                if (inRange(r.confirmationsTimestamp, start, end)) {
+                    if (r.confirmationsOutcome === 'confermato') confermati++
+                    else if (r.confirmationsOutcome === 'scartato') scartati++
+                }
+                if (inRange(r.presentedAt, start, end)) presenziati++
+                if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, start, end)) {
+                    chiusure++
+                    fatturatoEur += r.amount || 0
+                }
+            }
             return {
-                userId: op.id,
-                name: op.name || op.displayName || op.id,
-                confermati: confirmedBy.filter(r => r.outcome === 'confermato').length,
-                scartati: confirmedBy.filter(r => r.outcome === 'scartato').length,
-                chiusure: closedBy.length,
-                fatturatoEur: closedBy.reduce((s, r) => s + (r.amount || 0), 0),
+                userId: id,
+                name: u?.name || u?.displayName || id,
+                confermati,
+                scartati,
+                presenziati,
+                chiusure,
+                fatturatoEur,
+                pctPresenze: confermati > 0 ? presenziati / confermati : null,
+                pctChiusure: presenziati > 0 ? chiusure / presenziati : null,
+                eurPerConferma: confermati > 0 ? fatturatoEur / confermati : null,
             }
         }).sort((a, b) => b.confermati - a.confermati)
 
+        const deltaPct = (cur: number | null, old: number | null): number | null =>
+            cur === null || old === null ? null : cur - old
+
         return {
             success: true,
+            yearMonth: ym,
+            currentYearMonth,
+            isCurrentMonth,
             month: {
-                fissati,
-                confermati,
-                scartati,
-                presentati,
-                chiusure: chiusureMese,
-                fatturatoEur: fatturatoMese,
-                pctConferme: fissati > 0 ? confermati / fissati : null,
-                pctPresenze: confermati > 0 ? presentati / confermati : null,
-                pctChiusure: presentati > 0 ? chiusureMese / presentati : null,
+                fissati: totalsRow.fissati,
+                confermati: totalsRow.confermati,
+                scartati: scartatiMese,
+                presentati: totalsRow.presenziati,
+                chiusure: totalsRow.chiusi,
+                fatturatoEur: totalsRow.fatturatoEur,
+                pctConferme: totalsRow.pctConf,
+                pctPresenze: totalsRow.pctPres,
+                pctChiusure: totalsRow.pctChius,
+            },
+            deltaVsPrev: {
+                pctConferme: deltaPct(totalsRow.pctConf, prevRow.pctConf),
+                pctPresenze: deltaPct(totalsRow.pctPres, prevRow.pctPres),
+                pctChiusure: deltaPct(totalsRow.pctChius, prevRow.pctChius),
+                chiusure: totalsRow.chiusi - prevRow.chiusi,
+                fatturatoEur: totalsRow.fatturatoEur - prevRow.fatturatoEur,
             },
             week: { chiusure: chiusureSettimana, fatturatoEur: fatturatoSettimana },
+            perFunnel,
+            totals: totalsRow,
+            discardReasons,
+            scartiTotali: scartatiMese,
+            leadTime,
+            weekly: weeklyRows,
             perOperator,
         }
     } catch (error) {
