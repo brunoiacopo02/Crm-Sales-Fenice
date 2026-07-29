@@ -5,7 +5,7 @@ import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents, salesAttempts } from "@/db/schema"
 import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, inArray, sql } from "drizzle-orm"
 import crypto from "crypto"
-import { createGoogleCalendarEvent, checkFreeBusy, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
+import { createGoogleCalendarEvent, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
 import { incrementChestProgress } from "@/app/actions/chestActions"
@@ -453,16 +453,10 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             };
         }
 
-        // FreeBusy Check BEFORE DB update to avoid inconsistent state
-        if (outcome === "confermato" && salespersonAssigned && oldLead.appointmentDate) {
-            const apptDate = new Date(oldLead.appointmentDate);
-            const endTime = addHours(apptDate, 1);
-
-            const isFree = await checkFreeBusy(salespersonAssigned, apptDate, endTime);
-            if (!isFree) {
-                return { success: false, error: "Il venditore selezionato ha già un impegno in questa fascia oraria in Google Calendar." };
-            }
-        }
+        // NB: nessun blocco FreeBusy su Google Calendar. Le Conferme vedono già
+        // l'agenda dei venditori dal CRM (VenditoriAgendaModal, che mostra anche
+        // gli impegni esterni GCal) e si coordinano al telefono: un "busy" su
+        // Google non deve impedire di fissare l'appuntamento.
 
         const updated = await db.update(leads).set({
             confirmationsOutcome: outcome,
