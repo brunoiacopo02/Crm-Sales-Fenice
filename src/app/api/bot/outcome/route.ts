@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
         assignedToId: leads.assignedToId,
         status: leads.status,
         confNeedsReschedule: leads.confNeedsReschedule,
+        agendaStatus: leads.agendaStatus,
     }).from(leads).where(eq(leads.id, leadId)).limit(1);
 
     if (!lead) {
@@ -88,8 +89,36 @@ export async function POST(req: NextRequest) {
     const [assignee] = lead.assignedToId
         ? await db.select({ id: users.id, isBot: users.isBot }).from(users).where(eq(users.id, lead.assignedToId)).limit(1)
         : [undefined];
-    if (!assignee || !assignee.isBot) {
-        return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
+    const assigneeIsBot = !!assignee?.isBot;
+
+    // Lead di un GDO umano: da quando l'agenda parte dal canale bot, il bot
+    // conversa anche con lead che non gli appartengono. Può però SOLO annotare —
+    // il lead resta del GDO, quindi niente transizioni di stato — e solo se per
+    // quel lead è passata davvero un'agenda dal suo canale. Minimo privilegio:
+    // il segreto è fidato per operazioni distruttive sui lead del bot, non deve
+    // poter scrivere su qualunque lead a database.
+    if (!assigneeIsBot) {
+        if (typedOutcome !== 'NOTA') {
+            return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
+        }
+        if (lead.agendaStatus !== 'consegnato' && lead.agendaStatus !== 'inviato') {
+            return NextResponse.json({ error: 'forbidden', detail: 'nessuna agenda inviata dal bot per questo lead' }, { status: 403 });
+        }
+    }
+
+    // Autore degli eventi. Sui lead umani l'assegnatario è una persona: attribuirgli
+    // la nota la farebbe sembrare scritta da lui, quindi si usa l'account bot.
+    let actorUserId: string;
+    if (assigneeIsBot) {
+        actorUserId = assignee!.id;
+    } else {
+        const [botAccount] = await db.select({ id: users.id }).from(users)
+            .where(and(eq(users.isBot, true), eq(users.companyId, 'fenice'))).limit(1);
+        if (!botAccount) {
+            console.error('[bot-fissatore] nessun account bot Fenice trovato');
+            return NextResponse.json({ error: 'not_configured', detail: 'account bot assente' }, { status: 503 });
+        }
+        actorUserId = botAccount.id;
     }
 
     // Idempotenza anti ri-fissaggio. Il bot esterno ri-notifica lo stesso
@@ -109,7 +138,7 @@ export async function POST(req: NextRequest) {
             id: crypto.randomUUID(),
             leadId,
             eventType: 'BOT_REPORT',
-            userId: assignee.id,
+            userId: actorUserId,
             timestamp: new Date(),
             metadata: report as Record<string, unknown>,
             companyId: 'fenice',
@@ -131,7 +160,7 @@ export async function POST(req: NextRequest) {
             id: crypto.randomUUID(),
             leadId,
             eventType: 'BOT_NOTE',
-            userId: assignee.id,
+            userId: actorUserId,
             timestamp: new Date(),
             metadata: { note: text },
             companyId: 'fenice',
@@ -168,7 +197,7 @@ export async function POST(req: NextRequest) {
     // coinvolto: i flussi dei GDO umani restano intatti.
     if (typedOutcome === 'NON_RISPOSTO' || typedOutcome === 'INTERROTTO') {
         const reason = typedOutcome === 'NON_RISPOSTO' ? 'mai_risposto' : 'chat_interrotta';
-        const r = await reassignBotLeadToHumanPool(leadId, reason, assignee.id, note);
+        const r = await reassignBotLeadToHumanPool(leadId, reason, actorUserId, note);
         return NextResponse.json({ ok: true, reassigned: r.assignedToId });
     }
 
@@ -183,7 +212,7 @@ export async function POST(req: NextRequest) {
         discardReason,
         undefined,            // currentVersion (no optimistic lock dal bot)
         undefined,            // scriptCompleted
-        { companyId: 'fenice', actorUserId: assignee.id, isBot: true },
+        { companyId: 'fenice', actorUserId, isBot: true },
     );
 
     if (!result || result.success !== true) {

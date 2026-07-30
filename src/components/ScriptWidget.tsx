@@ -382,11 +382,13 @@ interface ScriptWidgetProps {
   leadPhone?: string;
   /** Agenda already-sent timestamp (shows "già inviata" badge on the button). */
   agendaSentAt?: Date | null;
+  /** Esito dell'ultimo invio agenda: decide colore del pulsante e blocco del reinvio. */
+  agendaStatus?: string | null;
   /** Optional callback invoked when the survey is saved (used by parent to refresh UI). */
   onSurveySaved?: () => void;
 }
 
-export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, agendaSentAt, onSurveySaved }: ScriptWidgetProps = {}) {
+export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, agendaSentAt, agendaStatus, onSurveySaved }: ScriptWidgetProps = {}) {
   const company = useSalesCompany();
   const isSerenamente = company === 'serenamente';
   const blocks = isSerenamente ? SERENAMENTE_BLOCKS : SCRIPT_BLOCKS;
@@ -601,8 +603,8 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
                   leadId={leadId}
                   leadName={leadName}
                   leadPhone={leadPhone}
-                  hasEmail={!!leadEmail}
                   agendaSentAt={agendaSentAt ?? null}
+                  agendaStatus={agendaStatus ?? null}
               />
           )}
           {surveyEnabled && !surveySaved && (

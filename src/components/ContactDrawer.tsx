@@ -267,8 +267,8 @@ export function ContactDrawer({
                                     leadId={lead.id}
                                     leadName={lead.name || ''}
                                     leadPhone={lead.phone}
-                                    hasEmail={!!lead.email}
                                     agendaSentAt={lead.agendaSentAt ?? null}
+                                    agendaStatus={lead.agendaStatus ?? null}
                                 />
                             )}
                             {isAdmin && lead?.id && (
@@ -467,8 +467,8 @@ export function ContactDrawer({
                                         leadId={lead.id}
                                         leadName={lead.name}
                                         leadPhone={lead.phone}
-                                        hasEmail={!!lead.email}
                                         agendaSentAt={lead.agendaSentAt}
+                                        agendaStatus={lead.agendaStatus ?? null}
                                     />
                                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} popoverDirection="up" />
                                 </div>
@@ -544,6 +544,7 @@ export function ContactDrawer({
                                     leadName={lead.name}
                                     leadPhone={lead.phone}
                                     agendaSentAt={lead.agendaSentAt ?? null}
+                                    agendaStatus={lead.agendaStatus ?? null}
                                 />
                             )}
                         </div>

@@ -28,6 +28,7 @@ type LeadProps = {
         lastCallNote?: string | null
         recallNote?: string | null
         agendaSentAt?: Date | null
+        agendaStatus?: string | null
         createdAt?: Date | null
         source?: string | null
         phoneSuspicious?: boolean | null
@@ -392,8 +393,8 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                         leadId={lead.id}
                         leadName={lead.name}
                         leadPhone={lead.phone}
-                        hasEmail={!!lead.email}
                         agendaSentAt={lead.agendaSentAt}
+                        agendaStatus={lead.agendaStatus ?? null}
                     />
                     <GdoQuickActions leadId={lead.id} leadVersion={lead.version} recallPrefillNote={lead.recallNote || lead.lastCallNote || null} />
                 </div>
@@ -433,6 +434,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                     leadName={lead.name}
                                     leadPhone={lead.phone}
                                     agendaSentAt={lead.agendaSentAt ?? null}
+                                    agendaStatus={lead.agendaStatus ?? null}
                                 />
                             </div>
                         </div>

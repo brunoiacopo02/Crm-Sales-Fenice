@@ -1,21 +1,24 @@
 "use client"
 
 import { useState } from "react"
-import { Send, X, Briefcase, Users, CheckCircle2, Loader2, Mail, Sparkles } from "lucide-react"
+import { Send, X, Briefcase, Users, CheckCircle2, Loader2, Sparkles, AlertTriangle, MessageCircle } from "lucide-react"
 import { sendAgendaToLead } from "@/app/actions/activeCampaignActions"
 import { sendAgendaSerenamente } from "@/app/actions/serenamenteAgendaActions"
 import { useSalesCompany } from "@/components/providers/SalesCompanyProvider"
 import { useRouter } from "next/navigation"
 
+/** Esito dell'ultimo invio. Volutamente senza riferimenti al canale sottostante. */
+export type AgendaStatus = 'consegnato' | 'inviato' | 'fallito'
+
 type AgendaButtonProps = {
     leadId: string
     leadName: string
     leadPhone: string
-    hasEmail: boolean
     agendaSentAt?: Date | null
+    agendaStatus?: string | null
 }
 
-export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSentAt }: AgendaButtonProps) {
+export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agendaStatus }: AgendaButtonProps) {
     const router = useRouter()
     const company = useSalesCompany()
     const isSerenamente = company === 'serenamente'
@@ -23,25 +26,29 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
     const [lavora, setLavora] = useState<boolean | null>(null)
     const [haFamiglia, setHaFamiglia] = useState<boolean | null>(null)
     const [offertaDelMese, setOffertaDelMese] = useState(false)
-    const [emailOverride, setEmailOverride] = useState("")
     const [loading, setLoading] = useState(false)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
-    // Stato ottimistico per l'invio diretto Serenamente: il badge diventa verde
-    // SUBITO, anche dentro il drawer dello script dove router.refresh() non
-    // ri-renderizza le props (il click sembrava "non fare nulla").
-    const [sentNow, setSentNow] = useState(false)
+    // Stato ottimistico: il badge si aggiorna SUBITO, anche dentro il drawer dello
+    // script dove router.refresh() non ri-renderizza le props (il click sembrava
+    // "non fare nulla"). Tiene anche l'esito, che decide colore e riapribilità.
+    const [sentNowStatus, setSentNowStatus] = useState<AgendaStatus | null>(null)
 
-    const alreadySent = !!agendaSentAt || sentNow
-    const needsEmail = !hasEmail
+    const status = (sentNowStatus ?? agendaStatus ?? null) as AgendaStatus | null
+    const alreadySent = !!agendaSentAt || sentNowStatus === 'consegnato' || sentNowStatus === 'inviato'
+
+    // 'inviato' = partito ma consegna non confermata (tipicamente telefono spento).
+    // Un reinvio arriverebbe doppio appena il lead torna online, quindi si blocca.
+    const isLocked = status === 'inviato'
+    const isFailed = status === 'fallito'
 
     const handleOpen = (e: React.MouseEvent) => {
         e.stopPropagation()
+        if (isLocked) return
         setShowModal(true)
         setLavora(null)
         setHaFamiglia(null)
         setOffertaDelMese(false)
-        setEmailOverride("")
         setSuccessMsg(null)
         setErrorMsg(null)
     }
@@ -61,7 +68,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         try {
             const result = await sendAgendaSerenamente(leadId)
             if (result.success) {
-                setSentNow(true)
+                setSentNowStatus('consegnato')
                 window.alert("✅ Agenda inviata a " + leadName + " via WhatsApp")
                 router.refresh()
             } else {
@@ -74,15 +81,9 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         }
     }
 
-    const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
-
     const handleSubmit = async () => {
         // Validation: either offerta del mese OR both work/family questions answered
         if (!offertaDelMese && (lavora === null || haFamiglia === null)) return
-        if (needsEmail && !isValidEmail(emailOverride)) {
-            setErrorMsg("Inserisci un'email valida")
-            return
-        }
         setLoading(true)
         setErrorMsg(null)
         try {
@@ -90,13 +91,19 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                 lavora: lavora ?? false,
                 haFamiglia: haFamiglia ?? false,
                 offertaDelMese,
-                emailOverride: needsEmail ? emailOverride.trim() : undefined,
             })
             if (result.success) {
-                setSuccessMsg(result.alreadySent ? "Agenda reinviata correttamente!" : "Agenda inviata correttamente!")
+                const esito = (result.esito ?? 'consegnato') as AgendaStatus
+                setSentNowStatus(esito)
+                setSuccessMsg(
+                    esito === 'inviato'
+                        ? "Agenda inviata, consegna non ancora confermata."
+                        : result.alreadySent ? "Agenda reinviata correttamente!" : "Agenda inviata correttamente!"
+                )
                 router.refresh()
-                setTimeout(() => setShowModal(false), 1500)
+                setTimeout(() => setShowModal(false), esito === 'inviato' ? 3000 : 1500)
             } else {
+                if (result.esito === 'fallito') setSentNowStatus('fallito')
                 setErrorMsg(result.error || "Errore sconosciuto")
             }
         } catch (e: any) {
@@ -106,31 +113,45 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
         }
     }
 
-    const canSubmit = (offertaDelMese || (lavora !== null && haFamiglia !== null)) && !loading && (!needsEmail || isValidEmail(emailOverride))
+    const canSubmit = (offertaDelMese || (lavora !== null && haFamiglia !== null)) && !loading
+
+    const buttonClass = isLocked
+        ? 'border-amber-300 bg-amber-50 text-amber-700 cursor-not-allowed'
+        : isFailed
+            ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+            : alreadySent
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+
+    const buttonLabel = isLocked ? 'Consegna non confermata' : isFailed ? 'Invio fallito' : 'Agenda'
+
+    const buttonTitle = isSerenamente
+        ? "Invia agenda Serenamente"
+        : isLocked
+            ? "Il messaggio è partito ma la consegna non è confermata (telefono spento o offline). Arriverà da solo appena il lead torna online: non reinviare, riceverebbe tutto doppio."
+            : isFailed
+                ? "L'ultimo invio non è andato a buon fine — clicca per riprovare"
+                : alreadySent
+                    ? `Agenda già inviata (${new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}) — clicca per reinviare`
+                    : "Invia agenda al lead via WhatsApp"
 
     return (
         <>
             <button
                 type="button"
                 onClick={isSerenamente ? handleDirectSend : handleOpen}
-                disabled={isSerenamente && loading}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${alreadySent
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                    : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                    }`}
-                title={
-                    isSerenamente
-                        ? "Invia agenda Serenamente"
-                        : alreadySent
-                            ? `Agenda già inviata (${new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}) — clicca per reinviare`
-                            : "Invia agenda Calendly via WhatsApp"
-                }
+                disabled={(isSerenamente && loading) || isLocked}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${buttonClass}`}
+                title={buttonTitle}
             >
                 {isSerenamente && loading
                     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : alreadySent ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />
+                    : isLocked ? <AlertTriangle className="w-3.5 h-3.5" />
+                        : isFailed ? <AlertTriangle className="w-3.5 h-3.5" />
+                            : alreadySent ? <CheckCircle2 className="w-3.5 h-3.5" />
+                                : <Send className="w-3.5 h-3.5" />
                 }
-                Agenda
+                {isSerenamente ? 'Agenda' : buttonLabel}
             </button>
 
             {showModal && (
@@ -164,7 +185,13 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
 
                         {/* Body */}
                         <div className="p-5 space-y-5">
-                            {alreadySent && !successMsg && (
+                            {isFailed && !successMsg && (
+                                <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">
+                                    ⚠️ L'ultimo invio a questo lead non è andato a buon fine. Verifica che il numero sia corretto e attivo su WhatsApp.
+                                </div>
+                            )}
+
+                            {alreadySent && !isFailed && !successMsg && (
                                 <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg px-3 py-2">
                                     ⚠️ Agenda già inviata il <strong>{new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</strong>. Procedi solo se il lead non l'ha ricevuta.
                                 </div>
@@ -172,27 +199,6 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
 
                             {!successMsg && (
                                 <>
-                                    {/* Email input — only if lead has no email */}
-                                    {needsEmail && (
-                                        <div>
-                                            <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">
-                                                <Mail className="w-3.5 h-3.5" /> Email del Lead *
-                                            </label>
-                                            <input
-                                                type="email"
-                                                value={emailOverride}
-                                                onChange={(e) => setEmailOverride(e.target.value)}
-                                                placeholder="esempio@email.com"
-                                                disabled={loading}
-                                                className="input-fenice text-sm w-full"
-                                                autoFocus
-                                            />
-                                            <div className="text-[11px] text-ash-500 mt-1">
-                                                Il lead non ha email salvata. Inserisci quella comunicata durante la chiamata — verrà salvata anche nel CRM.
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {/* Offerta del Mese checkbox */}
                                     <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${offertaDelMese
                                         ? 'border-purple-500 bg-purple-50 shadow-sm'
@@ -280,6 +286,16 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
                                         </div>
                                     </div>
 
+                                    {/* Promemoria operativo: senza una risposta del lead il video non parte.
+                                        TESTO DA APPROVARE DAL PO prima del go-live. */}
+                                    <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                                        <MessageCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                        <div className="text-[11px] leading-relaxed text-blue-900">
+                                            <strong>Prima di chiudere la chiamata</strong>, fatti rispondere al messaggio dal lead:
+                                            senza una sua risposta il video di preparazione non gli arriva.
+                                        </div>
+                                    </div>
+
                                     {errorMsg && (
                                         <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">
                                             {errorMsg}
@@ -290,11 +306,17 @@ export function AgendaButton({ leadId, leadName, leadPhone, hasEmail, agendaSent
 
                             {successMsg && (
                                 <div className="flex flex-col items-center gap-3 py-6">
-                                    <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
-                                        <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                                    <div className={`w-14 h-14 rounded-full flex items-center justify-center ${sentNowStatus === 'inviato' ? 'bg-amber-100' : 'bg-emerald-100'}`}>
+                                        {sentNowStatus === 'inviato'
+                                            ? <AlertTriangle className="w-8 h-8 text-amber-600" />
+                                            : <CheckCircle2 className="w-8 h-8 text-emerald-600" />}
                                     </div>
-                                    <div className="text-sm font-bold text-emerald-700">{successMsg}</div>
-                                    <div className="text-xs text-ash-500">Il lead riceverà il messaggio via WhatsApp.</div>
+                                    <div className={`text-sm font-bold ${sentNowStatus === 'inviato' ? 'text-amber-700' : 'text-emerald-700'}`}>{successMsg}</div>
+                                    <div className="text-xs text-ash-500 text-center px-4">
+                                        {sentNowStatus === 'inviato'
+                                            ? "Il telefono del lead risulta spento o offline: il messaggio gli arriverà appena si ricollega. Non reinviare."
+                                            : "Il lead riceverà il messaggio via WhatsApp."}
+                                    </div>
                                 </div>
                             )}
                         </div>

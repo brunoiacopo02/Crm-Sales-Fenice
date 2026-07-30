@@ -7,6 +7,7 @@ import { createClient } from "@/utils/supabase/server"
 import { logLeadEvent } from "@/lib/eventLogger"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 import { sendSerenamenteTemplate, SERENAMENTE_TEMPLATE_NR, SERENAMENTE_TEMPLATE_AUTOCONFERMA } from "@/lib/serenamenteMessaging"
+import { sendAgendaViaBot, type AgendaEsito } from "@/lib/agendaBot"
 
 // ActiveCampaign configuration
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com'
@@ -95,20 +96,32 @@ export type SendAgendaOptions = {
     lavora: boolean
     haFamiglia: boolean
     offertaDelMese?: boolean // If true, sends OFF1 tag only (skips Lavora/Famiglia)
-    emailOverride?: string // If lead has no email, GDO provides one at submit time
+    emailOverride?: string // Solo per il fallback ActiveCampaign: il modale non la chiede più
 }
 
 export type SendAgendaResult = {
     success: boolean
     error?: string
     alreadySent?: boolean
+    esito?: AgendaEsito      // valorizzato solo dal canale bot
+    deduplicato?: boolean
 }
 
+// Per decisione del PO l'interfaccia del GDO non deve mai lasciar intuire che
+// dietro l'invio c'è un bot: il dettaglio tecnico resta nei log e nell'evento.
+const GENERIC_SEND_ERROR = 'Invio agenda fallito. Riprova tra qualche istante.'
+
 /**
- * Invia l'agenda Calendly tramite automazione ActiveCampaign (che usa Spoki per WhatsApp).
- * - Cerca il contatto in AC per email, se non esiste lo crea
- * - Aggiunge i tag in base alla situazione del lead (lavora/famiglia)
- * - Aggiunge il contatto all'automazione 248 che invia messaggio + VSL dopo 5 min
+ * Invia l'agenda al lead. Il canale è deciso da AGENDA_CHANNEL su Vercel:
+ *  - 'bot' → endpoint /api/send-agenda del fornitore (canale attuale)
+ *  - qualunque altro valore o assente → ActiveCampaign/Spoki (fallback storico)
+ *
+ * Il default è ActiveCampaign di proposito: il deploy non cambia comportamento,
+ * il passaggio al bot è una variabile d'ambiente da girare quando si è pronti,
+ * e il rientro è altrettanto immediato senza deploy.
+ *
+ * Nota sul fallback: il modale non raccoglie più l'email, quindi su AC i lead
+ * senza email a database falliranno. Accettabile per una leva d'emergenza.
  */
 export async function sendAgendaToLead(
     leadId: string,
@@ -125,13 +138,110 @@ export async function sendAgendaToLead(
     if (!lead) return { success: false, error: 'Lead non trovato' }
 
     // Rete di sicurezza: i lead non-Fenice (es. Serenamente) NON devono passare da
-    // ActiveCampaign/Spoki di Fenice — altrimenti il contatto entra nell'AC Fenice e il
-    // webhook crea un duplicato Fenice. Per Serenamente l'agenda va via Twilio (AgendaButton
-    // usa già sendAgendaSerenamente); questo blocca eventuali chiamate errate.
+    // qui. Su ActiveCampaign il contatto finirebbe nell'AC Fenice e il webhook
+    // creerebbe un duplicato; sull'endpoint bot verrebbero comunque respinti con 403
+    // (accetta solo companyId "fenice"). Per Serenamente l'agenda va via Twilio
+    // (AgendaButton usa già sendAgendaSerenamente); questo blocca chiamate errate.
     if (ctx.companyId !== 'fenice') {
-        return { success: false, error: `Lead ${ctx.companyId}: l'agenda va inviata col flusso dedicato (Twilio), non con ActiveCampaign Fenice.` }
+        return { success: false, error: `Lead ${ctx.companyId}: l'agenda va inviata col flusso dedicato (Twilio), non con questo canale.` }
     }
 
+    if (process.env.AGENDA_CHANNEL === 'bot') {
+        return sendAgendaViaBotChannel(lead, options, supabaseUser.id, ctx.companyId)
+    }
+    return sendAgendaViaActiveCampaign(lead, options, supabaseUser.id, ctx.companyId)
+}
+
+/**
+ * Canale bot. La differenza sostanziale rispetto ad ActiveCampaign è che qui
+ * l'esito è REALE e sincrono: `agendaSentAt` si scrive solo se il messaggio è
+ * davvero partito. Su 'fallito' non si scrive nulla e non si logga AGENDA_SENT —
+ * era proprio il falso positivo di AC/Spoki a nascondere il problema per settimane.
+ */
+async function sendAgendaViaBotChannel(
+    lead: typeof leads.$inferSelect,
+    options: SendAgendaOptions,
+    userId: string,
+    companyId: string,
+): Promise<SendAgendaResult> {
+    const wasSent = lead.agendaSentAt !== null
+
+    const r = await sendAgendaViaBot({
+        leadId: lead.id,
+        phone: lead.phone,
+        name: lead.name,
+        email: lead.email,
+        funnel: lead.funnel,
+        variant: {
+            lavora: !!options.lavora,
+            haFamiglia: !!options.haFamiglia,
+            offertaDelMese: !!options.offertaDelMese,
+        },
+    })
+
+    if (!r.ok) {
+        // Errore di trasporto/protocollo: non sappiamo se il messaggio sia partito,
+        // quindi non tocchiamo né agendaSentAt né agendaStatus.
+        console.error(`[agenda] invio fallito (${r.kind}) per lead ${lead.id}: ${r.error}`)
+        return { success: false, error: GENERIC_SEND_ERROR }
+    }
+
+    if (r.esito === 'fallito') {
+        // Risposta valida a una consegna non riuscita: numero non su WhatsApp,
+        // template bloccato, Twilio giù. Tracciamo lo stato per la UI (il pulsante
+        // diventa rosso e il reinvio resta permesso) ma NON logghiamo AGENDA_SENT:
+        // quell'evento alimenta le statistiche e conterebbe un invio mai avvenuto.
+        await db.update(leads)
+            .set({ agendaStatus: 'fallito' })
+            .where(and(eq(leads.id, lead.id), eq(leads.companyId, companyId)))
+        console.error(`[agenda] esito fallito per lead ${lead.id}: ${r.message ?? '—'}`)
+        return { success: false, error: GENERIC_SEND_ERROR, esito: 'fallito' }
+    }
+
+    // consegnato | inviato → il messaggio è partito.
+    await db.update(leads)
+        .set({ agendaSentAt: new Date(), agendaStatus: r.esito })
+        .where(and(eq(leads.id, lead.id), eq(leads.companyId, companyId)))
+
+    await logLeadEvent({
+        leadId: lead.id,
+        eventType: 'AGENDA_SENT',
+        userId,
+        metadata: {
+            channel: 'bot',
+            esito: r.esito,
+            deduplicato: r.deduplicato,
+            conversationId: r.conversationId,
+            sid: r.sid,
+            offertaDelMese: !!options.offertaDelMese,
+            lavora: options.offertaDelMese ? null : options.lavora,
+            haFamiglia: options.offertaDelMese ? null : options.haFamiglia,
+            resend: wasSent,
+        },
+        companyId,
+    })
+
+    return { success: true, alreadySent: wasSent, esito: r.esito, deduplicato: r.deduplicato }
+}
+
+/**
+ * Fallback storico: automazione ActiveCampaign 248, che spedisce via Spoki.
+ * - Cerca il contatto in AC per email, se non esiste lo crea
+ * - Aggiunge i tag in base alla situazione del lead (lavora/famiglia)
+ * - Aggiunge il contatto all'automazione che invia messaggio + VSL dopo 5 min
+ *
+ * Attenzione: AC risponde 2xx anche quando Spoki non spedisce, quindi qui il
+ * successo NON garantisce la consegna. È il motivo per cui questo canale è stato
+ * sostituito; resta solo come leva di emergenza.
+ */
+async function sendAgendaViaActiveCampaign(
+    lead: typeof leads.$inferSelect,
+    options: SendAgendaOptions,
+    userId: string,
+    companyId: string,
+): Promise<SendAgendaResult> {
+    const leadId = lead.id
+    const ctx = { companyId }
     // Use lead email or override provided by GDO
     const emailToUse = lead.email || options.emailOverride
     if (!emailToUse) {
@@ -179,8 +289,9 @@ export async function sendAgendaToLead(
         await logLeadEvent({
             leadId,
             eventType: 'AGENDA_SENT',
-            userId: supabaseUser.id,
+            userId,
             metadata: {
+                channel: 'activecampaign',
                 contactId,
                 offertaDelMese: !!options.offertaDelMese,
                 lavora: options.offertaDelMese ? null : options.lavora,

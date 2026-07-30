@@ -129,6 +129,11 @@ export const leads = pgTable('leads', {
     lastCallNote: text('lastCallNote'),
     recallNote: text('recallNote'),
     agendaSentAt: timestamp('agendaSentAt', { withTimezone: true, mode: 'date' }),
+    // Esito dell'ultimo invio agenda dal canale bot: 'consegnato' | 'inviato' | 'fallito'.
+    // Su 'inviato' (accettato da Twilio ma consegna non confermata, es. telefono
+    // spento) il reinvio va BLOCCATO: arriverebbe doppio al ritorno online.
+    // NULL = mai inviata dal bot (lead storici via ActiveCampaign/Spoki).
+    agendaStatus: text('agendaStatus'),
     recallDate: timestamp('recallDate', { withTimezone: true, mode: 'date' }),
     // Settato quando un lead con richiamo programmato riceve esito NON_RISPOSTO:
     // indica "aveva un richiamo e non ha risposto" (badge sulla card). Azzerato

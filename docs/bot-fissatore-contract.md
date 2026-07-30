@@ -1,7 +1,7 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.2 — 2026-07-25 (aggiunto esito `NOTA` per annotazioni senza transizione di stato — es. disdette; cap giornaliero 20 → 50).
+> **Versione:** 1.3 — 2026-07-29 (aggiunta Direzione 3: invio agenda su richiesta del GDO; `NOTA` ammessa sui lead dei GDO umani).
 
 ---
 
@@ -12,8 +12,9 @@
 3. [Schema firma HMAC](#schema-firma-hmac)
 4. [Direzione 1 — CRM → Bot (push all'assegnazione)](#direzione-1--crm--bot-push-allassegnazione)
 5. [Direzione 2 — Bot → CRM (callback outcome)](#direzione-2--bot--crm-callback-outcome)
-6. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
-7. [Limitazioni note](#limitazioni-note)
+6. [Direzione 3 — CRM → Bot (invio agenda)](#direzione-3--crm--bot-invio-agenda)
+7. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
+8. [Limitazioni note](#limitazioni-note)
 
 ---
 
@@ -213,8 +214,21 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 > o la richiesta di spostamento comunicata in chat. Il campo `note` è **obbligatorio** (400 se
 > vuoto). `NOTA` non modifica MAI lo stato del lead: se il lead vuole rifissare, la nuova data
 > va comunicata da una persona (o, quando concordato, con un nuovo `APPUNTAMENTO`). Risposta:
-> `{ ok: true, noted: true }`. Vale la regola generale: il lead deve essere ancora assegnato
-> all'account bot, altrimenti 403.
+> `{ ok: true, noted: true }`.
+
+> **`NOTA` sui lead dei GDO umani (nuovo in v1.3):** da quando l'agenda parte dal canale
+> bot (Direzione 3), il bot conversa anche con lead che **non gli sono assegnati**. Su
+> quei lead è ammesso **esclusivamente** l'esito `NOTA`, e solo se per quel lead è
+> passata davvero un'agenda dal bot (`leads.agendaStatus` = `consegnato` o `inviato`).
+> Ogni altro esito su un lead non assegnato al bot resta **403**, così come la `NOTA` su
+> un lead che non ha mai ricevuto l'agenda. Sui lead assegnati all'account bot non cambia
+> nulla: tutti gli esiti restano ammessi.
+
+| Assegnatario del lead | Agenda inviata dal bot | Esiti ammessi |
+|---|---|---|
+| account bot | indifferente | tutti |
+| GDO umano | sì | solo `NOTA` |
+| GDO umano | no | nessuno (403) |
 
 > **Formato `date`:** ISO 8601 con offset di fuso orario **obbligatorio** (`Z` oppure `±HH:MM`).
 > L'endpoint verifica attivamente la presenza dell'offset: una data priva di fuso viene
@@ -242,6 +256,95 @@ interface BotReport {
 
 Il `report` viene persistito su `leads.botReport` e appare nella card del lead nella
 dashboard Conferme. È fortemente raccomandato per aiutare il team Conferme e i Venditori.
+
+---
+
+## Direzione 3 — CRM → Bot (invio agenda)
+
+Dal 2026-07-29 l'agenda che il GDO manda al lead **non passa più da ActiveCampaign/Spoki**
+ma dall'endpoint del fornitore. Il contesto operativo è importante: il GDO clicca il
+pulsante **mentre è al telefono col lead**, e il lead prenota dall'agenda durante la
+chiamata stessa. Serve quindi un esito reale e sincrono, non un'accettazione ottimistica.
+
+### Request
+
+```
+POST https://web-app-messaggistica.vercel.app/api/send-agenda
+Content-Type: application/json
+x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
+```
+
+Stesso segreto e stesso schema di firma delle altre due direzioni.
+
+### Body
+
+```ts
+interface SendAgendaPayload {
+  leadId:    string;   // UUID del lead nel CRM
+  phone:     string;   // grezzo dal DB — normalizzazione E.164 a carico del bot
+  companyId: 'fenice'; // obbligatorio: altri valori → 403
+  name?:     string;
+  email?:    string;
+  funnel?:   string;
+  variant: {           // sceglie testo e video; se assente vale tutto false
+    lavora:         boolean;
+    haFamiglia:     boolean;
+    offertaDelMese: boolean;  // prevale sugli altri due
+  };
+}
+```
+
+### Risposta
+
+Sempre **HTTP 200** quando la richiesta è valida: l'esito applicativo sta nel corpo,
+non nello stato HTTP. Codici diversi da 200 solo per errori di protocollo
+(401 firma, 403 companyId, 400 corpo, 429 rate limit).
+
+```json
+{ "ok": true, "esito": "consegnato", "deduplicato": false, "conversationId": 1234, "sid": "SM..." }
+```
+
+| `esito` | Significato | Ritentabile |
+|---|---|---|
+| `consegnato` | Twilio conferma delivered/read | — |
+| `inviato` | accettato da Twilio, nessuna conferma entro ~8s (telefono spento/offline) | **NO** — arriverebbe doppio al ritorno online |
+| `fallito` | numero non su WhatsApp, template bloccato, Twilio giù | sì |
+
+La risposta arriva entro ~8s; il CRM attende fino a 12s prima di considerarlo un
+errore di rete.
+
+**Lato CRM:** `agendaSentAt` viene scritto **solo** su `consegnato` e `inviato`. Su
+`fallito` non si scrive e non si logga `AGENDA_SENT` — quell'evento alimenta le
+statistiche e conterebbe un invio mai avvenuto. L'esito finisce su `leads.agendaStatus`,
+che nella UI del GDO **disabilita il pulsante** quando vale `inviato`.
+
+### Deduplica
+
+Stesso `leadId` entro **15 minuti** → nessun reinvio, risposta con l'esito precedente
+e `deduplicato: true`. Non si applica dopo un `fallito`.
+
+> **Richiesta aperta:** includere anche la **variante** nella chiave di deduplica. Se il
+> GDO sbaglia a impostare lavora/famiglia e corregge entro 15 minuti, oggi la correzione
+> viene deduplicata e il lead resta col video sbagliato.
+
+### Sequenza lato bot
+
+1. Template `fenice_agenda_gdo_v3` (UTILITY) col link di prenotazione, che chiede
+   esplicitamente al lead di rispondere.
+2. **Alla prima risposta del lead** — qualunque essa sia — il video della variante,
+   come testo libero.
+3. Da lì il bot gestisce la conversazione sapendo che l'appuntamento è **già fissato**:
+   non ripropone la call, non ripete il pitch, non manda solleciti. Il GDO non viene
+   mai nominato.
+
+> **Punto fragile noto:** senza una risposta del lead la finestra 24h di WhatsApp resta
+> chiusa e **il video non parte**. Dipende da cosa dice il GDO al telefono; il CRM
+> mostra un promemoria nel modale al momento dell'invio.
+
+### Cosa il bot NON fa su questi lead
+
+Il lead resta del GDO umano: nessuna transizione di stato, nessun follow-up "prenota",
+nessuna classificazione automatica. L'unico ritorno ammesso è `NOTA` (vedi sotto).
 
 ---
 
