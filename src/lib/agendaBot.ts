@@ -45,6 +45,14 @@ export type SendAgendaViaBotResult =
         ok: true
         esito: AgendaEsito
         deduplicato: boolean
+        /** Il fornitore ha aggiornato il video che partirà alla risposta del lead. */
+        varianteAggiornata: boolean
+        /**
+         * Il lead aveva già risposto e il video SBAGLIATO è già partito: la
+         * correzione non è più recuperabile via software. Va detto al GDO, che
+         * è l'unico che può rimediare parlandone col lead.
+         */
+        videoGiaInviato: boolean
         message?: string
         conversationId?: number | null
         sid?: string | null
@@ -122,6 +130,8 @@ export async function sendAgendaViaBot(input: SendAgendaViaBotInput): Promise<Se
         ok: true,
         esito: data.esito as AgendaEsito,
         deduplicato: data.deduplicato === true,
+        varianteAggiornata: data.varianteAggiornata === true,
+        videoGiaInviato: data.videoGiaInviato === true,
         message: typeof data.message === 'string' ? data.message : undefined,
         conversationId: data.conversationId ?? null,
         sid: data.sid ?? null,

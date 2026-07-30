@@ -318,14 +318,22 @@ errore di rete.
 statistiche e conterebbe un invio mai avvenuto. L'esito finisce su `leads.agendaStatus`,
 che nella UI del GDO **disabilita il pulsante** quando vale `inviato`.
 
-### Deduplica
+### Deduplica e correzione della variante
 
 Stesso `leadId` entro **15 minuti** → nessun reinvio, risposta con l'esito precedente
 e `deduplicato: true`. Non si applica dopo un `fallito`.
 
-> **Richiesta aperta:** includere anche la **variante** nella chiave di deduplica. Se il
-> GDO sbaglia a impostare lavora/famiglia e corregge entro 15 minuti, oggi la correzione
-> viene deduplicata e il lead resta col video sbagliato.
+La variante **non** entra nella chiave di deduplica, di proposito: entrarci farebbe
+partire due volte lo stesso identico messaggio di agenda. Il fornitore aggiorna invece
+il **video** che partirà alla risposta del lead, e lo comunica con due campi:
+
+| Campo | Significato | Cosa fa il CRM |
+|---|---|---|
+| `varianteAggiornata: true` | correzione applicata, il lead riceverà il video giusto | messaggio "Variante aggiornata" nel modale |
+| `videoGiaInviato: true` | il lead aveva già risposto e il video **sbagliato è già partito** | avviso rosso a tutto schermo, la modale **non si chiude da sola**: il GDO deve dirlo al lead mentre è in chiamata |
+
+Il secondo caso non è recuperabile via software ed è giusto che il CRM lo dica invece
+di aggiornare una colonna facendo finta di aver risolto.
 
 ### Sequenza lato bot
 
@@ -340,6 +348,32 @@ e `deduplicato: true`. Non si applica dopo un `fallito`.
 > **Punto fragile noto:** senza una risposta del lead la finestra 24h di WhatsApp resta
 > chiusa e **il video non parte**. Dipende da cosa dice il GDO al telefono; il CRM
 > mostra un promemoria nel modale al momento dell'invio.
+
+### Avviso di consegna a posteriori — Bot → CRM
+
+Un'agenda uscita con esito `inviato` resterebbe in quello stato per sempre, e con essa
+il blocco del reinvio nella UI. Quando quel messaggio viene poi consegnato davvero, il
+bot chiama:
+
+```
+POST https://crm-sales-fenice.vercel.app/api/bot/agenda-delivery
+x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
+
+{ "leadId": "...", "esito": "consegnato", "sid": "SM...", "at": "2026-07-30T18:00:00.000Z" }
+```
+
+L'endpoint agisce **solo** sulla transizione `inviato` → `consegnato`. Qualunque altro
+stato (già consegnato, fallito, mai inviato) risponde `200 { ok: true, ignored: true }`
+senza scrivere: un retry non è mai un problema.
+
+| HTTP | Significato |
+|---|---|
+| `200 { ok: true, updated: true }` | stato aggiornato, reinvio sbloccato |
+| `200 { ok: true, ignored: true }` | avviso ripetuto o fuori tempo — nessuna azione |
+| `400` | `leadId` mancante o `esito` diverso da `"consegnato"` |
+| `401` | firma non valida |
+| `403` | lead non Fenice |
+| `404` | lead inesistente |
 
 ### Cosa il bot NON fa su questi lead
 

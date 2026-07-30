@@ -105,6 +105,10 @@ export type SendAgendaResult = {
     alreadySent?: boolean
     esito?: AgendaEsito      // valorizzato solo dal canale bot
     deduplicato?: boolean
+    /** Variante corretta entro la finestra di deduplica: il video giusto partirà alla risposta. */
+    varianteAggiornata?: boolean
+    /** Il video sbagliato è GIÀ partito: solo il GDO può rimediare, parlandone col lead. */
+    videoGiaInviato?: boolean
 }
 
 // Per decisione del PO l'interfaccia del GDO non deve mai lasciar intuire che
@@ -211,6 +215,8 @@ async function sendAgendaViaBotChannel(
             channel: 'bot',
             esito: r.esito,
             deduplicato: r.deduplicato,
+            varianteAggiornata: r.varianteAggiornata,
+            videoGiaInviato: r.videoGiaInviato,
             conversationId: r.conversationId,
             sid: r.sid,
             offertaDelMese: !!options.offertaDelMese,
@@ -221,7 +227,14 @@ async function sendAgendaViaBotChannel(
         companyId,
     })
 
-    return { success: true, alreadySent: wasSent, esito: r.esito, deduplicato: r.deduplicato }
+    return {
+        success: true,
+        alreadySent: wasSent,
+        esito: r.esito,
+        deduplicato: r.deduplicato,
+        varianteAggiornata: r.varianteAggiornata,
+        videoGiaInviato: r.videoGiaInviato,
+    }
 }
 
 /**

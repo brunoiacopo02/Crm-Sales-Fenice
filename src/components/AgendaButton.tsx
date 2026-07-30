@@ -33,6 +33,9 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
     // script dove router.refresh() non ri-renderizza le props (il click sembrava
     // "non fare nulla"). Tiene anche l'esito, che decide colore e riapribilità.
     const [sentNowStatus, setSentNowStatus] = useState<AgendaStatus | null>(null)
+    // Il lead aveva già risposto e il video della variante precedente è partito:
+    // non è più correggibile via software, deve saperlo il GDO.
+    const [videoGiaInviato, setVideoGiaInviato] = useState(false)
 
     const status = (sentNowStatus ?? agendaStatus ?? null) as AgendaStatus | null
     const alreadySent = !!agendaSentAt || sentNowStatus === 'consegnato' || sentNowStatus === 'inviato'
@@ -94,14 +97,22 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
             })
             if (result.success) {
                 const esito = (result.esito ?? 'consegnato') as AgendaStatus
+                const videoPartito = result.videoGiaInviato === true
                 setSentNowStatus(esito)
+                setVideoGiaInviato(videoPartito)
                 setSuccessMsg(
-                    esito === 'inviato'
-                        ? "Agenda inviata, consegna non ancora confermata."
-                        : result.alreadySent ? "Agenda reinviata correttamente!" : "Agenda inviata correttamente!"
+                    result.varianteAggiornata
+                        ? "Variante aggiornata."
+                        : esito === 'inviato'
+                            ? "Agenda inviata, consegna non ancora confermata."
+                            : result.alreadySent ? "Agenda reinviata correttamente!" : "Agenda inviata correttamente!"
                 )
                 router.refresh()
-                setTimeout(() => setShowModal(false), esito === 'inviato' ? 3000 : 1500)
+                // Se il video sbagliato è già partito la modale NON si chiude da sola:
+                // è un'informazione su cui il GDO deve agire, non un messaggio di conferma.
+                if (!videoPartito) {
+                    setTimeout(() => setShowModal(false), esito === 'inviato' ? 3000 : 1500)
+                }
             } else {
                 if (result.esito === 'fallito') setSentNowStatus('fallito')
                 setErrorMsg(result.error || "Errore sconosciuto")
@@ -304,7 +315,30 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                                 </>
                             )}
 
-                            {successMsg && (
+                            {successMsg && videoGiaInviato && (
+                                <div className="flex flex-col items-center gap-3 py-4">
+                                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                                        <AlertTriangle className="w-8 h-8 text-red-600" />
+                                    </div>
+                                    <div className="text-sm font-bold text-red-700 text-center">
+                                        Il lead ha già ricevuto il video precedente
+                                    </div>
+                                    <div className="text-xs text-ash-600 text-center px-3 leading-relaxed">
+                                        Aveva già risposto al messaggio, quindi il video della variante precedente
+                                        gli è arrivato e <strong>non è più recuperabile</strong>. Da qui in avanti
+                                        riceverà quello corretto, ma il video sbagliato l'ha visto:
+                                        <strong> diglielo tu ora che sei in chiamata.</strong>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowModal(false)}
+                                        className="mt-1 px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-sm transition-colors"
+                                    >
+                                        Ho capito
+                                    </button>
+                                </div>
+                            )}
+
+                            {successMsg && !videoGiaInviato && (
                                 <div className="flex flex-col items-center gap-3 py-6">
                                     <div className={`w-14 h-14 rounded-full flex items-center justify-center ${sentNowStatus === 'inviato' ? 'bg-amber-100' : 'bg-emerald-100'}`}>
                                         {sentNowStatus === 'inviato'
