@@ -6,9 +6,13 @@
 // BOT_WEBHOOK_SECRET, header `x-bot-signature`, nessun segreto nuovo.
 
 import { signPayload } from '@/lib/marketing-webhooks/signing'
+import { formatRomeAppointmentLabel, toRomeIso } from '@/lib/dateUtils'
 
 const AGENDA_BOT_URL = process.env.AGENDA_BOT_URL
     ?? 'https://web-app-messaggistica.vercel.app/api/send-agenda'
+
+const APPOINTMENT_BOT_URL = process.env.APPOINTMENT_BOT_URL
+    ?? 'https://web-app-messaggistica.vercel.app/api/appointment-set'
 
 // Il fornitore risponde entro ~8s: oltre, chiude lui con `inviato`. Aspettiamo
 // qualche secondo in più così un loro ritardo fisiologico non diventa un nostro
@@ -33,6 +37,14 @@ export type SendAgendaViaBotInput = {
     email?: string | null
     funnel?: string | null
     variant: AgendaVariant
+    /**
+     * Data/ora dell'appuntamento, se già nota. Quasi sempre NON lo è: il GDO
+     * manda l'agenda mentre è al telefono e registra l'esito ~1 minuto dopo
+     * (97% dei casi su 4 giorni di dati). Per quel 97% la data arriva al bot
+     * con la notifica separata di `notifyAppointmentToBot`; qui copriamo i
+     * rifissaggi, dove l'appuntamento esiste già quando l'agenda riparte.
+     */
+    appointmentAt?: Date | null
 }
 
 /**
@@ -85,6 +97,8 @@ export async function sendAgendaViaBot(input: SendAgendaViaBotInput): Promise<Se
         email: input.email ?? undefined,
         funnel: input.funnel ?? undefined,
         variant: input.variant,
+        appointmentAt: input.appointmentAt ? toRomeIso(input.appointmentAt) : undefined,
+        appointmentLabel: input.appointmentAt ? formatRomeAppointmentLabel(input.appointmentAt) : undefined,
     })
 
     let res: Response
@@ -135,5 +149,82 @@ export async function sendAgendaViaBot(input: SendAgendaViaBotInput): Promise<Se
         message: typeof data.message === 'string' ? data.message : undefined,
         conversationId: data.conversationId ?? null,
         sid: data.sid ?? null,
+    }
+}
+
+/** Perché stiamo comunicando l'appuntamento: primo fissaggio o spostamento. */
+export type AppointmentTrigger = 'fissato' | 'spostato'
+
+export type NotifyAppointmentInput = {
+    lead: {
+        id: string
+        phone: string | null
+        name?: string | null
+        funnel?: string | null
+        companyId: string
+    }
+    appointmentAt: Date | null
+    trigger: AppointmentTrigger
+}
+
+/**
+ * Comunica al bot data e ora dell'appuntamento del lead.
+ *
+ * Serve perché il payload di `/api/send-agenda` non può portarle: quando il GDO
+ * invia l'agenda l'appuntamento non è ancora stato registrato (97% dei casi).
+ * Questa è quindi una seconda chiamata, fatta nel momento in cui la data esiste
+ * davvero — e ripetuta a ogni spostamento, altrimenti il bot resterebbe con la
+ * data vecchia e la direbbe sbagliata al lead.
+ *
+ * Non lancia MAI: un fornitore giù non deve impedire a un GDO di esitare il
+ * lead. In caso di errore resta solo la riga di log — nessuna scrittura sul
+ * lead, quindi nessun dato del CRM può divergere per colpa di questa chiamata.
+ */
+export async function notifyAppointmentToBot(input: NotifyAppointmentInput): Promise<void> {
+    const { lead, appointmentAt, trigger } = input
+
+    // Stesso interruttore del canale agenda: se siamo tornati ad ActiveCampaign
+    // il bot non ha una conversazione aperta con questi lead, e la notifica non
+    // avrebbe destinatario. Togliere AGENDA_CHANNEL spegne tutto insieme.
+    if (process.env.AGENDA_CHANNEL !== 'bot') return
+    // Serenamente ha il suo canale (Twilio diretto), qui non c'entra.
+    if (lead.companyId !== 'fenice') return
+    if (!appointmentAt || !lead.phone) return
+
+    const secret = process.env.BOT_WEBHOOK_SECRET
+    if (!secret) {
+        console.error('[agenda-bot] BOT_WEBHOOK_SECRET non impostato — appuntamento non notificato')
+        return
+    }
+
+    const rawBody = JSON.stringify({
+        leadId: lead.id,
+        phone: lead.phone,
+        companyId: 'fenice',
+        name: lead.name ?? undefined,
+        funnel: lead.funnel ?? undefined,
+        appointmentAt: toRomeIso(appointmentAt),
+        appointmentLabel: formatRomeAppointmentLabel(appointmentAt),
+        trigger,
+    })
+
+    try {
+        const res = await fetch(APPOINTMENT_BOT_URL, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'x-bot-signature': signPayload(rawBody, secret),
+            },
+            body: rawBody,
+            // Più stretto dei 12s dell'agenda: qui siamo dentro l'esito del GDO,
+            // che non deve restare appeso ad aspettare il fornitore.
+            signal: AbortSignal.timeout(6_000),
+        })
+        if (!res.ok) {
+            const body = await res.text().catch(() => '')
+            console.error(`[agenda-bot] appuntamento non accettato (lead ${lead.id}): ${protocolError(res.status, body)}`)
+        }
+    } catch (e) {
+        console.error(`[agenda-bot] rete/timeout su appuntamento per lead ${lead.id}`, e)
     }
 }

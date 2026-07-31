@@ -17,6 +17,7 @@ import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { incrementDuelScore } from "@/app/actions/duelActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
+import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
@@ -492,6 +493,17 @@ export async function updateLeadOutcome(
             leadId,
             actorUserId: effectiveUserId ?? null,
         }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+
+        // Bot: data e ora dell'appuntamento, che quando è partita l'agenda non
+        // esistevano ancora. Saltato se a fissare è il bot stesso — quella data
+        // ce l'ha appena mandata lui.
+        if (!isBotActor) {
+            await notifyAppointmentToBot({
+                lead: { id: leadId, phone: lead.phone, name: lead.name, funnel: lead.funnel, companyId: ctx.companyId },
+                appointmentAt: appointmentDate,
+                trigger: 'fissato',
+            });
+        }
 
         // Gamification: award XP for appointment set (tenant attribution)
         if (effectiveUserId && !isBotActor) {

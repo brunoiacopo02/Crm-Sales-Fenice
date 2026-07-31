@@ -12,6 +12,7 @@ import { incrementChestProgress } from "@/app/actions/chestActions"
 import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
+import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
 import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
@@ -339,6 +340,14 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
             leadId,
             actorUserId: session.user.id,
         }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+
+        // Bot: riallinea la data anche di là (stessa condizione del webhook —
+        // solo se è cambiata davvero).
+        await notifyAppointmentToBot({
+            lead: { id: leadId, phone: oldLead.phone, name: data.name, funnel: oldLead.funnel, companyId: ctx.companyId },
+            appointmentAt: data.appointmentDate,
+            trigger: oldLead.appointmentDate ? 'spostato' : 'fissato',
+        });
     }
 
     // Audit Log
@@ -1020,6 +1029,14 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
                 leadId,
                 actorUserId: session.user.id,
             }).catch((e: unknown) => console.error("Marketing webhook (appointment.set reschedule) err:", e));
+
+            // Bot: il rifissaggio delle Conferme è il caso in cui la data cambia
+            // più spesso — senza questa riga il bot resterebbe sulla prima.
+            await notifyAppointmentToBot({
+                lead: { id: leadId, phone: oldLead.phone, name: oldLead.name, funnel: oldLead.funnel, companyId: ctx.companyId },
+                appointmentAt: payload.newAppointmentDate,
+                trigger: oldApptDate ? 'spostato' : 'fissato',
+            });
         }
 
         // Handle Calendar if already confirmed and shift/removal happened

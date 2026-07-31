@@ -32,6 +32,37 @@ export function toRomeDateStr(at: Date): string {
     return at.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
 }
 
+/**
+ * ISO 8601 con offset Europe/Rome esplicito — es. '2026-07-31T15:00:00+02:00'.
+ *
+ * È il formato che il fornitore bot già pretende da noi in ingresso su
+ * /api/bot/outcome ("date deve includere il fuso orario"), quindi lo usiamo
+ * anche in uscita: `Z` sarebbe altrettanto non ambiguo, ma con l'offset locale
+ * l'ora dell'appuntamento si legge a occhio nei log di entrambe le parti.
+ */
+export function toRomeIso(at: Date): string {
+    return `${toRomeDatetimeLocal(at)}:00${romeOffset(at)}`;
+}
+
+/**
+ * Data/ora in italiano, pronta da inserire in un messaggio al lead —
+ * es. 'venerdì 31 luglio alle 15:00'.
+ *
+ * Serve a chi riceve l'appuntamento da noi (il bot) per non doverlo
+ * riformattare: è lì che storicamente nascono gli orari sfalsati di un'ora.
+ */
+export function formatRomeAppointmentLabel(at: Date): string {
+    const d = new Intl.DateTimeFormat('it-IT', {
+        timeZone: 'Europe/Rome',
+        weekday: 'long', day: 'numeric', month: 'long',
+    }).format(at);
+    const h = new Intl.DateTimeFormat('it-IT', {
+        timeZone: 'Europe/Rome',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(at);
+    return `${d} alle ${h}`;
+}
+
 /** Bounds del giorno (Europe/Rome) contenente `at`. */
 export function dayBoundsRome(at: Date): { start: Date; end: Date } {
     const dateStr = toRomeDateStr(at);
