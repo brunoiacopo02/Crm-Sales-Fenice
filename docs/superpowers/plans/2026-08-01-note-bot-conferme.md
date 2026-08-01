@@ -375,12 +375,15 @@ git commit -m "feat(bot): collega i re-invii della stessa nota e non rinotificar
 
 ---
 
-### Task 3: Il tab Note legge anche le note del bot
+### Task 3: Il tab Note legge e mostra anche le note del bot
 
-`getConfermeNotes` smette di essere una lettura di `confirmationsNotes` e diventa la lista unica di tutto quello che c'è da leggere su quel lead: gli appunti delle Conferme e il racconto delle chat del bot, in ordine cronologico, con le catene di re-invio già raggruppate.
+`getConfermeNotes` smette di essere una lettura di `confirmationsNotes` e diventa la lista unica di tutto quello che c'è da leggere su quel lead: gli appunti delle Conferme e il racconto delle chat del bot, in ordine cronologico, con le catene di re-invio già raggruppate. Il drawer la rende.
+
+Server action e drawer stanno nello stesso task perché il drawer è l'unico consumatore della action: cambiarne la forma senza aggiornarlo lascerebbe il branch con errori di tipo aperti, contro i Global Constraints.
 
 **Files:**
 - Modify: `src/app/actions/confermeActions.ts:361-381` (`getConfermeNotes`)
+- Modify: `src/components/ConfermeDrawer.tsx:72` (stato), `:207` (`handleAddNote`), `:782-828` (render del tab Note)
 
 **Interfaces:**
 - Consumes: gli eventi `BOT_NOTE` con `metadata.supersedes` scritti nel Task 2.
@@ -396,8 +399,6 @@ git commit -m "feat(bot): collega i re-invii della stessa nota e non rinotificar
       updates: Array<{ id: string; text: string; createdAt: Date }>;
   };
   ```
-
-  Il Task 4 rende questa forma e il Task 4 aggiorna anche `addConfermeNote` lato client per costruirla.
 
 - [ ] **Step 1: Sostituire `getConfermeNotes`**
 
@@ -494,35 +495,15 @@ export async function getConfermeNotes(leadId: string): Promise<ConfermeNoteItem
 }
 ```
 
-- [ ] **Step 2: Verificare i tipi**
+- [ ] **Step 2: Verificare quali errori di tipo restano aperti**
 
 ```bash
 npx tsc --noEmit
 ```
 
-Atteso: **due errori in `src/components/ConfermeDrawer.tsx`**, perché il componente usa ancora la forma vecchia (`n.note.text`, `n.author?.name`). Sono attesi e li chiude il Task 4. Nessun altro file deve comparire — se compare, `getConfermeNotes` ha un altro consumatore da aggiornare.
+Atteso: **due errori in `src/components/ConfermeDrawer.tsx`**, perché il componente usa ancora la forma vecchia (`n.note.text`, `n.author?.name`). Li chiudono gli step qui sotto. Nessun altro file deve comparire — se compare, `getConfermeNotes` ha un altro consumatore da aggiornare e va segnalato prima di proseguire.
 
-- [ ] **Step 3: Commit**
-
-Si committa con gli errori di tipo aperti perché il Task 4 è il completamento immediato di questo; il branch non è deployabile finché non passa anche quello.
-
-```bash
-git add src/app/actions/confermeActions.ts
-git commit -m "feat(conferme): unisci le note del bot alle note Conferme in lettura"
-```
-
----
-
-### Task 4: Le note del bot si vedono nel tab Note
-
-**Files:**
-- Modify: `src/components/ConfermeDrawer.tsx:72` (stato), `:207` (`handleAddNote`), `:782-828` (render del tab Note)
-
-**Interfaces:**
-- Consumes: `ConfermeNoteItem[]` da `getConfermeNotes` (Task 3).
-- Produces: niente per gli altri task.
-
-- [ ] **Step 1: Tipizzare lo stato delle note**
+- [ ] **Step 3: Tipizzare lo stato delle note**
 
 Sostituisci `const [notes, setNotes] = useState<any[]>([])` con:
 
@@ -537,7 +518,7 @@ E aggiungi l'import del tipo in cima al file, accanto agli altri import da `conf
 import type { ConfermeNoteItem } from "@/app/actions/confermeActions"
 ```
 
-- [ ] **Step 2: Aggiornare l'inserimento ottimistico**
+- [ ] **Step 4: Aggiornare l'inserimento ottimistico**
 
 In `handleAddNote`, la riga `setNotes([{ note, author: currentUser }, ...notes])` non corrisponde più alla forma. Sostituiscila con:
 
@@ -552,7 +533,7 @@ In `handleAddNote`, la riga `setNotes([{ note, author: currentUser }, ...notes])
             }, ...notes])
 ```
 
-- [ ] **Step 3: Rendere le due sorgenti**
+- [ ] **Step 5: Rendere le due sorgenti**
 
 Sostituisci il blocco `notes.map(...)` (dentro `{activeTab === "note" && ...}`, il ramo `) : (` che oggi mappa `n.note.text`) con:
 
@@ -601,15 +582,15 @@ Sostituisci il blocco `notes.map(...)` (dentro `{activeTab === "note" && ...}`, 
                                         ))
 ```
 
-- [ ] **Step 4: Verificare i tipi**
+- [ ] **Step 6: Verificare i tipi**
 
 ```bash
 npx tsc --noEmit
 ```
 
-Atteso: exit 0 — gli errori aperti dal Task 3 sono chiusi.
+Atteso: exit 0 — i due errori visti allo Step 2 sono chiusi.
 
-- [ ] **Step 5: Verifica a mano**
+- [ ] **Step 7: Verifica a mano**
 
 Con `npm run dev`, entra come utente Conferme (o admin) su `/conferme`, apri un lead che ha ricevuto note dal bot e vai sul tab **Note**.
 
@@ -630,16 +611,16 @@ group by 1 order by 2 desc limit 5;
 
 Se la query non torna niente (il Task 2 è appena andato in locale e in produzione non ci sono ancora catene), usa lo script del Task 2 Step 4 per crearne una su un lead di test.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/components/ConfermeDrawer.tsx
-git commit -m "feat(conferme): mostra le note del bot nel tab Note del drawer"
+git add src/app/actions/confermeActions.ts src/components/ConfermeDrawer.tsx
+git commit -m "feat(conferme): le note del bot nel tab Note del drawer"
 ```
 
 ---
 
-### Task 5: L'anteprima sulla riga della board
+### Task 4: L'anteprima sulla riga della board
 
 Senza questo, la nota si vede solo aprendo il lead. Qui l'operatore la vede scorrendo la board, e capisce se qualcuno l'ha già raccolta.
 
@@ -759,7 +740,7 @@ git commit -m "feat(conferme): anteprima della nota del bot sulla riga della boa
 
 ---
 
-### Task 6: La notifica porta al lead
+### Task 5: La notifica porta al lead
 
 Oggi il click sulla notifica non fa niente. Qui diventa il percorso più corto tra "il bot ha scritto qualcosa" e "l'operatore lo sta leggendo".
 
@@ -891,7 +872,7 @@ git commit -m "feat(conferme): la notifica del Fissatore apre il lead sul tab No
 
 ---
 
-### Task 7: Verifica finale e build
+### Task 6: Verifica finale e build
 
 **Files:** nessuna modifica prevista. Se emergono correzioni, si committano qui.
 
@@ -934,5 +915,5 @@ git push -u origin feat/note-bot-conferme
 
 - **Il fornitore non va toccato.** Se durante il lavoro sembra necessario chiedergli una modifica, il design è stato frainteso: rileggi la spec.
 - **`metadata` di `leadEvents` è `jsonb` senza schema.** Ogni lettura va difesa (`typeof meta.note === 'string'`): in produzione esistono eventi `BOT_NOTE` scritti prima di questa feature, con `{ note }` e basta. Devono continuare a leggersi — e infatti si leggono come catene da un elemento solo.
-- **Ordine dei task.** Il Task 4 chiude gli errori di tipo aperti dal Task 3: vanno fatti in sequenza. Dal 5 in poi sono indipendenti tra loro.
+- **Ordine dei task.** Il Task 3 tocca la server action e il suo unico consumatore insieme, di proposito: a metà task il branch non compila, a fine task sì. I task 4 e 5 sono indipendenti tra loro.
 - **Le note del bot esistono solo su Fenice.** Su Serenamente le query tornano vuote e la UI non mostra niente: è il comportamento voluto, non un bug da "sistemare".
