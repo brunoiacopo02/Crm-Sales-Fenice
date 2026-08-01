@@ -62,3 +62,6 @@ seed-launch-pool.log
 
 .vercel
 .env*
+
+# SDD workspace (superpowers subagent-driven-development)
+.superpowers/
