@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '@/db';
 import { leads, users, leadEvents, notifications } from '@/db/schema';
@@ -7,6 +7,7 @@ import { verifySignature } from '@/lib/marketing-webhooks/signing';
 import { updateLeadOutcome } from '@/app/actions/pipelineActions';
 import { reassignBotLeadToHumanPool } from '@/lib/bot-fissatore/reassign';
 import type { BotReport } from '@/lib/bot-fissatore/types';
+import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissatore/noteDedup';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -156,17 +157,40 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'bad_request', detail: 'note richiesta per esito NOTA' }, { status: 400 });
         }
 
+        // Il bot ri-manda la stessa nota 2-3 volte a distanza di minuti (visti 3
+        // invii sullo stesso lead in 3 minuti). L'evento si scrive lo stesso —
+        // ogni versione del motivo resta leggibile — ma il re-invio eredita
+        // `supersedes` dal capofila e NON fa scattare una seconda notifica.
+        const [prev] = await db.select({
+            id: leadEvents.id,
+            metadata: leadEvents.metadata,
+        }).from(leadEvents).where(and(
+            eq(leadEvents.leadId, leadId),
+            eq(leadEvents.eventType, 'BOT_NOTE'),
+            gte(leadEvents.timestamp, new Date(Date.now() - BOT_NOTE_DEDUP_WINDOW_MS)),
+        )).orderBy(desc(leadEvents.timestamp)).limit(1);
+
+        const prevMeta = (prev?.metadata ?? {}) as { note?: string; supersedes?: string };
+        const isDuplicate = !!prev
+            && typeof prevMeta.note === 'string'
+            && isSameBotNoteIntent(prevMeta.note, text);
+
+        // Catena piatta: `supersedes` punta sempre al capofila, mai a un anello
+        // intermedio. Raggrupparle in lettura resta un group-by, non una risalita.
+        const supersedes = isDuplicate ? (prevMeta.supersedes ?? prev.id) : undefined;
+
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
             eventType: 'BOT_NOTE',
             userId: actorUserId,
             timestamp: new Date(),
-            metadata: { note: text },
+            metadata: supersedes ? { note: text, supersedes } : { note: text },
             companyId: 'fenice',
         });
 
-        if (lead.status === 'APPOINTMENT') {
+        // Una notifica per intenzione, non una per re-invio.
+        if (!isDuplicate && lead.status === 'APPOINTMENT') {
             const confermeUsers = await db.select({ id: users.id }).from(users).where(and(
                 eq(users.companyId, 'fenice'),
                 eq(users.role, 'CONFERME'),
@@ -188,7 +212,8 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ ok: true, noted: true });
+        // `deduped` è informativo, non un errore: per il bot l'invio è andato a buon fine.
+        return NextResponse.json({ ok: true, noted: true, ...(isDuplicate ? { deduped: true } : {}) });
     }
 
     // Ritorno al pool umano: il bot non ha convertito ma non c'è obiezione ferrea
