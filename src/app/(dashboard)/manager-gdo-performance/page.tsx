@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/server"
 export default async function ManagerGdoPerformancePage({
     searchParams
 }: {
-    searchParams: { month?: string }
+    searchParams: Promise<{ month?: string }>
 }) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -16,8 +16,9 @@ export default async function ManagerGdoPerformancePage({
         redirect('/unauthorized');
     }
 
+    const sp = await searchParams;
     const currentMonthStr = new Date().toISOString().slice(0, 7);
-    const selectedMonth = searchParams.month || currentMonthStr;
+    const selectedMonth = sp.month || currentMonthStr;
 
     const [data, scriptRates] = await Promise.all([
         getManagerGdoTables(selectedMonth),
