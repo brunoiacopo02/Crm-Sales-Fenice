@@ -57,7 +57,7 @@ Chiamata a ogni punto in cui la data nasce o cambia:
 | Nuovo appuntamento del GDO | `pipelineActions.ts` → `updateLeadOutcome` |
 | Spostamento dal GDO | `appointmentActions.ts` → `updateGdoAppointment` |
 | Modifica dati dalle Conferme | `confermeActions.ts` → `updateLeadDataConferme` |
-| Rifissaggio delle Conferme | `confermeActions.ts` → `setConfermeOutcome` |
+| Rifissaggio delle Conferme | `confermeActions.ts` → `scheduleConfermeRecall` |
 
 Non viene inviata quando: l'appuntamento lo fissa il bot stesso (la data l'ha
 mandata lui), il lead non è Fenice (Serenamente ha il canale Twilio), manca il
