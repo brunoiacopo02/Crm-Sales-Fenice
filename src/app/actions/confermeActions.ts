@@ -241,11 +241,58 @@ export async function getConfermeAppointments(filters: {
         }
     }
 
-    type RowWithNote = (typeof results)[number] & { lastConfermeNote: { text: string; createdAt: Date; authorId: string } | null };
-    const withNotes: RowWithNote[] = results.map(r => ({
-        ...r,
-        lastConfermeNote: notesMap.get(r.lead.id) ?? null,
-    }));
+    // Ultima nota del bot per lead (anteprima 🤖 nella riga board). Una query
+    // sola su tutti i leadId, come per le note Conferme.
+    const botNotesMap = new Map<string, { text: string; createdAt: Date }>();
+    if (leadIds.length > 0) {
+        const botRows = await db.select({
+            leadId: leadEvents.leadId,
+            metadata: leadEvents.metadata,
+            timestamp: leadEvents.timestamp,
+        }).from(leadEvents)
+            .where(and(
+                eq(leadEvents.companyId, ctx.companyId),
+                eq(leadEvents.eventType, 'BOT_NOTE'),
+                inArray(leadEvents.leadId, leadIds),
+            ))
+            .orderBy(desc(leadEvents.timestamp));
+        for (const r of botRows) {
+            if (botNotesMap.has(r.leadId)) continue;
+            const text = (r.metadata as { note?: string } | null)?.note;
+            if (typeof text === 'string' && text.trim()) {
+                botNotesMap.set(r.leadId, { text: text.trim(), createdAt: r.timestamp });
+            }
+        }
+    }
+
+    type RowWithNote = (typeof results)[number] & {
+        lastConfermeNote: { text: string; createdAt: Date; authorId: string } | null;
+        lastBotNote: { text: string; createdAt: Date; isNew: boolean } | null;
+    };
+    const withNotes: RowWithNote[] = results.map(r => {
+        const lastConfermeNote = notesMap.get(r.lead.id) ?? null;
+        const bot = botNotesMap.get(r.lead.id) ?? null;
+        // "Nuova" = arrivata dopo l'ultima volta che le Conferme hanno toccato
+        // il lead. Si spegne da sola appena qualcuno ci lavora: nessun campo di
+        // stato da azzerare a mano.
+        // confCall1/2/3At li scrive solo il flusso NR: senza
+        // confirmationsTimestamp chi risponde al telefono e mette l'esito senza
+        // NR e senza nota lascerebbe la pill accesa per sempre.
+        const lastTouch = [
+            r.lead.confCall1At,
+            r.lead.confCall2At,
+            r.lead.confCall3At,
+            r.lead.confirmationsTimestamp,
+            lastConfermeNote?.createdAt ?? null,
+        ].filter((d): d is Date => !!d).map(d => new Date(d).getTime());
+        return {
+            ...r,
+            lastConfermeNote,
+            lastBotNote: bot
+                ? { ...bot, isNew: lastTouch.length === 0 || bot.createdAt.getTime() > Math.max(...lastTouch) }
+                : null,
+        };
+    });
 
     const grouped: Record<string, RowWithNote[]> = {};
     const daDefinire: RowWithNote[] = [];
@@ -358,7 +405,25 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
     return { success: true }
 }
 
-export async function getConfermeNotes(leadId: string) {
+/**
+ * Una voce del tab Note: un appunto delle Conferme oppure una nota del bot.
+ *
+ * Le note del bot arrivano come eventi `BOT_NOTE`; i re-invii della stessa
+ * intenzione (`metadata.supersedes`) si presentano come una voce sola, col
+ * testo più recente in testa e i precedenti in `updates`. Nessun evento viene
+ * nascosto: sono tutti lì, solo raggruppati.
+ */
+export type ConfermeNoteItem = {
+    id: string;
+    source: 'conferme' | 'bot';
+    text: string;
+    createdAt: Date;
+    authorName: string | null;
+    /** Versioni precedenti della stessa nota del bot, dalla più recente. Sempre vuoto per le note Conferme. */
+    updates: Array<{ id: string; text: string; createdAt: Date }>;
+};
+
+export async function getConfermeNotes(leadId: string): Promise<ConfermeNoteItem[]> {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -367,17 +432,66 @@ export async function getConfermeNotes(leadId: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
 
-    return await db.select({
-        note: confirmationsNotes,
-        author: users
-    }).from(confirmationsNotes)
-        .leftJoin(users, eq(confirmationsNotes.authorId, users.id))
-        .where(and(
-            eq(confirmationsNotes.companyId, ctx.companyId),
-            eq(confirmationsNotes.leadId, leadId),
-        ))
-        .orderBy(desc(confirmationsNotes.createdAt))
+    const [confermeRows, botRows] = await Promise.all([
+        db.select({
+            id: confirmationsNotes.id,
+            text: confirmationsNotes.text,
+            createdAt: confirmationsNotes.createdAt,
+            authorName: users.name,
+            authorDisplayName: users.displayName,
+        }).from(confirmationsNotes)
+            .leftJoin(users, eq(confirmationsNotes.authorId, users.id))
+            .where(and(
+                eq(confirmationsNotes.companyId, ctx.companyId),
+                eq(confirmationsNotes.leadId, leadId),
+            )),
+        db.select({
+            id: leadEvents.id,
+            metadata: leadEvents.metadata,
+            timestamp: leadEvents.timestamp,
+        }).from(leadEvents)
+            .where(and(
+                eq(leadEvents.companyId, ctx.companyId),
+                eq(leadEvents.leadId, leadId),
+                eq(leadEvents.eventType, 'BOT_NOTE'),
+            ))
+            .orderBy(desc(leadEvents.timestamp)),
+    ])
 
+    const items: ConfermeNoteItem[] = confermeRows.map(r => ({
+        id: r.id,
+        source: 'conferme' as const,
+        text: r.text,
+        createdAt: r.createdAt,
+        authorName: r.authorDisplayName || r.authorName || null,
+        updates: [],
+    }))
+
+    // Raggruppa per capofila. `botRows` è già dal più recente: il primo di ogni
+    // catena diventa la voce mostrata, gli altri finiscono in `updates`.
+    const chains = new Map<string, ConfermeNoteItem>()
+    for (const r of botRows) {
+        const meta = (r.metadata ?? {}) as { note?: string; supersedes?: string }
+        const text = typeof meta.note === 'string' ? meta.note.trim() : ''
+        if (!text) continue
+        const chainId = meta.supersedes ?? r.id
+        const head = chains.get(chainId)
+        if (!head) {
+            chains.set(chainId, {
+                id: r.id,
+                source: 'bot',
+                text,
+                createdAt: r.timestamp,
+                authorName: null,
+                updates: [],
+            })
+        } else {
+            head.updates.push({ id: r.id, text, createdAt: r.timestamp })
+        }
+    }
+    items.push(...chains.values())
+
+    return items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
 
 export async function addConfermeNote(leadId: string, text: string) {

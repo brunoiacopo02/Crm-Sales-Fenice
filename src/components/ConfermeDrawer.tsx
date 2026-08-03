@@ -6,6 +6,7 @@ import { SchedaEsitoInline, type SchedaEsitoHandle } from "./conferme/SchedaEsit
 import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { ConfermeCallTimer } from "./ConfermeCallTimer"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
+import type { ConfermeNoteItem } from "@/app/actions/confermeActions"
 import { saveConfermeSurvey } from "@/app/actions/surveyActions"
 import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
@@ -51,7 +52,7 @@ function ConfermeDrawerSkeleton() {
     )
 }
 
-export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }: any) {
+export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, initialTab }: any) {
     const lead = item?.lead;
     const gdo = item?.gdo;
 
@@ -69,7 +70,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
     const [savingData, setSavingData] = useState(false)
 
     // Notes states
-    const [notes, setNotes] = useState<any[]>([])
+    const [notes, setNotes] = useState<ConfermeNoteItem[]>([])
+    const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set())
     const [newNote, setNewNote] = useState("")
     const [loadingNotes, setLoadingNotes] = useState(false)
 
@@ -136,7 +138,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setSalesperson(lead.salespersonUserId || "")
             setSpOutcome(lead.salespersonOutcome || "")
             setSpNotes(lead.salespersonOutcomeNotes || "")
-            setActiveTab("dati")
+            setActiveTab(initialTab || "dati")
 
             setLoadingNotes(true)
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))
@@ -204,7 +206,14 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
         try {
             const { addConfermeNote } = await import('@/app/actions/confermeActions');
             const note = await addConfermeNote(lead.id, newNote)
-            setNotes([{ note, author: currentUser }, ...notes])
+            setNotes([{
+                id: note.id,
+                source: 'conferme',
+                text: note.text,
+                createdAt: note.createdAt,
+                authorName: currentUser?.displayName || currentUser?.name || null,
+                updates: [],
+            }, ...notes])
             setNewNote("")
         } catch (error) {
             alert("Errore inserimento nota")
@@ -801,13 +810,46 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
                                             Nessuna nota presente per questo lead.
                                         </div>
                                     ) : (
-                                        notes.map((n, idx) => (
-                                            <div key={n.note.id || idx} className="p-4 bg-white rounded-xl border border-ash-200 shadow-sm transition-shadow hover:shadow-md">
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <span className="text-xs font-bold text-ash-900 bg-ash-100 px-2 py-1 rounded-md">{n.author?.name || "Utente"}</span>
-                                                    <span className="text-[11px] font-medium text-ash-400 uppercase tracking-wider">{format(new Date(n.note.createdAt), "dd/MM/yy HH:mm")}</span>
+                                        notes.map(n => n.source === 'bot' ? (
+                                            <div key={n.id} className="p-4 bg-sky-50 rounded-xl border border-sky-200 shadow-sm">
+                                                <div className="flex justify-between items-start mb-3 gap-2">
+                                                    <span className="text-xs font-bold text-sky-900 bg-sky-100 px-2 py-1 rounded-md">🤖 Fissatore — dalla chat</span>
+                                                    <span className="text-[11px] font-medium text-sky-500 uppercase tracking-wider shrink-0">{format(new Date(n.createdAt), "dd/MM/yy HH:mm")}</span>
                                                 </div>
-                                                <p className="text-sm text-ash-700 whitespace-pre-wrap leading-relaxed">{n.note.text}</p>
+                                                <p className="text-sm text-sky-950 whitespace-pre-wrap leading-relaxed">{n.text}</p>
+                                                {n.updates.length > 0 && (
+                                                    <div className="mt-3 pt-3 border-t border-sky-200/70">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setExpandedNotes(prev => {
+                                                                const next = new Set(prev)
+                                                                if (next.has(n.id)) next.delete(n.id); else next.add(n.id)
+                                                                return next
+                                                            })}
+                                                            className="text-[11px] font-bold text-sky-700 hover:text-sky-900 cursor-pointer"
+                                                        >
+                                                            {expandedNotes.has(n.id) ? "▾" : "▸"} +{n.updates.length} {n.updates.length === 1 ? "aggiornamento" : "aggiornamenti"} dal bot
+                                                        </button>
+                                                        {expandedNotes.has(n.id) && (
+                                                            <div className="mt-2 space-y-2">
+                                                                {n.updates.map(u => (
+                                                                    <div key={u.id} className="text-[12px] text-sky-800/90 flex gap-2">
+                                                                        <span className="shrink-0 font-medium text-sky-500">{format(new Date(u.createdAt), "HH:mm")}</span>
+                                                                        <span className="whitespace-pre-wrap leading-relaxed">{u.text}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div key={n.id} className="p-4 bg-white rounded-xl border border-ash-200 shadow-sm transition-shadow hover:shadow-md">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <span className="text-xs font-bold text-ash-900 bg-ash-100 px-2 py-1 rounded-md">{n.authorName || "Utente"}</span>
+                                                    <span className="text-[11px] font-medium text-ash-400 uppercase tracking-wider">{format(new Date(n.createdAt), "dd/MM/yy HH:mm")}</span>
+                                                </div>
+                                                <p className="text-sm text-ash-700 whitespace-pre-wrap leading-relaxed">{n.text}</p>
                                             </div>
                                         ))
                                     )}

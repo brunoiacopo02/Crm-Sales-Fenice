@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise, Archive } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
 
@@ -59,6 +60,54 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     // Drawer state
     const [selectedLead, setSelectedLead] = useState<LeadData | null>(null)
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+    const [drawerInitialTab, setDrawerInitialTab] = useState<string | undefined>(undefined)
+    const [pendingDeepLink, setPendingDeepLink] = useState<{ leadId: string; tab?: string } | null>(null)
+
+    const searchParams = useSearchParams()
+    const deepLinkLeadId = searchParams.get('lead')
+    const deepLinkTab = searchParams.get('tab')
+
+    // Deep-link dalla notifica "Nota dal Fissatore": /conferme?lead=<id>&tab=note.
+    // I parametri si leggono in modo reattivo: l'operatore Conferme sta già su
+    // questa board tutto il giorno, e una navigazione sulla stessa rotta non
+    // rimonta il sottoalbero client — un effetto legato al solo mount non
+    // scatterebbe mai. Subito dopo l'URL si ripulisce dei due parametri (gli
+    // altri restano), così un refresh non riapre il drawer su un lead superato.
+    useEffect(() => {
+        if (!deepLinkLeadId) return
+        setPendingDeepLink({ leadId: deepLinkLeadId, tab: deepLinkTab ?? undefined })
+        const params = new URLSearchParams(window.location.search)
+        params.delete('lead')
+        params.delete('tab')
+        const rest = params.toString()
+        window.history.replaceState({}, '', rest ? `${window.location.pathname}?${rest}` : window.location.pathname)
+    }, [deepLinkLeadId, deepLinkTab])
+
+    // Il lead può stare in una qualsiasi delle liste caricate a seconda della
+    // vista attiva. Il deep-link vale un colpo solo: se un drawer è già aperto
+    // non glielo si strappa da sotto (si perderebbe quello che l'operatore sta
+    // scrivendo), e se a caricamento finito il lead non c'è — già esitato o
+    // fuori dalla finestra del kanban — si rinuncia in silenzio, invece di
+    // restare armati e far comparire il drawer mezz'ora dopo, a sorpresa.
+    useEffect(() => {
+        if (!pendingDeepLink) return
+        if (isDrawerOpen) {
+            setPendingDeepLink(null)
+            return
+        }
+        const pools = [kanbanData.flatList, kanbanData.daDefinire, tableData, storicoData, oggiLeads, domaniLeads]
+        for (const pool of pools) {
+            const found = pool.find((i: any) => i?.lead?.id === pendingDeepLink.leadId)
+            if (found) {
+                setSelectedLead(found)
+                setDrawerInitialTab(pendingDeepLink.tab)
+                setIsDrawerOpen(true)
+                setPendingDeepLink(null)
+                return
+            }
+        }
+        if (!loading) setPendingDeepLink(null)
+    }, [pendingDeepLink, isDrawerOpen, loading, kanbanData, tableData, storicoData, oggiLeads, domaniLeads])
 
     // Close-lead modal state (quick action "Chiuso" dallo storico)
     const [closeModalLead, setCloseModalLead] = useState<{ id: string; version: number; name: string } | null>(null)
@@ -251,7 +300,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 lockedByName={lockedByName}
                 layoutMode={layoutMode}
                 onRefresh={() => fetchLeads(false)}
-                onRowClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
+                onRowClick={() => { setSelectedLead(item); setDrawerInitialTab(undefined); setIsDrawerOpen(true); }}
             />
         )
     }
@@ -601,6 +650,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                         className="hover:bg-brand-orange-50/30 transition-all duration-200 cursor-pointer group"
                                                         onClick={() => {
                                                             setSelectedLead(item)
+                                                            setDrawerInitialTab(undefined)
                                                             setIsDrawerOpen(true)
                                                         }}
                                                     >
@@ -720,6 +770,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                         className="hover:bg-brand-orange-50/30 transition-all duration-200 cursor-pointer group"
                                                         onClick={() => {
                                                             setSelectedLead(item)
+                                                            setDrawerInitialTab(undefined)
                                                             setIsDrawerOpen(true)
                                                         }}
                                                     >
@@ -810,9 +861,11 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     isOpen={true}
                     item={selectedLead}
                     currentUser={currentUser}
+                    initialTab={drawerInitialTab}
                     onRefresh={() => fetchLeads(false)}
                     onClose={() => {
                         setIsDrawerOpen(false)
+                        setDrawerInitialTab(undefined)
                         fetchLeads(false)
                     }}
                 />

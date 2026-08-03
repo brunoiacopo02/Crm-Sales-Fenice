@@ -119,6 +119,10 @@ export function Topbar() {
         const meta = notif.metadata as Record<string, any>
         if (notif.type === 'leaderboard_overtaken') {
             router.push(`/classifica?period=${meta?.period || 'today'}`)
+        } else if (notif.type === 'bot_note') {
+            // Le note del bot si leggono nella board Conferme, non nel drawer
+            // della ricerca: è lì che l'operatore lavora il lead.
+            if (meta?.leadId) router.push(`/conferme?lead=${meta.leadId}&tab=note`)
         } else if (notif.type === 'appointment_confirmed' || notif.type === 'sales_outcome_set' || notif.type === 'appointment_assigned') {
             // Se la notifica riguarda un lead, apriamo la drawer cercando globalmente
             if (meta?.leadId) {
