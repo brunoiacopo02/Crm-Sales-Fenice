@@ -52,7 +52,7 @@ function ConfermeDrawerSkeleton() {
     )
 }
 
-export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }: any) {
+export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, initialTab }: any) {
     const lead = item?.lead;
     const gdo = item?.gdo;
 
@@ -138,7 +138,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh }
             setSalesperson(lead.salespersonUserId || "")
             setSpOutcome(lead.salespersonOutcome || "")
             setSpNotes(lead.salespersonOutcomeNotes || "")
-            setActiveTab("dati")
+            setActiveTab(initialTab || "dati")
 
             setLoadingNotes(true)
             getConfermeNotes(lead.id).then(res => setNotes(res)).finally(() => setLoadingNotes(false))

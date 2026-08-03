@@ -59,6 +59,35 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     // Drawer state
     const [selectedLead, setSelectedLead] = useState<LeadData | null>(null)
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+    const [drawerInitialTab, setDrawerInitialTab] = useState<string | undefined>(undefined)
+    const [pendingDeepLink, setPendingDeepLink] = useState<{ leadId: string; tab?: string } | null>(null)
+
+    // Deep-link dalla notifica "Nota dal Fissatore": /conferme?lead=<id>&tab=note.
+    // I parametri si tolgono subito dall'URL, così un refresh non riapre il drawer.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const leadId = params.get('lead')
+        if (!leadId) return
+        setPendingDeepLink({ leadId, tab: params.get('tab') ?? undefined })
+        window.history.replaceState({}, '', window.location.pathname)
+    }, [])
+
+    // Il lead può stare in una qualsiasi delle liste caricate a seconda della
+    // vista attiva. Se non c'è (già esitato, fuori finestra) non si apre nulla.
+    useEffect(() => {
+        if (!pendingDeepLink) return
+        const pools = [kanbanData.flatList, kanbanData.daDefinire, tableData, storicoData, oggiLeads, domaniLeads]
+        for (const pool of pools) {
+            const found = pool.find((i: any) => i?.lead?.id === pendingDeepLink.leadId)
+            if (found) {
+                setSelectedLead(found)
+                setDrawerInitialTab(pendingDeepLink.tab)
+                setIsDrawerOpen(true)
+                setPendingDeepLink(null)
+                return
+            }
+        }
+    }, [pendingDeepLink, kanbanData, tableData, storicoData, oggiLeads, domaniLeads])
 
     // Close-lead modal state (quick action "Chiuso" dallo storico)
     const [closeModalLead, setCloseModalLead] = useState<{ id: string; version: number; name: string } | null>(null)
@@ -810,9 +839,11 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     isOpen={true}
                     item={selectedLead}
                     currentUser={currentUser}
+                    initialTab={drawerInitialTab}
                     onRefresh={() => fetchLeads(false)}
                     onClose={() => {
                         setIsDrawerOpen(false)
+                        setDrawerInitialTab(undefined)
                         fetchLeads(false)
                     }}
                 />
