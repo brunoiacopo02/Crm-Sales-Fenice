@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw } from "lucide-react"
+import { format } from "date-fns"
 import { CompanyBadge } from "./CompanyBadge"
 import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
@@ -512,6 +513,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                     >
                         <span className="font-bold text-violet-800 shrink-0 uppercase tracking-wide text-[9px]">🤖 Fissatore:</span>
                         <span className="truncate flex-1">{item.lastBotNote.text}</span>
+                        <span className="shrink-0 font-medium text-violet-500 tabular-nums">{format(new Date(item.lastBotNote.createdAt), "dd/MM HH:mm")}</span>
                         {item.lastBotNote.isNew && (
                             <span className="shrink-0 bg-amber-500 text-white font-bold uppercase tracking-wide text-[9px] px-1.5 py-0.5 rounded">Nuova</span>
                         )}

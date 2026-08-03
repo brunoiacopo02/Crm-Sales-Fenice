@@ -275,10 +275,14 @@ export async function getConfermeAppointments(filters: {
         // "Nuova" = arrivata dopo l'ultima volta che le Conferme hanno toccato
         // il lead. Si spegne da sola appena qualcuno ci lavora: nessun campo di
         // stato da azzerare a mano.
+        // confCall1/2/3At li scrive solo il flusso NR: senza
+        // confirmationsTimestamp chi risponde al telefono e mette l'esito senza
+        // NR e senza nota lascerebbe la pill accesa per sempre.
         const lastTouch = [
             r.lead.confCall1At,
             r.lead.confCall2At,
             r.lead.confCall3At,
+            r.lead.confirmationsTimestamp,
             lastConfermeNote?.createdAt ?? null,
         ].filter((d): d is Date => !!d).map(d => new Date(d).getTime());
         return {
