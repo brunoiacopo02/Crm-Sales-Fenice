@@ -69,7 +69,10 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         const leadId = params.get('lead')
         if (!leadId) return
         setPendingDeepLink({ leadId, tab: params.get('tab') ?? undefined })
-        window.history.replaceState({}, '', window.location.pathname)
+        params.delete('lead')
+        params.delete('tab')
+        const rest = params.toString()
+        window.history.replaceState({}, '', rest ? `${window.location.pathname}?${rest}` : window.location.pathname)
     }, [])
 
     // Il lead può stare in una qualsiasi delle liste caricate a seconda della
@@ -280,7 +283,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 lockedByName={lockedByName}
                 layoutMode={layoutMode}
                 onRefresh={() => fetchLeads(false)}
-                onRowClick={() => { setSelectedLead(item); setIsDrawerOpen(true); }}
+                onRowClick={() => { setSelectedLead(item); setDrawerInitialTab(undefined); setIsDrawerOpen(true); }}
             />
         )
     }
@@ -630,6 +633,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                         className="hover:bg-brand-orange-50/30 transition-all duration-200 cursor-pointer group"
                                                         onClick={() => {
                                                             setSelectedLead(item)
+                                                            setDrawerInitialTab(undefined)
                                                             setIsDrawerOpen(true)
                                                         }}
                                                     >
@@ -749,6 +753,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                         className="hover:bg-brand-orange-50/30 transition-all duration-200 cursor-pointer group"
                                                         onClick={() => {
                                                             setSelectedLead(item)
+                                                            setDrawerInitialTab(undefined)
                                                             setIsDrawerOpen(true)
                                                         }}
                                                     >
