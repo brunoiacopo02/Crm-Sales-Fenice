@@ -45,9 +45,12 @@ immutabili: l'audit resta pulito e nessuna parola detta in chat va persa.
 Il dedup sopprime solo il rumore: **niente notifica nuova** nella campanella
 (una per intenzione, non tre) e **niente card ripetute** nel tab Note.
 
-**Come si riconosce un duplicato.** Stesso lead, entro **15 minuti**, stessa
-*intenzione*. L'intenzione è il testo normalizzato fino a `"Motivo:"` — è lì che
-i duplicati veri coincidono, mentre la coda varia:
+**Come si riconosce un duplicato.** Stesso lead, stessa *intenzione*, entro
+**15 minuti dalla nota precedente della catena**. La finestra si misura
+dall'ultima nota arrivata, non dal capofila: una raffica che continua a ritmo
+serrato resta una catena sola anche quando si allunga oltre il quarto d'ora.
+L'intenzione è il testo normalizzato fino a `"Motivo:"` — è lì che i duplicati
+veri coincidono, mentre la coda varia:
 
 | | |
 |---|---|
@@ -65,8 +68,8 @@ Estrazione della chiave, in quest'ordine:
 
 Poi normalizzata: minuscolo, spazi collassati, punteggiatura di coda rimossa.
 
-**Catena piatta.** Si cerca l'ultimo `BOT_NOTE` dello stesso lead entro 15
-minuti. Se quello ha già un `supersedes`, il nuovo evento eredita **lo stesso
+**Catena piatta.** Si cerca l'ultimo `BOT_NOTE` dello stesso lead arrivato negli
+ultimi 15 minuti. Se quello ha già un `supersedes`, il nuovo evento eredita **lo stesso
 valore**; altrimenti punta al suo id. Così `supersedes` indica sempre il
 capofila, mai un anello intermedio: raggruppare è un `group by`, non una
 risalita ricorsiva.
@@ -154,11 +157,12 @@ quindi il caso non si pone.
 
 ## Verifica
 
-- **Dedup**: tre note con lo stesso incipit entro 15 minuti → tre eventi a
-  database, un solo `supersedes` capofila, **una** notifica, **una** card nel
-  tab Note con `+2 aggiornamenti`.
-- **Oltre la finestra**: stessa intenzione dopo 20 minuti → due capofila, due
-  notifiche, due card. È un secondo tentativo del lead, non un duplicato.
+- **Dedup**: tre note con lo stesso incipit, ognuna a pochi minuti dalla
+  precedente → tre eventi a database, un solo `supersedes` capofila, **una**
+  notifica, **una** card nel tab Note con `+2 aggiornamenti`.
+- **Oltre la finestra**: stessa intenzione 20 minuti dopo l'ultima nota di quel
+  lead → due capofila, due notifiche, due card. È un secondo tentativo del lead,
+  non un duplicato.
 - **Intenzioni diverse ravvicinate**: "vuole annullare" e poi "ha riconfermato"
   entro 15 minuti → due card distinte, due notifiche. La seconda non deve
   sparire dietro la prima.
