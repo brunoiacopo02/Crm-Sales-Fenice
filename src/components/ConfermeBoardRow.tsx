@@ -502,6 +502,23 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                 </div>
             )}
 
+            {/* Ultima nota del bot (anteprima compatta). Viola per non confondersi
+                con il blu della nota Conferme qui sopra. */}
+            {item.lastBotNote && (
+                <div className="w-full mt-1 pointer-events-none">
+                    <div
+                        className="text-[11px] text-violet-700 bg-violet-50/80 py-1 px-2 rounded-md flex items-center gap-1.5 border border-violet-100/80"
+                        title={item.lastBotNote.text}
+                    >
+                        <span className="font-bold text-violet-800 shrink-0 uppercase tracking-wide text-[9px]">🤖 Fissatore:</span>
+                        <span className="truncate flex-1">{item.lastBotNote.text}</span>
+                        {item.lastBotNote.isNew && (
+                            <span className="shrink-0 bg-amber-500 text-white font-bold uppercase tracking-wide text-[9px] px-1.5 py-0.5 rounded">Nuova</span>
+                        )}
+                    </div>
+                </div>
+            )}
+
         </div>
     )
 }

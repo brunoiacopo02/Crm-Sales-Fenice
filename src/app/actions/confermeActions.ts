@@ -241,11 +241,54 @@ export async function getConfermeAppointments(filters: {
         }
     }
 
-    type RowWithNote = (typeof results)[number] & { lastConfermeNote: { text: string; createdAt: Date; authorId: string } | null };
-    const withNotes: RowWithNote[] = results.map(r => ({
-        ...r,
-        lastConfermeNote: notesMap.get(r.lead.id) ?? null,
-    }));
+    // Ultima nota del bot per lead (anteprima 🤖 nella riga board). Una query
+    // sola su tutti i leadId, come per le note Conferme.
+    const botNotesMap = new Map<string, { text: string; createdAt: Date }>();
+    if (leadIds.length > 0) {
+        const botRows = await db.select({
+            leadId: leadEvents.leadId,
+            metadata: leadEvents.metadata,
+            timestamp: leadEvents.timestamp,
+        }).from(leadEvents)
+            .where(and(
+                eq(leadEvents.companyId, ctx.companyId),
+                eq(leadEvents.eventType, 'BOT_NOTE'),
+                inArray(leadEvents.leadId, leadIds),
+            ))
+            .orderBy(desc(leadEvents.timestamp));
+        for (const r of botRows) {
+            if (botNotesMap.has(r.leadId)) continue;
+            const text = (r.metadata as { note?: string } | null)?.note;
+            if (typeof text === 'string' && text.trim()) {
+                botNotesMap.set(r.leadId, { text: text.trim(), createdAt: r.timestamp });
+            }
+        }
+    }
+
+    type RowWithNote = (typeof results)[number] & {
+        lastConfermeNote: { text: string; createdAt: Date; authorId: string } | null;
+        lastBotNote: { text: string; createdAt: Date; isNew: boolean } | null;
+    };
+    const withNotes: RowWithNote[] = results.map(r => {
+        const lastConfermeNote = notesMap.get(r.lead.id) ?? null;
+        const bot = botNotesMap.get(r.lead.id) ?? null;
+        // "Nuova" = arrivata dopo l'ultima volta che le Conferme hanno toccato
+        // il lead. Si spegne da sola appena qualcuno ci lavora: nessun campo di
+        // stato da azzerare a mano.
+        const lastTouch = [
+            r.lead.confCall1At,
+            r.lead.confCall2At,
+            r.lead.confCall3At,
+            lastConfermeNote?.createdAt ?? null,
+        ].filter((d): d is Date => !!d).map(d => new Date(d).getTime());
+        return {
+            ...r,
+            lastConfermeNote,
+            lastBotNote: bot
+                ? { ...bot, isNew: lastTouch.length === 0 || bot.createdAt.getTime() > Math.max(...lastTouch) }
+                : null,
+        };
+    });
 
     const grouped: Record<string, RowWithNote[]> = {};
     const daDefinire: RowWithNote[] = [];
