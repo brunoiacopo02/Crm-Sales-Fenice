@@ -92,33 +92,43 @@ export async function POST(req: NextRequest) {
         : [undefined];
     const assigneeIsBot = !!assignee?.isBot;
 
-    // Lead di un GDO umano: da quando l'agenda parte dal canale bot, il bot
-    // conversa anche con lead che non gli appartengono. Minimo privilegio:
-    // il segreto è fidato per operazioni sui lead del bot, non deve poter
-    // scrivere su qualunque lead a database — da qui la verifica sotto.
-    // Su un lead non assegnato al bot serve la prova che quel lead sia stato
-    // suo: il segreto è fidato per operare sui lead del bot, non deve diventare
-    // il permesso di scrivere su qualunque riga della tabella. Prova = il push
-    // al bot è avvenuto, oppure un'agenda è uscita dal suo canale.
+    // Lead di un GDO umano: da quando l'agenda parte dal canale bot (AGENDA_CHANNEL=bot,
+    // dal 31/07), quel canale recapita anche le agende dei lead che restano assegnati a
+    // un GDO — il bot ci chatta comunque, ed è da lì che arrivano note di disdetta o
+    // spostamento. Minimo privilegio: il segreto è fidato per operare sui lead che il
+    // bot ha davvero lavorato, non per scrivere su qualunque riga solo perché un video
+    // è passato dal suo canale. Due prove, non una: `leadWasBotOwned` (BOT_PUSHED oppure
+    // agenda consegnata/inviata) è la soglia bassa che basta per NOTA, che non sposta
+    // stato. `leadWasWorkedByBot` (solo BOT_PUSHED, prova che il lead gli fosse davvero
+    // assegnato) è la soglia che serve per accettare un APPUNTAMENTO: un'agenda
+    // recapitata non è mai stata una sua conversazione da chiudere, e un GDO che ha
+    // fissato lui l'appuntamento non deve vederselo portare via.
     let leadWasBotOwned = assigneeIsBot;
+    let leadWasWorkedByBot = assigneeIsBot;
     if (!assigneeIsBot) {
         const [pushed] = await db.select({ id: leadEvents.id })
             .from(leadEvents)
             .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.eventType, 'BOT_PUSHED')))
             .limit(1);
-        leadWasBotOwned = !!pushed
+        leadWasWorkedByBot = !!pushed;
+        leadWasBotOwned = leadWasWorkedByBot
             || lead.agendaStatus === 'consegnato'
             || lead.agendaStatus === 'inviato';
 
         if (!leadWasBotOwned) {
             return NextResponse.json({ error: 'forbidden', detail: 'lead mai passato dal bot' }, { status: 403 });
         }
-        // Il lead è di un GDO umano. NOTA annota e basta. APPUNTAMENTO viene
-        // accettato e il lead torna al bot (vedi sotto): un appuntamento fissato
-        // è troppo caro per buttarlo via. Tutto il resto no — uno scarto o un
-        // richiamo dal bot sovrascriverebbe il lavoro di chi ce l'ha in mano.
+        // Il lead è di un GDO umano. NOTA annota e basta — bastano push o sola agenda.
+        // Tutto il resto no — uno scarto o un richiamo dal bot sovrascriverebbe il
+        // lavoro di chi ce l'ha in mano.
         if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO') {
             return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
+        }
+        // APPUNTAMENTO torna al bot (vedi sotto): un appuntamento fissato è troppo
+        // caro per buttarlo via, ma solo se il bot lo aveva davvero in carico. Sui
+        // lead con solo agenda recapitata l'appuntamento resta di chi lo ha fissato.
+        if (typedOutcome === 'APPUNTAMENTO' && !leadWasWorkedByBot) {
+            return NextResponse.json({ error: 'forbidden', detail: 'agenda recapitata dal bot ma lead mai lavorato da lui (nessun BOT_PUSHED): appuntamento non accettato' }, { status: 403 });
         }
     }
 
@@ -241,17 +251,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, reassigned: r.assignedToId });
     }
 
-    // Appuntamento su un lead che il bot ci aveva restituito: lo riprende.
+    // Appuntamento su un lead che il bot ci aveva restituito: lo riprende. Guardia
+    // ripetuta con `leadWasWorkedByBot` (già verificata sopra, che qui avrebbe già
+    // fatto uscire con 403): un'agenda solo recapitata non basta a giustificare la
+    // riassegnazione, l'invariante deve leggersi qui senza risalire al blocco di auth.
     // La riassegnazione va PRIMA di updateLeadOutcome, così l'appuntamento è
     // attribuito al bot — che è già escluso dai KPI per GDO — e non al GDO che
     // non l'ha fissato. Il GDO che lo perde viene avvisato: un lead che sparisce
     // dalla pipeline senza spiegazione è un reclamo che abbiamo già inseguito.
-    if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot) {
+    if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot && leadWasWorkedByBot) {
         const previousOwnerId = lead.assignedToId;
 
         await db.update(leads)
             .set({ assignedToId: actorUserId })
-            .where(eq(leads.id, leadId));
+            .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')));
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
