@@ -13,7 +13,9 @@ import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissato
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
 // NOTA (contratto v1.2): annotazione senza transizione di stato — canale per disdette/
 // spostamenti comunicati in chat su lead già appuntati, che il bot non può declassare.
-const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA'] as const;
+// CONTATTO_UMANO: il lead ha chiesto di parlare con una persona. Segnalazione
+// agli admin, nessuna transizione di stato: decide un umano a chi darla.
+const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA', 'CONTATTO_UMANO'] as const;
 type BotOutcome = typeof VALID_OUTCOMES[number];
 
 interface BotOutcomeBody {
@@ -121,7 +123,7 @@ export async function POST(req: NextRequest) {
         // Il lead è di un GDO umano. NOTA annota e basta — bastano push o sola agenda.
         // Tutto il resto no — uno scarto o un richiamo dal bot sovrascriverebbe il
         // lavoro di chi ce l'ha in mano.
-        if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO') {
+        if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO' && typedOutcome !== 'CONTATTO_UMANO') {
             return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
         }
         // APPUNTAMENTO torna al bot (vedi sotto): un appuntamento fissato è troppo
@@ -239,6 +241,49 @@ export async function POST(req: NextRequest) {
 
         // `deduped` è informativo, non un errore: per il bot l'invio è andato a buon fine.
         return NextResponse.json({ ok: true, noted: true, ...(isDuplicate ? { deduped: true } : {}) });
+    }
+
+    // Il lead ha chiesto di parlare con una persona. Non è una transizione di
+    // stato: il lead resta dov'è ed è un admin a decidere a chi darlo. Va agli
+    // admin e non al GDO assegnato per decisione del PO — su un lead ridato il
+    // GDO potrebbe non essere quello giusto a cui affidarlo.
+    if (typedOutcome === 'CONTATTO_UMANO') {
+        const text = (note ?? '').trim();
+        if (!text) {
+            return NextResponse.json({ error: 'bad_request', detail: 'note richiesta per esito CONTATTO_UMANO' }, { status: 400 });
+        }
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'BOT_CONTACT_REQUEST',
+            userId: actorUserId,
+            timestamp: new Date(),
+            metadata: { note: text },
+            companyId: 'fenice',
+        });
+
+        const admins = await db.select({ id: users.id }).from(users).where(and(
+            eq(users.companyId, 'fenice'),
+            eq(users.role, 'ADMIN'),
+            eq(users.isActive, true),
+        ));
+        if (admins.length > 0) {
+            const now = new Date();
+            await db.insert(notifications).values(admins.map(a => ({
+                id: crypto.randomUUID(),
+                recipientUserId: a.id,
+                type: 'bot_contatto_umano',
+                title: '☎️ Il lead vuole essere richiamato',
+                body: `${lead.name}: ${text.length > 200 ? text.slice(0, 200) + '…' : text}`,
+                metadata: { leadId },
+                status: 'unread',
+                createdAt: now,
+                companyId: 'fenice',
+            }))).catch((e) => console.error('[bot-fissatore] CONTATTO_UMANO notify err', e));
+        }
+
+        return NextResponse.json({ ok: true, noted: true });
     }
 
     // Ritorno al pool umano: il bot non ha convertito ma non c'è obiezione ferrea
