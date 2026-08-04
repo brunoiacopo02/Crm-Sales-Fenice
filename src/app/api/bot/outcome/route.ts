@@ -93,17 +93,32 @@ export async function POST(req: NextRequest) {
     const assigneeIsBot = !!assignee?.isBot;
 
     // Lead di un GDO umano: da quando l'agenda parte dal canale bot, il bot
-    // conversa anche con lead che non gli appartengono. Può però SOLO annotare —
-    // il lead resta del GDO, quindi niente transizioni di stato — e solo se per
-    // quel lead è passata davvero un'agenda dal suo canale. Minimo privilegio:
-    // il segreto è fidato per operazioni distruttive sui lead del bot, non deve
-    // poter scrivere su qualunque lead a database.
+    // conversa anche con lead che non gli appartengono. Minimo privilegio:
+    // il segreto è fidato per operazioni sui lead del bot, non deve poter
+    // scrivere su qualunque lead a database — da qui la verifica sotto.
+    // Su un lead non assegnato al bot serve la prova che quel lead sia stato
+    // suo: il segreto è fidato per operare sui lead del bot, non deve diventare
+    // il permesso di scrivere su qualunque riga della tabella. Prova = il push
+    // al bot è avvenuto, oppure un'agenda è uscita dal suo canale.
+    let leadWasBotOwned = assigneeIsBot;
     if (!assigneeIsBot) {
-        if (typedOutcome !== 'NOTA') {
-            return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
+        const [pushed] = await db.select({ id: leadEvents.id })
+            .from(leadEvents)
+            .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.eventType, 'BOT_PUSHED')))
+            .limit(1);
+        leadWasBotOwned = !!pushed
+            || lead.agendaStatus === 'consegnato'
+            || lead.agendaStatus === 'inviato';
+
+        if (!leadWasBotOwned) {
+            return NextResponse.json({ error: 'forbidden', detail: 'lead mai passato dal bot' }, { status: 403 });
         }
-        if (lead.agendaStatus !== 'consegnato' && lead.agendaStatus !== 'inviato') {
-            return NextResponse.json({ error: 'forbidden', detail: 'nessuna agenda inviata dal bot per questo lead' }, { status: 403 });
+        // Il lead è di un GDO umano. NOTA annota e basta. APPUNTAMENTO viene
+        // accettato e il lead torna al bot (vedi sotto): un appuntamento fissato
+        // è troppo caro per buttarlo via. Tutto il resto no — uno scarto o un
+        // richiamo dal bot sovrascriverebbe il lavoro di chi ce l'ha in mano.
+        if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO') {
+            return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
         }
     }
 
@@ -224,6 +239,43 @@ export async function POST(req: NextRequest) {
         const reason = typedOutcome === 'NON_RISPOSTO' ? 'mai_risposto' : 'chat_interrotta';
         const r = await reassignBotLeadToHumanPool(leadId, reason, actorUserId, note);
         return NextResponse.json({ ok: true, reassigned: r.assignedToId });
+    }
+
+    // Appuntamento su un lead che il bot ci aveva restituito: lo riprende.
+    // La riassegnazione va PRIMA di updateLeadOutcome, così l'appuntamento è
+    // attribuito al bot — che è già escluso dai KPI per GDO — e non al GDO che
+    // non l'ha fissato. Il GDO che lo perde viene avvisato: un lead che sparisce
+    // dalla pipeline senza spiegazione è un reclamo che abbiamo già inseguito.
+    if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot) {
+        const previousOwnerId = lead.assignedToId;
+
+        await db.update(leads)
+            .set({ assignedToId: actorUserId })
+            .where(eq(leads.id, leadId));
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'REASSIGNED_TO_BOT',
+            userId: actorUserId,
+            timestamp: new Date(),
+            metadata: { fromUserId: previousOwnerId, reason: 'appuntamento_dal_bot' },
+            companyId: 'fenice',
+        }).catch((e) => console.error('[bot-fissatore] REASSIGNED_TO_BOT event err', e));
+
+        if (previousOwnerId) {
+            await db.insert(notifications).values({
+                id: crypto.randomUUID(),
+                recipientUserId: previousOwnerId,
+                type: 'bot_took_lead',
+                title: '🤖 Il Fissatore ha fissato questo lead',
+                body: `${lead.name}: il bot ha chiuso l'appuntamento in chat, quindi il lead è tornato a lui.`,
+                metadata: { leadId },
+                status: 'unread',
+                createdAt: new Date(),
+                companyId: 'fenice',
+            }).catch((e) => console.error('[bot-fissatore] bot_took_lead notify err', e));
+        }
     }
 
     // Transizione di stato via riuso totale di updateLeadOutcome (handoff Conferme,
