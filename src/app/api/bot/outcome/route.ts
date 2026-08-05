@@ -253,6 +253,30 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'bad_request', detail: 'note richiesta per esito CONTATTO_UMANO' }, { status: 400 });
         }
 
+        // Il fornitore non manda un CONTATTO_UMANO isolato: finché il lead continua a
+        // scrivere, il bot rivaluta e riemette lo stesso esito a ogni messaggio,
+        // riformulando il motivo con parole diverse — non sono retry, sono rivalutazioni.
+        // L'evento va scritto a ogni chiamata (ogni riformulazione resta leggibile in
+        // timeline, come per NOTA), ma la notifica no: senza soppressione, tre
+        // riemissioni in pochi minuti riempiono la campanella di OGNI admin attivo per
+        // un solo lead — il modo più rapido per insegnare a un admin a ignorarla, cioè
+        // il problema che questa feature doveva chiudere. Finestra di 24h e non i 15
+        // min di NOTA DI PROPOSITO: qui non si raggruppa una raffica di re-invii, si
+        // copre il tempo entro cui un admin prende in carico la richiesta. Se il lead
+        // richiede di essere richiamato la settimana dopo è una richiesta nuova e deve
+        // suonare di nuovo — non allineare questa finestra a quella di NOTA.
+        const NOTIFY_SUPPRESS_WINDOW_MS = 24 * 60 * 60 * 1000;
+        const [recentRequest] = await db.select({ id: leadEvents.id })
+            .from(leadEvents)
+            .where(and(
+                eq(leadEvents.leadId, leadId),
+                eq(leadEvents.eventType, 'BOT_CONTACT_REQUEST'),
+                gte(leadEvents.timestamp, new Date(Date.now() - NOTIFY_SUPPRESS_WINDOW_MS)),
+            ))
+            .orderBy(desc(leadEvents.timestamp))
+            .limit(1);
+        const notifySuppressed = !!recentRequest;
+
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
@@ -263,27 +287,29 @@ export async function POST(req: NextRequest) {
             companyId: 'fenice',
         });
 
-        const admins = await db.select({ id: users.id }).from(users).where(and(
-            eq(users.companyId, 'fenice'),
-            eq(users.role, 'ADMIN'),
-            eq(users.isActive, true),
-        ));
-        if (admins.length > 0) {
-            const now = new Date();
-            await db.insert(notifications).values(admins.map(a => ({
-                id: crypto.randomUUID(),
-                recipientUserId: a.id,
-                type: 'bot_contatto_umano',
-                title: '☎️ Il lead vuole essere richiamato',
-                body: `${lead.name}: ${text.length > 200 ? text.slice(0, 200) + '…' : text}`,
-                metadata: { leadId },
-                status: 'unread',
-                createdAt: now,
-                companyId: 'fenice',
-            }))).catch((e) => console.error('[bot-fissatore] CONTATTO_UMANO notify err', e));
+        if (!notifySuppressed) {
+            const admins = await db.select({ id: users.id }).from(users).where(and(
+                eq(users.companyId, 'fenice'),
+                eq(users.role, 'ADMIN'),
+                eq(users.isActive, true),
+            ));
+            if (admins.length > 0) {
+                const now = new Date();
+                await db.insert(notifications).values(admins.map(a => ({
+                    id: crypto.randomUUID(),
+                    recipientUserId: a.id,
+                    type: 'bot_contatto_umano',
+                    title: '☎️ Il lead vuole essere richiamato',
+                    body: `${lead.name}: ${text.length > 200 ? text.slice(0, 200) + '…' : text}`,
+                    metadata: { leadId },
+                    status: 'unread',
+                    createdAt: now,
+                    companyId: 'fenice',
+                }))).catch((e) => console.error('[bot-fissatore] CONTATTO_UMANO notify err', e));
+            }
         }
 
-        return NextResponse.json({ ok: true, noted: true });
+        return NextResponse.json({ ok: true, noted: true, ...(notifySuppressed ? { notifySuppressed: true } : {}) });
     }
 
     // Ritorno al pool umano: il bot non ha convertito ma non c'è obiezione ferrea
