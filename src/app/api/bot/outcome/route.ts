@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '@/db';
 import { leads, users, leadEvents, notifications } from '@/db/schema';
@@ -17,6 +17,17 @@ import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissato
 // agli admin, nessuna transizione di stato: decide un umano a chi darla.
 const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA', 'CONTATTO_UMANO'] as const;
 type BotOutcome = typeof VALID_OUTCOMES[number];
+
+/** Data appuntamento leggibile in italiano, es. "gio 07/08 alle 16:00" (Europe/Rome). */
+function formatRomeAppointment(d: Date): string {
+    const fmt = new Intl.DateTimeFormat('it-IT', {
+        timeZone: 'Europe/Rome',
+        weekday: 'short', day: '2-digit', month: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d);
+    const get = (t: string) => fmt.find(p => p.type === t)?.value ?? '';
+    return `${get('weekday')} ${get('day')}/${get('month')} alle ${get('hour')}:${get('minute')}`;
+}
 
 interface BotOutcomeBody {
     leadId?: string;
@@ -80,6 +91,7 @@ export async function POST(req: NextRequest) {
         status: leads.status,
         confNeedsReschedule: leads.confNeedsReschedule,
         agendaStatus: leads.agendaStatus,
+        presentedAt: leads.presentedAt,
     }).from(leads).where(eq(leads.id, leadId)).limit(1);
 
     if (!lead) {
@@ -108,9 +120,17 @@ export async function POST(req: NextRequest) {
     let leadWasBotOwned = assigneeIsBot;
     let leadWasWorkedByBot = assigneeIsBot;
     if (!assigneeIsBot) {
+        // Solo i push andati a buon fine sono prova: `BOT_PUSHED` viene scritto anche
+        // per skipped_disabled / missing_env / http_error / network_error (vedi
+        // lib/bot-fissatore/push.ts), cioè per lead che al bot non sono mai arrivati.
+        // Stessa convenzione di lettura delle statistiche (botStatsActions.ts).
         const [pushed] = await db.select({ id: leadEvents.id })
             .from(leadEvents)
-            .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.eventType, 'BOT_PUSHED')))
+            .where(and(
+                eq(leadEvents.leadId, leadId),
+                eq(leadEvents.eventType, 'BOT_PUSHED'),
+                sql`${leadEvents.metadata}->>'result' = 'sent'`,
+            ))
             .limit(1);
         leadWasWorkedByBot = !!pushed;
         leadWasBotOwned = leadWasWorkedByBot
@@ -330,12 +350,31 @@ export async function POST(req: NextRequest) {
     // attribuito al bot — che è già escluso dai KPI per GDO — e non al GDO che
     // non l'ha fissato. Il GDO che lo perde viene avvisato: un lead che sparisce
     // dalla pipeline senza spiegazione è un reclamo che abbiamo già inseguito.
-    if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot && leadWasWorkedByBot) {
+    //
+    // ECCEZIONE `presentedAt`: NON si sposta la proprietà di un lead che ha già
+    // prodotto storico. Ogni metrica per-GDO di questo codebase è calcolata live
+    // sull'assegnatario ATTUALE (presenceCounting.ts conta le presenze per
+    // `assignedToId` + `presentedAt` latchato; gdoPerformanceActions.ts costruisce
+    // le tabelle manager filtrando `isActive && !isBot`) e il bot non ha riga in
+    // quelle tabelle: spostare l'assegnatario non trasferisce i numeri al bot, li
+    // fa SPARIRE. Su un lead con `presentedAt` valorizzato significherebbe
+    // cancellare a posteriori una presenza da un ciclo bonus già chiuso e pagato
+    // (biweeklyBonusActions ricalcola i cicli storici a ogni render) e togliere
+    // dal fatturato del GDO un `closeAmountEur` già riconciliato a mano sullo
+    // Sheet — una discrepanza che salta fuori settimane dopo senza spiegazione.
+    // L'appuntamento si accetta comunque (perderlo contraddice tutta la feature):
+    // resta accreditato al GDO umano che tiene il lead. È la distorsione più
+    // piccola — un conteggio in avanti attribuito a un umano, invece della
+    // riscrittura di un mese già chiuso. NON semplificare via questa condizione.
+    const leadHasHistory = lead.presentedAt !== null;
+    let reassignedFromOwnerId: string | null = null;
+    if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot && leadWasWorkedByBot && !leadHasHistory) {
         const previousOwnerId = lead.assignedToId;
 
         await db.update(leads)
             .set({ assignedToId: actorUserId })
             .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')));
+        reassignedFromOwnerId = previousOwnerId ?? null;
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
@@ -348,12 +387,15 @@ export async function POST(req: NextRequest) {
         }).catch((e) => console.error('[bot-fissatore] REASSIGNED_TO_BOT event err', e));
 
         if (previousOwnerId) {
+            // La data è la parte verificabile per il GDO: senza, l'avviso dice solo
+            // che il lead è sparito. Formato italiano esplicito su Europe/Rome.
+            const apptLabel = date ? formatRomeAppointment(date) : null;
             await db.insert(notifications).values({
                 id: crypto.randomUUID(),
                 recipientUserId: previousOwnerId,
                 type: 'bot_took_lead',
                 title: '🤖 Il Fissatore ha fissato questo lead',
-                body: `${lead.name}: il bot ha chiuso l'appuntamento in chat, quindi il lead è tornato a lui.`,
+                body: `${lead.name}: il bot ha chiuso l'appuntamento in chat${apptLabel ? ` per ${apptLabel}` : ''}, quindi il lead è tornato a lui.`,
                 metadata: { leadId },
                 status: 'unread',
                 createdAt: new Date(),
@@ -377,6 +419,18 @@ export async function POST(req: NextRequest) {
     );
 
     if (!result || result.success !== true) {
+        // L'esito non è passato (tipicamente CONCURRENCY_ERROR, che il retry orario
+        // del bot sana) ma la riassegnazione è già committata: senza rollback il lead
+        // resta parcheggiato sull'account bot, fuori dalla pipeline del GDO, sotto una
+        // notifica che gli dice che l'appuntamento è stato preso — e nessun
+        // appuntamento esiste. Ripristino best-effort: se fallisce anche questo si
+        // torna comunque 409, mai un 500.
+        if (reassignedFromOwnerId) {
+            await db.update(leads)
+                .set({ assignedToId: reassignedFromOwnerId })
+                .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')))
+                .catch((e) => console.error('[bot-fissatore] rollback riassegnazione fallito', e));
+        }
         return NextResponse.json({ error: 'update_failed', detail: result?.error ?? 'unknown' }, { status: 409 });
     }
 

@@ -223,6 +223,7 @@ export function ContactDrawer({
             case 'APPOINTMENT_SET': return <CalendarCheck className="h-4 w-4 text-green-500" />
             case 'BOT_NOTE': return <FileText className="h-4 w-4 text-sky-500" />
             case 'REASSIGNED_TO_BOT': return <User className="h-4 w-4 text-indigo-500" />
+            case 'BOT_CONTACT_REQUEST': return <Phone className="h-4 w-4 text-sky-500" />
             default: return <CheckCircle2 className="h-4 w-4 text-ash-400" />
         }
     }
@@ -241,6 +242,7 @@ export function ContactDrawer({
             case 'lead_parked': return 'Messo in lavorazione'
             case 'BOT_NOTE': return '📋 Nota dal Fissatore'
             case 'REASSIGNED_TO_BOT': return '🤖 Lead ripreso dal Fissatore'
+            case 'BOT_CONTACT_REQUEST': return '☎️ Richiesta di contatto umano'
             default: return 'Evento Sconosciuto'
         }
     }
