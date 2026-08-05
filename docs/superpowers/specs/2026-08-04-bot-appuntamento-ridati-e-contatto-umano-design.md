@@ -39,7 +39,8 @@ ferma — e quella richiesta oggi non arriva a nessuno.
 avvisare il GDO e lasciarglielo.
 
 Il rischio noto e accettato: il GDO che ci stava lavorando se lo vede sparire
-dalla pipeline. Per questo la ripresa **non è silenziosa** — vedi sotto.
+dalla pipeline senza che nessuno glielo dica. Resta ricostruibile dalla
+timeline del lead, ma va cercata.
 
 **Provenienza richiesta.** Il segreto del bot non deve diventare il permesso di
 fissare appuntamenti su qualunque lead a database. L'esito si accetta solo se
