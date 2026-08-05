@@ -18,17 +18,6 @@ import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissato
 const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA', 'CONTATTO_UMANO'] as const;
 type BotOutcome = typeof VALID_OUTCOMES[number];
 
-/** Data appuntamento leggibile in italiano, es. "gio 07/08 alle 16:00" (Europe/Rome). */
-function formatRomeAppointment(d: Date): string {
-    const fmt = new Intl.DateTimeFormat('it-IT', {
-        timeZone: 'Europe/Rome',
-        weekday: 'short', day: '2-digit', month: '2-digit',
-        hour: '2-digit', minute: '2-digit', hour12: false,
-    }).formatToParts(d);
-    const get = (t: string) => fmt.find(p => p.type === t)?.value ?? '';
-    return `${get('weekday')} ${get('day')}/${get('month')} alle ${get('hour')}:${get('minute')}`;
-}
-
 interface BotOutcomeBody {
     leadId?: string;
     outcome?: string;
@@ -266,7 +255,10 @@ export async function POST(req: NextRequest) {
     // Il lead ha chiesto di parlare con una persona. Non è una transizione di
     // stato: il lead resta dov'è ed è un admin a decidere a chi darlo. Va agli
     // admin e non al GDO assegnato per decisione del PO — su un lead ridato il
-    // GDO potrebbe non essere quello giusto a cui affidarlo.
+    // GDO potrebbe non essere quello giusto a cui affidarlo. Se il lead è già
+    // `APPOINTMENT` la richiesta va anche alle Conferme attive: sono loro che lo
+    // richiamano il giorno prima dell'appuntamento, quindi sono loro a doverlo
+    // sapere subito.
     if (typedOutcome === 'CONTATTO_UMANO') {
         const text = (note ?? '').trim();
         if (!text) {
@@ -313,11 +305,21 @@ export async function POST(req: NextRequest) {
                 eq(users.role, 'ADMIN'),
                 eq(users.isActive, true),
             ));
-            if (admins.length > 0) {
+            // Sul lead appuntato la richiesta riguarda anche le Conferme: sono
+            // loro a richiamarlo il giorno prima. Stessa selezione del blocco NOTA.
+            const confermeUsers = lead.status === 'APPOINTMENT'
+                ? await db.select({ id: users.id }).from(users).where(and(
+                    eq(users.companyId, 'fenice'),
+                    eq(users.role, 'CONFERME'),
+                    eq(users.isActive, true),
+                ))
+                : [];
+            const recipients = [...admins, ...confermeUsers];
+            if (recipients.length > 0) {
                 const now = new Date();
-                await db.insert(notifications).values(admins.map(a => ({
+                await db.insert(notifications).values(recipients.map(u => ({
                     id: crypto.randomUUID(),
-                    recipientUserId: a.id,
+                    recipientUserId: u.id,
                     type: 'bot_contatto_umano',
                     title: '☎️ Il lead vuole essere richiamato',
                     body: `${lead.name}: ${text.length > 200 ? text.slice(0, 200) + '…' : text}`,
@@ -348,8 +350,8 @@ export async function POST(req: NextRequest) {
     // riassegnazione, l'invariante deve leggersi qui senza risalire al blocco di auth.
     // La riassegnazione va PRIMA di updateLeadOutcome, così l'appuntamento è
     // attribuito al bot — che è già escluso dai KPI per GDO — e non al GDO che
-    // non l'ha fissato. Il GDO che lo perde viene avvisato: un lead che sparisce
-    // dalla pipeline senza spiegazione è un reclamo che abbiamo già inseguito.
+    // non l'ha fissato. Decisione del PO: la ripresa è silenziosa, nessuna
+    // notifica al GDO che lo perde — resta solo l'evento sotto come audit.
     //
     // ECCEZIONE `presentedAt`: NON si sposta la proprietà di un lead che ha già
     // prodotto storico. Ogni metrica per-GDO di questo codebase è calcolata live
@@ -368,13 +370,20 @@ export async function POST(req: NextRequest) {
     // riscrittura di un mese già chiuso. NON semplificare via questa condizione.
     const leadHasHistory = lead.presentedAt !== null;
     let reassignedFromOwnerId: string | null = null;
+    // Separato da `reassignedFromOwnerId`: quel campo è nullable perché il
+    // precedente assegnatario può legittimamente essere null (lead scaduto senza
+    // GDO eleggibile), quindi la sua truthiness da sola non basta a distinguere
+    // "nessuna riassegnazione avvenuta" da "riassegnazione avvenuta da un lead
+    // senza owner". Il rollback deve pilotarsi su questo flag, non su quel valore.
+    let didReassign = false;
     if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot && leadWasWorkedByBot && !leadHasHistory) {
         const previousOwnerId = lead.assignedToId;
 
         await db.update(leads)
             .set({ assignedToId: actorUserId })
             .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')));
-        reassignedFromOwnerId = previousOwnerId ?? null;
+        reassignedFromOwnerId = previousOwnerId;
+        didReassign = true;
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
@@ -385,23 +394,6 @@ export async function POST(req: NextRequest) {
             metadata: { fromUserId: previousOwnerId, reason: 'appuntamento_dal_bot' },
             companyId: 'fenice',
         }).catch((e) => console.error('[bot-fissatore] REASSIGNED_TO_BOT event err', e));
-
-        if (previousOwnerId) {
-            // La data è la parte verificabile per il GDO: senza, l'avviso dice solo
-            // che il lead è sparito. Formato italiano esplicito su Europe/Rome.
-            const apptLabel = date ? formatRomeAppointment(date) : null;
-            await db.insert(notifications).values({
-                id: crypto.randomUUID(),
-                recipientUserId: previousOwnerId,
-                type: 'bot_took_lead',
-                title: '🤖 Il Fissatore ha fissato questo lead',
-                body: `${lead.name}: il bot ha chiuso l'appuntamento in chat${apptLabel ? ` per ${apptLabel}` : ''}, quindi il lead è tornato a lui.`,
-                metadata: { leadId },
-                status: 'unread',
-                createdAt: new Date(),
-                companyId: 'fenice',
-            }).catch((e) => console.error('[bot-fissatore] bot_took_lead notify err', e));
-        }
     }
 
     // Transizione di stato via riuso totale di updateLeadOutcome (handoff Conferme,
@@ -421,11 +413,10 @@ export async function POST(req: NextRequest) {
     if (!result || result.success !== true) {
         // L'esito non è passato (tipicamente CONCURRENCY_ERROR, che il retry orario
         // del bot sana) ma la riassegnazione è già committata: senza rollback il lead
-        // resta parcheggiato sull'account bot, fuori dalla pipeline del GDO, sotto una
-        // notifica che gli dice che l'appuntamento è stato preso — e nessun
+        // resta parcheggiato sull'account bot, fuori dalla pipeline del GDO — e nessun
         // appuntamento esiste. Ripristino best-effort: se fallisce anche questo si
         // torna comunque 409, mai un 500.
-        if (reassignedFromOwnerId) {
+        if (didReassign) {
             await db.update(leads)
                 .set({ assignedToId: reassignedFromOwnerId })
                 .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')))

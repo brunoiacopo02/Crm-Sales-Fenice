@@ -52,19 +52,17 @@ l'ha fissato — il bot è già escluso dai KPI per GDO. Poi l'esito segue la
 strada di sempre (`updateLeadOutcome` con `serviceCtx`), quindi handoff alle
 Conferme, call log e webhook marketing restano identici.
 
-**Il GDO che perde il lead viene avvisato.** Notifica dedicata: *"Il Fissatore
-ha fissato questo lead"*, con nome e data dell'appuntamento. Un lead che sparisce
-dalla pipeline senza spiegazione è esattamente il reclamo che abbiamo già
-inseguito a maggio: qui la spiegazione parte insieme al lead.
-
-Resta un evento `REASSIGNED_TO_BOT` con dentro da chi è stato ripreso.
+**La ripresa è silenziosa.** Il GDO che perde il lead non riceve nessuna
+notifica: il lead viene semplicemente ripreso. Resta un evento
+`REASSIGNED_TO_BOT` con dentro da chi è stato ripreso — è la traccia di audit,
+non un avviso.
 
 **Solo `APPUNTAMENTO`.** Gli altri esiti su lead non del bot continuano a
 prendere `403`: uno scarto o un richiamo dal bot su un lead che sta lavorando
 un umano non ha la stessa urgenza commerciale e sovrascriverebbe il lavoro di
 qualcun altro senza compenso.
 
-## 2. `CONTATTO_UMANO`: la richiesta arriva agli admin
+## 2. `CONTATTO_UMANO`: la richiesta arriva agli admin (e alle Conferme se il lead è appuntato)
 
 **Decisione del PO:** il report va agli **amministratori**, non al GDO. Decide
 l'admin cosa farne e a chi assegnarla.
@@ -78,9 +76,17 @@ guarda nessun umano — cioè lo stesso posto dove le richieste si perdono oggi.
 una segnalazione, non una transizione: il lead resta esattamente dov'è.
 
 **Cosa fa:** scrive un evento `BOT_CONTACT_REQUEST` in timeline e manda una
-notifica a tutti gli admin Fenice attivi, cliccabile, che apre la scheda del
-lead. Stessa provenienza richiesta del punto 1 — o il lead è del bot, o deve
+notifica cliccabile, che apre la scheda del lead, a tutti gli admin Fenice
+attivi. Stessa provenienza richiesta del punto 1 — o il lead è del bot, o deve
 risultare che lo sia stato.
+
+**Se il lead è già `APPOINTMENT`, la richiesta arriva anche alle Conferme**
+attive di Fenice, non solo agli admin: sono loro a richiamare il lead il
+giorno prima dell'appuntamento, quindi sono loro a dover sapere subito che
+vuole parlare con una persona. Stessa selezione di ruolo/attivo/azienda usata
+per il blocco `NOTA` più sopra. La soppressione delle 24 ore copre entrambe le
+platee insieme: se la richiesta è soppressa non notifica nessuno, se non lo è
+notifica tutti quelli previsti.
 
 Nove lead al mese: volume minimo, intento altissimo.
 
@@ -95,12 +101,17 @@ Nove lead al mese: volume minimo, intento altissimo.
 
 - **Appuntamento su lead ridato**: `APPUNTAMENTO` su un lead con `BOT_PUSHED` e
   assegnato a un umano → `200`, lead in `APPOINTMENT` e assegnato al bot,
-  notifica al GDO precedente, evento `REASSIGNED_TO_BOT`.
+  nessuna notifica al GDO precedente, evento `REASSIGNED_TO_BOT`.
 - **Lead mai passato dal bot**: stesso esito su un lead senza `BOT_PUSHED` e
   senza agenda → `403`, nessuna scrittura.
 - **Altri esiti invariati**: `DA_SCARTARE` su lead di un umano → `403`.
-- **Lead già del bot**: `APPUNTAMENTO` normale → identico a oggi, nessuna
-  notifica di ripresa e nessun evento di riassegnazione.
-- **`CONTATTO_UMANO`**: `200`, evento in timeline, una notifica per ogni admin
-  attivo, nessuna modifica allo stato o all'assegnatario del lead.
+- **Lead già del bot**: `APPUNTAMENTO` normale → identico a oggi, nessun
+  evento di riassegnazione.
+- **`CONTATTO_UMANO` su lead non appuntato**: `200`, evento in timeline, una
+  notifica per ogni admin attivo, nessuna alle Conferme, nessuna modifica
+  allo stato o all'assegnatario del lead.
+- **`CONTATTO_UMANO` su lead `APPOINTMENT`**: `200`, evento in timeline, una
+  notifica per ogni admin attivo e per ogni Confermista attivo di Fenice.
+- **`CONTATTO_UMANO` soppresso (entro 24h dal precedente)**: `200`, evento in
+  timeline, nessuna notifica a nessuno — né admin né Conferme.
 - **`CONTATTO_UMANO` senza nota** → `400`.
