@@ -7,7 +7,7 @@ import { TeamGoalBanner } from "@/components/TeamGoalBanner"
 export default async function ClassificaPage({
     searchParams
 }: {
-    searchParams: { period?: string }
+    searchParams: Promise<{ period?: string }>
 }) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -21,7 +21,8 @@ export default async function ClassificaPage({
     const loggedUserId = session?.user?.id
     const userRole = session?.user?.role as string | undefined
 
-    const period = (searchParams.period as LeaderboardPeriod) || 'today'
+    const sp = await searchParams
+    const period = (sp.period as LeaderboardPeriod) || 'today'
     const [leaderboardData, playerOfWeek] = await Promise.all([
         getLeaderboard(period),
         getPlayerOfTheWeek(),
