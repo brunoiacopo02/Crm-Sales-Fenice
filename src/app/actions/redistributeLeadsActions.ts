@@ -304,6 +304,10 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
             db.update(leads)
                 .set({
                     assignedToId: newAssignee,
+                    // Latch: una redistribuzione non è un nuovo ingresso nel
+                    // funnel. Si scrive solo se il lead non era mai stato preso
+                    // in carico (magazzino), altrimenti resta la data originale.
+                    assignedAt: sql`COALESCE(${leads.assignedAt}, ${now})`,
                     updatedAt: now,
                     version: sql`${leads.version} + 1`,
                 })

@@ -507,6 +507,7 @@ export async function POST(req: NextRequest) {
                 status: 'NEW',
                 callCount: 0,
                 assignedToId: assignedGdoId,
+                assignedAt: now,
                 createdAt: now,
                 updatedAt: now,
                 companyId: SERENAMENTE_COMPANY,

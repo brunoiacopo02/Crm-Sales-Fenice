@@ -70,7 +70,10 @@ export async function pickAndAssignBuckets(params: {
             for (const [gdoId, leadIds] of Object.entries(idsByGdo)) {
                 await tx
                     .update(leads)
-                    .set({ assignedToId: gdoId, updatedAt: new Date() })
+                    // `assignedAt` è la data con cui il lead viene contato nel
+                    // mese: qui è il momento vero di ingresso nel funnel, non
+                    // l'import nel pool (che può essere di mesi prima).
+                    .set({ assignedToId: gdoId, assignedAt: new Date(), updatedAt: new Date() })
                     .where(and(
                         eq(leads.companyId, companyId),
                         inArray(leads.id, leadIds),

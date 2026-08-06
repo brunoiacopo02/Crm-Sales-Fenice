@@ -207,10 +207,11 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
-                gte(leads.createdAt, todayStart),
-                lte(leads.createdAt, todayEnd),
-                // Lead dei pool /import (launchBucket) non ancora assegnati =
-                // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+                // "Nuovi oggi" = presi in carico oggi (migr. 0027): i lead
+                // distribuiti oggi da un pool sono nuovi per il GDO che li
+                // riceve, anche se caricati settimane prima.
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${todayStart}`,
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) <= ${todayEnd}`,
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             ));
         const byFunnelMap = new Map<string, number>();

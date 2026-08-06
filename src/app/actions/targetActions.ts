@@ -321,7 +321,11 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
             or(sql`${leads.launchBucket} IS NULL`, isNotNull(leads.assignedToId)),
             or(
-                and(gte(leads.createdAt, startDate), lt(leads.createdAt, endDate)),
+                // Ingresso nel funnel = presa in carico (migr. 0027), non import.
+                and(
+                    sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${startDate}`,
+                    sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${endDate}`,
+                ),
                 and(gte(leads.appointmentCreatedAt, startDate), lt(leads.appointmentCreatedAt, endDate)),
                 and(gte(leads.appointmentDate, startDate), lt(leads.appointmentDate, endDate)),
                 and(gte(leads.confirmationsTimestamp, startDate), lt(leads.confirmationsTimestamp, endDate)),
@@ -331,8 +335,12 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         )
     );
 
-    // Totale lead = lead CREATI nel mese (semantica corretta per "lead acquisiti")
-    const totaleLeadDelMese = monthLeads.filter(l => inMonth(l.createdAt)).length;
+    // Totale lead = lead PRESI IN CARICO nel mese (migr. 0027). Per i lead da
+    // ActiveCampaign è la stessa cosa della creazione; per quelli dei pool
+    // /import è il momento in cui l'admin li distribuisce, che è quando
+    // entrano davvero nel lavoro del mese.
+    const entrataNelFunnel = (l: { assignedAt: Date | null; createdAt: Date }) => l.assignedAt ?? l.createdAt;
+    const totaleLeadDelMese = monthLeads.filter(l => inMonth(entrataNelFunnel(l))).length;
 
     // ACT Counters
     let actAppsFissati = 0;
@@ -359,8 +367,8 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         const isDatabase = (lead.funnel ?? '').toLowerCase() === 'database';
         const bucket = isDatabase ? breakdownDatabase : breakdownNuovi;
 
-        // Totale categoria = lead della categoria creato nel mese
-        if (inMonth(lead.createdAt)) {
+        // Totale categoria = lead della categoria preso in carico nel mese
+        if (inMonth(entrataNelFunnel(lead))) {
             bucket.totale++;
         }
 

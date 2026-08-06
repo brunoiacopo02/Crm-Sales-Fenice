@@ -124,8 +124,12 @@ export async function getManagerGdoTables(monthString: string) {
             .where(and(
                 eq(leads.companyId, ctx.companyId),
                 isNotNull(leads.assignedToId),
-                gte(leads.createdAt, startObj),
-                lt(leads.createdAt, endObj)
+                // Base = presa in carico, non import (migr. 0027). I lead dei
+                // pool /import nascono mesi prima di arrivare a un GDO: contati
+                // su createdAt finivano nel mese del caricamento, dove nessuno
+                // li guarda. COALESCE per i lead storici senza assignedAt.
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${startObj}`,
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${endObj}`,
             )),
         // Presenze del mese (PO 2026-07-17): base `presentedAt` (giorno dell'appuntamento
         // in cui il lead ha presenziato, latch immutabile) — NON il cohort dei fissati.

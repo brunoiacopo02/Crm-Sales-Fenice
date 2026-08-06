@@ -269,6 +269,9 @@ export async function processCsvImport(
                 status: 'NEW',
                 callCount: 0,
                 assignedToId: assignedGdoId,
+                // Caricato già assegnato: entra nel funnel adesso. Se resta nel
+                // magazzino (nessun GDO) la data arriva alla distribuzione.
+                assignedAt: assignedGdoId ? new Date() : null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
                 companyId: ctx.companyId,
@@ -399,6 +402,7 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
         status: 'NEW',
         callCount: 0,
         assignedToId: assignedGdoId,
+        assignedAt: assignedGdoId ? new Date() : null,
         createdAt: new Date(),
         updatedAt: new Date(),
         companyId: ctx.companyId,

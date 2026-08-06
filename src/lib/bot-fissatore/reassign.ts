@@ -73,7 +73,9 @@ export async function reassignBotLeadToHumanPool(
         const gdoId = eligible[0].id;
 
         await tx.update(leads)
-            .set({ ...resetFields, assignedToId: gdoId })
+            // Latch su assignedAt: il lead che il bot restituisce era già stato
+            // contato quando è entrato in circolo, non è un lead nuovo di oggi.
+            .set({ ...resetFields, assignedToId: gdoId, assignedAt: sql`COALESCE(${leads.assignedAt}, ${now})` })
             .where(eq(leads.id, leadId));
 
         await tx.update(users)

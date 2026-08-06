@@ -125,6 +125,13 @@ export const leads = pgTable('leads', {
     status: text('status').default('NEW').notNull(),
     callCount: integer('callCount').default(0).notNull(),
     assignedToId: text('assignedToId').references(() => users.id),
+    // Data della PRIMA presa in carico da parte di un operatore (migr. 0027).
+    // Per i lead che arrivano da ActiveCampaign coincide con `createdAt`: nascono
+    // già assegnati. Per i pool /import no — un lead caricato a luglio e
+    // distribuito ad agosto entra nel funnel ad agosto, ed è lì che va contato.
+    // Non viene riscritta dalle riassegnazioni (bot che restituisce, cambio GDO):
+    // quel lead era già stato contato quando è entrato in circolo la prima volta.
+    assignedAt: timestamp('assignedAt', { withTimezone: true, mode: 'date' }),
     lastCallDate: timestamp('lastCallDate', { withTimezone: true, mode: 'date' }),
     lastCallNote: text('lastCallNote'),
     recallNote: text('recallNote'),

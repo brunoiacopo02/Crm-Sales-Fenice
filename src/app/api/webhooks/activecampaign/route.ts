@@ -614,6 +614,8 @@ export async function POST(req: NextRequest) {
                 status: 'NEW',
                 callCount: 0,
                 assignedToId: assignedGdoId,
+                // Lead da AC: nasce già in carico, ingresso nel funnel = adesso.
+                assignedAt: now,
                 createdAt: now,
                 updatedAt: now,
                 companyId: FENICE_COMPANY,

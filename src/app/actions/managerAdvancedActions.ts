@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { appSettings, callLogs, leads, users } from "@/db/schema"
-import { and, eq, gte, lte, or, isNull, isNotNull } from "drizzle-orm"
+import { and, eq, gte, lte, or, isNull, isNotNull, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
@@ -143,8 +143,10 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
             .where(and(
-                gte(leads.createdAt, startDate),
-                lte(leads.createdAt, endDate),
+                // Base = presa in carico (migr. 0027): un lead del pool caricato
+                // a luglio e distribuito ad agosto è un lead di agosto.
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${startDate}`,
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) <= ${endDate}`,
                 eq(leads.companyId, ctx.companyId),
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             )),

@@ -135,10 +135,12 @@ async function leadOverviewForCompany(ctx: TenantContext, ym: string): Promise<L
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
-                gte(leads.createdAt, monthStart),
-                lt(leads.createdAt, monthEnd),
                 // Lead dei pool /import (launchBucket) non ancora assegnati =
-                // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
+                // magazzino: contano solo dall'assegnazione (PO 2026-07-20), e
+                // dal mese in cui vengono assegnati (migr. 0027) — prima
+                // rientravano nel mese di caricamento del pool.
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${monthStart}`,
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${monthEnd}`,
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             ))
             .groupBy(sql`LOWER(COALESCE(${leads.funnel}, '')) = 'database'`);
