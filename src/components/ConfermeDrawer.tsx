@@ -1,14 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, MessageCircle, Loader2 } from "lucide-react"
+import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, Loader2 } from "lucide-react"
 import { SchedaEsitoInline, type SchedaEsitoHandle } from "./conferme/SchedaEsitoInline"
 import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { ConfermeCallTimer } from "./ConfermeCallTimer"
 import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
 import type { ConfermeNoteItem } from "@/app/actions/confermeActions"
 import { saveConfermeSurvey } from "@/app/actions/surveyActions"
-import { sendConfermeNotifyToLead } from "@/app/actions/activeCampaignActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
 import { connectConfermePresence, setConfermeActivity, subscribeConfermePresence } from "@/lib/confermePresence"
 import { stopTimerAndLogForLead } from "@/lib/confermeCallTimer"
@@ -104,8 +103,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
 
     // Quick Action States
     const [isSavingNR, setIsSavingNR] = useState(false)
-    const [isSendingNotify, setIsSendingNotify] = useState(false)
-    const [notifySentMsg, setNotifySentMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     const [now, setNow] = useState(new Date())
 
@@ -419,24 +416,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
         }
     }
 
-    const handleSendNotify = async (type: 'call1' | '3nr') => {
-        setIsSendingNotify(true);
-        setNotifySentMsg(null);
-        try {
-            const res = await sendConfermeNotifyToLead(lead.id, type);
-            if (res.success) {
-                setNotifySentMsg({ type: 'success', text: type === '3nr' ? 'Notifica 3 NR inviata!' : 'Notifica WhatsApp inviata!' });
-                setTimeout(() => setNotifySentMsg(null), 4000);
-            } else {
-                setNotifySentMsg({ type: 'error', text: res.error || 'Errore invio' });
-            }
-        } catch (e: any) {
-            setNotifySentMsg({ type: 'error', text: e.message || 'Errore invio' });
-        } finally {
-            setIsSendingNotify(false);
-        }
-    }
-
     const getLastNRDate = () => {
         if (lead.confCall3At) return new Date(lead.confCall3At);
         if (lead.confCall2At) return new Date(lead.confCall2At);
@@ -508,28 +487,12 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                     <ConfermeCallTimer leadId={lead.id} disabled={isSavingNR} />
                                 )}
 
-                                {!lead.confirmationsOutcome && (
-                                    <>
-                                        <button
-                                            onClick={() => handleSendNotify('call1')}
-                                            disabled={isSendingNotify || (lead.companyId === 'serenamente' ? !lead.phone : !lead.email)}
-                                            title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica WhatsApp dopo prima NR"}
-                                            className="text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                                        >
-                                            {isSendingNotify ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
-                                            Notifica 1° NR
-                                        </button>
-                                        <button
-                                            onClick={() => handleSendNotify('3nr')}
-                                            disabled={isSendingNotify || (lead.companyId === 'serenamente' ? !lead.phone : !lead.email)}
-                                            title={!lead.email ? "Lead senza email — impossibile creare contatto AC" : "Notifica WhatsApp dopo 3 NR"}
-                                            className="text-xs text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-300 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                                        >
-                                            {isSendingNotify ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
-                                            Notifica 3 NR
-                                        </button>
-                                    </>
-                                )}
+                                {/* I due bottoni "Notifica 1° NR" / "Notifica 3 NR" sono stati
+                                    rimossi il 2026-08-06 (decisione PO): quei messaggi partivano
+                                    ancora dalle automation ActiveCampaign, fuori dal canale bot,
+                                    e per ora non vanno mandati. La server action
+                                    sendConfermeNotifyToLead resta in piedi: sarà il punto di
+                                    aggancio quando i messaggi passeranno dal bot. */}
                             </div>
                         </div>
                         {/* Bottoni Annulla Snooze / Annulla Richiamo */}
@@ -553,12 +516,6 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                         {isCancellingRecall ? "..." : "Annulla Richiamo — Rimetti in Board"}
                                     </button>
                                 )}
-                            </div>
-                        )}
-
-                        {notifySentMsg && (
-                            <div className={`text-xs px-3 py-2 rounded-lg font-medium ${notifySentMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                                {notifySentMsg.text}
                             </div>
                         )}
 
