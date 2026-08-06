@@ -1,7 +1,11 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.3 — 2026-07-29 (aggiunta Direzione 3: invio agenda su richiesta del GDO; `NOTA` ammessa sui lead dei GDO umani).
+> **Versione:** 1.4 — 2026-08-06 (nuovo esito `CONTATTO_UMANO`; `APPUNTAMENTO` accettato sui lead che il bot aveva restituito; Direzione 4: data dell'appuntamento comunicata al bot).
+>
+> **Il contratto cresce, non cambia.** Ogni payload valido nella v1.3 resta valido: le
+> novità sono un valore di `outcome` in più, un caso di `403` che ora diventa `200` e una
+> chiamata aggiuntiva in uscita dal CRM.
 
 ---
 
@@ -13,8 +17,9 @@
 4. [Direzione 1 — CRM → Bot (push all'assegnazione)](#direzione-1--crm--bot-push-allassegnazione)
 5. [Direzione 2 — Bot → CRM (callback outcome)](#direzione-2--bot--crm-callback-outcome)
 6. [Direzione 3 — CRM → Bot (invio agenda)](#direzione-3--crm--bot-invio-agenda)
-7. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
-8. [Limitazioni note](#limitazioni-note)
+7. [Direzione 4 — CRM → Bot (data dell'appuntamento)](#direzione-4--crm--bot-data-dellappuntamento)
+8. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
+9. [Limitazioni note](#limitazioni-note)
 
 ---
 
@@ -44,6 +49,13 @@ Le seguenti variabili devono essere impostate **sia su Vercel (lato CRM) sia sul
 BOT_INTAKE_ENABLED=false        # Impostare `true` su Vercel per abilitare il push
 BOT_INTAKE_URL=                 # URL pubblico del webhook del bot (Direzione 1)
 BOT_WEBHOOK_SECRET=             # Segreto condiviso HMAC-SHA256 (uguale su entrambi i lati)
+
+# Canale agenda e appuntamenti (solo lato CRM)
+AGENDA_CHANNEL=bot              # `bot` = agenda dal canale fornitore (Direzione 3).
+                                # Toglierla fa tornare l'agenda su ActiveCampaign e
+                                # spegne anche la Direzione 4: è il rollback completo.
+AGENDA_BOT_URL=                 # Default: https://web-app-messaggistica.vercel.app/api/send-agenda
+APPOINTMENT_BOT_URL=            # Default: https://web-app-messaggistica.vercel.app/api/appointment-set
 ```
 
 > `BOT_INTAKE_ENABLED=false` è il valore di sicurezza predefinito: il CRM non effettuerà push
@@ -182,14 +194,14 @@ x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
 ```ts
 interface BotOutcomeBody {
   leadId:         string;     // Obbligatorio — UUID ricevuto nel push
-  outcome:        BotOutcome; // Obbligatorio — uno dei 6 valori sotto
+  outcome:        BotOutcome; // Obbligatorio — uno dei 7 valori sotto
   date?:          string;     // Obbligatorio per APPUNTAMENTO e RICHIAMO (ISO 8601 con offset)
-  note?:          string;     // Note libere sull'interazione (obbligatoria per NOTA)
+  note?:          string;     // Note libere sull'interazione (obbligatoria per NOTA e CONTATTO_UMANO)
   discardReason?: string;     // Motivo scarto (usato per DA_SCARTARE)
   report?:        BotReport;  // Report strutturato (opzionale ma raccomandato)
 }
 
-type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA';
+type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA' | 'CONTATTO_UMANO';
 ```
 
 ### Valori `outcome`
@@ -202,6 +214,7 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 | `NON_RISPOSTO` | Non ha **mai risposto** dopo il ciclo di solleciti | No | **Riassegnato a un operatore umano** (round-robin) |
 | `INTERROTTO` | Chat **avviata ma interrotta senza obiezione ferrea** | No | **Riassegnato a un operatore umano** (round-robin) |
 | `NOTA` | **Annotazione senza cambio di stato** (es. disdetta o richiesta di spostamento su lead già appuntato) | No | Nota in timeline + **notifica al team Conferme** se il lead è appuntato. Non tocca stato, appuntamento né assegnazione |
+| `CONTATTO_UMANO` | Il lead **chiede espressamente di parlare con una persona** | No | Segnalazione in timeline + **notifica agli amministratori** (e alle Conferme se il lead è appuntato). Non tocca stato, appuntamento né assegnazione |
 
 > **Importante (cambio rispetto alla v1.0):** `NON_RISPOSTO` non scarta più il lead — lo
 > **restituisce** al CRM, che lo riassegna a un GDO umano. Il nuovo esito `INTERROTTO` ha lo
@@ -216,19 +229,64 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 > va comunicata da una persona (o, quando concordato, con un nuovo `APPUNTAMENTO`). Risposta:
 > `{ ok: true, noted: true }`.
 
+> **Quando usare `CONTATTO_UMANO` (nuovo in v1.4):** quando il lead chiede di parlare con
+> una persona e il bot promette il richiamo. Prima quella richiesta non arrivava a
+> nessuno. Il campo `note` è **obbligatorio** (400 se vuoto): è la richiesta del lead, e
+> senza il testo la segnalazione non serve a niente.
+>
+> Non è un `RICHIAMO`: quello lascerebbe il lead sull'account bot, dove nessun umano
+> guarda. `CONTATTO_UMANO` **non cambia stato, non riassegna, non tocca l'appuntamento** —
+> è una segnalazione, il lead resta dov'è. Il CRM scrive un evento in timeline e manda una
+> notifica cliccabile a tutti gli amministratori attivi; se il lead è già in `APPOINTMENT`
+> la ricevono anche le Conferme, che sono quelle che lo richiamano il giorno prima.
+>
+> **Riemissione libera.** Il bot può riemettere l'esito a ogni messaggio del lead: l'evento
+> viene sempre scritto (ogni riformulazione resta leggibile in timeline), ma la notifica è
+> soppressa se sullo stesso lead ce n'è già stata una nelle **24 ore** precedenti — in quel
+> caso la risposta contiene `notifySuppressed: true`. La finestra è di 24h e non di pochi
+> minuti di proposito: copre il tempo entro cui un admin prende in carico la richiesta. Se
+> il lead richiede di essere richiamato la settimana dopo, è una richiesta nuova e notifica
+> di nuovo. Risposta: `{ ok: true, noted: true }`.
+
 > **`NOTA` sui lead dei GDO umani (nuovo in v1.3):** da quando l'agenda parte dal canale
 > bot (Direzione 3), il bot conversa anche con lead che **non gli sono assegnati**. Su
-> quei lead è ammesso **esclusivamente** l'esito `NOTA`, e solo se per quel lead è
-> passata davvero un'agenda dal bot (`leads.agendaStatus` = `consegnato` o `inviato`).
-> Ogni altro esito su un lead non assegnato al bot resta **403**, così come la `NOTA` su
-> un lead che non ha mai ricevuto l'agenda. Sui lead assegnati all'account bot non cambia
-> nulla: tutti gli esiti restano ammessi.
+> quei lead non è ammesso tutto: serve la prova che il lead sia davvero passato dal bot.
+> Ogni altro esito resta **403**.
 
-| Assegnatario del lead | Agenda inviata dal bot | Esiti ammessi |
+> **`APPUNTAMENTO` sui lead che il bot aveva restituito (nuovo in v1.4):** se il bot ci ha
+> ridato un lead (`INTERROTTO` / `NON_RISPOSTO`) e poi la conversazione riprende e si
+> chiude con un appuntamento, quell'esito **ora viene accettato** invece di tornare `403`.
+> Il CRM riprende il lead sull'account bot **prima** di registrare l'esito, così
+> l'appuntamento resta attribuito al bot e non al GDO che non l'ha fissato. Da lì l'esito
+> segue la strada di sempre: handoff alle Conferme, call log e webhook marketing identici.
+> Il payload non cambia.
+>
+> Vale **solo per `APPUNTAMENTO`**: uno scarto o un richiamo su un lead che sta lavorando
+> una persona ne sovrascriverebbe il lavoro, e restano `403`.
+>
+> **Due prove diverse, non una.** Il segreto condiviso non è il permesso di scrivere su
+> qualunque riga del database:
+>
+> - **soglia bassa** — il lead *è passato* dal bot: esiste un `BOT_PUSHED` andato a buon
+>   fine **oppure** l'agenda è stata recapitata dal canale bot (`agendaStatus` =
+>   `consegnato` / `inviato`). Basta per `NOTA` e `CONTATTO_UMANO`, che non spostano nulla.
+> - **soglia alta** — il lead *è stato lavorato* dal bot: esiste un `BOT_PUSHED` andato a
+>   buon fine. Serve per `APPUNTAMENTO`. Un'agenda recapitata non è mai stata una
+>   conversazione del bot da chiudere, e un GDO che ha fissato lui l'appuntamento non deve
+>   vederselo portare via.
+
+| Assegnatario del lead | Prova di provenienza | Esiti ammessi |
 |---|---|---|
-| account bot | indifferente | tutti |
-| GDO umano | sì | solo `NOTA` |
-| GDO umano | no | nessuno (403) |
+| account bot | — | tutti |
+| GDO umano | `BOT_PUSHED` riuscito | `NOTA`, `CONTATTO_UMANO`, `APPUNTAMENTO` |
+| GDO umano | solo agenda recapitata | `NOTA`, `CONTATTO_UMANO` |
+| GDO umano | nessuna | nessuno (403) |
+
+> **Eccezione sui lead che hanno già prodotto storico.** Se il lead ha già una presenza
+> registrata, l'appuntamento **viene comunque accettato** ma il lead **non** passa
+> all'account bot: resta al GDO umano che ce l'ha. Spostarlo cancellerebbe a posteriori una
+> presenza da un ciclo bonus già chiuso e pagato. Dal punto di vista del bot non cambia
+> nulla: la risposta è `200` in entrambi i casi.
 
 > **Formato `date`:** ISO 8601 con offset di fuso orario **obbligatorio** (`Z` oppure `±HH:MM`).
 > L'endpoint verifica attivamente la presenza dell'offset: una data priva di fuso viene
@@ -378,7 +436,63 @@ senza scrivere: un retry non è mai un problema.
 ### Cosa il bot NON fa su questi lead
 
 Il lead resta del GDO umano: nessuna transizione di stato, nessun follow-up "prenota",
-nessuna classificazione automatica. L'unico ritorno ammesso è `NOTA` (vedi sotto).
+nessuna classificazione automatica. Gli unici ritorni ammessi sono `NOTA` e
+`CONTATTO_UMANO` (vedi la tabella degli esiti ammessi nella Direzione 2).
+
+---
+
+## Direzione 4 — CRM → Bot (data dell'appuntamento)
+
+> **Stato: endpoint non ancora disponibile lato fornitore.** Il CRM effettua già le
+> chiamate; finché l'endpoint non risponde, falliscono in silenzio e restano solo nei log.
+
+Il payload di `/api/send-agenda` **non può** portare la data dell'appuntamento: quando il
+GDO manda l'agenda, l'appuntamento quasi sempre non esiste ancora. Misurato su quattro
+giorni di produzione: **su 274 casi, in 265 la data è stata registrata DOPO l'invio
+dell'agenda**, in media 65 secondi dopo. Serve quindi una seconda chiamata, fatta nel
+momento in cui la data esiste davvero e ripetuta a ogni spostamento — altrimenti il bot
+resta con la data vecchia e la dice sbagliata al lead.
+
+### Request
+
+```
+POST https://web-app-messaggistica.vercel.app/api/appointment-set
+Content-Type: application/json
+x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
+```
+
+Stessa firma HMAC dell'agenda. L'URL è configurabile lato CRM con `APPOINTMENT_BOT_URL`.
+
+### Body
+
+```ts
+interface AppointmentSetBody {
+  leadId:           string;  // UUID del lead nel CRM
+  phone:            string;  // Telefono del lead
+  companyId:        'fenice';
+  name?:            string;
+  funnel?:          string;
+  appointmentAt:    string;  // ISO 8601 con offset esplicito, es. "2026-08-12T15:00:00+02:00"
+  appointmentLabel: string;  // Etichetta pronta da leggere, es. "mercoledì 12 agosto alle 15:00"
+  trigger:          'fissato' | 'spostato';
+}
+```
+
+`appointmentLabel` è già formattata in italiano e nel fuso `Europe/Rome`: serve perché il
+bot non debba riformattare la data (e sbagliarla) per dirla al lead.
+
+### Quando parte
+
+Ai quattro punti in cui la data nasce o cambia: nuovo appuntamento del GDO, spostamento
+del GDO, modifica dati dalle Conferme, rifissaggio delle Conferme. **Non** parte quando è
+il bot stesso a fissare — la data l'ha mandata lui.
+
+### Risposta attesa
+
+Un `200` qualunque è sufficiente. Il CRM **non** legge il corpo della risposta e **non**
+scrive nulla sul lead in base a questa chiamata: un fornitore giù non deve impedire a un
+GDO di esitare il lead. Il timeout è di **6 secondi** (più stretto dei 12s dell'agenda,
+perché qui siamo dentro l'esito del GDO che non deve restare appeso).
 
 ---
 
@@ -388,9 +502,13 @@ nessuna classificazione automatica. L'unico ritorno ammesso è `NOTA` (vedi sott
 |---|---|---|
 | `200` | — (`{ ok: true }`) | Outcome registrato correttamente |
 | `400` | `invalid_json` | Body non è JSON valido (parsing fallito) |
-| `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO; `note` vuota per NOTA |
+| `200` | — (`{ ok: true, noted: true }`) | `NOTA` / `CONTATTO_UMANO` registrata. Può contenere `deduped: true` (nota riconosciuta come re-invio) o `notifySuppressed: true` (notifica già mandata nelle 24h) |
+| `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO; `note` vuota per NOTA o CONTATTO_UMANO |
 | `401` | `invalid_signature` | Firma HMAC assente o non corrispondente |
-| `403` | `forbidden` | Lead non appartiene all'azienda `fenice`, oppure non è assegnato a un account bot |
+| `403` | `forbidden` | Lead non appartiene all'azienda `fenice` (`lead non Fenice`) |
+| `403` | `forbidden` | `lead mai passato dal bot` — nessun `BOT_PUSHED` riuscito e nessuna agenda recapitata |
+| `403` | `forbidden` | `lead non assegnato a un account bot` — esito diverso da `NOTA` / `CONTATTO_UMANO` / `APPUNTAMENTO` su un lead di un GDO umano |
+| `403` | `forbidden` | `agenda recapitata dal bot ma lead mai lavorato da lui` — `APPUNTAMENTO` senza `BOT_PUSHED` |
 | `404` | `lead_not_found` | `leadId` non esiste nel DB |
 | `409` | `update_failed` | La transizione di stato nel CRM non è riuscita (dettaglio in `detail`) |
 | `503` | `not_configured` | `BOT_WEBHOOK_SECRET` non impostato su Vercel — contattare l'admin |
