@@ -7,6 +7,7 @@ import { leads, leadEvents } from "@/db/schema"
 import { eq, asc, desc, and } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
+import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 export async function getAppointments() {
@@ -154,6 +155,14 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
         leadId,
         actorUserId: supabaseUser.id,
     }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+
+    // Bot: la data è cambiata, va riallineata anche di là — altrimenti al lead
+    // ripeterebbe quella vecchia.
+    await notifyAppointmentToBot({
+        lead: { id: leadId, phone: lead.phone, name: lead.name, funnel: lead.funnel, companyId: ctx.companyId },
+        appointmentAt: dateObj,
+        trigger: lead.appointmentDate ? 'spostato' : 'fissato',
+    });
 
     return { success: true };
 }

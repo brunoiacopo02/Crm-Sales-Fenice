@@ -181,6 +181,10 @@ async function sendAgendaViaBotChannel(
             haFamiglia: !!options.haFamiglia,
             offertaDelMese: !!options.offertaDelMese,
         },
+        // Di norma è ancora vuoto (l'esito APPUNTAMENTO arriva dopo l'agenda) e
+        // la data la manda notifyAppointmentToBot; qui serve per i reinvii su
+        // lead già fissati, dove invece è nota fin da subito.
+        appointmentAt: lead.appointmentDate,
     })
 
     if (!r.ok) {
