@@ -15,6 +15,7 @@
 
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
+import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { db } from "@/db";
 import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
 import { eq, and, asc, sql, isNull, gte, desc, or, like } from "drizzle-orm";
@@ -574,7 +575,12 @@ export async function POST(req: NextRequest) {
             // più aggiornato). I lead Fenice vanno solo ai GDO Fenice.
             // Gli account bot (isBot=true) escono dal pool quando raggiungono
             // BOT_DAILY_CAP lead nel giorno solare Europe/Rome. Gli umani passano sempre.
-            const eligible = await tx.select({
+            const roundRobinOrder = [
+                asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`),
+                asc(users.id),
+            ] as const;
+
+            const selectHumanPool = () => tx.select({
                 id: users.id,
                 isBot: users.isBot,
             }).from(users).where(and(
@@ -590,7 +596,31 @@ export async function POST(req: NextRequest) {
                       AND l."companyId" = ${FENICE_COMPANY}
                       AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
                 ) < ${BOT_DAILY_CAP})`,
-            )).orderBy(asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id));
+            )).orderBy(...roundRobinOrder);
+
+            // Finestra ferie GDO (8-16 agosto 2026): nessun umano al lavoro, quindi
+            // TUTTO al bot. Si ignorano sia la selezione acAutoIntake della scheda
+            // /lead-automatici (che resta salvata e torna valida da sola il 17) sia
+            // BOT_DAILY_CAP. Vedi src/lib/bot-fissatore/holidayWindow.ts.
+            const holidayWindow = isBotHolidayWindow(now);
+            let eligible = holidayWindow
+                ? await tx.select({
+                    id: users.id,
+                    isBot: users.isBot,
+                }).from(users).where(and(
+                    eq(users.companyId, FENICE_COMPANY),
+                    eq(users.role, 'GDO'),
+                    eq(users.isActive, true),
+                    eq(users.isBot, true),
+                )).orderBy(...roundRobinOrder)
+                : await selectHumanPool();
+
+            // Bot spento/inesistente durante le ferie: meglio un lead che aspetta
+            // un GDO che un lead perso in una failure.
+            const routedToBotByWindow = holidayWindow && eligible.length > 0;
+            if (holidayWindow && eligible.length === 0) {
+                eligible = await selectHumanPool();
+            }
 
             if (eligible.length === 0) {
                 return { kind: 'no_gdo' as const };
@@ -623,7 +653,7 @@ export async function POST(req: NextRequest) {
 
             await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 
-            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot };
+            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routedToBotByWindow };
         });
 
         if (txResult.kind === 'duplicate') {
@@ -684,7 +714,13 @@ export async function POST(req: NextRequest) {
         await logLeadEvent({
             leadId: newLeadId,
             eventType: 'ASSIGNED',
-            metadata: { assignedToUser: assignedGdoId, source: 'activecampaign' },
+            metadata: {
+                assignedToUser: assignedGdoId,
+                source: 'activecampaign',
+                // Traccia del dirottamento ferie: fra due mesi, guardando i volumi
+                // di agosto, la spiegazione sta nel DB e non nella memoria di qualcuno.
+                ...(txResult.routedToBotByWindow ? { botHolidayWindow: true } : {}),
+            },
             companyId: FENICE_COMPANY,
         });
 

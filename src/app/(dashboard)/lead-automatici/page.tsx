@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { listGdosForAcIntake, listAcWebhooks, listAcFailures, getAcIntakeStats } from "@/app/actions/acIntakeActions";
+import { getActiveHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import LeadAutomaticiClient from "./LeadAutomaticiClient";
 
 export default async function LeadAutomaticiPage() {
@@ -25,6 +26,7 @@ export default async function LeadAutomaticiPage() {
                 initialWebhooks={webhooksRes.webhooks || []}
                 initialFailures={failures}
                 initialStats={stats}
+                holidayWindow={getActiveHolidayWindow()}
             />
         </div>
     );

@@ -24,9 +24,17 @@ interface Props {
     initialWebhooks: Array<{ id: string; url: string; events: string[]; name: string }>;
     initialFailures: AcFailureRow[];
     initialStats: AcIntakeStats;
+    /** Finestra ferie GDO attiva ADESSO (valutata dal server), o null fuori finestra. */
+    holidayWindow: { from: string; until: string; lastDay: string } | null;
 }
 
-export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats }: Props) {
+/** '2026-08-08' → '8 agosto' (per la striscia ferie). */
+function giornoIt(day: string): string {
+    return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+        .format(new Date(`${day}T00:00:00Z`));
+}
+
+export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats, holidayWindow }: Props) {
     const [rows, setRows] = useState(initialRows);
     const [webhooks, setWebhooks] = useState(initialWebhooks);
     const [failures, setFailures] = useState(initialFailures);
@@ -170,6 +178,18 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     Quando AC riceve un lead nuovo, viene inserito nel CRM e assegnato in round-robin a uno dei GDO abilitati qui sotto.
                 </p>
             </header>
+
+            {holidayWindow && (
+                <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                    <div className="text-sm text-amber-900">
+                        <span className="font-bold">Ferie GDO {giornoIt(holidayWindow.from)} – {giornoIt(holidayWindow.lastDay)}</span>
+                        {' '}— tutti i lead ActiveCampaign in arrivo vengono assegnati al bot (GDO 201) e il suo cap
+                        giornaliero è sospeso. Le selezioni qui sotto restano salvate e tornano attive da sole
+                        il {giornoIt(holidayWindow.until)}.
+                    </div>
+                </div>
+            )}
 
             {msg && (
                 <div className={`rounded-xl border px-4 py-2 text-sm ${msg.type === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
