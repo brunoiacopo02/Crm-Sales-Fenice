@@ -80,7 +80,8 @@ più l'etichetta leggibile, e teniamo `rawReason` per l'audit.
 | non vuole prendere l'appuntamento | `REFUSED_APPOINTMENT` | GDO, Conferme |
 | numero inesistente | `INVALID_NUMBER` | GDO, Conferme |
 | non ha potere decisionale | `NO_DECISION_POWER` | GDO, Conferme |
-| irreperibile (3 o 4 tentativi vuoti) | `UNREACHABLE` | automatico |
+| irreperibile (3 o 4 tentativi vuoti) | `UNREACHABLE` | automatico, GDO |
+| 3 NR consecutivi | `UNREACHABLE` | automatico, Conferme |
 | non risponde | `NO_ANSWER` | Conferme |
 | posticipa senza data | `POSTPONED_NO_DATE` | Conferme |
 | attaccato in faccia | `HUNG_UP` | Conferme |
@@ -94,12 +95,17 @@ perdere il dato mentre aggiorniamo la mappa.
 Il bot passa dalla **stessa** `updateLeadOutcome` dei GDO umani (`/api/bot/outcome`
 la chiama con `serviceCtx`). Un solo hook copre quindi tre dei quattro casi.
 
-| Caso | Punto di aggancio | Condizione |
-|---|---|---|
-| Scarto GDO umano | `pipelineActions.updateLeadOutcome` | `outcome === 'DA_SCARTARE'` |
-| Auto-scarto 3 NR | `pipelineActions.updateLeadOutcome` | `NON_RISPOSTO` e `newStatus === 'REJECTED'` |
-| Scarto del bot | *(stesso hook)* | `serviceCtx.isBot` |
-| Scarto Conferme | `confermeActions.setConfermeOutcome` | `confirmationsOutcome === 'scartato'` |
+| Caso | Punto di aggancio | Condizione | `stage` / `automatic` |
+|---|---|---|---|
+| Scarto GDO umano | `pipelineActions.updateLeadOutcome` | `outcome === 'DA_SCARTARE'` | GDO / false |
+| Auto-scarto GDO 3 NR | `pipelineActions.updateLeadOutcome` | `NON_RISPOSTO` e `newStatus === 'REJECTED'` | GDO / true |
+| Scarto del bot | *(stesso hook)* | `serviceCtx.isBot` | GDO / dipende |
+| Scarto Conferme | `confermeActions.setConfermeOutcome` | `outcome === 'scartato'` | CONFERME / false |
+| Auto-scarto Conferme 3 NR | `confermeActions.recordConfermeNoAnswer` | `isAutoDiscard === true` | CONFERME / true |
+
+Le Conferme hanno un **secondo** auto-scarto, distinto da quello dei GDO: al terzo
+mancato contatto sul lead già appuntato, con causale `'3 NR consecutivi'`. Anche quello
+mappa su `UNREACHABLE` con `automatic: true`.
 
 L'hook va **dopo** l'update riuscito, come gli altri cinque: se l'update fallisce per
 `CONCURRENCY_ERROR` non deve partire nessun evento.

@@ -122,7 +122,7 @@ etichette sono testo di UI e possono cambiare, i codici no.
 | `REFUSED_APPOINTMENT` | non vuole prendere l'appuntamento | GDO, Conferme |
 | `INVALID_NUMBER` | numero inesistente | GDO, Conferme |
 | `NO_DECISION_POWER` | non ha potere decisionale | GDO, Conferme |
-| `UNREACHABLE` | irreperibile (3 tentativi vuoti) | automatico |
+| `UNREACHABLE` | irreperibile (3 tentativi vuoti) / 3 NR consecutivi | automatico |
 | `NO_ANSWER` | non risponde | Conferme |
 | `POSTPONED_NO_DATE` | posticipa senza data | Conferme |
 | `HUNG_UP` | attaccato in faccia | Conferme |
