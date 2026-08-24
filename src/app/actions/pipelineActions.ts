@@ -199,7 +199,14 @@ export async function getPipelineLeads() {
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.status, 'REJECTED'),
                 eq(leads.callCount, 3),
-                eq(leads.discardReason, "irriperebile (3 tentativi vuoti)"),
+                // Il refuso storico "irriperebile" è stato corretto in "irreperibile"
+                // (pipelineActions.ts, auto-scarto NON_RISPOSTO), ma i lead scartati
+                // prima del fix restano nel DB con la vecchia grafia: matchiamo entrambe,
+                // altrimenti la "quarta chiamata" smette di trovare candidati.
+                or(
+                    eq(leads.discardReason, "irreperibile (3 tentativi vuoti)"),
+                    eq(leads.discardReason, "irriperebile (3 tentativi vuoti)"),
+                ),
                 gte(leads.updatedAt, thirtyDaysAgo)
             ]
             if (isGdo) fourthCallConditions.push(eq(leads.assignedToId, userId))
@@ -535,7 +542,11 @@ export async function updateLeadOutcome(
     // Marketing: il lead e' morto qui. Copre i tre casi che passano da questa
     // funzione — scarto a mano del GDO, auto-scarto al terzo tentativo vuoto,
     // e scarto del bot, che richiama updateLeadOutcome con serviceCtx.
-    if (newStatus === 'REJECTED' && (outcome === 'DA_SCARTARE' || outcome === 'NON_RISPOSTO')) {
+    // Guardia lead.status !== 'REJECTED': senza, un secondo DA_SCARTARE su un
+    // lead già scartato (es. il bot che ri-manda lo stesso esito senza lock
+    // ottimistico) rimanderebbe l'evento. Uno scarto dopo una riapertura
+    // (lo stato prima dell'update non era REJECTED) resta invece legittimo.
+    if (newStatus === 'REJECTED' && lead.status !== 'REJECTED' && (outcome === 'DA_SCARTARE' || outcome === 'NON_RISPOSTO')) {
         await enqueueMarketingWebhook({
             eventType: 'lead.rejected',
             leadId,
