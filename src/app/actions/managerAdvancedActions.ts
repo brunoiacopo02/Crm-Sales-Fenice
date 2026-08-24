@@ -2,9 +2,11 @@
 
 import { db } from "@/db"
 import { appSettings, callLogs, leads, users } from "@/db/schema"
-import { and, eq, gte, lte, or, isNull, isNotNull, sql } from "drizzle-orm"
+import { and, eq, gte, lt, lte, or, isNull, isNotNull, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { isRealGdo } from "@/lib/kpi/canon"
+import { operativaPeriodBounds } from "@/lib/kpi/periodBounds"
 
 export type OperativaDataRow = {
     userId: string
@@ -88,28 +90,17 @@ export async function setOperativaCplEur(value: number): Promise<{ success: bool
 export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMESTRE'): Promise<OperativaDataRow[]> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    const now = new Date()
-    let startDate = new Date()
-    let endDate = new Date()
-
-    if (period === 'OGGI') {
-        startDate.setHours(0, 0, 0, 0)
-        endDate.setHours(23, 59, 59, 999)
-    } else if (period === 'MESE') {
-        startDate.setDate(1)
-        startDate.setHours(0, 0, 0, 0)
-        // L'ultimo giorno del mese solare attuale può essere saltato calcolando il 1° giorno del mese successivo meno una frazione,
-        // ma è più sicuro fino a NOW per avere una base realistica, oppure calcoliamo semplicemente Mese intero.
-        endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0, 23, 59, 59, 999)
-    } else if (period === 'TRIMESTRE') {
-        startDate.setDate(now.getDate() - 90)
-        startDate.setHours(0, 0, 0, 0)
-        endDate.setHours(23, 59, 59, 999)
-    }
+    // Bounds Europe/Rome, `end` esclusivo (src/lib/kpi/periodBounds.ts).
+    // Prima erano componenti Date del server: su Vercel (UTC) il mese partiva
+    // alle 02:00 italiane e sconfinava di 2h in quello dopo.
+    const { start: startDate, end: endDate } = operativaPeriodBounds(period)
 
     // Usiamo Promise.all() per queries pesanti simultanee
-    const [gdos, logsRaw, appointments, assignedLeadsRaw, cplEur] = await Promise.all([
-        db.select({ id: users.id, name: users.name, displayName: users.displayName }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId))),
+    const [gdosRaw, logsRaw, appointments, closedLeads, assignedLeadsRaw, cplEur] = await Promise.all([
+        db.select({
+            id: users.id, name: users.name, displayName: users.displayName,
+            role: users.role, isActive: users.isActive, isBot: users.isBot,
+        }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId))),
         db.select({
             id: callLogs.id,
             userId: callLogs.userId,
@@ -119,16 +110,38 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             leadFunnel: leads.funnel,
         }).from(callLogs)
             .leftJoin(leads, eq(callLogs.leadId, leads.id))
-            .where(and(gte(callLogs.createdAt, startDate), lte(callLogs.createdAt, endDate), eq(callLogs.companyId, ctx.companyId))),
+            .where(and(gte(callLogs.createdAt, startDate), lt(callLogs.createdAt, endDate), eq(callLogs.companyId, ctx.companyId))),
 
+        // Appuntamenti FISSATI nel periodo. Base canonica `apptSetAt`
+        // (src/lib/kpi/canon.ts) = COALESCE(appointmentCreatedAt, appointmentDate):
+        // il solo appointmentCreatedAt perdeva i lead storici che non ce l'hanno.
         db.select({
             id: leads.id,
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
-            salespersonOutcome: leads.salespersonOutcome,
-            confirmationsOutcome: leads.confirmationsOutcome,
         }).from(leads)
-            .where(and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate), eq(leads.companyId, ctx.companyId))),
+            .where(and(
+                isNotNull(leads.appointmentDate),
+                sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startDate}`,
+                sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endDate}`,
+                eq(leads.companyId, ctx.companyId),
+            )),
+
+        // Contratti chiusi NEL periodo: regola canonica chiusure = data
+        // dell'esito venditore, la stessa di /manager-gdo-performance.
+        // Prima si contavano sulla coorte degli appuntamenti *fissati* nel
+        // periodo: un appuntamento fissato il 31/07 e chiuso il 03/08
+        // spariva da agosto in questa tabella ma compariva in Performance GDO.
+        db.select({
+            assignedToId: leads.assignedToId,
+        }).from(leads)
+            .where(and(
+                sql`LOWER(${leads.salespersonOutcome}) = 'chiuso'`,
+                isNotNull(leads.salespersonOutcomeAt),
+                gte(leads.salespersonOutcomeAt, startDate),
+                lt(leads.salespersonOutcomeAt, endDate),
+                eq(leads.companyId, ctx.companyId),
+            )),
 
         // leadAssegnati = lead assegnati al GDO nel periodo, indipendentemente
         // dallo status. Prima filtrava solo status='NEW', perdendo tutti i
@@ -146,13 +159,18 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
                 // Base = presa in carico (migr. 0027): un lead del pool caricato
                 // a luglio e distribuito ad agosto è un lead di agosto.
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${startDate}`,
-                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) <= ${endDate}`,
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${endDate}`,
                 eq(leads.companyId, ctx.companyId),
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             )),
 
         readCplEur(),
     ])
+
+    // Roster canonico (src/lib/kpi/canon.ts): niente bot fissatore — le sue
+    // ore lavorate sono finte e falsavano costo/contratto — e niente GDO
+    // disattivati, che comparivano come righe tutte a zero.
+    const gdos = gdosRaw.filter(isRealGdo)
 
     const gdoDataMap = new Map<string, any>()
 
@@ -248,12 +266,14 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         } else {
             row._apptNuovi++
         }
+    }
 
-        const isSalesClosed = appt.salespersonOutcome?.toLowerCase() === 'chiuso'
-        const isConfirmed = appt.confirmationsOutcome?.toLowerCase() === 'confermato'
-        if (isSalesClosed && isConfirmed) {
-            row.contrattiChiusi++
-        }
+    // Chiusure del periodo, attribuite al GDO che possiede il lead. Query
+    // separata perche' la finestra e' sulla data di esito, non su quella di
+    // fissaggio: le due coorti non coincidono a cavallo di mese.
+    for (const closed of closedLeads) {
+        if (!closed.assignedToId || !gdoDataMap.has(closed.assignedToId)) continue
+        gdoDataMap.get(closed.assignedToId)!.contrattiChiusi++
     }
 
     // Lead Assegnati nel periodo. leadAssegnati = totale (incluso DATABASE),
