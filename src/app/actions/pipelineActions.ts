@@ -376,10 +376,10 @@ export async function updateLeadOutcome(
     else if (outcome === 'NON_RISPOSTO') {
         if (newCallCount >= 4) {
             newStatus = 'REJECTED'
-            discardReason = "irriperebile (4 tentativi vuoti)"
+            discardReason = "irreperibile (4 tentativi vuoti)"
         } else if (newCallCount === 3) {
             newStatus = 'REJECTED'
-            discardReason = "irriperebile (3 tentativi vuoti)"
+            discardReason = "irreperibile (3 tentativi vuoti)"
         } else {
             newStatus = 'IN_PROGRESS'
         }
@@ -530,6 +530,22 @@ export async function updateLeadOutcome(
                 console.error("Boss battle contribution failed:", e)
             })
         }
+    }
+
+    // Marketing: il lead e' morto qui. Copre i tre casi che passano da questa
+    // funzione — scarto a mano del GDO, auto-scarto al terzo tentativo vuoto,
+    // e scarto del bot, che richiama updateLeadOutcome con serviceCtx.
+    if (newStatus === 'REJECTED' && (outcome === 'DA_SCARTARE' || outcome === 'NON_RISPOSTO')) {
+        await enqueueMarketingWebhook({
+            eventType: 'lead.rejected',
+            leadId,
+            actorUserId: effectiveUserId ?? null,
+            rejection: {
+                stage: 'GDO',
+                automatic: outcome === 'NON_RISPOSTO',
+                byBot: isBotActor,
+            },
+        }).catch((e: unknown) => console.error("Marketing webhook (lead.rejected GDO) err:", e));
     }
 
     return { success: true, rewardData }
