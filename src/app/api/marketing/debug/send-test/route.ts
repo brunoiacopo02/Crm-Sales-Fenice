@@ -1,17 +1,22 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
+import { enqueueMarketingWebhook, type EnqueueInput } from '@/lib/marketing-webhooks/enqueue';
 import { ALL_EVENT_TYPES } from '@/lib/marketing-webhooks/types';
-import type { MarketingEventType } from '@/lib/marketing-webhooks/types';
+import type { MarketingEventType, RejectionStage } from '@/lib/marketing-webhooks/types';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/marketing/debug/send-test
- * Body: { eventType: MarketingEventType, leadId: string }
+ * Body: { eventType: MarketingEventType, leadId: string, rejection?: { stage?, automatic?, byBot? } }
  *
  * MANAGER/ADMIN only. Forza l'enqueue di un evento contro la URL configurata.
  * Utile per QA prima del go-live.
+ *
+ * `lead.rejected` richiede un contesto `rejection` che non e' derivabile dal
+ * solo leadId (vedi enqueueMarketingWebhook): lo accettiamo dal body con
+ * default ragionevoli (stage GDO, non automatico, non bot) cosi' un test
+ * rapido non richiede di popolare ogni campo.
  */
 export async function POST(req: Request) {
     const supabase = await createClient();
@@ -23,7 +28,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
 
-    let body: { eventType?: string; leadId?: string };
+    let body: {
+        eventType?: string;
+        leadId?: string;
+        rejection?: { stage?: string; automatic?: boolean; byBot?: boolean };
+    };
     try {
         body = await req.json();
     } catch {
@@ -41,11 +50,28 @@ export async function POST(req: Request) {
         }, { status: 400 });
     }
 
-    await enqueueMarketingWebhook({
+    const enqueueInput: EnqueueInput = {
         eventType: body.eventType as MarketingEventType,
         leadId: body.leadId,
         actorUserId: user.id,
-    });
+    };
+
+    if (body.eventType === 'lead.rejected') {
+        const stage: RejectionStage = body.rejection?.stage === 'CONFERME' ? 'CONFERME' : 'GDO';
+        enqueueInput.rejection = {
+            stage,
+            automatic: body.rejection?.automatic ?? false,
+            byBot: body.rejection?.byBot ?? false,
+        };
+    }
+
+    const result = await enqueueMarketingWebhook(enqueueInput);
+
+    if (!result.enqueued) {
+        // Niente "enqueued: true" bugiardo: se non e' finito in outbox, il
+        // chiamante (chi fa QA prima del go-live) deve saperlo subito.
+        return NextResponse.json({ enqueued: false, reason: result.reason ?? 'unknown' }, { status: 422 });
+    }
 
     return NextResponse.json({ enqueued: true });
 }

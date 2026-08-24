@@ -160,8 +160,14 @@ Un test verifica che **ogni** valore di entrambe le liste abbia un codice divers
 
 ## Cosa NON facciamo
 
-- **Nessun backfill.** Decisione PO: il marketing accumula da adesso. Il backfill resta
-  rifattibile in qualsiasi momento con `scripts/backfillMarketingEventsWindow.ts`.
+- **Nessun backfill.** Decisione PO: il marketing accumula da adesso. Occhio pero':
+  `scripts/backfillMarketingEventsWindow.ts` e la route gemella
+  `/api/marketing/backfill-events-window` **non conoscono `lead.rejected`** — coprono
+  solo i cinque tipi originali (`appointment.set`, `appointment.outcome`,
+  `deal.assigned`, `deal.closed_won`, `deal.closed_lost`). Se in futuro si decidesse di
+  fare comunque un backfill dello storico scarti, prima va esteso lo script/la route a
+  costruire `buildLeadRejected`, non è "gia' pronto all'uso" come per gli altri sei
+  eventi.
 - **Nessuna migrazione DB.** Tutti i campi esistono.
 - **Nessun evento per i richiami o gli esiti non terminali.** Il marketing ha chiesto
   gli scarti; un evento per ogni "richiamo fra due giorni" sarebbe rumore.

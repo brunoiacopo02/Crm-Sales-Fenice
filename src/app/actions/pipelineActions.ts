@@ -540,13 +540,23 @@ export async function updateLeadOutcome(
     }
 
     // Marketing: il lead e' morto qui. Copre i tre casi che passano da questa
-    // funzione — scarto a mano del GDO, auto-scarto al terzo tentativo vuoto,
-    // e scarto del bot, che richiama updateLeadOutcome con serviceCtx.
-    // Guardia lead.status !== 'REJECTED': senza, un secondo DA_SCARTARE su un
-    // lead già scartato (es. il bot che ri-manda lo stesso esito senza lock
-    // ottimistico) rimanderebbe l'evento. Uno scarto dopo una riapertura
-    // (lo stato prima dell'update non era REJECTED) resta invece legittimo.
-    if (newStatus === 'REJECTED' && lead.status !== 'REJECTED' && (outcome === 'DA_SCARTARE' || outcome === 'NON_RISPOSTO')) {
+    // funzione — scarto a mano del GDO, auto-scarto al terzo/quarto tentativo
+    // vuoto, e scarto del bot, che richiama updateLeadOutcome con serviceCtx.
+    // Guardia sulla causale, non sullo stato: updateLeadOutcome non blocca mai
+    // un esito su un lead già REJECTED (vedi la "quarta chiamata" abilitata da
+    // checkFourthCallEligibility, in cima a questo file) — un lead
+    // auto-scartato al 3° NON_RISPOSTO
+    // può essere recuperato dal GDO ed esitato DA_SCARTARE con la causale
+    // vera (es. "non ha soldi"). Quello è un evento nuovo e deve partire.
+    // Va soppresso solo il caso che la guardia originale proteggeva: il bot
+    // che ri-manda lo stesso identico esito con la stessa causale (es. senza
+    // lock ottimistico). Confrontiamo quindi la causale che sta per essere
+    // scritta sul lead (discardReason, eventualmente già riassegnata sopra
+    // nel ramo NON_RISPOSTO) con quella già presente sul lead PRIMA di questo
+    // update (lead.discardReason, il valore letto a inizio funzione).
+    const nextDiscardReason = discardReason || lead.discardReason
+    const isRejectionNews = lead.status !== 'REJECTED' || nextDiscardReason !== lead.discardReason
+    if (newStatus === 'REJECTED' && isRejectionNews && (outcome === 'DA_SCARTARE' || outcome === 'NON_RISPOSTO')) {
         await enqueueMarketingWebhook({
             eventType: 'lead.rejected',
             leadId,
