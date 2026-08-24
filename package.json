@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test src/lib/venditorePerformance/aggregate.test.ts src/lib/venditorePerformance/guard.test.ts src/lib/bot-fissatore/noteDedup.test.ts src/lib/bot-fissatore/holidayWindow.test.ts src/lib/kpi/periodBounds.test.ts"
+    "test": "node --import tsx --test src/lib/venditorePerformance/aggregate.test.ts src/lib/venditorePerformance/guard.test.ts src/lib/bot-fissatore/noteDedup.test.ts src/lib/bot-fissatore/holidayWindow.test.ts src/lib/kpi/periodBounds.test.ts src/lib/marketing-webhooks/discard-reasons.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
