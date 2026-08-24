@@ -2,10 +2,12 @@
 
 import { db } from "@/db"
 import { users, leads, notifications, shopItems, callLogs } from "@/db/schema"
-import { eq, and, ne, gte, lte, desc, desc as drizzleDesc, count, isNotNull, sql } from "drizzle-orm"
-import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
+import { eq, and, ne, gte, lt, lte, desc, desc as drizzleDesc, count, isNotNull, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { isRealGdo } from "@/lib/kpi/canon"
+import { leaderboardPeriodBounds } from "@/lib/kpi/periodBounds"
+import { dayBoundsRome } from "@/lib/dateUtils"
 
 export type LeaderboardPeriod = 'today' | 'week' | 'month'
 export type LeaderboardMetric = 'appointments' | 'calls' | 'xp' | 'streak'
@@ -19,22 +21,17 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
     let startDate: Date
     let endDate: Date
 
-    // Assuming timezone offset is already correctly handled by server runtime or date-fns
-    if (period === 'today') {
-        startDate = startOfDay(now)
-        endDate = endOfDay(now)
-    } else if (period === 'week') {
-        // week starts on Monday (1)
-        startDate = startOfWeek(now, { weekStartsOn: 1 })
-        endDate = endOfWeek(now, { weekStartsOn: 1 })
-    } else {
-        startDate = startOfMonth(now)
-        endDate = endOfMonth(now)
-    }
+    // Bounds Europe/Rome, end esclusivo (src/lib/kpi/periodBounds.ts). Il
+    // commento che stava qui dava per scontato che il fuso fosse gia' gestito:
+    // su Vercel il server e' UTC, quindi la settimana era lun-dom UTC.
+    ;({ start: startDate, end: endDate } = leaderboardPeriodBounds(period, now))
 
-    // Get all gdos del tenant
-    const allGdos = await db.select().from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')))
+    // Get all gdos del tenant. Roster canonico: fuori il bot fissatore —
+    // fissa ~260 app/mese, 3x il miglior umano, e restava primo in classifica
+    // pur avendo la gamification spenta — e fuori i GDO disattivati.
+    const allGdos = (await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
+        .filter(isRealGdo)
 
     // Get all appointments in the period (tenant-scoped)
     const periodAppointments = await db.select()
@@ -44,7 +41,7 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.status, 'APPOINTMENT'),
                 gte(leads.appointmentCreatedAt, startDate),
-                lte(leads.appointmentCreatedAt, endDate)
+                lt(leads.appointmentCreatedAt, endDate)
             )
         )
 
@@ -148,7 +145,7 @@ export async function checkLeaderboardOvertake(userId: string) {
         const overtakenUserIds = previousListAbove.filter(id => !currentListAbove.includes(id))
 
         const now = new Date()
-        const startOfTodayDt = startOfDay(now)
+        const startOfTodayDt = dayBoundsRome(now).start
 
         for (const overtakenId of overtakenUserIds) {
             const overtakenStats = currentLeaderboard.find(u => u.userId === overtakenId)
@@ -207,19 +204,11 @@ export async function getMultiMetricLeaderboard(period: LeaderboardPeriod, metri
     let startDate: Date
     let endDate: Date
 
-    if (period === 'today') {
-        startDate = startOfDay(now)
-        endDate = endOfDay(now)
-    } else if (period === 'week') {
-        startDate = startOfWeek(now, { weekStartsOn: 1 })
-        endDate = endOfWeek(now, { weekStartsOn: 1 })
-    } else {
-        startDate = startOfMonth(now)
-        endDate = endOfMonth(now)
-    }
+    ;({ start: startDate, end: endDate } = leaderboardPeriodBounds(period, now))
 
-    const allGdos = await db.select().from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')))
+    const allGdos = (await db.select().from(users)
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
+        .filter(isRealGdo)
     const allSkins = await db.select().from(shopItems)
         .where(eq(shopItems.companyId, ctx.companyId))
     const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
@@ -232,7 +221,7 @@ export async function getMultiMetricLeaderboard(period: LeaderboardPeriod, metri
                 and(
                     eq(callLogs.companyId, ctx.companyId),
                     gte(callLogs.createdAt, startDate),
-                    lte(callLogs.createdAt, endDate)
+                    lt(callLogs.createdAt, endDate)
                 )
             )
 
@@ -326,16 +315,7 @@ export async function getConfermeLeaderboard(period: LeaderboardPeriod) {
     let startDate: Date
     let endDate: Date
 
-    if (period === 'today') {
-        startDate = startOfDay(now)
-        endDate = endOfDay(now)
-    } else if (period === 'week') {
-        startDate = startOfWeek(now, { weekStartsOn: 1 })
-        endDate = endOfWeek(now, { weekStartsOn: 1 })
-    } else {
-        startDate = startOfMonth(now)
-        endDate = endOfMonth(now)
-    }
+    ;({ start: startDate, end: endDate } = leaderboardPeriodBounds(period, now))
 
     const ctx = await currentTenant()
     assertSalesArea(ctx)
@@ -354,7 +334,7 @@ export async function getConfermeLeaderboard(period: LeaderboardPeriod) {
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.confirmationsOutcome, 'confermato'),
                 gte(leads.confirmationsTimestamp, startDate),
-                lte(leads.confirmationsTimestamp, endDate)
+                lt(leads.confirmationsTimestamp, endDate)
             )
         )
 
@@ -388,16 +368,7 @@ export async function getVenditoriLeaderboard(period: LeaderboardPeriod) {
     let startDate: Date
     let endDate: Date
 
-    if (period === 'today') {
-        startDate = startOfDay(now)
-        endDate = endOfDay(now)
-    } else if (period === 'week') {
-        startDate = startOfWeek(now, { weekStartsOn: 1 })
-        endDate = endOfWeek(now, { weekStartsOn: 1 })
-    } else {
-        startDate = startOfMonth(now)
-        endDate = endOfMonth(now)
-    }
+    ;({ start: startDate, end: endDate } = leaderboardPeriodBounds(period, now))
 
     const ctx = await currentTenant()
     assertSalesArea(ctx)
@@ -416,7 +387,7 @@ export async function getVenditoriLeaderboard(period: LeaderboardPeriod) {
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.salespersonOutcome, 'Chiuso'),
                 gte(leads.salespersonOutcomeAt, startDate),
-                lte(leads.salespersonOutcomeAt, endDate)
+                lt(leads.salespersonOutcomeAt, endDate)
             )
         )
 
