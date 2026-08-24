@@ -5,6 +5,7 @@ import { Ban, PhoneOff, CalendarClock, Handshake, X } from "lucide-react"
 import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { useRouter } from "next/navigation"
 import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
+import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
 
 type OutcomeModalProps = {
     leadId: string
@@ -12,17 +13,6 @@ type OutcomeModalProps = {
     isOpen: boolean
     onClose: () => void
 }
-
-const DISCARD_REASONS = [
-    "non interessato",
-    "disoccupato",
-    "straniero",
-    "solo informazioni",
-    "non vuole prendere l'appuntamento",
-    "numero inesistente",
-    "non ha potere decisionale",
-    "non ha soldi"
-]
 
 export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeModalProps) {
     const router = useRouter()
@@ -201,7 +191,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                                         required
                                     >
                                         <option value="" disabled>-- Seleziona il motivo esatto --</option>
-                                        {DISCARD_REASONS.map(reason => (
+                                        {GDO_DISCARD_REASONS.map(reason => (
                                             <option key={reason} value={reason}>{reason}</option>
                                         ))}
                                     </select>
