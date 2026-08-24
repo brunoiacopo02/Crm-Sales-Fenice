@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { InferSelectModel } from 'drizzle-orm';
 import type { leads, users } from '@/db/schema';
+import { discardReasonCode, discardReasonLabel } from './discard-reasons';
 import type {
     MarketingWebhookEnvelope,
     MarketingEventType,
@@ -12,6 +13,8 @@ import type {
     DealAssignedData,
     DealClosedWonData,
     DealClosedLostData,
+    LeadRejectedData,
+    RejectionStage,
 } from './types';
 
 type Lead = InferSelectModel<typeof leads>;
@@ -203,6 +206,46 @@ export function buildDealClosedLost(ctx: BuildContext): MarketingWebhookEnvelope
     return {
         eventId: deterministicEventId('deal.closed_lost', lead.id, occurredAt),
         eventType: 'deal.closed_lost',
+        occurredAt: occurredAt.toISOString(),
+        apiVersion: '1',
+        lead: leadEnvelope(lead),
+        data,
+    };
+}
+
+export interface RejectionContext extends BuildContext {
+    stage: RejectionStage;
+    automatic: boolean;
+    byBot: boolean;
+}
+
+/**
+ * Evento canonico "questo lead e' morto, ed ecco perche'".
+ *
+ * La causale sta su due colonne diverse a seconda dello stadio: i GDO scrivono
+ * leads.discardReason, le Conferme leads.confirmationsDiscardReason. Un lead
+ * scartato dalle Conferme puo' avere valorizzate entrambe (e' passato per i GDO
+ * prima), quindi lo stage decide quale leggere — non si puo' fare COALESCE.
+ */
+export function buildLeadRejected(ctx: RejectionContext): MarketingWebhookEnvelope {
+    const { lead, actor, occurredAt = new Date(), stage, automatic, byBot } = ctx;
+    const raw = stage === 'CONFERME' ? lead.confirmationsDiscardReason : lead.discardReason;
+
+    const data: LeadRejectedData = {
+        stage,
+        automatic,
+        reasonCode: discardReasonCode(raw),
+        reasonLabel: discardReasonLabel(raw),
+        rawReason: raw,
+        callCount: lead.callCount,
+        byBot,
+        rejectedAt: occurredAt.toISOString(),
+        rejectedBy: actorFromUser(actor),
+    };
+
+    return {
+        eventId: deterministicEventId('lead.rejected', lead.id, occurredAt),
+        eventType: 'lead.rejected',
         occurredAt: occurredAt.toISOString(),
         apiVersion: '1',
         lead: leadEnvelope(lead),
