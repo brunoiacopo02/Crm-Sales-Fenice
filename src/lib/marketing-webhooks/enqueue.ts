@@ -10,8 +10,9 @@ import {
     buildDealAssigned,
     buildDealClosedWon,
     buildDealClosedLost,
+    buildLeadRejected,
 } from './payload-builders';
-import type { MarketingEventType, MarketingWebhookEnvelope } from './types';
+import type { MarketingEventType, MarketingWebhookEnvelope, RejectionStage } from './types';
 
 export interface EnqueueInput {
     eventType: MarketingEventType;
@@ -22,6 +23,13 @@ export interface EnqueueInput {
     // Senza questi, lo switch lancia per il tipo rescheduled.
     previousAppointmentDate?: Date;
     newAppointmentDate?: Date;
+    // Solo per lead.rejected: contesto che non e' derivabile dalla riga del
+    // lead. La causale invece si legge dal lead, non va passata qui.
+    rejection?: {
+        stage: RejectionStage;
+        automatic: boolean;
+        byBot?: boolean;
+    };
 }
 
 /**
@@ -74,6 +82,19 @@ export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<void
         case 'deal.assigned':         envelope = buildDealAssigned(ctx); break;
         case 'deal.closed_won':       envelope = buildDealClosedWon(ctx); break;
         case 'deal.closed_lost':      envelope = buildDealClosedLost(ctx); break;
+        case 'lead.rejected': {
+            if (!input.rejection) {
+                console.error(`[marketing-webhooks] lead.rejected senza rejection per ${input.leadId}, skip`);
+                return;
+            }
+            envelope = buildLeadRejected({
+                ...ctx,
+                stage: input.rejection.stage,
+                automatic: input.rejection.automatic,
+                byBot: input.rejection.byBot ?? false,
+            });
+            break;
+        }
     }
 
     await db.insert(marketingWebhookDeliveries).values({
