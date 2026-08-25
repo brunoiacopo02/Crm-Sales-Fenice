@@ -13,6 +13,23 @@ export function apptSetAt(lead: { appointmentCreatedAt: Date | null; appointment
     if (!lead.appointmentDate) return null
     return lead.appointmentCreatedAt ?? lead.appointmentDate
 }
+/**
+ * Data canonica di "ingresso in circolazione" di un lead (migrazione 0027,
+ * decisione PO 2026-07-20/2026-08-06): un lead dei pool /import caricato a
+ * luglio e distribuito dal TL ad agosto è un lead di agosto.
+ *
+ * Vale per tutti i lead, non solo per quelli dei pool: sui lead dei funnel a
+ * pagamento `assignedAt` e `createdAt` cadono nello stesso giorno (verificato
+ * su 23.760 lead non-pool da giugno: zero cambiano mese), quindi la regola
+ * unica non sposta il CPL delle campagne.
+ *
+ * `assignedAt` è NULL sui lead di magazzino mai assegnati e sul tracciato
+ * anteriore alla 0027: lì si ricade su `createdAt`.
+ */
+export function leadIntakeAt(lead: { assignedAt: Date | null; createdAt: Date }): Date {
+    return lead.assignedAt ?? lead.createdAt
+}
+
 // Target giornalieri per-GDO (decisione PO): default individuale 8, soglia giudizio manager 10.
 export const DEFAULT_DAILY_APPT_TARGET = 8
 export const MANAGER_TARGET_APP_PER_GDO_DAY = 10
