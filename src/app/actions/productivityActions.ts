@@ -11,13 +11,17 @@
 
 import { db } from "@/db"
 import { pbxCalls, users, leads } from "@/db/schema"
-import { and, gte, lte, eq, isNotNull, or } from "drizzle-orm"
+import { and, gte, lte, lt, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
 import { apptSetAt } from "@/lib/kpi/canon"
+import { dayBoundsRome } from "@/lib/dateUtils"
 
 /** Sotto questa soglia la giornata non è rappresentativa (mezze giornate, assenze). */
 const MIN_CALLS_PER_DAY = 40
+
+/** Ruoli che possono vedere produttività telefonica e qualità appuntamenti dei GDO. */
+const PRODUCTIVITY_VIEW_ROLES = ['ADMIN', 'MANAGER', 'TL']
 
 export type PhoneProductivityRow = {
     userId: string
@@ -40,6 +44,9 @@ export async function getPhoneProductivity(
 ): Promise<{ rows: PhoneProductivityRow[]; benchmarkMin: number }> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    if (!PRODUCTIVITY_VIEW_ROLES.includes(ctx.role)) {
+        throw new Error(`Forbidden: user ${ctx.userId} has role '${ctx.role}', not allowed to view phone productivity`)
+    }
 
     const raw = await db.select({
         userId: pbxCalls.userId,
@@ -153,9 +160,16 @@ export async function getApptQuality(
 ): Promise<ApptQualityRow[]> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    if (!PRODUCTIVITY_VIEW_ROLES.includes(ctx.role)) {
+        throw new Error(`Forbidden: user ${ctx.userId} has role '${ctx.role}', not allowed to view appointment quality`)
+    }
 
-    const from = new Date(`${fromDateLocal}T00:00:00+02:00`)
-    const to = new Date(`${toDateLocal}T23:59:59+02:00`)
+    // Bounds Europe/Rome del periodo [fromDateLocal, toDateLocal] (inclusive),
+    // via dayBoundsRome (gestisce il DST) invece di un offset scritto a mano:
+    // `from` = inizio del primo giorno, `to` = inizio del giorno dopo `toDateLocal`
+    // (esclusivo) — vedi inRange più sotto.
+    const from = dayBoundsRome(new Date(`${fromDateLocal}T00:00:00Z`)).start
+    const to = dayBoundsRome(new Date(`${toDateLocal}T00:00:00Z`)).end
 
     const rows = await db.select({
         userId: leads.assignedToId,
@@ -175,10 +189,10 @@ export async function getApptQuality(
             eq(users.role, 'GDO'),
             eq(users.isBot, false),
             or(
-                and(gte(leads.appointmentCreatedAt, from), lte(leads.appointmentCreatedAt, to)),
-                and(gte(leads.appointmentDate, from), lte(leads.appointmentDate, to)),
-                and(gte(leads.presentedAt, from), lte(leads.presentedAt, to)),
-                and(gte(leads.salespersonOutcomeAt, from), lte(leads.salespersonOutcomeAt, to)),
+                and(gte(leads.appointmentCreatedAt, from), lt(leads.appointmentCreatedAt, to)),
+                and(gte(leads.appointmentDate, from), lt(leads.appointmentDate, to)),
+                and(gte(leads.presentedAt, from), lt(leads.presentedAt, to)),
+                and(gte(leads.salespersonOutcomeAt, from), lt(leads.salespersonOutcomeAt, to)),
             ),
         ))
 
@@ -191,7 +205,7 @@ export async function getApptQuality(
         }
         return s
     }
-    const inRange = (d: Date | null) => !!d && d >= from && d <= to
+    const inRange = (d: Date | null) => !!d && d >= from && d < to
 
     for (const r of rows) {
         if (!r.userId) continue

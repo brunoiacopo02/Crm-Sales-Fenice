@@ -55,7 +55,7 @@ export function ManagerPauseView() {
         return <div className="p-8 text-center text-gray-500">Avvio cruscotto di sorveglianza...</div>
     }
 
-    if (session?.user?.role !== "ADMIN" && session?.user?.role !== "MANAGER") {
+    if (session?.user?.role !== "ADMIN" && session?.user?.role !== "MANAGER" && session?.user?.role !== "TL") {
         return <div className="p-8 text-center text-red-500 font-bold">Accesso Negato: Ruolo insufficiente.</div>
     }
 
