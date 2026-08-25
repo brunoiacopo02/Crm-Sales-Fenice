@@ -5,9 +5,18 @@ Questo documento è indirizzato a chi lavora sul **receiver** lato CRM marketing
 altro contesto.
 
 Il CRM Fenice sta per iniziare a inviare un settimo tipo di evento. **Il receiver oggi
-non lo conosce.** Se risponde con un 4xx, il nostro outbox ritenta col backoff
-1m → 5m → 30m → 2h → 6h e poi manda l'evento in dead-letter queue: nessun dato viene
-perso da parte nostra, ma voi non ricevete niente finché il receiver non è aggiornato.
+non lo conosce.**
+
+⚠️ **Leggete bene questa parte, perché non si comporta come vi aspettereste.** Nel
+nostro outbox un **4xx non viene mai ritentato**: al primo tentativo la consegna passa a
+`failed_permanent` e l'evento si ferma lì. La scala di retry 1m → 5m → 30m → 2h → 6h
+vale solo per **5xx, timeout e 429**. Quindi se il receiver risponde 400 o 422 a un
+`eventType` che non conosce, **ogni evento inviato in quella finestra è perso**: non
+torna da solo, va ripescato a mano dalla nostra tabella outbox.
+
+La conseguenza pratica per voi è una sola, e vale anche a regime: **davanti a qualcosa
+che non capite, rispondete 2xx e loggate, oppure 500 se volete il retry. Mai 4xx.** Un
+4xx è una rinuncia definitiva a quell'evento.
 
 Serve quindi che il receiver accetti `lead.rejected` **prima** che attiviamo l'invio.
 Fateci sapere quando siete pronti e accendiamo.
@@ -28,6 +37,9 @@ firma, header, autenticazione o formato dell'inviluppo.
 - **Dedup:** `X-CRM-Event-Id` — è un UUID deterministico, la vostra logica di
   idempotenza esistente vale identica.
 - **Tipo:** `X-CRM-Event-Type: lead.rejected`
+- **Timeout:** abbandoniamo la richiesta dopo **10 secondi**. Rispondete 2xx appena
+  avete persistito (o accodato) l'evento, senza aspettare elaborazioni lunghe: un
+  timeout conta come fallimento ritentabile e vi rimanda lo stesso evento.
 
 Se il vostro handler è già generico sul body e valida la firma prima di guardare
 `eventType`, il lavoro si riduce a **riconoscere un valore in più** e persistere il
