@@ -741,7 +741,7 @@ git commit -m "feat(cdr): script di import idempotente dei tabulati FreePBX"
 `ritmoMinPerDay` sono i minuti al giorno in buchi **sotto i 3 minuti** (compilazione esito e passaggio al numero successivo: incomprimibili). `assenzeMinPerDay` sono quelli in buchi **oltre i 10 minuti**: è il numero da portare in una discussione con la persona, perché il totale mescola cose diverse. La fascia 3–10 minuti resta fuori da entrambi: è zona grigia e va mostrata come tale.
   - `export async function getPhoneProductivity(fromDateLocal: string, toDateLocal: string): Promise<{ rows: PhoneProductivityRow[]; benchmarkMin: number }>`
 
-`benchmarkMin` è il minor `offPhoneMinPerDay` del gruppo: è il riferimento contro cui leggere gli altri, come stabilito nella spec (non lo zero).
+`benchmarkMin` è il minor **`assenzeMinPerDay`** del gruppo: è il riferimento contro cui leggere gli altri, come stabilito nella spec (non lo zero). Deve essere calcolato sulle assenze e **non** sul tempo non telefonico totale: la colonna "Oltre il migliore" della Task 6 fa `assenzeMinPerDay - benchmarkMin`, quindi usare il totale come riferimento produrrebbe scostamenti negativi per tutti e renderebbe la colonna priva di senso.
 
 - [ ] **Step 1: Scrivere la server action**
 
@@ -778,6 +778,10 @@ export type PhoneProductivityRow = {
     offPhonePct: number
     avgGapSeconds: number
     medianGapSeconds: number
+    /** Minuti al giorno in buchi sotto i 3 minuti: ritmo di lavoro, incomprimibile. */
+    ritmoMinPerDay: number
+    /** Minuti al giorno in buchi oltre i 10 minuti: è questo il numero da discutere. */
+    assenzeMinPerDay: number
 }
 
 export async function getPhoneProductivity(
