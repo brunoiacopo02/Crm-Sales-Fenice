@@ -1349,3 +1349,37 @@ export const crmDeals = pgTable('crm_deals', {
     // 2026-07-05: droppati crm_deals_company_closed_idx / _company_funnel_closed_idx / _company_salesperson_idx (mai usati, Disk IO)
 }));
 
+// Tabulati (CDR) del centralino FreePBX in ufficio, importati da CSV.
+// `id` è l'uniqueid assegnato da Asterisk: rende l'import idempotente
+// (ON CONFLICT DO NOTHING) e permette di ricaricare lo stesso file senza
+// duplicare nulla. `dstKey` sono le ultime 10 cifre del numero chiamato,
+// la chiave con cui si aggancia leads.phone.
+export const pbxCalls = pgTable('pbxCalls', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    calldate: timestamp('calldate', { withTimezone: true, mode: 'date' }).notNull(),
+    dateLocal: text('dateLocal').notNull(),
+    src: text('src').notNull(),
+    dstKey: text('dstKey'),
+    duration: integer('duration').notNull(),
+    billsec: integer('billsec').notNull(),
+    disposition: text('disposition').notNull(),
+    direction: text('direction').notNull(), // 'out' | 'in'
+    userId: text('userId').references(() => users.id),
+}, (table) => {
+    return {
+        userDayIdx: index('pbxcalls_user_day_idx').on(table.companyId, table.userId, table.dateLocal),
+        dstKeyIdx: index('pbxcalls_dst_key_idx').on(table.dstKey),
+    };
+});
+
+// Quale interno del centralino corrisponde a quale utente del CRM.
+// NON è derivabile da una regola numerica (1007 = GDO 115, non 107):
+// va mantenuta a mano quando cambia una postazione.
+export const pbxExtensions = pgTable('pbxExtensions', {
+    extension: text('extension').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    label: text('label'),
+});
+
