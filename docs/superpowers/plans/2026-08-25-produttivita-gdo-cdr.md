@@ -376,7 +376,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { computeDayMetrics, median } from './dayMetrics'
 
-const at = (hhmm: string) => new Date(`2026-08-22T${hhmm}:00Z`)
+/** Accetta 'HH:MM' oppure 'HH:MM:SS' — i test sulle fasce hanno bisogno dei secondi. */
+const at = (hms: string) => new Date(`2026-08-22T${hms.length === 5 ? hms + ':00' : hms}Z`)
 
 test('lista vuota non produce metriche', () => {
     assert.equal(computeDayMetrics([]), null)
@@ -436,12 +437,12 @@ test('la mediana funziona su liste pari e dispari', () => {
 })
 
 test('distribuisce i buchi nelle cinque fasce, per secondi totali', () => {
-    // buchi attesi: 30s, 120s, 600s (esattamente al confine: va in 10-30)
+    // Chiamate di durata zero, così ogni buco è esattamente la distanza fra due orari.
     const m = computeDayMetrics([
-        { calldate: at('13:00'), duration: 0, billsec: 0, disposition: 'NO ANSWER' },
-        { calldate: at('13:00'), duration: 30, billsec: 0, disposition: 'NO ANSWER' },  // gap 30s da 13:00:00
-        { calldate: at('13:02'), duration: 0, billsec: 0, disposition: 'NO ANSWER' },   // gap 90s
-        { calldate: at('13:12'), duration: 0, billsec: 0, disposition: 'NO ANSWER' },   // gap 600s
+        { calldate: at('13:00:00'), duration: 0, billsec: 0, disposition: 'NO ANSWER' },
+        { calldate: at('13:00:30'), duration: 0, billsec: 0, disposition: 'NO ANSWER' }, // buco 30s
+        { calldate: at('13:02:00'), duration: 0, billsec: 0, disposition: 'NO ANSWER' }, // buco 90s
+        { calldate: at('13:12:00'), duration: 0, billsec: 0, disposition: 'NO ANSWER' }, // buco 600s
     ])!
     assert.equal(m.buckets.under1m, 30)
     assert.equal(m.buckets.m1to3, 90)
@@ -683,7 +684,9 @@ main().catch(e => { console.error(e); process.exit(1) })
 
 - [ ] **Step 3: Aggiungere lo script a `package.json`**
 
-Negli `scripts`: `"import:cdr": "node --import tsx scripts/import-cdr.ts"`
+Negli `scripts`: `"import:cdr": "node --import tsx --env-file=.env scripts/import-cdr.ts"`
+
+`--env-file=.env` serve per `DATABASE_URL`. Senza, `src/db/index.ts` ripiega su una connessione scritta nel codice: funzionerebbe comunque, ma dipendere da quel fallback è sbagliato.
 
 - [ ] **Step 4: Importare un solo mese e verificare**
 
