@@ -232,7 +232,48 @@ vista lato GDO — il modello dati non cambia.
 - QA nel browser sulla pagina riscritta, e verifica da account GDO che **nulla**
   sia cambiato di visibile a parte il nuovo volume minimo.
 
-## 9. Il centralino: verifica di fattibilità in corso
+## 9. Il centralino: VERIFICATO — i tabulati ci sono
+
+Verifica eseguita il 2026-08-25 dal pannello, in sola lettura. Esito:
+
+| Domanda | Risposta |
+|---|---|
+| Che cos'è | **FreePBX 17.0.32** su Asterisk, nome "VoIP Server" |
+| Tabulati (CDR) | **Sì**, modulo CDR Reports completo |
+| Da quando | **10 marzo 2026** (prime chiamate di test all'installazione). Copre marzo–agosto, quindi sia il prima sia il dopo del "libero arbitrio" |
+| Export | **CSV disponibile** (Report Type → CSV File), oltre a CDR search e Call Graph |
+| Interni | **20**: da `1005` a `1023` per le postazioni, più `102` "supervisor", `103`, `999` |
+| Attribuzione alla persona | **Sì, quasi automatica**: `1005`→"105", `1013`→"113", `1015`→"115", `1019`→"119". La regola è **interno `10XX` = GDO `1XX`**, gli stessi codici del CRM |
+| Dati per chiamata | orario, numero chiamato, CallerID (= interno), esito (ANSWERED / NO ANSWER / BUSY / FAILED / CANCEL), **durata reale** |
+
+Campione verificato: interno `1007` (= GDO 107), giornata del 22/08/2026 →
+**127 chiamate in uscita**. Gli squilli a vuoto durano 00:30 fissi, le
+conversazioni hanno durata effettiva (01:27, 07:53, 01:39…). La distinzione
+fra "ha parlato" e "non ha parlato" è quindi un dato, non più una stima.
+
+**Riorientamento del progetto.** Con i CDR disponibili dal 10 marzo, la fase 1
+retroattiva non è più limitata alle euristiche sui `callLogs`: si può ricostruire
+il tempo reale al telefono e il tempo morto fra chiamate **anche sui mesi
+passati**. Cadono il tetto conversazione, la classificazione
+CERTO / PROBABILE / CONVERSAZIONE e la dipendenza dal marker `calledAt` lato
+browser. Il tracker CRM (fase 2) resta utile solo per ciò che il centralino non
+sa: quanto costa compilare un esito e quali lead vengono aperti senza essere
+chiamati.
+
+**Scoperta collaterale, fuori perimetro ma di valore.** Le chiamate in *entrata*
+esaminate risultano in larga parte `NO ANSWER`: sono clienti che richiamano e non
+trovano risposta. Vale la pena misurarle a parte — sono opportunità perse che
+oggi nessuna dashboard vede.
+
+**Sicurezza — da far verificare a chi amministra il centralino** (rilevato, non
+toccato): il pannello segnala **System Firewall non attivo** e **"20
+extensions/trunks have weak secrets"** come problema critico. Su un centralino
+con SIM aziendali dentro, questa combinazione è lo scenario tipico della frode
+telefonica: se quell'apparato è raggiungibile da internet, le chiamate le paga
+l'azienda. Va accertato che non ci sia alcun inoltro di porte verso `192.168.1.7`
+e vanno rigenerate le password degli interni.
+
+### Come era stata impostata la verifica (storico)
 
 In ufficio c'è un centralino raggiungibile solo dalla LAN su
 `http://192.168.1.7/admin/config.php` — il percorso indica quasi certamente
