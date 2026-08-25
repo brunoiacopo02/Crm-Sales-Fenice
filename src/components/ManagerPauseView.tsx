@@ -4,15 +4,16 @@ import { useAuth } from "@/components/AuthProvider"
 import { useState, useEffect, useCallback } from "react"
 import { getManagerPauseReport, getWeeklyPauseReport, getMonthlyPauseReport, type PauseAggregateReport } from "@/app/actions/pauseActions"
 import { getLocalDateRome } from "@/lib/pauseUtils"
-import { Search, Clock, AlertTriangle, RefreshCw, CalendarDays, CalendarRange, BarChart3 } from "lucide-react"
+import { Search, Clock, AlertTriangle, RefreshCw, CalendarDays, CalendarRange, BarChart3, Phone } from "lucide-react"
+import { PhoneProductivityTab } from "./PhoneProductivityTab"
 
-type Tab = 'giornaliero' | 'settimanale' | 'mensile'
+type Tab = 'telefono' | 'giornaliero' | 'settimanale' | 'mensile'
 
 export function ManagerPauseView() {
     const { user: authUser, isLoading: isAuthLoading } = useAuth();
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;
     const authStatus = isAuthLoading ? "loading" : (session ? "authenticated" : "unauthenticated");
-    const [tab, setTab] = useState<Tab>('giornaliero')
+    const [tab, setTab] = useState<Tab>('telefono')
     const [report, setReport] = useState<any>(null)
     const [aggReport, setAggReport] = useState<PauseAggregateReport | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -22,6 +23,7 @@ export function ManagerPauseView() {
     const fetchReport = useCallback(async () => {
         setIsLoading(true)
         try {
+            if (tab === 'telefono') { setIsLoading(false); return }
             if (tab === 'giornaliero') {
                 const data = await getManagerPauseReport(targetDate)
                 setReport(data)
@@ -100,6 +102,9 @@ export function ManagerPauseView() {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200 w-fit">
+                <button onClick={() => setTab('telefono')} className={tabClass('telefono')}>
+                    <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Tempo al telefono</span>
+                </button>
                 <button onClick={() => setTab('giornaliero')} className={tabClass('giornaliero')}>
                     <span className="flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" /> Giornaliero</span>
                 </button>
@@ -110,6 +115,9 @@ export function ManagerPauseView() {
                     <span className="flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5" /> Mensile</span>
                 </button>
             </div>
+
+            {/* Tempo al telefono tab */}
+            {tab === 'telefono' && <PhoneProductivityTab />}
 
             {/* Giornaliero tab */}
             {tab === 'giornaliero' && report && (

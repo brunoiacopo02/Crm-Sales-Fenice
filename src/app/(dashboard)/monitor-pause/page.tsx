@@ -22,7 +22,7 @@ export default async function MonitorPausePage() {
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
                     <p className="text-sm text-gray-500 mt-1">
-                        Supervisione in tempo reale dei break giornalieri dei GDO, reportistica sforamenti ed uso dei permessi.
+                        Tempo al telefono, tempi morti e break dei GDO.
                     </p>
                 </div >
             </div >
