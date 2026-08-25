@@ -311,6 +311,40 @@ e **163 min al giorno di tempo non telefonico** (46%) — in totale **374 ore su
 | 109 (Giusy) | 129 | 156 min | 153 min | 43% | 72 s | 8,0 |
 | **117 (Simone)** | 152 | **191 min** | **100 min** | **29%** | 40 s | 6,7 |
 
+### Di cosa sono fatti quei 163 minuti (verifica successiva)
+
+Il totale, da solo, è fuorviante. Scomponendo i 374 ore di agosto per durata
+del singolo buco fra due chiamate:
+
+| Durata del buco | Quanti | Ore | % del totale | min/gg a testa |
+|---|---|---|---|---|
+| sotto 1 min | 19.282 | 91 | 24% | **39** |
+| 1–3 min | 1.658 | 46 | 12% | 20 |
+| 3–10 min | 747 | 66 | 18% | 29 |
+| **10–30 min** | 486 | 136 | **36%** | **59** |
+| oltre 30 min | 46 | 36 | 10% | 16 |
+
+Letture obbligate:
+
+1. **Il CRM non è lento.** L'87% dei buchi sta sotto il minuto, con una mediana
+   di ~17 secondi: è il tempo di chiudere l'esito e passare al numero dopo.
+   Costa ~39 min al giorno, non è comprimibile più di tanto e non è colpa di
+   nessuno. L'ipotesi che il form di esito costasse ~95 min al giorno è
+   **smentita dai dati**.
+2. **La parte che merita attenzione sono i buchi sopra i 10 minuti: 75 min al
+   giorno a testa**, concentrati in appena 532 episodi al mese. Il numero da
+   portare in discussione è questo, non i 163.
+3. **Zero non è un obiettivo teorico**: Simone, Karim e Giusy hanno **nessun**
+   buco oltre i 30 minuti in tutto agosto. Giulia (39 min/gg) e Alessandro
+   (38 min/gg) stanno all'estremo opposto.
+
+La pagina deve quindi mostrare **la scomposizione per fasce**, non il totale
+secco: il totale da solo mette sullo stesso piano chi lavora con ritmo lento e
+chi si assenta, che sono due problemi diversi con due rimedi diversi.
+
+**Le chiamate in entrata non spiegano nulla**: verificate, sono 966 in tutto
+agosto per 940 minuti complessivi, cioè ~7 minuti al giorno a testa.
+
 **Il tempo non telefonico NON è tutto pausa**: contiene la compilazione degli
 esiti, le note e la scelta del lead. Il riferimento è quindi il migliore del
 gruppo, non lo zero: il GDO 117 mostra che ~100 min al giorno di lavoro non

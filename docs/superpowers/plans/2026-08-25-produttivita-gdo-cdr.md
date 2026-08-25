@@ -352,9 +352,13 @@ git commit -m "feat(cdr): parser delle righe CSV FreePBX con fuso Europe/Rome"
 - Consumes: `CdrRow` da `src/lib/cdr/parseCdr.ts` (solo i campi `calldate`, `duration`, `billsec`, `disposition`)
 - Produces:
   - `export type DayCall = { calldate: Date; duration: number; billsec: number; disposition: string }`
-  - `export type DayMetrics = { calls: number; answered: number; talkSeconds: number; occupiedSeconds: number; windowSeconds: number; offPhoneSeconds: number; gaps: number[]; firstAt: Date; lastAt: Date }`
+  - `export type GapBuckets = { under1m: number; m1to3: number; m3to10: number; m10to30: number; over30m: number }` — secondi totali per fascia
+  - `export type DayMetrics = { calls: number; answered: number; talkSeconds: number; occupiedSeconds: number; windowSeconds: number; offPhoneSeconds: number; gaps: number[]; buckets: GapBuckets; firstAt: Date; lastAt: Date }`
   - `export function computeDayMetrics(calls: DayCall[]): DayMetrics | null` — `null` se la lista è vuota
   - `export function median(values: number[]): number`
+  - `export function emptyBuckets(): GapBuckets`
+
+**Perché le fasce sono obbligatorie e non un abbellimento**: il totale del tempo non telefonico mette sullo stesso piano chi ha un ritmo lento e chi si assenta, che sono due problemi diversi. Misurato su agosto, l'87% dei buchi sta sotto il minuto e vale solo il 24% del tempo (è la compilazione dell'esito, incomprimibile), mentre il 36% del tempo si concentra in 486 buchi da 10–30 minuti. Una pagina che mostrasse solo il totale porterebbe a conclusioni sbagliate sulle persone.
 
 Definizioni (dalla spec, sezione 9):
 - **finestra di turno** = dalla prima chiamata alla fine dell'ultima (`calldate + duration`)
@@ -430,6 +434,31 @@ test('la mediana funziona su liste pari e dispari', () => {
     assert.equal(median([10, 20, 30, 40]), 25)
     assert.equal(median([]), 0)
 })
+
+test('distribuisce i buchi nelle cinque fasce, per secondi totali', () => {
+    // buchi attesi: 30s, 120s, 600s (esattamente al confine: va in 10-30)
+    const m = computeDayMetrics([
+        { calldate: at('13:00'), duration: 0, billsec: 0, disposition: 'NO ANSWER' },
+        { calldate: at('13:00'), duration: 30, billsec: 0, disposition: 'NO ANSWER' },  // gap 30s da 13:00:00
+        { calldate: at('13:02'), duration: 0, billsec: 0, disposition: 'NO ANSWER' },   // gap 90s
+        { calldate: at('13:12'), duration: 0, billsec: 0, disposition: 'NO ANSWER' },   // gap 600s
+    ])!
+    assert.equal(m.buckets.under1m, 30)
+    assert.equal(m.buckets.m1to3, 90)
+    assert.equal(m.buckets.m3to10, 0)
+    assert.equal(m.buckets.m10to30, 600)   // 600 è il confine: appartiene alla fascia superiore
+    assert.equal(m.buckets.over30m, 0)
+})
+
+test('la somma delle fasce corrisponde alla somma dei gap', () => {
+    const m = computeDayMetrics([
+        { calldate: at('13:00'), duration: 60, billsec: 30, disposition: 'ANSWERED' },
+        { calldate: at('13:05'), duration: 60, billsec: 30, disposition: 'ANSWERED' },
+        { calldate: at('14:00'), duration: 60, billsec: 30, disposition: 'ANSWERED' },
+    ])!
+    const sommaFasce = m.buckets.under1m + m.buckets.m1to3 + m.buckets.m3to10 + m.buckets.m10to30 + m.buckets.over30m
+    assert.equal(sommaFasce, m.gaps.reduce((a, b) => a + b, 0))
+})
 ```
 
 - [ ] **Step 2: Eseguire il test e verificare che fallisca**
@@ -458,6 +487,23 @@ export type DayCall = {
     disposition: string
 }
 
+/**
+ * Secondi totali di buco, divisi per durata del singolo buco.
+ * Serve a non confondere il ritmo lento con l'assenza: sotto il minuto è
+ * la compilazione dell'esito (incomprimibile), sopra i 10 minuti è altro.
+ */
+export type GapBuckets = {
+    under1m: number
+    m1to3: number
+    m3to10: number
+    m10to30: number
+    over30m: number
+}
+
+export function emptyBuckets(): GapBuckets {
+    return { under1m: 0, m1to3: 0, m3to10: 0, m10to30: 0, over30m: 0 }
+}
+
 export type DayMetrics = {
     calls: number
     answered: number
@@ -466,6 +512,7 @@ export type DayMetrics = {
     windowSeconds: number
     offPhoneSeconds: number
     gaps: number[]
+    buckets: GapBuckets
     firstAt: Date
     lastAt: Date
 }
@@ -497,9 +544,16 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
     // Gap fra la fine di una chiamata e l'inizio della successiva.
     // I negativi indicano chiamate sovrapposte (dato anomalo): si scartano.
     const gaps: number[] = []
+    const buckets = emptyBuckets()
     for (let i = 1; i < sorted.length; i++) {
         const gap = Math.round((sorted[i].calldate.getTime() - endOf(sorted[i - 1])) / 1000)
-        if (gap >= 0) gaps.push(gap)
+        if (gap < 0) continue
+        gaps.push(gap)
+        if (gap < 60) buckets.under1m += gap
+        else if (gap < 180) buckets.m1to3 += gap
+        else if (gap < 600) buckets.m3to10 += gap
+        else if (gap < 1800) buckets.m10to30 += gap
+        else buckets.over30m += gap
     }
 
     return {
@@ -510,6 +564,7 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
         windowSeconds,
         offPhoneSeconds: Math.max(0, windowSeconds - occupiedSeconds),
         gaps,
+        buckets,
         firstAt,
         lastAt,
     }
@@ -519,7 +574,7 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
 - [ ] **Step 4: Eseguire i test e verificare che passino**
 
 Run: `node --import tsx --test src/lib/cdr/dayMetrics.test.ts`
-Atteso: 7 test PASS.
+Atteso: 9 test PASS.
 
 - [ ] **Step 5: Registrare il test nello script `test` e lanciare l'intera suite**
 
@@ -678,7 +733,9 @@ git commit -m "feat(cdr): script di import idempotente dei tabulati FreePBX"
 **Interfaces:**
 - Consumes: `computeDayMetrics`, `median`, `DayCall` da `src/lib/cdr/dayMetrics.ts`; `pbxCalls`, `users` da `@/db/schema`; `currentTenant`, `assertSalesArea`, `companyScope` da `@/lib/tenancy`
 - Produces:
-  - `export type PhoneProductivityRow = { userId: string; gdo: string; days: number; callsPerDay: number; talkMinPerDay: number; offPhoneMinPerDay: number; offPhonePct: number; avgGapSeconds: number; medianGapSeconds: number }`
+  - `export type PhoneProductivityRow = { userId: string; gdo: string; days: number; callsPerDay: number; talkMinPerDay: number; offPhoneMinPerDay: number; offPhonePct: number; avgGapSeconds: number; medianGapSeconds: number; ritmoMinPerDay: number; assenzeMinPerDay: number }`
+
+`ritmoMinPerDay` sono i minuti al giorno in buchi **sotto i 3 minuti** (compilazione esito e passaggio al numero successivo: incomprimibili). `assenzeMinPerDay` sono quelli in buchi **oltre i 10 minuti**: è il numero da portare in una discussione con la persona, perché il totale mescola cose diverse. La fascia 3–10 minuti resta fuori da entrambi: è zona grigia e va mostrata come tale.
   - `export async function getPhoneProductivity(fromDateLocal: string, toDateLocal: string): Promise<{ rows: PhoneProductivityRow[]; benchmarkMin: number }>`
 
 `benchmarkMin` è il minor `offPhoneMinPerDay` del gruppo: è il riferimento contro cui leggere gli altri, come stabilito nella spec (non lo zero).
@@ -768,6 +825,7 @@ export async function getPhoneProductivity(
     const byUser = new Map<string, {
         gdo: string; days: number; calls: number; talk: number
         offPhone: number; window: number; gaps: number[]
+        ritmo: number; grigia: number; assenze: number
     }>()
     for (const slot of byDay.values()) {
         if (slot.calls.length < MIN_CALLS_PER_DAY) continue
@@ -775,7 +833,7 @@ export async function getPhoneProductivity(
         if (!m) continue
         let u = byUser.get(slot.userId)
         if (!u) {
-            u = { gdo: slot.gdo, days: 0, calls: 0, talk: 0, offPhone: 0, window: 0, gaps: [] }
+            u = { gdo: slot.gdo, days: 0, calls: 0, talk: 0, offPhone: 0, window: 0, gaps: [], ritmo: 0, grigia: 0, assenze: 0 }
             byUser.set(slot.userId, u)
         }
         u.days += 1
@@ -784,6 +842,9 @@ export async function getPhoneProductivity(
         u.offPhone += m.offPhoneSeconds
         u.window += m.windowSeconds
         u.gaps.push(...m.gaps)
+        u.ritmo += m.buckets.under1m + m.buckets.m1to3
+        u.grigia += m.buckets.m3to10
+        u.assenze += m.buckets.m10to30 + m.buckets.over30m
     }
 
     const rows: PhoneProductivityRow[] = [...byUser.entries()].map(([userId, u]) => ({
@@ -796,9 +857,12 @@ export async function getPhoneProductivity(
         offPhonePct: u.window ? Math.round((100 * u.offPhone) / u.window) : 0,
         avgGapSeconds: u.gaps.length ? Math.round(u.gaps.reduce((a, b) => a + b, 0) / u.gaps.length) : 0,
         medianGapSeconds: Math.round(median(u.gaps)),
-    })).sort((a, b) => b.offPhoneMinPerDay - a.offPhoneMinPerDay)
+        ritmoMinPerDay: Math.round(u.ritmo / u.days / 60),
+        assenzeMinPerDay: Math.round(u.assenze / u.days / 60),
+    })).sort((a, b) => b.assenzeMinPerDay - a.assenzeMinPerDay)
 
-    const benchmarkMin = rows.length ? Math.min(...rows.map(r => r.offPhoneMinPerDay)) : 0
+    // Il riferimento è il migliore del gruppo sulle assenze, non sul totale.
+    const benchmarkMin = rows.length ? Math.min(...rows.map(r => r.assenzeMinPerDay)) : 0
     return { rows, benchmarkMin }
 }
 ```
@@ -910,9 +974,14 @@ export function PhoneProductivityTab() {
                 </button>
             </div>
 
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                Il <strong>tempo non telefonico</strong> comprende la compilazione degli esiti, le note e la scelta del lead:
-                non è tutto tempo di pausa. Il riferimento è il migliore del gruppo ({data.benchmarkMin} min al giorno), non lo zero.
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
+                <div>
+                    Il tempo fuori dalle telefonate va letto scomposto, non come totale.
+                    <strong> Ritmo</strong> sono i buchi sotto i 3 minuti: compilare l'esito e passare al numero dopo,
+                    tempo di lavoro che non si comprime.
+                    <strong> Assenze</strong> sono i buchi oltre i 10 minuti: è questo il numero da discutere.
+                </div>
+                <div>Il riferimento è il migliore del gruppo: {data.benchmarkMin} min al giorno di assenze.</div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">
@@ -923,26 +992,24 @@ export function PhoneProductivityTab() {
                             <th className="text-right px-4 py-3 font-semibold">Giornate</th>
                             <th className="text-right px-4 py-3 font-semibold">Chiamate/gg</th>
                             <th className="text-right px-4 py-3 font-semibold">Al telefono</th>
-                            <th className="text-right px-4 py-3 font-semibold">Non telefonico</th>
+                            <th className="text-right px-4 py-3 font-semibold" title="Buchi sotto i 3 minuti">Ritmo</th>
+                            <th className="text-right px-4 py-3 font-semibold" title="Buchi oltre i 10 minuti">Assenze</th>
                             <th className="text-right px-4 py-3 font-semibold">Oltre il migliore</th>
-                            <th className="text-right px-4 py-3 font-semibold">Pausa tra 2 chiamate</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data.rows.map(r => {
-                            const excess = r.offPhoneMinPerDay - data.benchmarkMin
+                            const excess = r.assenzeMinPerDay - data.benchmarkMin
                             return (
                                 <tr key={r.userId} className="border-t border-ash-100">
                                     <td className="px-4 py-3 font-semibold text-ash-800">{r.gdo}</td>
                                     <td className="px-4 py-3 text-right text-ash-500">{r.days}</td>
                                     <td className="px-4 py-3 text-right tabular-nums">{r.callsPerDay}</td>
                                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-700">{r.talkMinPerDay} min</td>
-                                    <td className="px-4 py-3 text-right tabular-nums">{r.offPhoneMinPerDay} min <span className="text-ash-400">({r.offPhonePct}%)</span></td>
-                                    <td className={`px-4 py-3 text-right tabular-nums font-semibold ${excess > 60 ? 'text-red-600' : excess > 30 ? 'text-amber-600' : 'text-ash-400'}`}>
+                                    <td className="px-4 py-3 text-right tabular-nums text-ash-500">{r.ritmoMinPerDay} min</td>
+                                    <td className="px-4 py-3 text-right tabular-nums font-semibold">{r.assenzeMinPerDay} min</td>
+                                    <td className={`px-4 py-3 text-right tabular-nums font-semibold ${excess > 45 ? 'text-red-600' : excess > 20 ? 'text-amber-600' : 'text-ash-400'}`}>
                                         {excess > 0 ? `+${excess} min` : '—'}
-                                    </td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-ash-600">
-                                        {r.avgGapSeconds}s <span className="text-ash-400">(mediana {r.medianGapSeconds}s)</span>
                                     </td>
                                 </tr>
                             )
@@ -954,6 +1021,7 @@ export function PhoneProductivityTab() {
             <div className="flex items-center gap-2 text-xs text-ash-400">
                 <Phone className="w-3 h-3" />
                 Giornate con almeno 40 chiamate. Fonte: tabulati del centralino.
+                Il tempo non telefonico totale è {Math.round(data.rows.reduce((a, r) => a + r.offPhoneMinPerDay, 0) / data.rows.length)} min al giorno in media.
             </div>
         </div>
     )
