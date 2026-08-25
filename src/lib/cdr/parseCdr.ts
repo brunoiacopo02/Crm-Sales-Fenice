@@ -2,13 +2,15 @@
  * Parser delle righe CSV esportate da FreePBX 17 (Reports -> CDR Reports,
  * Report Type = CSV File).
  *
- * Attenzione al fuso: `calldate` è già ora locale italiana perché il
- * centralino sta in ufficio. Va quindi interpretata come Europe/Rome e non
- * come UTC, altrimenti tutte le giornate slittano di 1-2 ore e le chiamate
- * serali finiscono nel giorno sbagliato.
+ * Attenzione al fuso: `calldate` è scritta dal centralino in UTC, non in
+ * ora locale italiana. Verificato incrociando gli orari col turno reale
+ * degli operatori (13:30-20:00) su due stagioni diverse: interpretando il
+ * campo come UTC e convertendo in Europe/Rome, gli orari tornano corretti
+ * sia in ora solare che in ora legale. `dateLocal` resta calcolato in
+ * Europe/Rome perché la giornata operativa è quella italiana.
  */
 
-import { parseRomeDatetimeLocal, toRomeDateStr } from '@/lib/dateUtils'
+import { toRomeDateStr } from '@/lib/dateUtils'
 
 export type CdrRow = {
     id: string
@@ -47,10 +49,12 @@ export function parseCdrLine(rec: Record<string, string>): CdrRow | null {
     if (srcIsExt && dstIsExt) return null
     if (!srcIsExt && !dstIsExt) return null
 
-    // Normalizza "2026-08-22 16:20:03" a "2026-08-22T16:20:03"
+    // "2026-08-22 16:20:03" è UTC: aggiungendo "Z" il costruttore Date la
+    // interpreta correttamente senza passare per l'ora locale italiana.
     const normalized = (rec.calldate || '').replace(' ', 'T')
-    const calldate = parseRomeDatetimeLocal(normalized)
-    if (!calldate) return null
+    if (!normalized) return null
+    const calldate = new Date(`${normalized}Z`)
+    if (isNaN(calldate.getTime())) return null
 
     const direction: 'out' | 'in' = srcIsExt ? 'out' : 'in'
     return {

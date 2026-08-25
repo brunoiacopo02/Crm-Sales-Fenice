@@ -44,14 +44,20 @@ test('duration e billsec mancanti diventano zero', () => {
     assert.equal(r.billsec, 0)
 })
 
-test('interpreta l orario come italiano in ora legale (CEST, +2)', () => {
+test('interpreta calldate come UTC in ora legale italiana (CEST, +2)', () => {
     const r = parseCdrLine({ ...base, calldate: '2026-08-22 16:20:03' } as any)!
-    assert.equal(r.calldate.toISOString(), '2026-08-22T14:20:03.000Z')
+    assert.equal(r.calldate.toISOString(), '2026-08-22T16:20:03.000Z')
     assert.equal(r.dateLocal, '2026-08-22')
 })
 
-test('interpreta l orario come italiano anche in ora solare (CET, +1)', () => {
+test('interpreta calldate come UTC anche in ora solare italiana (CET, +1)', () => {
     const r = parseCdrLine({ ...base, calldate: '2026-01-15 10:00:00' } as any)!
-    assert.equal(r.calldate.toISOString(), '2026-01-15T09:00:00.000Z')
+    assert.equal(r.calldate.toISOString(), '2026-01-15T10:00:00.000Z')
     assert.equal(r.dateLocal, '2026-01-15')
+})
+
+test('dateLocal scavalca la mezzanotte italiana quando calldate UTC e vicino alle 22-23', () => {
+    const r = parseCdrLine({ ...base, calldate: '2026-08-22 23:30:00' } as any)!
+    assert.equal(r.calldate.toISOString(), '2026-08-22T23:30:00.000Z')
+    assert.equal(r.dateLocal, '2026-08-23')
 })
