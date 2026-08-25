@@ -25,6 +25,12 @@ Nessuna UI, nessuna comunicazione, nessun intervento sui loro computer.
 
 ## 2. Cosa dicono già i dati (agosto 2026, misurato in fase di design)
 
+> **SUPERATA dalla sezione 9.** Questa sezione contiene le stime ricavate dai
+> soli `callLogs` prima che si scoprisse che il centralino conserva i tabulati.
+> Resta come documentazione del ragionamento e come banco di prova (le stime
+> davano ~37 min/giorno di tempo morto "certo"; la misura reale ne dà 163 di
+> tempo non telefonico, di cui circa un'ora eccedente il migliore del gruppo).
+
 - Turno reale 13:00–19:30, finestra media prima→ultima chiamata 5,6–6,0 ore.
 - Volume: media 163 chiamate/giorno, mediana 155, quartile lento 117, massimo 368.
   In crescita da giugno (136) e luglio (151): il libero arbitrio **non** ha ridotto
@@ -58,6 +64,15 @@ Questi numeri sono la baseline contro cui verificare l'implementazione.
 - Nessuna sanzione automatica, nessuna notifica, nessuna gamification collegata.
 
 ## 4. Architettura
+
+> **PARZIALMENTE SUPERATA dalla sezione 9.** Con i tabulati del centralino
+> disponibili dal 10 marzo 2026, la fase 1 non usa più le euristiche sui
+> `callLogs` e la fase 2 non ha più bisogno del marker `calledAt` intercettato
+> nel browser. Restano validi: la struttura della pagina (fase 3), i parametri,
+> e la parte di fase 2 che misura il costo di compilazione degli esiti.
+> L'architettura definitiva è: **import CDR → analisi → pagina**, con il tracker
+> CRM come complemento. Le sottosezioni che seguono documentano il piano
+> precedente e vanno lette in quest'ottica.
 
 ### Fase 1 — Analisi retroattiva (nessun dato nuovo)
 
@@ -250,6 +265,64 @@ Campione verificato: interno `1007` (= GDO 107), giornata del 22/08/2026 →
 **127 chiamate in uscita**. Gli squilli a vuoto durano 00:30 fissi, le
 conversazioni hanno durata effettiva (01:27, 07:53, 01:39…). La distinzione
 fra "ha parlato" e "non ha parlato" è quindi un dato, non più una stima.
+
+### Mappatura interno → GDO (VERIFICATA, non deducibile per regola)
+
+La regola numerica ipotizzata (`10XX` → `1XX`) è **sbagliata**. La corrispondenza
+reale è stata ricavata incrociando i numeri effettivamente chiamati da ogni
+interno con `leads.assignedToId` nel CRM (18 numeri su 18 concordi):
+
+| Interno | GDO | Nome | | Interno | GDO | Nome |
+|---|---|---|---|---|---|---|
+| 1007 | 115 | Clara | | 1016 | 105 | Karim |
+| 1008 | 109 | Giusy | | 1017 | 117 | Simone |
+| 1009 | 107 | Giulia | | 1019 | 119 | Riccardo |
+| 1010 | 118 | Fabio | | 1020 | 110 | Alessandro |
+| 1014 | 106 | Zora | | 1023 | 112 | — |
+| 1015 | 114 | Christel | | | | |
+
+La tabella è stata ricavata dai dati e **confermata indipendentemente dal
+committente**, che ha fornito la stessa corrispondenza con i nomi: le due fonti
+coincidono su tutte e dieci le postazioni verificabili. L'interno `1023` (GDO
+112) risulta dai dati ma non era nell'elenco fornito, e va confermato. Gli
+interni `1005` e `1013` sono attivi fino a luglio e non compaiono ad agosto.
+
+La mappatura va conservata in tabella (non calcolata da una regola: la regola
+numerica `10XX`→`1XX` è **falsa**) e aggiornata a mano quando cambia una
+postazione. È l'unico punto fragile dell'intera catena.
+
+### Primi risultati misurati (agosto 2026, 11 GDO, 138 giornate ≥40 chiamate)
+
+Turno medio 5,9 h. Di queste: **138 min al telefono** (39%), ~53 min di squilli,
+e **163 min al giorno di tempo non telefonico** (46%) — in totale **374 ore su
+814 ore di turno**.
+
+| GDO | chiam/gg | al telefono | non-telefono | % | gap medio | app/gg |
+|---|---|---|---|---|---|---|
+| 115 (Clara) | 106 | 114 min | **212 min** | 59% | 121 s | 5,3 |
+| 114 (Christel) | 136 | 124 min | 185 min | 52% | 82 s | 5,9 |
+| 107 (Giulia) | 154 | 113 min | 174 min | 52% | 68 s | 4,6 |
+| 106 (Zora) | 160 | 138 min | 172 min | 48% | 65 s | 6,1 |
+| 110 (Alessandro) | 129 | 141 min | 169 min | 48% | 79 s | 4,2 |
+| 119 (Riccardo) | 102 | 170 min | 162 min | 44% | 96 s | 6,8 |
+| 112 (—) | 256 | 111 min | 161 min | 45% | 38 s | 4,0 |
+| 118 (Fabio) | 234 | 120 min | 154 min | 44% | 40 s | 4,3 |
+| 105 (Karim) | 199 | 139 min | 154 min | 43% | 47 s | 4,2 |
+| 109 (Giusy) | 129 | 156 min | 153 min | 43% | 72 s | 8,0 |
+| **117 (Simone)** | 152 | **191 min** | **100 min** | **29%** | 40 s | 6,7 |
+
+**Il tempo non telefonico NON è tutto pausa**: contiene la compilazione degli
+esiti, le note e la scelta del lead. Il riferimento è quindi il migliore del
+gruppo, non lo zero: il GDO 117 mostra che ~100 min al giorno di lavoro non
+telefonico sono fisiologici. L'eccesso rispetto a quel riferimento va da +53 a
++112 min al giorno, con una media di circa **un'ora a testa**.
+
+**Il volume di chiamate è una metrica debole, confermato dai fatti**: il GDO 112
+fa 256 chiamate al giorno ma sta al telefono 111 minuti e fissa 4,0
+appuntamenti; il GDO 119 ne fa 102, sta al telefono 170 minuti e ne fissa 6,8.
+Chiamare tanto e parlare poco non produce appuntamenti. Il minimo di 140 resta
+come soglia di allarme, ma la metrica di riferimento diventa **minuti al telefono
+e appuntamenti**, non il conteggio delle chiamate.
 
 **Riorientamento del progetto.** Con i CDR disponibili dal 10 marzo, la fase 1
 retroattiva non è più limitata alle euristiche sui `callLogs`: si può ricostruire
