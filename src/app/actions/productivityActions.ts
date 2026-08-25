@@ -14,7 +14,7 @@ import { pbxCalls, users, leads } from "@/db/schema"
 import { and, gte, lte, lt, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
-import { shiftBoundsFor, lateAndEarly, saturdayAllowanceSec, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN } from "@/lib/cdr/shift"
+import { shiftBoundsFor, lateAndEarly, saturdayAllowanceSec, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN, WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN, romeDowOf } from "@/lib/cdr/shift"
 import { apptSetAt } from "@/lib/kpi/canon"
 import { dayBoundsRome } from "@/lib/dateUtils"
 
@@ -50,10 +50,11 @@ export type PhoneProductivityRow = {
     /** Giornate in cui si arriva a fine turno: anticipo ≤ 15 minuti. */
     daysFullShift: number
     /**
-     * Giornate con anticipo > SATURDAY_TRAINING_ALLOWANCE_MIN (60) minuti:
-     * mezze giornate, permessi, uscite autorizzate. Il sabato la stessa
-     * soglia coincide con l'abbuono formazione, così una giornata di sabato
-     * con la sola ultima ora di formazione non risulta "corta".
+     * Giornate con anticipo oltre la soglia: mezze giornate, permessi, uscite
+     * autorizzate. Soglia: 60 min nei feriali, 120 min il sabato (vedi
+     * WEEKDAY_DAYS_SHORT_THRESHOLD_MIN e SATURDAY_DAYS_SHORT_THRESHOLD_MIN in shift.ts).
+     * Il sabato 120 min sta dentro il gap fra formazione legittima (≤95 min)
+     * e giornate anomale (≥113 min).
      */
     daysShort: number
     /** Buchi dentro il turno: fermo totale meno i due bordi. */
@@ -167,11 +168,14 @@ export async function getPhoneProductivity(
         u.startLateDaysSec.push(startLateSec)
         u.endEarlyDaysSec.push(endEarlySec)
         // Soglie sulla singola giornata, non sulla mediana: "arriva a fine
-        // turno" e "mezza giornata/permesso" sono eventi puntuali. La soglia
-        // "corta" usa lo stesso abbuono del sabato (SATURDAY_TRAINING_ALLOWANCE_MIN):
-        // altrimenti la formazione farebbe risultare "corte" tutte le giornate di sabato.
+        // turno" e "mezza giornata/permesso" sono eventi puntuali.
+        // La soglia di "corta" dipende dal giorno: feriali 60 min, sabato 120 min
+        // (vedi shift.ts per la distribuzione che giustifica 120).
         if (endEarlySec <= 15 * 60) u.daysFullShift += 1
-        if (endEarlySec > SATURDAY_TRAINING_ALLOWANCE_MIN * 60) u.daysShort += 1
+        const threshold = romeDowOf(slot.dateLocal) === 6
+            ? SATURDAY_DAYS_SHORT_THRESHOLD_MIN * 60
+            : WEEKDAY_DAYS_SHORT_THRESHOLD_MIN * 60
+        if (endEarlySec > threshold) u.daysShort += 1
         u.idleInShift += idleInShiftSec
         u.fermoTotal += fermoTotalSec
         u.shiftMinutesSum += shift.minutes

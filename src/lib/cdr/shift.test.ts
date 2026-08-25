@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
     romeDowOf, shiftBoundsFor, lateAndEarly, WEEKDAY_SHIFT, SATURDAY_SHIFT,
     saturdayAllowanceSec, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN,
+    WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN,
 } from './shift'
 
 // 2026-08-24 = lunedì, 2026-08-22 = sabato, 2026-08-23 = domenica.
@@ -90,4 +91,27 @@ test('feriale, 45 minuti di anticipo: nessun abbuono, tutti e 45 contati come fe
     const fermo = fermoTotalSeconds(WEEKDAY, shift.minutes * 60, occupiedSeconds, endEarlySec)
     assert.equal(saturdayAllowanceSec(WEEKDAY, endEarlySec), 0)
     assert.equal(fermo, 45 * 60)
+})
+
+// Soglie di daysShort: feriali 60 min, sabato 120 min.
+// La soglia sabato 120 min sta nel gap fra formazione legittima (≤95) e anomalie (≥113).
+
+test('feriale, 90 minuti di anticipo: supera soglia (60), risulta "corta"', () => {
+    const endEarlySec = 90 * 60
+    const threshold = WEEKDAY_DAYS_SHORT_THRESHOLD_MIN * 60
+    assert.equal(WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, 60)
+    assert.ok(endEarlySec > threshold, '90 min > 60 min threshold')
+})
+
+test('sabato, 90 minuti di anticipo: non supera soglia (120), non risulta "corta"', () => {
+    const endEarlySec = 90 * 60
+    const threshold = SATURDAY_DAYS_SHORT_THRESHOLD_MIN * 60
+    assert.equal(SATURDAY_DAYS_SHORT_THRESHOLD_MIN, 120)
+    assert.ok(endEarlySec <= threshold, '90 min ≤ 120 min threshold')
+})
+
+test('sabato, 130 minuti di anticipo: supera soglia (120), risulta "corta"', () => {
+    const endEarlySec = 130 * 60
+    const threshold = SATURDAY_DAYS_SHORT_THRESHOLD_MIN * 60
+    assert.ok(endEarlySec > threshold, '130 min > 120 min threshold')
 })

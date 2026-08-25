@@ -33,6 +33,26 @@ export const SATURDAY_SHIFT = { startMin: 10 * 60, endMin: 16 * 60 + 30 }
  */
 export const SATURDAY_TRAINING_ALLOWANCE_MIN = 60
 
+/**
+ * Soglia (minuti di anticipo a fine turno) oltre la quale una giornata si
+ * considera "corta" (mezza giornata, permesso, uscita autorizzata).
+ *
+ * Feriali: 60 minuti (invariato dalla genesi del modulo).
+ *
+ * Sabato: 120 minuti. Distribuzione reale agosto 2026 (75 sabati):
+ *   - 0–15 min: 42 sabati (arrivano a fine turno)
+ *   - 27–54 min: 8 sabati (formazione 30 min)
+ *   - 61–95 min: 22 sabati (formazione 60 min) ← ABBUONATI
+ *   - [gap vuoto 95–113]
+ *   - 113–137 min: 3 sabati (anomali) ← OLTRE SOGLIA
+ *
+ * Il valore 120 minuti sta dentro il gap, così le giornate con sola
+ * formazione (fino a 95 min) non risultano "corte", mentre quelle
+ * realmente anomale (da 113 min) lo sono.
+ */
+export const WEEKDAY_DAYS_SHORT_THRESHOLD_MIN = 60
+export const SATURDAY_DAYS_SHORT_THRESHOLD_MIN = 120
+
 export type ShiftBounds = { start: Date; end: Date; minutes: number }
 
 /** Giorno della settimana Europe/Rome di una `dateLocal` ("YYYY-MM-DD"): 0=domenica..6=sabato. */

@@ -1,0 +1,753 @@
+<title>Prototipo v2 — Script + Sondaggio GDO</title>
+<style>
+  :root {
+    --bg: #faf8f5;
+    --surface: #ffffff;
+    --surface-2: #f5f1ea;
+    --ink: #1f2430;
+    --ink-soft: #5b6270;
+    --line: #e6e0d6;
+    --brand: #ea580c;
+    --brand-soft: #fff1e7;
+    --brand-ink: #9a3c07;
+    --ok: #15803d;
+    --ok-soft: #ecfdf3;
+    --warn: #b45309;
+    --warn-soft: #fffbeb;
+    --danger: #b91c1c;
+    --opt: #94a3b8;
+    --shadow: 0 1px 3px rgba(31,36,48,.08), 0 8px 24px rgba(31,36,48,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181f; --surface: #1e222c; --surface-2: #262b37; --ink: #edeae4;
+      --ink-soft: #a3a8b4; --line: #333947; --brand: #f97b33; --brand-soft: #35251b;
+      --brand-ink: #ffb98a; --ok: #4ade80; --ok-soft: #16281d; --warn: #fbbf24;
+      --warn-soft: #2b2415; --danger: #f87171; --opt: #64748b;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f5; --surface: #ffffff; --surface-2: #f5f1ea; --ink: #1f2430;
+    --ink-soft: #5b6270; --line: #e6e0d6; --brand: #ea580c; --brand-soft: #fff1e7;
+    --brand-ink: #9a3c07; --ok: #15803d; --ok-soft: #ecfdf3; --warn: #b45309;
+    --warn-soft: #fffbeb; --danger: #b91c1c; --opt: #94a3b8;
+    --shadow: 0 1px 3px rgba(31,36,48,.08), 0 8px 24px rgba(31,36,48,.06);
+  }
+  :root[data-theme="dark"] {
+    --bg: #16181f; --surface: #1e222c; --surface-2: #262b37; --ink: #edeae4;
+    --ink-soft: #a3a8b4; --line: #333947; --brand: #f97b33; --brand-soft: #35251b;
+    --brand-ink: #ffb98a; --ok: #4ade80; --ok-soft: #16281d; --warn: #fbbf24;
+    --warn-soft: #2b2415; --danger: #f87171; --opt: #64748b;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", system-ui, Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 130px; }
+
+  header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; margin-bottom: 6px; }
+  header.top h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700;
+    color: var(--brand-ink); background: var(--brand-soft); border-radius: 4px; padding: 3px 8px; }
+  p.lede { color: var(--ink-soft); margin: 4px 0 18px; max-width: 76ch; }
+  p.lede b { color: var(--ink); }
+
+  .leadbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; box-shadow: var(--shadow); margin-bottom: 16px; }
+  .leadbar .who { font-weight: 700; }
+  .leadbar .who small { font-weight: 400; color: var(--ink-soft); }
+  .seg { display: flex; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 3px; gap: 3px; margin-left: auto; }
+  .seg button { border: 0; background: transparent; color: var(--ink-soft); font: inherit;
+    font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  .seg button.on { background: var(--brand); color: #fff; }
+  button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+
+  .steps { display: flex; gap: 4px; padding: 12px 14px 0; flex-wrap: wrap; }
+  .steps button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line);
+    background: var(--surface-2); color: var(--ink-soft); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .steps button.cur { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .steps button.done { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+  .steps button.need { box-shadow: 0 0 0 2px var(--warn); }
+
+  .block { padding: 14px 16px 18px; }
+  .block h2 { font-size: 16px; margin: 4px 0 2px; }
+  .voice { font-size: 13px; color: var(--brand-ink); background: var(--brand-soft);
+    border-radius: 8px; padding: 8px 12px; margin: 10px 0; white-space: pre-line; }
+  .voice::before { content: "🎙 Voce · "; font-weight: 700; }
+  .scriptText { white-space: pre-line; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; font-size: 14.5px; }
+  .warnbox { background: var(--warn-soft); color: var(--warn); font-weight: 700; font-size: 13px;
+    border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
+
+  .check { margin-top: 10px; }
+  .check h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); margin: 12px 0 6px; }
+  .check label { display: flex; gap: 8px; align-items: flex-start; padding: 5px 4px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .check label:hover { background: var(--surface-2); }
+  .check input { margin-top: 3px; accent-color: var(--brand); }
+  .checkCount { font-size: 12.5px; font-weight: 700; color: var(--warn); margin-top: 6px; }
+  .checkCount.ok { color: var(--ok); }
+
+  .survey { margin-top: 14px; border-top: 2px dashed var(--line); padding-top: 12px; }
+  .survey .cap { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--brand-ink); margin-bottom: 4px; }
+  .q { margin: 12px 0 2px; }
+  .q .ask { font-size: 13px; color: var(--ink-soft); font-style: italic; margin-bottom: 5px; }
+  .q .ask::before { content: "🗣 chiedi: "; font-style: normal; }
+  .q .lbl { font-size: 13.5px; font-weight: 650; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .q .lbl .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+  .q.opt .lbl .dot { background: var(--opt); }
+  .q.ansd .lbl .dot { background: var(--ok); }
+  .q .lbl .optTag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-soft); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+    border-radius: 999px; font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer; }
+  .chips button:hover { border-color: var(--brand); }
+  .chips button.sel { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 650; }
+
+  .navrow { display: flex; gap: 8px; padding: 0 16px 16px; }
+  .navrow button { font: inherit; font-weight: 650; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); }
+  .navrow .next { margin-left: auto; background: var(--brand); border-color: var(--brand); color: #fff; }
+  .navrow button:disabled { opacity: .45; cursor: not-allowed; }
+  .gatehint { font-size: 12.5px; color: var(--warn); padding: 0 16px 14px; margin-top: -6px; }
+
+  .side { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 14px; }
+  .progress { padding: 14px 16px; }
+  .progress h2, .notecard h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-soft); margin: 0 0 10px; }
+  .pbar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-bottom: 6px; }
+  .pbar div { height: 100%; background: var(--brand); width: 0; transition: width .25s; }
+  .pbar.full div { background: var(--ok); }
+  .pcount { font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; }
+  .pcount b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .missing { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft);
+    columns: 2; column-gap: 14px; }
+  @media (max-width: 1050px) { .missing { columns: 1; } }
+  .missing li { break-inside: avoid; }
+  .missing li::before { content: "○ "; color: var(--warn); }
+  .missing li.opt::before { color: var(--opt); }
+  .missing li.done { text-decoration: line-through; opacity: .55; }
+  .missing li.done::before { content: "● "; color: var(--ok); }
+
+  .notecard { padding: 14px 16px; }
+  .nota { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; font-size: 13.5px; white-space: pre-wrap; min-height: 120px; }
+  .nota.empty { color: var(--ink-soft); font-style: italic; }
+  .notecard .hint { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
+  .copybtn { margin-top: 10px; font: inherit; font-size: 13px; font-weight: 650; border-radius: 7px;
+    padding: 7px 13px; cursor: pointer; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); }
+  textarea.gdonote { width: 100%; min-height: 64px; resize: vertical; font: inherit; font-size: 13.5px;
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+
+  .esitobar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface);
+    border-top: 1px solid var(--line); box-shadow: 0 -6px 20px rgba(0,0,0,.08); z-index: 20; }
+  .esitobar .in { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .esitobar .lab { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); margin-right: 4px; }
+  .esitobar button { font: inherit; font-size: 13.5px; font-weight: 650; border-radius: 8px;
+    padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); }
+  .esitobar .fix { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .esitobar button:disabled { opacity: .5; cursor: not-allowed; }
+  .esitobar .why { font-size: 12px; color: var(--warn); flex-basis: 100%; }
+
+  .veil { position: fixed; inset: 0; background: rgba(15,17,22,.55); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+  .veil.open { display: flex; }
+  .modal { background: var(--surface); border-radius: 14px; max-width: 580px; width: 100%;
+    max-height: 88vh; overflow: auto; padding: 20px 22px; box-shadow: var(--shadow); }
+  .modal h2 { margin: 0 0 4px; font-size: 18px; }
+  .modal .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 14px; }
+  .modal .nota { min-height: 0; }
+  .modal .row { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
+  .modal .row button { font: inherit; font-weight: 650; border-radius: 8px; padding: 9px 16px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); }
+  .modal .row .pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .modal .row .pri:disabled { opacity: .5; cursor: not-allowed; }
+  .flow { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft);
+    background: var(--ok-soft); border-radius: 8px; padding: 8px 12px; margin-top: 14px; }
+
+  .toast { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: var(--bg); font-size: 13.5px; font-weight: 650; border-radius: 8px;
+    padding: 10px 18px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 60; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (prefers-reduced-motion: reduce) { .pbar div, .toast { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Script + Sondaggio in chiamata</h1>
+    <span class="tag">Prototipo v2 — non collegato al CRM</span>
+  </header>
+  <p class="lede">Novità v2: <b>lo script ti porta alle risposte</b> — ogni informazione ha la sua domanda suggerita (🗣) nel blocco dove esce naturale in conversazione. <b>11 core obbligatorie</b> per fissare (pallino arancio) + <b>9 extra facoltative</b> (pallino grigio) che arricchiscono la nota. A ogni esito, 3 tap finali di valutazione (temperatura, obiezioni, leva).</p>
+
+  <div class="leadbar">
+    <div class="who">Mario Rossi <small>· 351 234 5678 · da ActiveCampaign</small></div>
+    <div class="seg" role="group" aria-label="Tipo lead">
+      <button id="segNuovo" class="on">Lead Nuovo</button>
+      <button id="segDb">Database</button>
+      <button id="segBs">Black Summer</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <section class="card" id="scriptPane">
+      <div class="steps" id="steps"></div>
+      <div class="block" id="blockHost"></div>
+      <div class="gatehint" id="gateHint" hidden></div>
+      <div class="navrow">
+        <button id="prevBtn">← Indietro</button>
+        <button id="nextBtn" class="next">Avanti →</button>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card progress">
+        <h2>Sondaggio · <span id="variantName">Lead Nuovo</span></h2>
+        <div class="pbar" id="pbar"><div></div></div>
+        <div class="pcount">Core: <b id="pDone">0</b>/<b id="pTot">11</b> (obbligatorie per fissare) · Extra: <b id="pOptDone">0</b>/<b id="pOptTot">9</b></div>
+        <ul class="missing" id="missingList"></ul>
+      </div>
+      <div class="card notecard">
+        <h2>Anteprima nota automatica → Conferme</h2>
+        <div class="nota empty" id="notaPrev">Si compone da sola man mano che rispondi…</div>
+        <div class="hint">Le Conferme la troveranno già pronta nel drawer del lead. Niente più note scritte a mano.</div>
+        <label class="hint" for="gdoNote" style="display:block;margin-top:10px;font-weight:650;color:var(--ink)">💬 Nota libera del GDO (facoltativa)</label>
+        <textarea class="gdonote" id="gdoNote" placeholder='es. "richiamare dopo le 18, preferisce WhatsApp"'></textarea>
+        <button class="copybtn" id="copyBtn">Copia nota</button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="esitobar">
+  <div class="in">
+    <span class="lab">Esito chiamata</span>
+    <button id="esNr">📵 Non risposto</button>
+    <button id="esRichiamo">🕐 Richiamo</button>
+    <button id="esScarto">🗑 Scarta</button>
+    <button id="esFissa" class="fix">📅 Fissa appuntamento</button>
+    <span class="why" id="esWhy" hidden></span>
+  </div>
+</div>
+
+<!-- Pannello valutazione finale (si apre a ogni esito tranne NR) -->
+<div class="veil" id="evalVeil" role="dialog" aria-modal="true" aria-labelledby="evTitle">
+  <div class="modal">
+    <h2 id="evTitle">Ultimi 3 tap — valutazione a caldo</h2>
+    <p class="sub" id="evSub">Il tuo giudizio vale oro per chi lavora il lead dopo di te.</p>
+    <div id="evalHost"></div>
+    <div class="row">
+      <button id="evCancel">Annulla</button>
+      <button id="evConfirm" class="pri">Conferma esito</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modale nota finale -->
+<div class="veil" id="veil" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="modal">
+    <h2 id="mTitle">✅ Appuntamento fissato</h2>
+    <p class="sub" id="mSub">Questa nota è stata generata automaticamente e inviata alle Conferme insieme al lead:</p>
+    <div class="nota" id="mNota"></div>
+    <div class="flow">📨 Nel CRM reale: nota nel drawer Conferme + notifica realtime, zero lavoro manuale.</div>
+    <div class="row">
+      <button id="mClose">Chiudi</button>
+      <button id="mReset" class="pri">Ricomincia la simulazione</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- Catalogo campi v2 ----------
+// core: obbligatorio per fissare · multi: selezione multipla · ask: domanda suggerita
+const FIELDS = {
+  // — esistenti (core) —
+  requestReason: { lbl:"Motivo della richiesta", core:true, ask:"Cos'è che ti aveva colpito della nostra pubblicità?",
+    opt:[["corso","Cerca un corso"],["valuta","Sta valutando cosa fare"],["info","Vuole informazioni"],["curiosita","Curiosità"]] },
+  expectation: { lbl:"Cosa si aspettava", core:true, ask:"Cosa speravi di ricevere lasciando i tuoi dati?",
+    opt:[["info","Ricevere info"],["materiale_gratis","Solo materiale gratuito"],["comprare","Comprare un corso"],["capire","Capire se fa per me"]] },
+  ageRange: { lbl:"Età del lead", core:true, ask:"(la stimi o emerge da sola — non chiederla a bruciapelo)",
+    opt:[["18-24","18-24"],["25-35","25-35"],["35-45","35-45"],["45-55","45-55"],["55+","55+"]] },
+  occupation: { lbl:"Stato occupazionale", core:true, ask:"Cosa fai di lavoro? Da quanto tempo?",
+    opt:[["disoccupato","Disoccupato"],["studente","Studente"],["full_time","Full time"],["part_time","Part time"],["p_iva","P. IVA"],["pensionato","Pensionato"]] },
+  mainProblem: { lbl:"Problema principale", core:true, ask:"Cosa cambieresti se potessi? Come ti fa sentire questa situazione?",
+    opt:[["economico","Economico"],["insoddisfatto","Insoddisfatto"],["tempo","Non ha tempo"],["competenze","Non ha competenze"]] },
+  digitalKnow: { lbl:"Conoscenza del digitale", core:true, ask:"Hai già visto qualcosa sulle professioni digitali?",
+    opt:[["nulla","Nulla"],["ha_visto","Ha visto qualcosa"],["conosce","Conosce le professioni"],["esperto","Esperto"]] },
+  changeWithin: { lbl:"Entro quanto vuole cambiare", core:true, ask:"Hai una tempistica precisa o è 'prima o poi'?",
+    opt:[["<30gg","Entro 30 giorni"],["30-90gg","30-90 giorni"],["indefinito","Nessuna data definita"]] },
+  changeSince: { lbl:"Da quanto cerca un cambiamento", core:true, ask:"È da molto che stai cercando di raggiungere questo obiettivo?",
+    opt:[["<6m","Meno di 6 mesi"],["6-12m","6-12 mesi"],[">12m","Più di 12 mesi"]] },
+  // — nuovi CORE —
+  obiettivo: { lbl:"Obiettivo dichiarato", core:true, ask:"Qual è l'obiettivo principale che vuoi raggiungere?",
+    opt:[["entrata_extra","Entrata extra"],["cambio_lavoro","Cambiare lavoro"],["remoto","Lavorare da remoto"],["crescita","Crescita personale"]] },
+  budgetSignal: { lbl:"Segnale budget (reazione alla quota)", core:true, ask:"Osserva la reazione quando dici '1.000-3.000€ a seconda del corso'",
+    opt:[["ok","Va avanti tranquillo"],["incerto","Domande sul pagamento / esita"],["no","Si irrigidisce / 'non posso'"]] },
+  temperatura: { lbl:"Temperatura lead", core:true, evalOnly:true, ask:"",
+    opt:[["caldo","🔥 Caldo"],["tiepido","🌤 Tiepido"],["freddo","🧊 Freddo"]] },
+  // — nuovi EXTRA —
+  figli: { lbl:"Ha figli", core:false, ask:"(emerge nel blocco 4 — ramo famiglia)",
+    opt:[["si","Sì"],["no","No"]] },
+  giaProvato: { lbl:"Cosa ha già provato", core:false, ask:"Cosa hai già provato per cambiare che non ha funzionato?",
+    opt:[["corsi_fatti","Altri corsi fatti"],["tentativi_falliti","Tentativi falliti"],["mai_provato","Mai provato nulla"]] },
+  professione: { lbl:"Professione di interesse", core:false, ask:"Hai già visto una professione che ti incuriosisce?",
+    opt:[["smm","Social Media Manager"],["copy","Copywriter"],["grafico","Graphic Designer"],["video","Video Editor"],["non_sa","Non sa ancora"]] },
+  chiDecide: { lbl:"Chi decide", core:false, ask:"Se trovassi il percorso giusto, la decisione la prendi tu o ne parli con qualcuno?",
+    opt:[["da_solo","Decide da solo"],["partner","Col partner"],["genitori","Coi genitori"]] },
+  fasciaCall: { lbl:"Fascia preferita videocall", core:false, ask:"Quando sei più libero per una videocall di mezz'ora?",
+    opt:[["mattina","Mattina"],["pranzo","Pausa pranzo"],["pomeriggio","Pomeriggio"],["sera","Sera"]] },
+  canale: { lbl:"Canale per ricontattarlo", core:false, ask:"Ti mando il link su WhatsApp — lo usi spesso, giusto?",
+    opt:[["whatsapp","WhatsApp"],["chiamata","Preferisce chiamata"]] },
+  obiezioni: { lbl:"Obiezioni emerse", core:false, evalOnly:true, multi:true, ask:"",
+    opt:[["prezzo","Prezzo"],["tempo","Tempo"],["sfiducia","Sfiducia"],["pensarci","Deve pensarci"],["terzi","Deve parlarne con terzi"],["nessuna","Nessuna"]] },
+  leva: { lbl:"Leva consigliata alle Conferme", core:false, evalOnly:true, ask:"",
+    opt:[["economica","Economica"],["famiglia","Famiglia"],["crescita","Crescita"],["urgenza","Urgenza"]] },
+};
+
+// Mapping blocco (1-based) → campi mostrati lì. evalOnly = pannello esito.
+const BLOCK_FIELDS_FULL = {
+  2: ["requestReason","expectation"],
+  3: ["giaProvato"],
+  4: ["ageRange","occupation","mainProblem","digitalKnow","figli"],
+  5: ["professione"],
+  6: ["obiettivo"],
+  7: ["changeWithin","changeSince"],
+  9: ["budgetSignal","chiDecide"],
+  10: ["fasciaCall","canale"],
+};
+const SHORT_FIELDS = ["occupation","mainProblem","obiettivo","changeWithin"];  // variante Database/BS (blocco 2)
+const EVAL_FIELDS = ["temperatura","obiezioni","leva"];  // pannello esito (temperatura core)
+
+// ---------- Script Fenice — testo 1:1 da ScriptWidget.tsx (NON MODIFICATO).
+// Unica sostituzione di rendering (come fa il widget reale): #NOME# → Mario.
+const BLOCKS = [
+ { t:"1 — Apertura", c:`Buongiorno, Mario?
+🗣️
+Ciao Mario! Sono #MIO NOME#, il tutor di Fenice Academy, professioni del futuro! Come stai? Tutto bene?
+🗣️`,
+   v:"Sorridi mentre parli — si sente al telefono. Voce piena, dal petto. Energia ALTA, entusiasmo vero. Ritmo leggermente veloce — devi sembrare una persona di valore." },
+ { t:"2 — Gestione risposta", c:`"Tutto bene"
+Ottimo! Senti, ti chiamo perché hai lasciato i tuoi dati sulla nostra pubblicità riguardo le professioni digitali — mi ha incuriosito, volevo capire direttamente da te: cos'è che ti aveva colpito?
+
+"Più o meno / insomma / male"
+Caspita, mi dispiace... spero nulla di grave.
+(PAUSA 2-3 secondi — NON riempire il silenzio)
+🗣️
+Ti chiamo perché hai lasciato i tuoi dati sulla nostra pubblicità riguardo le professioni digitali — e magari è proprio il momento giusto per parlarne, no? Cosa ti aveva incuriosito?
+
+"Non ricordo"
+Fenice Academy! Formazione sulle professioni digitali — social media manager, copywriter, graphic designer...
+Ti chiamo perché hai lasciato i tuoi dati su una nostra pubblicità su FB o IG — magari era un po' di tempo fa! Tu attualmente lavori già nel digitale o fai tutt'altro?
+
+Se continua: "Nessun problema, capita! L'importante è: ti incuriosisce il mondo digitale? Perché se sì, vale la pena di fare due chiacchiere."
+
+"Non ho tempo / Mi richiami"
+Immaginavo tu fossi impegnato! Proprio per questo faccio chiamate da massimo 5 minuti — così sfruttiamo bene il tempo di entrambi. Okay?
+Dimmi solo velocemente: cosa ti aveva colpito delle professioni digitali?
+
+Se insiste: "Assolutamente, ti richiamo volentieri! Dimmi quando preferisci — domani mattina o pomeriggio?"
+
+"Mi avete già chiamato"
+Certo, mi ricordo! E proprio per questo ti richiamo — in Fenice abbiamo introdotto delle novità importanti. Volevo capire se adesso possiamo venire incontro meglio alle tue esigenze. Ricordami: come mai ti stavi interessando alle professioni digitali?`,
+   v:"Adatta la tua energia a quella del lead. Se è entusiasta, sii entusiasta. Se è giù, abbassa il volume, parla più lentamente, fai sentire che ti importa. Poi risali gradualmente." },
+ { t:"3 — Motivazione interesse", c:`"Curiosità"
+Beh oggi se ne fa un gran parlare, è normale essere curiosi! Aiutami a capire meglio — tu oggi lavori in questo settore o fai tutt'altro?
+
+"Voglio cambiare lavoro / Seconda entrata"
+Interessante... e dimmi, questa cosa la stai valutando da poco o è un pensiero che hai da un po'?
+🗣️
+
+"Studente"
+Cosa stai studiando? A che punto sei? Lavori anche?
+Hai valutato se sei disposto ad investire in un percorso di formazione?`,
+   v:"Passa dall'entusiasmo alla curiosità. Parla meno e ascolta il DOPPIO. Il tuo tono dice: 'sono genuinamente interessato a te'." },
+ { t:"4 — Analisi problema", c:null,
+   v:"Le prime domande: tono tranquillo, amichevole — come un amico.\nLe domande centrali: tono più serio, empatico — come un dottore.\nLe ultime domande: voce bassa, lenta, PAUSE LUNGHE (3-4 sec) dopo la risposta. Il silenzio è potentissimo.\nRipeti le parole esatte del lead. Se dice 'mi sento bloccato', tu dici 'capisco, ti senti bloccato... e da quanto tempo?'",
+   check:{ min:8, sections:[
+     { t:"Se lavora", items:[
+       "Cosa fai di lavoro? Da quanto tempo?",
+       "Part-time o full-time? Dipendente o libero professionista?",
+       "Sei soddisfatto del tuo lavoro attuale?",
+       "Cosa cambieresti se potessi?",
+       "Quanto guadagni più o meno? Ti basta per vivere come vorresti?",
+       "Hai mai pensato di avere un'entrata alternativa?",
+       "Ti ci vedi a fare questo lavoro per tutta la vita?",
+       "Ti senti valorizzato nel lavoro che fai?",
+       "Cosa hai già provato per cambiare e non ha funzionato?",
+       "Se la situazione non cambiasse nei prossimi 2 anni, ti andrebbe bene?",
+       "Come ti fa sentire tutto questo? (PAUSA — lascialo parlare)",
+       "Quanto ti costa questa situazione, non solo economicamente ma di tempo e serenità?"
+     ]},
+     { t:"Se non lavora", items:[
+       "Da quanto tempo sei disoccupato/a?",
+       "Qual è l'ultimo lavoro che hai fatto?",
+       "Cosa è successo? Finito il contratto o sei andato/a via?",
+       "Hai provato a cercare lavoro nel tradizionale? Come sta andando?",
+       "Come ti fa sentire dipendere da un'altra persona economicamente?",
+       "Hai un piano concreto per cambiare la situazione?",
+       "Se la tua situazione non cambiasse, ti andrebbe bene?",
+       "Come immagini la tua vita tra un anno se non cambi nulla?",
+       "Cosa hai già provato che non ha funzionato?",
+       "Quanto pesa questa situazione su di te quotidianamente?"
+     ]},
+     { t:"Se ha figli", items:[
+       "Con il lavoro che hai, riesci a stare con loro quanto vorresti?",
+       "Ti godi la famiglia come vorresti?",
+       "Come ti senti rispetto alla gestione economica familiare?",
+       "Cosa ti preoccupa di più per il loro futuro?",
+       "Cosa hai già provato che non ha funzionato?"
+     ]},
+     { t:"Se non ha figli", items:[
+       "Riesci a dedicare tempo a te stesso? Viaggiare? Hobby?",
+       "Ti senti in ritardo rispetto ai tuoi coetanei?",
+       "Tra 5 anni la tua situazione sarà diversa o identica?",
+       "Cosa ti trattiene dal fare un cambiamento?",
+       "Cosa hai già provato che non ha funzionato?"
+     ]}
+   ]}},
+ { t:"5 — Professione", c:`Tranquillo, siamo qui proprio per valutare delle alternative e capire come aiutarti grazie al mondo digitale. Tu hai già visto una professione che ti incuriosisce?
+
+"Vuole farne una"
+Il [professione] è un'ottima scelta — c'è tantissima richiesta in questo momento. Però dipende anche dai tuoi obiettivi: cosa vorresti ottenere da un lavoro nel digitale?
+
+"Non sa cosa fare"
+Capire se è più razionale/analitico o creativo, poi:
+Guarda, per te vedrei bene il [professione] — è perfetto per chi [match]. Però la cosa più importante è capire prima i tuoi obiettivi.`,
+   v:"Torna ad energia ALTA. Quando suggerisci la professione, voce sicura, ZERO esitazione. Tu sei l'esperto." },
+ { t:"6 — Analisi obiettivi", c:null,
+   v:"Tono che SALE, entusiasta, positivo. Qui parli del futuro del lead — deve sentire la differenza tra 'dove sei' (problema, tono basso) e 'dove vuoi arrivare' (obiettivo, tono alto). Tu sei il ponte.",
+   check:{ min:5, sections:[
+     { t:"Domande obiettivi", items:[
+       "Qual è l'obiettivo principale che vuoi raggiungere?",
+       "Hai una tempistica precisa o è 'prima o poi'?",
+       "Dove vorresti essere tra 6 mesi?",
+       "Se questa cosa funzionasse, cosa cambierebbe concretamente?",
+       "Cosa ti manca oggi per arrivare al tuo obiettivo?",
+       "C'è qualcosa che ti ha fermato finora?",
+       "Che tipo di vita vuoi costruirti nei prossimi anni?",
+       "Preferisci massimizzare guadagni, tempo libero o stabilità?"
+     ]}
+   ]}},
+ { t:"7 — Urgenza obiettivo", c:`"È da molto che stai cercando di raggiungere questo obiettivo?"
+
+Se risponde POCO:
+"Ah, e come mai proprio adesso vorresti iniziare un percorso per avere [obiettivo]?"
+
+Se risponde TANTO:
+"Ah, e come mai non sei ancora riuscito a farlo?"
+(PAUSA LUNGA 3-4 secondi — non dire nulla)`,
+   v:"Se risponde TANTO: dopo la pausa, voce bassa, calma, sincera — come se stessi dicendo una verità importante a un amico." },
+ { t:"8 — Bridge al pitch", c:`"Perfetto Mario, sono convinto che noi possiamo aiutarti a fare [OBIETTIVO] e adesso ti spiego come, ok?"`,
+   v:"Cambio di marcia. Fino ad ora ascoltavi. Adesso SEI L'ESPERTO. Voce che sale, tono fermo, dal petto. Certezza totale.",
+   warn:"NON PASSARE AL PITCH SE NON AVETE PARLATO ALMENO 4 MINUTI" },
+ { t:"9 — Pitch", c:`"Considera che noi abbiamo percorsi davvero completi, composti da 3 elementi fondamentali. Adesso riassumo molto, poi ci sentiamo in una videochiamata per vedere tutti i dettagli, okay?"
+
+1. TEORIA
+"Per apprendere le competenze richieste — immagino tu abbia una vita abbastanza piena, vero?
+(aspetta il sì)
+Allora le nostre lezioni sono perfette perché le guardi quando e dove vuoi."
+
+2. PRATICA
+"Stage in azienda — immagino che orari fissi ti sarebbero scomodi, vero?
+(aspetta il sì)
+Immaginavo — per questo faremo lo stage da remoto e con orari flessibili."
+
+3. COLLEGAMENTO AL LAVORO
+(ABBASSA il volume, parla quasi sussurrando)
+"Fenice Academy garantisce A CONTRATTO due colloqui di lavoro a fine corso."
+(PAUSA 2 secondi — torna a volume normale)
+"Pensi che sia facile cercare lavoro in autonomia? Proprio per questo noi te li portiamo noi."
+
+"Insomma… molto completo e perfetto anche per te che parti da zero.
+Prevede una quota di iscrizione che varia dai 1.000 ai 3.000€ a seconda del corso.
+Ma sai cosa penso Mario? Che il vero punto sia prima capire bene di cosa si tratta e se è la cosa che fa per te.
+Anzi, tu di dove sei?"`,
+   v:"3 livelli tonali:\n• Teoria = entusiasta, positivo\n• Pratica = rassicurante\n• Garanzia lavoro = SUSSURRA, poi pausa, poi torna normale. Questo contrasto la rende memorabile.\n'Tu di dove sei?' = tono leggero, come tra amici." },
+ { t:"10 — Presa appuntamento", c:`"Okay, organizziamoci una videocall. Almeno ci diamo anche un volto…
+Parliamo una mezz'ora e vediamo insieme come e se, lavorando nel digitale, puoi risolvere [PROBLEMA] e arrivare a [OBIETTIVO]. Okay?"
+
+SE FA PROBLEMI SULLA QUOTA:
+"Comprendo che sia una scelta importante. Proprio per questo fissiamo una videochiamata per capire prima di tutto se il digitale è adatto a te e se è ciò che vuoi fare."
+
+Ti mando il link della mia agenda virtuale su WhatsApp — dimmi quando arriva.
+
+⚠️ "SEI SICURO/A, ALLE ORE X, DI AVERE 45 MINUTI TRANQUILLI IN UN POSTO TRANQUILLO?"
+
+Ti chiedo di leggere il nome della mia collega che appare dopo aver cliccato Invia.
+(legge: [NOME CONFERMA])`,
+   v:"Tono ORGANIZZATIVO — come se stessi fissando qualcosa di naturale e ovvio. Non chiedi il permesso, organizzi. 'Organizziamoci' non 'ti andrebbe di...'" },
+ { t:"11 — Chiusura", c:`"Perfetto. Adesso ti dico chi è [NOME CONFERMA] — prima però ti mando un video su WhatsApp di circa 20 minuti, che ti spiega chi siamo, cosa facciamo, le professioni, i pacchetti e le quote di iscrizione."
+
+"È FONDAMENTALE vedere il video subito appena puoi, già stasera, così ti fai un'idea generale di tutto."
+(pausa — aspetta che dica ok)
+
+"Nella giornata di [GIORNO] ti chiamerà la mia collega [NOME CONFERMA] per effettuare una PRESELEZIONE e mandarti il link per la videochiamata che faremo giorno [X] alle ore [X]."
+
+"Tutto chiaro?"
+🗣️
+
+"È stato un piacere Mario. Ci vediamo in videochiamata — vedrai che sarà una bella chiacchierata. A presto!"`,
+   v:"Rallenta tutto. Voce bassa, calda, sicura. Come un mentore che dà le ultime indicazioni. L'ultima emozione che lasci è quella che il lead ricorderà." },
+];
+
+// ---------- Stato ----------
+let variant = "nuovo";
+let cur = 0;
+let answers = {};          // field -> value | array (multi)
+let checks = {};
+let pendingEsito = null;
+const $ = (id) => document.getElementById(id);
+
+const inCallFields = () => variant === "nuovo"
+  ? Object.keys(FIELDS).filter(f => !FIELDS[f].evalOnly)
+  : SHORT_FIELDS;
+const allActiveFields = () => inCallFields().concat(EVAL_FIELDS.filter(f => variant === "nuovo" || f === "temperatura"));
+const coreFields = () => allActiveFields().filter(f => FIELDS[f].core);
+const extraFields = () => allActiveFields().filter(f => !FIELDS[f].core);
+const isAnswered = (f) => { const v = answers[f]; return FIELDS[f].multi ? Array.isArray(v) && v.length > 0 : !!v; };
+const fieldsForBlock = (i) => {
+  if (variant === "nuovo") return BLOCK_FIELDS_FULL[i + 1] || [];
+  return i === 1 ? SHORT_FIELDS : [];
+};
+const labelOf = (f, v) => { const o = FIELDS[f].opt.find(x => x[0] === v); return o ? o[1] : v; };
+
+// ---------- Nota automatica ----------
+function buildNote(esito) {
+  const a = answers, miss = "—";
+  const g = (f) => isAnswered(f) ? (FIELDS[f].multi ? a[f].map(v => labelOf(f, v)).join(", ") : labelOf(f, a[f])) : miss;
+  const has = (f) => isAnswered(f);
+  const src = variant === "nuovo" ? "Lead nuovo (AC)" : variant === "db" ? "Database" : "Lancio Black Summer";
+  let L = ["📋 NOTA AUTOMATICA — Mario Rossi", "Origine: " + src + (esito ? " · Esito: " + esito : "")];
+  if (variant === "nuovo") {
+    L.push("• Profilo: " + g("ageRange") + " anni · " + g("occupation") + (has("figli") ? (a.figli === "si" ? " · con figli" : " · senza figli") : "") + " · digitale: " + g("digitalKnow"));
+    L.push("• Motivo: " + g("requestReason") + " — si aspetta: " + g("expectation"));
+    L.push("• Problema: " + g("mainProblem") + (has("giaProvato") ? " · già provato: " + g("giaProvato").toLowerCase() : ""));
+    L.push("• Obiettivo: " + g("obiettivo") + (has("professione") ? " → interessa: " + g("professione") : ""));
+    L.push("• Urgenza: cambia " + (has("changeWithin") ? g("changeWithin").toLowerCase() : miss) + " · cerca da " + (has("changeSince") ? g("changeSince").toLowerCase() : miss));
+    L.push("• 💰 Budget: " + g("budgetSignal") + (has("chiDecide") ? " · decide: " + g("chiDecide").toLowerCase() : ""));
+    if (has("fasciaCall") || has("canale")) L.push("• 📞 Logistica: " + [has("fasciaCall") ? "preferisce " + g("fasciaCall").toLowerCase() : "", has("canale") ? g("canale") : ""].filter(Boolean).join(" · "));
+  } else {
+    L.push("• Occupazione: " + g("occupation") + " · Problema: " + g("mainProblem"));
+    L.push("• Obiettivo: " + g("obiettivo") + " · cambia " + (has("changeWithin") ? g("changeWithin").toLowerCase() : miss));
+  }
+  const val = [];
+  if (has("temperatura")) val.push(g("temperatura"));
+  if (has("obiezioni")) val.push("obiezioni: " + g("obiezioni").toLowerCase());
+  if (has("leva")) val.push("leva consigliata: " + g("leva").toLowerCase());
+  if (val.length) L.push("• 🌡 Valutazione GDO: " + val.join(" · "));
+  const note = $("gdoNote").value.trim();
+  if (note) L.push('💬 Note GDO: "' + note + '"');
+  L.push("(compilata in chiamata · " + new Date().toLocaleDateString("it-IT") + ")");
+  return L.join("\n");
+}
+
+// ---------- Render domanda (riusabile: blocchi + pannello esito) ----------
+function renderQuestion(f, host) {
+  const def = FIELDS[f];
+  const q = document.createElement("div");
+  q.className = "q" + (def.core ? "" : " opt") + (isAnswered(f) ? " ansd" : "");
+  if (def.ask) { const ask = document.createElement("div"); ask.className = "ask"; ask.textContent = def.ask; q.appendChild(ask); }
+  const l = document.createElement("div"); l.className = "lbl";
+  const dot = document.createElement("span"); dot.className = "dot";
+  l.appendChild(dot); l.appendChild(document.createTextNode(def.lbl));
+  if (!def.core) { const t = document.createElement("span"); t.className = "optTag"; t.textContent = "facoltativa"; l.appendChild(t); }
+  q.appendChild(l);
+  const ch = document.createElement("div"); ch.className = "chips";
+  def.opt.forEach(([val, lab]) => {
+    const btn = document.createElement("button");
+    btn.textContent = lab;
+    const sel = def.multi ? (answers[f] || []).includes(val) : answers[f] === val;
+    if (sel) btn.className = "sel";
+    btn.onclick = () => {
+      if (def.multi) {
+        const arr = answers[f] || [];
+        answers[f] = sel ? arr.filter(x => x !== val) : [...arr, val];
+      } else answers[f] = sel ? undefined : val;
+      renderAll();
+      if ($("evalVeil").classList.contains("open")) renderEvalPanel();
+    };
+    ch.appendChild(btn);
+  });
+  q.appendChild(ch); host.appendChild(q);
+}
+
+// ---------- Render ----------
+function renderSteps() {
+  const host = $("steps"); host.innerHTML = "";
+  BLOCKS.forEach((b, i) => {
+    const btn = document.createElement("button");
+    btn.textContent = i + 1; btn.title = b.t;
+    const fs = fieldsForBlock(i).filter(f => FIELDS[f].core);
+    const done = fs.length > 0 && fs.every(isAnswered);
+    if (i === cur) btn.className = "cur";
+    else if (i < cur) btn.className = "done";
+    if (fs.length && !done && i !== cur) btn.classList.add("need");
+    btn.onclick = () => { cur = i; renderAll(); };
+    host.appendChild(btn);
+  });
+}
+
+function renderBlock() {
+  const b = BLOCKS[cur], host = $("blockHost");
+  host.innerHTML = "";
+  const h = document.createElement("h2"); h.textContent = b.t; host.appendChild(h);
+  const v = document.createElement("div"); v.className = "voice"; v.textContent = b.v; host.appendChild(v);
+  if (b.warn) { const w = document.createElement("div"); w.className = "warnbox"; w.textContent = "⚠️ " + b.warn; host.appendChild(w); }
+  if (b.c) { const s = document.createElement("div"); s.className = "scriptText"; s.textContent = b.c; host.appendChild(s); }
+  if (b.check) {
+    const wrap = document.createElement("div"); wrap.className = "check";
+    checks[cur] = checks[cur] || new Set();
+    b.check.sections.forEach(sec => {
+      const h3 = document.createElement("h3"); h3.textContent = sec.t; wrap.appendChild(h3);
+      sec.items.forEach(item => {
+        const key = sec.t + "|" + item;
+        const lab = document.createElement("label");
+        const cb = document.createElement("input"); cb.type = "checkbox";
+        cb.checked = checks[cur].has(key);
+        cb.onchange = () => { cb.checked ? checks[cur].add(key) : checks[cur].delete(key); renderAll(); };
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(item)); wrap.appendChild(lab);
+      });
+    });
+    const cnt = document.createElement("div"); cnt.className = "checkCount";
+    const n = checks[cur].size;
+    cnt.textContent = n >= b.check.min ? `✓ ${n} domande fatte (minimo ${b.check.min})` : `${n}/${b.check.min} domande minime fatte`;
+    if (n >= b.check.min) cnt.classList.add("ok");
+    wrap.appendChild(cnt);
+    host.appendChild(wrap);
+  }
+  const fs = fieldsForBlock(cur);
+  if (fs.length) {
+    const sv = document.createElement("div"); sv.className = "survey";
+    const cap = document.createElement("div"); cap.className = "cap";
+    cap.textContent = variant === "nuovo" ? "📝 Cattura le risposte mentre parlate" : "📝 Info per le Conferme — 4 tap e basta";
+    sv.appendChild(cap);
+    fs.forEach(f => renderQuestion(f, sv));
+    host.appendChild(sv);
+  }
+}
+
+function blockGateOk(i) {
+  const b = BLOCKS[i];
+  const fs = fieldsForBlock(i).filter(f => FIELDS[f].core);  // solo le core bloccano l'avanzamento
+  const surveyOk = fs.every(isAnswered);
+  const checkOk = !b.check || (checks[i] && checks[i].size >= b.check.min);
+  return { ok: surveyOk && checkOk, surveyOk, checkOk };
+}
+
+function renderNav() {
+  $("prevBtn").disabled = cur === 0;
+  const g = blockGateOk(cur);
+  const last = cur === BLOCKS.length - 1;
+  $("nextBtn").disabled = last || !g.ok;
+  $("nextBtn").textContent = last ? "Fine script" : "Avanti →";
+  const hint = $("gateHint");
+  if (!g.ok && !last) {
+    hint.hidden = false;
+    hint.textContent = !g.surveyOk
+      ? "⛔ Per avanzare rispondi alle domande core (pallino arancio) di questo blocco."
+      : "⛔ Spunta il numero minimo di domande della checklist per avanzare.";
+  } else hint.hidden = true;
+}
+
+function renderSide() {
+  const core = coreFields(), extra = extraFields();
+  const cd = core.filter(isAnswered).length, ed = extra.filter(isAnswered).length;
+  $("pDone").textContent = cd; $("pTot").textContent = core.length;
+  $("pOptDone").textContent = ed; $("pOptTot").textContent = extra.length;
+  const pb = $("pbar"); pb.classList.toggle("full", cd === core.length);
+  pb.firstElementChild.style.width = (cd / core.length * 100) + "%";
+  const ml = $("missingList"); ml.innerHTML = "";
+  core.concat(extra).forEach(f => {
+    const li = document.createElement("li");
+    li.textContent = FIELDS[f].lbl;
+    if (!FIELDS[f].core) li.classList.add("opt");
+    if (isAnswered(f)) li.classList.add("done");
+    ml.appendChild(li);
+  });
+  const anyAns = allActiveFields().some(isAnswered) || $("gdoNote").value.trim();
+  const np = $("notaPrev");
+  np.classList.toggle("empty", !anyAns);
+  np.textContent = anyAns ? buildNote() : "Si compone da sola man mano che rispondi…";
+  $("variantName").textContent = variant === "nuovo" ? "Lead Nuovo" : variant === "db" ? "Database (corto)" : "Black Summer (corto)";
+}
+
+function renderEsito() {
+  // Il fissaggio richiede le core in-chiamata (temperatura si dà nel pannello esito).
+  const missing = coreFields().filter(f => f !== "temperatura" && !isAnswered(f));
+  const btn = $("esFissa"), why = $("esWhy");
+  btn.disabled = missing.length > 0;
+  if (missing.length) {
+    why.hidden = false;
+    why.textContent = `🔒 Fissaggio bloccato — mancano ${missing.length} core: ` + missing.map(f => FIELDS[f].lbl).join(", ");
+  } else why.hidden = true;
+}
+
+function renderAll() { renderSteps(); renderBlock(); renderNav(); renderSide(); renderEsito(); }
+
+// ---------- Pannello valutazione esito ----------
+function renderEvalPanel() {
+  const host = $("evalHost"); host.innerHTML = "";
+  const fs = variant === "nuovo" ? EVAL_FIELDS : ["temperatura"];
+  fs.forEach(f => renderQuestion(f, host));
+  $("evConfirm").disabled = !isAnswered("temperatura");
+  $("evConfirm").textContent = isAnswered("temperatura") ? "Conferma esito" : "Serve la temperatura (1 tap)";
+}
+function openEval(esito) {
+  pendingEsito = esito;
+  $("evSub").textContent = esito === "FISSATO"
+    ? "Prima di inviare tutto alle Conferme: il tuo giudizio a caldo."
+    : `Esito "${esito}" — lascia il giudizio a caldo per chi riprenderà il lead.`;
+  renderEvalPanel();
+  $("evalVeil").classList.add("open");
+}
+$("evCancel").onclick = () => { pendingEsito = null; $("evalVeil").classList.remove("open"); };
+$("evConfirm").onclick = () => {
+  $("evalVeil").classList.remove("open");
+  if (pendingEsito === "FISSATO") {
+    $("mNota").textContent = buildNote("APPUNTAMENTO FISSATO");
+    $("veil").classList.add("open");
+  } else {
+    toast(pendingEsito === "RICHIAMO" ? "🕐 Richiamo salvato — risposte e valutazione memorizzate" : "🗑 Scartato — dati salvati per i report qualità");
+  }
+  pendingEsito = null;
+};
+
+// ---------- Eventi ----------
+$("prevBtn").onclick = () => { if (cur > 0) { cur--; renderAll(); } };
+$("nextBtn").onclick = () => { if (cur < BLOCKS.length - 1) { cur++; renderAll(); } };
+$("gdoNote").oninput = () => renderSide();
+
+function setVariant(v, btn) {
+  variant = v; answers = {}; checks = {}; cur = 0;
+  document.querySelectorAll(".seg button").forEach(b => b.classList.remove("on"));
+  btn.classList.add("on");
+  renderAll();
+}
+$("segNuovo").onclick = (e) => setVariant("nuovo", e.target);
+$("segDb").onclick = (e) => setVariant("db", e.target);
+$("segBs").onclick = (e) => setVariant("bs", e.target);
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2400);
+}
+$("esNr").onclick = () => toast("📵 Non risposto — nessun sondaggio richiesto, callCount +1");
+$("esRichiamo").onclick = () => openEval("RICHIAMO");
+$("esScarto").onclick = () => openEval("SCARTO");
+$("esFissa").onclick = () => openEval("FISSATO");
+$("mClose").onclick = () => $("veil").classList.remove("open");
+$("mReset").onclick = () => { $("veil").classList.remove("open"); answers = {}; checks = {}; cur = 0; $("gdoNote").value = ""; renderAll(); };
+$("copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText(buildNote()); toast("Nota copiata ✓"); }
+  catch { toast("Copia non riuscita — seleziona il testo a mano"); }
+};
+
+renderAll();
+</script>
