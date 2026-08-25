@@ -232,10 +232,52 @@ vista lato GDO — il modello dati non cambia.
 - QA nel browser sulla pagina riscritta, e verifica da account GDO che **nulla**
   sia cambiato di visibile a parte il nuovo volume minimo.
 
-## 9. Fuori perimetro (possibili estensioni)
+## 9. Il centralino: verifica di fattibilità in corso
 
-- **Tabulati del centralino VoIP dietro MicroSIP**: darebbero durata e orario
-  reali di ogni telefonata, trasformando ogni stima in misura. Richiede accesso
-  al pannello del provider.
+In ufficio c'è un centralino raggiungibile solo dalla LAN su
+`http://192.168.1.7/admin/config.php` — il percorso indica quasi certamente
+**FreePBX** (interfaccia web di Asterisk), con un gateway GSM per le SIM e
+MicroSIP come telefono sui PC.
+
+Se espone i tabulati (CDR), diventano la fonte migliore in assoluto: orario di
+inizio, numero chiamato, durata di conversazione effettiva (`billsec`) ed esito
+tecnico di **ogni** chiamata. Conseguenze sul design:
+
+- il tempo al telefono si misura invece di stimarlo: cadono il tetto
+  conversazione, la durata anomala per tipo di esito e la classificazione
+  CERTO / PROBABILE / CONVERSAZIONE della fase 1;
+- il tempo morto fra due chiamate è la differenza fra la fine di una e l'inizio
+  della successiva, al secondo;
+- si vedono fatti che il CRM non può conoscere: chiamate senza esito registrato,
+  esiti senza chiamata, chiamate a numeri non presenti nel CRM.
+
+Il tracker CRM (fase 2) resterebbe utile per ciò che i tabulati non sanno —
+quanto costa compilare un esito, i lead aperti e mai chiamati — ma smetterebbe
+di essere il pezzo portante.
+
+**Vincoli.** Il centralino è in LAN, il CRM è su Vercel: la connessione va fatta
+in uscita, con un piccolo agente sul PC dell'ufficio che legge i tabulati e li
+invia firmati al CRM (stesso schema HMAC già in uso per il bot fissatore).
+Il pannello del centralino **non va esposto su internet** in nessun caso: i PBX
+raggiungibili da fuori sono un bersaglio classico e le SIM sono aziendali.
+
+**Verifica da fare in ufficio (sola lettura):**
+
+1. Versione e conferma che sia FreePBX (visibile nell'intestazione del pannello).
+2. `Reports → CDR Reports`: esiste? Da quale data partono i dati? Quante
+   chiamate risultano in una giornata tipo?
+3. Nella stessa pagina: c'è l'export in CSV?
+4. `Applications → Extensions`: quanti interni esistono e con che numerazione —
+   **serve la mappatura interno ↔ GDO**, senza la quale i tabulati non sono
+   attribuibili alle persone.
+5. Esiste un accesso SSH al box e le credenziali del database `asteriskcdrdb`?
+   (Serve solo per automatizzare; per la verifica basta l'export CSV.)
+6. Il box è sempre acceso e chi ne ha le credenziali di amministrazione?
+
+Esito della verifica: se i punti 2 e 4 rispondono sì, il progetto si riorienta
+sui tabulati prima di scrivere il tracker.
+
+## 10. Fuori perimetro
+
 - **Registrazioni delle chiamate**: analisi qualitativa, progetto a sé.
 - Volume minimo personalizzato per GDO (oggi scelto unico per tutti).
