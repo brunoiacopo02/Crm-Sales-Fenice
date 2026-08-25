@@ -90,7 +90,7 @@ esistono già nell'interfaccia:
 
 | Marker | Aggancio nel codice | Segmento che chiude |
 |---|---|---|
-| `copiedAt` — copia il numero | `LeadCard.tsx:278` (bottone "Copia numero") | **Tempo morto fra due chiamate**: dal salvataggio dell'esito precedente a questo |
+| `calledAt` — parte la chiamata | click sul numero nella card (`LeadCard.tsx:258-260`), intercettato in fase di **cattura** su `window`; in subordine il bottone "Copia numero" (`LeadCard.tsx:278`) | **Tempo morto fra due chiamate**: dal salvataggio dell'esito precedente a questo |
 | `openedAt` — apre la scheda esito | `PipelineBoard.tsx:190` (`onOutcomeClick` → `setSelectedLeadId`) | Durata del tentativo: squilli + conversazione |
 | `savedAt` — salva l'esito | `pipelineActions.ts:361` (insert su `callLogs`) | Compilazione dell'esito e delle note |
 | `idleSeconds` — secondi senza input nel ciclo | listener su mouse/tastiera/scroll/visibilità | Indicatore informativo, **mai** usato come prova a carico |
@@ -116,12 +116,28 @@ giorno per l'intera squadra. Un flush periodico copre i cicli abbandonati
 pg_cron, come già fatto per `pipelineSnapshots` — vincolo dovuto ai due alert
 Disk IO Budget già ricevuti da Supabase.
 
-**Copertura del marker "copia numero".** Un GDO che digita il numero a mano
-invece di copiarlo non produce `copiedAt`. La copertura va misurata nel QA
-(percentuale di cicli con `copiedAt` valorizzato) e mostrata nella pagina, perché
-determina l'affidabilità della metrica principale. Se risultasse bassa, il
-fallback è usare `openedAt` come inizio ciclo, accettando che il tempo morto
-misurato sia sottostimato.
+**Come si intercetta l'inizio della chiamata.** I GDO chiamano cliccando
+direttamente sul numero nella card: un'estensione del browser trasforma il numero
+in un elemento cliccabile e passa la chiamata a MicroSIP. Quel click avviene
+comunque dentro il DOM del CRM, quindi è intercettabile — a patto di ascoltarlo
+nel punto giusto:
+
+- listener registrato su `window` in **fase di cattura** (`capture: true`), cioè
+  il primo anello della catena di propagazione. Arriva prima di qualunque
+  gestore dell'estensione, anche se questa chiama `stopPropagation()`;
+- il contenitore del numero nella card riceve un attributo `data-lead-phone`
+  con l'id del lead, così il listener risale al lead dal bersaglio del click;
+- l'estensione può sostituire o incapsulare il nodo di testo del numero: il
+  listener non deve dipendere dall'identità del nodo cliccato, ma solo dal fatto
+  che si trovi dentro un contenitore marcato (`closest('[data-lead-phone]')`);
+- il click sul bottone "Copia numero" (`LeadCard.tsx:278`) vale come marker
+  equivalente per chi usa quel flusso. Si prende il primo dei due che avviene.
+
+**Copertura da verificare.** La percentuale di cicli con `calledAt` valorizzato è
+l'indicatore di affidabilità della metrica principale, va misurata nel QA e
+mostrata nella pagina. Chi digitasse il numero a mano sul softphone non produce
+il marker. Se la copertura risultasse bassa, il fallback è usare `openedAt` come
+inizio ciclo, accettando che il tempo morto misurato sia sottostimato.
 
 ### Fase 3 — La pagina `/monitor-pause` riscritta
 
@@ -160,7 +176,7 @@ giustificabile in sé e non rivela nulla del tracker.
 Nuova tabella `workCycles` (una riga per lead lavorato):
 
 - `id`, `companyId`, `userId`, `leadId`
-- `copiedAt`, `openedAt`, `savedAt` (timestamptz, nullable tranne `savedAt`)
+- `calledAt`, `openedAt`, `savedAt` (timestamptz, nullable tranne `savedAt`)
 - `idleSeconds`, `activeSeconds` (integer)
 - `outcome` (denormalizzato dal callLog, per il confronto con la mediana di tipo)
 - `callLogId` (nullable, per i cicli abbandonati)
@@ -187,13 +203,18 @@ vista lato GDO — il modello dati non cambia.
 
 ## 7. Rischi e limiti
 
-- **Copertura del marker "copia numero"** (vedi sopra): è il rischio principale
+- **Copertura del marker di inizio chiamata** (vedi sopra): è il rischio principale
   sull'affidabilità della metrica di punta.
 - **Cicli sovrapposti**: un GDO che apre più schede insieme produce cicli
   intrecciati. Vanno rilevati e marcati, non silenziosamente sommati.
-- **Ordine invertito**: chi chiama prima e apre la scheda dopo produce cicli
-  brevissimi e tempi morti gonfiati. Da verificare nel QA osservando la
-  distribuzione delle durate.
+- **Ordine dei marker non garantito**: c'è chi apre la scheda dell'esito prima di
+  cliccare il numero e chi fa il contrario. I segmenti vanno quindi calcolati
+  ordinando i marker per orario, non assumendo la sequenza
+  `calledAt` → `openedAt` → `savedAt`; un segmento negativo è un bug, non un dato.
+- **Il DOM manipolato dall'estensione**: l'estensione che rende cliccabili i
+  numeri modifica il DOM della pagina. Il listener non deve dipendere dal nodo
+  esatto cliccato (vedi sezione 4), e il QA deve verificare il comportamento con
+  l'estensione realmente installata, non solo su un browser pulito.
 - **Attività fuori CRM**: chi lavora su WhatsApp o su un altro schermo risulta
   inattivo. È corretto rispetto all'obiettivo, ma va detto leggendo i numeri.
 - **Fase 1 e fase 2 non sono confrontabili fra loro**: misurano cose diverse.
@@ -205,7 +226,7 @@ vista lato GDO — il modello dati non cambia.
   giornata sintetica e deve classificarla correttamente in CERTO / PROBABILE /
   CONVERSAZIONE, tetto incluso.
 - Test sul calcolo dei segmenti del ciclo, inclusi i casi degeneri: ciclo senza
-  `copiedAt`, ciclo abbandonato, cicli sovrapposti.
+  `calledAt`, ciclo abbandonato, cicli sovrapposti.
 - Riconciliazione SQL: i totali della fase 1 devono ricadere sui numeri della
   sezione 2 di questo documento.
 - QA nel browser sulla pagina riscritta, e verifica da account GDO che **nulla**
