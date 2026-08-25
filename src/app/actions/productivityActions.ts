@@ -14,6 +14,7 @@ import { pbxCalls, users, leads } from "@/db/schema"
 import { and, gte, lte, lt, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
+import { shiftBoundsFor, lateAndEarly } from "@/lib/cdr/shift"
 import { apptSetAt } from "@/lib/kpi/canon"
 import { dayBoundsRome } from "@/lib/dateUtils"
 
@@ -23,51 +24,12 @@ const MIN_CALLS_PER_DAY = 40
 /** Ruoli che possono vedere produttività telefonica e qualità appuntamenti dei GDO. */
 const PRODUCTIVITY_VIEW_ROLES = ['ADMIN', 'MANAGER', 'TL']
 
-/**
- * Turno reale degli operatori, fornito dal committente il 2026-08-25.
- * Prima si misurava la finestra osservata (prima-ultima chiamata, ~354 min),
- * che nascondeva i bordi: chi comincia tardi o stacca presto non si vedeva.
- * Le metriche di turno vanno invece calcolate su questi orari fissi.
- *
- * Costanti locali (non esportate): un file "use server" non può esportare
- * altro che funzioni async, e comunque vanno cambiate in un punto solo.
- */
-// Feriali (lun-ven): 13:30-20:00 = 390 minuti.
-const WEEKDAY_SHIFT = { startMin: 13 * 60 + 30, endMin: 20 * 60 }
-// Sabato: turno diverso, ~10:00-15:30 = 330 minuti. NON confermato dal
-// committente (dedotto dai dati) — tenuto distinto per poterlo correggere
-// senza toccare i feriali.
-const SATURDAY_SHIFT = { startMin: 10 * 60, endMin: 15 * 60 + 30 }
-
-/** Giorno della settimana Europe/Rome di una `dateLocal` ("YYYY-MM-DD"): 0=domenica..6=sabato. */
-function romeDowOf(dateLocal: string): number {
-    // dateLocal è già una data di calendario Europe/Rome (vedi parseCdr.ts);
-    // mezzogiorno UTC non attraversa mai il cambio di giorno per nessun fuso.
-    return new Date(`${dateLocal}T12:00:00Z`).getUTCDay()
-}
-
-/** Bordi del turno (istanti UTC) per la giornata data. `null` = domenica, esclusa. */
-function shiftBoundsFor(dateLocal: string, dow: number): { start: Date; end: Date; minutes: number } | null {
-    if (dow === 0) return null
-    const shift = dow === 6 ? SATURDAY_SHIFT : WEEKDAY_SHIFT
-    const dayStart = dayBoundsRome(new Date(`${dateLocal}T12:00:00Z`)).start
-    return {
-        start: new Date(dayStart.getTime() + shift.startMin * 60000),
-        end: new Date(dayStart.getTime() + shift.endMin * 60000),
-        minutes: shift.endMin - shift.startMin,
-    }
-}
-
 export type PhoneProductivityRow = {
     userId: string
     gdo: string
     days: number
     callsPerDay: number
     talkMinPerDay: number
-    offPhoneMinPerDay: number
-    offPhonePct: number
-    avgGapSeconds: number
-    medianGapSeconds: number
     ritmoMinPerDay: number
     grigiaMinPerDay: number
     assenzeMinPerDay: number
@@ -149,7 +111,6 @@ export async function getPhoneProductivity(
     // Aggrega per utente sulle sole giornate rappresentative
     const byUser = new Map<string, {
         gdo: string; days: number; calls: number; talk: number
-        offPhone: number; window: number; gaps: number[]
         ritmo: number; grigia: number; assenze: number
         // startLate/endEarly per-giornata (secondi): servono per la MEDIANA,
         // non per una media — vedi commento su PhoneProductivityRow.
@@ -164,14 +125,13 @@ export async function getPhoneProductivity(
 
         // Le domeniche (se mai ce ne fossero) non hanno un turno definito:
         // la giornata va esclusa da tutte le metriche, non solo da quelle di turno.
-        const dow = romeDowOf(slot.dateLocal)
-        const shift = shiftBoundsFor(slot.dateLocal, dow)
+        const shift = shiftBoundsFor(slot.dateLocal)
         if (!shift) continue
 
         let u = byUser.get(slot.userId)
         if (!u) {
             u = {
-                gdo: slot.gdo, days: 0, calls: 0, talk: 0, offPhone: 0, window: 0, gaps: [], ritmo: 0, grigia: 0, assenze: 0,
+                gdo: slot.gdo, days: 0, calls: 0, talk: 0, ritmo: 0, grigia: 0, assenze: 0,
                 startLateDaysSec: [], endEarlyDaysSec: [], daysFullShift: 0, daysShort: 0,
                 idleInShift: 0, fermoTotal: 0, shiftMinutesSum: 0,
             }
@@ -180,9 +140,6 @@ export async function getPhoneProductivity(
         u.days += 1
         u.calls += m.calls
         u.talk += m.talkSeconds
-        u.offPhone += m.offPhoneSeconds
-        u.window += m.windowSeconds
-        u.gaps.push(...m.gaps)
         u.ritmo += m.buckets.under1m + m.buckets.m1to3
         u.grigia += m.buckets.m3to10
         u.assenze += m.buckets.m10to30 + m.buckets.over30m
@@ -190,8 +147,7 @@ export async function getPhoneProductivity(
         // Metriche di turno per questa giornata (secondi), poi mediate sulle
         // giornate come tutto il resto — mai sommate tutte insieme e divise alla fine.
         const shiftDurationSec = shift.minutes * 60
-        const startLateSec = Math.max(0, (m.firstAt.getTime() - shift.start.getTime()) / 1000)
-        const endEarlySec = Math.max(0, (shift.end.getTime() - m.lastAt.getTime()) / 1000)
+        const { startLateSec, endEarlySec } = lateAndEarly(m.firstAt, m.lastAt, shift)
         const fermoTotalSec = Math.max(0, shiftDurationSec - m.occupiedSeconds)
         const idleInShiftSec = Math.max(0, fermoTotalSec - startLateSec - endEarlySec)
 
@@ -209,16 +165,16 @@ export async function getPhoneProductivity(
     const rows: PhoneProductivityRow[] = [...byUser.entries()].map(([userId, u]) => {
         const fermoTotalMin = Math.round(u.fermoTotal / u.days / 60)
         const shiftMinutes = Math.round(u.shiftMinutesSum / u.days)
+        // fermoPct dai contatori grezzi in secondi (u.fermoTotal, shiftSecondsSum),
+        // non dai minuti già arrotondati sopra (fermoTotalMin/shiftMinutes):
+        // il doppio arrotondamento porta fino a 1-2 punti di scarto.
+        const shiftSecondsSum = u.shiftMinutesSum * 60
         return {
             userId,
             gdo: u.gdo,
             days: u.days,
             callsPerDay: Math.round(u.calls / u.days),
             talkMinPerDay: Math.round(u.talk / u.days / 60),
-            offPhoneMinPerDay: Math.round(u.offPhone / u.days / 60),
-            offPhonePct: u.window ? Math.round((100 * u.offPhone) / u.window) : 0,
-            avgGapSeconds: u.gaps.length ? Math.round(u.gaps.reduce((a, b) => a + b, 0) / u.gaps.length) : 0,
-            medianGapSeconds: Math.round(median(u.gaps)),
             ritmoMinPerDay: Math.round(u.ritmo / u.days / 60),
             grigiaMinPerDay: Math.round(u.grigia / u.days / 60),
             assenzeMinPerDay: Math.round(u.assenze / u.days / 60),
@@ -229,7 +185,7 @@ export async function getPhoneProductivity(
             daysShort: u.daysShort,
             idleInShiftMin: Math.round(u.idleInShift / u.days / 60),
             fermoTotalMin,
-            fermoPct: shiftMinutes ? Math.round((100 * fermoTotalMin) / shiftMinutes) : 0,
+            fermoPct: shiftSecondsSum ? Math.round((100 * u.fermoTotal) / shiftSecondsSum) : 0,
             shiftMinutes,
         }
     }).sort((a, b) => b.assenzeMinPerDay - a.assenzeMinPerDay)

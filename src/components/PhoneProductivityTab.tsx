@@ -74,8 +74,8 @@ export function PhoneProductivityTab() {
                     è la <strong>mediana</strong> delle giornate e non la media, che verrebbe trascinata da 1-2 casi anomali.
                 </div>
                 <div>
-                    Il sabato ha un turno diverso (10:00-15:30, non confermato dal committente) ed è conteggiato
-                    con la sua durata: non è confrontabile 1:1 con un feriale.
+                    Il sabato ha un turno più corto (10:00-15:30) ed è conteggiato con la sua durata:
+                    non è confrontabile 1:1 con un feriale.
                 </div>
             </div>
 
@@ -141,7 +141,13 @@ export function PhoneProductivityTab() {
                                     </td>
                                     <td className="px-4 py-3 text-right tabular-nums">
                                         <div className="font-semibold text-ash-800">{r.endEarlyMin} min</div>
-                                        <div className="text-xs text-ash-400">{r.daysFullShift}/{r.days} giornate intere</div>
+                                        <div className="text-xs text-ash-400">
+                                            {r.daysFullShift}/{r.days} giornate intere
+                                            {r.daysShort > 0 && ` · ${r.daysShort} corte`}
+                                        </div>
+                                        {r.startLateMin > 10 && (
+                                            <div className="text-xs text-ash-300">inizia tardi: {r.startLateMin} min</div>
+                                        )}
                                     </td>
                                     <td className="px-4 py-3 text-right tabular-nums">
                                         <div className="font-bold text-ash-900 text-base">{r.fermoTotalMin} min</div>
