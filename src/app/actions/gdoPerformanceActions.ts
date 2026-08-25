@@ -9,6 +9,7 @@ import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
 import { monthBoundsRome, dayBoundsRome, weekBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
+import { getMinCallsPerDay } from "@/app/actions/managerAdvancedActions";
 
 export interface GamificationTargetInput {
     month: string;
@@ -588,7 +589,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
 
     return {
         callsDone,
-        callsTarget: 90,
+        callsTarget: await getMinCallsPerDay(),
         pipelineSize,
         appointmentsDone,
         appointmentsTarget: dailyApptTarget,
