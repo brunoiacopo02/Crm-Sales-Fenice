@@ -6,7 +6,7 @@ import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
-import { isRealGdo, apptSetAt } from '@/lib/kpi/canon'
+import { isRealGdo, apptSetAt, isNeverAnsweredLog, isAnsweredLog } from '@/lib/kpi/canon'
 
 import { cache } from "react"
 
@@ -25,21 +25,9 @@ export type KpiFilters = {
     trendGranularity?: 'day' | 'hour'
 }
 
-/**
- * discardReason che semanticamente NON è una scelta di scarto basata sul
- * contenuto della chiamata, ma indica che il lead non ha mai risposto
- * (numero che non esiste, non utilizzabile, ecc.). Va contato come
- * NON_RISPOSTO ai fini del tasso risposta del GDO e ESCLUSO dai motivi
- * di scarto, perché non è un esito qualitativo della chiamata.
- */
-const NEVER_ANSWERED_DISCARD_REASONS = new Set<string>([
-    'numero inesistente',
-])
-
-function isNeverAnsweredLog(outcome: string | null, discardReason: string | null): boolean {
-    if (outcome !== 'DA_SCARTARE') return false
-    return !!discardReason && NEVER_ANSWERED_DISCARD_REASONS.has(discardReason)
-}
+// NEVER_ANSWERED_DISCARD_REASONS / isNeverAnsweredLog / isAnsweredLog vivono in
+// @/lib/kpi/canon: la stessa definizione la usa Operativa Team, e tenerne due
+// copie e' gia' costato 2-4 punti di scostamento fra le due schermate.
 
 /** Verifica se un timestamp cade in orario lavoro GDO 13:30-20:00 Europe/Rome */
 function isWithinWorkingHours(date: Date): boolean {
@@ -157,11 +145,8 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const calledLeadsCount = leadIdsWithLogs.size
 
     // "Numero inesistente" trattato come NON_RISPOSTO: non conta come
-    // risposta del GDO né come scarto qualitativo. Vedi
-    // NEVER_ANSWERED_DISCARD_REASONS.
-    const answeredLogs = validLogs.filter(l =>
-        l.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(l.outcome, l.discardReason),
-    )
+    // risposta del GDO né come scarto qualitativo. Vedi isAnsweredLog in canon.
+    const answeredLogs = validLogs.filter(l => isAnsweredLog(l.outcome, l.discardReason))
     const answeredLeadIds = new Set(answeredLogs.map(l => l.leadId))
     const answeredLeadsCount = answeredLeadIds.size
 
@@ -215,8 +200,8 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         const st = gdoStatsMap[uname]
         st.calls++
         st.totalContacted.add(log.leadId)
-        // Numero inesistente non conta come risposta (vedi NEVER_ANSWERED_DISCARD_REASONS)
-        if (log.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(log.outcome, log.discardReason)) st.answers++
+        // Numero inesistente non conta come risposta (vedi isAnsweredLog in canon)
+        if (isAnsweredLog(log.outcome, log.discardReason)) st.answers++
     })
 
     // Merge App Fissati per GDO: attribuzione via leads.assignedToId + apptSetAt
@@ -798,7 +783,7 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
         const side = (r.funnel ?? '').trim().toLowerCase() === 'database' ? 'database' : 'nuovi'
         const b = buckets.get(key)![side]
         b.calls++
-        if (r.outcome !== 'NON_RISPOSTO' && !isNeverAnsweredLog(r.outcome, r.discardReason)) b.answered++
+        if (isAnsweredLog(r.outcome, r.discardReason)) b.answered++
         if (r.outcome === 'APPUNTAMENTO') b.appts++
     }
     const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0

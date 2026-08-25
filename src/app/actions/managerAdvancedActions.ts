@@ -5,7 +5,7 @@ import { appSettings, callLogs, leads, users } from "@/db/schema"
 import { and, eq, gte, lt, lte, or, isNull, isNotNull, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
-import { isRealGdo } from "@/lib/kpi/canon"
+import { isRealGdo, isAnsweredLog } from "@/lib/kpi/canon"
 import { operativaPeriodBounds } from "@/lib/kpi/periodBounds"
 
 export type OperativaDataRow = {
@@ -106,6 +106,11 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             userId: callLogs.userId,
             leadId: callLogs.leadId,
             outcome: callLogs.outcome,
+            // Serve a isAnsweredLog: senza questa colonna la regola
+            // "numero inesistente non e' una risposta" era inapplicabile qui,
+            // ed e' il motivo per cui il tasso risposta di Operativa era
+            // gonfiato rispetto a /kpi-gdo sugli stessi identici dati.
+            discardReason: callLogs.discardReason,
             createdAt: callLogs.createdAt,
             leadFunnel: leads.funnel,
         }).from(callLogs)
@@ -212,9 +217,10 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
 
         const row = gdoDataMap.get(log.userId)!
         row.chiamate++
-        // Outcome DIVERSO da 'NON_RISPOSTO' e 'Non_risponde'
-        const oc = log.outcome?.toUpperCase() || ''
-        if (oc !== 'NON_RISPOSTO' && oc !== 'NON_RISPONDE') {
+        // Definizione canonica condivisa con /kpi-gdo (src/lib/kpi/canon.ts):
+        // esclude NON_RISPOSTO, la grafia legacy NON_RISPONDE, e gli scarti
+        // per "numero inesistente", che sono mancati contatti e non risposte.
+        if (isAnsweredLog(log.outcome, log.discardReason)) {
             row.risposte++
         }
 

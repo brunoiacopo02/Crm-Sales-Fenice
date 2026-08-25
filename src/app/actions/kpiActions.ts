@@ -6,6 +6,7 @@ import { callLogs, leads } from "@/db/schema"
 import { eq, gte, lt, and, sql, isNotNull } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { dayBoundsRome } from '@/lib/dateUtils';
+import { isAnsweredLog } from '@/lib/kpi/canon';
 export type KpiData = {
     totalCalls: number
     totalAnswers: number
@@ -49,9 +50,10 @@ export async function getDailyKpi(dateStr?: string): Promise<KpiData> {
 
     const totalCalls = logs.length
 
-    // "Answers" -> Usually considering RICHIAMO and APPUNTAMENTO, sometimes DA_SCARTARE if they answered to say "not interested".
-    // Let's assume NON_RISPOSTO is the only true "No Answer".
-    const answers = logs.filter(l => l.outcome !== 'NON_RISPOSTO')
+    // "Risposta" = definizione canonica condivisa (src/lib/kpi/canon.ts):
+    // NON_RISPOSTO, la grafia legacy NON_RISPONDE e gli scarti per "numero
+    // inesistente" sono tutti mancati contatti.
+    const answers = logs.filter(l => isAnsweredLog(l.outcome, l.discardReason))
     const totalAnswers = answers.length
 
     // App Fissati: base canonica PO 2026-07-05 — data di fissaggio

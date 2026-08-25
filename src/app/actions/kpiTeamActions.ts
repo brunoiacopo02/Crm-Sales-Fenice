@@ -8,7 +8,7 @@ import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
-import { isRealGdo, apptSetAt } from '@/lib/kpi/canon';
+import { isRealGdo, apptSetAt, isAnsweredLog } from '@/lib/kpi/canon';
 export type KpiPeriod = 'oggi' | 'ieri' | 'settimana' | 'mese'
 
 /** Verifica se un timestamp cade nell'orario lavorativo GDO 13:30-20:00 Europe/Rome */
@@ -63,6 +63,9 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     let logsQuery = await db.select({
             id: callLogs.id,
             outcome: callLogs.outcome,
+            // Serve a isAnsweredLog: "numero inesistente" e' un mancato
+            // contatto, non una risposta (definizione unica in kpi/canon).
+            discardReason: callLogs.discardReason,
             userId: callLogs.userId,
             createdAt: callLogs.createdAt,
             leadFunnel: leads.funnel
@@ -123,7 +126,7 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     // Filtro orario lavorativo 13:30-20:00 Europe/Rome per conteggi chiamate
     const workingHoursLogs = logs.filter(l => isWithinWorkingHours(l.createdAt))
     const totalCalls = workingHoursLogs.length
-    const answeredLogs = workingHoursLogs.filter(l => l.outcome !== 'NON_RISPOSTO')
+    const answeredLogs = workingHoursLogs.filter(l => isAnsweredLog(l.outcome, l.discardReason))
     const totalAnswers = answeredLogs.length
     // Appuntamenti = App Fissati dal lead (apptLeads sopra), non più righe log
     const totalAppointments = apptLeads.length
@@ -160,7 +163,7 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
         // Chiamate/risposte solo in orario lavorativo 13:30-20:00
         if (isWithinWorkingHours(log.createdAt)) {
             rank.calls += 1
-            if (log.outcome !== 'NON_RISPOSTO') rank.answers += 1
+            if (isAnsweredLog(log.outcome, log.discardReason)) rank.answers += 1
 
             const logTime = log.createdAt.getTime()
             if (logTime < rank.firstCallTime) rank.firstCallTime = logTime

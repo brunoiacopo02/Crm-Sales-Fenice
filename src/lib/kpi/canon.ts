@@ -16,6 +16,48 @@ export function apptSetAt(lead: { appointmentCreatedAt: Date | null; appointment
 // Target giornalieri per-GDO (decisione PO): default individuale 8, soglia giudizio manager 10.
 export const DEFAULT_DAILY_APPT_TARGET = 8
 export const MANAGER_TARGET_APP_PER_GDO_DAY = 10
+/**
+ * Causali di scarto che NON sono una scelta basata sul contenuto della
+ * chiamata, ma dicono che il lead non ha mai risposto (numero che non esiste,
+ * non utilizzabile, ecc.). Vanno contate come mancato contatto nel tasso di
+ * risposta ed ESCLUSE dai motivi di scarto: non sono un esito qualitativo.
+ *
+ * ⚠️ Le voci qui dentro devono essere gia' normalizzate (minuscolo, senza
+ * spazi ai bordi): il confronto passa da `normalizeDiscardReason`.
+ * Estendibile ad altre grafie ("numero errato", "numero non utilizzabile").
+ */
+export const NEVER_ANSWERED_DISCARD_REASONS = new Set<string>([
+    'numero inesistente',
+])
+
+function normalizeDiscardReason(raw: string | null | undefined): string {
+    return (raw ?? '').trim().toLowerCase()
+}
+
+/** true se il log dice "il lead non ha mai risposto" pur non essendo NON_RISPOSTO. */
+export function isNeverAnsweredLog(outcome: string | null, discardReason: string | null): boolean {
+    if (outcome !== 'DA_SCARTARE') return false
+    const reason = normalizeDiscardReason(discardReason)
+    return reason !== '' && NEVER_ANSWERED_DISCARD_REASONS.has(reason)
+}
+
+/**
+ * Definizione canonica di "il GDO ha parlato con il lead", usata sia da
+ * /kpi-gdo (`getAdvancedKpi`) sia da Operativa Team (`getManagerOperativaData`).
+ *
+ * ⚠️ Nasce dall'aver avuto due implementazioni divergenti della stessa metrica:
+ * Operativa contava "numero inesistente" come risposta e KPI GDO no, con uno
+ * scarto misurato fino a 4 punti sullo stesso GDO nello stesso mese. Se serve
+ * cambiare la regola, si cambia QUI e basta — non nei chiamanti.
+ *
+ * `NON_RISPONDE` e' la grafia legacy di `NON_RISPOSTO` nel tracciato vecchio.
+ */
+export function isAnsweredLog(outcome: string | null, discardReason: string | null): boolean {
+    const oc = (outcome ?? '').toUpperCase()
+    if (oc === '' || oc === 'NON_RISPOSTO' || oc === 'NON_RISPONDE') return false
+    return !isNeverAnsweredLog(outcome, discardReason)
+}
+
 // Filtro standard per GDO "veri" nelle classifiche/medie (esclude il bot fissatore).
 export function isRealGdo(u: { role: string; isActive: boolean; isBot: boolean }): boolean {
     return u.role === 'GDO' && u.isActive && !u.isBot
