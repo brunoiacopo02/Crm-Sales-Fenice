@@ -4,10 +4,11 @@ import { useAuth } from "@/components/AuthProvider"
 import { useState, useEffect, useCallback } from "react"
 import { getManagerPauseReport, getWeeklyPauseReport, getMonthlyPauseReport, type PauseAggregateReport } from "@/app/actions/pauseActions"
 import { getLocalDateRome } from "@/lib/pauseUtils"
-import { Search, Clock, AlertTriangle, RefreshCw, CalendarDays, CalendarRange, BarChart3, Phone } from "lucide-react"
+import { Search, Clock, AlertTriangle, RefreshCw, CalendarDays, CalendarRange, BarChart3, Phone, Target } from "lucide-react"
 import { PhoneProductivityTab } from "./PhoneProductivityTab"
+import { ApptQualityTab } from "./ApptQualityTab"
 
-type Tab = 'telefono' | 'giornaliero' | 'settimanale' | 'mensile'
+type Tab = 'telefono' | 'qualita' | 'giornaliero' | 'settimanale' | 'mensile'
 
 export function ManagerPauseView() {
     const { user: authUser, isLoading: isAuthLoading } = useAuth();
@@ -23,7 +24,7 @@ export function ManagerPauseView() {
     const fetchReport = useCallback(async () => {
         setIsLoading(true)
         try {
-            if (tab === 'telefono') { setIsLoading(false); return }
+            if (tab === 'telefono' || tab === 'qualita') { setIsLoading(false); return }
             if (tab === 'giornaliero') {
                 const data = await getManagerPauseReport(targetDate)
                 setReport(data)
@@ -105,6 +106,9 @@ export function ManagerPauseView() {
                 <button onClick={() => setTab('telefono')} className={tabClass('telefono')}>
                     <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Tempo al telefono</span>
                 </button>
+                <button onClick={() => setTab('qualita')} className={tabClass('qualita')}>
+                    <span className="flex items-center gap-1.5"><Target className="w-3.5 h-3.5" /> Qualità appuntamenti</span>
+                </button>
                 <button onClick={() => setTab('giornaliero')} className={tabClass('giornaliero')}>
                     <span className="flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" /> Giornaliero</span>
                 </button>
@@ -118,6 +122,9 @@ export function ManagerPauseView() {
 
             {/* Tempo al telefono tab */}
             {tab === 'telefono' && <PhoneProductivityTab />}
+
+            {/* Qualità appuntamenti tab */}
+            {tab === 'qualita' && <ApptQualityTab />}
 
             {/* Giornaliero tab */}
             {tab === 'giornaliero' && report && (

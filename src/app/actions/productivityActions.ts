@@ -10,10 +10,11 @@
  */
 
 import { db } from "@/db"
-import { pbxCalls, users } from "@/db/schema"
-import { and, gte, lte, eq, isNotNull } from "drizzle-orm"
+import { pbxCalls, users, leads } from "@/db/schema"
+import { and, gte, lte, eq, isNotNull, sql } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
+import { apptSetAt } from "@/lib/kpi/canon"
 
 /** Sotto questa soglia la giornata non è rappresentativa (mezze giornate, assenze). */
 const MIN_CALLS_PER_DAY = 40
@@ -29,6 +30,7 @@ export type PhoneProductivityRow = {
     avgGapSeconds: number
     medianGapSeconds: number
     ritmoMinPerDay: number
+    grigiaMinPerDay: number
     assenzeMinPerDay: number
 }
 
@@ -113,6 +115,7 @@ export async function getPhoneProductivity(
         avgGapSeconds: u.gaps.length ? Math.round(u.gaps.reduce((a, b) => a + b, 0) / u.gaps.length) : 0,
         medianGapSeconds: Math.round(median(u.gaps)),
         ritmoMinPerDay: Math.round(u.ritmo / u.days / 60),
+        grigiaMinPerDay: Math.round(u.grigia / u.days / 60),
         assenzeMinPerDay: Math.round(u.assenze / u.days / 60),
     })).sort((a, b) => b.assenzeMinPerDay - a.assenzeMinPerDay)
 
@@ -121,4 +124,88 @@ export async function getPhoneProductivity(
     // "Oltre il migliore" in UI) — non lo zero.
     const benchmarkMin = rows.length ? Math.min(...rows.map(r => r.assenzeMinPerDay)) : 0
     return { rows, benchmarkMin }
+}
+
+export type ApptQualityRow = {
+    userId: string
+    gdo: string
+    app: number
+    presenziati: number
+    chiusi: number
+    fatturato: number
+    presenzaPct: number
+    chiusuraPct: number
+    euroPerApp: number
+}
+
+/**
+ * Cascata di qualità degli appuntamenti per GDO.
+ *
+ * Attenzione alle date: l'appuntamento si conta al momento in cui è stato
+ * fissato, la presenza al giorno in cui il lead si è presentato, la chiusura
+ * alla data dell'esito del venditore. Sono tre date diverse: gli appuntamenti
+ * di fine mese si presentano e si chiudono nel mese successivo, quindi la
+ * cascata dell'ultimo mese è sempre parziale. Va detto nella UI.
+ */
+export async function getApptQuality(
+    fromDateLocal: string,
+    toDateLocal: string,
+): Promise<ApptQualityRow[]> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+
+    const from = new Date(`${fromDateLocal}T00:00:00+02:00`)
+    const to = new Date(`${toDateLocal}T23:59:59+02:00`)
+
+    const rows = await db.select({
+        userId: leads.assignedToId,
+        name: users.name,
+        displayName: users.displayName,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
+        appointmentDate: leads.appointmentDate,
+        presentedAt: leads.presentedAt,
+        salespersonOutcome: leads.salespersonOutcome,
+        salespersonOutcomeAt: leads.salespersonOutcomeAt,
+        closeAmountEur: leads.closeAmountEur,
+    })
+        .from(leads)
+        .innerJoin(users, eq(users.id, leads.assignedToId))
+        .where(and(
+            companyScope(ctx, leads.companyId),
+            eq(users.role, 'GDO'),
+            sql`coalesce(${users.isBot}, false) = false`,
+        ))
+
+    const agg = new Map<string, ApptQualityRow>()
+    const slot = (id: string, gdo: string) => {
+        let s = agg.get(id)
+        if (!s) {
+            s = { userId: id, gdo, app: 0, presenziati: 0, chiusi: 0, fatturato: 0, presenzaPct: 0, chiusuraPct: 0, euroPerApp: 0 }
+            agg.set(id, s)
+        }
+        return s
+    }
+    const inRange = (d: Date | null) => !!d && d >= from && d <= to
+
+    for (const r of rows) {
+        if (!r.userId) continue
+        const s = slot(r.userId, r.displayName || r.name || r.userId)
+        if (inRange(apptSetAt(r))) s.app += 1
+        if (inRange(r.presentedAt)) s.presenziati += 1
+        if (r.salespersonOutcome?.toLowerCase() === 'chiuso' && inRange(r.salespersonOutcomeAt)) {
+            s.chiusi += 1
+            s.fatturato += r.closeAmountEur || 0
+        }
+    }
+
+    return [...agg.values()]
+        .filter(s => s.app > 0)
+        .map(s => ({
+            ...s,
+            fatturato: Math.round(s.fatturato),
+            presenzaPct: s.app ? Math.round((100 * s.presenziati) / s.app) : 0,
+            chiusuraPct: s.presenziati ? Math.round((100 * s.chiusi) / s.presenziati) : 0,
+            euroPerApp: s.app ? Math.round(s.fatturato / s.app) : 0,
+        }))
+        .sort((a, b) => b.euroPerApp - a.euroPerApp)
 }

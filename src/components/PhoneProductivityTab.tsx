@@ -72,6 +72,7 @@ export function PhoneProductivityTab() {
                             <th className="text-right px-4 py-3 font-semibold">Chiamate/gg</th>
                             <th className="text-right px-4 py-3 font-semibold">Al telefono</th>
                             <th className="text-right px-4 py-3 font-semibold" title="Buchi sotto i 3 minuti">Ritmo</th>
+                            <th className="text-right px-4 py-3 font-semibold" title="Buchi fra 3 e 10 minuti">Zona grigia</th>
                             <th className="text-right px-4 py-3 font-semibold" title="Buchi oltre i 10 minuti">Assenze</th>
                             <th className="text-right px-4 py-3 font-semibold">Oltre il migliore</th>
                         </tr>
@@ -86,6 +87,7 @@ export function PhoneProductivityTab() {
                                     <td className="px-4 py-3 text-right tabular-nums">{r.callsPerDay}</td>
                                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-700">{r.talkMinPerDay} min</td>
                                     <td className="px-4 py-3 text-right tabular-nums text-ash-500">{r.ritmoMinPerDay} min</td>
+                                    <td className="px-4 py-3 text-right tabular-nums text-ash-500">{r.grigiaMinPerDay} min</td>
                                     <td className="px-4 py-3 text-right tabular-nums font-semibold">{r.assenzeMinPerDay} min</td>
                                     <td className={`px-4 py-3 text-right tabular-nums font-semibold ${excess > 45 ? 'text-red-600' : excess > 20 ? 'text-amber-600' : 'text-ash-400'}`}>
                                         {excess > 0 ? `+${excess} min` : '—'}
