@@ -63,6 +63,11 @@ export function PhoneProductivityTab() {
             {/* Avviso: cosa significa "fermo" e come leggere i bordi del turno */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
                 <div>
+                    La giornata si divide in tre pezzi: <strong>conversazione</strong> (Al telefono),{' '}
+                    <strong>squilli a vuoto</strong> (il telefono suona e nessuno risponde) e{' '}
+                    <strong>tempo fermo</strong>. Sommati, danno la durata del turno.
+                </div>
+                <div>
                     Il <strong>tempo fermo</strong> non è tutto tempo di pausa: contiene anche la compilazione
                     degli esiti e la scelta del lead successivo. Il riferimento sensato è
                     <strong> il migliore del gruppo</strong> ({data.benchmarkMin} min/giorno di assenze pure),
@@ -96,6 +101,7 @@ export function PhoneProductivityTab() {
                             <th className="text-right px-4 py-3 font-semibold" title="Numero di giornate con almeno 40 chiamate, usate per il calcolo">Giornate</th>
                             <th className="text-right px-4 py-3 font-semibold" title="Chiamate effettuate in media in una giornata">Chiamate/gg</th>
                             <th className="text-right px-4 py-3 font-semibold" title="Minuti di conversazione effettiva (billsec) in media al giorno">Al telefono</th>
+                            <th className="text-right px-4 py-3 font-semibold" title="Il telefono squilla e nessuno risponde (duration - billsec) in media al giorno: non è conversazione né tempo fermo, è il terzo pezzo del turno">Squilli a vuoto</th>
                             <th className="text-right px-4 py-3 font-semibold" title="Buchi fra una chiamata e l'altra, divisi per durata: clicca per il dettaglio">
                                 <button
                                     onClick={() => setShowBuckets(v => !v)}
@@ -123,6 +129,7 @@ export function PhoneProductivityTab() {
                                     <td className="px-4 py-3 text-right text-ash-500">{r.days}</td>
                                     <td className="px-4 py-3 text-right tabular-nums">{r.callsPerDay}</td>
                                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-700">{r.talkMinPerDay} min</td>
+                                    <td className="px-4 py-3 text-right tabular-nums text-ash-500">{r.ringingMinPerDay} min</td>
                                     <td className="px-4 py-3 text-right tabular-nums text-ash-500">
                                         {showBuckets ? (
                                             <div className="flex flex-col gap-0.5 text-xs">

@@ -30,6 +30,13 @@ export type PhoneProductivityRow = {
     days: number
     callsPerDay: number
     talkMinPerDay: number
+    /**
+     * Il telefono squilla ma nessuno risponde — media giornaliera di
+     * sum(duration - billsec). Non è conversazione (talkMinPerDay) né tempo
+     * fermo (fermoTotalMin): è il terzo pezzo del turno, calcolato con lo
+     * stesso schema degli altri campi (accumulo per giornata, poi media).
+     */
+    ringingMinPerDay: number
     ritmoMinPerDay: number
     grigiaMinPerDay: number
     assenzeMinPerDay: number
@@ -116,7 +123,7 @@ export async function getPhoneProductivity(
 
     // Aggrega per utente sulle sole giornate rappresentative
     const byUser = new Map<string, {
-        gdo: string; days: number; calls: number; talk: number
+        gdo: string; days: number; calls: number; talk: number; ringing: number
         ritmo: number; grigia: number; assenze: number
         // startLate/endEarly per-giornata (secondi): servono per la MEDIANA,
         // non per una media — vedi commento su PhoneProductivityRow.
@@ -137,7 +144,7 @@ export async function getPhoneProductivity(
         let u = byUser.get(slot.userId)
         if (!u) {
             u = {
-                gdo: slot.gdo, days: 0, calls: 0, talk: 0, ritmo: 0, grigia: 0, assenze: 0,
+                gdo: slot.gdo, days: 0, calls: 0, talk: 0, ringing: 0, ritmo: 0, grigia: 0, assenze: 0,
                 startLateDaysSec: [], endEarlyDaysSec: [], daysFullShift: 0, daysShort: 0,
                 idleInShift: 0, fermoTotal: 0, shiftMinutesSum: 0,
             }
@@ -146,6 +153,9 @@ export async function getPhoneProductivity(
         u.days += 1
         u.calls += m.calls
         u.talk += m.talkSeconds
+        // squilli a vuoto = tempo occupato (duration) meno conversazione
+        // effettiva (billsec), accumulato per giornata come talk/ritmo/ecc.
+        u.ringing += m.occupiedSeconds - m.talkSeconds
         u.ritmo += m.buckets.under1m + m.buckets.m1to3
         u.grigia += m.buckets.m3to10
         u.assenze += m.buckets.m10to30 + m.buckets.over30m
@@ -194,6 +204,7 @@ export async function getPhoneProductivity(
             days: u.days,
             callsPerDay: Math.round(u.calls / u.days),
             talkMinPerDay: Math.round(u.talk / u.days / 60),
+            ringingMinPerDay: Math.round(u.ringing / u.days / 60),
             ritmoMinPerDay: Math.round(u.ritmo / u.days / 60),
             grigiaMinPerDay: Math.round(u.grigia / u.days / 60),
             assenzeMinPerDay: Math.round(u.assenze / u.days / 60),
