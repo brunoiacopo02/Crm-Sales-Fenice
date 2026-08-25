@@ -11,7 +11,7 @@
 
 import { db } from "@/db"
 import { pbxCalls, users, leads } from "@/db/schema"
-import { and, gte, lte, eq, isNotNull, sql } from "drizzle-orm"
+import { and, gte, lte, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
 import { apptSetAt } from "@/lib/kpi/canon"
@@ -173,7 +173,13 @@ export async function getApptQuality(
         .where(and(
             companyScope(ctx, leads.companyId),
             eq(users.role, 'GDO'),
-            sql`coalesce(${users.isBot}, false) = false`,
+            eq(users.isBot, false),
+            or(
+                and(gte(leads.appointmentCreatedAt, from), lte(leads.appointmentCreatedAt, to)),
+                and(gte(leads.appointmentDate, from), lte(leads.appointmentDate, to)),
+                and(gte(leads.presentedAt, from), lte(leads.presentedAt, to)),
+                and(gte(leads.salespersonOutcomeAt, from), lte(leads.salespersonOutcomeAt, to)),
+            ),
         ))
 
     const agg = new Map<string, ApptQualityRow>()
