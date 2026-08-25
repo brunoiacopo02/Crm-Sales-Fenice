@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCdrLine, dstKeyOf, romeDateKey } from './parseCdr'
+import { parseCdrLine, dstKeyOf } from './parseCdr'
 
 const base = {
     calldate: '2026-08-22 16:20:03', clid: '"1007" <1007>', src: '1007',
@@ -44,7 +44,14 @@ test('duration e billsec mancanti diventano zero', () => {
     assert.equal(r.billsec, 0)
 })
 
-test('romeDateKey usa il giorno italiano, non UTC', () => {
-    // 2026-08-22 00:30 italiana = 2026-08-21 22:30 UTC
-    assert.equal(romeDateKey(new Date('2026-08-21T22:30:00Z')), '2026-08-22')
+test('interpreta l orario come italiano in ora legale (CEST, +2)', () => {
+    const r = parseCdrLine({ ...base, calldate: '2026-08-22 16:20:03' } as any)!
+    assert.equal(r.calldate.toISOString(), '2026-08-22T14:20:03.000Z')
+    assert.equal(r.dateLocal, '2026-08-22')
+})
+
+test('interpreta l orario come italiano anche in ora solare (CET, +1)', () => {
+    const r = parseCdrLine({ ...base, calldate: '2026-01-15 10:00:00' } as any)!
+    assert.equal(r.calldate.toISOString(), '2026-01-15T09:00:00.000Z')
+    assert.equal(r.dateLocal, '2026-01-15')
 })

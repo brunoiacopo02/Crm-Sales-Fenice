@@ -8,6 +8,8 @@
  * serali finiscono nel giorno sbagliato.
  */
 
+import { parseRomeDatetimeLocal, toRomeDateStr } from '@/lib/dateUtils'
+
 export type CdrRow = {
     id: string
     calldate: Date
@@ -31,32 +33,6 @@ export function dstKeyOf(raw: string): string | null {
     return digits.length >= 10 ? digits.slice(-10) : null
 }
 
-/** Giorno operativo italiano di un istante. */
-export function romeDateKey(d: Date): string {
-    return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
-}
-
-/**
- * "2026-08-22 16:20:03" (ora di Roma) -> Date corretta.
- * Si ricava l'offset confrontando l'istante interpretato come UTC con la
- * sua resa in Europe/Rome: funziona sia con l'ora solare sia con la legale.
- */
-function parseRomeTimestamp(s: string): Date | null {
-    const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(s)
-    if (!m) return null
-    const [, y, mo, d, h, mi, se] = m
-    const asUtc = Date.UTC(+y, +mo - 1, +d, +h, +mi, +se)
-    const probe = new Date(asUtc)
-    const romeParts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Europe/Rome', hour12: false,
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-    }).formatToParts(probe).reduce<Record<string, string>>((a, p) => (a[p.type] = p.value, a), {})
-    const romeAsUtc = Date.UTC(+romeParts.year, +romeParts.month - 1, +romeParts.day,
-        +romeParts.hour % 24, +romeParts.minute, +romeParts.second)
-    return new Date(asUtc - (romeAsUtc - asUtc))
-}
-
 export function parseCdrLine(rec: Record<string, string>): CdrRow | null {
     const id = (rec.uniqueid || '').trim()
     if (!id) return null
@@ -71,14 +47,16 @@ export function parseCdrLine(rec: Record<string, string>): CdrRow | null {
     if (srcIsExt && dstIsExt) return null
     if (!srcIsExt && !dstIsExt) return null
 
-    const calldate = parseRomeTimestamp(rec.calldate || '')
+    // Normalizza "2026-08-22 16:20:03" a "2026-08-22T16:20:03"
+    const normalized = (rec.calldate || '').replace(' ', 'T')
+    const calldate = parseRomeDatetimeLocal(normalized)
     if (!calldate) return null
 
     const direction: 'out' | 'in' = srcIsExt ? 'out' : 'in'
     return {
         id,
         calldate,
-        dateLocal: romeDateKey(calldate),
+        dateLocal: toRomeDateStr(calldate),
         src,
         dstKey: direction === 'out' ? dstKeyOf(dst) : dstKeyOf(src),
         duration: Number(rec.duration) || 0,
