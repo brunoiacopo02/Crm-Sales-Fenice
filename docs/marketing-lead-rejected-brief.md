@@ -231,11 +231,13 @@ Quando questi sette punti passano, ditecelo e attiviamo l'invio dal nostro lato.
 
 ## 11. Test
 
-Non esiste un endpoint di test separato né un secret di test dedicato: c'è **un solo**
-URL configurato lato nostro (`MARKETING_WEBHOOK_URL_PROD`) e **un solo** secret
-(`MARKETING_WEBHOOK_SECRET`), condiviso da tutti e sette gli eventi. Non c'è un
-`WEBHOOK_SECRET_CRM_TEST` né un dominio `crm-fenice-test`: se li avete letti in una
-versione precedente di questo documento, ignorateli.
+**Dal lato nostro non esiste un canale di test separato:** c'è **un solo** URL
+configurato (`MARKETING_WEBHOOK_URL_PROD`) e **un solo** secret
+(`MARKETING_WEBHOOK_SECRET`), condiviso da tutti e sette gli eventi. Se dalla vostra
+parte esiste ancora un path di test (`…/crm-fenice-test`) con il suo
+`WEBHOOK_SECRET_CRM_TEST`, per usarlo dobbiamo comunque ripuntare la nostra unica env
+var su quell'URL e allineare l'unico secret: non possiamo mandare in parallelo su due
+destinazioni. Ditecelo voi se preferite quella strada.
 
 Ecco come possiamo davvero fare una prova insieme:
 
