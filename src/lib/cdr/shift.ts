@@ -29,7 +29,7 @@ export const SATURDAY_SHIFT = { startMin: 10 * 60, endMin: 16 * 60 + 30 }
  * eccedenza oltre l'abbuono torna a contare normalmente come fermo. Nei
  * feriali non si applica alcun abbuono. Valore unico e modificabile qui
  * (vedi fermoTotalSeconds/saturdayAllowanceSec più sotto e il suo uso in
- * productivityActions.ts per fermoTotalMin e daysShort).
+ * productivityActions.ts per daysShort e pauseMinPerDay).
  */
 export const SATURDAY_TRAINING_ALLOWANCE_MIN = 60
 

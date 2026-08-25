@@ -17,7 +17,7 @@ function monthBounds(offset: number): { from: string; to: string; label: string 
 
 export function PhoneProductivityTab() {
     const [offset, setOffset] = useState(0)
-    const [data, setData] = useState<{ rows: PhoneProductivityRow[]; benchmarkMin: number } | null>(null)
+    const [data, setData] = useState<{ rows: PhoneProductivityRow[] } | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [showBuckets, setShowBuckets] = useState(false)
     const period = monthBounds(offset)
@@ -42,9 +42,8 @@ export function PhoneProductivityTab() {
 
     const { rows } = data
     const avgTalkMin = Math.round(rows.reduce((a, r) => a + r.talkMinPerDay, 0) / rows.length)
-    const avgFermoMin = Math.round(rows.reduce((a, r) => a + r.fermoTotalMin, 0) / rows.length)
-    const fermoValues = rows.map(r => r.fermoTotalMin)
-    const fermoSpread = Math.max(...fermoValues) - Math.min(...fermoValues)
+    const avgPauseMinTeam = Math.round(rows.reduce((a, r) => a + r.pauseMinPerDay, 0) / rows.length)
+    const teamOverAllowanceHours = Math.round(rows.reduce((a, r) => a + r.overAllowanceHoursPeriod, 0) * 10) / 10
 
     return (
         <div className="space-y-4">
@@ -60,28 +59,26 @@ export function PhoneProductivityTab() {
                 </button>
             </div>
 
-            {/* Avviso: cosa significa "fermo" e come leggere i bordi del turno */}
+            {/* Avviso: come si distingue il ritmo di lavoro dalla pausa vera */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
                 <div>
-                    La giornata si divide in tre pezzi: <strong>conversazione</strong> (Al telefono),{' '}
-                    <strong>squilli a vuoto</strong> (il telefono suona e nessuno risponde) e{' '}
-                    <strong>tempo fermo</strong>. Sommati, danno la durata del turno.
+                    Fra una chiamata e l&apos;altra ci vogliono 11-25 secondi per chiudere l&apos;esito e comporre il
+                    numero dopo: sono <strong>22-62 minuti al giorno</strong> di <strong>ritmo di lavoro</strong>,
+                    non pausa, e non vengono conteggiati come tale.
                 </div>
                 <div>
-                    Il <strong>tempo fermo</strong> non è tutto tempo di pausa: contiene anche la compilazione
-                    degli esiti e la scelta del lead successivo. Il riferimento sensato è
-                    <strong> il migliore del gruppo</strong> ({data.benchmarkMin} min/giorno di assenze pure),
-                    non lo zero e non i 30 minuti di pausa concessi.
+                    Tutto ciò che supera <strong>2 minuti</strong> fra una chiamata e l&apos;altra è conteggiato come
+                    <strong> interruzione</strong>. Il contratto prevede <strong>30 minuti di pausa al giorno</strong>:
+                    è questo il riferimento, non il migliore del gruppo.
                 </div>
                 <div>
-                    Le giornate molto corte (uscita molto prima di fine turno) sono quasi sempre permessi o
-                    mezze giornate autorizzate, non uscite anticipate sistematiche: per questo "stacca prima"
-                    è la <strong>mediana</strong> delle giornate e non la media, che verrebbe trascinata da 1-2 casi anomali.
+                    Il ritmo di lavoro e la durata di ogni singola pausa sono <strong>simili per tutti</strong>{' '}
+                    (16-28 secondi; 8-11 minuti a interruzione). A fare la differenza fra le persone è{' '}
+                    <strong>quante volte ci si ferma</strong>, non quanto dura la singola pausa.
                 </div>
                 <div>
                     Il sabato ha lo stesso orario dei feriali ma su una fascia diversa (10:00-16:30). L&apos;ultima
-                    ora è spesso dedicata alla formazione: fino a 60 minuti di anticipo a fine turno non vengono
-                    conteggiati come tempo fermo.
+                    ora è spesso dedicata alla formazione: fino a 60 minuti non vengono conteggiati come interruzione.
                 </div>
             </div>
 
@@ -89,12 +86,12 @@ export function PhoneProductivityTab() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <SummaryStat label="Turno di riferimento" value="Fer. 13:30-20:00" sub="Sab. 10:00-16:30" />
                 <SummaryStat label="Al telefono (media)" value={`${avgTalkMin} min`} sub="al giorno, squadra" />
-                <SummaryStat label="Fermo totale (media)" value={`${avgFermoMin} min`} sub="al giorno, squadra" />
-                <SummaryStat label="Migliore vs peggiore" value={`${fermoSpread} min`} sub="scarto sul fermo totale" />
+                <SummaryStat label="Pause (media)" value={`${avgPauseMinTeam} min`} sub="al giorno, squadra · 30 min concessi" />
+                <SummaryStat label="Ore in eccesso" value={`${itNum(teamOverAllowanceHours)} h`} sub="squadra, nel periodo" />
             </div>
 
-            <div className="rounded-xl border border-ash-200 bg-white overflow-hidden">
-                <table className="w-full text-sm">
+            <div className="rounded-xl border border-ash-200 bg-white overflow-x-auto">
+                <table className="w-full text-sm min-w-[960px]">
                     <thead className="bg-ash-50 text-ash-600">
                         <tr>
                             <th className="text-left px-4 py-3 font-semibold">GDO</th>
@@ -114,15 +111,19 @@ export function PhoneProductivityTab() {
                             <th className="text-right px-4 py-3 font-semibold" title="Mediana dei minuti fra la fine dell'ultima chiamata e la fine turno. Non è una media: 1-2 giornate anomale (permessi, mezze giornate) la sposterebbero lontano dal caso tipico. A fianco: quante giornate arrivano fino a fine turno (anticipo entro 15 min).">
                                 Stacca prima (mediana)
                             </th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Minuti del turno senza nessuna chiamata attiva (bordi + buchi interni), e percentuale sulla durata del turno. È l'informazione più importante della tabella.">
-                                Fermo totale
+                            <th className="text-right px-4 py-3 font-semibold" title="Minuti al giorno persi in interruzioni fra una chiamata e l'altra oltre i 2 minuti (sotto i 2 minuti è ritmo di lavoro: chiudere l'esito, comporre il numero dopo). Sotto: quante volte al giorno e quanto dura in media ogni interruzione.">
+                                Pause
                             </th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Quanto la giornata di assenze pure (buchi oltre 10 minuti) supera il migliore del gruppo">Oltre il migliore</th>
+                            <th className="text-right px-4 py-3 font-bold" title="Quanto le pause superano i 30 minuti di pausa concessi da contratto. È il numero da guardare.">
+                                Oltre i 30 min
+                            </th>
+                            <th className="text-right px-4 py-3 font-semibold" title="Ore complessive di eccesso sui 30 minuti concessi, nell'intero periodo mostrato">
+                                Ore in eccesso
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map(r => {
-                            const excess = r.assenzeMinPerDay - data.benchmarkMin
                             return (
                                 <tr key={r.userId} className="border-t border-ash-100 align-top">
                                     <td className="px-4 py-3 font-semibold text-ash-800">{r.gdo}</td>
@@ -158,16 +159,27 @@ export function PhoneProductivityTab() {
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-right tabular-nums">
-                                        <div className="font-bold text-ash-900 text-base">{r.fermoTotalMin} min</div>
-                                        <div className="text-xs text-ash-500">{r.fermoPct}% del turno ({r.shiftMinutes} min)</div>
+                                        <div className="font-semibold text-ash-800">{r.pauseMinPerDay} min</div>
+                                        <div className="text-xs text-ash-400">
+                                            {itNum(r.pauseCountPerDay)} volte · {r.avgPauseMin} min l&apos;una
+                                        </div>
                                     </td>
-                                    <td className={`px-4 py-3 text-right tabular-nums font-semibold ${excess > 45 ? 'text-red-600' : excess > 20 ? 'text-amber-600' : 'text-ash-400'}`}>
-                                        {excess > 0 ? `+${excess} min` : '—'}
+                                    <td className={`px-4 py-3 text-right tabular-nums font-bold text-base ${r.overAllowanceMinPerDay > 45 ? 'text-red-600' : r.overAllowanceMinPerDay > 0 ? 'text-amber-600' : 'text-ash-400'}`}>
+                                        {r.overAllowanceMinPerDay > 0 ? `+${r.overAllowanceMinPerDay} min` : '—'}
+                                    </td>
+                                    <td className="px-4 py-3 text-right tabular-nums text-ash-600">
+                                        {r.overAllowanceHoursPeriod > 0 ? `${itNum(r.overAllowanceHoursPeriod)} h` : '—'}
                                     </td>
                                 </tr>
                             )
                         })}
                     </tbody>
+                    <tfoot>
+                        <tr className="border-t-2 border-ash-200 bg-ash-50 font-semibold text-ash-800">
+                            <td className="px-4 py-3" colSpan={9}>Totale squadra, ore in eccesso sul periodo</td>
+                            <td className="px-4 py-3 text-right tabular-nums">{itNum(teamOverAllowanceHours)} h</td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
 
@@ -182,6 +194,11 @@ export function PhoneProductivityTab() {
             </div>
         </div>
     )
+}
+
+/** Un decimale, virgola italiana: 20,9 invece di 20.9. */
+function itNum(n: number): string {
+    return n.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 function SummaryStat({ label, value, sub }: { label: string; value: string; sub: string }) {

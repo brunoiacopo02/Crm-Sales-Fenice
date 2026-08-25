@@ -4,9 +4,12 @@
  * Produttività telefonica dei GDO dai tabulati del centralino (tabella
  * pbxCalls, alimentata da scripts/import-cdr.ts).
  *
- * Il "tempo non telefonico" comprende la compilazione degli esiti e la
- * scelta del lead: non è tempo di pausa. Va confrontato col migliore del
- * gruppo (benchmarkMin), mai con lo zero.
+ * Il "tempo non telefonico" comprende sia il ritmo di lavoro fra una chiamata
+ * e l'altra (chiudere l'esito, comporre il numero dopo — è lavoro, non
+ * pausa) sia le interruzioni vere. Dal 2026-08-25 le due cose si contano
+ * separatamente (vedi workRhythmMinPerDay/pauseMinPerDay) e le interruzioni
+ * si confrontano coi 30 minuti di pausa concessi da contratto
+ * (overAllowanceMinPerDay), non più col migliore del gruppo.
  */
 
 import { db } from "@/db"
@@ -21,6 +24,22 @@ import { dayBoundsRome } from "@/lib/dateUtils"
 /** Sotto questa soglia la giornata non è rappresentativa (mezze giornate, assenze). */
 const MIN_CALLS_PER_DAY = 40
 
+/**
+ * Soglia (secondi) oltre la quale un buco fra due chiamate è una vera
+ * interruzione e non ritmo di lavoro. Sotto: chiudere l'esito e comporre il
+ * numero successivo (11-25 secondi di mediana, misurato agosto 2026) — è
+ * lavoro incomprimibile, non pausa. Soglia prudente concordata col committente
+ * il 2026-08-25.
+ */
+const WORK_RHYTHM_THRESHOLD_SEC = 2 * 60
+
+/**
+ * Pausa quotidiana prevista da contratto (minuti): diritto contrattuale, non
+ * un obiettivo aziendale. È il metro di riferimento per overAllowanceMinPerDay,
+ * al posto del "migliore del gruppo" usato in precedenza.
+ */
+const CONTRACTUAL_PAUSE_ALLOWANCE_MIN = 30
+
 /** Ruoli che possono vedere produttività telefonica e qualità appuntamenti dei GDO. */
 const PRODUCTIVITY_VIEW_ROLES = ['ADMIN', 'MANAGER', 'TL']
 
@@ -33,13 +52,38 @@ export type PhoneProductivityRow = {
     /**
      * Il telefono squilla ma nessuno risponde — media giornaliera di
      * sum(duration - billsec). Non è conversazione (talkMinPerDay) né tempo
-     * fermo (fermoTotalMin): è il terzo pezzo del turno, calcolato con lo
-     * stesso schema degli altri campi (accumulo per giornata, poi media).
+     * fermo: è il terzo pezzo del turno, calcolato con lo stesso schema
+     * degli altri campi (accumulo per giornata, poi media).
      */
     ringingMinPerDay: number
     ritmoMinPerDay: number
     grigiaMinPerDay: number
     assenzeMinPerDay: number
+    /**
+     * Ritmo di lavoro: minuti al giorno passati in buchi fra due chiamate
+     * fino a WORK_RHYTHM_THRESHOLD_SEC (2 minuti) — chiudere l'esito e
+     * comporre il numero dopo. Non è pausa.
+     */
+    workRhythmMinPerDay: number
+    /**
+     * Interruzioni vere: minuti al giorno passati in buchi fra due chiamate
+     * sopra WORK_RHYTHM_THRESHOLD_SEC (2 minuti). Il sabato è già scalato
+     * dell'abbuono formazione (vedi saturdayAllowanceSec in shift.ts),
+     * altrimenti l'ultima ora di formazione risulterebbe un'interruzione.
+     */
+    pauseMinPerDay: number
+    /**
+     * Quante interruzioni sopra i 2 minuti in media al giorno (un decimale).
+     * La differenza fra le persone è quasi tutta qui, non nella durata della
+     * singola pausa (vedi avgPauseMin, quasi uguale per tutti).
+     */
+    pauseCountPerDay: number
+    /** Durata media di una singola interruzione (minuti, arrotondati). Non abbuonata sabato: è la fotografia grezza della pausa tipica. */
+    avgPauseMin: number
+    /** max(0, pauseMinPerDay - 30): scostamento dai 30 minuti di pausa concessi da contratto. È il numero da guardare. */
+    overAllowanceMinPerDay: number
+    /** Ore complessive di eccesso nel periodo mostrato: overAllowanceMinPerDay * giornate / 60, un decimale. */
+    overAllowanceHoursPeriod: number
     /**
      * Ritardo fra l'inizio turno e la prima chiamata — MEDIANA sulle giornate
      * (mai negativo). Non la media: poche giornate anomale (permessi, mezze
@@ -66,18 +110,12 @@ export type PhoneProductivityRow = {
     daysShort: number
     /** Buchi dentro il turno: fermo totale meno i due bordi. */
     idleInShiftMin: number
-    /** Minuti del turno senza nessuna chiamata attiva (bordi + buchi interni). */
-    fermoTotalMin: number
-    /** fermoTotalMin in percentuale sulla durata del turno. */
-    fermoPct: number
-    /** Durata del turno usata per questa riga (media sulle giornate), per trasparenza. */
-    shiftMinutes: number
 }
 
 export async function getPhoneProductivity(
     fromDateLocal: string,
     toDateLocal: string,
-): Promise<{ rows: PhoneProductivityRow[]; benchmarkMin: number }> {
+): Promise<{ rows: PhoneProductivityRow[] }> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
     if (!PRODUCTIVITY_VIEW_ROLES.includes(ctx.role)) {
@@ -129,7 +167,12 @@ export async function getPhoneProductivity(
         // non per una media — vedi commento su PhoneProductivityRow.
         startLateDaysSec: number[]; endEarlyDaysSec: number[]
         daysFullShift: number; daysShort: number
-        idleInShift: number; fermoTotal: number; shiftMinutesSum: number
+        idleInShift: number
+        // Ritmo di lavoro (≤2 min) e interruzioni vere (>2 min) fra chiamate.
+        // pauseSec è già scalato dell'abbuono formazione del sabato (per
+        // pauseMinPerDay/overAllowance); pauseSecRaw e pauseCount non lo sono
+        // (per avgPauseMin, la fotografia grezza della pausa tipica).
+        workRhythmSec: number; pauseSec: number; pauseSecRaw: number; pauseCount: number
     }>()
     for (const slot of byDay.values()) {
         if (slot.calls.length < MIN_CALLS_PER_DAY) continue
@@ -146,7 +189,8 @@ export async function getPhoneProductivity(
             u = {
                 gdo: slot.gdo, days: 0, calls: 0, talk: 0, ringing: 0, ritmo: 0, grigia: 0, assenze: 0,
                 startLateDaysSec: [], endEarlyDaysSec: [], daysFullShift: 0, daysShort: 0,
-                idleInShift: 0, fermoTotal: 0, shiftMinutesSum: 0,
+                idleInShift: 0,
+                workRhythmSec: 0, pauseSec: 0, pauseSecRaw: 0, pauseCount: 0,
             }
             byUser.set(slot.userId, u)
         }
@@ -187,17 +231,34 @@ export async function getPhoneProductivity(
             : WEEKDAY_DAYS_SHORT_THRESHOLD_MIN * 60
         if (endEarlySec > threshold) u.daysShort += 1
         u.idleInShift += idleInShiftSec
-        u.fermoTotal += fermoTotalSec
-        u.shiftMinutesSum += shift.minutes
+
+        // Ritmo di lavoro vs interruzioni vere: si riparte dai buchi grezzi
+        // fra chiamate (m.gaps), non dai bucket esistenti (i loro confini a
+        // 60/180/600/1800s non cadono sulla soglia dei 2 minuti concordata).
+        let workRhythmSecDay = 0
+        let pauseSecRawDay = 0
+        let pauseCountRawDay = 0
+        for (const gap of m.gaps) {
+            if (gap <= WORK_RHYTHM_THRESHOLD_SEC) workRhythmSecDay += gap
+            else {
+                pauseSecRawDay += gap
+                pauseCountRawDay += 1
+            }
+        }
+        // Il sabato l'ultima ora di formazione compare come un buco interno
+        // fra due chiamate: va abbuonata dalle pause con la stessa funzione e
+        // lo stesso tetto (60 min) già usati per l'anticipo a fine turno,
+        // altrimenti la formazione risulterebbe un'interruzione.
+        const pauseAllowanceSec = saturdayAllowanceSec(slot.dateLocal, pauseSecRawDay)
+        u.workRhythmSec += workRhythmSecDay
+        u.pauseSec += pauseSecRawDay - pauseAllowanceSec
+        u.pauseSecRaw += pauseSecRawDay
+        u.pauseCount += pauseCountRawDay
     }
 
     const rows: PhoneProductivityRow[] = [...byUser.entries()].map(([userId, u]) => {
-        const fermoTotalMin = Math.round(u.fermoTotal / u.days / 60)
-        const shiftMinutes = Math.round(u.shiftMinutesSum / u.days)
-        // fermoPct dai contatori grezzi in secondi (u.fermoTotal, shiftSecondsSum),
-        // non dai minuti già arrotondati sopra (fermoTotalMin/shiftMinutes):
-        // il doppio arrotondamento porta fino a 1-2 punti di scarto.
-        const shiftSecondsSum = u.shiftMinutesSum * 60
+        const pauseMinPerDay = Math.round(u.pauseSec / u.days / 60)
+        const overAllowanceMinPerDay = Math.max(0, pauseMinPerDay - CONTRACTUAL_PAUSE_ALLOWANCE_MIN)
         return {
             userId,
             gdo: u.gdo,
@@ -208,23 +269,24 @@ export async function getPhoneProductivity(
             ritmoMinPerDay: Math.round(u.ritmo / u.days / 60),
             grigiaMinPerDay: Math.round(u.grigia / u.days / 60),
             assenzeMinPerDay: Math.round(u.assenze / u.days / 60),
+            workRhythmMinPerDay: Math.round(u.workRhythmSec / u.days / 60),
+            pauseMinPerDay,
+            // Un decimale: è la metrica che spiega la differenza fra le
+            // persone (vedi commento sul campo in PhoneProductivityRow).
+            pauseCountPerDay: Math.round((u.pauseCount / u.days) * 10) / 10,
+            avgPauseMin: u.pauseCount ? Math.round(u.pauseSecRaw / u.pauseCount / 60) : 0,
+            overAllowanceMinPerDay,
+            overAllowanceHoursPeriod: Math.round((overAllowanceMinPerDay * u.days / 60) * 10) / 10,
             // Mediana, non media: vedi commento su PhoneProductivityRow.
             startLateMin: Math.round(median(u.startLateDaysSec) / 60),
             endEarlyMin: Math.round(median(u.endEarlyDaysSec) / 60),
             daysFullShift: u.daysFullShift,
             daysShort: u.daysShort,
             idleInShiftMin: Math.round(u.idleInShift / u.days / 60),
-            fermoTotalMin,
-            fermoPct: shiftSecondsSum ? Math.round((100 * u.fermoTotal) / shiftSecondsSum) : 0,
-            shiftMinutes,
         }
-    }).sort((a, b) => b.assenzeMinPerDay - a.assenzeMinPerDay)
+    }).sort((a, b) => b.overAllowanceMinPerDay - a.overAllowanceMinPerDay)
 
-    // Il riferimento è il migliore del gruppo sulle assenze, non sul totale
-    // (deve essere omogeneo con assenzeMinPerDay, usato per lo scostamento
-    // "Oltre il migliore" in UI) — non lo zero.
-    const benchmarkMin = rows.length ? Math.min(...rows.map(r => r.assenzeMinPerDay)) : 0
-    return { rows, benchmarkMin }
+    return { rows }
 }
 
 export type ApptQualityRow = {
