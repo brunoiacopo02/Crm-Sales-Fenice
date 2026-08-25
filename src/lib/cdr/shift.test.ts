@@ -1,6 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { romeDowOf, shiftBoundsFor, lateAndEarly, WEEKDAY_SHIFT, SATURDAY_SHIFT } from './shift'
+import {
+    romeDowOf, shiftBoundsFor, lateAndEarly, WEEKDAY_SHIFT, SATURDAY_SHIFT,
+    saturdayAllowanceSec, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN,
+} from './shift'
 
 // 2026-08-24 = lunedì, 2026-08-22 = sabato, 2026-08-23 = domenica.
 const WEEKDAY = '2026-08-24'
@@ -13,9 +16,9 @@ test('un feriale ha un turno di 390 minuti (13:30-20:00)', () => {
     assert.equal(shift.minutes, WEEKDAY_SHIFT.endMin - WEEKDAY_SHIFT.startMin)
 })
 
-test('il sabato ha un turno di 330 minuti (10:00-15:30)', () => {
+test('il sabato ha un turno di 390 minuti (10:00-16:30), come i feriali', () => {
     const shift = shiftBoundsFor(SATURDAY)!
-    assert.equal(shift.minutes, 330)
+    assert.equal(shift.minutes, 390)
     assert.equal(shift.minutes, SATURDAY_SHIFT.endMin - SATURDAY_SHIFT.startMin)
 })
 
@@ -55,4 +58,36 @@ test('ultima chiamata dopo la fine turno: anticipo mai negativo', () => {
     const lastAt = new Date(shift.end.getTime() + 15 * 60000) // 15 minuti dopo la fine
     const { endEarlySec } = lateAndEarly(firstAt, lastAt, shift)
     assert.equal(endEarlySec, 0)
+})
+
+// Abbuono formazione del sabato: l'anticipo a fine turno non conta come
+// fermo fino a SATURDAY_TRAINING_ALLOWANCE_MIN (60) minuti; oltre, l'eccedenza
+// torna a contare normalmente. Nei feriali nessun abbuono.
+
+test('sabato, 45 minuti di anticipo: abbuono pieno, nessun tempo fermo aggiuntivo', () => {
+    const shift = shiftBoundsFor(SATURDAY)!
+    const endEarlySec = 45 * 60
+    // Nessun ritardo/buco interno: l'intero fermo grezzo viene dall'anticipo.
+    const occupiedSeconds = shift.minutes * 60 - endEarlySec
+    const fermo = fermoTotalSeconds(SATURDAY, shift.minutes * 60, occupiedSeconds, endEarlySec)
+    assert.equal(saturdayAllowanceSec(SATURDAY, endEarlySec), 45 * 60)
+    assert.equal(fermo, 0)
+})
+
+test('sabato, 90 minuti di anticipo: 60 abbuonati, 30 contati come fermo', () => {
+    const shift = shiftBoundsFor(SATURDAY)!
+    const endEarlySec = 90 * 60
+    const occupiedSeconds = shift.minutes * 60 - endEarlySec
+    const fermo = fermoTotalSeconds(SATURDAY, shift.minutes * 60, occupiedSeconds, endEarlySec)
+    assert.equal(saturdayAllowanceSec(SATURDAY, endEarlySec), SATURDAY_TRAINING_ALLOWANCE_MIN * 60)
+    assert.equal(fermo, 30 * 60)
+})
+
+test('feriale, 45 minuti di anticipo: nessun abbuono, tutti e 45 contati come fermo', () => {
+    const shift = shiftBoundsFor(WEEKDAY)!
+    const endEarlySec = 45 * 60
+    const occupiedSeconds = shift.minutes * 60 - endEarlySec
+    const fermo = fermoTotalSeconds(WEEKDAY, shift.minutes * 60, occupiedSeconds, endEarlySec)
+    assert.equal(saturdayAllowanceSec(WEEKDAY, endEarlySec), 0)
+    assert.equal(fermo, 45 * 60)
 })

@@ -74,14 +74,15 @@ export function PhoneProductivityTab() {
                     è la <strong>mediana</strong> delle giornate e non la media, che verrebbe trascinata da 1-2 casi anomali.
                 </div>
                 <div>
-                    Il sabato ha un turno più corto (10:00-15:30) ed è conteggiato con la sua durata:
-                    non è confrontabile 1:1 con un feriale.
+                    Il sabato ha lo stesso orario dei feriali ma su una fascia diversa (10:00-16:30). L&apos;ultima
+                    ora è spesso dedicata alla formazione: fino a 60 minuti di anticipo a fine turno non vengono
+                    conteggiati come tempo fermo.
                 </div>
             </div>
 
             {/* Riga riassuntiva di squadra, sopra la tabella */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <SummaryStat label="Turno di riferimento" value="Fer. 13:30-20:00" sub="Sab. 10:00-15:30" />
+                <SummaryStat label="Turno di riferimento" value="Fer. 13:30-20:00" sub="Sab. 10:00-16:30" />
                 <SummaryStat label="Al telefono (media)" value={`${avgTalkMin} min`} sub="al giorno, squadra" />
                 <SummaryStat label="Fermo totale (media)" value={`${avgFermoMin} min`} sub="al giorno, squadra" />
                 <SummaryStat label="Migliore vs peggiore" value={`${fermoSpread} min`} sub="scarto sul fermo totale" />

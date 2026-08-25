@@ -14,7 +14,7 @@ import { pbxCalls, users, leads } from "@/db/schema"
 import { and, gte, lte, lt, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
-import { shiftBoundsFor, lateAndEarly } from "@/lib/cdr/shift"
+import { shiftBoundsFor, lateAndEarly, saturdayAllowanceSec, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN } from "@/lib/cdr/shift"
 import { apptSetAt } from "@/lib/kpi/canon"
 import { dayBoundsRome } from "@/lib/dateUtils"
 
@@ -49,7 +49,12 @@ export type PhoneProductivityRow = {
     endEarlyMin: number
     /** Giornate in cui si arriva a fine turno: anticipo ≤ 15 minuti. */
     daysFullShift: number
-    /** Giornate con anticipo > 60 minuti: mezze giornate, permessi, uscite autorizzate. */
+    /**
+     * Giornate con anticipo > SATURDAY_TRAINING_ALLOWANCE_MIN (60) minuti:
+     * mezze giornate, permessi, uscite autorizzate. Il sabato la stessa
+     * soglia coincide con l'abbuono formazione, così una giornata di sabato
+     * con la sola ultima ora di formazione non risulta "corta".
+     */
     daysShort: number
     /** Buchi dentro il turno: fermo totale meno i due bordi. */
     idleInShiftMin: number
@@ -148,15 +153,25 @@ export async function getPhoneProductivity(
         // giornate come tutto il resto — mai sommate tutte insieme e divise alla fine.
         const shiftDurationSec = shift.minutes * 60
         const { startLateSec, endEarlySec } = lateAndEarly(m.firstAt, m.lastAt, shift)
-        const fermoTotalSec = Math.max(0, shiftDurationSec - m.occupiedSeconds)
-        const idleInShiftSec = Math.max(0, fermoTotalSec - startLateSec - endEarlySec)
+        // Il sabato la formazione occupa spesso l'ultima ora: quell'anticipo
+        // non conta come fermo, fino a SATURDAY_TRAINING_ALLOWANCE_MIN minuti
+        // (vedi shift.ts). Nei feriali l'abbuono è sempre 0.
+        const allowanceSec = saturdayAllowanceSec(slot.dateLocal, endEarlySec)
+        const fermoTotalSec = fermoTotalSeconds(slot.dateLocal, shiftDurationSec, m.occupiedSeconds, endEarlySec)
+        // I buchi interni restano quelli "grezzi" (non scalati dall'abbuono):
+        // fermoTotalSec è già al netto dell'abbuono sull'anticipo, quindi qui
+        // si sottrae l'anticipo altrettanto scalato per tornare ai soli buchi
+        // interni — fermoTotale = startLate + idleInShift + (endEarly - abbuono).
+        const idleInShiftSec = Math.max(0, fermoTotalSec - startLateSec - (endEarlySec - allowanceSec))
 
         u.startLateDaysSec.push(startLateSec)
         u.endEarlyDaysSec.push(endEarlySec)
         // Soglie sulla singola giornata, non sulla mediana: "arriva a fine
-        // turno" e "mezza giornata/permesso" sono eventi puntuali.
+        // turno" e "mezza giornata/permesso" sono eventi puntuali. La soglia
+        // "corta" usa lo stesso abbuono del sabato (SATURDAY_TRAINING_ALLOWANCE_MIN):
+        // altrimenti la formazione farebbe risultare "corte" tutte le giornate di sabato.
         if (endEarlySec <= 15 * 60) u.daysFullShift += 1
-        if (endEarlySec > 60 * 60) u.daysShort += 1
+        if (endEarlySec > SATURDAY_TRAINING_ALLOWANCE_MIN * 60) u.daysShort += 1
         u.idleInShift += idleInShiftSec
         u.fermoTotal += fermoTotalSec
         u.shiftMinutesSum += shift.minutes

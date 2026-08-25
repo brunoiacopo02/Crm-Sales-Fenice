@@ -15,10 +15,23 @@ import { dayBoundsRome } from "@/lib/dateUtils"
 // Feriali (lun-ven): 13:30-20:00 = 390 minuti.
 export const WEEKDAY_SHIFT = { startMin: 13 * 60 + 30, endMin: 20 * 60 }
 
-// Sabato: turno diverso, ~10:00-15:30 = 330 minuti.
-// NOTA INTERNA: orario NON confermato dal committente (dedotto dai dati) —
-// tenuto distinto dai feriali per poterlo correggere senza toccare l'altro.
-export const SATURDAY_SHIFT = { startMin: 10 * 60, endMin: 15 * 60 + 30 }
+// Sabato: 10:00-16:30 = 390 minuti, stessa durata dei feriali su fascia
+// diversa. Orario CONFERMATO dal committente il 2026-08-25 (non più dedotto
+// dai dati): la finestra osservata sembrava chiudersi prima delle 16:30
+// perché spesso l'ultima ora è dedicata alla formazione (vedi
+// SATURDAY_TRAINING_ALLOWANCE_MIN più sotto), non perché il turno sia più corto.
+export const SATURDAY_SHIFT = { startMin: 10 * 60, endMin: 16 * 60 + 30 }
+
+/**
+ * Il sabato, la formazione occupa spesso l'ultima ora di turno: è lavoro,
+ * non tempo fermo. Questo abbuono (minuti) scala l'anticipo a fine turno
+ * dal computo del tempo fermo, fino a questo massimo — l'eventuale
+ * eccedenza oltre l'abbuono torna a contare normalmente come fermo. Nei
+ * feriali non si applica alcun abbuono. Valore unico e modificabile qui
+ * (vedi fermoTotalSeconds/saturdayAllowanceSec più sotto e il suo uso in
+ * productivityActions.ts per fermoTotalMin e daysShort).
+ */
+export const SATURDAY_TRAINING_ALLOWANCE_MIN = 60
 
 export type ShiftBounds = { start: Date; end: Date; minutes: number }
 
@@ -57,4 +70,33 @@ export function lateAndEarly(
         startLateSec: Math.max(0, (firstAt.getTime() - shift.start.getTime()) / 1000),
         endEarlySec: Math.max(0, (shift.end.getTime() - lastAt.getTime()) / 1000),
     }
+}
+
+/**
+ * Abbuono formazione (secondi) da scalare dall'anticipo a fine turno nel
+ * computo del tempo fermo: 0 nei feriali, `min(endEarlySec, SATURDAY_TRAINING_ALLOWANCE_MIN)`
+ * il sabato.
+ */
+export function saturdayAllowanceSec(dateLocal: string, endEarlySec: number): number {
+    if (romeDowOf(dateLocal) !== 6) return 0
+    return Math.min(endEarlySec, SATURDAY_TRAINING_ALLOWANCE_MIN * 60)
+}
+
+/**
+ * Tempo fermo totale della giornata (secondi), al netto dell'abbuono
+ * formazione del sabato:
+ *
+ *   fermoTotale = durataTurno - tempoOccupato - min(anticipoFineTurno, abbuono)
+ *
+ * Nei feriali l'abbuono è 0, quindi la formula si riduce a
+ * `durataTurno - tempoOccupato` come prima di questa modifica.
+ */
+export function fermoTotalSeconds(
+    dateLocal: string,
+    shiftDurationSec: number,
+    occupiedSeconds: number,
+    endEarlySec: number,
+): number {
+    const allowanceSec = saturdayAllowanceSec(dateLocal, endEarlySec)
+    return Math.max(0, shiftDurationSec - occupiedSeconds - allowanceSec)
 }
