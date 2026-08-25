@@ -116,8 +116,9 @@ export async function getPhoneProductivity(
         assenzeMinPerDay: Math.round(u.assenze / u.days / 60),
     })).sort((a, b) => b.assenzeMinPerDay - a.assenzeMinPerDay)
 
-    // Il riferimento è il migliore del gruppo sul tempo non telefonico
-    // complessivo (offPhoneMinPerDay), non lo zero — come da spec.
-    const benchmarkMin = rows.length ? Math.min(...rows.map(r => r.offPhoneMinPerDay)) : 0
+    // Il riferimento è il migliore del gruppo sulle assenze, non sul totale
+    // (deve essere omogeneo con assenzeMinPerDay, usato per lo scostamento
+    // "Oltre il migliore" in UI) — non lo zero.
+    const benchmarkMin = rows.length ? Math.min(...rows.map(r => r.assenzeMinPerDay)) : 0
     return { rows, benchmarkMin }
 }
