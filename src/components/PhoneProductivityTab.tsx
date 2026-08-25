@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { getPhoneProductivity, type PhoneProductivityRow } from "@/app/actions/productivityActions"
-import { Phone, RefreshCw, ChevronDown, ChevronUp } from "lucide-react"
+import { Phone, RefreshCw } from "lucide-react"
+import { WEEKDAY_SHIFT } from "@/lib/cdr/shift"
+
+/** Durata del turno (minuti): 390 sia nei feriali (13:30-20:00) sia il sabato (10:00-16:30). */
+const SHIFT_REFERENCE_MIN = WEEKDAY_SHIFT.endMin - WEEKDAY_SHIFT.startMin
 
 function monthBounds(offset: number): { from: string; to: string; label: string } {
     const now = new Date()
@@ -15,11 +19,16 @@ function monthBounds(offset: number): { from: string; to: string; label: string 
     }
 }
 
+/** Somma delle sei colonne di tempo sommabili della riga (esclude le colonne di giudizio). */
+function rowTotalMin(r: PhoneProductivityRow): number {
+    return r.talkMinPerDay + r.ringingMinPerDay + r.workRhythmMinPerDay + r.pauseMinPerDay
+        + r.startLateAvgMin + r.endEarlyAvgMin
+}
+
 export function PhoneProductivityTab() {
     const [offset, setOffset] = useState(0)
     const [data, setData] = useState<{ rows: PhoneProductivityRow[] } | null>(null)
     const [isLoading, setIsLoading] = useState(true)
-    const [showBuckets, setShowBuckets] = useState(false)
     const period = monthBounds(offset)
 
     const fetchData = useCallback(async () => {
@@ -59,26 +68,33 @@ export function PhoneProductivityTab() {
                 </button>
             </div>
 
-            {/* Avviso: come si distingue il ritmo di lavoro dalla pausa vera */}
+            {/* Avviso: come si distingue il ritmo di lavoro dalla pausa vera, e come si verifica la tabella a mano */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
                 <div>
-                    Fra una chiamata e l&apos;altra ci vogliono 11-25 secondi per chiudere l&apos;esito e comporre il
-                    numero dopo: sono <strong>22-62 minuti al giorno</strong> di <strong>ritmo di lavoro</strong>,
-                    non pausa, e non vengono conteggiati come tale.
+                    Le sei colonne di tempo (<strong>al telefono, squilli, ritmo, pause, inizio tardi, dopo l&apos;ultima
+                    chiamata</strong>) sono tutte sommabili: la loro somma torna alla durata del turno
+                    (<strong>{SHIFT_REFERENCE_MIN} min</strong>), colonna <strong>Totale</strong>. È così che la tabella
+                    si verifica a mano.
                 </div>
                 <div>
-                    Tutto ciò che supera <strong>2 minuti</strong> fra una chiamata e l&apos;altra è conteggiato come
-                    <strong> interruzione</strong>. Il contratto prevede <strong>30 minuti di pausa al giorno</strong>:
-                    è questo il riferimento, non il migliore del gruppo.
+                    Fra una chiamata e l&apos;altra, fino a <strong>2 minuti</strong> è <strong>ritmo di lavoro</strong>:
+                    chiudere l&apos;esito e comporre il numero dopo, non pausa (<strong>37-75 minuti al giorno</strong>).
+                    Oltre i 2 minuti è <strong>interruzione</strong> vera: il contratto prevede 30 minuti di pausa al
+                    giorno, è questo il riferimento, non il migliore del gruppo.
                 </div>
                 <div>
-                    Il ritmo di lavoro e la durata di ogni singola pausa sono <strong>simili per tutti</strong>{' '}
-                    (16-28 secondi; 8-11 minuti a interruzione). A fare la differenza fra le persone è{' '}
-                    <strong>quante volte ci si ferma</strong>, non quanto dura la singola pausa.
+                    La durata di ogni singola pausa è <strong>simile per tutti</strong> (8-11 minuti a interruzione).
+                    A fare la differenza fra le persone è <strong>quante volte ci si ferma</strong>, non quanto dura la
+                    singola pausa.
                 </div>
                 <div>
                     Il sabato ha lo stesso orario dei feriali ma su una fascia diversa (10:00-16:30). L&apos;ultima
                     ora è spesso dedicata alla formazione: fino a 60 minuti non vengono conteggiati come interruzione.
+                </div>
+                <div>
+                    Tutte le medie della tabella sono calcolate sulle sole <strong>giornate intere</strong>: le mezze
+                    giornate e i permessi sono contati a parte (colonna Giornate) e non entrano nel confronto, perché
+                    altrimenti chi ha avuto permessi risulterebbe più diligente di chi ha lavorato tutti i giorni interi.
                 </div>
             </div>
 
@@ -91,84 +107,70 @@ export function PhoneProductivityTab() {
             </div>
 
             <div className="rounded-xl border border-ash-200 bg-white overflow-x-auto">
-                <table className="w-full text-sm min-w-[960px]">
+                <table className="w-full text-sm">
                     <thead className="bg-ash-50 text-ash-600">
                         <tr>
-                            <th className="text-left px-4 py-3 font-semibold">GDO</th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Numero di giornate con almeno 40 chiamate, usate per il calcolo">Giornate</th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Chiamate effettuate in media in una giornata">Chiamate/gg</th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Minuti di conversazione effettiva (billsec) in media al giorno">Al telefono</th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Il telefono squilla e nessuno risponde (duration - billsec) in media al giorno: non è conversazione né tempo fermo, è il terzo pezzo del turno">Squilli a vuoto</th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Buchi fra una chiamata e l'altra, divisi per durata: clicca per il dettaglio">
-                                <button
-                                    onClick={() => setShowBuckets(v => !v)}
-                                    className="flex items-center gap-1 ml-auto text-ash-600 hover:text-ash-800"
-                                >
-                                    Buchi per durata
-                                    {showBuckets ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                </button>
-                            </th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Mediana dei minuti fra la fine dell'ultima chiamata e la fine turno. Non è una media: 1-2 giornate anomale (permessi, mezze giornate) la sposterebbero lontano dal caso tipico. A fianco: quante giornate arrivano fino a fine turno (anticipo entro 15 min).">
-                                Stacca prima (mediana)
-                            </th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Minuti al giorno persi in interruzioni fra una chiamata e l'altra oltre i 2 minuti (sotto i 2 minuti è ritmo di lavoro: chiudere l'esito, comporre il numero dopo). Sotto: quante volte al giorno e quanto dura in media ogni interruzione.">
+                            <th className="text-left px-2 py-3 font-semibold">GDO</th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Giornate INTERE (non permessi/mezze giornate), con almeno 40 chiamate: sono la base di calcolo di tutte le medie della riga. A fianco, se presenti, le giornate escluse (permessi/mezze giornate).">Gg</th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Chiamate effettuate in media in una giornata">Chiamate</th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Minuti di conversazione effettiva (billsec) in media al giorno">Al telefono</th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Il telefono squilla e nessuno risponde (duration - billsec) in media al giorno: non è conversazione né tempo fermo, è il terzo pezzo del turno">Squilli</th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in buchi fra una chiamata e l'altra fino a 2 minuti: chiudere l'esito e comporre il numero dopo. È lavoro, non pausa.">Ritmo</th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno persi in interruzioni fra una chiamata e l'altra oltre i 2 minuti (sotto i 2 minuti è ritmo di lavoro). Sotto: quante volte al giorno e quanto dura in media ogni interruzione.">
                                 Pause
                             </th>
-                            <th className="text-right px-4 py-3 font-bold" title="Quanto le pause superano i 30 minuti di pausa concessi da contratto. È il numero da guardare.">
-                                Oltre i 30 min
+                            <th className="text-right px-2 py-3 font-semibold" title="Media sulle giornate intere di 'inizio tardi' (ritardo fra inizio turno e prima chiamata) più 'dopo l'ultima chiamata' (anticipo fra fine ultima chiamata e fine turno). Dettaglio dei due valori (media e mediana) nel tooltip della cella.">
+                                Bordi turno
                             </th>
-                            <th className="text-right px-4 py-3 font-semibold" title="Ore complessive di eccesso sui 30 minuti concessi, nell'intero periodo mostrato">
-                                Ore in eccesso
+                            <th className="text-right px-2 py-3 font-bold" title="Quanto le pause superano i 30 minuti di pausa concessi da contratto. È il numero da guardare.">
+                                Oltre 30&apos;
+                            </th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Ore complessive di eccesso sui 30 minuti concessi, nell'intero periodo mostrato">
+                                Ore ecc.
+                            </th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Somma delle sei colonne di tempo, a fianco la durata del turno di riferimento: devono coincidere a meno di pochi minuti (vedi nota sotto la tabella).">
+                                Totale
                             </th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map(r => {
+                            const total = rowTotalMin(r)
+                            const bordiTurno = r.startLateAvgMin + r.endEarlyAvgMin
                             return (
                                 <tr key={r.userId} className="border-t border-ash-100 align-top">
-                                    <td className="px-4 py-3 font-semibold text-ash-800">{r.gdo}</td>
-                                    <td className="px-4 py-3 text-right text-ash-500">{r.days}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums">{r.callsPerDay}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-700">{r.talkMinPerDay} min</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-ash-500">{r.ringingMinPerDay} min</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-ash-500">
-                                        {showBuckets ? (
-                                            <div className="flex flex-col gap-0.5 text-xs">
-                                                <div title="Post-chiamata (<3 min): compilare l'esito e passare al numero dopo, tempo di lavoro che non si comprime">
-                                                    Post-chiamata (&lt;3 min): <span className="tabular-nums font-medium text-ash-700">{r.ritmoMinPerDay} min</span>
-                                                </div>
-                                                <div title="Pause brevi (3-10 min)">
-                                                    Pause brevi (3-10 min): <span className="tabular-nums font-medium text-ash-700">{r.grigiaMinPerDay} min</span>
-                                                </div>
-                                                <div title="Assenze (>10 min): il numero da discutere">
-                                                    Assenze (&gt;10 min): <span className="tabular-nums font-semibold text-ash-800">{r.assenzeMinPerDay} min</span>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="text-xs">{r.assenzeMinPerDay} min assenze</div>
-                                        )}
+                                    <td className="px-2 py-3 font-semibold text-ash-800">{r.gdo}</td>
+                                    <td className="px-2 py-3 text-right tabular-nums">
+                                        <div className="text-ash-500">{r.days}</div>
+                                        {r.daysShort > 0 && <div className="text-xs text-ash-400">+{r.daysShort} escl.</div>}
                                     </td>
-                                    <td className="px-4 py-3 text-right tabular-nums">
-                                        <div className="font-semibold text-ash-800">{r.endEarlyMin} min</div>
-                                        <div className="text-xs text-ash-400">
-                                            {r.daysFullShift}/{r.days} giornate intere
-                                            {r.daysShort > 0 && ` · ${r.daysShort} corte`}
-                                        </div>
-                                        {r.startLateMin > 10 && (
-                                            <div className="text-xs text-ash-300">inizia tardi: {r.startLateMin} min</div>
-                                        )}
-                                    </td>
-                                    <td className="px-4 py-3 text-right tabular-nums">
+                                    <td className="px-2 py-3 text-right tabular-nums">{r.callsPerDay}</td>
+                                    <td className="px-2 py-3 text-right tabular-nums font-semibold text-emerald-700">{r.talkMinPerDay} min</td>
+                                    <td className="px-2 py-3 text-right tabular-nums text-ash-500">{r.ringingMinPerDay} min</td>
+                                    <td className="px-2 py-3 text-right tabular-nums text-ash-600">{r.workRhythmMinPerDay} min</td>
+                                    <td className="px-2 py-3 text-right tabular-nums">
                                         <div className="font-semibold text-ash-800">{r.pauseMinPerDay} min</div>
                                         <div className="text-xs text-ash-400">
                                             {itNum(r.pauseCountPerDay)} volte · {r.avgPauseMin} min l&apos;una
                                         </div>
                                     </td>
-                                    <td className={`px-4 py-3 text-right tabular-nums font-bold text-base ${r.overAllowanceMinPerDay > 45 ? 'text-red-600' : r.overAllowanceMinPerDay > 0 ? 'text-amber-600' : 'text-ash-400'}`}>
+                                    <td
+                                        className="px-2 py-3 text-right tabular-nums"
+                                        title={`Inizio tardi: media ${r.startLateAvgMin} min (mediana ${r.startLateMin} min) · Dopo l'ultima chiamata: media ${r.endEarlyAvgMin} min (mediana ${r.endEarlyMin} min)`}
+                                    >
+                                        <div className="font-semibold text-ash-800">{bordiTurno} min</div>
+                                        <div className="text-xs text-ash-400">
+                                            {r.daysFullShift}/{r.days + r.daysShort} a fine turno
+                                        </div>
+                                    </td>
+                                    <td className={`px-2 py-3 text-right tabular-nums font-bold text-base ${r.overAllowanceMinPerDay > 45 ? 'text-red-600' : r.overAllowanceMinPerDay > 0 ? 'text-amber-600' : 'text-ash-400'}`}>
                                         {r.overAllowanceMinPerDay > 0 ? `+${r.overAllowanceMinPerDay} min` : '—'}
                                     </td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-ash-600">
+                                    <td className="px-2 py-3 text-right tabular-nums text-ash-600">
                                         {r.overAllowanceHoursPeriod > 0 ? `${itNum(r.overAllowanceHoursPeriod)} h` : '—'}
+                                    </td>
+                                    <td className="px-2 py-3 text-right tabular-nums text-ash-500">
+                                        {total} / {SHIFT_REFERENCE_MIN} min
                                     </td>
                                 </tr>
                             )
@@ -176,21 +178,31 @@ export function PhoneProductivityTab() {
                     </tbody>
                     <tfoot>
                         <tr className="border-t-2 border-ash-200 bg-ash-50 font-semibold text-ash-800">
-                            <td className="px-4 py-3" colSpan={9}>Totale squadra, ore in eccesso sul periodo</td>
-                            <td className="px-4 py-3 text-right tabular-nums">{itNum(teamOverAllowanceHours)} h</td>
+                            <td className="px-2 py-3" colSpan={9}>Totale squadra, ore in eccesso sul periodo</td>
+                            <td className="px-2 py-3 text-right tabular-nums">{itNum(teamOverAllowanceHours)} h</td>
+                            <td className="px-2 py-3 text-right tabular-nums text-ash-400">—</td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-ash-400">
-                <Phone className="w-3 h-3" />
-                Giornate con almeno 40 chiamate. Fonte: tabulati del centralino, turno reale (non la finestra osservata).
-                {rows.some(r => r.daysShort > 0) && (
-                    <span>
-                        {' '}{rows.reduce((a, r) => a + r.daysShort, 0)} giornate su {rows.reduce((a, r) => a + r.days, 0)} nel mese hanno anticipo oltre 60 min (mezze giornate/permessi), escluse dal giudizio sulla mediana.
-                    </span>
-                )}
+            <div className="flex items-start gap-2 text-xs text-ash-400">
+                <Phone className="w-3 h-3 mt-0.5 shrink-0" />
+                <div className="space-y-0.5">
+                    <div>
+                        Giornate con almeno 40 chiamate. Fonte: tabulati del centralino, turno reale (non la finestra osservata).
+                        {rows.some(r => r.daysShort > 0) && (
+                            <span>
+                                {' '}{rows.reduce((a, r) => a + r.daysShort, 0)} giornate su {rows.reduce((a, r) => a + r.days + r.daysShort, 0)} nel mese sono mezze giornate/permessi (anticipo oltre 60 min, 120 il sabato): contate a parte (colonna Giornate), escluse da tutte le medie della riga.
+                            </span>
+                        )}
+                    </div>
+                    <div>
+                        La colonna Totale può superare la durata del turno di 3-13 minuti: è una media su giornate
+                        feriali e sabati, che hanno fasce orarie diverse, più gli arrotondamenti al minuto di ogni
+                        colonna. Non è un errore.
+                    </div>
+                </div>
             </div>
         </div>
     )

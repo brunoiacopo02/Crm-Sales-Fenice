@@ -10,6 +10,14 @@
  * separatamente (vedi workRhythmMinPerDay/pauseMinPerDay) e le interruzioni
  * si confrontano coi 30 minuti di pausa concessi da contratto
  * (overAllowanceMinPerDay), non più col migliore del gruppo.
+ *
+ * Tutte le medie giornaliere (chiamate, telefono, squilli, ritmo, pause,
+ * bordi del turno) si calcolano SOLO sulle "giornate intere", cioè quelle
+ * che non sono permessi/mezze giornate/uscite autorizzate (vedi la soglia
+ * usata per `daysShort`). Includere le giornate corte abbasserebbe ogni
+ * voce e farebbe risultare chi ha avuto permessi più diligente di chi ha
+ * lavorato tutti i giorni interi. Le giornate corte non spariscono: restano
+ * contate in `daysShort` e mostrate a parte.
  */
 
 import { db } from "@/db"
@@ -46,6 +54,13 @@ const PRODUCTIVITY_VIEW_ROLES = ['ADMIN', 'MANAGER', 'TL']
 export type PhoneProductivityRow = {
     userId: string
     gdo: string
+    /**
+     * Giornate INTERE (non permessi/mezze giornate): il denominatore di
+     * tutte le medie della riga (callsPerDay, talkMinPerDay, ringingMinPerDay,
+     * workRhythmMinPerDay, pauseMinPerDay, pauseCountPerDay, startLateAvgMin,
+     * endEarlyAvgMin). Le giornate escluse sono in `daysShort`, mostrate a
+     * parte per trasparenza, mai sparite dal computo.
+     */
     days: number
     callsPerDay: number
     talkMinPerDay: number
@@ -56,9 +71,6 @@ export type PhoneProductivityRow = {
      * degli altri campi (accumulo per giornata, poi media).
      */
     ringingMinPerDay: number
-    ritmoMinPerDay: number
-    grigiaMinPerDay: number
-    assenzeMinPerDay: number
     /**
      * Ritmo di lavoro: minuti al giorno passati in buchi fra due chiamate
      * fino a WORK_RHYTHM_THRESHOLD_SEC (2 minuti) — chiudere l'esito e
@@ -82,7 +94,7 @@ export type PhoneProductivityRow = {
     avgPauseMin: number
     /** max(0, pauseMinPerDay - 30): scostamento dai 30 minuti di pausa concessi da contratto. È il numero da guardare. */
     overAllowanceMinPerDay: number
-    /** Ore complessive di eccesso nel periodo mostrato: overAllowanceMinPerDay * giornate / 60, un decimale. */
+    /** Ore complessive di eccesso nel periodo mostrato: overAllowanceMinPerDay * giornate INTERE / 60, un decimale (sulle giornate corte non si può pretendere il turno pieno). */
     overAllowanceHoursPeriod: number
     /**
      * Ritardo fra l'inizio turno e la prima chiamata — MEDIANA sulle giornate
@@ -98,6 +110,25 @@ export type PhoneProductivityRow = {
      * spostano — vedi daysFullShift/daysShort per non perdere l'eccezione.
      */
     endEarlyMin: number
+    /**
+     * Ritardo fra l'inizio turno e la prima chiamata — MEDIA sulle sole
+     * giornate INTERE (mai negativa), non mediana. Serve, insieme a
+     * endEarlyAvgMin e workRhythmMinPerDay, a rendere la tabella verificabile
+     * a mano: la mediana (startLateMin, calcolata su tutte le giornate) non è
+     * sommabile con le altre colonne di tempo, la media sì. Calcolata sulle
+     * sole giornate intere: includendo i permessi risulterebbe un ritardo
+     * medio più basso di quello reale nelle giornate normali.
+     */
+    startLateAvgMin: number
+    /**
+     * Anticipo fra la fine dell'ultima chiamata e la fine turno — MEDIA sulle
+     * sole giornate INTERE (mai negativa). Stesso motivo di startLateAvgMin:
+     * serve per la somma di riga, la mediana (endEarlyMin, su tutte le
+     * giornate) resta per il giudizio sulle giornate tipiche. Senza questo
+     * filtro il valore risultava 19-52 min (trascinato dai permessi) contro
+     * i 2-10 min reali delle sole giornate intere.
+     */
+    endEarlyAvgMin: number
     /** Giornate in cui si arriva a fine turno: anticipo ≤ 15 minuti. */
     daysFullShift: number
     /**
@@ -161,17 +192,28 @@ export async function getPhoneProductivity(
 
     // Aggrega per utente sulle sole giornate rappresentative
     const byUser = new Map<string, {
-        gdo: string; days: number; calls: number; talk: number; ringing: number
-        ritmo: number; grigia: number; assenze: number
-        // startLate/endEarly per-giornata (secondi): servono per la MEDIANA,
-        // non per una media — vedi commento su PhoneProductivityRow.
+        gdo: string
+        // daysFull = giornate INTERE: denominatore di tutte le medie (calls,
+        // talk, ringing, workRhythm, pause, startLate/endEarly medi).
+        // daysShort = giornate corte (permessi/mezze giornate), escluse dalle
+        // medie ma contate per trasparenza. daysTotal = daysFull + daysShort,
+        // usato solo per idleInShiftMin (metrica non di riga, non richiesta
+        // di essere "solo giornate intere").
+        daysFull: number; daysShort: number; daysTotal: number
+        calls: number; talk: number; ringing: number
+        // startLate/endEarly per-giornata (secondi), su TUTTE le giornate
+        // rappresentative: servono per la MEDIANA — vedi commento su
+        // PhoneProductivityRow. Le somme per la MEDIA (startLateFullSec/
+        // endEarlyFullSec) sono invece accumulate solo sulle giornate intere.
         startLateDaysSec: number[]; endEarlyDaysSec: number[]
-        daysFullShift: number; daysShort: number
+        startLateFullSec: number; endEarlyFullSec: number
+        daysFullShift: number
         idleInShift: number
-        // Ritmo di lavoro (≤2 min) e interruzioni vere (>2 min) fra chiamate.
-        // pauseSec è già scalato dell'abbuono formazione del sabato (per
-        // pauseMinPerDay/overAllowance); pauseSecRaw e pauseCount non lo sono
-        // (per avgPauseMin, la fotografia grezza della pausa tipica).
+        // Ritmo di lavoro (≤2 min) e interruzioni vere (>2 min) fra chiamate,
+        // accumulati solo sulle giornate intere. pauseSec è già scalato
+        // dell'abbuono formazione del sabato (per pauseMinPerDay/
+        // overAllowance); pauseSecRaw e pauseCount non lo sono (per
+        // avgPauseMin, la fotografia grezza della pausa tipica).
         workRhythmSec: number; pauseSec: number; pauseSecRaw: number; pauseCount: number
     }>()
     for (const slot of byDay.values()) {
@@ -187,22 +229,17 @@ export async function getPhoneProductivity(
         let u = byUser.get(slot.userId)
         if (!u) {
             u = {
-                gdo: slot.gdo, days: 0, calls: 0, talk: 0, ringing: 0, ritmo: 0, grigia: 0, assenze: 0,
-                startLateDaysSec: [], endEarlyDaysSec: [], daysFullShift: 0, daysShort: 0,
+                gdo: slot.gdo, daysFull: 0, daysShort: 0, daysTotal: 0,
+                calls: 0, talk: 0, ringing: 0,
+                startLateDaysSec: [], endEarlyDaysSec: [],
+                startLateFullSec: 0, endEarlyFullSec: 0,
+                daysFullShift: 0,
                 idleInShift: 0,
                 workRhythmSec: 0, pauseSec: 0, pauseSecRaw: 0, pauseCount: 0,
             }
             byUser.set(slot.userId, u)
         }
-        u.days += 1
-        u.calls += m.calls
-        u.talk += m.talkSeconds
-        // squilli a vuoto = tempo occupato (duration) meno conversazione
-        // effettiva (billsec), accumulato per giornata come talk/ritmo/ecc.
-        u.ringing += m.occupiedSeconds - m.talkSeconds
-        u.ritmo += m.buckets.under1m + m.buckets.m1to3
-        u.grigia += m.buckets.m3to10
-        u.assenze += m.buckets.m10to30 + m.buckets.over30m
+        u.daysTotal += 1
 
         // Metriche di turno per questa giornata (secondi), poi mediate sulle
         // giornate come tutto il resto — mai sommate tutte insieme e divise alla fine.
@@ -219,18 +256,35 @@ export async function getPhoneProductivity(
         // interni — fermoTotale = startLate + idleInShift + (endEarly - abbuono).
         const idleInShiftSec = Math.max(0, fermoTotalSec - startLateSec - (endEarlySec - allowanceSec))
 
+        // Mediana: su TUTTE le giornate rappresentative (vedi commento su
+        // PhoneProductivityRow) — non filtrare qui, solo nelle somme sotto.
         u.startLateDaysSec.push(startLateSec)
         u.endEarlyDaysSec.push(endEarlySec)
-        // Soglie sulla singola giornata, non sulla mediana: "arriva a fine
-        // turno" e "mezza giornata/permesso" sono eventi puntuali.
-        // La soglia di "corta" dipende dal giorno: feriali 60 min, sabato 120 min
-        // (vedi shift.ts per la distribuzione che giustifica 120).
+        // Soglia sulla singola giornata, non sulla mediana: "arriva a fine
+        // turno" è un evento puntuale, indipendente da intera/corta.
         if (endEarlySec <= 15 * 60) u.daysFullShift += 1
+        u.idleInShift += idleInShiftSec
+
+        // Giornata intera = non "corta" (non un permesso/mezza giornata).
+        // Soglia dipendente dal giorno: feriali 60 min, sabato 120 min (vedi
+        // shift.ts per la distribuzione che giustifica 120 — assorbe la
+        // formazione legittima). Tutte le medie della riga si calcolano SOLO
+        // su queste giornate: vedi commento in testa al file.
         const threshold = romeDowOf(slot.dateLocal) === 6
             ? SATURDAY_DAYS_SHORT_THRESHOLD_MIN * 60
             : WEEKDAY_DAYS_SHORT_THRESHOLD_MIN * 60
-        if (endEarlySec > threshold) u.daysShort += 1
-        u.idleInShift += idleInShiftSec
+        if (endEarlySec > threshold) {
+            u.daysShort += 1
+            continue // giornata corta: non entra in nessuna media
+        }
+        u.daysFull += 1
+        u.calls += m.calls
+        u.talk += m.talkSeconds
+        // squilli a vuoto = tempo occupato (duration) meno conversazione
+        // effettiva (billsec), accumulato per giornata come talk/pause/ecc.
+        u.ringing += m.occupiedSeconds - m.talkSeconds
+        u.startLateFullSec += startLateSec
+        u.endEarlyFullSec += endEarlySec
 
         // Ritmo di lavoro vs interruzioni vere: si riparte dai buchi grezzi
         // fra chiamate (m.gaps), non dai bucket esistenti (i loro confini a
@@ -256,35 +310,38 @@ export async function getPhoneProductivity(
         u.pauseCount += pauseCountRawDay
     }
 
-    const rows: PhoneProductivityRow[] = [...byUser.entries()].map(([userId, u]) => {
-        const pauseMinPerDay = Math.round(u.pauseSec / u.days / 60)
-        const overAllowanceMinPerDay = Math.max(0, pauseMinPerDay - CONTRACTUAL_PAUSE_ALLOWANCE_MIN)
-        return {
-            userId,
-            gdo: u.gdo,
-            days: u.days,
-            callsPerDay: Math.round(u.calls / u.days),
-            talkMinPerDay: Math.round(u.talk / u.days / 60),
-            ringingMinPerDay: Math.round(u.ringing / u.days / 60),
-            ritmoMinPerDay: Math.round(u.ritmo / u.days / 60),
-            grigiaMinPerDay: Math.round(u.grigia / u.days / 60),
-            assenzeMinPerDay: Math.round(u.assenze / u.days / 60),
-            workRhythmMinPerDay: Math.round(u.workRhythmSec / u.days / 60),
-            pauseMinPerDay,
-            // Un decimale: è la metrica che spiega la differenza fra le
-            // persone (vedi commento sul campo in PhoneProductivityRow).
-            pauseCountPerDay: Math.round((u.pauseCount / u.days) * 10) / 10,
-            avgPauseMin: u.pauseCount ? Math.round(u.pauseSecRaw / u.pauseCount / 60) : 0,
-            overAllowanceMinPerDay,
-            overAllowanceHoursPeriod: Math.round((overAllowanceMinPerDay * u.days / 60) * 10) / 10,
-            // Mediana, non media: vedi commento su PhoneProductivityRow.
-            startLateMin: Math.round(median(u.startLateDaysSec) / 60),
-            endEarlyMin: Math.round(median(u.endEarlyDaysSec) / 60),
-            daysFullShift: u.daysFullShift,
-            daysShort: u.daysShort,
-            idleInShiftMin: Math.round(u.idleInShift / u.days / 60),
-        }
-    }).sort((a, b) => b.overAllowanceMinPerDay - a.overAllowanceMinPerDay)
+    const rows: PhoneProductivityRow[] = [...byUser.entries()]
+        .filter(([, u]) => u.daysFull > 0)
+        .map(([userId, u]) => {
+            const pauseMinPerDay = Math.round(u.pauseSec / u.daysFull / 60)
+            const overAllowanceMinPerDay = Math.max(0, pauseMinPerDay - CONTRACTUAL_PAUSE_ALLOWANCE_MIN)
+            return {
+                userId,
+                gdo: u.gdo,
+                days: u.daysFull,
+                callsPerDay: Math.round(u.calls / u.daysFull),
+                talkMinPerDay: Math.round(u.talk / u.daysFull / 60),
+                ringingMinPerDay: Math.round(u.ringing / u.daysFull / 60),
+                workRhythmMinPerDay: Math.round(u.workRhythmSec / u.daysFull / 60),
+                pauseMinPerDay,
+                // Un decimale: è la metrica che spiega la differenza fra le
+                // persone (vedi commento sul campo in PhoneProductivityRow).
+                pauseCountPerDay: Math.round((u.pauseCount / u.daysFull) * 10) / 10,
+                avgPauseMin: u.pauseCount ? Math.round(u.pauseSecRaw / u.pauseCount / 60) : 0,
+                overAllowanceMinPerDay,
+                overAllowanceHoursPeriod: Math.round((overAllowanceMinPerDay * u.daysFull / 60) * 10) / 10,
+                // Mediana, su tutte le giornate rappresentative — vedi commento su PhoneProductivityRow.
+                startLateMin: Math.round(median(u.startLateDaysSec) / 60),
+                endEarlyMin: Math.round(median(u.endEarlyDaysSec) / 60),
+                // Media, solo giornate intere: serve alla somma di riga verificabile
+                // a mano (vedi commento sui campi in PhoneProductivityRow).
+                startLateAvgMin: Math.round(u.startLateFullSec / u.daysFull / 60),
+                endEarlyAvgMin: Math.round(u.endEarlyFullSec / u.daysFull / 60),
+                daysFullShift: u.daysFullShift,
+                daysShort: u.daysShort,
+                idleInShiftMin: u.daysTotal ? Math.round(u.idleInShift / u.daysTotal / 60) : 0,
+            }
+        }).sort((a, b) => b.overAllowanceMinPerDay - a.overAllowanceMinPerDay)
 
     return { rows }
 }
