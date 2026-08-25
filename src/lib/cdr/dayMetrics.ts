@@ -1,0 +1,98 @@
+/**
+ * Metriche di una giornata di lavoro di una postazione, ricavate dai
+ * tabulati del centralino.
+ *
+ * Il "tempo non telefonico" NON è tempo di pausa: contiene anche la
+ * compilazione degli esiti e la scelta del lead. Va sempre letto per
+ * confronto con il migliore del gruppo, mai contro lo zero.
+ */
+
+export type DayCall = {
+    calldate: Date
+    duration: number   // secondi totali, squilli inclusi
+    billsec: number    // secondi di conversazione effettiva
+    disposition: string
+}
+
+/**
+ * Secondi totali di buco, divisi per durata del singolo buco.
+ * Serve a non confondere il ritmo lento con l'assenza: sotto il minuto è
+ * la compilazione dell'esito (incomprimibile), sopra i 10 minuti è altro.
+ */
+export type GapBuckets = {
+    under1m: number
+    m1to3: number
+    m3to10: number
+    m10to30: number
+    over30m: number
+}
+
+export function emptyBuckets(): GapBuckets {
+    return { under1m: 0, m1to3: 0, m3to10: 0, m10to30: 0, over30m: 0 }
+}
+
+export type DayMetrics = {
+    calls: number
+    answered: number
+    talkSeconds: number
+    occupiedSeconds: number
+    windowSeconds: number
+    offPhoneSeconds: number
+    gaps: number[]
+    buckets: GapBuckets
+    firstAt: Date
+    lastAt: Date
+}
+
+export function median(values: number[]): number {
+    if (!values.length) return 0
+    const s = [...values].sort((a, b) => a - b)
+    const mid = Math.floor(s.length / 2)
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
+
+export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
+    if (!calls.length) return null
+
+    const sorted = [...calls].sort((a, b) => a.calldate.getTime() - b.calldate.getTime())
+    const endOf = (c: DayCall) => c.calldate.getTime() + c.duration * 1000
+
+    const firstAt = sorted[0].calldate
+    const lastAt = new Date(Math.max(...sorted.map(endOf)))
+    const windowSeconds = Math.round((lastAt.getTime() - firstAt.getTime()) / 1000)
+
+    let talkSeconds = 0, occupiedSeconds = 0, answered = 0
+    for (const c of sorted) {
+        talkSeconds += c.billsec
+        occupiedSeconds += c.duration
+        if (c.disposition === 'ANSWERED') answered += 1
+    }
+
+    // Gap fra la fine di una chiamata e l'inizio della successiva.
+    // I negativi indicano chiamate sovrapposte (dato anomalo): si scartano.
+    const gaps: number[] = []
+    const buckets = emptyBuckets()
+    for (let i = 1; i < sorted.length; i++) {
+        const gap = Math.round((sorted[i].calldate.getTime() - endOf(sorted[i - 1])) / 1000)
+        if (gap < 0) continue
+        gaps.push(gap)
+        if (gap < 60) buckets.under1m += gap
+        else if (gap < 180) buckets.m1to3 += gap
+        else if (gap < 600) buckets.m3to10 += gap
+        else if (gap < 1800) buckets.m10to30 += gap
+        else buckets.over30m += gap
+    }
+
+    return {
+        calls: sorted.length,
+        answered,
+        talkSeconds,
+        occupiedSeconds,
+        windowSeconds,
+        offPhoneSeconds: Math.max(0, windowSeconds - occupiedSeconds),
+        gaps,
+        buckets,
+        firstAt,
+        lastAt,
+    }
+}
