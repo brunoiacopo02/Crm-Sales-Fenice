@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '@/db';
-import { leads, users, leadEvents, notifications } from '@/db/schema';
+import { leads, users, leadEvents, notifications, botContactRequests } from '@/db/schema';
 import { verifySignature } from '@/lib/marketing-webhooks/signing';
 import { updateLeadOutcome } from '@/app/actions/pipelineActions';
 import { reassignBotLeadToHumanPool } from '@/lib/bot-fissatore/reassign';
 import type { BotReport } from '@/lib/bot-fissatore/types';
 import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissatore/noteDedup';
+import { normalizeContactCategory } from '@/lib/bot-fissatore/contactRequests';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -25,6 +26,14 @@ interface BotOutcomeBody {
     note?: string;
     discardReason?: string;
     report?: BotReport;
+    // CONTATTO_UMANO (contratto v1.5): categoria chiusa del motivo + contesto
+    // raccolto in chat. Opzionali per retrocompatibilità: una richiesta senza
+    // motivo entra comunque in coda come 'altro', mai un 400.
+    motivo?: string;
+    info?: Record<string, unknown>;
+    // RICHIAMO (contratto v1.5): quando il lead dice "ci risentiamo a settembre"
+    // non esiste un istante da scrivere. Alternativa a `date`, non aggiunta.
+    periodo?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -54,11 +63,22 @@ export async function POST(req: NextRequest) {
     }
     const typedOutcome = outcome as BotOutcome;
 
-    // Data richiesta per APPUNTAMENTO e RICHIAMO.
+    // Data richiesta per APPUNTAMENTO sempre; per RICHIAMO solo se il bot non
+    // dichiara un `periodo` indicativo. Pretendere un ISO su ogni richiamo
+    // costringeva il bot a INVENTARE giorno e ora quando il lead dice "a
+    // settembre": 22 richiami su 26 cadevano su ore tonde che nessuno aveva mai
+    // detto. Meglio un richiamo senza data ma vero — `updateLeadOutcome` regge
+    // già `recallDate` nullo e mette il lead IN_PROGRESS.
+    const recallPeriod = (body.periodo ?? '').trim();
     let date: Date | undefined;
-    if (typedOutcome === 'APPUNTAMENTO' || typedOutcome === 'RICHIAMO') {
+    if (typedOutcome === 'APPUNTAMENTO' || (typedOutcome === 'RICHIAMO' && !recallPeriod)) {
         if (!body.date) {
-            return NextResponse.json({ error: 'bad_request', detail: 'date richiesta per APPUNTAMENTO/RICHIAMO' }, { status: 400 });
+            return NextResponse.json({
+                error: 'bad_request',
+                detail: typedOutcome === 'RICHIAMO'
+                    ? 'per RICHIAMO serve `date` (ISO con offset) oppure `periodo` (testo libero, es. "a settembre")'
+                    : 'date richiesta per APPUNTAMENTO',
+            }, { status: 400 });
         }
         date = new Date(body.date);
         if (isNaN(date.getTime())) {
@@ -79,6 +99,7 @@ export async function POST(req: NextRequest) {
         assignedToId: leads.assignedToId,
         status: leads.status,
         confNeedsReschedule: leads.confNeedsReschedule,
+        appointmentDate: leads.appointmentDate,
         agendaStatus: leads.agendaStatus,
         presentedAt: leads.presentedAt,
     }).from(leads).where(eq(leads.id, leadId)).limit(1);
@@ -165,7 +186,60 @@ export async function POST(req: NextRequest) {
     // attesa di rifissaggio (i rifissaggi legittimi passano dalle Conferme, che
     // settano confNeedsReschedule) NON va ri-processato: no-op senza scritture DB.
     if (typedOutcome === 'APPUNTAMENTO' && lead.status === 'APPOINTMENT' && !lead.confNeedsReschedule) {
-        return NextResponse.json({ ok: true, deduped: true });
+        // ...ma solo se è LO STESSO appuntamento. Una data diversa è un
+        // rifissaggio concordato in chat: scartarlo in silenzio (com'era fino al
+        // 26/08) significa mandare le Conferme a chiamare per un orario che il
+        // lead ha già cambiato. Si aggiorna la data e si avvisa, senza passare da
+        // `updateLeadOutcome`: quello ritimbrerebbe `appointmentCreatedAt=now` e
+        // il rifissaggio finirebbe conteggiato come un fissaggio nuovo di oggi.
+        const newSlot = date;
+        const sameSlot = !newSlot || (lead.appointmentDate
+            && Math.abs(lead.appointmentDate.getTime() - newSlot.getTime()) < 60_000);
+        if (sameSlot || !newSlot) {
+            return NextResponse.json({ ok: true, deduped: true });
+        }
+
+        const previous = lead.appointmentDate;
+        await db.update(leads)
+            .set({ appointmentDate: newSlot, updatedAt: new Date() })
+            .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')));
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'BOT_APPOINTMENT_RESCHEDULED',
+            userId: actorUserId,
+            timestamp: new Date(),
+            metadata: {
+                from: previous ? previous.toISOString() : null,
+                to: newSlot.toISOString(),
+                note: note ?? null,
+            },
+            companyId: 'fenice',
+        }).catch((e) => console.error('[bot-fissatore] RESCHEDULED event err', e));
+
+        const confermeUsers = await db.select({ id: users.id }).from(users).where(and(
+            eq(users.companyId, 'fenice'),
+            eq(users.role, 'CONFERME'),
+            eq(users.isActive, true),
+        ));
+        if (confermeUsers.length > 0) {
+            const now = new Date();
+            const when = newSlot.toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' });
+            await db.insert(notifications).values(confermeUsers.map(u => ({
+                id: crypto.randomUUID(),
+                recipientUserId: u.id,
+                type: 'bot_appuntamento_spostato',
+                title: '🔄 Appuntamento spostato in chat',
+                body: `${lead.name}: nuovo orario ${when}`,
+                metadata: { leadId },
+                status: 'unread',
+                createdAt: now,
+                companyId: 'fenice',
+            }))).catch((e) => console.error('[bot-fissatore] reschedule notify err', e));
+        }
+
+        return NextResponse.json({ ok: true, rescheduled: true });
     }
 
     // Persisti il report (se presente) e logga un evento di audit.
@@ -289,15 +363,56 @@ export async function POST(req: NextRequest) {
             .limit(1);
         const notifySuppressed = !!recentRequest;
 
+        const category = normalizeContactCategory(body.motivo);
+        const leadInfo = (body.info && typeof body.info === 'object') ? body.info : null;
+
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
             eventType: 'BOT_CONTACT_REQUEST',
             userId: actorUserId,
             timestamp: new Date(),
-            metadata: { note: text },
+            metadata: { note: text, category, info: leadInfo },
             companyId: 'fenice',
         });
+
+        // La coda operativa. L'evento sopra è audit e resta uno per riemissione;
+        // qui invece deve esserci UNA riga per lead in attesa, altrimenti un lead
+        // che scrive cinque volte occupa cinque posti nella lista dell'admin.
+        // Finché la richiesta è `pending` si aggiorna quella: il motivo più
+        // recente è il più informato (il bot riformula man mano che il lead
+        // spiega). Una richiesta già gestita non si riapre: se il lead torna a
+        // chiedere dopo giorni è una richiesta NUOVA e deve tornare in cima.
+        const [openRequest] = await db.select({ id: botContactRequests.id, updatesCount: botContactRequests.updatesCount })
+            .from(botContactRequests)
+            .where(and(
+                eq(botContactRequests.leadId, leadId),
+                eq(botContactRequests.status, 'pending'),
+            ))
+            .orderBy(desc(botContactRequests.createdAt))
+            .limit(1);
+
+        if (openRequest) {
+            await db.update(botContactRequests)
+                .set({
+                    reason: text,
+                    category,
+                    ...(leadInfo ? { leadInfo } : {}),
+                    updatesCount: openRequest.updatesCount + 1,
+                    updatedAt: new Date(),
+                })
+                .where(eq(botContactRequests.id, openRequest.id));
+        } else {
+            await db.insert(botContactRequests).values({
+                id: crypto.randomUUID(),
+                leadId,
+                companyId: 'fenice',
+                category,
+                reason: text,
+                leadInfo,
+                status: 'pending',
+            });
+        }
 
         if (!notifySuppressed) {
             const admins = await db.select({ id: users.id }).from(users).where(and(
@@ -398,10 +513,16 @@ export async function POST(req: NextRequest) {
 
     // Transizione di stato via riuso totale di updateLeadOutcome (handoff Conferme,
     // call log, marketing webhook). serviceCtx bypassa sessione/tenant e spegne la gamification.
+    // Il periodo indicativo vive nella nota del richiamo: è quello che il GDO
+    // legge in pipeline quando decide quando riprenderlo in mano.
+    const outcomeNote = (typedOutcome === 'RICHIAMO' && recallPeriod)
+        ? [note?.trim(), `Richiamo indicativo: ${recallPeriod}`].filter(Boolean).join(' — ')
+        : (note ?? '');
+
     const result = await updateLeadOutcome(
         leadId,
         typedOutcome,
-        note ?? '',
+        outcomeNote,
         date,
         undefined,            // userId (non usato: passiamo serviceCtx)
         discardReason,

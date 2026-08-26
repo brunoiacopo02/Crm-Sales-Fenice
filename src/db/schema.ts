@@ -1391,3 +1391,42 @@ export const pbxExtensions = pgTable('pbxExtensions', {
     label: text('label'),
 });
 
+
+// --- RICHIESTE DI CONTATTO UMANO (dal bot fissatore) ---
+// Il lead scrive in chat che vuole parlare con una persona: il bot smette di
+// rispondere e ce lo passa con `CONTATTO_UMANO`. Fino al 26/08 era solo un evento
+// in timeline + una notifica: su 53 richieste UNA sola è stata poi lavorata da un
+// umano. Una notifica non è una coda — se nessuno la vede quando suona, il lead
+// resta fermo. Questa tabella è lo stato operativo (chi aspetta, da quanto, a chi
+// è stato dato); l'evento `BOT_CONTACT_REQUEST` resta come audit immutabile.
+//
+// Una riga per lead in attesa, NON una per messaggio: il bot rivaluta e riemette
+// l'esito a ogni messaggio del lead riformulando il motivo, quindi una richiesta
+// ancora `pending` si aggiorna in loco (motivo più recente, updatesCount++).
+export const botContactRequests = pgTable('botContactRequests', {
+    id: text('id').primaryKey(),
+    leadId: text('leadId').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    // Categoria chiusa mandata dal bot (contratto v1.5). Valore ignoto → 'altro':
+    // un motivo non previsto non deve mai far perdere la richiesta.
+    category: text('category').default('altro').notNull(),
+    // Le parole esatte del lead: è quello che permette a chi chiama di aprire la
+    // telefonata sapendo già di cosa si parla.
+    reason: text('reason').notNull(),
+    leadInfo: jsonb('leadInfo'),
+    updatesCount: integer('updatesCount').default(1).notNull(),
+    status: text('status').default('pending').notNull(), // 'pending' | 'assigned' | 'closed'
+    assignedToId: text('assignedToId').references(() => users.id),
+    assignedByUserId: text('assignedByUserId').references(() => users.id),
+    assignedAt: timestamp('assignedAt', { withTimezone: true, mode: 'date' }),
+    closedAt: timestamp('closedAt', { withTimezone: true, mode: 'date' }),
+    closedByUserId: text('closedByUserId').references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        // La coda si legge sempre così: pending della company, i più vecchi in cima.
+        statusCreatedIdx: index('bot_contact_requests_status_created_idx').on(table.companyId, table.status, table.createdAt),
+        leadIdx: index('bot_contact_requests_lead_idx').on(table.leadId),
+    };
+});
