@@ -575,6 +575,87 @@ perché qui siamo dentro l'esito del GDO che non deve restare appeso).
 
 ---
 
+## Direzione 5 — Bot → CRM (cosa succede dopo l'appuntamento) — nuovo in v1.5
+
+Il database del bot si ferma al momento in cui l'appuntamento viene preso. Senza sapere
+chi si presenta e chi compra, l'unica cosa che il bot può ottimizzare è il **numero** di
+appuntamenti: può farlo crescere e peggiorare il risultato senza che nessuno se ne
+accorga. Questo endpoint chiude il cerchio.
+
+È un canale **in lettura e in pull**, non un webhook: nessuna coda di consegna da
+mantenere, nessun evento perso se il ricevente è giù, nessun ordine da ricostruire. Il
+bot chiede "cosa è cambiato da questo istante", riceve le righe in ordine di
+aggiornamento e riparte dall'ultimo `nextSince`.
+
+### Request
+
+```
+POST https://crm-sales-fenice.vercel.app/api/bot/lead-status
+x-bot-signature: sha256=<hmac del body grezzo, stesso BOT_WEBHOOK_SECRET>
+Content-Type: application/json
+
+{ "since": "2026-08-26T00:00:00+02:00", "limit": 200 }
+```
+
+`limit` è opzionale: default 200, massimo 1000.
+
+### Risposta
+
+```jsonc
+{
+  "leads": [
+    {
+      "leadId": "…",
+      "status": "APPOINTMENT",              // stato nel CRM
+      "appointmentDate": "2026-08-28T17:00:00.000Z",
+      "appointmentCreatedAt": "2026-08-26T09:12:00.000Z",
+      "confermeOutcome": "confermato",      // confermato | scartato | da_rifissare | null
+      "confermeOutcomeAt": "2026-08-27T10:03:00.000Z",
+      "confermeDiscardReason": null,
+      "presented": true,                    // si è presentato alla call
+      "presentedAt": "2026-08-28T17:00:00.000Z",
+      "salesOutcome": "Chiuso",             // Chiuso | Non chiuso | Sparito | null
+      "salesOutcomeAt": "2026-08-28T18:20:00.000Z",
+      "sold": true,
+      "soldProduct": "gold",
+      "soldAmountEur": 3500,
+      "discardReason": null,
+      "agendaStatus": "consegnato",
+      "updatedAt": "2026-08-28T18:20:00.000Z"
+    }
+  ],
+  "nextSince": "2026-08-28T18:20:00.000Z",
+  "hasMore": false
+}
+```
+
+### Come si consuma
+
+1. Si parte da un `since` qualunque (per il primo giro, la data di go-live del bot).
+2. Finché `hasMore` è `true`, si richiama subito con `since = nextSince`.
+3. Quando `hasMore` è `false`, si salva `nextSince` e si ripassa più tardi — un giro
+   ogni 15-30 minuti è più che sufficiente.
+
+`nextSince` è l'`updatedAt` dell'ultima riga servita, **non** "adesso": ripartire da
+adesso salterebbe tutto ciò che cambia mentre si scorrono le pagine.
+
+### Perimetro
+
+Escono **solo** i lead che il bot ha davvero lavorato: quelli che gli abbiamo pushato
+(`BOT_PUSHED` consegnato) o di cui ha recapitato l'agenda. Non è un export del CRM.
+
+### Avvertenze
+
+- `presented` è **latchato**: una volta vero non torna falso. Uno "Sparito" a un
+  follow-up successivo non cancella una presenza già avvenuta.
+- Una riga può ricomparire più volte nel tempo: ogni modifica al lead ne aggiorna
+  `updatedAt`. Va trattata come uno stato corrente da sovrascrivere, non come un evento
+  da accumulare.
+- `salesOutcome` può cambiare dopo la prima registrazione (correzioni, follow-up): vale
+  sempre l'ultimo valore letto.
+
+---
+
 ## Codici di risposta `/api/bot/outcome`
 
 | HTTP | `error` nel body | Significato |
