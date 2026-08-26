@@ -189,6 +189,13 @@ export type PhoneProductivityRow = {
      * mostrate.
      */
     daysLowVolume: number
+    /**
+     * Giornate il cui turno non e' coperto per intero dai tabulati importati
+     * (l'export si fa a mano e puo' fermarsi a meta' giornata). Escluse da
+     * tutto: se contassero come giornate corte, l'ultimo giorno importato
+     * risulterebbe un permesso per l'intera squadra.
+     */
+    daysNotImported: number
     /** Buchi dentro il turno: fermo totale meno i due bordi. */
     idleInShiftMin: number
 }
@@ -255,7 +262,20 @@ export async function getPhoneProductivity(
         longPauseSecRaw: number; longPauseCount: number
         /** Sotto MIN_CALLS_PER_DAY: giornata non rappresentativa. Contata, non mediata. */
         lowVolume: boolean
+        /** Il turno finisce dopo l'ultima chiamata importata: tabulati incompleti, non un comportamento. */
+        notImported: boolean
     }
+    // Fin dove arrivano i tabulati importati. L'export si fa a mano e puo'
+    // fermarsi a meta' giornata: quella giornata risulterebbe "corta" per
+    // tutti, cioe' un permesso collettivo che non e' mai avvenuto. Le
+    // giornate il cui turno finisce dopo l'ultima chiamata importata sono
+    // percio' escluse da tutto e contate a parte.
+    let lastImportedMs = 0
+    for (const r of raw) {
+        const endMs = r.calldate.getTime() + r.duration * 1000
+        if (endMs > lastImportedMs) lastImportedMs = endMs
+    }
+
     const dayRecords: DayRecord[] = []
     for (const slot of byDay.values()) {
         // Le domeniche (se mai ce ne fossero) non hanno un turno definito:
@@ -274,15 +294,27 @@ export async function getPhoneProductivity(
         let workRhythmSec = 0
         let shortPauseSec = 0, shortPauseCount = 0, shortPauseAfterRingCount = 0
         let longPauseSecRaw = 0, longPauseCount = 0
-        for (const { seconds, afterUnanswered } of m.gapDetails) {
-            if (seconds <= WORK_RHYTHM_THRESHOLD_SEC) {
-                workRhythmSec += seconds
-            } else if (seconds <= LONG_PAUSE_THRESHOLD_SEC) {
-                shortPauseSec += seconds
+        for (const { seconds, afterUnanswered, startsAt } of m.gapDetails) {
+            // Il buco va ritagliato sui bordi del turno: chi comincia a
+            // chiamare prima dell'inizio turno aveva un buco fra quella
+            // chiamata e la prima "in orario", e addebitarlo per intero
+            // significa contare come pausa del tempo fuori turno — cioe'
+            // punire chi si e' messo al telefono in anticipo. Stessa cosa in
+            // coda. Fino al 2026-08-26 il buco entrava intero: valeva 1-8
+            // minuti al giorno a seconda della persona.
+            const from = Math.max(startsAt.getTime(), shift.start.getTime())
+            const to = Math.min(startsAt.getTime() + seconds * 1000, shift.end.getTime())
+            const inShiftSec = Math.max(0, Math.round((to - from) / 1000))
+            if (inShiftSec === 0) continue
+
+            if (inShiftSec <= WORK_RHYTHM_THRESHOLD_SEC) {
+                workRhythmSec += inShiftSec
+            } else if (inShiftSec <= LONG_PAUSE_THRESHOLD_SEC) {
+                shortPauseSec += inShiftSec
                 shortPauseCount += 1
                 if (afterUnanswered) shortPauseAfterRingCount += 1
             } else {
-                longPauseSecRaw += seconds
+                longPauseSecRaw += inShiftSec
                 longPauseCount += 1
             }
         }
@@ -298,6 +330,7 @@ export async function getPhoneProductivity(
             workRhythmSec, shortPauseSec, shortPauseCount, shortPauseAfterRingCount,
             longPauseSecRaw, longPauseCount,
             lowVolume: slot.calls.length < MIN_CALLS_PER_DAY,
+            notImported: shift.end.getTime() > lastImportedMs,
         })
     }
 
@@ -306,7 +339,7 @@ export async function getPhoneProductivity(
     // (permesso, rientro) non dice niente su cosa facesse il resto del gruppo.
     const endEarlyByDate = new Map<string, number[]>()
     for (const d of dayRecords) {
-        if (d.lowVolume) continue
+        if (d.lowVolume || d.notImported) continue
         const list = endEarlyByDate.get(d.dateLocal)
         if (list) list.push(d.endEarlySec)
         else endEarlyByDate.set(d.dateLocal, [d.endEarlySec])
@@ -326,7 +359,7 @@ export async function getPhoneProductivity(
         // ma contate per trasparenza — nessuna giornata con dati sparisce in
         // silenzio. daysTotal = daysFull + daysShort, usato solo per
         // idleInShiftMin (metrica non di riga).
-        daysFull: number; daysShort: number; daysLowVolume: number; daysTotal: number
+        daysFull: number; daysShort: number; daysLowVolume: number; daysNotImported: number; daysTotal: number
         calls: number; talk: number; ringing: number; unanswered: number
         // startLate/endEarly per-giornata (secondi), su TUTTE le giornate
         // rappresentative: servono per la MEDIANA — vedi commento su
@@ -346,7 +379,7 @@ export async function getPhoneProductivity(
         let u = byUser.get(d.userId)
         if (!u) {
             u = {
-                gdo: d.gdo, daysFull: 0, daysShort: 0, daysLowVolume: 0, daysTotal: 0,
+                gdo: d.gdo, daysFull: 0, daysShort: 0, daysLowVolume: 0, daysNotImported: 0, daysTotal: 0,
                 calls: 0, talk: 0, ringing: 0, unanswered: 0,
                 startLateDaysSec: [], endEarlyDaysSec: [],
                 startLateFullSec: 0, endEarlyFullSec: 0,
@@ -357,6 +390,14 @@ export async function getPhoneProductivity(
                 longPauseSec: 0, longPauseCount: 0,
             }
             byUser.set(d.userId, u)
+        }
+
+        // Giornata coperta solo in parte dall'import: non dice niente su
+        // nessuno, non entra da nessuna parte (nemmeno fra le giornate corte,
+        // dove risulterebbe un permesso mai avvenuto).
+        if (d.notImported) {
+            u.daysNotImported += 1
+            continue
         }
 
         // Giornata da poche chiamate: contata e basta. Non entra in nessuna
@@ -372,7 +413,18 @@ export async function getPhoneProductivity(
         // abbassava le pause di tutti di 10-13 min al giorno anche nei
         // sabati senza formazione (7 su 10 fra giugno e agosto).
         const isTrainingDay = trainingDates.has(d.dateLocal)
+        // L'abbuono e' UNO PER GIORNATA, non uno per voce: la formazione dura
+        // un'ora sola. Si scala prima dall'anticipo a fine turno, che e' dove
+        // la formazione si manifesta sempre (verificato: nei sabati di
+        // formazione nessuna pausa lunga tocca l'ultima ora di turno), e solo
+        // l'eventuale residuo va sulle pause. Per meta' giornata del
+        // 2026-08-26 i due abbuoni erano indipendenti, con tetto 60 ciascuno:
+        // significava cancellare fino a 120 minuti, e i minuti tolti dalle
+        // pause erano pause ordinarie del mattino, non formazione.
         const allowanceSec = trainingAllowanceSec(isTrainingDay, d.endEarlySec)
+        const dayAllowanceCapSec = isTrainingDay ? SATURDAY_TRAINING_ALLOWANCE_MIN * 60 : 0
+        const residualAllowanceSec = dayAllowanceCapSec - allowanceSec
+        const pauseAllowanceSec = Math.min(residualAllowanceSec, d.longPauseSecRaw)
         const fermoTotalSec = fermoTotalSeconds(isTrainingDay, d.shiftDurationSec, d.occupiedSec, d.endEarlySec)
         // I buchi interni restano quelli "grezzi" (non scalati dall'abbuono):
         // fermoTotalSec è già al netto dell'abbuono sull'anticipo, quindi qui
@@ -421,9 +473,9 @@ export async function getPhoneProductivity(
         u.shortPauseSec += d.shortPauseSec
         u.shortPauseCount += d.shortPauseCount
         u.shortPauseAfterRingCount += d.shortPauseAfterRingCount
-        // Se la formazione cade fra due chiamate invece che a fine turno,
-        // compare come pausa lunga: stesso abbuono, stesso tetto.
-        u.longPauseSec += d.longPauseSecRaw - trainingAllowanceSec(isTrainingDay, d.longPauseSecRaw)
+        // Solo il residuo dell'abbuono giornaliero (vedi sopra): serve al caso
+        // in cui la formazione cada fra due chiamate invece che a fine turno.
+        u.longPauseSec += d.longPauseSecRaw - pauseAllowanceSec
         u.longPauseCount += d.longPauseCount
     }
 
@@ -473,6 +525,7 @@ export async function getPhoneProductivity(
                 daysFullShift: u.daysFullShift,
                 daysShort: u.daysShort,
                 daysLowVolume: u.daysLowVolume,
+                daysNotImported: u.daysNotImported,
                 idleInShiftMin: u.daysTotal ? Math.round(u.idleInShift / u.daysTotal / 60) : 0,
             }
         }).sort((a, b) => b.overAllowanceMinPerDay - a.overAllowanceMinPerDay)

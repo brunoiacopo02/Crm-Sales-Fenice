@@ -180,7 +180,7 @@ export function PhoneProductivityTab() {
                                         {(r.daysShort + r.daysLowVolume) > 0 && (
                                             <div
                                                 className="text-xs text-ash-400"
-                                                title={`${r.daysShort} mezze giornate/permessi · ${r.daysLowVolume} giornate sotto le 40 chiamate`}
+                                                title={`${r.daysShort} mezze giornate/permessi · ${r.daysLowVolume} giornate sotto le 40 chiamate${r.daysNotImported ? ` · ${r.daysNotImported} giornate non coperte dai tabulati importati, escluse da tutto` : ''}`}
                                             >
                                                 +{r.daysShort + r.daysLowVolume} escl.
                                             </div>
@@ -244,6 +244,11 @@ export function PhoneProductivityTab() {
                         {rows.some(r => r.daysShort + r.daysLowVolume > 0) && (
                             <span>
                                 {' '}Su {rows.reduce((a, r) => a + r.days + r.daysShort + r.daysLowVolume, 0)} giornate con chiamate nel mese, {rows.reduce((a, r) => a + r.daysShort, 0)} sono mezze giornate/permessi (un bordo del turno oltre 60 min, 120 il sabato) e {rows.reduce((a, r) => a + r.daysLowVolume, 0)} stanno sotto le 40 chiamate: tutte contate a parte nella colonna Giornate, tutte escluse dalle medie della riga. I giorni di ferie non compaiono affatto, perché non producono alcuna chiamata.
+                                {rows.some(r => r.daysNotImported > 0) && (
+                                    <span>
+                                        {' '}Escluse da tutto, invece, le giornate il cui turno non è coperto per intero dai tabulati importati: l&apos;export si fa a mano e può fermarsi a metà giornata, e contarle come mezze giornate significherebbe attribuire un permesso a tutta la squadra.
+                                    </span>
+                                )}
                             </span>
                         )}
                     </div>

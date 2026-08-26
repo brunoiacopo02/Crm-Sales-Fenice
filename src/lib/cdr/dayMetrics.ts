@@ -41,6 +41,13 @@ export function emptyBuckets(): GapBuckets {
 export type GapDetail = {
     seconds: number
     afterUnanswered: boolean
+    /**
+     * Istante in cui il buco comincia (fine della chiamata precedente).
+     * Serve a ritagliare il buco sui bordi del turno: un buco che comincia
+     * prima dell'inizio turno non va addebitato per intero — vedi l'uso in
+     * productivityActions.ts.
+     */
+    startsAt: Date
 }
 
 export type DayMetrics = {
@@ -100,7 +107,11 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
         const gap = Math.round((sorted[i].calldate.getTime() - endOf(sorted[i - 1])) / 1000)
         if (gap < 0) continue
         gaps.push(gap)
-        gapDetails.push({ seconds: gap, afterUnanswered: sorted[i - 1].billsec === 0 })
+        gapDetails.push({
+            seconds: gap,
+            afterUnanswered: sorted[i - 1].billsec === 0,
+            startsAt: new Date(endOf(sorted[i - 1])),
+        })
         if (gap < 60) buckets.under1m += gap
         else if (gap < 180) buckets.m1to3 += gap
         else if (gap < 600) buckets.m3to10 += gap
