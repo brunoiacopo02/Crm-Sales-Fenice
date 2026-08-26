@@ -46,6 +46,14 @@ export type GapDetail = {
 export type DayMetrics = {
     calls: number
     answered: number
+    /**
+     * Chiamate senza un secondo di conversazione (`billsec = 0`): squilli a
+     * vuoto, occupato, numero inesistente. Definito su billsec e non su
+     * `disposition` per restare coerente con `gapDetails.afterUnanswered`,
+     * che usa lo stesso criterio — servono l'uno come denominatore
+     * dell'altro.
+     */
+    unansweredCalls: number
     talkSeconds: number
     occupiedSeconds: number
     windowSeconds: number
@@ -75,11 +83,12 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
     const lastAt = new Date(Math.max(...sorted.map(endOf)))
     const windowSeconds = Math.round((lastAt.getTime() - firstAt.getTime()) / 1000)
 
-    let talkSeconds = 0, occupiedSeconds = 0, answered = 0
+    let talkSeconds = 0, occupiedSeconds = 0, answered = 0, unansweredCalls = 0
     for (const c of sorted) {
         talkSeconds += c.billsec
         occupiedSeconds += c.duration
         if (c.disposition === 'ANSWERED') answered += 1
+        if (c.billsec === 0) unansweredCalls += 1
     }
 
     // Gap fra la fine di una chiamata e l'inizio della successiva.
@@ -102,6 +111,7 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
     return {
         calls: sorted.length,
         answered,
+        unansweredCalls,
         talkSeconds,
         occupiedSeconds,
         windowSeconds,

@@ -24,11 +24,13 @@
  *
  * Tutte le medie giornaliere (chiamate, telefono, squilli, ritmo, pause,
  * bordi del turno) si calcolano SOLO sulle "giornate intere", cioè quelle
- * che non sono permessi/mezze giornate/uscite autorizzate (vedi la soglia
- * usata per `daysShort`). Includere le giornate corte abbasserebbe ogni
- * voce e farebbe risultare chi ha avuto permessi più diligente di chi ha
- * lavorato tutti i giorni interi. Le giornate corte non spariscono: restano
- * contate in `daysShort` e mostrate a parte.
+ * che non sono permessi/mezze giornate/uscite autorizzate né arrivi molto in
+ * ritardo (vedi la soglia usata per `daysShort`, applicata a entrambi i
+ * bordi del turno). Includere le giornate corte abbasserebbe ogni voce e
+ * farebbe risultare chi ha avuto permessi più diligente di chi ha lavorato
+ * tutti i giorni interi. Nessuna giornata con dei dati dietro sparisce però
+ * dal conto: le corte restano in `daysShort` e quelle sotto le 40 chiamate
+ * in `daysLowVolume`, entrambe mostrate a parte.
  */
 
 import { db } from "@/db"
@@ -36,7 +38,7 @@ import { pbxCalls, users, leads } from "@/db/schema"
 import { and, gte, lte, lt, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
-import { shiftBoundsFor, lateAndEarly, saturdayAllowanceSec, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN, WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN, romeDowOf } from "@/lib/cdr/shift"
+import { shiftBoundsFor, lateAndEarly, trainingAllowanceSec, isCollectiveTrainingDay, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN, WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN, romeDowOf } from "@/lib/cdr/shift"
 import { apptSetAt } from "@/lib/kpi/canon"
 import { dayBoundsRome } from "@/lib/dateUtils"
 
@@ -121,6 +123,15 @@ export type PhoneProductivityRow = {
     longPauseMinPerDay: number
     /** Quante pause vere in media al giorno (un decimale): sono le uscite, 3-6 in una giornata normale. */
     longPauseCountPerDay: number
+    /**
+     * Su cento squilli a vuoto, quanti sono seguiti da un'interruzione breve
+     * (un decimale). È la stessa cosa di shortPauseAfterRingCountPerDay ma in
+     * forma di TASSO, e regge un'obiezione che il conteggio non regge: chi
+     * lavora liste riciclate ha molti più squilli a vuoto degli altri, quindi
+     * ha più occasioni di fermarsi. Il tasso toglie di mezzo il volume.
+     * Agosto 2026: 1,1-6,1% per tutti, 12,1% per il GDO 115.
+     */
+    shortPauseAfterRingRatePct: number
     /** max(0, pauseMinPerDay - 30): scostamento dai 30 minuti di pausa concessi da contratto. È il numero da guardare. */
     overAllowanceMinPerDay: number
     /** Ore complessive di eccesso nel periodo mostrato: overAllowanceMinPerDay * giornate INTERE / 60, un decimale (sulle giornate corte non si può pretendere il turno pieno). */
@@ -161,13 +172,23 @@ export type PhoneProductivityRow = {
     /** Giornate in cui si arriva a fine turno: anticipo ≤ 15 minuti. */
     daysFullShift: number
     /**
-     * Giornate con anticipo oltre la soglia: mezze giornate, permessi, uscite
-     * autorizzate. Soglia: 60 min nei feriali, 120 min il sabato (vedi
-     * WEEKDAY_DAYS_SHORT_THRESHOLD_MIN e SATURDAY_DAYS_SHORT_THRESHOLD_MIN in shift.ts).
-     * Il sabato 120 min sta dentro il gap fra formazione legittima (≤95 min)
-     * e giornate anomale (≥113 min).
+     * Giornate corte: mezze giornate, permessi, uscite autorizzate e arrivi
+     * molto in ritardo. Soglia applicata a ENTRAMBI i bordi del turno
+     * (anticipo in uscita e ritardo in ingresso): 60 min nei feriali, 120 min
+     * il sabato (vedi WEEKDAY_DAYS_SHORT_THRESHOLD_MIN e
+     * SATURDAY_DAYS_SHORT_THRESHOLD_MIN in shift.ts). Il sabato 120 min sta
+     * dentro il gap fra formazione legittima (≤95 min) e giornate anomale
+     * (≥113 min).
      */
     daysShort: number
+    /**
+     * Giornate con meno di MIN_CALLS_PER_DAY chiamate: non rappresentative,
+     * fuori da tutte le medie. Contate qui perché nessuna giornata con dei
+     * dati dietro sparisca in silenzio — prima uscivano prima di qualunque
+     * contatore, mentre la pagina dichiarava che le escluse erano tutte
+     * mostrate.
+     */
+    daysLowVolume: number
     /** Buchi dentro il turno: fermo totale meno i due bordi. */
     idleInShiftMin: number
 }
@@ -219,17 +240,94 @@ export async function getPhoneProductivity(
         })
     }
 
-    // Aggrega per utente sulle sole giornate rappresentative
+    // PRIMO PASSAGGIO: una riga per (utente, giornata), senza decidere
+    // ancora nulla. Serve perché l'abbuono formazione non è deducibile da
+    // una giornata sola: dipende da cosa ha fatto TUTTA la squadra quel
+    // giorno (vedi isCollectiveTrainingDay in shift.ts).
+    type DayRecord = {
+        userId: string; gdo: string; dateLocal: string
+        shiftDurationSec: number
+        startLateSec: number; endEarlySec: number
+        calls: number; talkSec: number; ringingSec: number; occupiedSec: number
+        unansweredCalls: number
+        workRhythmSec: number
+        shortPauseSec: number; shortPauseCount: number; shortPauseAfterRingCount: number
+        longPauseSecRaw: number; longPauseCount: number
+        /** Sotto MIN_CALLS_PER_DAY: giornata non rappresentativa. Contata, non mediata. */
+        lowVolume: boolean
+    }
+    const dayRecords: DayRecord[] = []
+    for (const slot of byDay.values()) {
+        // Le domeniche (se mai ce ne fossero) non hanno un turno definito:
+        // la giornata va esclusa da tutte le metriche, non solo da quelle di turno.
+        const shift = shiftBoundsFor(slot.dateLocal)
+        if (!shift) continue
+        const m = computeDayMetrics(slot.calls)
+        if (!m) continue
+        const { startLateSec, endEarlySec } = lateAndEarly(m.firstAt, m.lastAt, shift)
+
+        // Le tre categorie: si riparte dai buchi grezzi fra chiamate
+        // (m.gapDetails), non dai bucket esistenti (i loro confini a
+        // 60/180/600/1800s non cadono sulle soglie concordate di 2 e 10
+        // minuti). gapDetails porta anche l'esito della chiamata che precede
+        // il buco, che serve per le interruzioni "dopo uno squillo a vuoto".
+        let workRhythmSec = 0
+        let shortPauseSec = 0, shortPauseCount = 0, shortPauseAfterRingCount = 0
+        let longPauseSecRaw = 0, longPauseCount = 0
+        for (const { seconds, afterUnanswered } of m.gapDetails) {
+            if (seconds <= WORK_RHYTHM_THRESHOLD_SEC) {
+                workRhythmSec += seconds
+            } else if (seconds <= LONG_PAUSE_THRESHOLD_SEC) {
+                shortPauseSec += seconds
+                shortPauseCount += 1
+                if (afterUnanswered) shortPauseAfterRingCount += 1
+            } else {
+                longPauseSecRaw += seconds
+                longPauseCount += 1
+            }
+        }
+
+        dayRecords.push({
+            userId: slot.userId, gdo: slot.gdo, dateLocal: slot.dateLocal,
+            shiftDurationSec: shift.minutes * 60,
+            startLateSec, endEarlySec,
+            calls: m.calls, talkSec: m.talkSeconds,
+            ringingSec: m.occupiedSeconds - m.talkSeconds,
+            occupiedSec: m.occupiedSeconds,
+            unansweredCalls: m.unansweredCalls,
+            workRhythmSec, shortPauseSec, shortPauseCount, shortPauseAfterRingCount,
+            longPauseSecRaw, longPauseCount,
+            lowVolume: slot.calls.length < MIN_CALLS_PER_DAY,
+        })
+    }
+
+    // SECONDO PASSAGGIO: in quali giornate la squadra ha fatto formazione.
+    // Votano solo le giornate rappresentative: una giornata da poche chiamate
+    // (permesso, rientro) non dice niente su cosa facesse il resto del gruppo.
+    const endEarlyByDate = new Map<string, number[]>()
+    for (const d of dayRecords) {
+        if (d.lowVolume) continue
+        const list = endEarlyByDate.get(d.dateLocal)
+        if (list) list.push(d.endEarlySec)
+        else endEarlyByDate.set(d.dateLocal, [d.endEarlySec])
+    }
+    const trainingDates = new Set<string>()
+    for (const [dateLocal, endEarlySecs] of endEarlyByDate) {
+        if (isCollectiveTrainingDay(dateLocal, endEarlySecs)) trainingDates.add(dateLocal)
+    }
+
+    // TERZO PASSAGGIO: le medie per utente.
     const byUser = new Map<string, {
         gdo: string
         // daysFull = giornate INTERE: denominatore di tutte le medie (calls,
         // talk, ringing, workRhythm, pause, startLate/endEarly medi).
-        // daysShort = giornate corte (permessi/mezze giornate), escluse dalle
-        // medie ma contate per trasparenza. daysTotal = daysFull + daysShort,
-        // usato solo per idleInShiftMin (metrica non di riga, non richiesta
-        // di essere "solo giornate intere").
-        daysFull: number; daysShort: number; daysTotal: number
-        calls: number; talk: number; ringing: number
+        // daysShort = giornate corte (permessi/mezze giornate) e
+        // daysLowVolume = giornate sotto le 40 chiamate: escluse dalle medie
+        // ma contate per trasparenza — nessuna giornata con dati sparisce in
+        // silenzio. daysTotal = daysFull + daysShort, usato solo per
+        // idleInShiftMin (metrica non di riga).
+        daysFull: number; daysShort: number; daysLowVolume: number; daysTotal: number
+        calls: number; talk: number; ringing: number; unanswered: number
         // startLate/endEarly per-giornata (secondi), su TUTTE le giornate
         // rappresentative: servono per la MEDIANA — vedi commento su
         // PhoneProductivityRow. Le somme per la MEDIA (startLateFullSec/
@@ -240,28 +338,16 @@ export async function getPhoneProductivity(
         idleInShift: number
         // Le tre categorie di tempo fra una chiamata e l'altra (vedi il
         // commento in testa al file), accumulate solo sulle giornate intere.
-        // longPauseSec è già scalato dell'abbuono formazione del sabato: la
-        // formazione dura un'ora, quindi cade sempre nella fascia oltre i 10
-        // minuti, mai fra le interruzioni brevi.
         workRhythmSec: number
         shortPauseSec: number; shortPauseCount: number; shortPauseAfterRingCount: number
         longPauseSec: number; longPauseCount: number
     }>()
-    for (const slot of byDay.values()) {
-        if (slot.calls.length < MIN_CALLS_PER_DAY) continue
-        const m = computeDayMetrics(slot.calls)
-        if (!m) continue
-
-        // Le domeniche (se mai ce ne fossero) non hanno un turno definito:
-        // la giornata va esclusa da tutte le metriche, non solo da quelle di turno.
-        const shift = shiftBoundsFor(slot.dateLocal)
-        if (!shift) continue
-
-        let u = byUser.get(slot.userId)
+    for (const d of dayRecords) {
+        let u = byUser.get(d.userId)
         if (!u) {
             u = {
-                gdo: slot.gdo, daysFull: 0, daysShort: 0, daysTotal: 0,
-                calls: 0, talk: 0, ringing: 0,
+                gdo: d.gdo, daysFull: 0, daysShort: 0, daysLowVolume: 0, daysTotal: 0,
+                calls: 0, talk: 0, ringing: 0, unanswered: 0,
                 startLateDaysSec: [], endEarlyDaysSec: [],
                 startLateFullSec: 0, endEarlyFullSec: 0,
                 daysFullShift: 0,
@@ -270,87 +356,75 @@ export async function getPhoneProductivity(
                 shortPauseSec: 0, shortPauseCount: 0, shortPauseAfterRingCount: 0,
                 longPauseSec: 0, longPauseCount: 0,
             }
-            byUser.set(slot.userId, u)
+            byUser.set(d.userId, u)
+        }
+
+        // Giornata da poche chiamate: contata e basta. Non entra in nessuna
+        // media né nel tempo fermo, ma non sparisce dal conto delle giornate.
+        if (d.lowVolume) {
+            u.daysLowVolume += 1
+            continue
         }
         u.daysTotal += 1
 
-        // Metriche di turno per questa giornata (secondi), poi mediate sulle
-        // giornate come tutto il resto — mai sommate tutte insieme e divise alla fine.
-        const shiftDurationSec = shift.minutes * 60
-        const { startLateSec, endEarlySec } = lateAndEarly(m.firstAt, m.lastAt, shift)
-        // Il sabato la formazione occupa spesso l'ultima ora: quell'anticipo
-        // non conta come fermo, fino a SATURDAY_TRAINING_ALLOWANCE_MIN minuti
-        // (vedi shift.ts). Nei feriali l'abbuono è sempre 0.
-        const allowanceSec = saturdayAllowanceSec(slot.dateLocal, endEarlySec)
-        const fermoTotalSec = fermoTotalSeconds(slot.dateLocal, shiftDurationSec, m.occupiedSeconds, endEarlySec)
+        // L'abbuono formazione vale solo nelle giornate in cui la formazione
+        // c'è stata davvero: fino al 2026-08-26 valeva per ogni sabato, e
+        // abbassava le pause di tutti di 10-13 min al giorno anche nei
+        // sabati senza formazione (7 su 10 fra giugno e agosto).
+        const isTrainingDay = trainingDates.has(d.dateLocal)
+        const allowanceSec = trainingAllowanceSec(isTrainingDay, d.endEarlySec)
+        const fermoTotalSec = fermoTotalSeconds(isTrainingDay, d.shiftDurationSec, d.occupiedSec, d.endEarlySec)
         // I buchi interni restano quelli "grezzi" (non scalati dall'abbuono):
         // fermoTotalSec è già al netto dell'abbuono sull'anticipo, quindi qui
         // si sottrae l'anticipo altrettanto scalato per tornare ai soli buchi
         // interni — fermoTotale = startLate + idleInShift + (endEarly - abbuono).
-        const idleInShiftSec = Math.max(0, fermoTotalSec - startLateSec - (endEarlySec - allowanceSec))
+        const idleInShiftSec = Math.max(0, fermoTotalSec - d.startLateSec - (d.endEarlySec - allowanceSec))
 
         // Mediana: su TUTTE le giornate rappresentative (vedi commento su
         // PhoneProductivityRow) — non filtrare qui, solo nelle somme sotto.
-        u.startLateDaysSec.push(startLateSec)
-        u.endEarlyDaysSec.push(endEarlySec)
+        u.startLateDaysSec.push(d.startLateSec)
+        u.endEarlyDaysSec.push(d.endEarlySec)
         // Soglia sulla singola giornata, non sulla mediana: "arriva a fine
         // turno" è un evento puntuale, indipendente da intera/corta.
-        if (endEarlySec <= 15 * 60) u.daysFullShift += 1
+        if (d.endEarlySec <= 15 * 60) u.daysFullShift += 1
         u.idleInShift += idleInShiftSec
 
-        // Giornata intera = non "corta" (non un permesso/mezza giornata).
+        // Giornata intera = né mezza giornata né permesso, su ENTRAMBI i
+        // bordi: si guarda l'anticipo a fine turno e anche il ritardo in
+        // ingresso. Guardare solo l'uscita lasciava passare come "intera"
+        // una giornata iniziata con tre ore di ritardo — la stessa
+        // distorsione che il filtro esiste per prevenire, sull'altro bordo.
         // Soglia dipendente dal giorno: feriali 60 min, sabato 120 min (vedi
-        // shift.ts per la distribuzione che giustifica 120 — assorbe la
-        // formazione legittima). Tutte le medie della riga si calcolano SOLO
-        // su queste giornate: vedi commento in testa al file.
-        const threshold = romeDowOf(slot.dateLocal) === 6
-            ? SATURDAY_DAYS_SHORT_THRESHOLD_MIN * 60
-            : WEEKDAY_DAYS_SHORT_THRESHOLD_MIN * 60
-        if (endEarlySec > threshold) {
+        // shift.ts). Tutte le medie della riga si calcolano SOLO su queste
+        // giornate: vedi commento in testa al file.
+        const thresholdSec = (romeDowOf(d.dateLocal) === 6
+            ? SATURDAY_DAYS_SHORT_THRESHOLD_MIN
+            : WEEKDAY_DAYS_SHORT_THRESHOLD_MIN) * 60
+        if (d.endEarlySec > thresholdSec || d.startLateSec > thresholdSec) {
             u.daysShort += 1
             continue // giornata corta: non entra in nessuna media
         }
         u.daysFull += 1
-        u.calls += m.calls
-        u.talk += m.talkSeconds
+        u.calls += d.calls
+        u.talk += d.talkSec
         // squilli a vuoto = tempo occupato (duration) meno conversazione
         // effettiva (billsec), accumulato per giornata come talk/pause/ecc.
-        u.ringing += m.occupiedSeconds - m.talkSeconds
-        u.startLateFullSec += startLateSec
-        u.endEarlyFullSec += endEarlySec
+        u.ringing += d.ringingSec
+        u.unanswered += d.unansweredCalls
+        u.startLateFullSec += d.startLateSec
+        // L'ora di formazione è lavoro, non "tempo dopo l'ultima chiamata":
+        // va tolta anche dalla media sommabile, altrimenti comparirebbe come
+        // tempo fermo a fine turno. La mediana resta grezza.
+        u.endEarlyFullSec += d.endEarlySec - allowanceSec
 
-        // Le tre categorie: si riparte dai buchi grezzi fra chiamate
-        // (m.gapDetails), non dai bucket esistenti (i loro confini a
-        // 60/180/600/1800s non cadono sulle soglie concordate di 2 e 10
-        // minuti). gapDetails porta anche l'esito della chiamata che precede
-        // il buco, che serve per le interruzioni "dopo uno squillo a vuoto".
-        let workRhythmSecDay = 0
-        let shortPauseSecDay = 0, shortPauseCountDay = 0, shortPauseAfterRingDay = 0
-        let longPauseSecDay = 0, longPauseCountDay = 0
-        for (const { seconds, afterUnanswered } of m.gapDetails) {
-            if (seconds <= WORK_RHYTHM_THRESHOLD_SEC) {
-                workRhythmSecDay += seconds
-            } else if (seconds <= LONG_PAUSE_THRESHOLD_SEC) {
-                shortPauseSecDay += seconds
-                shortPauseCountDay += 1
-                if (afterUnanswered) shortPauseAfterRingDay += 1
-            } else {
-                longPauseSecDay += seconds
-                longPauseCountDay += 1
-            }
-        }
-        // Il sabato l'ultima ora di formazione compare come un buco interno
-        // fra due chiamate: va abbuonata con la stessa funzione e lo stesso
-        // tetto (60 min) già usati per l'anticipo a fine turno, altrimenti la
-        // formazione risulterebbe una pausa. Si scala dalle sole pause vere:
-        // un'ora di formazione non può cadere nella fascia 2-10 minuti.
-        const pauseAllowanceSec = saturdayAllowanceSec(slot.dateLocal, longPauseSecDay)
-        u.workRhythmSec += workRhythmSecDay
-        u.shortPauseSec += shortPauseSecDay
-        u.shortPauseCount += shortPauseCountDay
-        u.shortPauseAfterRingCount += shortPauseAfterRingDay
-        u.longPauseSec += longPauseSecDay - pauseAllowanceSec
-        u.longPauseCount += longPauseCountDay
+        u.workRhythmSec += d.workRhythmSec
+        u.shortPauseSec += d.shortPauseSec
+        u.shortPauseCount += d.shortPauseCount
+        u.shortPauseAfterRingCount += d.shortPauseAfterRingCount
+        // Se la formazione cade fra due chiamate invece che a fine turno,
+        // compare come pausa lunga: stesso abbuono, stesso tetto.
+        u.longPauseSec += d.longPauseSecRaw - trainingAllowanceSec(isTrainingDay, d.longPauseSecRaw)
+        u.longPauseCount += d.longPauseCount
     }
 
     const rows: PhoneProductivityRow[] = [...byUser.entries()]
@@ -382,6 +456,11 @@ export async function getPhoneProductivity(
                 shortPauseAfterRingCountPerDay: perDay(u.shortPauseAfterRingCount),
                 longPauseMinPerDay,
                 longPauseCountPerDay: perDay(u.longPauseCount),
+                // Tasso, non conteggio: toglie di mezzo l'obiezione "ho piu'
+                // squilli a vuoto degli altri perche' chiamo liste peggiori".
+                shortPauseAfterRingRatePct: u.unanswered
+                    ? Math.round((u.shortPauseAfterRingCount / u.unanswered) * 1000) / 10
+                    : 0,
                 overAllowanceMinPerDay,
                 overAllowanceHoursPeriod: Math.round((overAllowanceMinPerDay * u.daysFull / 60) * 10) / 10,
                 // Mediana, su tutte le giornate rappresentative — vedi commento su PhoneProductivityRow.
@@ -393,6 +472,7 @@ export async function getPhoneProductivity(
                 endEarlyAvgMin: Math.round(u.endEarlyFullSec / u.daysFull / 60),
                 daysFullShift: u.daysFullShift,
                 daysShort: u.daysShort,
+                daysLowVolume: u.daysLowVolume,
                 idleInShiftMin: u.daysTotal ? Math.round(u.idleInShift / u.daysTotal / 60) : 0,
             }
         }).sort((a, b) => b.overAllowanceMinPerDay - a.overAllowanceMinPerDay)

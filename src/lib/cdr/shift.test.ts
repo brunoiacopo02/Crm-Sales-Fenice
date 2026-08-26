@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     romeDowOf, shiftBoundsFor, lateAndEarly, WEEKDAY_SHIFT, SATURDAY_SHIFT,
-    saturdayAllowanceSec, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN,
+    trainingAllowanceSec, isCollectiveTrainingDay, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN,
     WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN,
 } from './shift'
 
@@ -61,36 +61,79 @@ test('ultima chiamata dopo la fine turno: anticipo mai negativo', () => {
     assert.equal(endEarlySec, 0)
 })
 
-// Abbuono formazione del sabato: l'anticipo a fine turno non conta come
-// fermo fino a SATURDAY_TRAINING_ALLOWANCE_MIN (60) minuti; oltre, l'eccedenza
-// torna a contare normalmente. Nei feriali nessun abbuono.
+// Abbuono formazione: nelle giornate in cui la squadra ha fatto formazione
+// l'assenza non conta come fermo fino a SATURDAY_TRAINING_ALLOWANCE_MIN (60)
+// minuti; oltre, l'eccedenza torna a contare normalmente. Nelle giornate
+// senza formazione nessun abbuono, sabato incluso.
 
-test('sabato, 45 minuti di anticipo: abbuono pieno, nessun tempo fermo aggiuntivo', () => {
+test('giornata di formazione, 45 minuti di anticipo: abbuono pieno, nessun tempo fermo aggiuntivo', () => {
     const shift = shiftBoundsFor(SATURDAY)!
     const endEarlySec = 45 * 60
     // Nessun ritardo/buco interno: l'intero fermo grezzo viene dall'anticipo.
     const occupiedSeconds = shift.minutes * 60 - endEarlySec
-    const fermo = fermoTotalSeconds(SATURDAY, shift.minutes * 60, occupiedSeconds, endEarlySec)
-    assert.equal(saturdayAllowanceSec(SATURDAY, endEarlySec), 45 * 60)
+    const fermo = fermoTotalSeconds(true, shift.minutes * 60, occupiedSeconds, endEarlySec)
+    assert.equal(trainingAllowanceSec(true, endEarlySec), 45 * 60)
     assert.equal(fermo, 0)
 })
 
-test('sabato, 90 minuti di anticipo: 60 abbuonati, 30 contati come fermo', () => {
+test('giornata di formazione, 90 minuti di anticipo: 60 abbuonati, 30 contati come fermo', () => {
     const shift = shiftBoundsFor(SATURDAY)!
     const endEarlySec = 90 * 60
     const occupiedSeconds = shift.minutes * 60 - endEarlySec
-    const fermo = fermoTotalSeconds(SATURDAY, shift.minutes * 60, occupiedSeconds, endEarlySec)
-    assert.equal(saturdayAllowanceSec(SATURDAY, endEarlySec), SATURDAY_TRAINING_ALLOWANCE_MIN * 60)
+    const fermo = fermoTotalSeconds(true, shift.minutes * 60, occupiedSeconds, endEarlySec)
+    assert.equal(trainingAllowanceSec(true, endEarlySec), SATURDAY_TRAINING_ALLOWANCE_MIN * 60)
     assert.equal(fermo, 30 * 60)
+})
+
+test('sabato SENZA formazione: nessun abbuono, l anticipo conta tutto come fermo', () => {
+    const shift = shiftBoundsFor(SATURDAY)!
+    const endEarlySec = 45 * 60
+    const occupiedSeconds = shift.minutes * 60 - endEarlySec
+    const fermo = fermoTotalSeconds(false, shift.minutes * 60, occupiedSeconds, endEarlySec)
+    assert.equal(trainingAllowanceSec(false, endEarlySec), 0)
+    assert.equal(fermo, 45 * 60)
 })
 
 test('feriale, 45 minuti di anticipo: nessun abbuono, tutti e 45 contati come fermo', () => {
     const shift = shiftBoundsFor(WEEKDAY)!
     const endEarlySec = 45 * 60
     const occupiedSeconds = shift.minutes * 60 - endEarlySec
-    const fermo = fermoTotalSeconds(WEEKDAY, shift.minutes * 60, occupiedSeconds, endEarlySec)
-    assert.equal(saturdayAllowanceSec(WEEKDAY, endEarlySec), 0)
+    const fermo = fermoTotalSeconds(false, shift.minutes * 60, occupiedSeconds, endEarlySec)
     assert.equal(fermo, 45 * 60)
+})
+
+// Riconoscimento della giornata di formazione dai dati: la formazione e'
+// collettiva, quindi si vede come fermata sincronizzata dell'ultima mezz'ora.
+// Quote reali dei 10 sabati giugno-agosto 2026: 100, 0, 57, 0, 13, 0, 0, 100, 100, 0.
+
+test('sabato di formazione: tutta la squadra ferma nell ultima mezz ora', () => {
+    const anticipi = [72, 74, 80, 84, 51, 69].map(m => m * 60)
+    assert.equal(isCollectiveTrainingDay(SATURDAY, anticipi), true)
+})
+
+test('sabato senza formazione: nessuno si ferma (22/08/2026, anticipi 0-5 min)', () => {
+    const anticipi = [0, 1, 2, 3, 5, 4, 0, 2].map(m => m * 60)
+    assert.equal(isCollectiveTrainingDay(SATURDAY, anticipi), false)
+})
+
+test('sabato con una sola persona ferma: sotto quorum, nessun abbuono per nessuno', () => {
+    // 1 su 8 = 13%: e' il caso dell 11/07/2026, un permesso individuale.
+    const anticipi = [95, 7, 3, 0, 2, 6, 1, 4].map(m => m * 60)
+    assert.equal(isCollectiveTrainingDay(SATURDAY, anticipi), false)
+})
+
+test('sabato al 57% di fermi: sopra quorum (e il 20/06/2026 la formazione c era)', () => {
+    const anticipi = [27, 35, 60, 65, 137, 5, 10].map(m => m * 60)  // 4 fermi su 7
+    assert.equal(isCollectiveTrainingDay(SATURDAY, anticipi), true)
+})
+
+test('meno di tre operatori: nessun quorum possibile', () => {
+    assert.equal(isCollectiveTrainingDay(SATURDAY, [70 * 60, 80 * 60]), false)
+})
+
+test('un feriale non e mai giornata di formazione, per quanto sincronizzato', () => {
+    const anticipi = [70, 75, 80, 90].map(m => m * 60)
+    assert.equal(isCollectiveTrainingDay(WEEKDAY, anticipi), false)
 })
 
 // Soglie di daysShort: feriali 60 min, sabato 120 min.

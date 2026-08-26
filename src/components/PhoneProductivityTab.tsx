@@ -61,6 +61,7 @@ export function PhoneProductivityTab() {
     const avgShortPauseMinTeam = Math.round(teamAvg(r => r.shortPauseMinPerDay))
     const avgLongPauseMinTeam = Math.round(teamAvg(r => r.longPauseMinPerDay))
     const avgAfterRingTeam = Math.round(teamAvg(r => r.shortPauseAfterRingCountPerDay) * 10) / 10
+    const avgAfterRingRateTeam = Math.round(teamAvg(r => r.shortPauseAfterRingRatePct) * 10) / 10
     const afterRingValues = rows.map(r => r.shortPauseAfterRingCountPerDay)
     const minAfterRing = Math.min(...afterRingValues)
     const maxAfterRing = Math.max(...afterRingValues)
@@ -96,18 +97,25 @@ export function PhoneProductivityTab() {
                     uscite (3-6 al giorno in una giornata normale).
                 </div>
                 <div>
-                    <strong>Dopo uno squillo a vuoto non c&apos;è nessun esito da scrivere</strong>: fermarsi lì non ha la
-                    giustificazione del lavoro amministrativo. È la voce meno contestabile della tabella, e in questo
-                    periodo va da <strong>{itNum(minAfterRing)}</strong> a <strong>{itNum(maxAfterRing)} volte al
-                    giorno</strong> a seconda della persona.
+                    <strong>Dopo uno squillo a vuoto l&apos;esito si scrive in pochi secondi</strong>, non in 2-10 minuti:
+                    non c&apos;è la telefonata da annotare, non c&apos;è nulla da riportare. Fermarsi lì è la voce meno
+                    contestabile della tabella: in questo periodo va da <strong>{itNum(minAfterRing)}</strong> a
+                    <strong> {itNum(maxAfterRing)} volte al giorno</strong> a seconda della persona.
+                </div>
+                <div>
+                    Accanto al numero di volte c&apos;è la <strong>percentuale sugli squilli a vuoto</strong>, ed è quella
+                    da usare in un confronto: chi lavora liste riciclate riceve molte più mancate risposte degli altri,
+                    quindi ha più occasioni di fermarsi. Il tasso toglie di mezzo il volume e lascia solo l&apos;abitudine.
                 </div>
                 <div>
                     Il metro sulle interruzioni (brevi + pause insieme) resta il diritto contrattuale a
                     <strong> 30 minuti di pausa al giorno</strong>, non il migliore del gruppo.
                 </div>
                 <div>
-                    Il sabato ha lo stesso orario dei feriali ma su una fascia diversa (10:00-16:30). L&apos;ultima
-                    ora è spesso dedicata alla formazione: fino a 60 minuti non vengono conteggiati come interruzione.
+                    Il sabato ha lo stesso orario dei feriali ma su una fascia diversa (10:00-16:30). Quando c&apos;è
+                    formazione occupa l&apos;ultima ora e fino a 60 minuti non vengono conteggiati come interruzione —
+                    ma <strong>solo nei sabati in cui la formazione c&apos;è stata davvero</strong>, riconosciuti dal
+                    fatto che si ferma insieme almeno metà della squadra. Nei sabati normali non c&apos;è alcun abbuono.
                 </div>
                 <div>
                     Tutte le medie della tabella sono calcolate sulle sole <strong>giornate intere</strong>: le mezze
@@ -120,7 +128,7 @@ export function PhoneProductivityTab() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <SummaryStat label="Turno di riferimento" value="Fer. 13:30-20:00" sub="Sab. 10:00-16:30" />
                 <SummaryStat label="Al telefono (media)" value={`${avgTalkMin} min`} sub="al giorno, squadra" />
-                <SummaryStat label="Interruzioni brevi" value={`${avgShortPauseMinTeam} min`} sub={`al giorno, squadra · ${itNum(avgAfterRingTeam)} volte dopo uno squillo a vuoto`} />
+                <SummaryStat label="Interruzioni brevi" value={`${avgShortPauseMinTeam} min`} sub={`al giorno, squadra · ${itNum(avgAfterRingTeam)} volte dopo uno squillo a vuoto (${itNum(avgAfterRingRateTeam)}%)`} />
                 <SummaryStat label="Pause (oltre 10 min)" value={`${avgLongPauseMinTeam} min`} sub="al giorno, squadra · 30 min concessi in tutto" />
                 <SummaryStat label="Ore in eccesso" value={`${itNum(teamOverAllowanceHours)} h`} sub="squadra, nel periodo" />
             </div>
@@ -130,7 +138,7 @@ export function PhoneProductivityTab() {
                     <thead className="bg-ash-50 text-ash-600">
                         <tr>
                             <th className="text-left px-2 py-3 font-semibold">GDO</th>
-                            <th className="text-right px-2 py-3 font-semibold" title="Giornate INTERE (non permessi/mezze giornate), con almeno 40 chiamate: sono la base di calcolo di tutte le medie della riga. A fianco, se presenti, le giornate escluse (permessi/mezze giornate).">Gg</th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Giornate INTERE (non permessi, non mezze giornate, non arrivi molto in ritardo) con almeno 40 chiamate: sono la base di calcolo di tutte le medie della riga. Sotto, se presenti, le giornate escluse: mezze giornate/permessi e giornate sotto le 40 chiamate.">Gg</th>
                             <th className="text-right px-2 py-3 font-semibold" title="Chiamate effettuate in media in una giornata">Chiamate</th>
                             <th className="text-right px-2 py-3 font-semibold" title="Minuti di conversazione effettiva (billsec) in media al giorno">Al telefono</th>
                             <th className="text-right px-2 py-3 font-semibold" title="Il telefono squilla e nessuno risponde (duration - billsec) in media al giorno: non è conversazione né tempo fermo, è il terzo pezzo del turno">Squilli</th>
@@ -169,7 +177,14 @@ export function PhoneProductivityTab() {
                                     <td className="px-2 py-3 font-semibold text-ash-800">{r.gdo}</td>
                                     <td className="px-2 py-3 text-right tabular-nums">
                                         <div className="text-ash-500">{r.days}</div>
-                                        {r.daysShort > 0 && <div className="text-xs text-ash-400">+{r.daysShort} escl.</div>}
+                                        {(r.daysShort + r.daysLowVolume) > 0 && (
+                                            <div
+                                                className="text-xs text-ash-400"
+                                                title={`${r.daysShort} mezze giornate/permessi · ${r.daysLowVolume} giornate sotto le 40 chiamate`}
+                                            >
+                                                +{r.daysShort + r.daysLowVolume} escl.
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="px-2 py-3 text-right tabular-nums">{r.callsPerDay}</td>
                                     <td className="px-2 py-3 text-right tabular-nums font-semibold text-emerald-700">{r.talkMinPerDay} min</td>
@@ -179,10 +194,10 @@ export function PhoneProductivityTab() {
                                         <div className="font-semibold text-ash-800">{r.shortPauseMinPerDay} min</div>
                                         <div className="text-xs text-ash-400">{itNum(r.shortPauseCountPerDay)} volte</div>
                                         <div
-                                            className={`text-xs ${r.shortPauseAfterRingCountPerDay >= 5 ? 'font-semibold text-red-600' : 'text-ash-400'}`}
-                                            title="Interruzioni brevi che iniziano subito dopo uno squillo a vuoto: nessun esito da scrivere, nessuna giustificazione amministrativa"
+                                            className={`text-xs ${r.shortPauseAfterRingRatePct >= 8 ? 'font-semibold text-red-600' : 'text-ash-400'}`}
+                                            title="Interruzioni brevi che iniziano subito dopo uno squillo a vuoto, dove l'esito si scrive in pochi secondi. La percentuale e' calcolata sugli squilli a vuoto della persona, quindi non premia chi ne ha di meno."
                                         >
-                                            {itNum(r.shortPauseAfterRingCountPerDay)} dopo squillo a vuoto
+                                            {itNum(r.shortPauseAfterRingCountPerDay)} dopo squillo a vuoto · {itNum(r.shortPauseAfterRingRatePct)}%
                                         </div>
                                     </td>
                                     <td className="px-2 py-3 text-right tabular-nums">
@@ -225,10 +240,10 @@ export function PhoneProductivityTab() {
                 <Phone className="w-3 h-3 mt-0.5 shrink-0" />
                 <div className="space-y-0.5">
                     <div>
-                        Giornate con almeno 40 chiamate. Fonte: tabulati del centralino, turno reale (non la finestra osservata).
-                        {rows.some(r => r.daysShort > 0) && (
+                        Fonte: tabulati del centralino, turno reale (non la finestra osservata).
+                        {rows.some(r => r.daysShort + r.daysLowVolume > 0) && (
                             <span>
-                                {' '}{rows.reduce((a, r) => a + r.daysShort, 0)} giornate su {rows.reduce((a, r) => a + r.days + r.daysShort, 0)} nel mese sono mezze giornate/permessi (anticipo oltre 60 min, 120 il sabato): contate a parte (colonna Giornate), escluse da tutte le medie della riga.
+                                {' '}Su {rows.reduce((a, r) => a + r.days + r.daysShort + r.daysLowVolume, 0)} giornate con chiamate nel mese, {rows.reduce((a, r) => a + r.daysShort, 0)} sono mezze giornate/permessi (un bordo del turno oltre 60 min, 120 il sabato) e {rows.reduce((a, r) => a + r.daysLowVolume, 0)} stanno sotto le 40 chiamate: tutte contate a parte nella colonna Giornate, tutte escluse dalle medie della riga. I giorni di ferie non compaiono affatto, perché non producono alcuna chiamata.
                             </span>
                         )}
                     </div>
