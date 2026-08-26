@@ -17,6 +17,7 @@ import {
     Zap,
     Briefcase,
     Activity,
+    PhoneIncoming,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -169,6 +170,8 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                         { name: "Note GDO", href: "/note-gdo", icon: FileText },
                         { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                         { name: "Statistiche Fissatore", href: "/statistiche-fissatore", icon: Activity },
+                        // Coda di smistamento, non una vista di lettura: solo ADMIN.
+                        ...(role === "ADMIN" ? [{ name: "Richieste di Contatto", href: "/richieste-contatto", icon: PhoneIncoming }] : []),
                     ],
                 },
                 {
