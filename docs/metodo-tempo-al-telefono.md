@@ -21,17 +21,23 @@ minuti di turno:
 | Cosa | Minuti | % del turno | Si può contestare? |
 |---|---|---|---|
 | Tempo non passato in conversazione | 270 | 69% | Sì, include gli squilli: chiamare e non trovare nessuno è lavoro |
-| **Tempo con la cornetta abbassata** | **234** | **60%** | Sì, include il lavoro fra una chiamata e l'altra e i bordi del turno |
-| Interruzioni fra le chiamate (brevi + pause) | 177 | 45% | Poco: è tempo in cui il telefono è fermo e non c'è un esito da scrivere |
-| **Oltre i 30 minuti di pausa da contratto** | **147** | **38%** | **È questo il numero da portare** |
+| **Tempo con la cornetta abbassata** | **230** | **59%** | Sì, include il tempo per scrivere gli esiti e i bordi del turno |
+| Interruzioni fra le chiamate (brevi + pause) | 195 | 50% | Poco: è tempo oltre quello riconosciuto per scrivere l'esito |
+| **Oltre i 30 minuti di pausa da contratto** | **165** | **42%** | **È questo il numero da portare** |
 
-Per la persona messa meglio (GDO 117) le stesse quattro righe fanno 178, 126, 59 e
-**29 minuti**.
+Per la persona messa meglio (GDO 117) le stesse quattro righe fanno 178, 126, 75 e
+**45 minuti**.
 
-**La frase corretta è: "le interruzioni superano di 147 minuti al giorno la pausa
+**La frase corretta è: "le interruzioni superano di 165 minuti al giorno la pausa
 prevista dal contratto"**, non "perde il 60% del turno". La differenza fra i due
-modi di dirlo è di 87 minuti al giorno, ed è tutta roba che in un colloquio la
+modi di dirlo è di 65 minuti al giorno, ed è tutta roba che in un colloquio la
 persona ribatterebbe con ragione.
+
+*(La riga "cornetta abbassata" è la somma delle colonne come si leggono in pagina:
+23 + 87 + 108 + 12 = 230. Calcolandola invece per differenza dal turno teorico —
+390 − 120 − 36 — verrebbe 234: i quattro minuti di scarto sono l'ora di formazione
+del sabato, che è lavoro e viene tolta dalle voci di tempo fermo. Vale la pena
+saperlo perché chi rifà il conto in un modo o nell'altro trova due numeri diversi.)*
 
 ---
 
@@ -151,18 +157,42 @@ la **fine** di una e l'**inizio** della successiva. Non fra i due inizi: quello
 conterebbe la durata della prima chiamata come se fosse un buco. I buchi negativi
 (chiamate sovrapposte, 1 caso in sei mesi) si scartano.
 
-Ogni buco finisce in una di tre fasce, e **le tre fasce dicono cose diverse**:
+**Dentro ogni buco, quanto tempo è lavoro?** Fino al 26 agosto la risposta era una
+soglia sola per tutti: due minuti. Era troppo generosa, e la contestazione che l'ha
+fatta cadere è semplice — *dopo uno squillo a vuoto non c'è niente da scrivere,
+quindi due minuti non sono giustificabili*. Sui dati di agosto la sola fascia fra
+30 secondi e 2 minuti dopo una chiamata senza risposta valeva 6-25 minuti al giorno
+a persona, tutti classificati come lavoro.
 
-| Fascia | Cos'è | Come si legge |
-|---|---|---|
-| fino a 2 min | Chiudere l'esito, comporre il numero dopo | **Lavoro.** Non giudicabile: è alto proprio per chi fa tante chiamate |
-| 2-10 min | Troppo per essere lavoro, troppo poco per uscire | Interruzione breve |
-| oltre 10 min | Le uscite | Pausa vera. 3-6 al giorno è la normalità |
+Ora l'abbuono dipende da **cosa c'era davvero da scrivere**, cioè dall'esito che
+quella telefonata ha prodotto nel CRM:
 
-Le due soglie sono state scelte a tavolino, non ricavate dai dati. Ma sono state
-messe alla prova: spostandole a 3 e a 5 minuti la distanza fra il primo e
-l'ultimo della classifica resta (115: 185/168/148 minuti contro 117: 66/61/56).
-**Non è la scelta della soglia a fabbricare la differenza fra le persone.**
+| Esito della telefonata precedente | Tempo riconosciuto |
+|---|---|
+| Nessuno ha risposto | **9 secondi** |
+| Ha risposto, ma non se ne fa nulla (scarto, non interessato) | **9 secondi** |
+| Richiamo fissato | **30 secondi** |
+| Appuntamento preso | **80 secondi** |
+
+Il tempo entro l'abbuono è lavoro e non si giudica. Quello oltre è tempo fermo, e
+finisce fra le **interruzioni brevi** se il buco stava sotto i 10 minuti, fra le
+**pause** se lo superava (3-6 al giorno è la normalità).
+
+Due cose da sapere su come è implementato, perché sono le prime che un
+contraddittorio attacca:
+
+- **se non ha risposto nessuno, l'abbuono resta 9 secondi qualunque esito risulti
+  nel CRM.** Non c'è stata conversazione, quindi non c'era niente da trascrivere:
+  serve a non far comprare tempo a un esito registrato a vuoto;
+- **l'esito si aggancia alla telefonata** per operatore, giornata e ultime dieci
+  cifre del numero, scegliendo fra gli esiti di quel giorno su quel numero il più
+  vicino nel tempo — gli esiti si registrano spesso con ore di ritardo. Se non lo
+  si ritrova si usa l'abbuono minimo, **mai il più generoso**.
+
+Nella colonna "quante volte" si contano solo le fermate che superano il minuto
+oltre l'abbuono: senza quella soglia ogni singola telefonata produrrebbe
+un'interruzione e il conteggio non direbbe più niente. **I minuti invece si
+contano tutti.**
 
 **I bordi del turno** = dall'inizio turno alla prima chiamata, e dalla fine
 dell'ultima chiamata alla fine turno. Mai negativi.
@@ -211,8 +241,9 @@ in fondo alla classifica del tasso. Il volume non c'entra, resta l'abitudine.
 
 - **Le chiamate in entrata.** Il centralino non salva quale interno risponde: ad
   agosto sono 967 chiamate e 940 minuti di conversazione che, per chi ha
-  risposto, risultano tempo fermo. Sono circa 3 minuti al giorno a testa se
-  distribuite in modo uniforme, ma non c'è modo di sapere se lo siano.
+  risposto, risultano tempo fermo. Distribuite in parti uguali fra gli undici
+  operatori fanno circa **6 minuti al giorno a testa**, ma non c'è modo di sapere
+  se siano distribuite in parti uguali.
 - **Il lavoro non telefonico legittimo**: messaggi ai lead, compilazione di
   schede, riunioni. Non lascia traccia nei tabulati.
 - **Le chiamate fatte col telefono personale.** Nulla nei dati lo suggerisce, ma

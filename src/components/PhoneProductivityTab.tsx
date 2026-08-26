@@ -84,8 +84,8 @@ export function PhoneProductivityTab() {
             {/* Avviso: le tre categorie di tempo fra una chiamata e l'altra, e come si verifica la tabella a mano */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
                 <div>
-                    Le sette colonne di tempo (<strong>al telefono, squilli, tra le chiamate, interruzioni brevi, pause,
-                    inizio tardi, dopo l&apos;ultima chiamata</strong>) sono tutte sommabili: la loro somma torna alla
+                    Le sette colonne di tempo (<strong>al telefono, squilli, per scrivere gli esiti, interruzioni
+                    brevi, pause, inizio tardi, dopo l&apos;ultima chiamata</strong>) sono tutte sommabili: la loro somma torna alla
                     durata del turno (<strong>{SHIFT_REFERENCE_MIN} min</strong>), colonna <strong>Totale</strong>. È
                     così che la tabella si verifica a mano.
                 </div>
