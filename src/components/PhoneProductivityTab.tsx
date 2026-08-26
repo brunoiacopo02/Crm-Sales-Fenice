@@ -33,7 +33,7 @@ function rowTotalMin(r: PhoneProductivityRow): number {
 
 export function PhoneProductivityTab() {
     const [offset, setOffset] = useState(0)
-    const [data, setData] = useState<{ rows: PhoneProductivityRow[] } | null>(null)
+    const [data, setData] = useState<{ rows: PhoneProductivityRow[]; excludedMixedDuties: string[] } | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const period = monthBounds(offset)
 
@@ -55,7 +55,7 @@ export function PhoneProductivityTab() {
         return <div className="p-8 text-center text-ash-500">Nessun tabulato per {period.label}.</div>
     }
 
-    const { rows } = data
+    const { rows, excludedMixedDuties } = data
     const teamAvg = (pick: (r: PhoneProductivityRow) => number) => rows.reduce((a, r) => a + pick(r), 0) / rows.length
     const avgTalkMin = Math.round(teamAvg(r => r.talkMinPerDay))
     const avgShortPauseMinTeam = Math.round(teamAvg(r => r.shortPauseMinPerDay))
@@ -122,6 +122,19 @@ export function PhoneProductivityTab() {
                     ma <strong>solo nei sabati in cui la formazione c&apos;è stata davvero</strong>, riconosciuti dal
                     fatto che si ferma insieme almeno metà della squadra. Nei sabati normali non c&apos;è alcun abbuono.
                 </div>
+                {excludedMixedDuties.length > 0 && (
+                    <div>
+                        <strong>
+                            {excludedMixedDuties.length === 1
+                                ? `${excludedMixedDuties[0]} non compare in questa tabella`
+                                : `${excludedMixedDuties.join(', ')} non compaiono in questa tabella`}
+                        </strong>: {excludedMixedDuties.length === 1 ? 'divide' : 'dividono'} il turno con mansioni
+                        che non passano dal centralino (le Conferme). Richiamare gli appuntamenti già fissati, i
+                        rifissaggi e i messaggi non lasciano traccia nei tabulati, quindi qui risulterebbero tempo
+                        fermo, ritardi o pause lunghe. Gli appuntamenti che {excludedMixedDuties.length === 1 ? 'fissa' : 'fissano'} restano
+                        contati normalmente in tutte le altre schede.
+                    </div>
+                )}
                 <div>
                     Tutte le medie della tabella sono calcolate sulle sole <strong>giornate intere</strong>: le mezze
                     giornate e i permessi sono contati a parte (colonna Giornate) e non entrano nel confronto, perché

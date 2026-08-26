@@ -29,6 +29,13 @@
  * difendibile in un confronto con la persona (1,5 volte al giorno il
  * migliore, 8,8 il peggiore).
  *
+ * Chi divide il turno con mansioni che non passano dal telefono (es. le
+ * Conferme) è FUORI da questa scheda: `users.phoneTimeTracked = false`. Per
+ * quelle persone i tabulati non misurano il turno ma solo la parte
+ * telefonica, e tutto il resto — richiamare gli appuntamenti, i rifissaggi,
+ * i messaggi — risulterebbe tempo fermo. Restano invece dentro tutte le
+ * metriche di produzione: gli appuntamenti che fissano sono reali.
+ *
  * Tutte le medie giornaliere (chiamate, telefono, squilli, ritmo, pause,
  * bordi del turno) si calcolano SOLO sulle "giornate intere", cioè quelle
  * che non sono permessi/mezze giornate/uscite autorizzate né arrivi molto in
@@ -212,7 +219,7 @@ export type PhoneProductivityRow = {
 export async function getPhoneProductivity(
     fromDateLocal: string,
     toDateLocal: string,
-): Promise<{ rows: PhoneProductivityRow[] }> {
+): Promise<{ rows: PhoneProductivityRow[]; excludedMixedDuties: string[] }> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
     if (!PRODUCTIVITY_VIEW_ROLES.includes(ctx.role)) {
@@ -236,9 +243,27 @@ export async function getPhoneProductivity(
             companyScope(ctx, pbxCalls.companyId),
             eq(pbxCalls.direction, 'out'),
             isNotNull(pbxCalls.userId),
+            // Fuori chi ha mansioni che non passano dal centralino: per loro
+            // i tabulati non misurano il turno (vedi commento in testa).
+            eq(users.phoneTimeTracked, true),
             gte(pbxCalls.dateLocal, fromDateLocal),
             lte(pbxCalls.dateLocal, toDateLocal),
         ))
+
+    // Chi è fuori dalla scheda e perché: si mostra in pagina, non si nasconde.
+    const excludedRows = await db.select({
+        name: users.name,
+        displayName: users.displayName,
+    })
+        .from(users)
+        .where(and(
+            companyScope(ctx, users.companyId),
+            eq(users.role, 'GDO'),
+            eq(users.isActive, true),
+            eq(users.isBot, false),
+            eq(users.phoneTimeTracked, false),
+        ))
+    const excludedMixedDuties = excludedRows.map(r => r.displayName || r.name || '').filter(Boolean)
 
     // Esiti registrati nel CRM nello stesso periodo: servono a sapere COSA
     // c'era da scrivere dopo ogni telefonata, e quindi quanto tempo di lavoro
@@ -599,7 +624,7 @@ export async function getPhoneProductivity(
             }
         }).sort((a, b) => b.overAllowanceMinPerDay - a.overAllowanceMinPerDay)
 
-    return { rows }
+    return { rows, excludedMixedDuties }
 }
 
 export type ApptQualityRow = {

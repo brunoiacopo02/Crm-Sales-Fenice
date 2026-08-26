@@ -84,6 +84,14 @@ export const users = pgTable('users', {
     // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.
     statsActive: boolean('statsActive').default(true).notNull(),
 
+    // false = il turno di questa persona NON e' misurabile dai tabulati del
+    // centralino, perche' divide l'orario con mansioni che non passano dal
+    // telefono (es. le Conferme). La scheda "Tempo al telefono" di
+    // /monitor-pause la esclude, altrimenti il lavoro non telefonico
+    // risulterebbe tempo fermo. Diverso da statsActive: le metriche di
+    // PRODUZIONE (appuntamenti, chiamate, KPI) continuano a contarla.
+    phoneTimeTracked: boolean('phoneTimeTracked').default(true).notNull(),
+
     // Account bot (es. bot fissatore gdo205): partecipa al round-robin e ai KPI
     // come un GDO, ma la gamification è disattivata e all'assegnazione il CRM
     // pusha il lead al webhook del bot. Interruttore unico per gamification-off

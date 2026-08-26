@@ -117,6 +117,25 @@ la metà è formazione, sotto no.
 un errore a favore di tutti: abbassava le pause di 10-13 minuti al giorno a
 chiunque. Corretto.)*
 
+## 3-bis. Chi non entra nella scheda
+
+**Chi divide il turno con mansioni che non passano dal telefono è fuori.** Il caso
+attuale è il GDO 114 (Christel), che fa anche le Conferme: richiamare gli
+appuntamenti già fissati, gestire i rifissaggi e i messaggi non lascia alcuna
+traccia nei tabulati, quindi tutto quel lavoro le risulterebbe tempo fermo, ritardo
+in ingresso o pausa lunga. Con la vecchia soglia risultava seconda per tempo perso:
+era in buona parte il lavoro sulle Conferme.
+
+Si dichiara con `users.phoneTimeTracked = false`, ed è una cosa diversa da
+`statsActive`: **le metriche di produzione continuano a contarla**, perché gli
+appuntamenti che fissa sono reali. Qui si dice solo che il suo *tempo* non è
+misurabile col centralino. La scheda mostra chi è escluso e perché, invece di farlo
+sparire in silenzio.
+
+È il limite generale del metodo: **misura bene solo chi passa il turno intero al
+telefono.** Prima di aggiungere qualcuno alla tabella vale la pena chiedersi se ha
+altre mansioni.
+
 ## 4. Quali giornate entrano nel conto
 
 Si parte da tutte le coppie (persona, giorno) che hanno almeno una chiamata. Poi:
@@ -139,8 +158,7 @@ grossa: il "tempo dopo l'ultima chiamata" della squadra passa da 19-52 minuti a
 spariscono mai dal conto: sono contate e mostrate a fianco.
 
 Il filtro vale su **entrambi** i bordi del turno. Guardare solo l'uscita lasciava
-passare come "intera" una giornata cominciata con tre ore di ritardo — è successo
-il 21 agosto.
+passare come "intera" una giornata cominciata con tre ore di ritardo.
 
 ## 5. Come si scompone la giornata
 
