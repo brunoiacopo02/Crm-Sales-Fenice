@@ -248,10 +248,11 @@ export function PhoneProductivityTab() {
                         )}
                     </div>
                     <div>
-                        La colonna Totale può discostarsi dalla durata del turno di una decina di minuti in più o in
-                        meno: è una media su giornate feriali e sabati, che hanno fasce orarie diverse, ci sono gli
-                        arrotondamenti al minuto di ogni colonna, e il sabato fino a 60 minuti di formazione sono
-                        tolti dalle pause (quindi mancano dalla somma). Non è un errore.
+                        La colonna Totale può discostarsi dalla durata del turno: qualche minuto in più per gli
+                        arrotondamenti e per la media fra giornate feriali e sabati, che hanno fasce orarie diverse;
+                        fino a una trentina di minuti in meno per chi nel periodo ha fatto sabati di formazione,
+                        perché quell'ora è lavoro e viene tolta dalle voci di tempo fermo (quindi manca dalla
+                        somma, pur essendo stata lavorata). Non è un errore.
                     </div>
                 </div>
             </div>
