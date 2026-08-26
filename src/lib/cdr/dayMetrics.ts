@@ -1,3 +1,5 @@
+import { workAllowanceSec } from './allowance'
+
 /**
  * Metriche di una giornata di lavoro di una postazione, ricavate dai
  * tabulati del centralino.
@@ -12,6 +14,12 @@ export type DayCall = {
     duration: number   // secondi totali, squilli inclusi
     billsec: number    // secondi di conversazione effettiva
     disposition: string
+    /**
+     * Esito registrato nel CRM per questa telefonata (callLogs.outcome),
+     * null se non è stato ritrovato. Determina quanto tempo di lavoro si
+     * riconosce nel buco che segue — vedi allowance.ts.
+     */
+    outcome?: string | null
 }
 
 /**
@@ -48,6 +56,13 @@ export type GapDetail = {
      * productivityActions.ts.
      */
     startsAt: Date
+    /**
+     * Secondi di lavoro riconosciuti in questo buco, in base all'esito della
+     * telefonata che lo precede (vedi allowance.ts): 9 secondi se non c'era
+     * niente da scrivere, 80 se era stato preso un appuntamento. Il tempo
+     * oltre l'abbuono è fermo.
+     */
+    allowanceSec: number
 }
 
 export type DayMetrics = {
@@ -111,6 +126,7 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
             seconds: gap,
             afterUnanswered: sorted[i - 1].billsec === 0,
             startsAt: new Date(endOf(sorted[i - 1])),
+            allowanceSec: workAllowanceSec(sorted[i - 1].billsec, sorted[i - 1].outcome ?? null),
         })
         if (gap < 60) buckets.under1m += gap
         else if (gap < 180) buckets.m1to3 += gap

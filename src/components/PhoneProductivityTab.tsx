@@ -90,16 +90,21 @@ export function PhoneProductivityTab() {
                     così che la tabella si verifica a mano.
                 </div>
                 <div>
-                    Il tempo fra una chiamata e l&apos;altra è diviso in <strong>tre fasce, che dicono cose diverse</strong>:
-                    fino a <strong>2 minuti</strong> è lavoro (chiudere l&apos;esito, comporre il numero dopo) e non va
-                    giudicato — è alto proprio per chi fa tante chiamate; da <strong>2 a 10 minuti</strong> sono
-                    interruzioni brevi, non basta per uscire; <strong>oltre i 10 minuti</strong> sono le pause vere, le
-                    uscite (3-6 al giorno in una giornata normale).
+                    Dopo ogni telefonata si riconosce il tempo per <strong>scrivere quell&apos;esito</strong>, e dipende da
+                    cosa c&apos;era da scrivere: <strong>9 secondi</strong> se non ha risposto nessuno o se non se n&apos;è
+                    fatto nulla, <strong>30 secondi</strong> per un richiamo, <strong>80 secondi</strong> per un
+                    appuntamento preso. Quel tempo è lavoro e non va giudicato — cresce col numero di telefonate.
                 </div>
                 <div>
-                    <strong>Dopo uno squillo a vuoto l&apos;esito si scrive in pochi secondi</strong>, non in 2-10 minuti:
-                    non c&apos;è la telefonata da annotare, non c&apos;è nulla da riportare. Fermarsi lì è la voce meno
-                    contestabile della tabella: in questo periodo va da <strong>{itNum(minAfterRing)}</strong> a
+                    Tutto ciò che eccede quell&apos;abbuono è tempo fermo, e si divide in due: nei buchi <strong>fino a
+                    10 minuti</strong> sono <strong>interruzioni brevi</strong>, non basta per uscire; <strong>oltre i
+                    10 minuti</strong> sono le <strong>pause vere</strong>, le uscite (3-6 al giorno in una giornata
+                    normale). Nella colonna delle volte si contano le fermate che superano il minuto oltre l&apos;abbuono:
+                    i minuti invece si contano tutti.
+                </div>
+                <div>
+                    <strong>Dopo uno squillo a vuoto non c&apos;è la telefonata da annotare</strong>, e fermarsi lì è
+                    la voce meno contestabile della tabella: in questo periodo va da <strong>{itNum(minAfterRing)}</strong> a
                     <strong> {itNum(maxAfterRing)} volte al giorno</strong> a seconda della persona.
                 </div>
                 <div>
@@ -142,13 +147,13 @@ export function PhoneProductivityTab() {
                             <th className="text-right px-2 py-3 font-semibold" title="Chiamate effettuate in media in una giornata">Chiamate</th>
                             <th className="text-right px-2 py-3 font-semibold" title="Minuti di conversazione effettiva (billsec) in media al giorno">Al telefono</th>
                             <th className="text-right px-2 py-3 font-semibold" title="Il telefono squilla e nessuno risponde (duration - billsec) in media al giorno: non è conversazione né tempo fermo, è il terzo pezzo del turno">Squilli</th>
-                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in buchi fra una chiamata e l'altra fino a 2 minuti: chiudere l'esito e comporre il numero dopo. È lavoro, non pausa, e non è un metro di giudizio: è alto per chi fa tante chiamate.">
-                                Tra le chiamate
-                                <div className="text-[10px] font-normal text-ash-400">fino a 2 min · lavoro</div>
+                            <th className="text-right px-2 py-3 font-semibold" title="Tempo riconosciuto per scrivere l'esito, telefonata per telefonata: 9 secondi se non ha risposto nessuno o se non se n'è fatto nulla, 30 per un richiamo, 80 per un appuntamento preso. È lavoro, non pausa, e non è un metro di giudizio: cresce col numero di telefonate.">
+                                Per scrivere gli esiti
+                                <div className="text-[10px] font-normal text-ash-400">9-80 sec a chiamata</div>
                             </th>
-                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in interruzioni fra 2 e 10 minuti: troppo per essere lavoro, troppo poco per essere un'uscita. Sotto: quante volte al giorno, e quante di quelle volte arrivano subito dopo uno squillo a vuoto (dove non c'è alcun esito da scrivere).">
+                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno oltre il tempo riconosciuto per l'esito, nei buchi fino a 10 minuti: troppo per essere lavoro, troppo poco per essere un'uscita. Sotto: quante volte al giorno (contando le fermate oltre il minuto), e quante di quelle arrivano dopo uno squillo a vuoto.">
                                 Interruzioni brevi
-                                <div className="text-[10px] font-normal text-ash-400">2-10 min</div>
+                                <div className="text-[10px] font-normal text-ash-400">buchi fino a 10 min</div>
                             </th>
                             <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in pause oltre i 10 minuti: le uscite. Sotto: quante volte al giorno (3-6 è la giornata normale).">
                                 Pause

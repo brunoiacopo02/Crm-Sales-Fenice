@@ -97,9 +97,10 @@ test('gapDetails segna se il buco arriva dopo uno squillo a vuoto', () => {
     assert.deepEqual(m.gapDetails, [
         // dopo una conversazione: c'e' l'esito da scrivere. Il buco comincia
         // alla FINE della chiamata precedente (13:00 + 60s), non al suo inizio.
-        { seconds: 540, afterUnanswered: false, startsAt: at('13:01') },
-        // dopo uno squillo a vuoto: nessun esito da scrivere
-        { seconds: 570, afterUnanswered: true, startsAt: at('13:10:30') },
+        // 9 secondi di abbuono: ha risposto ma senza esito ritrovato
+        { seconds: 540, afterUnanswered: false, startsAt: at('13:01'), allowanceSec: 9 },
+        // dopo uno squillo a vuoto: nessun esito da scrivere, sempre 9 secondi
+        { seconds: 570, afterUnanswered: true, startsAt: at('13:10:30'), allowanceSec: 9 },
     ])
 })
 

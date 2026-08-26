@@ -5,14 +5,21 @@
  * pbxCalls, alimentata da scripts/import-cdr.ts).
  *
  * Il "tempo non telefonico" si scompone in TRE categorie, che dicono cose
- * diverse e vanno lette separatamente (valori misurati su agosto 2026):
- *   1. fra una chiamata e l'altra, fino a 2 minuti (workRhythmMinPerDay,
- *      39-80 min/gg): chiudere l'esito e comporre il numero dopo. È lavoro,
- *      non è comprimibile e non è un metro di giudizio — è proporzionale al
- *      numero di chiamate, quindi alto proprio per chi ne fa tante;
- *   2. interruzioni brevi, 2-10 minuti (shortPauseMinPerDay, 23-66 min/gg);
- *   3. pause vere, oltre i 10 minuti (longPauseMinPerDay, 45-120 min/gg),
- *      3-6 volte al giorno: le uscite.
+ * diverse e vanno lette separatamente:
+ *   1. il tempo per scrivere l'esito, riconosciuto telefonata per telefonata
+ *      in base a COSA c'era da scrivere (workRhythmMinPerDay): 9 secondi se
+ *      non ha risposto nessuno, 80 se è stato preso un appuntamento — vedi
+ *      allowance.ts. È lavoro e non è un metro di giudizio;
+ *   2. interruzioni brevi: il tempo oltre l'abbuono, nei buchi fino a 10
+ *      minuti (shortPauseMinPerDay);
+ *   3. pause vere, nei buchi oltre i 10 minuti (longPauseMinPerDay), 3-6
+ *      volte al giorno: le uscite.
+ *
+ * Fino al 2026-08-26 l'abbuono era una soglia unica di 2 minuti per ogni
+ * telefonata, indipendente dall'esito. Era troppo generosa: significava
+ * regalare fino a due minuti anche dopo uno squillo a vuoto, dove non c'è
+ * niente da annotare. Su agosto la sola fascia 30 secondi-2 minuti dopo una
+ * chiamata senza risposta valeva 6-25 minuti al giorno a persona.
  * Le categorie 2+3 insieme sono pauseMinPerDay e si confrontano coi 30
  * minuti di pausa concessi da contratto (overAllowanceMinPerDay), non più
  * col migliore del gruppo.
@@ -34,25 +41,26 @@
  */
 
 import { db } from "@/db"
-import { pbxCalls, users, leads } from "@/db/schema"
+import { pbxCalls, users, leads, callLogs } from "@/db/schema"
 import { and, gte, lte, lt, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
 import { shiftBoundsFor, lateAndEarly, trainingAllowanceSec, isCollectiveTrainingDay, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN, WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN, romeDowOf } from "@/lib/cdr/shift"
 import { apptSetAt } from "@/lib/kpi/canon"
-import { dayBoundsRome } from "@/lib/dateUtils"
+import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
 
 /** Sotto questa soglia la giornata non è rappresentativa (mezze giornate, assenze). */
 const MIN_CALLS_PER_DAY = 40
 
 /**
- * Soglia (secondi) oltre la quale un buco fra due chiamate è una vera
- * interruzione e non ritmo di lavoro. Sotto: chiudere l'esito e comporre il
- * numero successivo (11-25 secondi di mediana, misurato agosto 2026) — è
- * lavoro incomprimibile, non pausa. Soglia prudente concordata col committente
- * il 2026-08-25.
+ * Soglia (secondi) di eccesso oltre l'abbuono perché la fermata diventi un
+ * EVENTO contato ("quante volte"). I minuti oltre l'abbuono si contano
+ * sempre, anche pochi secondi; l'evento no, altrimenti ogni singola
+ * telefonata produrrebbe un'interruzione e la colonna dei conteggi non
+ * direbbe più niente. Un minuto oltre il tempo riconosciuto è una fermata
+ * che si vede.
  */
-const WORK_RHYTHM_THRESHOLD_SEC = 2 * 60
+const PAUSE_EVENT_MIN_SEC = 60
 
 /**
  * Soglia (secondi) che separa l'interruzione breve dalla pausa vera. Sotto i
@@ -94,23 +102,24 @@ export type PhoneProductivityRow = {
      */
     ringingMinPerDay: number
     /**
-     * Ritmo di lavoro: minuti al giorno passati in buchi fra due chiamate
-     * fino a WORK_RHYTHM_THRESHOLD_SEC (2 minuti) — chiudere l'esito e
-     * comporre il numero dopo. Non è pausa.
+     * Minuti al giorno riconosciuti per scrivere gli esiti: la somma degli
+     * abbuoni di ogni telefonata (9 / 30 / 80 secondi a seconda dell'esito,
+     * vedi allowance.ts), limitata al buco realmente disponibile. Non è
+     * pausa e non è un metro di giudizio: cresce col numero di telefonate.
      */
     workRhythmMinPerDay: number
     /**
      * Interruzioni vere: minuti al giorno passati in buchi fra due chiamate
-     * sopra WORK_RHYTHM_THRESHOLD_SEC (2 minuti). È esattamente la somma di
+     * oltre l'abbuono di scrittura dell'esito. È esattamente la somma di
      * shortPauseMinPerDay + longPauseMinPerDay, e si calcola da quelle: così
      * la riga somma anche mostrando le due voci separate. Il sabato è già
      * scalato dell'abbuono formazione (vedi saturdayAllowanceSec in
      * shift.ts), altrimenti l'ultima ora di formazione risulterebbe pausa.
      */
     pauseMinPerDay: number
-    /** Interruzioni brevi (2-10 min): minuti in media al giorno. */
+    /** Interruzioni brevi: minuti al giorno oltre l'abbuono, nei buchi fino a 10 minuti. */
     shortPauseMinPerDay: number
-    /** Quante interruzioni brevi in media al giorno (un decimale). */
+    /** Quante interruzioni brevi in media al giorno (un decimale): contate quando l'eccesso supera PAUSE_EVENT_MIN_SEC. */
     shortPauseCountPerDay: number
     /**
      * Quante delle interruzioni brevi seguono uno squillo a vuoto (la
@@ -217,6 +226,7 @@ export async function getPhoneProductivity(
         duration: pbxCalls.duration,
         billsec: pbxCalls.billsec,
         disposition: pbxCalls.disposition,
+        dstKey: pbxCalls.dstKey,
         name: users.name,
         displayName: users.displayName,
     })
@@ -230,6 +240,51 @@ export async function getPhoneProductivity(
             lte(pbxCalls.dateLocal, toDateLocal),
         ))
 
+    // Esiti registrati nel CRM nello stesso periodo: servono a sapere COSA
+    // c'era da scrivere dopo ogni telefonata, e quindi quanto tempo di lavoro
+    // riconoscere nel buco che segue (vedi allowance.ts). Si agganciano alla
+    // telefonata per (operatore, giornata, ultime dieci cifre del numero):
+    // stessa chiave usata da dstKey nei tabulati. Fra più esiti dello stesso
+    // giorno sullo stesso numero si prende quello più vicino nel tempo alla
+    // telefonata — gli esiti si registrano spesso con parecchio ritardo.
+    const outcomeRows = await db.select({
+        userId: callLogs.userId,
+        outcome: callLogs.outcome,
+        createdAt: callLogs.createdAt,
+        phone: leads.phone,
+    })
+        .from(callLogs)
+        .innerJoin(leads, eq(leads.id, callLogs.leadId))
+        .where(and(
+            companyScope(ctx, callLogs.companyId),
+            isNotNull(callLogs.userId),
+            gte(callLogs.createdAt, dayBoundsRome(new Date(`${fromDateLocal}T12:00:00Z`)).start),
+            lte(callLogs.createdAt, dayBoundsRome(new Date(`${toDateLocal}T12:00:00Z`)).end),
+        ))
+
+    /** (utente|giornata|ultime 10 cifre) -> esiti di quella giornata su quel numero. */
+    const outcomesByCall = new Map<string, { outcome: string; atMs: number }[]>()
+    for (const r of outcomeRows) {
+        const key10 = (r.phone ?? '').replace(/\D/g, '').slice(-10)
+        if (key10.length < 10 || !r.userId) continue
+        const key = `${r.userId}|${toRomeDateStr(r.createdAt)}|${key10}`
+        const list = outcomesByCall.get(key)
+        if (list) list.push({ outcome: r.outcome, atMs: r.createdAt.getTime() })
+        else outcomesByCall.set(key, [{ outcome: r.outcome, atMs: r.createdAt.getTime() }])
+    }
+
+    /** L'esito registrato più vicino nel tempo a quella telefonata, se esiste. */
+    const outcomeFor = (userId: string, dateLocal: string, dstKey: string | null, atMs: number): string | null => {
+        if (!dstKey) return null
+        const list = outcomesByCall.get(`${userId}|${dateLocal}|${dstKey}`)
+        if (!list?.length) return null
+        let best = list[0]
+        for (const o of list) {
+            if (Math.abs(o.atMs - atMs) < Math.abs(best.atMs - atMs)) best = o
+        }
+        return best.outcome
+    }
+
     // Raggruppa per (utente, giorno)
     const byDay = new Map<string, { userId: string; gdo: string; dateLocal: string; calls: DayCall[] }>()
     for (const r of raw) {
@@ -240,6 +295,7 @@ export async function getPhoneProductivity(
             byDay.set(key, slot)
         }
         slot.calls.push({
+            outcome: outcomeFor(r.userId!, r.dateLocal, r.dstKey, r.calldate.getTime()),
             calldate: r.calldate,
             duration: r.duration,
             billsec: r.billsec,
@@ -294,7 +350,7 @@ export async function getPhoneProductivity(
         let workRhythmSec = 0
         let shortPauseSec = 0, shortPauseCount = 0, shortPauseAfterRingCount = 0
         let longPauseSecRaw = 0, longPauseCount = 0
-        for (const { seconds, afterUnanswered, startsAt } of m.gapDetails) {
+        for (const { seconds, afterUnanswered, startsAt, allowanceSec } of m.gapDetails) {
             // Il buco va ritagliato sui bordi del turno: chi comincia a
             // chiamare prima dell'inizio turno aveva un buco fra quella
             // chiamata e la prima "in orario", e addebitarlo per intero
@@ -307,14 +363,27 @@ export async function getPhoneProductivity(
             const inShiftSec = Math.max(0, Math.round((to - from) / 1000))
             if (inShiftSec === 0) continue
 
-            if (inShiftSec <= WORK_RHYTHM_THRESHOLD_SEC) {
-                workRhythmSec += inShiftSec
-            } else if (inShiftSec <= LONG_PAUSE_THRESHOLD_SEC) {
-                shortPauseSec += inShiftSec
-                shortPauseCount += 1
-                if (afterUnanswered) shortPauseAfterRingCount += 1
+            // L'abbuono dipende da cosa c'era da scrivere dopo QUELLA
+            // telefonata (allowance.ts), non da una soglia unica: entro
+            // l'abbuono è lavoro, oltre è tempo fermo. La fascia (breve o
+            // pausa vera) si decide sulla lunghezza del buco, non
+            // dell'eccesso: un buco di mezz'ora resta un'uscita anche se
+            // l'abbuono ne toglie un minuto.
+            const workSec = Math.min(inShiftSec, allowanceSec)
+            workRhythmSec += workSec
+            const excessSec = inShiftSec - workSec
+            if (excessSec <= 0) continue
+
+            if (inShiftSec <= LONG_PAUSE_THRESHOLD_SEC) {
+                shortPauseSec += excessSec
+                // L'evento si conta solo se l'eccesso si vede (vedi
+                // PAUSE_EVENT_MIN_SEC): i minuti invece si contano sempre.
+                if (excessSec >= PAUSE_EVENT_MIN_SEC) {
+                    shortPauseCount += 1
+                    if (afterUnanswered) shortPauseAfterRingCount += 1
+                }
             } else {
-                longPauseSecRaw += inShiftSec
+                longPauseSecRaw += excessSec
                 longPauseCount += 1
             }
         }
