@@ -61,6 +61,9 @@ export function PhoneProductivityTab() {
     const avgShortPauseMinTeam = Math.round(teamAvg(r => r.shortPauseMinPerDay))
     const avgLongPauseMinTeam = Math.round(teamAvg(r => r.longPauseMinPerDay))
     const avgAfterRingTeam = Math.round(teamAvg(r => r.shortPauseAfterRingCountPerDay) * 10) / 10
+    const afterRingValues = rows.map(r => r.shortPauseAfterRingCountPerDay)
+    const minAfterRing = Math.min(...afterRingValues)
+    const maxAfterRing = Math.max(...afterRingValues)
     const teamOverAllowanceHours = Math.round(rows.reduce((a, r) => a + r.overAllowanceHoursPeriod, 0) * 10) / 10
 
     return (
@@ -94,12 +97,13 @@ export function PhoneProductivityTab() {
                 </div>
                 <div>
                     <strong>Dopo uno squillo a vuoto non c&apos;è nessun esito da scrivere</strong>: fermarsi lì non ha la
-                    giustificazione del lavoro amministrativo. È la voce meno contestabile della tabella, e va da
-                    1,5 a 8,8 volte al giorno a seconda della persona.
+                    giustificazione del lavoro amministrativo. È la voce meno contestabile della tabella, e in questo
+                    periodo va da <strong>{itNum(minAfterRing)}</strong> a <strong>{itNum(maxAfterRing)} volte al
+                    giorno</strong> a seconda della persona.
                 </div>
                 <div>
-                    Il metro sulle interruzioni (brevi + pause insieme) restano i <strong>30 minuti di pausa concessi
-                    da contratto</strong>, non il migliore del gruppo.
+                    Il metro sulle interruzioni (brevi + pause insieme) resta il diritto contrattuale a
+                    <strong> 30 minuti di pausa al giorno</strong>, non il migliore del gruppo.
                 </div>
                 <div>
                     Il sabato ha lo stesso orario dei feriali ma su una fascia diversa (10:00-16:30). L&apos;ultima
@@ -229,9 +233,10 @@ export function PhoneProductivityTab() {
                         )}
                     </div>
                     <div>
-                        La colonna Totale può superare la durata del turno di 3-13 minuti: è una media su giornate
-                        feriali e sabati, che hanno fasce orarie diverse, più gli arrotondamenti al minuto di ogni
-                        colonna. Non è un errore.
+                        La colonna Totale può discostarsi dalla durata del turno di una decina di minuti in più o in
+                        meno: è una media su giornate feriali e sabati, che hanno fasce orarie diverse, ci sono gli
+                        arrotondamenti al minuto di ogni colonna, e il sabato fino a 60 minuti di formazione sono
+                        tolti dalle pause (quindi mancano dalla somma). Non è un errore.
                     </div>
                 </div>
             </div>
