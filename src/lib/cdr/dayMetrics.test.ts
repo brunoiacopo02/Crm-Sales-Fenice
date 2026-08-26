@@ -86,3 +86,25 @@ test('la somma delle fasce corrisponde alla somma dei gap', () => {
     const sommaFasce = m.buckets.under1m + m.buckets.m1to3 + m.buckets.m3to10 + m.buckets.m10to30 + m.buckets.over30m
     assert.equal(sommaFasce, m.gaps.reduce((a, b) => a + b, 0))
 })
+
+test('gapDetails segna se il buco arriva dopo uno squillo a vuoto', () => {
+    // 13:00 risposta (billsec 30), 13:10 squillo a vuoto (billsec 0), 13:20 risposta
+    const m = computeDayMetrics([
+        { calldate: at('13:00'), duration: 60, billsec: 30, disposition: 'ANSWERED' },
+        { calldate: at('13:10'), duration: 30, billsec: 0, disposition: 'NO ANSWER' },
+        { calldate: at('13:20'), duration: 60, billsec: 40, disposition: 'ANSWERED' },
+    ])!
+    assert.deepEqual(m.gapDetails, [
+        { seconds: 540, afterUnanswered: false },   // dopo una conversazione: c'e' l'esito da scrivere
+        { seconds: 570, afterUnanswered: true },    // dopo uno squillo a vuoto: nessun esito da scrivere
+    ])
+})
+
+test('gapDetails e gaps restano allineati anche scartando i gap negativi', () => {
+    const m = computeDayMetrics([
+        { calldate: at('13:00'), duration: 600, billsec: 0, disposition: 'NO ANSWER' },
+        { calldate: at('13:05'), duration: 30, billsec: 0, disposition: 'NO ANSWER' },  // sovrapposta: scartata
+        { calldate: at('13:30'), duration: 60, billsec: 50, disposition: 'ANSWERED' },
+    ])!
+    assert.deepEqual(m.gapDetails.map(g => g.seconds), m.gaps)
+})

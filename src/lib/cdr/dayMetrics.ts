@@ -31,6 +31,18 @@ export function emptyBuckets(): GapBuckets {
     return { under1m: 0, m1to3: 0, m3to10: 0, m10to30: 0, over30m: 0 }
 }
 
+/**
+ * Un singolo buco fra due chiamate, con l'esito della chiamata che lo
+ * precede. `afterUnanswered` distingue il buco che segue uno squillo a
+ * vuoto (billsec = 0): li' non c'e' nessun esito da scrivere, quindi una
+ * interruzione subito dopo non ha la giustificazione del lavoro
+ * amministrativo. E' la metrica piu' difendibile della scheda.
+ */
+export type GapDetail = {
+    seconds: number
+    afterUnanswered: boolean
+}
+
 export type DayMetrics = {
     calls: number
     answered: number
@@ -39,6 +51,8 @@ export type DayMetrics = {
     windowSeconds: number
     offPhoneSeconds: number
     gaps: number[]
+    /** Gli stessi buchi di `gaps`, stesso ordine, con l'esito della chiamata precedente. */
+    gapDetails: GapDetail[]
     buckets: GapBuckets
     firstAt: Date
     lastAt: Date
@@ -71,11 +85,13 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
     // Gap fra la fine di una chiamata e l'inizio della successiva.
     // I negativi indicano chiamate sovrapposte (dato anomalo): si scartano.
     const gaps: number[] = []
+    const gapDetails: GapDetail[] = []
     const buckets = emptyBuckets()
     for (let i = 1; i < sorted.length; i++) {
         const gap = Math.round((sorted[i].calldate.getTime() - endOf(sorted[i - 1])) / 1000)
         if (gap < 0) continue
         gaps.push(gap)
+        gapDetails.push({ seconds: gap, afterUnanswered: sorted[i - 1].billsec === 0 })
         if (gap < 60) buckets.under1m += gap
         else if (gap < 180) buckets.m1to3 += gap
         else if (gap < 600) buckets.m3to10 += gap
@@ -91,6 +107,7 @@ export function computeDayMetrics(calls: DayCall[]): DayMetrics | null {
         windowSeconds,
         offPhoneSeconds: Math.max(0, windowSeconds - occupiedSeconds),
         gaps,
+        gapDetails,
         buckets,
         firstAt,
         lastAt,

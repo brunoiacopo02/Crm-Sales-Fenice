@@ -4,12 +4,23 @@
  * Produttività telefonica dei GDO dai tabulati del centralino (tabella
  * pbxCalls, alimentata da scripts/import-cdr.ts).
  *
- * Il "tempo non telefonico" comprende sia il ritmo di lavoro fra una chiamata
- * e l'altra (chiudere l'esito, comporre il numero dopo — è lavoro, non
- * pausa) sia le interruzioni vere. Dal 2026-08-25 le due cose si contano
- * separatamente (vedi workRhythmMinPerDay/pauseMinPerDay) e le interruzioni
- * si confrontano coi 30 minuti di pausa concessi da contratto
- * (overAllowanceMinPerDay), non più col migliore del gruppo.
+ * Il "tempo non telefonico" si scompone in TRE categorie, che dicono cose
+ * diverse e vanno lette separatamente (valori misurati su agosto 2026):
+ *   1. fra una chiamata e l'altra, fino a 2 minuti (workRhythmMinPerDay,
+ *      39-80 min/gg): chiudere l'esito e comporre il numero dopo. È lavoro,
+ *      non è comprimibile e non è un metro di giudizio — è proporzionale al
+ *      numero di chiamate, quindi alto proprio per chi ne fa tante;
+ *   2. interruzioni brevi, 2-10 minuti (shortPauseMinPerDay, 23-66 min/gg);
+ *   3. pause vere, oltre i 10 minuti (longPauseMinPerDay, 45-120 min/gg),
+ *      3-6 volte al giorno: le uscite.
+ * Le categorie 2+3 insieme sono pauseMinPerDay e si confrontano coi 30
+ * minuti di pausa concessi da contratto (overAllowanceMinPerDay), non più
+ * col migliore del gruppo.
+ *
+ * shortPauseAfterRingCountPerDay isola le interruzioni brevi che seguono uno
+ * squillo a vuoto: lì non c'è nessun esito da scrivere, quindi è la voce più
+ * difendibile in un confronto con la persona (1,5 volte al giorno il
+ * migliore, 8,8 il peggiore).
  *
  * Tutte le medie giornaliere (chiamate, telefono, squilli, ritmo, pause,
  * bordi del turno) si calcolano SOLO sulle "giornate intere", cioè quelle
@@ -40,6 +51,15 @@ const MIN_CALLS_PER_DAY = 40
  * il 2026-08-25.
  */
 const WORK_RHYTHM_THRESHOLD_SEC = 2 * 60
+
+/**
+ * Soglia (secondi) che separa l'interruzione breve dalla pausa vera. Sotto i
+ * 10 minuti è lo stacco che non basta per uscire; sopra è un'uscita. Le due
+ * fasce si distribuiscono in modo diverso fra le persone e vanno mostrate
+ * separate: insieme facevano una colonna "pause" che mescolava due
+ * comportamenti distinti.
+ */
+const LONG_PAUSE_THRESHOLD_SEC = 10 * 60
 
 /**
  * Pausa quotidiana prevista da contratto (minuti): diritto contrattuale, non
@@ -79,19 +99,28 @@ export type PhoneProductivityRow = {
     workRhythmMinPerDay: number
     /**
      * Interruzioni vere: minuti al giorno passati in buchi fra due chiamate
-     * sopra WORK_RHYTHM_THRESHOLD_SEC (2 minuti). Il sabato è già scalato
-     * dell'abbuono formazione (vedi saturdayAllowanceSec in shift.ts),
-     * altrimenti l'ultima ora di formazione risulterebbe un'interruzione.
+     * sopra WORK_RHYTHM_THRESHOLD_SEC (2 minuti). È esattamente la somma di
+     * shortPauseMinPerDay + longPauseMinPerDay, e si calcola da quelle: così
+     * la riga somma anche mostrando le due voci separate. Il sabato è già
+     * scalato dell'abbuono formazione (vedi saturdayAllowanceSec in
+     * shift.ts), altrimenti l'ultima ora di formazione risulterebbe pausa.
      */
     pauseMinPerDay: number
+    /** Interruzioni brevi (2-10 min): minuti in media al giorno. */
+    shortPauseMinPerDay: number
+    /** Quante interruzioni brevi in media al giorno (un decimale). */
+    shortPauseCountPerDay: number
     /**
-     * Quante interruzioni sopra i 2 minuti in media al giorno (un decimale).
-     * La differenza fra le persone è quasi tutta qui, non nella durata della
-     * singola pausa (vedi avgPauseMin, quasi uguale per tutti).
+     * Quante delle interruzioni brevi seguono uno squillo a vuoto (la
+     * chiamata precedente ha billsec = 0), in media al giorno. Dopo uno
+     * squillo a vuoto non c'è nessun esito da scrivere: è la voce meno
+     * contestabile della scheda.
      */
-    pauseCountPerDay: number
-    /** Durata media di una singola interruzione (minuti, arrotondati). Non abbuonata sabato: è la fotografia grezza della pausa tipica. */
-    avgPauseMin: number
+    shortPauseAfterRingCountPerDay: number
+    /** Pause vere (oltre 10 min): minuti in media al giorno, già al netto dell'abbuono formazione del sabato. */
+    longPauseMinPerDay: number
+    /** Quante pause vere in media al giorno (un decimale): sono le uscite, 3-6 in una giornata normale. */
+    longPauseCountPerDay: number
     /** max(0, pauseMinPerDay - 30): scostamento dai 30 minuti di pausa concessi da contratto. È il numero da guardare. */
     overAllowanceMinPerDay: number
     /** Ore complessive di eccesso nel periodo mostrato: overAllowanceMinPerDay * giornate INTERE / 60, un decimale (sulle giornate corte non si può pretendere il turno pieno). */
@@ -209,12 +238,14 @@ export async function getPhoneProductivity(
         startLateFullSec: number; endEarlyFullSec: number
         daysFullShift: number
         idleInShift: number
-        // Ritmo di lavoro (≤2 min) e interruzioni vere (>2 min) fra chiamate,
-        // accumulati solo sulle giornate intere. pauseSec è già scalato
-        // dell'abbuono formazione del sabato (per pauseMinPerDay/
-        // overAllowance); pauseSecRaw e pauseCount non lo sono (per
-        // avgPauseMin, la fotografia grezza della pausa tipica).
-        workRhythmSec: number; pauseSec: number; pauseSecRaw: number; pauseCount: number
+        // Le tre categorie di tempo fra una chiamata e l'altra (vedi il
+        // commento in testa al file), accumulate solo sulle giornate intere.
+        // longPauseSec è già scalato dell'abbuono formazione del sabato: la
+        // formazione dura un'ora, quindi cade sempre nella fascia oltre i 10
+        // minuti, mai fra le interruzioni brevi.
+        workRhythmSec: number
+        shortPauseSec: number; shortPauseCount: number; shortPauseAfterRingCount: number
+        longPauseSec: number; longPauseCount: number
     }>()
     for (const slot of byDay.values()) {
         if (slot.calls.length < MIN_CALLS_PER_DAY) continue
@@ -235,7 +266,9 @@ export async function getPhoneProductivity(
                 startLateFullSec: 0, endEarlyFullSec: 0,
                 daysFullShift: 0,
                 idleInShift: 0,
-                workRhythmSec: 0, pauseSec: 0, pauseSecRaw: 0, pauseCount: 0,
+                workRhythmSec: 0,
+                shortPauseSec: 0, shortPauseCount: 0, shortPauseAfterRingCount: 0,
+                longPauseSec: 0, longPauseCount: 0,
             }
             byUser.set(slot.userId, u)
         }
@@ -286,35 +319,53 @@ export async function getPhoneProductivity(
         u.startLateFullSec += startLateSec
         u.endEarlyFullSec += endEarlySec
 
-        // Ritmo di lavoro vs interruzioni vere: si riparte dai buchi grezzi
-        // fra chiamate (m.gaps), non dai bucket esistenti (i loro confini a
-        // 60/180/600/1800s non cadono sulla soglia dei 2 minuti concordata).
+        // Le tre categorie: si riparte dai buchi grezzi fra chiamate
+        // (m.gapDetails), non dai bucket esistenti (i loro confini a
+        // 60/180/600/1800s non cadono sulle soglie concordate di 2 e 10
+        // minuti). gapDetails porta anche l'esito della chiamata che precede
+        // il buco, che serve per le interruzioni "dopo uno squillo a vuoto".
         let workRhythmSecDay = 0
-        let pauseSecRawDay = 0
-        let pauseCountRawDay = 0
-        for (const gap of m.gaps) {
-            if (gap <= WORK_RHYTHM_THRESHOLD_SEC) workRhythmSecDay += gap
-            else {
-                pauseSecRawDay += gap
-                pauseCountRawDay += 1
+        let shortPauseSecDay = 0, shortPauseCountDay = 0, shortPauseAfterRingDay = 0
+        let longPauseSecDay = 0, longPauseCountDay = 0
+        for (const { seconds, afterUnanswered } of m.gapDetails) {
+            if (seconds <= WORK_RHYTHM_THRESHOLD_SEC) {
+                workRhythmSecDay += seconds
+            } else if (seconds <= LONG_PAUSE_THRESHOLD_SEC) {
+                shortPauseSecDay += seconds
+                shortPauseCountDay += 1
+                if (afterUnanswered) shortPauseAfterRingDay += 1
+            } else {
+                longPauseSecDay += seconds
+                longPauseCountDay += 1
             }
         }
         // Il sabato l'ultima ora di formazione compare come un buco interno
-        // fra due chiamate: va abbuonata dalle pause con la stessa funzione e
-        // lo stesso tetto (60 min) già usati per l'anticipo a fine turno,
-        // altrimenti la formazione risulterebbe un'interruzione.
-        const pauseAllowanceSec = saturdayAllowanceSec(slot.dateLocal, pauseSecRawDay)
+        // fra due chiamate: va abbuonata con la stessa funzione e lo stesso
+        // tetto (60 min) già usati per l'anticipo a fine turno, altrimenti la
+        // formazione risulterebbe una pausa. Si scala dalle sole pause vere:
+        // un'ora di formazione non può cadere nella fascia 2-10 minuti.
+        const pauseAllowanceSec = saturdayAllowanceSec(slot.dateLocal, longPauseSecDay)
         u.workRhythmSec += workRhythmSecDay
-        u.pauseSec += pauseSecRawDay - pauseAllowanceSec
-        u.pauseSecRaw += pauseSecRawDay
-        u.pauseCount += pauseCountRawDay
+        u.shortPauseSec += shortPauseSecDay
+        u.shortPauseCount += shortPauseCountDay
+        u.shortPauseAfterRingCount += shortPauseAfterRingDay
+        u.longPauseSec += longPauseSecDay - pauseAllowanceSec
+        u.longPauseCount += longPauseCountDay
     }
 
     const rows: PhoneProductivityRow[] = [...byUser.entries()]
         .filter(([, u]) => u.daysFull > 0)
         .map(([userId, u]) => {
-            const pauseMinPerDay = Math.round(u.pauseSec / u.daysFull / 60)
+            // pauseMinPerDay si compone dalle due voci GIÀ arrotondate, non
+            // dai secondi: così la somma mostrata in tabella (brevi + pause)
+            // coincide sempre col totale, senza lo scarto di arrotondamento
+            // che renderebbe la riga non verificabile a mano.
+            const shortPauseMinPerDay = Math.round(u.shortPauseSec / u.daysFull / 60)
+            const longPauseMinPerDay = Math.round(u.longPauseSec / u.daysFull / 60)
+            const pauseMinPerDay = shortPauseMinPerDay + longPauseMinPerDay
             const overAllowanceMinPerDay = Math.max(0, pauseMinPerDay - CONTRACTUAL_PAUSE_ALLOWANCE_MIN)
+            /** Media giornaliera con un decimale: i conteggi, non i minuti. */
+            const perDay = (n: number) => Math.round((n / u.daysFull) * 10) / 10
             return {
                 userId,
                 gdo: u.gdo,
@@ -324,10 +375,13 @@ export async function getPhoneProductivity(
                 ringingMinPerDay: Math.round(u.ringing / u.daysFull / 60),
                 workRhythmMinPerDay: Math.round(u.workRhythmSec / u.daysFull / 60),
                 pauseMinPerDay,
-                // Un decimale: è la metrica che spiega la differenza fra le
-                // persone (vedi commento sul campo in PhoneProductivityRow).
-                pauseCountPerDay: Math.round((u.pauseCount / u.daysFull) * 10) / 10,
-                avgPauseMin: u.pauseCount ? Math.round(u.pauseSecRaw / u.pauseCount / 60) : 0,
+                shortPauseMinPerDay,
+                // È il conteggio, non i minuti, a distinguere le persone
+                // (vedi commento sui campi in PhoneProductivityRow).
+                shortPauseCountPerDay: perDay(u.shortPauseCount),
+                shortPauseAfterRingCountPerDay: perDay(u.shortPauseAfterRingCount),
+                longPauseMinPerDay,
+                longPauseCountPerDay: perDay(u.longPauseCount),
                 overAllowanceMinPerDay,
                 overAllowanceHoursPeriod: Math.round((overAllowanceMinPerDay * u.daysFull / 60) * 10) / 10,
                 // Mediana, su tutte le giornate rappresentative — vedi commento su PhoneProductivityRow.

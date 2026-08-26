@@ -19,9 +19,15 @@ function monthBounds(offset: number): { from: string; to: string; label: string 
     }
 }
 
-/** Somma delle sei colonne di tempo sommabili della riga (esclude le colonne di giudizio). */
+/**
+ * Somma delle colonne di tempo sommabili della riga (esclude le colonne di
+ * giudizio). Si sommano le voci COSÌ COME SONO MOSTRATE — brevi e pause
+ * separate, non pauseMinPerDay — perché il totale deve tornare rifacendo il
+ * conto a mano da quello che si legge in tabella.
+ */
 function rowTotalMin(r: PhoneProductivityRow): number {
-    return r.talkMinPerDay + r.ringingMinPerDay + r.workRhythmMinPerDay + r.pauseMinPerDay
+    return r.talkMinPerDay + r.ringingMinPerDay + r.workRhythmMinPerDay
+        + r.shortPauseMinPerDay + r.longPauseMinPerDay
         + r.startLateAvgMin + r.endEarlyAvgMin
 }
 
@@ -50,8 +56,11 @@ export function PhoneProductivityTab() {
     }
 
     const { rows } = data
-    const avgTalkMin = Math.round(rows.reduce((a, r) => a + r.talkMinPerDay, 0) / rows.length)
-    const avgPauseMinTeam = Math.round(rows.reduce((a, r) => a + r.pauseMinPerDay, 0) / rows.length)
+    const teamAvg = (pick: (r: PhoneProductivityRow) => number) => rows.reduce((a, r) => a + pick(r), 0) / rows.length
+    const avgTalkMin = Math.round(teamAvg(r => r.talkMinPerDay))
+    const avgShortPauseMinTeam = Math.round(teamAvg(r => r.shortPauseMinPerDay))
+    const avgLongPauseMinTeam = Math.round(teamAvg(r => r.longPauseMinPerDay))
+    const avgAfterRingTeam = Math.round(teamAvg(r => r.shortPauseAfterRingCountPerDay) * 10) / 10
     const teamOverAllowanceHours = Math.round(rows.reduce((a, r) => a + r.overAllowanceHoursPeriod, 0) * 10) / 10
 
     return (
@@ -68,24 +77,29 @@ export function PhoneProductivityTab() {
                 </button>
             </div>
 
-            {/* Avviso: come si distingue il ritmo di lavoro dalla pausa vera, e come si verifica la tabella a mano */}
+            {/* Avviso: le tre categorie di tempo fra una chiamata e l'altra, e come si verifica la tabella a mano */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
                 <div>
-                    Le sei colonne di tempo (<strong>al telefono, squilli, ritmo, pause, inizio tardi, dopo l&apos;ultima
-                    chiamata</strong>) sono tutte sommabili: la loro somma torna alla durata del turno
-                    (<strong>{SHIFT_REFERENCE_MIN} min</strong>), colonna <strong>Totale</strong>. È così che la tabella
-                    si verifica a mano.
+                    Le sette colonne di tempo (<strong>al telefono, squilli, tra le chiamate, interruzioni brevi, pause,
+                    inizio tardi, dopo l&apos;ultima chiamata</strong>) sono tutte sommabili: la loro somma torna alla
+                    durata del turno (<strong>{SHIFT_REFERENCE_MIN} min</strong>), colonna <strong>Totale</strong>. È
+                    così che la tabella si verifica a mano.
                 </div>
                 <div>
-                    Fra una chiamata e l&apos;altra, fino a <strong>2 minuti</strong> è <strong>ritmo di lavoro</strong>:
-                    chiudere l&apos;esito e comporre il numero dopo, non pausa (<strong>37-75 minuti al giorno</strong>).
-                    Oltre i 2 minuti è <strong>interruzione</strong> vera: il contratto prevede 30 minuti di pausa al
-                    giorno, è questo il riferimento, non il migliore del gruppo.
+                    Il tempo fra una chiamata e l&apos;altra è diviso in <strong>tre fasce, che dicono cose diverse</strong>:
+                    fino a <strong>2 minuti</strong> è lavoro (chiudere l&apos;esito, comporre il numero dopo) e non va
+                    giudicato — è alto proprio per chi fa tante chiamate; da <strong>2 a 10 minuti</strong> sono
+                    interruzioni brevi, non basta per uscire; <strong>oltre i 10 minuti</strong> sono le pause vere, le
+                    uscite (3-6 al giorno in una giornata normale).
                 </div>
                 <div>
-                    La durata di ogni singola pausa è <strong>simile per tutti</strong> (8-11 minuti a interruzione).
-                    A fare la differenza fra le persone è <strong>quante volte ci si ferma</strong>, non quanto dura la
-                    singola pausa.
+                    <strong>Dopo uno squillo a vuoto non c&apos;è nessun esito da scrivere</strong>: fermarsi lì non ha la
+                    giustificazione del lavoro amministrativo. È la voce meno contestabile della tabella, e va da
+                    1,5 a 8,8 volte al giorno a seconda della persona.
+                </div>
+                <div>
+                    Il metro sulle interruzioni (brevi + pause insieme) restano i <strong>30 minuti di pausa concessi
+                    da contratto</strong>, non il migliore del gruppo.
                 </div>
                 <div>
                     Il sabato ha lo stesso orario dei feriali ma su una fascia diversa (10:00-16:30). L&apos;ultima
@@ -99,10 +113,11 @@ export function PhoneProductivityTab() {
             </div>
 
             {/* Riga riassuntiva di squadra, sopra la tabella */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <SummaryStat label="Turno di riferimento" value="Fer. 13:30-20:00" sub="Sab. 10:00-16:30" />
                 <SummaryStat label="Al telefono (media)" value={`${avgTalkMin} min`} sub="al giorno, squadra" />
-                <SummaryStat label="Pause (media)" value={`${avgPauseMinTeam} min`} sub="al giorno, squadra · 30 min concessi" />
+                <SummaryStat label="Interruzioni brevi" value={`${avgShortPauseMinTeam} min`} sub={`al giorno, squadra · ${itNum(avgAfterRingTeam)} volte dopo uno squillo a vuoto`} />
+                <SummaryStat label="Pause (oltre 10 min)" value={`${avgLongPauseMinTeam} min`} sub="al giorno, squadra · 30 min concessi in tutto" />
                 <SummaryStat label="Ore in eccesso" value={`${itNum(teamOverAllowanceHours)} h`} sub="squadra, nel periodo" />
             </div>
 
@@ -115,20 +130,28 @@ export function PhoneProductivityTab() {
                             <th className="text-right px-2 py-3 font-semibold" title="Chiamate effettuate in media in una giornata">Chiamate</th>
                             <th className="text-right px-2 py-3 font-semibold" title="Minuti di conversazione effettiva (billsec) in media al giorno">Al telefono</th>
                             <th className="text-right px-2 py-3 font-semibold" title="Il telefono squilla e nessuno risponde (duration - billsec) in media al giorno: non è conversazione né tempo fermo, è il terzo pezzo del turno">Squilli</th>
-                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in buchi fra una chiamata e l'altra fino a 2 minuti: chiudere l'esito e comporre il numero dopo. È lavoro, non pausa.">Ritmo</th>
-                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno persi in interruzioni fra una chiamata e l'altra oltre i 2 minuti (sotto i 2 minuti è ritmo di lavoro). Sotto: quante volte al giorno e quanto dura in media ogni interruzione.">
+                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in buchi fra una chiamata e l'altra fino a 2 minuti: chiudere l'esito e comporre il numero dopo. È lavoro, non pausa, e non è un metro di giudizio: è alto per chi fa tante chiamate.">
+                                Tra le chiamate
+                                <div className="text-[10px] font-normal text-ash-400">fino a 2 min · lavoro</div>
+                            </th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in interruzioni fra 2 e 10 minuti: troppo per essere lavoro, troppo poco per essere un'uscita. Sotto: quante volte al giorno, e quante di quelle volte arrivano subito dopo uno squillo a vuoto (dove non c'è alcun esito da scrivere).">
+                                Interruzioni brevi
+                                <div className="text-[10px] font-normal text-ash-400">2-10 min</div>
+                            </th>
+                            <th className="text-right px-2 py-3 font-semibold" title="Minuti al giorno in pause oltre i 10 minuti: le uscite. Sotto: quante volte al giorno (3-6 è la giornata normale).">
                                 Pause
+                                <div className="text-[10px] font-normal text-ash-400">oltre 10 min</div>
                             </th>
                             <th className="text-right px-2 py-3 font-semibold" title="Media sulle giornate intere di 'inizio tardi' (ritardo fra inizio turno e prima chiamata) più 'dopo l'ultima chiamata' (anticipo fra fine ultima chiamata e fine turno). Dettaglio dei due valori (media e mediana) nel tooltip della cella.">
                                 Bordi turno
                             </th>
-                            <th className="text-right px-2 py-3 font-bold" title="Quanto le pause superano i 30 minuti di pausa concessi da contratto. È il numero da guardare.">
+                            <th className="text-right px-2 py-3 font-bold" title="Quanto le interruzioni (brevi + pause insieme) superano i 30 minuti di pausa concessi da contratto. È il numero da guardare.">
                                 Oltre 30&apos;
                             </th>
                             <th className="text-right px-2 py-3 font-semibold" title="Ore complessive di eccesso sui 30 minuti concessi, nell'intero periodo mostrato">
                                 Ore ecc.
                             </th>
-                            <th className="text-right px-2 py-3 font-semibold" title="Somma delle sei colonne di tempo, a fianco la durata del turno di riferimento: devono coincidere a meno di pochi minuti (vedi nota sotto la tabella).">
+                            <th className="text-right px-2 py-3 font-semibold" title="Somma delle sette colonne di tempo, a fianco la durata del turno di riferimento: devono coincidere a meno di pochi minuti (vedi nota sotto la tabella).">
                                 Totale
                             </th>
                         </tr>
@@ -147,12 +170,20 @@ export function PhoneProductivityTab() {
                                     <td className="px-2 py-3 text-right tabular-nums">{r.callsPerDay}</td>
                                     <td className="px-2 py-3 text-right tabular-nums font-semibold text-emerald-700">{r.talkMinPerDay} min</td>
                                     <td className="px-2 py-3 text-right tabular-nums text-ash-500">{r.ringingMinPerDay} min</td>
-                                    <td className="px-2 py-3 text-right tabular-nums text-ash-600">{r.workRhythmMinPerDay} min</td>
+                                    <td className="px-2 py-3 text-right tabular-nums text-ash-500">{r.workRhythmMinPerDay} min</td>
                                     <td className="px-2 py-3 text-right tabular-nums">
-                                        <div className="font-semibold text-ash-800">{r.pauseMinPerDay} min</div>
-                                        <div className="text-xs text-ash-400">
-                                            {itNum(r.pauseCountPerDay)} volte · {r.avgPauseMin} min l&apos;una
+                                        <div className="font-semibold text-ash-800">{r.shortPauseMinPerDay} min</div>
+                                        <div className="text-xs text-ash-400">{itNum(r.shortPauseCountPerDay)} volte</div>
+                                        <div
+                                            className={`text-xs ${r.shortPauseAfterRingCountPerDay >= 5 ? 'font-semibold text-red-600' : 'text-ash-400'}`}
+                                            title="Interruzioni brevi che iniziano subito dopo uno squillo a vuoto: nessun esito da scrivere, nessuna giustificazione amministrativa"
+                                        >
+                                            {itNum(r.shortPauseAfterRingCountPerDay)} dopo squillo a vuoto
                                         </div>
+                                    </td>
+                                    <td className="px-2 py-3 text-right tabular-nums">
+                                        <div className="font-semibold text-ash-800">{r.longPauseMinPerDay} min</div>
+                                        <div className="text-xs text-ash-400">{itNum(r.longPauseCountPerDay)} volte</div>
                                     </td>
                                     <td
                                         className="px-2 py-3 text-right tabular-nums"
@@ -178,7 +209,7 @@ export function PhoneProductivityTab() {
                     </tbody>
                     <tfoot>
                         <tr className="border-t-2 border-ash-200 bg-ash-50 font-semibold text-ash-800">
-                            <td className="px-2 py-3" colSpan={9}>Totale squadra, ore in eccesso sul periodo</td>
+                            <td className="px-2 py-3" colSpan={10}>Totale squadra, ore in eccesso sul periodo</td>
                             <td className="px-2 py-3 text-right tabular-nums">{itNum(teamOverAllowanceHours)} h</td>
                             <td className="px-2 py-3 text-right tabular-nums text-ash-400">—</td>
                         </tr>
