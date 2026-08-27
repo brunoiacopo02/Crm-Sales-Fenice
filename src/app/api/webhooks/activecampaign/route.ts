@@ -16,6 +16,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
+import { getLeadRouting, BOT_DAILY_CAP, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { db } from "@/db";
 import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
 import { eq, and, asc, sql, isNull, gte, desc, or, like } from "drizzle-orm";
@@ -34,7 +35,6 @@ const DEFAULT_FUNNEL = 'SCONOSCIUTO';
 // Per Serenamente esisterà un endpoint separato (/serenamente) con secret e
 // AC account distinti e companyId='serenamente' hardcoded. Vedi design doc §11.
 const FENICE_COMPANY = 'fenice';
-const BOT_DAILY_CAP = 50; // max lead/giorno (Europe/Rome) per account isBot nel round-robin (20→50 il 2026-07-24, decisione PO)
 
 // Liste AC da NON importare nel CRM (es. campagne di raccolta lead per
 // lanci futuri: i lead devono restare in AC finché non decidiamo di
@@ -571,55 +571,81 @@ export async function POST(req: NextRequest) {
                 return { kind: 'cross_company_skip' as const, otherCompany: crossCompany.companyId };
             }
 
-            // Round-robin GDO Fenice (dentro la tx: vede l'acLastAssignedAt
-            // più aggiornato). I lead Fenice vanno solo ai GDO Fenice.
-            // Gli account bot (isBot=true) escono dal pool quando raggiungono
-            // BOT_DAILY_CAP lead nel giorno solare Europe/Rome. Gli umani passano sempre.
+            // ===== A chi va questo lead: bot o GDO umani =====
+            // La fascia oraria decide (src/lib/bot-fissatore/leadRouting.ts); il
+            // round-robin per acLastAssignedAt resta il criterio DENTRO ogni pool,
+            // così i turni non si sfasano quando un pool viene saltato.
             const roundRobinOrder = [
                 asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`),
                 asc(users.id),
             ] as const;
 
-            const selectHumanPool = () => tx.select({
-                id: users.id,
-                isBot: users.isBot,
-            }).from(users).where(and(
+            // Tetto giornaliero del bot: lead che gli sono stati assegnati oggi
+            // (giorno solare Europe/Rome). Conta anche quelli presi fuori fascia.
+            const underDailyCap = sql`(
+                SELECT count(*) FROM leads l
+                WHERE l."assignedToId" = ${users.id}
+                  AND l."companyId" = ${FENICE_COMPANY}
+                  AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
+            ) < ${BOT_DAILY_CAP}`;
+
+            const gdoBase = and(
                 eq(users.companyId, FENICE_COMPANY),
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true),
+            );
+
+            const selectPool = (where: ReturnType<typeof and>) => tx.select({
+                id: users.id,
+                isBot: users.isBot,
+            }).from(users).where(where).orderBy(...roundRobinOrder);
+
+            /** Pool storico: umani e bot nello stesso giro, il bot esce a quota piena. */
+            const selectLegacyPool = () => selectPool(and(
+                gdoBase,
                 eq(users.acAutoIntake, true),
-                // Cap giornaliero: gli account bot escono dal pool a quota BOT_DAILY_CAP.
-                // Gli umani (isBot=false) passano sempre il filtro.
-                sql`(${users.isBot} = false OR (
-                    SELECT count(*) FROM leads l
-                    WHERE l."assignedToId" = ${users.id}
-                      AND l."companyId" = ${FENICE_COMPANY}
-                      AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
-                ) < ${BOT_DAILY_CAP})`,
-            )).orderBy(...roundRobinOrder);
+                sql`(${users.isBot} = false OR ${underDailyCap})`,
+            ));
 
-            // Finestra ferie GDO (8-16 agosto 2026): nessun umano al lavoro, quindi
-            // TUTTO al bot. Si ignorano sia la selezione acAutoIntake della scheda
-            // /lead-automatici (che resta salvata e torna valida da sola il 17) sia
-            // BOT_DAILY_CAP. Vedi src/lib/bot-fissatore/holidayWindow.ts.
+            /** Solo i GDO umani abilitati all'intake automatico. */
+            const selectHumanPool = () => selectPool(and(
+                gdoBase,
+                eq(users.acAutoIntake, true),
+                eq(users.isBot, false),
+            ));
+
+            /**
+             * Solo il bot. `respectCap` lo esclude a quota piena; nelle fasce in cui
+             * il bot ha l'esclusiva il tetto non si applica (acAutoIntake nemmeno:
+             * la fascia vale di per sé, come per la finestra ferie).
+             */
+            const selectBotPool = (respectCap: boolean) => selectPool(and(
+                gdoBase,
+                eq(users.isBot, true),
+                respectCap ? underDailyCap : undefined,
+            ));
+
+            // La finestra ferie, quando attiva, vince su tutto: nessun umano al lavoro.
             const holidayWindow = isBotHolidayWindow(now);
-            let eligible = holidayWindow
-                ? await tx.select({
-                    id: users.id,
-                    isBot: users.isBot,
-                }).from(users).where(and(
-                    eq(users.companyId, FENICE_COMPANY),
-                    eq(users.role, 'GDO'),
-                    eq(users.isActive, true),
-                    eq(users.isBot, true),
-                )).orderBy(...roundRobinOrder)
-                : await selectHumanPool();
+            const routing: LeadRouting = holidayWindow ? 'bot_only' : getLeadRouting(now);
 
-            // Bot spento/inesistente durante le ferie: meglio un lead che aspetta
-            // un GDO che un lead perso in una failure.
-            const routedToBotByWindow = holidayWindow && eligible.length > 0;
-            if (holidayWindow && eligible.length === 0) {
+            // Ogni ramo ha il suo ripiego: una fascia non deve mai poter lasciare
+            // un lead senza padrone (bot spento, o tutti i GDO disattivati).
+            // `fallbackUsed` marca SOLO i ripieghi anomali: in 'bot_first' passare
+            // agli umani a quota piena è il funzionamento previsto, non un guasto.
+            let eligible: { id: string; isBot: boolean }[];
+            let fallbackUsed = false;
+            if (routing === 'legacy') {
+                eligible = await selectLegacyPool();
+            } else if (routing === 'gdo_only') {
                 eligible = await selectHumanPool();
+                if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
+            } else if (routing === 'bot_first') {
+                eligible = await selectBotPool(true);
+                if (eligible.length === 0) eligible = await selectHumanPool();
+            } else {
+                eligible = await selectBotPool(false);
+                if (eligible.length === 0) { eligible = await selectHumanPool(); fallbackUsed = true; }
             }
 
             if (eligible.length === 0) {
@@ -653,7 +679,7 @@ export async function POST(req: NextRequest) {
 
             await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 
-            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routedToBotByWindow };
+            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routing, holidayWindow, fallbackUsed };
         });
 
         if (txResult.kind === 'duplicate') {
@@ -717,9 +743,11 @@ export async function POST(req: NextRequest) {
             metadata: {
                 assignedToUser: assignedGdoId,
                 source: 'activecampaign',
-                // Traccia del dirottamento ferie: fra due mesi, guardando i volumi
-                // di agosto, la spiegazione sta nel DB e non nella memoria di qualcuno.
-                ...(txResult.routedToBotByWindow ? { botHolidayWindow: true } : {}),
+                // Traccia della regola applicata: fra due mesi, guardando i volumi,
+                // la spiegazione sta nel DB e non nella memoria di qualcuno.
+                routing: txResult.routing,
+                ...(txResult.fallbackUsed ? { routingFallback: true } : {}),
+                ...(txResult.holidayWindow ? { botHolidayWindow: true } : {}),
             },
             companyId: FENICE_COMPANY,
         });
