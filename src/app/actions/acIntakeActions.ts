@@ -2,7 +2,8 @@
 
 import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
-import { eq, and, desc, isNull, gte, count, notLike } from "drizzle-orm";
+import { eq, and, desc, isNull, gte, count, notLike, sql } from "drizzle-orm";
+import { getLeadRouting, BOT_DAILY_CAP, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 
@@ -434,6 +435,67 @@ export async function getAcIntakeStats(): Promise<AcIntakeStats> {
         today: stat(buckets[todayKey]),
         yesterday: stat(buckets[yKey]),
         dayBeforeYesterday: stat(buckets[dbyKey]),
+    };
+}
+
+// ============ Ripartizione bot / GDO ============
+
+export interface BotRoutingStatus {
+    /** Fascia in vigore adesso, gia' valutata sul server. */
+    routing: LeadRouting;
+    /** Tetto giornaliero del bot. */
+    cap: number;
+    /** Lead AC di oggi (giorno solare Europe/Rome) finiti al bot. */
+    todayBot: number;
+    /** Lead AC di oggi finiti ai GDO umani. */
+    todayHumans: number;
+    /** Lead ancora su NEW fermi sull'account bot, a qualsiasi data. */
+    botBacklog: number;
+    /** Quanti di quelli aspettano da piu' di 7 giorni. */
+    botBacklogOld: number;
+}
+
+/**
+ * Fotografia della nuova ripartizione: quanti lead ha preso oggi il bot, quanti
+ * i GDO, e quanto arretrato non lavorato si sta accumulando sull'account bot.
+ *
+ * Serve a rispondere senza query manuali alla domanda che il PO fara' ogni
+ * giorno dopo il cambio di regola: "il bot sta reggendo il volume?".
+ */
+export async function getBotRoutingStatus(): Promise<BotRoutingStatus> {
+    const { ctx } = await requireManager();
+
+    const now = new Date();
+    const todayRome = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(now);
+    const dayStart = sql`(${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'`;
+
+    const [today] = await db.select({
+        bot: sql<number>`count(*) filter (where ${users.isBot} = true)`.mapWith(Number),
+        humans: sql<number>`count(*) filter (where ${users.isBot} is distinct from true)`.mapWith(Number),
+    }).from(leads).leftJoin(users, eq(leads.assignedToId, users.id)).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.source, 'activecampaign'),
+        gte(leads.createdAt, dayStart),
+    ));
+
+    const [backlog] = await db.select({
+        total: sql<number>`count(*)`.mapWith(Number),
+        old: sql<number>`count(*) filter (where ${leads.createdAt} < now() - interval '7 days')`.mapWith(Number),
+    }).from(leads).innerJoin(users, eq(leads.assignedToId, users.id)).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(users.isBot, true),
+        eq(leads.status, 'NEW'),
+    ));
+
+    return {
+        routing: getLeadRouting(now),
+        cap: BOT_DAILY_CAP,
+        todayBot: today?.bot ?? 0,
+        todayHumans: today?.humans ?? 0,
+        botBacklog: backlog?.total ?? 0,
+        botBacklogOld: backlog?.old ?? 0,
     };
 }
 
