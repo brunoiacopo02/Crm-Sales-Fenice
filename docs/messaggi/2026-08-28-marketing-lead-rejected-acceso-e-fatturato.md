@@ -1,4 +1,4 @@
-# Marketing — `lead.rejected` è acceso, e una cosa sul fatturato
+# Marketing — `lead.rejected` è acceso, e quattro importi da correggere
 
 Destinatario: chi lavora sul receiver del CRM marketing.
 Data: 28/08/2026.
@@ -10,7 +10,7 @@ Data: 28/08/2026.
 Acceso oggi alle 13:15. Nessun backfill: partono dagli scarti di adesso in avanti,
 come da §9.
 
-I primi tre eventi sono già passati, tutti **200**:
+I primi eventi sono già passati, tutti **200**:
 
 | causale grezza | reasonCode | fase | automatico |
 |---|---|---|---|
@@ -18,7 +18,8 @@ I primi tre eventi sono già passati, tutti **200**:
 | non interessato | `NOT_INTERESTED` | CONFERME | no |
 | numero inesistente | `INVALID_NUMBER` | GDO | no |
 
-Se dalla vostra parte `crm_lead_rejections` li ha, siamo allineati e non serve altro.
+Se dalla vostra parte `crm_lead_rejections` li ha, siamo allineati e da qui in poi
+il flusso è suo.
 
 ---
 
@@ -65,70 +66,54 @@ L'unico difetto di averli identici è diagnostico, non funzionale. Se scattano
 insieme noi logghiamo `timeout_10s` con `httpStatus: null` e voi un 504, e nessuno
 dei due log dice chi ha ceduto per primo. **Scendendo a 8 secondi** la corsa la
 vincete sempre voi e il vostro 504 diventa la spiegazione univoca dell'evento
-mancato. In entrambi i casi la dedup su `X-CRM-Event-Id` copre lo scenario in cui
-avete persistito e noi abbiamo comunque abbandonato.
+mancato. Non è urgente: in entrambi i casi resta ritentabile, e la dedup su
+`X-CRM-Event-Id` copre lo scenario in cui avete persistito e noi abbiamo comunque
+abbandonato.
 
 ---
 
-## L'altra cosa: il fatturato aggiornato non vi è arrivato
+## Il fatturato di agosto
 
-Confermato, e abbiamo misurato quanto vale. **Il vostro fatturato è più basso del
-nostro di 53.749 €**, distribuiti su 61 trattative da aprile a oggi.
+Sì, il vostro fatturato di agosto era disallineato dal nostro. Guardiamo solo
+agosto: sul passato non torniamo.
 
-| | trattative | effetto sul vostro fatturato |
+**Quattro trattative ve le abbiamo appena rimandate noi** — erano chiuse da voi
+come perse e in realtà sono vendite. Sono partite oggi come `deal.closed_won`
+normali, non serve che facciate niente:
+
+| lead | esito | importo |
 |---|---|---|
-| Chiusure mai inviate | 25 | mancano 44.446 € |
-| Importo corretto dopo l'invio | 26 | ne contate ~50 € in più in totale, ma 4 casi singoli valgono centinaia di euro |
-| Esito cambiato dopo l'invio | 10 | 7 vendite da 9.355 € vi risultano perse, e 6.100 € vi risultano venduti ma non lo sono più |
+| Nicola Franzoni | 01/08 | 1.390 € |
+| Federica Zamattia | 04/08 | 300 € |
+| Deborah Salmaso | 10/08 | 1.390 € |
+| Fabio (ORG) | 22/08 | 2.890 € |
 
-### Perché succede
+Totale: **5.970 € di vendite che avevate come perse.**
+
+**Quattro importi invece ve li passiamo a mano**, perché su questi la vendita ce
+l'avete già e ci serve che venga *corretta*, non aggiunta:
+
+| lead | avete | è | delta |
+|---|---|---|---|
+| Monica Debandi | 3.154 € | **3.190 €** | +36 |
+| Krittanai | 3.489 € | **3.490 €** | +1 |
+| Gabriele | 2.865 € | **2.890 €** | +25 |
+| Kaur Jit | 2.862 € | **2.890 €** | +28 |
+
+Novanta euro in tutto: valgono per la quadratura, non per il ROAS. Se preferite
+riceverli come evento invece che correggerli a mano, ci basta sapere una cosa:
+**un secondo `deal.closed_won` sullo stesso `lead.id` da voi sovrascrive la
+trattativa o aggiunge una riga?** Se sovrascrive ve li mandiamo e chiudiamo così.
+Se aggiunge no, perché raddoppierebbe quei quattro invece di correggerli.
+
+### Perché era successo
 
 `deal.closed_won` e `deal.closed_lost` partono dal salvataggio dell'esito da parte
-del venditore. Ogni volta che una chiusura viene scritta o corretta **fuori da lì**
-— import storici, bonifiche, la riconciliazione col nostro Database Clienti del
-26/08 — voi restate fermi all'ultimo valore che vi abbiamo mandato. Non è un guasto
-del trasporto: gli eventi che vi abbiamo mandato li avete ricevuti tutti. È che
-dopo abbiamo cambiato i dati senza dirvelo.
+del venditore. Quando una chiusura viene corretta **fuori da lì** — nel nostro caso
+la riconciliazione col Database Clienti di fine agosto — voi restate fermi
+all'ultimo valore che vi abbiamo mandato, e nessuno se ne accorge. Non è mai stato
+un problema di trasporto: gli eventi mandati vi sono arrivati tutti.
 
-I casi grossi, per darvi la misura: Ornella 1.529 → 1.000, Alessandra 800 → 1.529,
-Achille Cannito 2.890 → 2.079, Nicola 2.079 → 2.890.
-
-### Come ve li diamo — decidete voi
-
-**Opzione A, ve li prendete voi (nessun lavoro da parte nostra, nessun rischio).**
-Avete già un endpoint di lettura, `GET /api/marketing/leads`, Bearer token
-condiviso al go-live. Restituisce lo **stato corrente** dei lead, non lo storico
-degli eventi, quindi per definizione è allineato:
-
-```
-GET https://<nostro-dominio>/api/marketing/leads?eventType=deal.closed_won&since=2026-04-01&limit=500
-Authorization: Bearer <token>
-```
-
-Paginato con `cursor`/`nextCursor`. Stessa forma di envelope dei webhook, così il
-vostro parser non cambia. Stesso giro con `eventType=deal.closed_lost` per gli
-esiti che sono cambiati in negativo. Se avete perso il token ve lo rimandiamo.
-
-**Opzione B, ve li rispediamo come eventi.** Abbiamo lo strumento pronto: ricostruisce
-i 61 envelope aggiornati e li rimette in coda. Ma prima ci serve una vostra
-conferma, perché **gli eventi correttivi hanno un `eventId` nuovo** — nascono adesso,
-quindi la vostra dedup non li scarta, ed è quello che vogliamo.
-
-> **La domanda:** un secondo `deal.closed_won` sullo stesso `lead.id` da voi
-> **sovrascrive** la trattativa o **aggiunge una riga**?
-
-Se sovrascrive (upsert per lead), diteci solo di procedere e li mandiamo.
-
-Se aggiunge una riga, non li mandiamo. Ventisei di questi lead una vendita ce
-l'hanno già da voi, ed è quella con l'importo sbagliato: una seconda riga non la
-corregge, la somma. Sono 62.435 € che diventerebbero 124.818 €, e il problema
-diventerebbe più grosso di quello che stiamo risolvendo. In quel caso opzione A.
-
-### Che succede d'ora in poi
-
-La correzione a mano di dati già inviati resta un buco strutturale: finché la
-riconciliazione col foglio la facciamo direttamente sul database, gli eventi non
-ripartono da soli. Da oggi lo strumento di riallineamento è in repo e lo passiamo
-dopo ogni bonifica, così lo scarto lo trovate voi già chiuso invece di scoprirlo
-mesi dopo. Se preferite, possiamo farlo diventare una consegna periodica —
-ditecelo e la mettiamo a cadenza fissa.
+Adesso abbiamo lo strumento che trova queste divergenze e le rispedisce, e lo
+passiamo dopo ogni riconciliazione. Quindi da settembre in poi non dovrebbe più
+succedere.
