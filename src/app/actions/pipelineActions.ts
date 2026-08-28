@@ -199,7 +199,14 @@ export async function getPipelineLeads() {
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.status, 'REJECTED'),
                 eq(leads.callCount, 3),
-                eq(leads.discardReason, "irriperebile (3 tentativi vuoti)"),
+                // Il refuso storico "irriperebile" è stato corretto in "irreperibile"
+                // (pipelineActions.ts, auto-scarto NON_RISPOSTO), ma i lead scartati
+                // prima del fix restano nel DB con la vecchia grafia: matchiamo entrambe,
+                // altrimenti la "quarta chiamata" smette di trovare candidati.
+                or(
+                    eq(leads.discardReason, "irreperibile (3 tentativi vuoti)"),
+                    eq(leads.discardReason, "irriperebile (3 tentativi vuoti)"),
+                ),
                 gte(leads.updatedAt, thirtyDaysAgo)
             ]
             if (isGdo) fourthCallConditions.push(eq(leads.assignedToId, userId))
@@ -376,10 +383,10 @@ export async function updateLeadOutcome(
     else if (outcome === 'NON_RISPOSTO') {
         if (newCallCount >= 4) {
             newStatus = 'REJECTED'
-            discardReason = "irriperebile (4 tentativi vuoti)"
+            discardReason = "irreperibile (4 tentativi vuoti)"
         } else if (newCallCount === 3) {
             newStatus = 'REJECTED'
-            discardReason = "irriperebile (3 tentativi vuoti)"
+            discardReason = "irreperibile (3 tentativi vuoti)"
         } else {
             newStatus = 'IN_PROGRESS'
         }
@@ -530,6 +537,36 @@ export async function updateLeadOutcome(
                 console.error("Boss battle contribution failed:", e)
             })
         }
+    }
+
+    // Marketing: il lead e' morto qui. Copre i tre casi che passano da questa
+    // funzione — scarto a mano del GDO, auto-scarto al terzo/quarto tentativo
+    // vuoto, e scarto del bot, che richiama updateLeadOutcome con serviceCtx.
+    // Guardia sulla causale, non sullo stato: updateLeadOutcome non blocca mai
+    // un esito su un lead già REJECTED (vedi la "quarta chiamata" abilitata da
+    // checkFourthCallEligibility, in cima a questo file) — un lead
+    // auto-scartato al 3° NON_RISPOSTO
+    // può essere recuperato dal GDO ed esitato DA_SCARTARE con la causale
+    // vera (es. "non ha soldi"). Quello è un evento nuovo e deve partire.
+    // Va soppresso solo il caso che la guardia originale proteggeva: il bot
+    // che ri-manda lo stesso identico esito con la stessa causale (es. senza
+    // lock ottimistico). Confrontiamo quindi la causale che sta per essere
+    // scritta sul lead (discardReason, eventualmente già riassegnata sopra
+    // nel ramo NON_RISPOSTO) con quella già presente sul lead PRIMA di questo
+    // update (lead.discardReason, il valore letto a inizio funzione).
+    const nextDiscardReason = discardReason || lead.discardReason
+    const isRejectionNews = lead.status !== 'REJECTED' || nextDiscardReason !== lead.discardReason
+    if (newStatus === 'REJECTED' && isRejectionNews && (outcome === 'DA_SCARTARE' || outcome === 'NON_RISPOSTO')) {
+        await enqueueMarketingWebhook({
+            eventType: 'lead.rejected',
+            leadId,
+            actorUserId: effectiveUserId ?? null,
+            rejection: {
+                stage: 'GDO',
+                automatic: outcome === 'NON_RISPOSTO',
+                byBot: isBotActor,
+            },
+        }).catch((e: unknown) => console.error("Marketing webhook (lead.rejected GDO) err:", e));
     }
 
     return { success: true, rewardData }

@@ -609,6 +609,24 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             actorUserId: session.user.id,
         }).catch((e: unknown) => console.error("Marketing webhook (appointment.outcome) err:", e));
 
+        // Marketing: evento canonico dello scarto. Convive con appointment.outcome
+        // qui sopra, che resta per retrocompatibilita' — il receiver e' avvisato
+        // di contare gli scarti solo da lead.rejected (vedi il brief).
+        // Guardia oldLead.confirmationsOutcome !== 'scartato': senza, un secondo
+        // salvataggio su un lead gia' scartato (es. version bump da una nota, poi
+        // "Salva esito" premuto di nuovo con outcome ancora "scartato" in stato)
+        // rimanderebbe l'evento — stesso bug corretto sui GDO (commit da0a7d8).
+        // Un ri-scarto dopo undoConfermeScarto resta un evento nuovo perche'
+        // l'undo azzera confirmationsOutcome prima del prossimo giro.
+        if (outcome === 'scartato' && oldLead.confirmationsOutcome !== 'scartato') {
+            await enqueueMarketingWebhook({
+                eventType: 'lead.rejected',
+                leadId,
+                actorUserId: session.user.id,
+                rejection: { stage: 'CONFERME', automatic: false, byBot: false },
+            }).catch((e: unknown) => console.error("Marketing webhook (lead.rejected Conferme) err:", e));
+        }
+
         if (salespersonAssigned) {
             await enqueueMarketingWebhook({
                 eventType: 'deal.assigned',
@@ -947,6 +965,22 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
                 leadId,
                 actorUserId: session.user.id,
             }).catch((e: unknown) => console.error("Marketing webhook (appointment.outcome auto-discard) err:", e));
+
+            // Guardia oldLead.confirmationsOutcome !== 'scartato': il ramo "stato
+            // impossibile" (3 NR gia' registrati, outcome ancora nullo — lead in
+            // transizione dal vecchio sistema a 4 tentativi) rientra in isAutoDiscard
+            // senza toccare confCallXAt. Senza questa guardia una chiamata ripetuta
+            // su un lead gia' scartato rimanderebbe l'evento (stesso bug dei GDO,
+            // commit da0a7d8). Dopo undoConfermeNoAnswer confirmationsOutcome torna
+            // null, quindi un nuovo auto-scarto resta un evento legittimo.
+            if (oldLead.confirmationsOutcome !== 'scartato') {
+                await enqueueMarketingWebhook({
+                    eventType: 'lead.rejected',
+                    leadId,
+                    actorUserId: session.user.id,
+                    rejection: { stage: 'CONFERME', automatic: true, byBot: false },
+                }).catch((e: unknown) => console.error("Marketing webhook (lead.rejected Conferme auto) err:", e));
+            }
         }
 
         await db.insert(leadEvents).values({

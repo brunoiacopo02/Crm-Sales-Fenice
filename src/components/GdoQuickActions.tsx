@@ -6,6 +6,7 @@ import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { useRouter } from "next/navigation"
 import { getAnimationsEnabled } from "@/lib/animationUtils"
 import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
+import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
 
 type GdoQuickActionsProps = {
     leadId: string
@@ -64,17 +65,6 @@ function appointmentSlotWarning(dateStr: string): string | null {
         ? "Orario fuori finestra: domani l'appuntamento va dalle 15:00 alle 22:00."
         : "Orario fuori finestra: dopodomani l'appuntamento va dalle 9:00 alle 22:00."
 }
-
-const DISCARD_REASONS = [
-    "non interessato",
-    "disoccupato",
-    "straniero",
-    "solo informazioni",
-    "non vuole prendere l'appuntamento",
-    "numero inesistente",
-    "non ha potere decisionale",
-    "non ha soldi"
-]
 
 export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillNote, popoverDirection = 'down' }: GdoQuickActionsProps) {
     const router = useRouter()
@@ -261,7 +251,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                         className="input-fenice !text-xs !py-2 !px-2.5 !border-rose-200 mb-2 font-medium"
                     >
                         <option value="" disabled>-- Motivo Scarto --</option>
-                        {DISCARD_REASONS.map(reason => (
+                        {GDO_DISCARD_REASONS.map(reason => (
                             <option key={reason} value={reason}>{reason}</option>
                         ))}
                     </select>

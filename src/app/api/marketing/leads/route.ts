@@ -37,6 +37,23 @@ export async function GET(req: Request) {
     const limitRaw = parseInt(url.searchParams.get('limit') ?? `${DEFAULT_LIMIT}`, 10);
     const limit = Math.min(Math.max(1, Number.isNaN(limitRaw) ? DEFAULT_LIMIT : limitRaw), MAX_LIMIT);
 
+    // lead.rejected non e' supportato da questo endpoint pull. A differenza
+    // degli altri sei tipi, il suo "chi" e "com'e' successo" (automatic, byBot,
+    // l'attore che ha causato lo scarto) non sono colonne stabili sulla riga
+    // lead — sono contesto catturato al momento dell'evento in
+    // updateLeadOutcome/setConfermeOutcome (vedi enqueueMarketingWebhook,
+    // campo `rejection`). Ricostruirli qui con euristiche su una riga generica
+    // rischierebbe di mandare al marketing un attore o un automatic sbagliati
+    // senza che nessuno se ne accorga. Meglio un errore chiaro che un dato
+    // silenziosamente falso: l'evento in tempo reale (outbox push) resta
+    // l'unica fonte per lead.rejected.
+    if (eventType === 'lead.rejected') {
+        return NextResponse.json({
+            error: 'lead_rejected_not_supported_via_pull',
+            message: "lead.rejected non e' ricostruibile da questo endpoint pull: usa il flusso push (outbox) gia' attivo.",
+        }, { status: 400 });
+    }
+
     const conditions: SQL[] = [];
 
     let dateField: AnyPgColumn = leads.updatedAt;

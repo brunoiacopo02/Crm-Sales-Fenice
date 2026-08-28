@@ -10,8 +10,9 @@ import {
     buildDealAssigned,
     buildDealClosedWon,
     buildDealClosedLost,
+    buildLeadRejected,
 } from './payload-builders';
-import type { MarketingEventType, MarketingWebhookEnvelope } from './types';
+import type { MarketingEventType, MarketingWebhookEnvelope, RejectionStage } from './types';
 
 export interface EnqueueInput {
     eventType: MarketingEventType;
@@ -22,6 +23,22 @@ export interface EnqueueInput {
     // Senza questi, lo switch lancia per il tipo rescheduled.
     previousAppointmentDate?: Date;
     newAppointmentDate?: Date;
+    // Solo per lead.rejected: contesto che non e' derivabile dalla riga del
+    // lead. La causale invece si legge dal lead, non va passata qui.
+    rejection?: {
+        stage: RejectionStage;
+        automatic: boolean;
+        byBot?: boolean;
+    };
+}
+
+/** Esito dell'enqueue: usato dal debug endpoint per non dichiarare "enqueued"
+ *  quando in realta' non e' stato scritto nulla in outbox. I chiamanti
+ *  fire-and-forget (`.catch(...)`) ignorano il valore risolto, quindi
+ *  restituirlo non cambia il loro comportamento. */
+export interface EnqueueResult {
+    enqueued: boolean;
+    reason?: string;
 }
 
 /**
@@ -31,20 +48,20 @@ export interface EnqueueInput {
  *
  * Kill-switch: se MARKETING_WEBHOOK_ENABLED !== 'true', no-op.
  */
-export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<void> {
-    if (process.env.MARKETING_WEBHOOK_ENABLED !== 'true') return;
+export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<EnqueueResult> {
+    if (process.env.MARKETING_WEBHOOK_ENABLED !== 'true') return { enqueued: false, reason: 'kill_switch_disabled' };
 
     const targetUrl = process.env.MARKETING_WEBHOOK_URL_PROD;
     const secret = process.env.MARKETING_WEBHOOK_SECRET;
     if (!targetUrl || !secret) {
         console.error('[marketing-webhooks] missing env: MARKETING_WEBHOOK_URL_PROD or MARKETING_WEBHOOK_SECRET');
-        return;
+        return { enqueued: false, reason: 'missing_env' };
     }
 
     const [lead] = await db.select().from(leads).where(eq(leads.id, input.leadId));
     if (!lead) {
         console.warn(`[marketing-webhooks] lead ${input.leadId} not found, skipping ${input.eventType}`);
-        return;
+        return { enqueued: false, reason: 'lead_not_found' };
     }
 
     let actor: { id: string; name: string | null; displayName: string | null; role: string } | null = null;
@@ -62,7 +79,7 @@ export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<void
         case 'appointment.rescheduled':
             if (!input.previousAppointmentDate || !input.newAppointmentDate) {
                 console.error(`[marketing-webhooks] appointment.rescheduled requires previousAppointmentDate and newAppointmentDate`);
-                return;
+                return { enqueued: false, reason: 'missing_reschedule_dates' };
             }
             envelope = buildAppointmentRescheduled({
                 ...ctx,
@@ -74,6 +91,19 @@ export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<void
         case 'deal.assigned':         envelope = buildDealAssigned(ctx); break;
         case 'deal.closed_won':       envelope = buildDealClosedWon(ctx); break;
         case 'deal.closed_lost':      envelope = buildDealClosedLost(ctx); break;
+        case 'lead.rejected': {
+            if (!input.rejection) {
+                console.error(`[marketing-webhooks] lead.rejected senza rejection per ${input.leadId}, skip`);
+                return { enqueued: false, reason: 'missing_rejection_context' };
+            }
+            envelope = buildLeadRejected({
+                ...ctx,
+                stage: input.rejection.stage,
+                automatic: input.rejection.automatic,
+                byBot: input.rejection.byBot ?? false,
+            });
+            break;
+        }
     }
 
     await db.insert(marketingWebhookDeliveries).values({
@@ -115,4 +145,6 @@ export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<void
             console.error('[marketing-webhooks] inline delivery error', e);
         }
     });
+
+    return { enqueued: true };
 }

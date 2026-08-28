@@ -198,6 +198,24 @@ export const CONFERME_BUDGET_OPTIONS = [
 ] as const;
 export type ConfermeBudget = typeof CONFERME_BUDGET_OPTIONS[number]['value'];
 
+// Causali di scarto dei GDO (tendina "Da scartare" in chiamata).
+// Erano duplicate in GdoQuickActions.tsx e OutcomeModal.tsx: due copie e la
+// mappa dei codici marketing (src/lib/marketing-webhooks/discard-reasons.ts)
+// che le deve coprire entrambe andavano fuori sincrono senza accorgersene.
+// Stringhe minuscole: sono anche il valore salvato su leads.discardReason,
+// cambiarle significa creare una categoria nuova per il marketing.
+export const GDO_DISCARD_REASONS = [
+    'non interessato',
+    'disoccupato',
+    'straniero',
+    'solo informazioni',
+    "non vuole prendere l'appuntamento",
+    'numero inesistente',
+    'non ha potere decisionale',
+    'non ha soldi',
+] as const;
+export type GdoDiscardReason = typeof GDO_DISCARD_REASONS[number];
+
 // ========== SALES ==========
 export const SALES_PROBLEM_SIGNAL_OPTIONS = [
     { value: 'problema_specifico', label: 'Ha dichiarato un problema specifico' },
