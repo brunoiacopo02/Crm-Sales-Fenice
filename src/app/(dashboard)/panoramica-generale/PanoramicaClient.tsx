@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
+import { Fragment, useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Settings, Calendar, TrendingUp, RefreshCw, X, AlertTriangle, AlertCircle, CheckCircle2, Pencil } from 'lucide-react';
 import {
@@ -307,6 +307,63 @@ function fmtDateShort(iso: string | null): string {
     return d.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/**
+ * Cella "split": la stessa percentuale letta separatamente sui lead nuovi
+ * (evergreen) e sui lead database (pool ricaricati da AC). Le due popolazioni
+ * hanno rese strutturalmente diverse e la loro media non è interpretabile.
+ * Denominatore = i lead di QUELLA origine entrati nel mese (CRM live).
+ */
+function SplitPctCell({
+    stage,
+    prevLabel,
+    nuoviPct,
+    nuoviCount,
+    nuoviLead,
+    nuoviPrev,
+    dbPct,
+    dbCount,
+    dbLead,
+    dbPrev,
+}: {
+    stage: string;
+    /** Nome dello stage precedente: abilita il rapporto a cascata nel tooltip. */
+    prevLabel?: string;
+    nuoviPct: number | null;
+    nuoviCount: number;
+    nuoviLead: number;
+    nuoviPrev?: number;
+    dbPct: number | null;
+    dbCount: number;
+    dbLead: number;
+    dbPrev?: number;
+}) {
+    const rows = [
+        { key: 'n', tag: 'N', name: 'Nuovi', pct: nuoviPct, count: nuoviCount, lead: nuoviLead, prev: nuoviPrev, cls: 'text-emerald-700', tagCls: 'bg-emerald-100 text-emerald-700' },
+        { key: 'db', tag: 'DB', name: 'Database', pct: dbPct, count: dbCount, lead: dbLead, prev: dbPrev, cls: 'text-violet-700', tagCls: 'bg-violet-100 text-violet-700' },
+    ];
+    return (
+        <td className="border-l border-ash-100 px-2 py-2 align-middle">
+            <div className="flex flex-col items-end gap-0.5 leading-none">
+                {rows.map((r) => {
+                    const cascade = prevLabel && r.prev !== undefined && r.prev > 0
+                        ? ` · ${fmtPct((r.count / r.prev) * 100)} su ${prevLabel}`
+                        : '';
+                    return (
+                        <span
+                            key={r.key}
+                            title={`${r.name} — ${stage}: ${fmtInt(r.count)} su ${fmtInt(r.lead)} lead del mese${cascade}`}
+                            className={`inline-flex items-center gap-1 whitespace-nowrap tabular-nums text-[10px] font-semibold ${r.cls}`}
+                        >
+                            <span className={`rounded px-1 py-px text-[9px] font-bold uppercase tracking-wide ${r.tagCls}`}>{r.tag}</span>
+                            {r.lead > 0 ? fmtPct(r.pct) : '—'}
+                        </span>
+                    );
+                })}
+            </div>
+        </td>
+    );
+}
+
 function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefresh: () => void }) {
     const [editingRow, setEditingRow] = useState<FunnelOverviewRow | null>(null);
 
@@ -336,33 +393,74 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                 <table className="w-full text-xs">
                     <thead>
                         <tr className="bg-[#1e3a5f] text-white">
-                            <th className="px-3 py-2.5 text-left font-bold uppercase text-[10px] tracking-wider">Funnel</th>
-                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Lead</th>
-                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">APP</th>
-                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Conferme</th>
-                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Trattative</th>
-                            <th colSpan={2} className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Close</th>
-                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Fatturato</th>
-                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Spesa</th>
-                            <th className="px-3 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">ROAS</th>
-                            <th className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Data -1%</th>
-                            <th className="px-3 py-2.5 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Stato</th>
-                            <th className="px-2 py-2.5 border-l border-white/20 w-8"></th>
+                            <th rowSpan={2} className="px-3 py-2 text-left font-bold uppercase text-[10px] tracking-wider">Funnel</th>
+                            <th rowSpan={2} className="px-3 py-2 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Lead</th>
+                            <th colSpan={3} className="px-3 py-2 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">APP</th>
+                            <th colSpan={3} className="px-3 py-2 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Conferme</th>
+                            <th colSpan={3} className="px-3 py-2 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Trattative</th>
+                            <th colSpan={3} className="px-3 py-2 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Close</th>
+                            <th rowSpan={2} className="px-3 py-2 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Fatturato</th>
+                            <th rowSpan={2} className="px-3 py-2 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Spesa</th>
+                            <th rowSpan={2} className="px-3 py-2 text-right font-bold uppercase text-[10px] tracking-wider border-l border-white/20">ROAS</th>
+                            <th rowSpan={2} className="px-3 py-2 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Data -1%</th>
+                            <th rowSpan={2} className="px-3 py-2 text-center font-bold uppercase text-[10px] tracking-wider border-l border-white/20">Stato</th>
+                            <th rowSpan={2} className="px-2 py-2 border-l border-white/20 w-8"></th>
+                        </tr>
+                        <tr className="bg-[#1e3a5f] text-white/70">
+                            {['APP', 'Conferme', 'Trattative', 'Close'].map((g) => (
+                                <Fragment key={g}>
+                                    <th className="px-3 pb-2 text-right font-semibold uppercase text-[9px] tracking-wider border-l border-white/20">N.</th>
+                                    <th className="px-3 pb-2 text-right font-semibold uppercase text-[9px] tracking-wider">% tot</th>
+                                    <th className="px-2 pb-2 text-right font-semibold uppercase text-[9px] tracking-wider border-l border-white/20 whitespace-nowrap">
+                                        <span className="text-emerald-300">Nuovi</span>
+                                        <span className="text-white/40"> / </span>
+                                        <span className="text-violet-300">DB</span>
+                                    </th>
+                                </Fragment>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map((row) => (
                             <tr key={row.funnelName} className="border-t border-ash-100 hover:bg-ash-50/30 transition-colors">
                                 <td className="px-3 py-2 text-white font-bold bg-brand-orange">{row.funnelName}</td>
-                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums font-semibold border-l border-ash-100">{fmtInt(row.leadCount)}</td>
+                                <td
+                                    className="px-3 py-2 text-right text-ash-800 tabular-nums font-semibold border-l border-ash-100"
+                                    title={`Lead CRM del mese — Nuovi: ${fmtInt(row.nuovi.leadCount)} · Database: ${fmtInt(row.database.leadCount)} · Lanci passati: ${fmtInt(row.altroLeadCount)}`}
+                                >
+                                    {fmtInt(row.leadCount)}
+                                </td>
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.appCount)}</td>
                                 <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.appPct)}</td>
+                                <SplitPctCell
+                                    stage="APP"
+                                    nuoviPct={row.nuovi.appPct} nuoviCount={row.nuovi.appCount} nuoviLead={row.nuovi.leadCount}
+                                    dbPct={row.database.appPct} dbCount={row.database.appCount} dbLead={row.database.leadCount}
+                                />
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.confermeCount)}</td>
                                 <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.confermePct)}</td>
+                                <SplitPctCell
+                                    stage="Conferme" prevLabel="APP"
+                                    nuoviPrev={row.nuovi.appCount} dbPrev={row.database.appCount}
+                                    nuoviPct={row.nuovi.confermePct} nuoviCount={row.nuovi.confermeCount} nuoviLead={row.nuovi.leadCount}
+                                    dbPct={row.database.confermePct} dbCount={row.database.confermeCount} dbLead={row.database.leadCount}
+                                />
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.trattativeCount)}</td>
                                 <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.trattativePct)}</td>
+                                <SplitPctCell
+                                    stage="Trattative" prevLabel="Conferme"
+                                    nuoviPrev={row.nuovi.confermeCount} dbPrev={row.database.confermeCount}
+                                    nuoviPct={row.nuovi.trattativePct} nuoviCount={row.nuovi.trattativeCount} nuoviLead={row.nuovi.leadCount}
+                                    dbPct={row.database.trattativePct} dbCount={row.database.trattativeCount} dbLead={row.database.leadCount}
+                                />
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.closeCount)}</td>
                                 <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.closePct)}</td>
+                                <SplitPctCell
+                                    stage="Close" prevLabel="Trattative"
+                                    nuoviPrev={row.nuovi.trattativeCount} dbPrev={row.database.trattativeCount}
+                                    nuoviPct={row.nuovi.closePct} nuoviCount={row.nuovi.closeCount} nuoviLead={row.nuovi.leadCount}
+                                    dbPct={row.database.closePct} dbCount={row.database.closeCount} dbLead={row.database.leadCount}
+                                />
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{row.fatturatoEur > 0 ? fmtEur(row.fatturatoEur) : '—'}</td>
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{row.spesaEur > 0 ? fmtEur(row.spesaEur) : '—'}</td>
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100 font-semibold">{fmtRoas(row.roas)}</td>
@@ -381,7 +479,7 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                         ))}
                         {rows.length === 0 && (
                             <tr>
-                                <td colSpan={15} className="px-6 py-8 text-center text-ash-500 text-sm">
+                                <td colSpan={19} className="px-6 py-8 text-center text-ash-500 text-sm">
                                     Nessun funnel trovato per questo mese.
                                 </td>
                             </tr>
@@ -391,15 +489,43 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                         <tfoot>
                             <tr className="border-t-2 border-ash-300 bg-ash-50 font-bold">
                                 <td className="px-3 py-2.5 text-ash-800">Totale</td>
-                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.leadCount)}</td>
+                                <td
+                                    className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100"
+                                    title={`Lead CRM del mese — Nuovi: ${fmtInt(totals.nuovi.leadCount)} · Database: ${fmtInt(totals.database.leadCount)} · Lanci passati: ${fmtInt(totals.altroLeadCount)}`}
+                                >
+                                    {fmtInt(totals.leadCount)}
+                                </td>
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.appCount)}</td>
                                 <td className="px-3 py-2.5"></td>
+                                <SplitPctCell
+                                    stage="APP"
+                                    nuoviPct={totals.nuovi.appPct} nuoviCount={totals.nuovi.appCount} nuoviLead={totals.nuovi.leadCount}
+                                    dbPct={totals.database.appPct} dbCount={totals.database.appCount} dbLead={totals.database.leadCount}
+                                />
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.confermeCount)}</td>
                                 <td className="px-3 py-2.5"></td>
+                                <SplitPctCell
+                                    stage="Conferme" prevLabel="APP"
+                                    nuoviPrev={totals.nuovi.appCount} dbPrev={totals.database.appCount}
+                                    nuoviPct={totals.nuovi.confermePct} nuoviCount={totals.nuovi.confermeCount} nuoviLead={totals.nuovi.leadCount}
+                                    dbPct={totals.database.confermePct} dbCount={totals.database.confermeCount} dbLead={totals.database.leadCount}
+                                />
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.trattativeCount)}</td>
                                 <td className="px-3 py-2.5"></td>
+                                <SplitPctCell
+                                    stage="Trattative" prevLabel="Conferme"
+                                    nuoviPrev={totals.nuovi.confermeCount} dbPrev={totals.database.confermeCount}
+                                    nuoviPct={totals.nuovi.trattativePct} nuoviCount={totals.nuovi.trattativeCount} nuoviLead={totals.nuovi.leadCount}
+                                    dbPct={totals.database.trattativePct} dbCount={totals.database.trattativeCount} dbLead={totals.database.leadCount}
+                                />
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.closeCount)}</td>
                                 <td className="px-3 py-2.5"></td>
+                                <SplitPctCell
+                                    stage="Close" prevLabel="Trattative"
+                                    nuoviPrev={totals.nuovi.trattativeCount} dbPrev={totals.database.trattativeCount}
+                                    nuoviPct={totals.nuovi.closePct} nuoviCount={totals.nuovi.closeCount} nuoviLead={totals.nuovi.leadCount}
+                                    dbPct={totals.database.closePct} dbCount={totals.database.closeCount} dbLead={totals.database.leadCount}
+                                />
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{totals.fatturatoEur > 0 ? fmtEur(totals.fatturatoEur) : '—'}</td>
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{totals.spesaEur > 0 ? fmtEur(totals.spesaEur) : '—'}</td>
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtRoas(totals.roas)}</td>
@@ -411,8 +537,20 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                     )}
                 </table>
             </div>
-            <div className="px-5 py-2.5 bg-ash-50/50 border-t border-ash-100 text-[11px] text-ash-500">
-                ACT APP/Conferme/Trattative/Close = CRM live + delta baseline. Lead / Fatturato / Spesa sono assoluti editabili. ROAS = Fatturato ÷ Spesa. Stato auto-calcolato dalla % Close: OK se &gt; 1%, PRE_RISK appena scende sotto, ALLERT dopo 7 giorni.
+            <div className="space-y-1.5 border-t border-ash-100 bg-ash-50/50 px-5 py-2.5 text-[11px] text-ash-500">
+                <div>
+                    ACT APP/Conferme/Trattative/Close = CRM live + delta baseline. Lead / Fatturato / Spesa sono assoluti editabili. ROAS = Fatturato ÷ Spesa. Stato auto-calcolato dalla % Close: OK se &gt; 1%, PRE_RISK appena scende sotto, ALLERT dopo 7 giorni.
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-emerald-700">Nuovi</span>
+                    <span>lead evergreen (nessun pool)</span>
+                    <span className="text-ash-300">•</span>
+                    <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-violet-700">DB</span>
+                    <span>lead dei pool Database mensili ricaricati da AC.</span>
+                </div>
+                <div>
+                    Le colonne <span className="font-semibold text-ash-600">Nuovi / DB</span> sono <span className="font-semibold text-ash-600">solo CRM live</span>, ciascuna sui lead della propria origine entrati nel mese: i delta manuali e il Lead assoluto della baseline restano sul <span className="font-semibold text-ash-600">totale</span> e non sono ripartiti, quindi Nuovi + DB può non fare il totale di riga. I lead dei <span className="font-semibold text-ash-600">lanci passati</span> (Black Summer, Webinar…) restano nel totale ma sono fuori da entrambi gli split — il dettaglio è nel tooltip della colonna Lead.
+                </div>
             </div>
 
             {editingRow && (

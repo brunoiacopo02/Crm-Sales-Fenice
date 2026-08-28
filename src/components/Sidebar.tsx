@@ -18,6 +18,7 @@ import {
     Briefcase,
     Activity,
     PhoneIncoming,
+    Calculator,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -229,6 +230,14 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                         { name: "Gestione Account", href: "/team", icon: UserCog },
                     ],
                 },
+                // Ultima voce di tutta la sidebar, e solo ADMIN: oltre al ruolo
+                // la pagina chiede una password propria (budget e marginalita').
+                ...(role === "ADMIN" ? [{
+                    label: "Riservato",
+                    items: [
+                        { name: "Previsionale", href: "/previsionale", icon: Calculator },
+                    ],
+                }] : []),
             ]
         }
     }

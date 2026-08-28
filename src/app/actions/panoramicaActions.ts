@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from "@/db";
-import { leads, monthlyLeadTargets, monthlyFunnelBaselines } from "@/db/schema";
+import { leads, monthlyLeadTargets, monthlyFunnelBaselines, launchPools } from "@/db/schema";
 import { and, gte, lt, sql, eq, or, isNull, isNotNull } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from '@/lib/tenancy';
@@ -742,6 +742,36 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
 
 export type FunnelStato = 'OK' | 'PRE_RISK' | 'ALLERT';
 
+/**
+ * Split per origine del lead (spec 2026-08-28). Le due popolazioni hanno rese
+ * strutturalmente diverse e la loro media non è interpretabile:
+ *  - NUOVI    → `leads.launchBucket IS NULL` (evergreen, arrivano live da AC)
+ *  - DATABASE → `leads.launchBucket` in uno dei bucket `launchPools.kind =
+ *               'DATABASE_MONTH'` (pool di contatti vecchi ricaricati da AC).
+ *               L'elenco è letto dal DB, così i pool mensili futuri entrano da soli.
+ *  - ALTRO    → gli altri bucket (lanci passati: BLACK_SUMMER, WEBINAR, ...).
+ *               Restano nei TOTALI di riga ma sono FUORI da entrambi gli split.
+ *
+ * ATTENZIONE — questi contatori sono 100% CRM live: i delta manuali degli admin
+ * (`monthlyFunnelBaselines.appDelta/...`) e il `leadCount` assoluto di baseline
+ * si applicano SOLO al totale di riga e NON sono ripartiti qui (non esiste una
+ * ripartizione affidabile di un numero inserito a mano). Di conseguenza
+ * `nuovi + database + altro` può non fare il totale della riga: è voluto.
+ */
+export type FunnelSplitCounts = {
+    /** Lead CRM del mese per questa origine (denominatore delle % qui sotto). */
+    leadCount: number;
+    appCount: number;
+    appPct: number | null;
+    confermeCount: number;
+    confermePct: number | null;
+    trattativeCount: number;
+    trattativePct: number | null;
+    closeCount: number;
+    closePct: number | null;
+    fatturatoEur: number;
+};
+
 export type FunnelOverviewRow = {
     funnelName: string;
     leadCount: number;
@@ -758,6 +788,12 @@ export type FunnelOverviewRow = {
     roas: number | null;
     dataPrimoSottoSoglia: string | null;
     statoSegnalazione: FunnelStato;
+    /** Solo lead nuovi (launchBucket IS NULL). Vedi FunnelSplitCounts. */
+    nuovi: FunnelSplitCounts;
+    /** Solo lead dei pool DATABASE_MONTH. Vedi FunnelSplitCounts. */
+    database: FunnelSplitCounts;
+    /** Lead di lanci passati: nel totale, fuori dai due split. */
+    altroLeadCount: number;
 };
 
 export type FunnelOverviewResult =
@@ -774,11 +810,49 @@ export type FunnelOverviewResult =
               fatturatoEur: number;
               spesaEur: number;
               roas: number | null;
+              nuovi: FunnelSplitCounts;
+              database: FunnelSplitCounts;
+              altroLeadCount: number;
           };
       }
     | { success: false; error: string };
 
-type CrmCounts = { app: number; conferme: number; trattative: number; close: number; fatturato: number };
+/** Contatori di stage grezzi (senza percentuali) per una popolazione di lead. */
+type StageCounts = { app: number; conferme: number; trattative: number; close: number; fatturato: number };
+
+/** Totale di funnel + gli stessi contatori divisi per origine del lead. */
+type CrmCounts = StageCounts & { nuovi: StageCounts; db: StageCounts };
+
+/** Origine del lead, derivata da `launchBucket` + registro `launchPools`. */
+type LeadOrigin = 'nuovi' | 'db' | 'altro';
+
+function emptyStage(): StageCounts {
+    return { app: 0, conferme: 0, trattative: 0, close: 0, fatturato: 0 };
+}
+
+function emptyCrmCounts(): CrmCounts {
+    return { ...emptyStage(), nuovi: emptyStage(), db: emptyStage() };
+}
+
+/**
+ * Bucket dei pool "Database mensile" (`launchPools.kind = 'DATABASE_MONTH'`).
+ * Letti dal DB e non hardcodati: un pool nuovo caricato da /import entra nello
+ * split senza toccare il codice.
+ */
+async function getDatabaseBuckets(companyId: string): Promise<Set<string>> {
+    const rows = await db.select({ bucket: launchPools.bucket })
+        .from(launchPools)
+        .where(and(
+            eq(launchPools.companyId, companyId),
+            eq(launchPools.kind, 'DATABASE_MONTH'),
+        ));
+    return new Set(rows.map((r) => r.bucket));
+}
+
+function originOf(launchBucket: string | null | undefined, dbBuckets: Set<string>): LeadOrigin {
+    if (!launchBucket) return 'nuovi';
+    return dbBuckets.has(launchBucket) ? 'db' : 'altro';
+}
 
 /**
  * Count CRM events per funnel for the given month.
@@ -787,7 +861,11 @@ type CrmCounts = { app: number; conferme: number; trattative: number; close: num
  * (post-f8992e1): pesca i lead con OR su tutte le date evento, poi conta in
  * ogni bucket solo se la data evento corrispondente cade nel mese.
  */
-async function getCrmFunnelCounts(yearMonth: string, companyId: string): Promise<Map<string, CrmCounts>> {
+async function getCrmFunnelCounts(
+    yearMonth: string,
+    companyId: string,
+    dbBuckets: Set<string> = new Set(),
+): Promise<Map<string, CrmCounts>> {
     const { year, month } = parseYearMonth(yearMonth);
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
     const monthEnd = new Date(Date.UTC(year, month, 1));
@@ -812,18 +890,26 @@ async function getCrmFunnelCounts(yearMonth: string, companyId: string): Promise
         if (!funnel || funnel === 'TEST') continue;
         let bucket = map.get(funnel);
         if (!bucket) {
-            bucket = { app: 0, conferme: 0, trattative: 0, close: 0, fatturato: 0 };
+            bucket = emptyCrmCounts();
             map.set(funnel, bucket);
         }
+
+        // Ogni incremento va sul totale di funnel E, in parallelo, sullo split
+        // per origine (nuovi / database). I lanci passati ('altro') restano solo
+        // nel totale: nessuna delle due colonne split li conta.
+        const origin = originOf(l.launchBucket, dbBuckets);
+        const split: StageCounts | null = origin === 'altro' ? null : bucket[origin];
 
         // App fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy).
         const apptSetAt = l.appointmentCreatedAt || l.appointmentDate;
         if (l.appointmentDate && inMonth(apptSetAt)) {
             bucket.app++;
+            if (split) split.app++;
         }
         // Conferme: data esito Conferme nel mese.
         if (l.confirmationsOutcome === 'confermato' && inMonth(l.confirmationsTimestamp)) {
             bucket.conferme++;
+            if (split) split.conferme++;
         }
         // Trattative: presenziato nel mese (whitelist Chiuso/Non chiuso).
         if (
@@ -831,14 +917,103 @@ async function getCrmFunnelCounts(yearMonth: string, companyId: string): Promise
             && inMonth(l.salespersonOutcomeAt)
         ) {
             bucket.trattative++;
+            if (split) split.trattative++;
         }
         // Chiusure + fatturato: chiuso nel mese.
         if (l.salespersonOutcome === 'Chiuso' && inMonth(l.salespersonOutcomeAt)) {
             bucket.close++;
             bucket.fatturato += l.closeAmountEur || 0;
+            if (split) {
+                split.close++;
+                split.fatturato += l.closeAmountEur || 0;
+            }
         }
     }
     return map;
+}
+
+type LeadSplit = { nuovi: number; db: number; altro: number };
+
+/**
+ * Denominatori dello split: quanti lead di ciascuna origine sono entrati nel
+ * mese, per funnel.
+ *
+ * Perché non si riusa il `leadCount` della riga: quello è il valore ASSOLUTO
+ * inserito a mano dall'admin (baseline Excel) + i lead creati dopo il salvataggio,
+ * e un numero digitato a mano non è ripartibile per origine. Qui si conta il CRM
+ * live con la stessa regola di attribuzione al mese usata da `getLeadOverview`:
+ *  - data = COALESCE(assignedAt, createdAt) (migr. 0027: i lead dei pool contano
+ *    dal mese di assegnazione, non da quello di caricamento);
+ *  - i lead di un pool non ancora assegnati sono magazzino e non contano.
+ */
+async function getLeadSplitByFunnel(
+    yearMonth: string,
+    companyId: string,
+    dbBuckets: Set<string>,
+): Promise<Map<string, LeadSplit>> {
+    const { year, month } = parseYearMonth(yearMonth);
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const monthEnd = new Date(Date.UTC(year, month, 1));
+
+    const rows = await db
+        .select({
+            funnel: sql<string>`UPPER(COALESCE(${leads.funnel}, ''))`,
+            bucket: leads.launchBucket,
+            c: sql<number>`count(*)::int`,
+        })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, companyId),
+            sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
+            sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${monthStart}`,
+            sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${monthEnd}`,
+            or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+        ))
+        .groupBy(sql`UPPER(COALESCE(${leads.funnel}, ''))`, leads.launchBucket);
+
+    const map = new Map<string, LeadSplit>();
+    for (const r of rows) {
+        const funnel = r.funnel;
+        if (!funnel || funnel === 'TEST') continue;
+        let acc = map.get(funnel);
+        if (!acc) {
+            acc = { nuovi: 0, db: 0, altro: 0 };
+            map.set(funnel, acc);
+        }
+        acc[originOf(r.bucket, dbBuckets)] += Number(r.c ?? 0);
+    }
+    return map;
+}
+
+function emptySplitCounts(): FunnelSplitCounts {
+    return {
+        leadCount: 0,
+        appCount: 0,
+        appPct: null,
+        confermeCount: 0,
+        confermePct: null,
+        trattativeCount: 0,
+        trattativePct: null,
+        closeCount: 0,
+        closePct: null,
+        fatturatoEur: 0,
+    };
+}
+
+/** Compone le percentuali di uno split sul suo denominatore di origine. */
+function buildSplitCounts(leadCount: number, s: StageCounts): FunnelSplitCounts {
+    return {
+        leadCount,
+        appCount: s.app,
+        appPct: pct(s.app, leadCount),
+        confermeCount: s.conferme,
+        confermePct: pct(s.conferme, leadCount),
+        trattativeCount: s.trattative,
+        trattativePct: pct(s.trattative, leadCount),
+        closeCount: s.close,
+        closePct: pct(s.close, leadCount),
+        fatturatoEur: s.fatturato,
+    };
 }
 
 /**
@@ -971,12 +1146,19 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
         // 2) Live CRM counts per funnel (uppercased, excluding TEST/empty).
         //    Counts ALL April leads. The baseline delta is purely external (Excel)
         //    and gets summed on top — no double-counting filter.
-        const crmMap = await getCrmFunnelCounts(ym, ctx.companyId);
+        //    `dbBuckets` alimenta lo split nuovi/database delle colonne dedicate:
+        //    NON entra nei totali di riga, che restano identici a prima.
+        const dbBuckets = await getDatabaseBuckets(ctx.companyId);
+        const crmMap = await getCrmFunnelCounts(ym, ctx.companyId, dbBuckets);
+        const leadSplitMap = await getLeadSplitByFunnel(ym, ctx.companyId, dbBuckets);
 
         // 3) Merge: include all baseline funnels, plus any CRM funnel that isn't in the baseline yet
         const allFunnels = new Set<string>();
         for (const b of baselines) allFunnels.add(b.funnelName);
         for (const f of crmMap.keys()) allFunnels.add(f);
+
+        // NB: leadSplitMap NON contribuisce a `allFunnels`. Le colonne split sono
+        // informative e non devono far comparire righe che prima non c'erano.
 
         // Preserve a stable display order matching the Excel layout, then append any extras alphabetically
         const CANONICAL_ORDER = ['TELEGRAM', 'JOB SIMULATOR', 'CORSO 10 ORE', 'ORG', 'DATABASE', 'GOOGLE', 'SOCIAL', 'TELEGRAM-TK'];
@@ -985,10 +1167,15 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
 
         const rows: FunnelOverviewRow[] = [];
         let totalLead = 0, totalApp = 0, totalConf = 0, totalTratt = 0, totalClose = 0, totalFat = 0, totalSpesa = 0;
+        // Accumulatori dello split (solo CRM live, nessun delta manuale).
+        const totNuoviStage = emptyStage();
+        const totDbStage = emptyStage();
+        let totNuoviLead = 0, totDbLead = 0, totAltroLead = 0;
 
         for (const funnelName of ordered) {
             const baseline = baselines.find(b => b.funnelName === funnelName);
-            const crm = crmMap.get(funnelName) || { app: 0, conferme: 0, trattative: 0, close: 0, fatturato: 0 };
+            const crm = crmMap.get(funnelName) || emptyCrmCounts();
+            const leadSplit = leadSplitMap.get(funnelName) || { nuovi: 0, db: 0, altro: 0 };
 
             // leadCount = baseline assoluto (quello inserito dall'admin) + lead
             // CRM importati DOPO baselineSetAt. Se non c'è baseline → 0.
@@ -1035,6 +1222,9 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
                 roas: spesaEur > 0 ? fatturatoEur / spesaEur : null,
                 dataPrimoSottoSoglia,
                 statoSegnalazione,
+                nuovi: buildSplitCounts(leadSplit.nuovi, crm.nuovi),
+                database: buildSplitCounts(leadSplit.db, crm.db),
+                altroLeadCount: leadSplit.altro,
             });
 
             totalLead += leadCount;
@@ -1044,6 +1234,14 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
             totalClose += closeCount;
             totalFat += fatturatoEur;
             totalSpesa += spesaEur;
+
+            totNuoviLead += leadSplit.nuovi;
+            totDbLead += leadSplit.db;
+            totAltroLead += leadSplit.altro;
+            for (const k of ['app', 'conferme', 'trattative', 'close', 'fatturato'] as const) {
+                totNuoviStage[k] += crm.nuovi[k];
+                totDbStage[k] += crm.db[k];
+            }
         }
 
         return {
@@ -1059,6 +1257,9 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
                 fatturatoEur: totalFat,
                 spesaEur: totalSpesa,
                 roas: totalSpesa > 0 ? totalFat / totalSpesa : null,
+                nuovi: buildSplitCounts(totNuoviLead, totNuoviStage),
+                database: buildSplitCounts(totDbLead, totDbStage),
+                altroLeadCount: totAltroLead,
             },
         };
     } catch (error: any) {
@@ -1107,8 +1308,9 @@ export async function setFunnelRow(input: {
         }
 
         // Re-query current CRM count to compute deltas
+        // Split per origine non serve qui: i delta si calcolano sul TOTALE.
         const crmMap = await getCrmFunnelCounts(input.yearMonth, ctx.companyId);
-        const crm = crmMap.get(funnelName) || { app: 0, conferme: 0, trattative: 0, close: 0 };
+        const crm = crmMap.get(funnelName) || emptyCrmCounts();
 
         const appDelta = Math.round(input.appDisplay - crm.app);
         const confermeDelta = Math.round(input.confermeDisplay - crm.conferme);
@@ -1242,11 +1444,31 @@ function mergeLeadOverviews(parts: LeadOverviewResult[], ym: string): LeadOvervi
     };
 }
 
+/** Accumulatore dello split in modalità "Tutte le aziende": solo valori assoluti. */
+type SplitAcc = { leadCount: number } & StageCounts;
+
+function emptySplitAcc(): SplitAcc {
+    return { leadCount: 0, ...emptyStage() };
+}
+
+function addSplitAcc(acc: SplitAcc, s: FunnelSplitCounts): void {
+    acc.leadCount += s.leadCount;
+    acc.app += s.appCount;
+    acc.conferme += s.confermeCount;
+    acc.trattative += s.trattativeCount;
+    acc.close += s.closeCount;
+    acc.fatturato += s.fatturatoEur;
+}
+
+function splitAccToCounts(a: SplitAcc): FunnelSplitCounts {
+    return buildSplitCounts(a.leadCount, { app: a.app, conferme: a.conferme, trattative: a.trattative, close: a.close, fatturato: a.fatturato });
+}
+
 function mergeFunnelOverviews(parts: FunnelOverviewResult[], ym: string): FunnelOverviewResult {
     const ok = parts.filter((p): p is OkFunnel => p.success);
     if (ok.length === 0) return parts[0] ?? { success: false, error: 'NO_DATA' };
 
-    type Acc = { leadCount: number; appCount: number; confermeCount: number; trattativeCount: number; closeCount: number; fatturatoEur: number; spesaEur: number; dataPrimoSottoSoglia: string | null; statoSegnalazione: FunnelStato };
+    type Acc = { leadCount: number; appCount: number; confermeCount: number; trattativeCount: number; closeCount: number; fatturatoEur: number; spesaEur: number; dataPrimoSottoSoglia: string | null; statoSegnalazione: FunnelStato; nuovi: SplitAcc; database: SplitAcc; altroLeadCount: number };
     const byFunnel = new Map<string, Acc>();
     const order: string[] = [];
     const sev = (s: FunnelStato): number => s === 'ALLERT' ? 2 : s === 'PRE_RISK' ? 1 : 0;
@@ -1255,10 +1477,13 @@ function mergeFunnelOverviews(parts: FunnelOverviewResult[], ym: string): Funnel
         for (const r of p.rows) {
             let acc = byFunnel.get(r.funnelName);
             if (!acc) {
-                acc = { leadCount: 0, appCount: 0, confermeCount: 0, trattativeCount: 0, closeCount: 0, fatturatoEur: 0, spesaEur: 0, dataPrimoSottoSoglia: null, statoSegnalazione: 'OK' };
+                acc = { leadCount: 0, appCount: 0, confermeCount: 0, trattativeCount: 0, closeCount: 0, fatturatoEur: 0, spesaEur: 0, dataPrimoSottoSoglia: null, statoSegnalazione: 'OK', nuovi: emptySplitAcc(), database: emptySplitAcc(), altroLeadCount: 0 };
                 byFunnel.set(r.funnelName, acc);
                 order.push(r.funnelName);
             }
+            addSplitAcc(acc.nuovi, r.nuovi);
+            addSplitAcc(acc.database, r.database);
+            acc.altroLeadCount += r.altroLeadCount;
             acc.leadCount += r.leadCount;
             acc.appCount += r.appCount;
             acc.confermeCount += r.confermeCount;
@@ -1292,17 +1517,25 @@ function mergeFunnelOverviews(parts: FunnelOverviewResult[], ym: string): Funnel
             roas: a.spesaEur > 0 ? a.fatturatoEur / a.spesaEur : null,
             dataPrimoSottoSoglia: a.dataPrimoSottoSoglia,
             statoSegnalazione: a.statoSegnalazione,
+            nuovi: splitAccToCounts(a.nuovi),
+            database: splitAccToCounts(a.database),
+            altroLeadCount: a.altroLeadCount,
         };
     });
 
-    let tLead = 0, tApp = 0, tConf = 0, tTratt = 0, tClose = 0, tFat = 0, tSpesa = 0;
-    for (const r of rows) { tLead += r.leadCount; tApp += r.appCount; tConf += r.confermeCount; tTratt += r.trattativeCount; tClose += r.closeCount; tFat += r.fatturatoEur; tSpesa += r.spesaEur; }
+    let tLead = 0, tApp = 0, tConf = 0, tTratt = 0, tClose = 0, tFat = 0, tSpesa = 0, tAltro = 0;
+    const tNuovi = emptySplitAcc();
+    const tDb = emptySplitAcc();
+    for (const r of rows) {
+        tLead += r.leadCount; tApp += r.appCount; tConf += r.confermeCount; tTratt += r.trattativeCount; tClose += r.closeCount; tFat += r.fatturatoEur; tSpesa += r.spesaEur;
+        addSplitAcc(tNuovi, r.nuovi); addSplitAcc(tDb, r.database); tAltro += r.altroLeadCount;
+    }
 
     return {
         success: true,
         yearMonth: ym,
         rows,
-        totals: { leadCount: tLead, appCount: tApp, confermeCount: tConf, trattativeCount: tTratt, closeCount: tClose, fatturatoEur: tFat, spesaEur: tSpesa, roas: tSpesa > 0 ? tFat / tSpesa : null },
+        totals: { leadCount: tLead, appCount: tApp, confermeCount: tConf, trattativeCount: tTratt, closeCount: tClose, fatturatoEur: tFat, spesaEur: tSpesa, roas: tSpesa > 0 ? tFat / tSpesa : null, nuovi: splitAccToCounts(tNuovi), database: splitAccToCounts(tDb), altroLeadCount: tAltro },
     };
 }
 

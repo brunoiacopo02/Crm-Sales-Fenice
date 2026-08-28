@@ -20,6 +20,9 @@ const REPORTING_ALLOWLIST = [
   '/kpi-venditori',
   '/kpi-team',
   '/conferme/analytics',
+  // Simulatore puro: non legge un solo lead, quindi non ha senso bloccarlo
+  // quando l'admin è in modalità gruppo.
+  '/previsionale',
 ]
 
 export function AllCompaniesGate({
