@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
 import { eq, and, desc, isNull, gte, count, notLike, sql } from "drizzle-orm";
-import { getLeadRouting, BOT_DAILY_CAP, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 
@@ -443,8 +443,8 @@ export async function getAcIntakeStats(): Promise<AcIntakeStats> {
 export interface BotRoutingStatus {
     /** Fascia in vigore adesso, gia' valutata sul server. */
     routing: LeadRouting;
-    /** Tetto giornaliero del bot. */
-    cap: number;
+    /** Soglia minima giornaliera del bot. */
+    dailyMin: number;
     /** Lead AC di oggi (giorno solare Europe/Rome) finiti al bot. */
     todayBot: number;
     /** Lead AC di oggi finiti ai GDO umani. */
@@ -491,7 +491,7 @@ export async function getBotRoutingStatus(): Promise<BotRoutingStatus> {
 
     return {
         routing: getLeadRouting(now),
-        cap: BOT_DAILY_CAP,
+        dailyMin: BOT_DAILY_MIN,
         todayBot: today?.bot ?? 0,
         todayHumans: today?.humans ?? 0,
         botBacklog: backlog?.total ?? 0,
