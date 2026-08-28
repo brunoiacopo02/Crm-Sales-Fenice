@@ -17,6 +17,7 @@ import {
     type AcFailureRow,
     type AcIntakeStats,
     type AcIntakeDayStat,
+    type BotRoutingStatus,
 } from "@/app/actions/acIntakeActions";
 
 interface Props {
@@ -26,7 +27,33 @@ interface Props {
     initialStats: AcIntakeStats;
     /** Finestra ferie GDO attiva ADESSO (valutata dal server), o null fuori finestra. */
     holidayWindow: { from: string; until: string; lastDay: string } | null;
+    /** Fascia di distribuzione in vigore + ripartizione di oggi. */
+    routingStatus: BotRoutingStatus;
 }
+
+/** Come si chiama, in italiano, la fascia in vigore adesso. */
+const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spiega: string; tono: string }> = {
+    bot_only: {
+        titolo: 'Fascia bot',
+        spiega: "fuori dall'orario dei GDO: tutti i lead in arrivo vanno al bot, il tetto giornaliero non si applica.",
+        tono: 'border-violet-200 bg-violet-50 text-violet-900',
+    },
+    bot_first: {
+        titolo: 'Fascia mista',
+        spiega: 'orario dei GDO: il bot ha la precedenza finché è sotto il tetto, poi i lead passano in round-robin ai GDO.',
+        tono: 'border-sky-200 bg-sky-50 text-sky-900',
+    },
+    gdo_only: {
+        titolo: 'Fascia GDO',
+        spiega: 'turno del sabato: i lead vanno solo ai GDO umani, il bot resta fuori anche se è sotto il tetto.',
+        tono: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    },
+    legacy: {
+        titolo: 'Regola oraria spenta',
+        spiega: "l'env BOT_ROUTING è su off: vale il round-robin storico, bot e GDO nello stesso giro.",
+        tono: 'border-ash-200 bg-ash-50 text-ash-700',
+    },
+};
 
 /** '2026-08-08' → '8 agosto' (per la striscia ferie). */
 function giornoIt(day: string): string {
@@ -34,7 +61,7 @@ function giornoIt(day: string): string {
         .format(new Date(`${day}T00:00:00Z`));
 }
 
-export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats, holidayWindow }: Props) {
+export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats, holidayWindow, routingStatus }: Props) {
     const [rows, setRows] = useState(initialRows);
     const [webhooks, setWebhooks] = useState(initialWebhooks);
     const [failures, setFailures] = useState(initialFailures);
@@ -175,9 +202,40 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     <Zap className="h-6 w-6 text-brand-orange" /> Lead Automatici da ActiveCampaign
                 </h1>
                 <p className="text-sm text-ash-500">
-                    Quando AC riceve un lead nuovo, viene inserito nel CRM e assegnato in round-robin a uno dei GDO abilitati qui sotto.
+                    Quando AC riceve un lead nuovo, viene inserito nel CRM e assegnato secondo la fascia oraria: al bot fuori dall'orario dei GDO, altrimenti in round-robin ai GDO abilitati qui sotto.
                 </p>
             </header>
+
+            {/* Ripartizione bot / GDO: la fascia in vigore e come sta andando oggi. */}
+            <section className={`rounded-2xl border p-4 shadow-sm ${ROUTING_LABEL[routingStatus.routing].tono}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 className="text-sm font-bold">
+                        Adesso: {ROUTING_LABEL[routingStatus.routing].titolo}
+                    </h2>
+                    <span className="text-xs opacity-80">
+                        Bot 20:00–13:00 · GDO 13:00–20:00 · sabato GDO 10:00–16:30 · domenica bot
+                    </span>
+                </div>
+                <p className="mt-0.5 text-xs opacity-90">{ROUTING_LABEL[routingStatus.routing].spiega}</p>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2">
+                        <div className="text-xl font-black">{routingStatus.todayBot}<span className="text-sm font-bold opacity-60">/{routingStatus.cap}</span></div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">Oggi al bot</div>
+                    </div>
+                    <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2">
+                        <div className="text-xl font-black">{routingStatus.todayHumans}</div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">Oggi ai GDO</div>
+                    </div>
+                    <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2">
+                        <div className="text-xl font-black">{routingStatus.botBacklog}</div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">Fermi sul bot</div>
+                    </div>
+                    <div className={`rounded-xl border px-3 py-2 ${routingStatus.botBacklogOld > 0 ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-white/60 bg-white/70'}`}>
+                        <div className="text-xl font-black">{routingStatus.botBacklogOld}</div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">Fermi da 7+ giorni</div>
+                    </div>
+                </div>
+            </section>
 
             {holidayWindow && (
                 <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">

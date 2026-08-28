@@ -84,6 +84,14 @@ export const users = pgTable('users', {
     // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.
     statsActive: boolean('statsActive').default(true).notNull(),
 
+    // false = il turno di questa persona NON e' misurabile dai tabulati del
+    // centralino, perche' divide l'orario con mansioni che non passano dal
+    // telefono (es. le Conferme). La scheda "Tempo al telefono" di
+    // /monitor-pause la esclude, altrimenti il lavoro non telefonico
+    // risulterebbe tempo fermo. Diverso da statsActive: le metriche di
+    // PRODUZIONE (appuntamenti, chiamate, KPI) continuano a contarla.
+    phoneTimeTracked: boolean('phoneTimeTracked').default(true).notNull(),
+
     // Account bot (es. bot fissatore gdo205): partecipa al round-robin e ai KPI
     // come un GDO, ma la gamification è disattivata e all'assegnazione il CRM
     // pusha il lead al webhook del bot. Interruttore unico per gamification-off
@@ -1349,3 +1357,76 @@ export const crmDeals = pgTable('crm_deals', {
     // 2026-07-05: droppati crm_deals_company_closed_idx / _company_funnel_closed_idx / _company_salesperson_idx (mai usati, Disk IO)
 }));
 
+// Tabulati (CDR) del centralino FreePBX in ufficio, importati da CSV.
+// `id` è l'uniqueid assegnato da Asterisk: rende l'import idempotente
+// (ON CONFLICT DO NOTHING) e permette di ricaricare lo stesso file senza
+// duplicare nulla. `dstKey` sono le ultime 10 cifre del numero chiamato,
+// la chiave con cui si aggancia leads.phone.
+export const pbxCalls = pgTable('pbxCalls', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    calldate: timestamp('calldate', { withTimezone: true, mode: 'date' }).notNull(),
+    dateLocal: text('dateLocal').notNull(),
+    src: text('src').notNull(),
+    dstKey: text('dstKey'),
+    duration: integer('duration').notNull(),
+    billsec: integer('billsec').notNull(),
+    disposition: text('disposition').notNull(),
+    direction: text('direction').notNull(), // 'out' | 'in'
+    userId: text('userId').references(() => users.id),
+}, (table) => {
+    return {
+        userDayIdx: index('pbxcalls_user_day_idx').on(table.companyId, table.userId, table.dateLocal),
+        dstKeyIdx: index('pbxcalls_dst_key_idx').on(table.dstKey),
+    };
+});
+
+// Quale interno del centralino corrisponde a quale utente del CRM.
+// NON è derivabile da una regola numerica (1007 = GDO 115, non 107):
+// va mantenuta a mano quando cambia una postazione.
+export const pbxExtensions = pgTable('pbxExtensions', {
+    extension: text('extension').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    label: text('label'),
+});
+
+
+// --- RICHIESTE DI CONTATTO UMANO (dal bot fissatore) ---
+// Il lead scrive in chat che vuole parlare con una persona: il bot smette di
+// rispondere e ce lo passa con `CONTATTO_UMANO`. Fino al 26/08 era solo un evento
+// in timeline + una notifica: su 53 richieste UNA sola è stata poi lavorata da un
+// umano. Una notifica non è una coda — se nessuno la vede quando suona, il lead
+// resta fermo. Questa tabella è lo stato operativo (chi aspetta, da quanto, a chi
+// è stato dato); l'evento `BOT_CONTACT_REQUEST` resta come audit immutabile.
+//
+// Una riga per lead in attesa, NON una per messaggio: il bot rivaluta e riemette
+// l'esito a ogni messaggio del lead riformulando il motivo, quindi una richiesta
+// ancora `pending` si aggiorna in loco (motivo più recente, updatesCount++).
+export const botContactRequests = pgTable('botContactRequests', {
+    id: text('id').primaryKey(),
+    leadId: text('leadId').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    // Categoria chiusa mandata dal bot (contratto v1.5). Valore ignoto → 'altro':
+    // un motivo non previsto non deve mai far perdere la richiesta.
+    category: text('category').default('altro').notNull(),
+    // Le parole esatte del lead: è quello che permette a chi chiama di aprire la
+    // telefonata sapendo già di cosa si parla.
+    reason: text('reason').notNull(),
+    leadInfo: jsonb('leadInfo'),
+    updatesCount: integer('updatesCount').default(1).notNull(),
+    status: text('status').default('pending').notNull(), // 'pending' | 'assigned' | 'closed'
+    assignedToId: text('assignedToId').references(() => users.id),
+    assignedByUserId: text('assignedByUserId').references(() => users.id),
+    assignedAt: timestamp('assignedAt', { withTimezone: true, mode: 'date' }),
+    closedAt: timestamp('closedAt', { withTimezone: true, mode: 'date' }),
+    closedByUserId: text('closedByUserId').references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        // La coda si legge sempre così: pending della company, i più vecchi in cima.
+        statusCreatedIdx: index('bot_contact_requests_status_created_idx').on(table.companyId, table.status, table.createdAt),
+        leadIdx: index('bot_contact_requests_lead_idx').on(table.leadId),
+    };
+});

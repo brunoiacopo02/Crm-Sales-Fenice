@@ -1,11 +1,11 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.4 — 2026-08-06 (nuovo esito `CONTATTO_UMANO`; `APPUNTAMENTO` accettato sui lead che il bot aveva restituito; Direzione 4: data dell'appuntamento comunicata al bot).
+> **Versione:** 1.5 — 2026-08-26 (`CONTATTO_UMANO` porta motivo e contesto e finisce in una coda vera; `RICHIAMO` senza data certa; `APPUNTAMENTO` con data diversa = rifissaggio invece di scarto silenzioso).
 >
-> **Il contratto cresce, non cambia.** Ogni payload valido nella v1.3 resta valido: le
-> novità sono un valore di `outcome` in più, un caso di `403` che ora diventa `200` e una
-> chiamata aggiuntiva in uscita dal CRM.
+> **Il contratto cresce, non cambia.** Ogni payload valido nella v1.4 resta valido: le
+> novità sono due campi opzionali su `CONTATTO_UMANO`, un'alternativa a `date` per
+> `RICHIAMO` e un caso che prima rispondeva `deduped` e ora aggiorna davvero l'appuntamento.
 
 ---
 
@@ -195,9 +195,12 @@ x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
 interface BotOutcomeBody {
   leadId:         string;     // Obbligatorio — UUID ricevuto nel push
   outcome:        BotOutcome; // Obbligatorio — uno dei 7 valori sotto
-  date?:          string;     // Obbligatorio per APPUNTAMENTO e RICHIAMO (ISO 8601 con offset)
+  date?:          string;     // Obbligatorio per APPUNTAMENTO; per RICHIAMO se manca `periodo` (ISO 8601 con offset)
+  periodo?:       string;     // v1.5 — RICHIAMO senza data certa, testo libero ("a settembre")
   note?:          string;     // Note libere sull'interazione (obbligatoria per NOTA e CONTATTO_UMANO)
   discardReason?: string;     // Motivo scarto (usato per DA_SCARTARE)
+  motivo?:        string;     // v1.5 — CONTATTO_UMANO: categoria chiusa del motivo
+  info?:          object;     // v1.5 — CONTATTO_UMANO: contesto sul lead (vedi sotto)
   report?:        BotReport;  // Report strutturato (opzionale ma raccomandato)
 }
 
@@ -209,7 +212,7 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 | Valore | Significato | `date` richiesta | Effetto nel CRM |
 |---|---|---|---|
 | `APPUNTAMENTO` | Lead ha fissato un appuntamento | SI | Passa alle Conferme |
-| `RICHIAMO` | Lead vuole essere ricontattato | SI | Richiamo programmato sul bot |
+| `RICHIAMO` | Lead vuole essere ricontattato | SI, oppure `periodo` | Richiamo programmato sul bot |
 | `DA_SCARTARE` | **Obiezione ferrea reale** (es. "non ho soldi", "non mi interessa") | No | **Scarto definitivo** |
 | `NON_RISPOSTO` | Non ha **mai risposto** dopo il ciclo di solleciti | No | **Riassegnato a un operatore umano** (round-robin) |
 | `INTERROTTO` | Chat **avviata ma interrotta senza obiezione ferrea** | No | **Riassegnato a un operatore umano** (round-robin) |
@@ -247,6 +250,82 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 > minuti di proposito: copre il tempo entro cui un admin prende in carico la richiesta. Se
 > il lead richiede di essere richiamato la settimana dopo, è una richiesta nuova e notifica
 > di nuovo. Risposta: `{ ok: true, noted: true }`.
+
+### `CONTATTO_UMANO`: motivo e contesto (nuovo in v1.5)
+
+Dal 26/08 la richiesta non è più solo una notifica: entra in una **coda** che un
+amministratore vede su `/richieste-contatto` e da cui assegna il lead al GDO che lo
+richiama. Perché quella coda sia lavorabile servono due campi in più — entrambi
+**opzionali** (una richiesta senza di essi entra comunque in coda), ma senza i quali
+chi chiama parte alla cieca:
+
+```ts
+{
+  outcome: 'CONTATTO_UMANO',
+  leadId:  '…',
+  note:    'Mi puoi chiamare? Vorrei capire meglio i costi',   // le parole del lead
+  motivo:  'prezzo',                                            // categoria chiusa
+  info: {
+    sintesi:           'Interessata al percorso, blocco sul prezzo',
+    disponibilita:     'dopo le 18',
+    telefonoPreferito: '+39…',      // se diverso da quello che abbiamo
+    urgenza:           'alta',      // 'alta' | 'media' | 'bassa'
+    argomenti:         ['rateizzazione', 'durata']
+  }
+}
+```
+
+**Categorie di `motivo`.** Il CRM normalizza: maiuscole, spazi e trattini non contano, e
+un valore che non riconosce diventa `altro` — **mai un 400**, una categoria sbagliata è
+un fastidio ma una richiesta persa è un lead perso.
+
+| Categoria | Quando |
+|---|---|
+| `richiamo` | Vuole essere richiamato, senza un tema preciso |
+| `prezzo` | Costi, rateizzazione, pagamenti |
+| `programma` | Come funziona il percorso, durata, contenuti |
+| `sfiducia_bot` | Non si fida della chat, vuole una persona vera |
+| `problema_tecnico` | Link o video che non funzionano |
+| `disdetta` | Vuole disdire o spostare un appuntamento |
+| `altro` | Tutto il resto |
+
+**Riemissione:** invariata (l'evento si scrive sempre, la notifica è soppressa entro 24h),
+ma in coda resta **una sola riga per lead**: la riemissione aggiorna il motivo di quella
+riga e ne incrementa il contatore, non ne crea una seconda. Una richiesta già gestita non
+si riapre: se il lead torna a chiedere dopo giorni, torna in cima come richiesta nuova.
+
+### `RICHIAMO` senza data certa (nuovo in v1.5)
+
+Quando il lead dice "ci risentiamo a settembre" non esiste un istante da scrivere. Fino
+alla v1.4 la route pretendeva un ISO su ogni `RICHIAMO`, e il risultato era che il bot
+**inventava** giorno e ora: su 26 richiami, 22 cadevano su ore tonde che nessun lead aveva
+mai detto. Ora `periodo` è un'alternativa a `date`:
+
+```json
+{ "leadId": "…", "outcome": "RICHIAMO", "periodo": "a settembre", "note": "Riprende dopo le ferie" }
+```
+
+Il lead va `IN_PROGRESS` senza data di richiamo e il periodo finisce nella nota che il GDO
+legge in pipeline. Se mandi `date` valgono le regole di sempre (ISO con offset). Se non
+mandi né `date` né `periodo`: `400`.
+
+### `APPUNTAMENTO` con data diversa = rifissaggio (nuovo in v1.5)
+
+Dal 10/07 un `APPUNTAMENTO` su un lead già appuntato riceveva `{ ok: true, deduped: true }`
+senza scritture: serviva a fermare il re-invio orario dello stesso esito. L'effetto
+collaterale era che **un cambio di data concordato in chat lo perdevamo in silenzio**, e le
+Conferme chiamavano per un orario che il lead aveva già spostato.
+
+Ora conta la data:
+
+- **stessa data** (entro un minuto) → `{ ok: true, deduped: true }`, come prima;
+- **data diversa** → aggiorniamo `appointmentDate`, scriviamo un evento
+  `BOT_APPOINTMENT_RESCHEDULED` e **notifichiamo le Conferme**. Risposta:
+  `{ ok: true, rescheduled: true }`.
+
+Il rifissaggio **non** viene contato come un fissaggio nuovo (non ritimbriamo la data di
+creazione dell'appuntamento): altrimenti un lead spostato tre volte comparirebbe tre volte
+tra gli appuntamenti presi oggi. Il campo `noteOnly` che avete proposto non serve.
 
 > **`NOTA` sui lead dei GDO umani (nuovo in v1.3):** da quando l'agenda parte dal canale
 > bot (Direzione 3), il bot conversa anche con lead che **non gli sono assegnati**. Su
@@ -493,6 +572,87 @@ Un `200` qualunque è sufficiente. Il CRM **non** legge il corpo della risposta 
 scrive nulla sul lead in base a questa chiamata: un fornitore giù non deve impedire a un
 GDO di esitare il lead. Il timeout è di **6 secondi** (più stretto dei 12s dell'agenda,
 perché qui siamo dentro l'esito del GDO che non deve restare appeso).
+
+---
+
+## Direzione 5 — Bot → CRM (cosa succede dopo l'appuntamento) — nuovo in v1.5
+
+Il database del bot si ferma al momento in cui l'appuntamento viene preso. Senza sapere
+chi si presenta e chi compra, l'unica cosa che il bot può ottimizzare è il **numero** di
+appuntamenti: può farlo crescere e peggiorare il risultato senza che nessuno se ne
+accorga. Questo endpoint chiude il cerchio.
+
+È un canale **in lettura e in pull**, non un webhook: nessuna coda di consegna da
+mantenere, nessun evento perso se il ricevente è giù, nessun ordine da ricostruire. Il
+bot chiede "cosa è cambiato da questo istante", riceve le righe in ordine di
+aggiornamento e riparte dall'ultimo `nextSince`.
+
+### Request
+
+```
+POST https://crm-sales-fenice.vercel.app/api/bot/lead-status
+x-bot-signature: sha256=<hmac del body grezzo, stesso BOT_WEBHOOK_SECRET>
+Content-Type: application/json
+
+{ "since": "2026-08-26T00:00:00+02:00", "limit": 200 }
+```
+
+`limit` è opzionale: default 200, massimo 1000.
+
+### Risposta
+
+```jsonc
+{
+  "leads": [
+    {
+      "leadId": "…",
+      "status": "APPOINTMENT",              // stato nel CRM
+      "appointmentDate": "2026-08-28T17:00:00.000Z",
+      "appointmentCreatedAt": "2026-08-26T09:12:00.000Z",
+      "confermeOutcome": "confermato",      // confermato | scartato | da_rifissare | null
+      "confermeOutcomeAt": "2026-08-27T10:03:00.000Z",
+      "confermeDiscardReason": null,
+      "presented": true,                    // si è presentato alla call
+      "presentedAt": "2026-08-28T17:00:00.000Z",
+      "salesOutcome": "Chiuso",             // Chiuso | Non chiuso | Sparito | null
+      "salesOutcomeAt": "2026-08-28T18:20:00.000Z",
+      "sold": true,
+      "soldProduct": "gold",
+      "soldAmountEur": 3500,
+      "discardReason": null,
+      "agendaStatus": "consegnato",
+      "updatedAt": "2026-08-28T18:20:00.000Z"
+    }
+  ],
+  "nextSince": "2026-08-28T18:20:00.000Z",
+  "hasMore": false
+}
+```
+
+### Come si consuma
+
+1. Si parte da un `since` qualunque (per il primo giro, la data di go-live del bot).
+2. Finché `hasMore` è `true`, si richiama subito con `since = nextSince`.
+3. Quando `hasMore` è `false`, si salva `nextSince` e si ripassa più tardi — un giro
+   ogni 15-30 minuti è più che sufficiente.
+
+`nextSince` è l'`updatedAt` dell'ultima riga servita, **non** "adesso": ripartire da
+adesso salterebbe tutto ciò che cambia mentre si scorrono le pagine.
+
+### Perimetro
+
+Escono **solo** i lead che il bot ha davvero lavorato: quelli che gli abbiamo pushato
+(`BOT_PUSHED` consegnato) o di cui ha recapitato l'agenda. Non è un export del CRM.
+
+### Avvertenze
+
+- `presented` è **latchato**: una volta vero non torna falso. Uno "Sparito" a un
+  follow-up successivo non cancella una presenza già avvenuta.
+- Una riga può ricomparire più volte nel tempo: ogni modifica al lead ne aggiorna
+  `updatedAt`. Va trattata come uno stato corrente da sovrascrivere, non come un evento
+  da accumulare.
+- `salesOutcome` può cambiare dopo la prima registrazione (correzioni, follow-up): vale
+  sempre l'ultimo valore letto.
 
 ---
 

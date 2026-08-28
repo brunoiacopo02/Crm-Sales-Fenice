@@ -1,43 +1,44 @@
 'use server';
 
 /**
- * Report Qualità GDO — KPI settimanali per il coaching (spec 2026-07-22).
+ * Report Qualità GDO — KPI settimanali per il coaching (spec 2026-07-22,
+ * revisione 2026-08-25).
  *
  * Alimenta la modale "Report qualità" su /manager-gdo-performance: righe
  * settimanali (lun-dom Europe/Rome) dall'inizio del piano coaching
  * (20/07/2026) più una baseline pre-piano, per il singolo GDO e per la
  * media team (GDO isActive+statsActive, bot escluso).
  *
- * Semantica KPI identica al dossier coaching GDO 110:
- *  - lavorati        → lastCallDate nella finestra, callCount > 0
- *  - fissati         → COALESCE(appointmentCreatedAt, appointmentDate) nella finestra
- *  - confermati      → coorte dei fissati della finestra con outcome 'confermato'
- *  - scarti 3NR      → coorte dei fissati con outcome 'scartato' e reason ~ 'nr'
- *  - media tentativi → avg(callCount) dei lavorati
- *  - scarti 1ª call  → lavorati REJECTED con callCount = 1
+ * ⚠️ Le metriche di attività si leggono da `callLogs`, che è un registro di
+ * fatti datati. La prima versione le leggeva da `leads.lastCallDate`, un
+ * campo che avanza a ogni nuova chiamata: i lead migravano dalle settimane
+ * vecchie a quelle nuove e le righe passate si svuotavano col tempo. Vedi la
+ * nota estesa in src/lib/kpi/coachingRows.ts.
+ *
+ * Semantica delle righe: src/lib/kpi/coachingRows.ts (con i test).
  */
 
 import { db } from "@/db";
-import { leads, users } from "@/db/schema";
+import { callLogs, leads, users } from "@/db/schema";
 import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
+import {
+    computeRow, matchesScope,
+    type CallFact, type ApptFact, type FunnelScope, type QualityRow,
+} from "@/lib/kpi/coachingRows";
 
-export type QualityRow = {
-    label: string;
-    lavorati: number;
-    fissati: number;
-    pctFissSuLavorati: number | null;
-    confermati: number;
-    pctConf: number | null;
-    scarti3nr: number;
-    pct3nr: number | null;
-    mediaTentativi: number | null;
-    pctScarti1a: number | null;
-};
+export type { QualityRow, FunnelScope } from "@/lib/kpi/coachingRows";
 
 export type GdoQualityReportResult =
-    | { success: true; gdoName: string; generatedAt: string; rows: QualityRow[]; teamRows: QualityRow[] }
+    | {
+        success: true;
+        gdoName: string;
+        generatedAt: string;
+        funnelScope: FunnelScope;
+        rows: QualityRow[];
+        teamRows: QualityRow[];
+    }
     | { success: false; error: string };
 
 // Inizio piano coaching GDO 110 (lunedì). Le settimane del report partono qui
@@ -46,49 +47,11 @@ const PLAN_START_DATE = '2026-07-20';
 const BASELINE_START_DATE = '2026-06-01';
 const MAX_WEEKS = 20;
 
-type LeanWorked = { assignedToId: string | null; callCount: number; status: string; lastCallDate: Date | null };
-type LeanFissato = {
-    assignedToId: string | null;
-    apptSetAt: Date | null;
-    confirmationsOutcome: string | null;
-    confirmationsDiscardReason: string | null;
-};
-
 type Window = { label: string; start: Date; end: Date };
 
 function fmtDdMm(d: Date): string {
     const [, m, day] = toRomeDateStr(d).split('-');
     return `${day}/${m}`;
-}
-
-function pct(n: number, d: number): number | null {
-    return d > 0 ? (n / d) * 100 : null;
-}
-
-function computeRow(label: string, worked: LeanWorked[], fissati: LeanFissato[]): QualityRow {
-    const lavorati = worked.length;
-    const scarti1a = worked.filter(w => w.status === 'REJECTED' && w.callCount === 1).length;
-    const sumTentativi = worked.reduce((s, w) => s + (w.callCount || 0), 0);
-
-    const nFissati = fissati.length;
-    const confermati = fissati.filter(f => f.confirmationsOutcome === 'confermato').length;
-    const scarti3nr = fissati.filter(f =>
-        f.confirmationsOutcome === 'scartato'
-        && (f.confirmationsDiscardReason || '').toLowerCase().includes('nr')
-    ).length;
-
-    return {
-        label,
-        lavorati,
-        fissati: nFissati,
-        pctFissSuLavorati: pct(nFissati, lavorati),
-        confermati,
-        pctConf: pct(confermati, nFissati),
-        scarti3nr,
-        pct3nr: pct(scarti3nr, nFissati),
-        mediaTentativi: lavorati > 0 ? sumTentativi / lavorati : null,
-        pctScarti1a: pct(scarti1a, lavorati),
-    };
 }
 
 function buildWindows(now: Date): Window[] {
@@ -117,7 +80,10 @@ function buildWindows(now: Date): Window[] {
     return windows;
 }
 
-export async function getGdoQualityReport(gdoUserId: string): Promise<GdoQualityReportResult> {
+export async function getGdoQualityReport(
+    gdoUserId: string,
+    funnelScope: FunnelScope = 'ALL',
+): Promise<GdoQualityReportResult> {
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
@@ -156,26 +122,44 @@ export async function getGdoQualityReport(gdoUserId: string): Promise<GdoQuality
         const windows = buildWindows(now);
         const rangeStart = windows[0].start;
 
-        const [workedRows, fissatiRows] = await Promise.all([
+        // CTE: rn = posizione della chiamata nella storia COMPLETA del lead.
+        // Il filtro sul periodo va applicato dopo, altrimenti "prima chiamata"
+        // significherebbe "prima chiamata dentro la finestra" e ogni settimana
+        // sembrerebbe piena di primi contatti.
+        const ranked = db.$with('ranked').as(
             db.select({
-                assignedToId: leads.assignedToId,
-                callCount: leads.callCount,
-                status: leads.status,
-                lastCallDate: leads.lastCallDate,
-            })
-                .from(leads)
+                leadId: callLogs.leadId,
+                userId: callLogs.userId,
+                outcome: callLogs.outcome,
+                createdAt: callLogs.createdAt,
+                rn: sql<number>`row_number() over (partition by ${callLogs.leadId} order by ${callLogs.createdAt}, ${callLogs.id})`.as('rn'),
+            }).from(callLogs).where(eq(callLogs.companyId, ctx.companyId)),
+        );
+
+        const [callRows, apptRows] = await Promise.all([
+            db.with(ranked)
+                .select({
+                    leadId: ranked.leadId,
+                    userId: ranked.userId,
+                    outcome: ranked.outcome,
+                    createdAt: ranked.createdAt,
+                    rn: ranked.rn,
+                    funnel: leads.funnel,
+                    leadCallCount: leads.callCount,
+                })
+                .from(ranked)
+                .innerJoin(leads, eq(leads.id, ranked.leadId))
                 .where(and(
-                    eq(leads.companyId, ctx.companyId),
-                    inArray(leads.assignedToId, allIds),
-                    isNotNull(leads.lastCallDate),
-                    gte(leads.lastCallDate, rangeStart),
-                    sql`${leads.callCount} > 0`,
+                    gte(ranked.createdAt, rangeStart),
+                    inArray(ranked.userId, allIds),
                 )),
             db.select({
+                leadId: leads.id,
                 assignedToId: leads.assignedToId,
                 apptSetAt: sql<Date | null>`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate})`,
                 confirmationsOutcome: leads.confirmationsOutcome,
                 confirmationsDiscardReason: leads.confirmationsDiscardReason,
+                funnel: leads.funnel,
             })
                 .from(leads)
                 .where(and(
@@ -186,10 +170,31 @@ export async function getGdoQualityReport(gdoUserId: string): Promise<GdoQuality
                 )),
         ]);
 
+        const calls: CallFact[] = callRows
+            .filter(r => matchesScope(r.funnel, funnelScope))
+            .map(r => ({
+                leadId: r.leadId,
+                userId: r.userId,
+                outcome: r.outcome,
+                createdAt: new Date(r.createdAt),
+                rn: Number(r.rn),
+                funnel: r.funnel,
+                leadCallCount: r.leadCallCount ?? 0,
+            }));
+        const appts: ApptFact[] = apptRows
+            .filter(r => matchesScope(r.funnel, funnelScope))
+            .map(r => ({
+                leadId: r.leadId,
+                assignedToId: r.assignedToId,
+                apptSetAt: r.apptSetAt ? new Date(r.apptSetAt) : null,
+                confirmationsOutcome: r.confirmationsOutcome,
+                confirmationsDiscardReason: r.confirmationsDiscardReason,
+                funnel: r.funnel,
+            }));
+
         const inWindow = (d: Date | null | undefined, w: Window): boolean => {
             if (!d) return false;
-            const t = new Date(d);
-            return t >= w.start && t < w.end;
+            return d >= w.start && d < w.end;
         };
 
         const rows: QualityRow[] = [];
@@ -197,18 +202,18 @@ export async function getGdoQualityReport(gdoUserId: string): Promise<GdoQuality
         const teamIdSet = new Set(teamIds);
 
         for (const w of windows) {
-            const workedWin = workedRows.filter(r => inWindow(r.lastCallDate, w));
-            const fissWin = fissatiRows.filter(r => inWindow(r.apptSetAt, w));
+            const callsWin = calls.filter(c => inWindow(c.createdAt, w));
+            const apptsWin = appts.filter(a => inWindow(a.apptSetAt, w));
 
             rows.push(computeRow(
                 w.label,
-                workedWin.filter(r => r.assignedToId === gdo.id) as LeanWorked[],
-                fissWin.filter(r => r.assignedToId === gdo.id) as LeanFissato[],
+                callsWin.filter(c => c.userId === gdo.id),
+                apptsWin.filter(a => a.assignedToId === gdo.id),
             ));
             teamRows.push(computeRow(
                 w.label,
-                workedWin.filter(r => r.assignedToId && teamIdSet.has(r.assignedToId)) as LeanWorked[],
-                fissWin.filter(r => r.assignedToId && teamIdSet.has(r.assignedToId)) as LeanFissato[],
+                callsWin.filter(c => c.userId && teamIdSet.has(c.userId)),
+                apptsWin.filter(a => a.assignedToId && teamIdSet.has(a.assignedToId)),
             ));
         }
 
@@ -216,6 +221,7 @@ export async function getGdoQualityReport(gdoUserId: string): Promise<GdoQuality
             success: true,
             gdoName: gdo.name || gdo.displayName || 'GDO',
             generatedAt: now.toISOString(),
+            funnelScope,
             rows,
             teamRows,
         };

@@ -2,8 +2,9 @@
 
 import { db } from "@/db";
 import { leads, marketingBudgets } from "@/db/schema";
-import { and, eq, ne, isNotNull, isNull, gte, lte, or } from "drizzle-orm";
+import { and, eq, ne, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { leadIntakeAt } from '@/lib/kpi/canon';
 
 const OFFICIAL_FUNNELS = [
     "TELEGRAM",
@@ -85,7 +86,11 @@ export async function getMarketingStats(monthString: string) {
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
             or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             or(
-                and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
+                // Ingresso in circolazione = COALESCE(assignedAt, createdAt),
+                // regola canonica migr. 0027 (leadIntakeAt). Senza il ramo su
+                // assignedAt, un lead del pool creato a luglio e distribuito
+                // dal TL ad agosto non veniva nemmeno pescato per agosto.
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${startDate} AND COALESCE(${leads.assignedAt}, ${leads.createdAt}) <= ${endDate}`,
                 and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
                 and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
                 and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
@@ -124,7 +129,7 @@ export async function getMarketingStats(monthString: string) {
         const g = grouped[rawFunnel];
         if (!g) continue;
 
-        const leadAcquisitoNelMese = inMonth(l.createdAt);
+        const leadAcquisitoNelMese = inMonth(leadIntakeAt(l));
         if (leadAcquisitoNelMese) {
             g.leads++;
             if (l.assignedToId) g.leadAssegnati++;
@@ -241,7 +246,11 @@ export async function getMarketingStatsByGdo(monthString: string) {
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
             or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
             or(
-                and(gte(leads.createdAt, startDate), lte(leads.createdAt, endDate)),
+                // Ingresso in circolazione = COALESCE(assignedAt, createdAt),
+                // regola canonica migr. 0027 (leadIntakeAt). Senza il ramo su
+                // assignedAt, un lead del pool creato a luglio e distribuito
+                // dal TL ad agosto non veniva nemmeno pescato per agosto.
+                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${startDate} AND COALESCE(${leads.assignedAt}, ${leads.createdAt}) <= ${endDate}`,
                 and(gte(leads.appointmentCreatedAt, startDate), lte(leads.appointmentCreatedAt, endDate)),
                 and(gte(leads.confirmationsTimestamp, startDate), lte(leads.confirmationsTimestamp, endDate)),
                 and(gte(leads.salespersonOutcomeAt, startDate), lte(leads.salespersonOutcomeAt, endDate)),
@@ -294,8 +303,10 @@ export async function getMarketingStatsByGdo(monthString: string) {
 
         const gdoStat = result[rawFunnel][assignedId];
 
-        // Lead assegnati: lead creato e assegnato nel mese
-        if (inMonth(l.createdAt) && l.assignedToId) {
+        // Lead assegnati: entrato in circolazione nel mese (leadIntakeAt) e
+        // assegnato. Sul createdAt puro i lead dei pool distribuiti dal TL
+        // finivano tutti nel mese in cui il pool era stato sincronizzato da AC.
+        if (inMonth(leadIntakeAt(l)) && l.assignedToId) {
             gdoStat.leadAssegnati++;
         }
 

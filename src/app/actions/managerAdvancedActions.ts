@@ -5,7 +5,7 @@ import { appSettings, callLogs, leads, users } from "@/db/schema"
 import { and, eq, gte, lt, lte, or, isNull, isNotNull, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
-import { isRealGdo } from "@/lib/kpi/canon"
+import { isRealGdo, isAnsweredLog } from "@/lib/kpi/canon"
 import { operativaPeriodBounds } from "@/lib/kpi/periodBounds"
 
 export type OperativaDataRow = {
@@ -37,6 +37,12 @@ export type OperativaDataRow = {
 const COSTO_ORARIO_GDO_EUR = 12.5
 const APP_SETTING_KEY_CPL = 'operativa_cpl_eur'
 const DEFAULT_CPL_EUR = 9
+
+// Volume minimo di chiamate giornaliere per GDO. Il vecchio valore fisso (90)
+// veniva superato ogni giorno da tutti: non misurava nulla. Default deciso
+// dal committente sulla base dei dati reali di volume chiamate.
+const APP_SETTING_KEY_MIN_CALLS = 'gdo_min_calls_per_day'
+const DEFAULT_MIN_CALLS = 140
 
 async function readCplEur(): Promise<number> {
     try {
@@ -87,6 +93,41 @@ export async function setOperativaCplEur(value: number): Promise<{ success: bool
     return { success: true, cplEur: rounded }
 }
 
+export async function getMinCallsPerDay(): Promise<number> {
+    try {
+        // appSettings is a global table (not in scoped list), no companyId filter
+        const rows = await db.select().from(appSettings).where(eq(appSettings.key, APP_SETTING_KEY_MIN_CALLS))
+        const parsed = Number(rows[0]?.value)
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MIN_CALLS
+    } catch {
+        return DEFAULT_MIN_CALLS
+    }
+}
+
+export async function setMinCallsPerDay(value: number): Promise<void> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const role = (user?.user_metadata as any)?.role
+    if (role !== 'ADMIN') throw new Error('Solo gli ADMIN possono modificare il volume minimo di chiamate.')
+
+    const v = Math.max(1, Math.round(value))
+    await db.insert(appSettings).values({
+        key: APP_SETTING_KEY_MIN_CALLS,
+        value: String(v),
+        updatedBy: user?.id,
+        updatedAt: new Date(),
+    }).onConflictDoUpdate({
+        target: appSettings.key,
+        set: {
+            value: String(v),
+            updatedBy: user?.id,
+            updatedAt: new Date(),
+        },
+    })
+}
+
 export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMESTRE'): Promise<OperativaDataRow[]> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
@@ -106,6 +147,11 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             userId: callLogs.userId,
             leadId: callLogs.leadId,
             outcome: callLogs.outcome,
+            // Serve a isAnsweredLog: senza questa colonna la regola
+            // "numero inesistente non e' una risposta" era inapplicabile qui,
+            // ed e' il motivo per cui il tasso risposta di Operativa era
+            // gonfiato rispetto a /kpi-gdo sugli stessi identici dati.
+            discardReason: callLogs.discardReason,
             createdAt: callLogs.createdAt,
             leadFunnel: leads.funnel,
         }).from(callLogs)
@@ -212,9 +258,10 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
 
         const row = gdoDataMap.get(log.userId)!
         row.chiamate++
-        // Outcome DIVERSO da 'NON_RISPOSTO' e 'Non_risponde'
-        const oc = log.outcome?.toUpperCase() || ''
-        if (oc !== 'NON_RISPOSTO' && oc !== 'NON_RISPONDE') {
+        // Definizione canonica condivisa con /kpi-gdo (src/lib/kpi/canon.ts):
+        // esclude NON_RISPOSTO, la grafia legacy NON_RISPONDE, e gli scarti
+        // per "numero inesistente", che sono mancati contatti e non risposte.
+        if (isAnsweredLog(log.outcome, log.discardReason)) {
             row.risposte++
         }
 

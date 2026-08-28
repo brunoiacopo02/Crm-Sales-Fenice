@@ -1,0 +1,431 @@
+# Produttività GDO: tempo morto, volume reale, qualità appuntamenti
+
+Data: 2026-08-25
+Stato: design approvato in brainstorming, in attesa di piano di implementazione
+
+## 1. Il problema
+
+Da giugno 2026 i GDO hanno "libero arbitrio" sulle pause: 30 minuti al giorno,
+ma senza più premere il pulsante del timer e senza sorveglianza. I dati lo
+confermano — le pause registrate sono crollate da 795 (maggio) a 108 (giugno),
+5 (luglio), zero (agosto). Il monitor pause esistente misura una cosa che non
+succede più.
+
+Restano tre domande senza risposta:
+
+1. Quanto tempo di pausa si prendono davvero, ora che nessuno li guarda?
+2. Quanto tempo si perde **tra una chiamata e l'altra** (note, scelta del lead,
+   esitazione)? Recuperare 2 minuti a testa all'ora su 10 persone significa
+   2 ore di squadra al giorno.
+3. Il volume minimo di chiamate è fermo a un numero inventato: va ritarato sul
+   comportamento reale, e affiancato dalla qualità degli appuntamenti prodotti.
+
+Vincolo dichiarato dal committente: **i GDO non devono saperlo**, per ora.
+Nessuna UI, nessuna comunicazione, nessun intervento sui loro computer.
+
+## 2. Cosa dicono già i dati (agosto 2026, misurato in fase di design)
+
+> **SUPERATA dalla sezione 9.** Questa sezione contiene le stime ricavate dai
+> soli `callLogs` prima che si scoprisse che il centralino conserva i tabulati.
+> Resta come documentazione del ragionamento e come banco di prova (le stime
+> davano ~37 min/giorno di tempo morto "certo"; la misura reale ne dà 163 di
+> tempo non telefonico, di cui circa un'ora eccedente il migliore del gruppo).
+
+- Turno reale 13:00–19:30, finestra media prima→ultima chiamata 5,6–6,0 ore.
+- Volume: media 163 chiamate/giorno, mediana 155, quartile lento 117, massimo 368.
+  In crescita da giugno (136) e luglio (151): il libero arbitrio **non** ha ridotto
+  il volume.
+- Buchi oltre i 10 minuti fra un esito e l'altro: 407 ore su 143 giornate-uomo,
+  cioè ~2,8 h al giorno per GDO. Ma vanno letti:
+  - 242 ore finiscono con esito `APPUNTAMENTO` (durata media 21 min) → conversazioni vere;
+  - 88 ore finiscono con `NON_RISPOSTO` → nessuno ha risposto, quindi tempo morto
+    quasi certo: ~37 min/giorno per GDO;
+  - 77 ore finiscono con scarto o richiamo → misto.
+- Spread enorme fra persone a parità di turno: GDO 118 fa 241 chiamate/giorno con
+  96 min di buchi; GDO 119 ne fa 96 con 218 min di buchi.
+
+Questi numeri sono la baseline contro cui verificare l'implementazione.
+
+## 3. Obiettivi e non obiettivi
+
+**Obiettivi**
+- Misurare il tempo morto **fuori** dalla lavorazione di un lead, cioè quello che
+  non può essere una conversazione.
+- Ricostruire il budget del tempo di una giornata GDO abbastanza fine da vedere i
+  minuti piccoli (post-chiamata, scelta del lead) e poterli ottimizzare.
+- Sostituire il volume minimo hardcoded con un parametro tarato sui dati.
+- Misurare la qualità degli appuntamenti fino all'euro, per GDO.
+- Non essere visibile né percepibile dai GDO.
+
+**Non obiettivi**
+- Non si giudica il tempo passato *dentro* la lavorazione di un lead: lì dentro
+  può esserci una telefonata e non abbiamo modo di smentirlo.
+- Non si sorveglia l'attività fuori dal CRM.
+- Nessuna sanzione automatica, nessuna notifica, nessuna gamification collegata.
+
+## 4. Architettura
+
+> **PARZIALMENTE SUPERATA dalla sezione 9.** Con i tabulati del centralino
+> disponibili dal 10 marzo 2026, la fase 1 non usa più le euristiche sui
+> `callLogs` e la fase 2 non ha più bisogno del marker `calledAt` intercettato
+> nel browser. Restano validi: la struttura della pagina (fase 3), i parametri,
+> e la parte di fase 2 che misura il costo di compilazione degli esiti.
+> L'architettura definitiva è: **import CDR → analisi → pagina**, con il tracker
+> CRM come complemento. Le sottosezioni che seguono documentano il piano
+> precedente e vanno lette in quest'ottica.
+
+### Fase 1 — Analisi retroattiva (nessun dato nuovo)
+
+Un modulo di analisi ricostruisce le giornate passate dai `callLogs` esistenti,
+sfruttando l'indice `calllogs_user_created_at_idx`. Consegna lo storico di
+giugno–agosto il giorno stesso del rilascio.
+
+Per ogni giornata di ogni GDO: finestra di turno, numero di chiamate, e i buchi
+sopra soglia classificati **in base all'esito che chiude il buco**:
+
+| Esito che chiude il buco | Classe | Motivo |
+|---|---|---|
+| `NON_RISPOSTO` | CERTO | Nessuno ha risposto: non stava parlando con nessuno |
+| `DA_SCARTARE`, `RICHIAMO` | PROBABILE | Parte è conversazione; si scomputa una durata plausibile, l'eccesso resta morto |
+| `APPUNTAMENTO` | CONVERSAZIONE | Ha parlato e fissato — ma solo fino a un tetto; l'eccesso torna PROBABILE |
+
+Il tetto impedisce che "fisso alle 14 e sparisco fino alle 15" venga assorbito
+come conversazione.
+
+**Limite strutturale, da dichiarare nella UI**: i `callLogs` hanno un solo
+timestamp per chiamata (il salvataggio dell'esito). Il buco fra due esiti contiene
+appiccicati insieme post-lavorazione, scelta del lead, squilli e conversazione.
+Per questo la fase 1 è attendibile **solo sui buchi grandi** e non può rispondere
+alla domanda sui minuti piccoli. Quella è la fase 2.
+
+### Fase 2 — Tracker del ciclo di lavorazione
+
+Il CRM registra il ciclo con cui un GDO lavora un lead, usando marker che
+esistono già nell'interfaccia:
+
+| Marker | Aggancio nel codice | Segmento che chiude |
+|---|---|---|
+| `calledAt` — parte la chiamata | click sul numero nella card (`LeadCard.tsx:258-260`), intercettato in fase di **cattura** su `window`; in subordine il bottone "Copia numero" (`LeadCard.tsx:278`) | **Tempo morto fra due chiamate**: dal salvataggio dell'esito precedente a questo |
+| `openedAt` — apre la scheda esito | `PipelineBoard.tsx:190` (`onOutcomeClick` → `setSelectedLeadId`) | Durata del tentativo: squilli + conversazione |
+| `savedAt` — salva l'esito | `pipelineActions.ts:361` (insert su `callLogs`) | Compilazione dell'esito e delle note |
+| `idleSeconds` — secondi senza input nel ciclo | listener su mouse/tastiera/scroll/visibilità | Indicatore informativo, **mai** usato come prova a carico |
+
+Il **tempo morto fra due chiamate** è il numero centrale del progetto: in quella
+finestra non c'è nessuna scheda aperta, quindi non può esserci una conversazione
+col lead. È giudicabile senza soglie e senza falsi positivi.
+
+Il tempo **dentro** il ciclo non viene mai classificato come pausa. L'unica
+contromisura contro il "tengo la scheda aperta e non faccio niente" è il
+confronto della durata del ciclo con la mediana del suo tipo di esito: un
+`NON_RISPOSTO` che richiede 25 minuti non è una conversazione, perché nessuno ha
+risposto. Il segnale "finestra del CRM in primo piano" **non** è utilizzabile a
+carico, perché i GDO chiamano da MicroSIP sullo stesso PC e il softphone prende
+legittimamente il primo piano; resta valido solo come prova a discarico
+(se c'è attività, è certamente presente).
+
+**Costo di scrittura.** Una riga per ciclo, non un evento per marker. Il client
+tiene i tempi in memoria e li spedisce insieme al salvataggio dell'esito,
+agganciandosi a una scrittura che avviene comunque. Stima: ~1.900 righe al
+giorno per l'intera squadra. Un flush periodico copre i cicli abbandonati
+(scheda aperta e mai esitata) e la chiusura del turno. Retention 90 giorni via
+pg_cron, come già fatto per `pipelineSnapshots` — vincolo dovuto ai due alert
+Disk IO Budget già ricevuti da Supabase.
+
+**Come si intercetta l'inizio della chiamata.** I GDO chiamano cliccando
+direttamente sul numero nella card: un'estensione del browser trasforma il numero
+in un elemento cliccabile e passa la chiamata a MicroSIP. Quel click avviene
+comunque dentro il DOM del CRM, quindi è intercettabile — a patto di ascoltarlo
+nel punto giusto:
+
+- listener registrato su `window` in **fase di cattura** (`capture: true`), cioè
+  il primo anello della catena di propagazione. Arriva prima di qualunque
+  gestore dell'estensione, anche se questa chiama `stopPropagation()`;
+- il contenitore del numero nella card riceve un attributo `data-lead-phone`
+  con l'id del lead, così il listener risale al lead dal bersaglio del click;
+- l'estensione può sostituire o incapsulare il nodo di testo del numero: il
+  listener non deve dipendere dall'identità del nodo cliccato, ma solo dal fatto
+  che si trovi dentro un contenitore marcato (`closest('[data-lead-phone]')`);
+- il click sul bottone "Copia numero" (`LeadCard.tsx:278`) vale come marker
+  equivalente per chi usa quel flusso. Si prende il primo dei due che avviene.
+
+**Copertura da verificare.** La percentuale di cicli con `calledAt` valorizzato è
+l'indicatore di affidabilità della metrica principale, va misurata nel QA e
+mostrata nella pagina. Chi digitasse il numero a mano sul softphone non produce
+il marker. Se la copertura risultasse bassa, il fallback è usare `openedAt` come
+inizio ciclo, accettando che il tempo morto misurato sia sottostimato.
+
+### Fase 3 — La pagina `/monitor-pause` riscritta
+
+Stesso indirizzo e stessi permessi di oggi (ADMIN / MANAGER / TL), perché è una
+voce di menu che esiste già e non insospettisce nessuno. Quattro schede:
+
+1. **Tempo morto** — per GDO e per giorno/settimana/mese: finestra di turno,
+   minuti certi / probabili / in conversazione, percentuale di tempo attivo, e
+   (dalla fase 2) secondi medi persi fra una chiamata e l'altra, per ora del giorno.
+2. **Volume** — chiamate/giorno contro il minimo, andamento, confronto fra pari.
+3. **Qualità appuntamenti** — la cascata fissati → % presenziati → % chiusi →
+   fatturato → € per appuntamento fissato, appoggiata alle definizioni `canon`
+   già in uso (`presentedAt`, `outcomeAt`) per non introdurre l'ennesima
+   definizione divergente.
+4. **Pause col bottone** — lo storico attuale, invariato.
+
+### Parametri
+
+Spostati in `appSettings` (tabella globale già usata per il CPL in
+`managerAdvancedActions.ts`) ed editabili dalla strip Parametri Manager
+(`panoramica-generale/ManagerParamsStrip.tsx`), senza toccare il codice:
+
+| Parametro | Default | Note |
+|---|---|---|
+| Volume minimo chiamate/giorno | **140** | Sostituisce il `90` hardcoded in `gdoPerformanceActions.ts:591`. Unico per tutti |
+| Soglia buco fase 1 | 10 min | Sotto questa soglia il dato retroattivo non è interpretabile |
+| Tetto conversazione | 25 min | Le call che portano appuntamento durano in media 21 min |
+| Soglia "fermo" nel ciclo | 60 s | Solo contatore informativo, mai usato come accusa |
+
+Il volume minimo è l'unico parametro visibile ai GDO: sostituisce il 90 nella
+loro dashboard obiettivi (`GdoDailyObjectives.tsx`). È un cambiamento
+giustificabile in sé e non rivela nulla del tracker.
+
+## 5. Modello dati
+
+Nuova tabella `workCycles` (una riga per lead lavorato):
+
+- `id`, `companyId`, `userId`, `leadId`
+- `calledAt`, `openedAt`, `savedAt` (timestamptz, nullable tranne `savedAt`)
+- `idleSeconds`, `activeSeconds` (integer)
+- `outcome` (denormalizzato dal callLog, per il confronto con la mediana di tipo)
+- `callLogId` (nullable, per i cicli abbandonati)
+- `dateLocal` (text, giornata Europe/Rome, come `breakSessions`)
+- indice su (`companyId`, `userId`, `dateLocal`)
+
+Nessuna modifica distruttiva alle tabelle esistenti. `presenceHeartbeats` viene
+esteso ai GDO per lo stato "CRM aperto" — è un upsert per utente, non cresce.
+
+Migrazione scritta a mano: `drizzle-kit generate` è inutilizzabile su questo
+progetto (vedi memoria admin-review-fixes-luglio).
+
+## 6. Visibilità e conformità
+
+Il tracker è invisibile: nessuna UI, nessuna voce di menu, nessuna notifica.
+La chiamata di rete riusa la forma dell'heartbeat che il CRM già invia per il
+Radar Conferme, quindi non spicca nemmeno ispezionando il traffico.
+
+Nota consegnata al committente in fase di design e da lui presa in carico: in
+Italia il controllo a distanza dell'attività dei lavoratori (art. 4 Statuto dei
+Lavoratori) richiede di norma un'informativa. La decisione è del committente;
+se in futuro si vorrà rendere trasparente lo strumento, basta accendere una
+vista lato GDO — il modello dati non cambia.
+
+## 7. Rischi e limiti
+
+- **Copertura del marker di inizio chiamata** (vedi sopra): è il rischio principale
+  sull'affidabilità della metrica di punta.
+- **Cicli sovrapposti**: un GDO che apre più schede insieme produce cicli
+  intrecciati. Vanno rilevati e marcati, non silenziosamente sommati.
+- **Ordine dei marker non garantito**: c'è chi apre la scheda dell'esito prima di
+  cliccare il numero e chi fa il contrario. I segmenti vanno quindi calcolati
+  ordinando i marker per orario, non assumendo la sequenza
+  `calledAt` → `openedAt` → `savedAt`; un segmento negativo è un bug, non un dato.
+- **Il DOM manipolato dall'estensione**: l'estensione che rende cliccabili i
+  numeri modifica il DOM della pagina. Il listener non deve dipendere dal nodo
+  esatto cliccato (vedi sezione 4), e il QA deve verificare il comportamento con
+  l'estensione realmente installata, non solo su un browser pulito.
+- **Attività fuori CRM**: chi lavora su WhatsApp o su un altro schermo risulta
+  inattivo. È corretto rispetto all'obiettivo, ma va detto leggendo i numeri.
+- **Fase 1 e fase 2 non sono confrontabili fra loro**: misurano cose diverse.
+  La pagina deve distinguerle esplicitamente, non sommarle.
+
+## 8. Verifica
+
+- Test sulla funzione di classificazione dei buchi: è logica pura, riceve una
+  giornata sintetica e deve classificarla correttamente in CERTO / PROBABILE /
+  CONVERSAZIONE, tetto incluso.
+- Test sul calcolo dei segmenti del ciclo, inclusi i casi degeneri: ciclo senza
+  `calledAt`, ciclo abbandonato, cicli sovrapposti.
+- Riconciliazione SQL: i totali della fase 1 devono ricadere sui numeri della
+  sezione 2 di questo documento.
+- QA nel browser sulla pagina riscritta, e verifica da account GDO che **nulla**
+  sia cambiato di visibile a parte il nuovo volume minimo.
+
+## 9. Il centralino: VERIFICATO — i tabulati ci sono
+
+Verifica eseguita il 2026-08-25 dal pannello, in sola lettura. Esito:
+
+| Domanda | Risposta |
+|---|---|
+| Che cos'è | **FreePBX 17.0.32** su Asterisk, nome "VoIP Server" |
+| Tabulati (CDR) | **Sì**, modulo CDR Reports completo |
+| Da quando | **10 marzo 2026** (prime chiamate di test all'installazione). Copre marzo–agosto, quindi sia il prima sia il dopo del "libero arbitrio" |
+| Export | **CSV disponibile** (Report Type → CSV File), oltre a CDR search e Call Graph |
+| Interni | **20**: da `1005` a `1023` per le postazioni, più `102` "supervisor", `103`, `999` |
+| Attribuzione alla persona | **Sì, quasi automatica**: `1005`→"105", `1013`→"113", `1015`→"115", `1019`→"119". La regola è **interno `10XX` = GDO `1XX`**, gli stessi codici del CRM |
+| Dati per chiamata | orario, numero chiamato, CallerID (= interno), esito (ANSWERED / NO ANSWER / BUSY / FAILED / CANCEL), **durata reale** |
+
+Campione verificato: interno `1007` (= GDO 107), giornata del 22/08/2026 →
+**127 chiamate in uscita**. Gli squilli a vuoto durano 00:30 fissi, le
+conversazioni hanno durata effettiva (01:27, 07:53, 01:39…). La distinzione
+fra "ha parlato" e "non ha parlato" è quindi un dato, non più una stima.
+
+### Mappatura interno → GDO (VERIFICATA, non deducibile per regola)
+
+La regola numerica ipotizzata (`10XX` → `1XX`) è **sbagliata**. La corrispondenza
+reale è stata ricavata incrociando i numeri effettivamente chiamati da ogni
+interno con `leads.assignedToId` nel CRM (18 numeri su 18 concordi):
+
+| Interno | GDO | Nome | | Interno | GDO | Nome |
+|---|---|---|---|---|---|---|
+| 1007 | 115 | Clara | | 1016 | 105 | Karim |
+| 1008 | 109 | Giusy | | 1017 | 117 | Simone |
+| 1009 | 107 | Giulia | | 1019 | 119 | Riccardo |
+| 1010 | 118 | Fabio | | 1020 | 110 | Alessandro |
+| 1014 | 106 | Zora | | 1023 | 112 | — |
+| 1015 | 114 | Christel | | | | |
+
+La tabella è stata ricavata dai dati e **confermata indipendentemente dal
+committente**, che ha fornito la stessa corrispondenza con i nomi: le due fonti
+coincidono su tutte e dieci le postazioni verificabili. L'interno `1023` (GDO
+112) risulta dai dati ma non era nell'elenco fornito, e va confermato. Gli
+interni `1005` e `1013` sono attivi fino a luglio e non compaiono ad agosto.
+
+La mappatura va conservata in tabella (non calcolata da una regola: la regola
+numerica `10XX`→`1XX` è **falsa**) e aggiornata a mano quando cambia una
+postazione. È l'unico punto fragile dell'intera catena.
+
+### Primi risultati misurati (agosto 2026, 11 GDO, 138 giornate ≥40 chiamate)
+
+Turno medio 5,9 h. Di queste: **138 min al telefono** (39%), ~53 min di squilli,
+e **163 min al giorno di tempo non telefonico** (46%) — in totale **374 ore su
+814 ore di turno**.
+
+| GDO | chiam/gg | al telefono | non-telefono | % | gap medio | app/gg |
+|---|---|---|---|---|---|---|
+| 115 (Clara) | 106 | 114 min | **212 min** | 59% | 121 s | 5,3 |
+| 114 (Christel) | 136 | 124 min | 185 min | 52% | 82 s | 5,9 |
+| 107 (Giulia) | 154 | 113 min | 174 min | 52% | 68 s | 4,6 |
+| 106 (Zora) | 160 | 138 min | 172 min | 48% | 65 s | 6,1 |
+| 110 (Alessandro) | 129 | 141 min | 169 min | 48% | 79 s | 4,2 |
+| 119 (Riccardo) | 102 | 170 min | 162 min | 44% | 96 s | 6,8 |
+| 112 (—) | 256 | 111 min | 161 min | 45% | 38 s | 4,0 |
+| 118 (Fabio) | 234 | 120 min | 154 min | 44% | 40 s | 4,3 |
+| 105 (Karim) | 199 | 139 min | 154 min | 43% | 47 s | 4,2 |
+| 109 (Giusy) | 129 | 156 min | 153 min | 43% | 72 s | 8,0 |
+| **117 (Simone)** | 152 | **191 min** | **100 min** | **29%** | 40 s | 6,7 |
+
+### Di cosa sono fatti quei 163 minuti (verifica successiva)
+
+Il totale, da solo, è fuorviante. Scomponendo i 374 ore di agosto per durata
+del singolo buco fra due chiamate:
+
+| Durata del buco | Quanti | Ore | % del totale | min/gg a testa |
+|---|---|---|---|---|
+| sotto 1 min | 19.282 | 91 | 24% | **39** |
+| 1–3 min | 1.658 | 46 | 12% | 20 |
+| 3–10 min | 747 | 66 | 18% | 29 |
+| **10–30 min** | 486 | 136 | **36%** | **59** |
+| oltre 30 min | 46 | 36 | 10% | 16 |
+
+Letture obbligate:
+
+1. **Il CRM non è lento.** L'87% dei buchi sta sotto il minuto, con una mediana
+   di ~17 secondi: è il tempo di chiudere l'esito e passare al numero dopo.
+   Costa ~39 min al giorno, non è comprimibile più di tanto e non è colpa di
+   nessuno. L'ipotesi che il form di esito costasse ~95 min al giorno è
+   **smentita dai dati**.
+2. **La parte che merita attenzione sono i buchi sopra i 10 minuti: 75 min al
+   giorno a testa**, concentrati in appena 532 episodi al mese. Il numero da
+   portare in discussione è questo, non i 163.
+3. **Zero non è un obiettivo teorico**: Simone, Karim e Giusy hanno **nessun**
+   buco oltre i 30 minuti in tutto agosto. Giulia (39 min/gg) e Alessandro
+   (38 min/gg) stanno all'estremo opposto.
+
+La pagina deve quindi mostrare **la scomposizione per fasce**, non il totale
+secco: il totale da solo mette sullo stesso piano chi lavora con ritmo lento e
+chi si assenta, che sono due problemi diversi con due rimedi diversi.
+
+**Le chiamate in entrata non spiegano nulla**: verificate, sono 966 in tutto
+agosto per 940 minuti complessivi, cioè ~7 minuti al giorno a testa.
+
+**Il tempo non telefonico NON è tutto pausa**: contiene la compilazione degli
+esiti, le note e la scelta del lead. Il riferimento è quindi il migliore del
+gruppo, non lo zero: il GDO 117 mostra che ~100 min al giorno di lavoro non
+telefonico sono fisiologici. L'eccesso rispetto a quel riferimento va da +53 a
++112 min al giorno, con una media di circa **un'ora a testa**.
+
+**Il volume di chiamate è una metrica debole, confermato dai fatti**: il GDO 112
+fa 256 chiamate al giorno ma sta al telefono 111 minuti e fissa 4,0
+appuntamenti; il GDO 119 ne fa 102, sta al telefono 170 minuti e ne fissa 6,8.
+Chiamare tanto e parlare poco non produce appuntamenti. Il minimo di 140 resta
+come soglia di allarme, ma la metrica di riferimento diventa **minuti al telefono
+e appuntamenti**, non il conteggio delle chiamate.
+
+**Riorientamento del progetto.** Con i CDR disponibili dal 10 marzo, la fase 1
+retroattiva non è più limitata alle euristiche sui `callLogs`: si può ricostruire
+il tempo reale al telefono e il tempo morto fra chiamate **anche sui mesi
+passati**. Cadono il tetto conversazione, la classificazione
+CERTO / PROBABILE / CONVERSAZIONE e la dipendenza dal marker `calledAt` lato
+browser. Il tracker CRM (fase 2) resta utile solo per ciò che il centralino non
+sa: quanto costa compilare un esito e quali lead vengono aperti senza essere
+chiamati.
+
+**Scoperta collaterale, fuori perimetro ma di valore.** Le chiamate in *entrata*
+esaminate risultano in larga parte `NO ANSWER`: sono clienti che richiamano e non
+trovano risposta. Vale la pena misurarle a parte — sono opportunità perse che
+oggi nessuna dashboard vede.
+
+**Sicurezza — da far verificare a chi amministra il centralino** (rilevato, non
+toccato): il pannello segnala **System Firewall non attivo** e **"20
+extensions/trunks have weak secrets"** come problema critico. Su un centralino
+con SIM aziendali dentro, questa combinazione è lo scenario tipico della frode
+telefonica: se quell'apparato è raggiungibile da internet, le chiamate le paga
+l'azienda. Va accertato che non ci sia alcun inoltro di porte verso `192.168.1.7`
+e vanno rigenerate le password degli interni.
+
+### Come era stata impostata la verifica (storico)
+
+In ufficio c'è un centralino raggiungibile solo dalla LAN su
+`http://192.168.1.7/admin/config.php` — il percorso indica quasi certamente
+**FreePBX** (interfaccia web di Asterisk), con un gateway GSM per le SIM e
+MicroSIP come telefono sui PC.
+
+Se espone i tabulati (CDR), diventano la fonte migliore in assoluto: orario di
+inizio, numero chiamato, durata di conversazione effettiva (`billsec`) ed esito
+tecnico di **ogni** chiamata. Conseguenze sul design:
+
+- il tempo al telefono si misura invece di stimarlo: cadono il tetto
+  conversazione, la durata anomala per tipo di esito e la classificazione
+  CERTO / PROBABILE / CONVERSAZIONE della fase 1;
+- il tempo morto fra due chiamate è la differenza fra la fine di una e l'inizio
+  della successiva, al secondo;
+- si vedono fatti che il CRM non può conoscere: chiamate senza esito registrato,
+  esiti senza chiamata, chiamate a numeri non presenti nel CRM.
+
+Il tracker CRM (fase 2) resterebbe utile per ciò che i tabulati non sanno —
+quanto costa compilare un esito, i lead aperti e mai chiamati — ma smetterebbe
+di essere il pezzo portante.
+
+**Vincoli.** Il centralino è in LAN, il CRM è su Vercel: la connessione va fatta
+in uscita, con un piccolo agente sul PC dell'ufficio che legge i tabulati e li
+invia firmati al CRM (stesso schema HMAC già in uso per il bot fissatore).
+Il pannello del centralino **non va esposto su internet** in nessun caso: i PBX
+raggiungibili da fuori sono un bersaglio classico e le SIM sono aziendali.
+
+**Verifica da fare in ufficio (sola lettura):**
+
+1. Versione e conferma che sia FreePBX (visibile nell'intestazione del pannello).
+2. `Reports → CDR Reports`: esiste? Da quale data partono i dati? Quante
+   chiamate risultano in una giornata tipo?
+3. Nella stessa pagina: c'è l'export in CSV?
+4. `Applications → Extensions`: quanti interni esistono e con che numerazione —
+   **serve la mappatura interno ↔ GDO**, senza la quale i tabulati non sono
+   attribuibili alle persone.
+5. Esiste un accesso SSH al box e le credenziali del database `asteriskcdrdb`?
+   (Serve solo per automatizzare; per la verifica basta l'export CSV.)
+6. Il box è sempre acceso e chi ne ha le credenziali di amministrazione?
+
+Esito della verifica: se i punti 2 e 4 rispondono sì, il progetto si riorienta
+sui tabulati prima di scrivere il tracker.
+
+## 10. Fuori perimetro
+
+- **Registrazioni delle chiamate**: analisi qualitativa, progetto a sé.
+- Volume minimo personalizzato per GDO (oggi scelto unico per tutti).

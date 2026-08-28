@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test src/lib/venditorePerformance/aggregate.test.ts src/lib/venditorePerformance/guard.test.ts src/lib/bot-fissatore/noteDedup.test.ts src/lib/bot-fissatore/holidayWindow.test.ts src/lib/kpi/periodBounds.test.ts src/lib/marketing-webhooks/discard-reasons.test.ts src/lib/marketing-webhooks/payload-builders.test.ts"
+    "test": "node --import tsx --test src/lib/venditorePerformance/aggregate.test.ts src/lib/venditorePerformance/guard.test.ts src/lib/bot-fissatore/noteDedup.test.ts src/lib/bot-fissatore/contactRequests.test.ts src/lib/bot-fissatore/holidayWindow.test.ts src/lib/bot-fissatore/leadRouting.test.ts src/lib/kpi/periodBounds.test.ts src/lib/kpi/canon.test.ts src/lib/kpi/coachingRows.test.ts src/lib/cdr/parseCdr.test.ts src/lib/cdr/dayMetrics.test.ts src/lib/cdr/shift.test.ts src/lib/cdr/allowance.test.ts src/lib/marketing-webhooks/discard-reasons.test.ts src/lib/marketing-webhooks/payload-builders.test.ts",
+    "import:cdr": "node --import tsx --env-file=.env scripts/import-cdr.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -35,6 +36,7 @@
     "@types/pg": "^8.18.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "csv-parse": "^7.0.2",
     "drizzle-kit": "^0.31.9",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
