@@ -31,21 +31,21 @@ interface Props {
     routingStatus: BotRoutingStatus;
 }
 
-/** Come si chiama, in italiano, la fascia in vigore adesso. */
+/** Come si chiama, in italiano, la finestra in vigore adesso. */
 const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spiega: string; tono: string }> = {
     bot_only: {
         titolo: 'Fascia bot',
-        spiega: "fuori dall'orario dei GDO: tutti i lead in arrivo vanno al bot, il tetto giornaliero non si applica.",
+        spiega: "fuori dall'orario dei GDO: tutti i lead in arrivo vanno al bot, senza alcun limite.",
         tono: 'border-violet-200 bg-violet-50 text-violet-900',
     },
     bot_first: {
         titolo: 'Fascia mista',
-        spiega: 'orario dei GDO: il bot ha la precedenza finché è sotto il tetto, poi i lead passano in round-robin ai GDO.',
+        spiega: 'orario dei GDO: i lead vanno ai GDO, ma il bot passa avanti finché non ha raggiunto il minimo giornaliero.',
         tono: 'border-sky-200 bg-sky-50 text-sky-900',
     },
     gdo_only: {
         titolo: 'Fascia GDO',
-        spiega: 'turno del sabato: i lead vanno solo ai GDO umani, il bot resta fuori anche se è sotto il tetto.',
+        spiega: 'sabato 09:00–16:30: i lead vanno solo ai GDO umani, il bot resta fuori anche se è sotto il minimo giornaliero.',
         tono: 'border-emerald-200 bg-emerald-50 text-emerald-900',
     },
     legacy: {
@@ -213,14 +213,14 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                         Adesso: {ROUTING_LABEL[routingStatus.routing].titolo}
                     </h2>
                     <span className="text-xs opacity-80">
-                        Bot 20:00–13:00 · GDO 13:00–20:00 · sabato GDO 10:00–16:30 · domenica bot
+                        Bot 20:00–13:00 · GDO 13:00–20:00 · sabato GDO 09:00–16:30 · domenica bot · minimo bot/giorno
                     </span>
                 </div>
                 <p className="mt-0.5 text-xs opacity-90">{ROUTING_LABEL[routingStatus.routing].spiega}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2">
-                        <div className="text-xl font-black">{routingStatus.todayBot}<span className="text-sm font-bold opacity-60">/{routingStatus.cap}</span></div>
-                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">Oggi al bot</div>
+                        <div className="text-xl font-black">{routingStatus.todayBot}<span className="text-sm font-bold opacity-60">/{routingStatus.dailyMin}</span></div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">Oggi al bot (min.)</div>
                     </div>
                     <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2">
                         <div className="text-xl font-black">{routingStatus.todayHumans}</div>
@@ -242,8 +242,8 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
                     <div className="text-sm text-amber-900">
                         <span className="font-bold">Ferie GDO {giornoIt(holidayWindow.from)} – {giornoIt(holidayWindow.lastDay)}</span>
-                        {' '}— tutti i lead ActiveCampaign in arrivo vengono assegnati al bot (GDO 201) e il suo cap
-                        giornaliero è sospeso. Le selezioni qui sotto restano salvate e tornano attive da sole
+                        {' '}— tutti i lead ActiveCampaign in arrivo vengono assegnati al bot (GDO 201), senza
+                        alcun limite giornaliero. Le selezioni qui sotto restano salvate e tornano attive da sole
                         il {giornoIt(holidayWindow.until)}.
                     </div>
                 </div>

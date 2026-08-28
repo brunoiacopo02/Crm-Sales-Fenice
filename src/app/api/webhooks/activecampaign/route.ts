@@ -16,7 +16,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
-import { getLeadRouting, BOT_DAILY_CAP, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { db } from "@/db";
 import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
 import { eq, and, asc, sql, isNull, gte, desc, or, like } from "drizzle-orm";
@@ -522,7 +522,7 @@ export async function POST(req: NextRequest) {
         const now = new Date();
         const dedupCutoff = new Date(now.getTime() - 10 * 60 * 1000);
 
-        // Giorno solare corrente in Europe/Rome (per il cap giornaliero dei bot).
+        // Giorno solare corrente in Europe/Rome (per la soglia minima dei bot).
         // Lasciamo a Postgres la conversione tz: confronto createdAt >= today 00:00 Rome.
         const todayRome = new Intl.DateTimeFormat('en-CA', {
             timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -580,14 +580,15 @@ export async function POST(req: NextRequest) {
                 asc(users.id),
             ] as const;
 
-            // Tetto giornaliero del bot: lead che gli sono stati assegnati oggi
-            // (giorno solare Europe/Rome). Conta anche quelli presi fuori fascia.
-            const underDailyCap = sql`(
+            // Soglia MINIMA giornaliera del bot: lead che gli sono stati assegnati
+            // oggi (giorno solare Europe/Rome). Conta anche quelli presi nelle
+            // finestre in cui il bot ha l'esclusiva, che sono il grosso del volume.
+            const underDailyMin = sql`(
                 SELECT count(*) FROM leads l
                 WHERE l."assignedToId" = ${users.id}
                   AND l."companyId" = ${FENICE_COMPANY}
                   AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
-            ) < ${BOT_DAILY_CAP}`;
+            ) < ${BOT_DAILY_MIN}`;
 
             const gdoBase = and(
                 eq(users.companyId, FENICE_COMPANY),
@@ -600,11 +601,11 @@ export async function POST(req: NextRequest) {
                 isBot: users.isBot,
             }).from(users).where(where).orderBy(...roundRobinOrder);
 
-            /** Pool storico: umani e bot nello stesso giro, il bot esce a quota piena. */
+            /** Pool storico: umani e bot nello stesso giro, il bot esce a soglia raggiunta. */
             const selectLegacyPool = () => selectPool(and(
                 gdoBase,
                 eq(users.acAutoIntake, true),
-                sql`(${users.isBot} = false OR ${underDailyCap})`,
+                sql`(${users.isBot} = false OR ${underDailyMin})`,
             ));
 
             /** Solo i GDO umani abilitati all'intake automatico. */
@@ -615,14 +616,16 @@ export async function POST(req: NextRequest) {
             ));
 
             /**
-             * Solo il bot. `respectCap` lo esclude a quota piena; nelle fasce in cui
-             * il bot ha l'esclusiva il tetto non si applica (acAutoIntake nemmeno:
-             * la fascia vale di per sé, come per la finestra ferie).
+             * Solo il bot. `respectMin` lo esclude quando ha già raggiunto la soglia
+             * minima del giorno: serve nelle finestre dei GDO, dove il bot passa
+             * avanti solo finché è sotto quota. Nelle finestre del bot non si applica
+             * alcun limite (e nemmeno acAutoIntake: la fascia vale di per sé, come
+             * per la finestra ferie).
              */
-            const selectBotPool = (respectCap: boolean) => selectPool(and(
+            const selectBotPool = (respectMin: boolean) => selectPool(and(
                 gdoBase,
                 eq(users.isBot, true),
-                respectCap ? underDailyCap : undefined,
+                respectMin ? underDailyMin : undefined,
             ));
 
             // La finestra ferie, quando attiva, vince su tutto: nessun umano al lavoro.
@@ -632,12 +635,14 @@ export async function POST(req: NextRequest) {
             // Ogni ramo ha il suo ripiego: una fascia non deve mai poter lasciare
             // un lead senza padrone (bot spento, o tutti i GDO disattivati).
             // `fallbackUsed` marca SOLO i ripieghi anomali: in 'bot_first' passare
-            // agli umani a quota piena è il funzionamento previsto, non un guasto.
+            // agli umani a soglia raggiunta è il funzionamento previsto, non un guasto.
             let eligible: { id: string; isBot: boolean }[];
             let fallbackUsed = false;
             if (routing === 'legacy') {
                 eligible = await selectLegacyPool();
             } else if (routing === 'gdo_only') {
+                // Fascia protetta del sabato: il bot non entra nemmeno se è
+                // sotto la soglia minima. Ci finisce solo se non c'è un umano.
                 eligible = await selectHumanPool();
                 if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
             } else if (routing === 'bot_first') {

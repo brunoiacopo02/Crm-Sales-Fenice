@@ -5,31 +5,51 @@
  * partire, partire in ritardo o partire due volte, mentre l'orologio non ha
  * stati. Ogni webhook decide da sé guardando l'istante in cui arriva.
  *
- * Calendario deciso col PO il 2026-08-27, sui volumi reali (~240 lead/giorno,
- * di cui ~150 fuori dall'orario dei GDO):
+ * Calendario deciso col PO il 2026-08-27 e rivisto il 2026-08-28: il contatore
+ * giornaliero del bot NON è più un tetto massimo ma una SOGLIA MINIMA. Il bot
+ * deve arrivare a BOT_DAILY_MIN lead al giorno; oltre quella quota non smette
+ * di ricevere, semplicemente perde la precedenza sui GDO negli orari umani.
  *
- *   lun–ven  20:00 → 13:00   tutto al bot, tetto ignorato
- *   lun–ven  13:00 → 20:00   il bot ha la precedenza finché è sotto BOT_DAILY_CAP,
- *                            poi round-robin sui GDO umani
- *   sabato   10:00 → 16:30   round-robin GDO (turno del sabato), bot escluso
- *                            anche se è sotto quota: è la sola fascia in cui
- *                            gli umani vincono sempre
- *   sabato   resto           tutto al bot
- *   domenica sempre          tutto al bot
+ * Ci sono tre tipi di finestra:
+ *
+ *   finestre del bot          tutti i lead al bot, senza alcun limite
+ *     lun–ven  20:00 → 13:00
+ *     sabato   00:00 → 09:00 e 16:30 → 24:00
+ *     domenica tutto il giorno
+ *
+ *   finestra mista            i lead vanno ai GDO, TRANNE finché il bot non ha
+ *     lun–ven  13:00 → 20:00  raggiunto BOT_DAILY_MIN lead nel giorno civile di
+ *                             Roma: fino a quel punto la precedenza è sua
+ *
+ *   fascia protetta GDO       solo umani, il bot è escluso a prescindere —
+ *     sabato   09:00 → 16:30  anche se è ancora sotto BOT_DAILY_MIN. È l'unica
+ *                             fascia della settimana in cui il bot non compare.
+ *
+ * Perché la fascia protetta parte alle 09:00 mentre il turno del sabato comincia
+ * alle 10:00: è voluto dal PO. L'ora di scarto serve a far trovare ai GDO una
+ * pipeline già piena all'inizio del turno, invece di partire da zero.
+ *
+ * Il conteggio giornaliero non sta qui: è un predicato SQL per-account nel
+ * webhook AC (`underDailyMin` in src/app/api/webhooks/activecampaign/route.ts),
+ * perché deve stare nella stessa transazione dell'assegnazione.
  *
  * Modulo puro: niente DB, niente rete. Testato in leadRouting.test.ts.
  * Chi lo usa resta responsabile dei fallback (bot spento, nessun GDO attivo).
  */
 
-/** Tetto giornaliero del bot, in lead assegnati nel giorno solare Europe/Rome. */
-export const BOT_DAILY_CAP = 100;
+/**
+ * Soglia MINIMA giornaliera del bot, in lead assegnati nel giorno solare
+ * Europe/Rome. Sotto questa quota il bot ha la precedenza anche negli orari
+ * dei GDO; sopra, i lead degli orari umani passano ai GDO.
+ */
+export const BOT_DAILY_MIN = 150;
 
 export type RoutingWindow =
-    /** Solo il bot. */
+    /** Finestra del bot: tutto al bot, la soglia non si applica. */
     | 'bot_only'
-    /** Prima il bot finché è sotto il tetto, poi i GDO umani. */
+    /** Finestra mista: prima il bot finché è sotto la soglia minima, poi i GDO. */
     | 'bot_first'
-    /** Solo i GDO umani. */
+    /** Fascia protetta: solo GDO umani, il bot è escluso anche se sotto soglia. */
     | 'gdo_only';
 
 /** 'legacy' = interruttore spento, vale il round-robin storico a pool unico. */
@@ -37,9 +57,13 @@ export type LeadRouting = RoutingWindow | 'legacy';
 
 const OFF_VALUES = new Set(['off', 'none', 'disabled', 'false', '0']);
 
-/** Turno GDO del sabato, in minuti dalla mezzanotte di Roma. */
-const SAT_SHIFT_START = 10 * 60;      // 10:00
-const SAT_SHIFT_END = 16 * 60 + 30;   // 16:30
+/**
+ * Fascia protetta del sabato, in minuti dalla mezzanotte di Roma.
+ * Parte un'ora PRIMA del turno (che comincia alle 10:00): l'ora di scarto
+ * accumula lead in pipeline per i GDO che stanno per attaccare.
+ */
+const SAT_PROTECTED_START = 9 * 60;       // 09:00
+const SAT_PROTECTED_END = 16 * 60 + 30;   // 16:30, fine turno
 /** Fascia GDO dei feriali. */
 const WEEKDAY_GDO_START = 13 * 60;    // 13:00
 const WEEKDAY_GDO_END = 20 * 60;      // 20:00
@@ -78,7 +102,7 @@ export function resolveRoutingWindow(now: Date): RoutingWindow {
     if (weekday === 0) return 'bot_only'; // domenica
 
     if (weekday === 6) {
-        return minutes >= SAT_SHIFT_START && minutes < SAT_SHIFT_END ? 'gdo_only' : 'bot_only';
+        return minutes >= SAT_PROTECTED_START && minutes < SAT_PROTECTED_END ? 'gdo_only' : 'bot_only';
     }
 
     return minutes >= WEEKDAY_GDO_START && minutes < WEEKDAY_GDO_END ? 'bot_first' : 'bot_only';
