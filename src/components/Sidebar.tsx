@@ -25,6 +25,8 @@ import { isConfermeTl } from "@/lib/confermeTl"
 
 import { useEffect, useState } from "react"
 import { getRecallLeads } from "@/app/actions/recallActions"
+import { countPendingContactRequests } from "@/app/actions/contactRequestActions"
+import { onBusEvent } from "@/lib/realtimeBus"
 import { createClient } from "@/utils/supabase/client"
 
 type NavItem = {
@@ -47,6 +49,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;
     const role = session?.user?.role
     const [expiredCount, setExpiredCount] = useState(0)
+    const [contactPending, setContactPending] = useState(0)
     const supabase = createClient()
     const handleSignOut = async () => {
         // Azzera la selezione azienda (cookie HttpOnly) per non farla ereditare
@@ -61,6 +64,40 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             setExpiredCount(data.expired.length)
         }).catch(() => { })
     }, [pathname])
+
+    // Pallino rosso su "Ti hanno cercato" / "Richieste di Contatto".
+    //
+    // La campanella suona una volta e poi si legge; il pallino resta finché il
+    // lavoro non è fatto. È la differenza che serviva: delle 53 richieste
+    // storiche ne era stata lavorata UNA, pur essendo tutte notificate.
+    //
+    // Tre sorgenti di aggiornamento, nessuna delle quali interroga il DB a vuoto:
+    //  - il cambio pagina, come già fa expiredCount;
+    //  - una notifica in arrivo sul bus (una richiesta NUOVA fa nascere una
+    //    notifica): il pallino compare senza ricaricare;
+    //  - l'evento window che la pagina della coda emette quando qualcuno prende
+    //    in carico o chiude: il pallino cala subito anche per gli altri.
+    // Deliberatamente NON ascoltiamo il topic `leads`: rimbalza a ogni update di
+    // qualunque lead dell'azienda, e ne pagheremmo una query di conteggio ognuna.
+    useEffect(() => {
+        if (role !== 'CONFERME' && role !== 'ADMIN') return
+        let alive = true
+        const refresh = () => {
+            countPendingContactRequests()
+                .then(n => { if (alive) setContactPending(n) })
+                .catch(() => { })
+        }
+        refresh()
+        const offBus = onBusEvent('notifications', (payload: { row?: { type?: string } }) => {
+            if (payload?.row?.type === 'bot_contatto_umano' || payload?.row?.type === 'contatto_umano_assegnato') refresh()
+        })
+        window.addEventListener('contact-requests-changed', refresh)
+        return () => {
+            alive = false
+            offBus()
+            window.removeEventListener('contact-requests-changed', refresh)
+        }
+    }, [pathname, role])
 
     // Close sidebar on route change (mobile)
     useEffect(() => {
@@ -89,7 +126,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
             // Stessa coda dell'admin, fetta diversa: alle Conferme arrivano solo
             // i lead già appuntati, che da quel momento sono di loro competenza.
-            { name: "Ti hanno cercato", href: "/richieste-contatto", icon: PhoneIncoming },
+            { name: "Ti hanno cercato", href: "/richieste-contatto", icon: PhoneIncoming, badge: contactPending },
             // Panoramica TL + dashboard direzionali: solo per il TL del team Conferme (Alberto).
             ...(isConfermeTl(session?.user?.email) ? [
                 { name: "Panoramica TL", href: "/conferme/panoramica-tl", icon: Compass },
@@ -175,7 +212,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                         { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                         { name: "Statistiche Fissatore", href: "/statistiche-fissatore", icon: Activity },
                         // Coda di smistamento, non una vista di lettura: solo ADMIN.
-                        ...(role === "ADMIN" ? [{ name: "Richieste di Contatto", href: "/richieste-contatto", icon: PhoneIncoming }] : []),
+                        ...(role === "ADMIN" ? [{ name: "Richieste di Contatto", href: "/richieste-contatto", icon: PhoneIncoming, badge: contactPending }] : []),
                     ],
                 },
                 {

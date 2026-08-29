@@ -78,7 +78,13 @@ function RequestCard({ row, gdos, canAssign }: { row: ContactRequestRow; gdos: C
         startTransition(async () => {
             const res = await fn();
             if (!res.ok) setError(res.error ?? 'Operazione non riuscita.');
-            else router.refresh();
+            else {
+                router.refresh();
+                // Fa calare subito il pallino rosso in Sidebar. router.refresh()
+                // ricarica i server component ma non tocca lo stato del client
+                // Sidebar, che il pallino se lo tiene in useState.
+                window.dispatchEvent(new CustomEvent('contact-requests-changed'));
+            }
         });
     };
 

@@ -385,3 +385,38 @@ export async function resolveContactRequest(
     revalidatePath('/', 'layout');
     return { ok: true };
 }
+
+/**
+ * Quante richieste ancora da prendere in carico ci sono nella corsia di chi
+ * chiede. Alimenta il pallino rosso in Sidebar.
+ *
+ * La campanella suona una volta e poi si legge; il pallino invece resta finché
+ * il lavoro non è fatto — ed è quello che serviva davvero: delle 53 richieste
+ * storiche ne era stata lavorata UNA, pur essendo tutte notificate.
+ *
+ * Conta solo `pending`: una richiesta già presa in carico ha un nome sopra e
+ * non è più un allarme per tutti. Ritorna 0 (mai un errore) per chi non ha
+ * accesso: è un badge, non deve mai poter rompere la navigazione.
+ */
+export async function countPendingContactRequests(): Promise<number> {
+    try {
+        const viewer = await requireViewer();
+        if (!viewer) return 0;
+
+        // Solo lo status del lead, che è ciò che decide la corsia. L'indice
+        // bot_contact_requests_status_created_idx copre già il filtro pending.
+        const rows = await db.select({ leadStatus: leads.status })
+            .from(botContactRequests)
+            .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
+            .where(and(
+                eq(botContactRequests.companyId, COMPANY),
+                eq(botContactRequests.status, 'pending'),
+            ));
+
+        if (viewer.lane === 'admin') return rows.length;
+        return rows.filter(r => contactLane(r.leadStatus) === 'conferme').length;
+    } catch (e) {
+        console.error('[contatto-umano] count err', e);
+        return 0;
+    }
+}
