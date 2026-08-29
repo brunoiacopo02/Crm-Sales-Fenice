@@ -2,9 +2,33 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CalendarClock, Check, Clock, Phone, UserPlus, X } from 'lucide-react';
-import { assignContactRequest, closeContactRequest, type ContactRequestRow, type ContactRequestsView } from '@/app/actions/contactRequestActions';
+import { AlertTriangle, CalendarClock, Check, Clock, Hand, Phone, UserPlus, X } from 'lucide-react';
+import {
+    assignContactRequest,
+    closeContactRequest,
+    resolveContactRequest,
+    takeChargeContactRequest,
+    type ContactOutcome,
+    type ContactRequestRow,
+    type ContactRequestsView,
+} from '@/app/actions/contactRequestActions';
 import { contactCategoryLabel } from '@/lib/bot-fissatore/contactRequests';
+
+/**
+ * Le etichette degli esiti. Le chiavi sono il vocabolario condiviso col
+ * fornitore e vivono in contactRequestActions: quel file è `'use server'` e
+ * Next.js accetta solo export di funzioni async, quindi le etichette leggibili
+ * stanno qui. Il `Record<ContactOutcome, string>` non è decorativo — è il
+ * vincolo che fa fallire il type-check se di là si aggiunge o si toglie un
+ * esito e qui nessuno se ne accorge.
+ */
+const CONTACT_OUTCOME_LABELS: Record<ContactOutcome, string> = {
+    chiamato_ok: 'Parlato, tutto a posto',
+    non_raggiungibile: 'Non raggiungibile',
+    rifissato: 'Appuntamento rifissato',
+    disdetto: 'Ha disdetto',
+    non_gestito: 'Non gestito',
+};
 
 /** "38 ore" non dice niente a colpo d'occhio: oltre le 48 si ragiona in giorni. */
 function waitLabel(hours: number): string {
@@ -41,9 +65,11 @@ function InfoGrid({ info }: { info: Record<string, unknown> }) {
     );
 }
 
-function RequestCard({ row, gdos }: { row: ContactRequestRow; gdos: ContactRequestsView['gdos'] }) {
+function RequestCard({ row, gdos, canAssign }: { row: ContactRequestRow; gdos: ContactRequestsView['gdos']; canAssign: boolean }) {
     const router = useRouter();
     const [gdoId, setGdoId] = useState('');
+    const [outcome, setOutcome] = useState<ContactOutcome | ''>('');
+    const [note, setNote] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
 
@@ -104,32 +130,88 @@ function RequestCard({ row, gdos }: { row: ContactRequestRow; gdos: ContactReque
                 </div>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-                <select
-                    value={gdoId}
-                    onChange={(e) => setGdoId(e.target.value)}
-                    disabled={pending}
-                    className="rounded-lg border border-ash-200 bg-white px-3 py-2 text-sm font-medium text-brand-charcoal focus:border-brand-orange focus:outline-none"
-                >
-                    <option value="">Scegli il GDO che lo chiama…</option>
-                    {gdos.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
-                </select>
-                <button
-                    type="button"
-                    disabled={!gdoId || pending}
-                    onClick={() => act(() => assignContactRequest(row.id, gdoId))}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-orange px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                    <UserPlus className="h-4 w-4" />Assegna e fai chiamare
-                </button>
-                <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => act(() => closeContactRequest(row.id))}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-ash-200 px-3 py-2 text-sm font-medium text-ash-600 transition hover:bg-ash-50 disabled:opacity-40"
-                >
-                    <X className="h-4 w-4" />Chiudi senza assegnare
-                </button>
+            {canAssign && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <select
+                        value={gdoId}
+                        onChange={(e) => setGdoId(e.target.value)}
+                        disabled={pending}
+                        className="rounded-lg border border-ash-200 bg-white px-3 py-2 text-sm font-medium text-brand-charcoal focus:border-brand-orange focus:outline-none"
+                    >
+                        <option value="">Scegli il GDO che lo chiama…</option>
+                        {gdos.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                    </select>
+                    <button
+                        type="button"
+                        disabled={!gdoId || pending}
+                        onClick={() => act(() => assignContactRequest(row.id, gdoId))}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-brand-orange px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        <UserPlus className="h-4 w-4" />Assegna e fai chiamare
+                    </button>
+                    <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => act(() => closeContactRequest(row.id))}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-ash-200 px-3 py-2 text-sm font-medium text-ash-600 transition hover:bg-ash-50 disabled:opacity-40"
+                    >
+                        <X className="h-4 w-4" />Chiudi senza assegnare
+                    </button>
+                </div>
+            )}
+
+            {/* Contenitori <div>, mai <span>: un bottone dentro un tag testuale
+                fa esplodere l'idratazione e porta al WSOD su Vercel. */}
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ash-100 pt-3">
+                {row.status === 'pending' && (
+                    <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => act(() => takeChargeContactRequest(row.id))}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-orange/30 bg-brand-orange/10 px-3 py-2 text-sm font-semibold text-brand-orange transition hover:bg-brand-orange/20 disabled:opacity-40"
+                    >
+                        <Hand className="h-4 w-4" />La prendo io
+                    </button>
+                )}
+                {row.status !== 'closed' && (
+                    <>
+                        <select
+                            value={outcome}
+                            onChange={(e) => setOutcome(e.target.value as ContactOutcome | '')}
+                            disabled={pending}
+                            className="rounded-lg border border-ash-200 bg-white px-3 py-2 text-sm font-medium text-brand-charcoal focus:border-brand-orange focus:outline-none"
+                        >
+                            <option value="">Com&apos;è finita…</option>
+                            {(Object.keys(CONTACT_OUTCOME_LABELS) as ContactOutcome[]).map(k => (
+                                <option key={k} value={k}>{CONTACT_OUTCOME_LABELS[k]}</option>
+                            ))}
+                        </select>
+                        <input
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="Nota (facoltativa)"
+                            disabled={pending}
+                            className="min-w-0 flex-1 rounded-lg border border-ash-200 bg-white px-3 py-2 text-sm text-brand-charcoal focus:border-brand-orange focus:outline-none"
+                        />
+                        <button
+                            type="button"
+                            disabled={!outcome || pending}
+                            onClick={() => {
+                                if (!outcome) { setError('Scegli un esito.'); return; }
+                                act(() => resolveContactRequest(row.id, outcome, note));
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-charcoal px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <Check className="h-4 w-4" />Chiudi con esito
+                        </button>
+                    </>
+                )}
+                {row.outcome && (
+                    <div className="text-sm text-ash-500">
+                        Esito: <strong className="text-brand-charcoal">{CONTACT_OUTCOME_LABELS[row.outcome as ContactOutcome] ?? row.outcome}</strong>
+                        {row.note ? ` — ${row.note}` : ''}
+                    </div>
+                )}
             </div>
 
             {error && <div className="mt-2 text-sm font-medium text-red-600">{error}</div>}
@@ -138,17 +220,23 @@ function RequestCard({ row, gdos }: { row: ContactRequestRow; gdos: ContactReque
 }
 
 export default function ContactRequestsClient({ view }: { view: ContactRequestsView }) {
-    const { pending, handled, gdos } = view;
+    const { pending, handled, gdos, canAssign } = view;
     const oldest = pending.length > 0 ? pending[0] : null;
+
+    // Le Conferme non smistano: vedono solo i lead già appuntati, che da quel
+    // momento sono roba loro. Chiamare "coda di smistamento" quella vista la
+    // farebbe leggere come un lavoro di qualcun altro.
+    const isConferme = view.lane === 'conferme';
+    const title = isConferme ? 'Lead che ti hanno cercato' : 'Richieste di contatto';
+    const subtitle = isConferme
+        ? 'Lead con un appuntamento fissato che hanno scritto al bot chiedendo di parlare con una persona. Il bot smette di rispondere: finché non li richiami, restano fermi.'
+        : 'I lead che in chat hanno chiesto di parlare con una persona. Il bot smette di rispondere: finché non li assegni a un GDO, restano fermi.';
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">Richieste di contatto</h1>
-                <p className="mt-1 max-w-3xl text-sm text-ash-500">
-                    I lead che in chat hanno chiesto di parlare con una persona. Il bot smette di rispondere:
-                    finché non li assegni a un GDO, restano fermi.
-                </p>
+                <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">{title}</h1>
+                <p className="mt-1 max-w-3xl text-sm text-ash-500">{subtitle}</p>
             </div>
 
             {pending.length === 0 ? (
@@ -170,7 +258,7 @@ export default function ContactRequestsClient({ view }: { view: ContactRequestsV
                     </div>
 
                     <div className="space-y-3">
-                        {pending.map(row => <RequestCard key={row.id} row={row} gdos={gdos} />)}
+                        {pending.map(row => <RequestCard key={row.id} row={row} gdos={gdos} canAssign={canAssign} />)}
                     </div>
                 </>
             )}
@@ -186,9 +274,13 @@ export default function ContactRequestsClient({ view }: { view: ContactRequestsV
                                     <span className="text-ash-500"> · {contactCategoryLabel(row.category)}</span>
                                 </div>
                                 <div className="text-xs text-ash-500">
-                                    {row.status === 'assigned'
-                                        ? `assegnata a ${row.assignedToName ?? '—'}`
-                                        : 'chiusa senza assegnazione'}
+                                    {/* L'esito vince sullo stato: una richiesta chiusa con
+                                        "Ha disdetto" non è "chiusa senza assegnazione". */}
+                                    {row.outcome
+                                        ? `${CONTACT_OUTCOME_LABELS[row.outcome as ContactOutcome] ?? row.outcome}${row.assignedToName ? ` · ${row.assignedToName}` : ''}`
+                                        : row.status === 'assigned'
+                                            ? `assegnata a ${row.assignedToName ?? '—'}`
+                                            : 'chiusa senza assegnazione'}
                                     {' · '}
                                     {new Date(row.updatedAt).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
                                 </div>

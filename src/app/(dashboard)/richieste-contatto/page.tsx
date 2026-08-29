@@ -3,13 +3,15 @@ import { createClient } from '@/utils/supabase/server';
 import { getContactRequests } from '@/app/actions/contactRequestActions';
 import ContactRequestsClient from './ContactRequestsClient';
 
-// Solo ADMIN: è una coda di smistamento, non una vista operativa. Il doppio
-// controllo (qui e dentro l'action) è voluto — la pagina protegge la
+// ADMIN e CONFERME. L'admin vede tutta la coda e smista; le Conferme vedono
+// solo i lead già appuntati, che da quel momento sono di loro competenza.
+// Il doppio controllo (qui e dentro l'action) è voluto: la pagina protegge la
 // navigazione, l'action protegge i dati.
 export default async function RichiesteContattoPage() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || user.user_metadata?.role !== 'ADMIN') {
+    const role = user?.user_metadata?.role;
+    if (!user || (role !== 'ADMIN' && role !== 'CONFERME')) {
         redirect('/unauthorized');
     }
 

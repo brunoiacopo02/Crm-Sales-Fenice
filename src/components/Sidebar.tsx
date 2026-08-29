@@ -87,6 +87,9 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     } else if (role === "CONFERME") {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
+            // Stessa coda dell'admin, fetta diversa: alle Conferme arrivano solo
+            // i lead già appuntati, che da quel momento sono di loro competenza.
+            { name: "Ti hanno cercato", href: "/richieste-contatto", icon: PhoneIncoming },
             // Panoramica TL + dashboard direzionali: solo per il TL del team Conferme (Alberto).
             ...(isConfermeTl(session?.user?.email) ? [
                 { name: "Panoramica TL", href: "/conferme/panoramica-tl", icon: Compass },
