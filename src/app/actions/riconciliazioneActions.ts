@@ -548,11 +548,23 @@ function reviveLeadSnapshot(lead: Record<string, unknown>): Record<string, unkno
 // `closeAmountEur` è una colonna `real` (float32 Postgres): un valore scritto
 // e riletto NON torna bit-identico a quello calcolato in JS (float64) — es.
 // 1234.56 diventa 1234.56005859375. Senza tolleranza, il controllo "nessuno
-// ha toccato il lead" di Ruling B fallirebbe SEMPRE su questo campo anche a
-// zero modifiche esterne. 1 centesimo di tolleranza assorbe il rumore di
-// arrotondamento (~1e-4) senza nascondere una modifica reale (che cambia
-// l'importo di più di un centesimo).
+// ha toccato il lead" fallirebbe SEMPRE su questo campo anche a zero
+// modifiche esterne.
 const LEAD_AMOUNT_FIELDS = new Set(['closeAmountEur']);
+
+// Tolleranza per il confronto su `closeAmountEur`. Deve stare in una forbice
+// stretta: SOPRA il rumore di arrotondamento float32 misurato in review
+// (~1e-4..2e-3 fino a €50.000 di importo), altrimenti il controllo scambia
+// per "modificato" un lead che nessuno ha toccato; SOTTO 0,01 (un centesimo),
+// altrimenti inghiotte silenziosamente la più piccola correzione reale
+// possibile su un importo in euro. 0,01 esatto (round 1) non lasciava
+// margine: un'importo arrotondato a 2 decimali e poi ri-arrotondato da
+// Postgres può produrre una differenza leggermente SOTTO 0,01 anche per una
+// vera modifica di un centesimo. 0,005 sta ~2,5x sopra il rumore peggiore
+// osservato e lascia margine pieno sotto un centesimo vero: NON alzarlo "per
+// arrotondare a un numero più comodo", romperebbe esattamente la garanzia
+// per cui esiste.
+const CLOSE_AMOUNT_TOLERANCE_EUR = 0.005;
 
 // Confronta un campo di `leads` così come letto ORA dal DB (`live`) con lo
 // stesso campo così come l'ha scritto `applicaCorrezioni` (`snapshot`, uscito
@@ -570,7 +582,7 @@ function leadFieldMatches(key: string, live: unknown, snapshot: unknown): boolea
         const liveNum = live === null || live === undefined ? null : Number(live);
         const snapNum = snapshot === null || snapshot === undefined ? null : Number(snapshot);
         if (liveNum === null || snapNum === null) return liveNum === null && snapNum === null;
-        return Math.abs(liveNum - snapNum) < 0.01;
+        return Math.abs(liveNum - snapNum) < CLOSE_AMOUNT_TOLERANCE_EUR;
     }
     // Testo/enum: confronto diretto, null e undefined trattati come equivalenti.
     if (live === null || live === undefined) return snapshot === null || snapshot === undefined;
@@ -629,9 +641,46 @@ export async function annullaRun(runId: string): Promise<AnnullaRunResult> {
                     // riga 942, verificato in sola lettura), quindi la riga di
                     // tentativo collegata sparisce da sola senza una DELETE separata.
                     if (entry.leadId) {
-                        await tx.delete(leads)
+                        // Stessa guardia di Ruling B, applicata al ramo che crea il
+                        // lead invece di ripristinarlo: `after.lead` è esattamente ciò
+                        // che applicaCorrezioni ha scritto alla creazione (name, phone,
+                        // email, funnel, salespersonOutcome, salespersonOutcomeAt,
+                        // closeAmountEur, salespersonAssigned). Se un admin/venditore ha
+                        // corretto uno di questi campi dopo la creazione, cancellare il
+                        // lead in silenzio distruggerebbe quel lavoro — stesso danno di
+                        // Finding B, sul ramo che il giro precedente non copriva.
+                        const [currentCreatedLead] = await tx.select({
+                            name: leads.name,
+                            phone: leads.phone,
+                            email: leads.email,
+                            funnel: leads.funnel,
+                            salespersonOutcome: leads.salespersonOutcome,
+                            salespersonOutcomeAt: leads.salespersonOutcomeAt,
+                            closeAmountEur: leads.closeAmountEur,
+                            salespersonAssigned: leads.salespersonAssigned,
+                        })
+                            .from(leads)
                             .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
-                        touched.push({ leadId: entry.leadId, family: entry.family });
+
+                        if (currentCreatedLead) {
+                            const currentCreatedLeadRecord = currentCreatedLead as unknown as Record<string, unknown>;
+                            for (const [key, snapshotValue] of Object.entries(after.lead)) {
+                                const liveValue = currentCreatedLeadRecord[key];
+                                if (!leadFieldMatches(key, liveValue, snapshotValue)) {
+                                    throw new Error(
+                                        `Annullamento bloccato: il lead "${currentCreatedLead.name}" (${entry.leadId}) ha il campo "${key}" cambiato dopo la riconciliazione ` +
+                                        `(la riconciliazione l'aveva creato con ${JSON.stringify(snapshotValue)}, ora è ${JSON.stringify(liveValue)}). ` +
+                                        `Qualcuno ci ha lavorato sopra nel frattempo: verifica a mano prima di riprovare l'annullamento.`,
+                                    );
+                                }
+                            }
+                            await tx.delete(leads)
+                                .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
+                            touched.push({ leadId: entry.leadId, family: entry.family });
+                        }
+                        // currentCreatedLead assente: il lead è già sparito per un'altra
+                        // via (stesso caso, poco sotto, delle entry con leadId nullo) —
+                        // niente da cancellare, niente evento da loggare.
                     }
                     continue;
                 }
