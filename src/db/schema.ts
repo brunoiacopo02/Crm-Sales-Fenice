@@ -1438,3 +1438,29 @@ export const botContactRequests = pgTable('botContactRequests', {
         leadIdx: index('bot_contact_requests_lead_idx').on(table.leadId),
     };
 });
+
+// Storico delle riconciliazioni CRM <-> Database Clienti.
+// Serve a rendere annullabile ogni applicazione: prima di ogni scrittura
+// salviamo lo stato precedente dei campi toccati.
+export const riconciliazioneRuns = pgTable('riconciliazioneRuns', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    monthKey: text('monthKey').notNull(),
+    source: text('source').notNull(),              // 'sheet' | 'csv'
+    appliedBy: text('appliedBy').notNull().references(() => users.id),
+    appliedAt: timestamp('appliedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    entryCount: integer('entryCount').default(0).notNull(),
+    revertedAt: timestamp('revertedAt', { withTimezone: true, mode: 'date' }),
+    revertedBy: text('revertedBy').references(() => users.id),
+});
+
+export const riconciliazioneEntries = pgTable('riconciliazioneEntries', {
+    id: text('id').primaryKey(),
+    runId: text('runId').notNull().references(() => riconciliazioneRuns.id, { onDelete: 'cascade' }),
+    leadId: text('leadId').references(() => leads.id, { onDelete: 'set null' }),
+    family: text('family').notNull(),
+    createdLead: boolean('createdLead').default(false).notNull(),
+    // Stato dei soli campi toccati, prima e dopo: è ciò che rende annullabile la run.
+    before: jsonb('before').notNull(),
+    after: jsonb('after').notNull(),
+});
