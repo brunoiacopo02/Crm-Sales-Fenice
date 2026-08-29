@@ -10,12 +10,48 @@ import { createClient } from '@/utils/supabase/server';
 
 const COMPANY = 'fenice'; // il bot fissatore lavora solo lead Fenice
 
-async function requireAdmin() {
+type Viewer = { id: string; role: string; lane: 'admin' | 'conferme' };
+
+/**
+ * Chi può vedere la coda, e quale fetta.
+ * - ADMIN: tutto, e può assegnare a un GDO.
+ * - CONFERME: solo i lead già appuntati — da lì in poi la competenza è loro,
+ *   sono loro a richiamarli il giorno prima della call. Sono le 14 richieste
+ *   su 64 (22%) che oggi finiscono in coda per un GDO.
+ * Le Conferme NON assegnano: spostare l'assegnatario cambia l'attribuzione dei
+ * KPI, e non è il loro mestiere.
+ */
+async function requireViewer(): Promise<Viewer | null> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
-    if (user.user_metadata?.role !== 'ADMIN') return null;
-    return { id: user.id };
+    const role = user.user_metadata?.role;
+    if (role === 'ADMIN') return { id: user.id, role, lane: 'admin' };
+    if (role === 'CONFERME') return { id: user.id, role, lane: 'conferme' };
+    return null;
+}
+
+async function requireAdmin() {
+    const v = await requireViewer();
+    return v?.lane === 'admin' ? { id: v.id } : null;
+}
+
+/**
+ * Fa emergere il lead sul cursore di /api/bot/lead-status.
+ *
+ * Quell'endpoint pagina su leads.updatedAt, ma prendere in carico una richiesta
+ * non tocca il lead: senza questo, le righe non uscirebbero MAI e il fornitore
+ * vedrebbe silenzio credendo che non le lavoriamo — cioè il problema che
+ * volevamo chiudere, con in più la convinzione di averlo chiuso.
+ *
+ * Semanticamente onesto: dal punto di vista del bot qualcosa su quel lead è
+ * davvero cambiato. Volume trascurabile (~64 richieste da luglio).
+ */
+async function touchLeadForBotCursor(leadId: string): Promise<void> {
+    await db.update(leads)
+        .set({ updatedAt: new Date() })
+        .where(and(eq(leads.id, leadId), eq(leads.companyId, COMPANY)))
+        .catch((e) => console.error('[contatto-umano] touch lead err', e));
 }
 
 export interface ContactRequestRow {
@@ -39,9 +75,29 @@ export interface ContactRequestRow {
     assignedToName: string | null;
     assignedAt: string | null;
     currentOwnerName: string | null;
+    lane: 'conferme' | 'gdo';
+    outcome: string | null;
+    note: string | null;
 }
 
+/**
+ * Vocabolario condiviso col fornitore: sono i valori che finiscono in
+ * `botContactRequests.outcome` e che il bot rilegge da /api/bot/lead-status,
+ * così non serve tradurre ai due capi.
+ *
+ * Solo le chiavi, non le etichette: questo file è `'use server'` e Next.js
+ * accetta **esclusivamente** export di funzioni async (ensureServerEntryExports
+ * lancia a runtime su qualunque altro valore). Le etichette leggibili stanno nel
+ * client, tipizzate `Record<ContactOutcome, string>` — se qui si aggiunge o si
+ * toglie un esito, là non compila più.
+ */
+const CONTACT_OUTCOMES = ['chiamato_ok', 'non_raggiungibile', 'rifissato', 'disdetto', 'non_gestito'] as const;
+
+export type ContactOutcome = typeof CONTACT_OUTCOMES[number];
+
 export interface ContactRequestsView {
+    lane: 'admin' | 'conferme';
+    canAssign: boolean;
     pending: ContactRequestRow[];
     handled: ContactRequestRow[];
     gdos: Array<{ id: string; label: string }>;
@@ -59,7 +115,8 @@ type QueueRow = {
 };
 
 export async function getContactRequests(): Promise<ContactRequestsView | null> {
-    if (!await requireAdmin()) return null;
+    const viewer = await requireViewer();
+    if (!viewer) return null;
 
     const HANDLED_WINDOW_DAYS = 30;
     const selection = {
@@ -126,22 +183,31 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
         assignedToName: r.r.assignedToId ? (nameOf.get(r.r.assignedToId) ?? null) : null,
         assignedAt: r.r.assignedAt ? r.r.assignedAt.toISOString() : null,
         currentOwnerName: r.ownerId ? (nameOf.get(r.ownerId) ?? null) : null,
+        lane: contactLane(r.leadStatus),
+        outcome: r.r.outcome,
+        note: r.r.note,
     });
 
     const gdoRows = await db.select({ id: users.id, name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
         .from(users)
         .where(and(eq(users.companyId, COMPANY), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.isBot, false)));
 
+    // Le Conferme vedono solo la loro corsia; l'admin vede tutta la coda.
+    const inLane = (r: ContactRequestRow) => viewer.lane === 'admin' || r.lane === 'conferme';
+
     return {
+        lane: viewer.lane,
+        canAssign: viewer.lane === 'admin',
         // Chi aspetta da più tempo sta in cima: è l'unico ordine che impedisce
         // a una richiesta di luglio di scivolare sotto quelle di stamattina.
-        pending: all.filter(r => r.r.status === 'pending').map(toRow)
+        pending: all.filter(r => r.r.status === 'pending').map(toRow).filter(inLane)
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
-        handled: all.filter(r => r.r.status !== 'pending').map(toRow)
+        handled: all.filter(r => r.r.status !== 'pending').map(toRow).filter(inLane)
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-        gdos: gdoRows
-            .map(g => ({ id: g.id, label: g.gdoCode ? `GDO ${g.gdoCode}` : (g.displayName || g.name || g.id) }))
-            .sort((a, b) => a.label.localeCompare(b.label, 'it')),
+        gdos: viewer.lane === 'admin'
+            ? gdoRows.map(g => ({ id: g.id, label: g.gdoCode ? `GDO ${g.gdoCode}` : (g.displayName || g.name || g.id) }))
+                .sort((a, b) => a.label.localeCompare(b.label, 'it'))
+            : [],
     };
 }
 
@@ -218,6 +284,7 @@ export async function assignContactRequest(requestId: string, gdoId: string): Pr
         companyId: COMPANY,
     }).catch((e) => console.error('[contatto-umano] notify err', e));
 
+    await touchLeadForBotCursor(row.r.leadId);
     revalidatePath('/richieste-contatto');
     revalidatePath('/', 'layout');
     return { ok: true, moved: !locked };
@@ -232,9 +299,89 @@ export async function closeContactRequest(requestId: string): Promise<{ ok: bool
     const updated = await db.update(botContactRequests)
         .set({ status: 'closed', closedAt: now, closedByUserId: admin.id, updatedAt: now })
         .where(and(eq(botContactRequests.id, requestId), eq(botContactRequests.status, 'pending')))
-        .returning({ id: botContactRequests.id });
+        .returning({ id: botContactRequests.id, leadId: botContactRequests.leadId });
 
     if (updated.length === 0) return { ok: false, error: 'Richiesta non trovata o già gestita.' };
+
+    await touchLeadForBotCursor(updated[0].leadId);
     revalidatePath('/richieste-contatto');
+    return { ok: true };
+}
+
+/**
+ * "La prendo io." Non sposta il lead e non tocca l'assegnatario del funnel:
+ * dice solo chi se ne sta occupando, così due Conferme non chiamano la stessa
+ * persona a cinque minuti di distanza.
+ */
+export async function takeChargeContactRequest(requestId: string): Promise<{ ok: boolean; error?: string }> {
+    const viewer = await requireViewer();
+    if (!viewer) return { ok: false, error: 'Non autorizzato.' };
+
+    const [row] = await db.select({ r: botContactRequests, leadStatus: leads.status })
+        .from(botContactRequests)
+        .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
+        .where(eq(botContactRequests.id, requestId))
+        .limit(1);
+    if (!row) return { ok: false, error: 'Richiesta non trovata.' };
+    if (row.r.status !== 'pending') return { ok: false, error: 'Richiesta già gestita.' };
+    if (viewer.lane === 'conferme' && contactLane(row.leadStatus) !== 'conferme') {
+        return { ok: false, error: 'Questa richiesta non è di competenza delle Conferme.' };
+    }
+
+    const now = new Date();
+    await db.update(botContactRequests)
+        .set({ status: 'assigned', assignedToId: viewer.id, assignedAt: now, updatedAt: now })
+        .where(and(eq(botContactRequests.id, requestId), eq(botContactRequests.status, 'pending')));
+
+    await touchLeadForBotCursor(row.r.leadId);
+    revalidatePath('/richieste-contatto');
+    revalidatePath('/', 'layout');
+    return { ok: true };
+}
+
+/**
+ * Com'è finita. È il segnale che il fornitore ci chiede: finché non esiste, il
+ * bot resta zitto su quella chat all'infinito anche quando il caso è chiuso da
+ * settimane, e nessuno dei due può dire se la sezione sta funzionando.
+ */
+export async function resolveContactRequest(
+    requestId: string,
+    outcome: ContactOutcome,
+    note?: string,
+): Promise<{ ok: boolean; error?: string }> {
+    const viewer = await requireViewer();
+    if (!viewer) return { ok: false, error: 'Non autorizzato.' };
+    if (!(CONTACT_OUTCOMES as readonly string[]).includes(outcome)) {
+        return { ok: false, error: 'Esito non valido.' };
+    }
+
+    const [row] = await db.select({ r: botContactRequests, leadStatus: leads.status })
+        .from(botContactRequests)
+        .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
+        .where(eq(botContactRequests.id, requestId))
+        .limit(1);
+    if (!row) return { ok: false, error: 'Richiesta non trovata.' };
+    if (viewer.lane === 'conferme' && contactLane(row.leadStatus) !== 'conferme') {
+        return { ok: false, error: 'Questa richiesta non è di competenza delle Conferme.' };
+    }
+
+    const now = new Date();
+    await db.update(botContactRequests)
+        .set({
+            status: 'closed',
+            outcome,
+            outcomeAt: now,
+            note: note?.trim() || null,
+            closedAt: now,
+            closedByUserId: viewer.id,
+            // Se nessuno l'aveva presa in carico, chi la chiude è chi se n'è occupato.
+            ...(row.r.assignedToId ? {} : { assignedToId: viewer.id, assignedAt: now }),
+            updatedAt: now,
+        })
+        .where(eq(botContactRequests.id, requestId));
+
+    await touchLeadForBotCursor(row.r.leadId);
+    revalidatePath('/richieste-contatto');
+    revalidatePath('/', 'layout');
     return { ok: true };
 }
