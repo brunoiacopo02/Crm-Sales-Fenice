@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { and, eq, gte, lt, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { leads, salesAttempts, riconciliazioneRuns, riconciliazioneEntries } from '@/db/schema';
+import { leads, salesAttempts, riconciliazioneRuns, riconciliazioneEntries, users } from '@/db/schema';
 import { createClient } from '@/utils/supabase/server';
 import { normalizePhoneStrict } from '@/lib/phoneNormalize';
 import { monthBoundsRome } from '@/lib/dateUtils';
@@ -128,6 +128,39 @@ function requirePhoneForLeadAssente(s: NonNullable<DiffEntry['sheet']>): string 
     return s.phone;
 }
 
+// Snapshot completo (non solo i campi toccati) di una riga salesAttempts: a
+// differenza di leads, qui prima/dopo devono bastare al Task 7 per ricreare o
+// cancellare l'intera riga, non solo per rimettere a posto un valore.
+type AttemptSnapshot = {
+    id: string;
+    outcome: string;
+    outcomeAt: Date | null;
+    closeAmountEur: number | null;
+    closeProduct: string | null;
+    attemptNumber: number;
+};
+
+// Risolve il codice venditore del foglio ("Sales 00X") a un users.id reale.
+// Verificato in sola lettura su prod il 2026-08-29: gli account VENDITORE di
+// fenice hanno name IDENTICO al codice ("Sales 001".."Sales 010", 6 account,
+// stessa cardinalità di TUTOR_TO_SALES) — leads.salespersonAssigned mostra gli
+// stessi valori, altri path (getSalespersonName) sono legacy o su altre tabelle.
+// Se non risolve NÉ dal foglio NÉ dal lead esistente, abortiamo: attribuire il
+// fatturato a chi ha cliccato il bottone (l'admin) sarebbe peggio che rifiutare
+// la scrittura.
+function resolveSalesUserId(
+    salesCode: string | null,
+    salesCodeToUserId: Map<string, string>,
+    fallbackUserId: string | null,
+): string {
+    const fromSheet = salesCode ? salesCodeToUserId.get(salesCode) : undefined;
+    if (fromSheet) return fromSheet;
+    if (fallbackUserId) return fallbackUserId;
+    throw new Error(
+        `Codice venditore "${salesCode ?? '(nessuno)'}" non corrisponde a nessun account VENDITORE (users.name) e il lead non ha già un salespersonUserId. Correggi l'account o la mappatura prima di riprovare.`,
+    );
+}
+
 export async function applicaCorrezioni(monthKey: string, keys: string[]): Promise<ApplyResult> {
     const admin = await requireAdmin();
     if (!admin) return { success: false, error: 'Non autorizzato.' };
@@ -145,6 +178,22 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
     // il client non è la fonte di verità sui permessi di applicazione.
     const todo = fresh.entries.filter(e => wanted.has(e.key) && e.appliable);
     if (todo.length === 0) return { success: false, error: 'Nessuna correzione applicabile fra quelle selezionate.' };
+
+    // Mappa codice foglio → users.id, risolta UNA volta per l'intero batch
+    // (non per riga) interrogando solo i codici che compaiono davvero nella
+    // selezione corrente.
+    const distinctCodes = Array.from(new Set(
+        todo.map(e => e.sheet?.salesCode).filter((c): c is string => !!c),
+    ));
+    const salesCodeToUserId = new Map<string, string>();
+    if (distinctCodes.length > 0) {
+        const matches = await db.select({ id: users.id, name: users.name })
+            .from(users)
+            .where(and(eq(users.companyId, COMPANY_ID), inArray(users.name, distinctCodes)));
+        for (const m of matches) {
+            if (m.name) salesCodeToUserId.set(m.name, m.id);
+        }
+    }
 
     const runId = crypto.randomUUID();
     const touched: Array<{ leadId: string; family: string }> = [];
@@ -164,9 +213,13 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
                 if (e.family === 'lead-assente') {
                     const sheet = e.sheet!;
                     const phone = requirePhoneForLeadAssente(sheet);
+                    // Nessun lead preesistente da cui ereditare un venditore: deve
+                    // risolvere dal codice del foglio, altrimenti abort (vedi
+                    // resolveSalesUserId).
+                    const salesUserId = resolveSalesUserId(sheet.salesCode, salesCodeToUserId, null);
 
                     const leadId = crypto.randomUUID();
-                    const after = {
+                    const leadAfter = {
                         name: sheet.fullName,
                         phone,
                         email: sheet.email,
@@ -176,37 +229,73 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
                         closeAmountEur: sheet.amountEur,
                         salespersonAssigned: sheet.salesCode,
                     };
-                    await tx.insert(leads).values({
-                        id: leadId,
-                        companyId: COMPANY_ID,
-                        name: after.name,
-                        phone: after.phone,
-                        email: after.email,
-                        // Origine dedicata: il contratto entra nel fatturato totale ma
-                        // resta distinguibile nelle statistiche per funnel. `status`
-                        // resta al suo default ('NEW'): non va indovinato.
-                        funnel: after.funnel,
-                        salespersonOutcome: after.salespersonOutcome,
-                        salespersonOutcomeAt: after.salespersonOutcomeAt,
-                        closeAmountEur: after.closeAmountEur,
-                        salespersonAssigned: after.salespersonAssigned,
-                        // Nessun presentedAt, nessun appointmentDate, nessuna presenza:
-                        // questo contratto non è passato dal funnel GDO/Conferme e non
-                        // deve gonfiare i tassi di nessuno dei due team.
+
+                    // Ruling D: anche questa famiglia deve passare da
+                    // resolveAttemptWrite e produrre una riga salesAttempts reale.
+                    // Senza, il lead risulta Chiuso su `leads` ma con
+                    // attemptsAmountEur=0 su salesAttempts: al giro successivo di
+                    // confrontaMese ri-matcha per telefono e finisce bloccato per
+                    // sempre come "leads e salesAttempts non concordano"
+                    // (match.ts:62-63) — un blocco permanente autoinflitto.
+                    const attemptWrite = resolveAttemptWrite({
+                        attempts: [],
+                        outcome: 'Chiuso',
+                        cycleStartAt: null,
+                        leadHasOutcome: false,
+                        occasion: 'current',
                     });
+                    const attemptId = crypto.randomUUID();
+                    const attemptAfter: AttemptSnapshot = {
+                        id: attemptId,
+                        outcome: 'Chiuso',
+                        outcomeAt: sheet.signedAt,
+                        closeAmountEur: sheet.amountEur,
+                        closeProduct: null,
+                        attemptNumber: attemptWrite.mode === 'insert' ? attemptWrite.attemptNumber : 0,
+                    };
+
+                    // La riga di storico precede le scritture reali: prima/dopo
+                    // coprono ENTRAMBE le tabelle toccate (Ruling A), altrimenti
+                    // il Task 7 non saprebbe quale riga salesAttempts cancellare.
                     await tx.insert(riconciliazioneEntries).values({
                         id: crypto.randomUUID(),
                         runId,
                         leadId,
                         family: e.family,
                         createdLead: true,
-                        before: {},
-                        after,
+                        before: { lead: {}, attempt: null },
+                        after: { lead: leadAfter, attempt: attemptAfter },
                     });
 
-                    // Nessuna scrittura su salesAttempts per questa famiglia: il lead
-                    // creato qui non ha mai attraversato un ciclo di trattativa (niente
-                    // check-in, niente tentativi) — non c'è nulla da correggere lì.
+                    await tx.insert(leads).values({
+                        id: leadId,
+                        companyId: COMPANY_ID,
+                        name: leadAfter.name,
+                        phone: leadAfter.phone,
+                        email: leadAfter.email,
+                        // Origine dedicata: il contratto entra nel fatturato totale ma
+                        // resta distinguibile nelle statistiche per funnel. `status`
+                        // resta al suo default ('NEW'): non va indovinato.
+                        funnel: leadAfter.funnel,
+                        salespersonOutcome: leadAfter.salespersonOutcome,
+                        salespersonOutcomeAt: leadAfter.salespersonOutcomeAt,
+                        closeAmountEur: leadAfter.closeAmountEur,
+                        salespersonAssigned: leadAfter.salespersonAssigned,
+                        // Nessun presentedAt, nessun appointmentDate, nessuna presenza:
+                        // questo contratto non è passato dal funnel GDO/Conferme e non
+                        // deve gonfiare i tassi di nessuno dei due team.
+                    });
+                    await tx.insert(salesAttempts).values({
+                        id: attemptId,
+                        leadId,
+                        companyId: COMPANY_ID,
+                        salesUserId,
+                        attemptNumber: attemptAfter.attemptNumber,
+                        outcome: attemptAfter.outcome,
+                        outcomeAt: attemptAfter.outcomeAt!,
+                        closeAmountEur: attemptAfter.closeAmountEur,
+                    });
+
                     touched.push({ leadId, family: e.family });
                     continue;
                 }
@@ -261,29 +350,13 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
                     leadSet.salespersonAssigned = e.sheet!.salesCode ?? currentLead.salespersonAssigned;
                 }
 
-                const before: Record<string, unknown> = {};
-                const after: Record<string, unknown> = {};
+                const leadBefore: Record<string, unknown> = {};
+                const leadAfter: Record<string, unknown> = {};
                 for (const key of Object.keys(leadSet)) {
                     if (key === 'version') continue;
-                    before[key] = (currentLead as Record<string, unknown>)[key];
-                    after[key] = leadSet[key];
+                    leadBefore[key] = (currentLead as Record<string, unknown>)[key];
+                    leadAfter[key] = leadSet[key];
                 }
-
-                // La riga di storico va scritta PRIMA della modifica reale: senza
-                // questa riga, nella stessa transazione della scrittura, la run non
-                // sarebbe annullabile (compito del Task 7).
-                await tx.insert(riconciliazioneEntries).values({
-                    id: crypto.randomUUID(),
-                    runId,
-                    leadId,
-                    family: e.family,
-                    createdLead: false,
-                    before,
-                    after,
-                });
-
-                await tx.update(leads).set(leadSet)
-                    .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, leadId)));
 
                 // La storia passa SEMPRE da resolveAttemptWrite: è l'unica cosa che
                 // impedisce a una correzione di duplicare il tentativo e contare due
@@ -294,6 +367,8 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
                     outcome: salesAttempts.outcome,
                     outcomeAt: salesAttempts.outcomeAt,
                     attemptNumber: salesAttempts.attemptNumber,
+                    closeAmountEur: salesAttempts.closeAmountEur,
+                    closeProduct: salesAttempts.closeProduct,
                 })
                     .from(salesAttempts)
                     .where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.leadId, leadId)));
@@ -307,35 +382,95 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
                     occasion: 'current',
                 });
 
+                // Ruling A: prima/dopo dell'attempt sono uno SNAPSHOT COMPLETO
+                // della riga (non solo i campi toccati) — al Task 7 serve poter
+                // ricreare o cancellare l'intera riga, non solo un valore.
+                let attemptBefore: AttemptSnapshot | null = null;
+                let attemptAfter: AttemptSnapshot;
+                let attemptDbSet: Record<string, unknown> = {};
+                let attemptInsertValues: { id: string; salesUserId: string; attemptNumber: number; outcome: string; outcomeAt: Date; closeAmountEur: number | null } | null = null;
+
                 if (write.mode === 'update') {
-                    const attemptSet: Record<string, unknown> = {};
+                    const found = attempts.find(a => a.id === write.id)!;
+                    attemptBefore = {
+                        id: found.id,
+                        outcome: found.outcome,
+                        outcomeAt: found.outcomeAt,
+                        closeAmountEur: found.closeAmountEur,
+                        closeProduct: found.closeProduct,
+                        attemptNumber: found.attemptNumber,
+                    };
                     if (e.family === 'importo') {
-                        attemptSet.closeAmountEur = e.sheet!.amountEur;
+                        attemptDbSet = { closeAmountEur: e.sheet!.amountEur };
+                        attemptAfter = { ...attemptBefore, closeAmountEur: e.sheet!.amountEur };
                     } else if (e.family === 'solo-crm') {
-                        attemptSet.outcome = 'Non chiuso';
-                        attemptSet.closeAmountEur = null;
-                        attemptSet.closeProduct = null;
+                        attemptDbSet = { outcome: 'Non chiuso', closeAmountEur: null, closeProduct: null };
+                        attemptAfter = { ...attemptBefore, outcome: 'Non chiuso', closeAmountEur: null, closeProduct: null };
                     } else {
-                        attemptSet.outcome = 'Chiuso';
-                        attemptSet.outcomeAt = e.sheet!.signedAt;
-                        attemptSet.closeAmountEur = e.sheet!.amountEur;
+                        attemptDbSet = { outcome: 'Chiuso', outcomeAt: e.sheet!.signedAt, closeAmountEur: e.sheet!.amountEur };
+                        attemptAfter = { ...attemptBefore, outcome: 'Chiuso', outcomeAt: e.sheet!.signedAt, closeAmountEur: e.sheet!.amountEur };
                     }
-                    await tx.update(salesAttempts).set(attemptSet)
-                        .where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.id, write.id)));
                 } else {
-                    // Ramo raro: nessun attempt esisteva ancora per questo lead (tipico
-                    // di esito-mancante/lead-scartato, mai chiusi prima). Attribuito al
-                    // venditore reale del lead se noto, altrimenti a chi applica la
-                    // riconciliazione — mai lasciato NOT NULL vuoto.
-                    await tx.insert(salesAttempts).values({
+                    // Ramo raro: nessun attempt esisteva ancora per questo lead
+                    // (tipico di esito-mancante/lead-scartato, mai chiusi prima).
+                    // Ruling B: l'attribuzione segue il venditore del FOGLIO
+                    // (risolto sopra), poi quello già assegnato sul lead; MAI
+                    // l'admin che applica la riconciliazione.
+                    const salesUserId = resolveSalesUserId(
+                        e.sheet?.salesCode ?? null,
+                        salesCodeToUserId,
+                        currentLead.salespersonUserId ?? null,
+                    );
+                    const outcomeAt = e.family === 'solo-crm' ? (currentLead.salespersonOutcomeAt ?? new Date()) : e.sheet!.signedAt;
+                    const closeAmountEur = e.family === 'solo-crm' ? null : e.sheet!.amountEur;
+                    attemptInsertValues = {
                         id: crypto.randomUUID(),
-                        leadId,
-                        companyId: COMPANY_ID,
-                        salesUserId: currentLead.salespersonUserId ?? admin.id,
+                        salesUserId,
                         attemptNumber: write.attemptNumber,
                         outcome: attemptOutcome,
-                        outcomeAt: e.family === 'solo-crm' ? (currentLead.salespersonOutcomeAt ?? new Date()) : e.sheet!.signedAt,
-                        closeAmountEur: e.family === 'solo-crm' ? null : e.sheet!.amountEur,
+                        outcomeAt,
+                        closeAmountEur,
+                    };
+                    attemptAfter = {
+                        id: attemptInsertValues.id,
+                        outcome: attemptInsertValues.outcome,
+                        outcomeAt: attemptInsertValues.outcomeAt,
+                        closeAmountEur: attemptInsertValues.closeAmountEur,
+                        closeProduct: null,
+                        attemptNumber: attemptInsertValues.attemptNumber,
+                    };
+                }
+
+                // La riga di storico va scritta PRIMA delle modifiche reali: senza
+                // questa riga, nella stessa transazione della scrittura, la run non
+                // sarebbe annullabile (compito del Task 7) — e ora copre ANCHE
+                // salesAttempts (Ruling A), non solo leads.
+                await tx.insert(riconciliazioneEntries).values({
+                    id: crypto.randomUUID(),
+                    runId,
+                    leadId,
+                    family: e.family,
+                    createdLead: false,
+                    before: { lead: leadBefore, attempt: attemptBefore },
+                    after: { lead: leadAfter, attempt: attemptAfter },
+                });
+
+                await tx.update(leads).set(leadSet)
+                    .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, leadId)));
+
+                if (write.mode === 'update') {
+                    await tx.update(salesAttempts).set(attemptDbSet)
+                        .where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.id, write.id)));
+                } else {
+                    await tx.insert(salesAttempts).values({
+                        id: attemptInsertValues!.id,
+                        leadId,
+                        companyId: COMPANY_ID,
+                        salesUserId: attemptInsertValues!.salesUserId,
+                        attemptNumber: attemptInsertValues!.attemptNumber,
+                        outcome: attemptInsertValues!.outcome,
+                        outcomeAt: attemptInsertValues!.outcomeAt,
+                        closeAmountEur: attemptInsertValues!.closeAmountEur,
                     });
                 }
 
@@ -348,15 +483,21 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
 
     // Fuori dalla transazione: la scrittura finanziaria è già al sicuro (o
     // completamente annullata sopra). Il log evento è un audit trail
-    // aggiuntivo, non la fonte di verità (quella è riconciliazioneEntries).
+    // aggiuntivo, non la fonte di verità (quella è riconciliazioneEntries) — un
+    // suo fallimento non deve MAI far sembrare fallita una run già committata:
+    // per questo ogni chiamata è isolata nel proprio try/catch.
     for (const t of touched) {
-        await logLeadEvent({
-            leadId: t.leadId,
-            eventType: 'RECONCILED',
-            userId: admin.id,
-            companyId: COMPANY_ID,
-            metadata: { monthKey, family: t.family, runId },
-        });
+        try {
+            await logLeadEvent({
+                leadId: t.leadId,
+                eventType: 'RECONCILED',
+                userId: admin.id,
+                companyId: COMPANY_ID,
+                metadata: { monthKey, family: t.family, runId },
+            });
+        } catch (logErr) {
+            console.error('[applicaCorrezioni] logLeadEvent fallito (run già committata, non blocca la risposta):', logErr);
+        }
     }
 
     revalidatePath('/riconciliazione');
