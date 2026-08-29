@@ -153,7 +153,15 @@ export async function POST(req: NextRequest) {
             || lead.agendaStatus === 'consegnato'
             || lead.agendaStatus === 'inviato';
 
-        if (!leadWasBotOwned) {
+        // CONTATTO_UMANO è l'unica eccezione, e passa sempre: è l'unico esito che
+        // non scrive NIENTE sul lead — mette una riga in coda e manda una notifica,
+        // nessuna transizione di stato, nessuna attribuzione toccata. Il danno
+        // massimo se il bot sbaglia lead è una riga di coda da chiudere; il danno
+        // di rifiutarlo è una persona che ha chiesto di essere richiamata e di cui
+        // nessuno saprà mai niente. È successo davvero: `e4ef3953` il 31/07 scriveva
+        // «farmi sentire la tua collega» e ha preso un 403.
+        // Decisione PO 2026-08-29.
+        if (!leadWasBotOwned && typedOutcome !== 'CONTATTO_UMANO') {
             return NextResponse.json({ error: 'forbidden', detail: 'lead mai passato dal bot' }, { status: 403 });
         }
         // Il lead è di un GDO umano. NOTA annota e basta — bastano push o sola agenda.
@@ -417,7 +425,11 @@ export async function POST(req: NextRequest) {
             eventType: 'BOT_CONTACT_REQUEST',
             userId: actorUserId,
             timestamp: new Date(),
-            metadata: { note: text, category, info: leadInfo },
+            // `botOwned: false` = richiesta accettata pur senza prova che il bot
+            // avesse quel lead in carico. Non cambia niente per chi la lavora, ma
+            // se un giorno la coda si riempisse di richieste su lead altrui, è da
+            // qui che si vede senza dover reinterrogare gli eventi.
+            metadata: { note: text, category, info: leadInfo, botOwned: leadWasBotOwned },
             companyId: 'fenice',
         });
 
