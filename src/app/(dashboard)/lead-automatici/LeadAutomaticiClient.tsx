@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, ExternalLink, RotateCcw, Check, TrendingUp, Ban } from "lucide-react";
 import {
     setGdoAcIntake,
@@ -13,6 +14,8 @@ import {
     retryAllAcFailures,
     resolveAcFailure,
     getAcIntakeStats,
+    assignQuarantinedLead,
+    type QuarantinedLeadRow,
     type GdoAcIntakeRow,
     type AcFailureRow,
     type AcIntakeStats,
@@ -29,6 +32,8 @@ interface Props {
     holidayWindow: { from: string; until: string; lastDay: string } | null;
     /** Fascia di distribuzione in vigore + ripartizione di oggi. */
     routingStatus: BotRoutingStatus;
+    /** Lead entrati con un telefono che non sembra un numero, senza assegnatario. */
+    initialQuarantined: QuarantinedLeadRow[];
 }
 
 /** Come si chiama, in italiano, la finestra in vigore adesso. */
@@ -61,7 +66,8 @@ function giornoIt(day: string): string {
         .format(new Date(`${day}T00:00:00Z`));
 }
 
-export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats, holidayWindow, routingStatus }: Props) {
+export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats, holidayWindow, routingStatus, initialQuarantined }: Props) {
+    const router = useRouter();
     const [rows, setRows] = useState(initialRows);
     const [webhooks, setWebhooks] = useState(initialWebhooks);
     const [failures, setFailures] = useState(initialFailures);
@@ -531,6 +537,73 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     </div>
                 )}
             </section>
+
+            {/* Quarantena telefoni: lead entrati con un numero implausibile e
+                lasciati senza assegnatario dal webhook AC. Vanno guardati da
+                qualcuno, altrimenti la quarantena è solo un modo elegante di
+                perderli. */}
+            {initialQuarantined.length > 0 && (
+                <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 sm:p-5">
+                    <div className="mb-1 text-sm font-bold text-amber-900">
+                        ⚠️ Telefoni da verificare ({initialQuarantined.length})
+                    </div>
+                    <p className="mb-3 text-xs text-amber-800">
+                        Lead entrati con un numero che non sembra un telefono. Non sono assegnati
+                        a nessuno: correggi il numero dalla scheda del lead e poi mandalo a un GDO.
+                    </p>
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[640px] text-left text-xs">
+                            <thead className="text-amber-900/70">
+                                <tr>
+                                    <th className="pb-2 font-semibold">Nome</th>
+                                    <th className="pb-2 font-semibold">Numero</th>
+                                    <th className="pb-2 font-semibold">Funnel</th>
+                                    <th className="pb-2 font-semibold">Arrivato</th>
+                                    <th className="pb-2 font-semibold">Assegna a</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {initialQuarantined.map(q => (
+                                    <tr key={q.id} className="border-t border-amber-200/70">
+                                        <td className="py-2 pr-3 font-medium text-ash-900">{q.name}</td>
+                                        <td className="py-2 pr-3 font-mono text-amber-900">{q.phone}</td>
+                                        <td className="py-2 pr-3 text-ash-600">{q.funnel ?? '—'}</td>
+                                        <td className="py-2 pr-3 text-ash-500">
+                                            {new Date(q.createdAt).toLocaleDateString('it-IT')}
+                                        </td>
+                                        <td className="py-2">
+                                            <select
+                                                defaultValue=""
+                                                disabled={isPending}
+                                                onChange={(e) => {
+                                                    const gdoId = e.target.value;
+                                                    if (!gdoId) return;
+                                                    startTransition(async () => {
+                                                        const res = await assignQuarantinedLead(q.id, gdoId);
+                                                        if (!res.success) {
+                                                            setMsg({ type: 'err', text: res.error || 'Errore' });
+                                                            return;
+                                                        }
+                                                        router.refresh();
+                                                    });
+                                                }}
+                                                className="rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs disabled:opacity-50"
+                                            >
+                                                <option value="">Scegli GDO…</option>
+                                                {rows.filter(g => g.isActive).map(g => (
+                                                    <option key={g.id} value={g.id}>
+                                                        {g.gdoCode ? `GDO ${g.gdoCode}` : (g.displayName || g.name || g.id)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
 
             {/* GDO round robin */}
             <section className="rounded-2xl border border-ash-200 bg-white shadow-sm">
