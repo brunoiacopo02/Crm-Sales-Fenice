@@ -1,7 +1,7 @@
 'use server';
 
 import crypto from 'node:crypto';
-import { and, eq, gte, lt, inArray } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray, desc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { leads, salesAttempts, riconciliazioneRuns, riconciliazioneEntries, users } from '@/db/schema';
@@ -502,4 +502,186 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
 
     revalidatePath('/riconciliazione');
     return { success: true, runId, applied: touched.length };
+}
+
+// Forma condivisa con `applicaCorrezioni`: ogni riga di riconciliazioneEntries
+// porta lo stato (dei soli campi toccati) prima e dopo la scrittura. `lead` è
+// tipizzato largo perché arriva da una colonna jsonb senza `$type<>` — le
+// chiavi presenti sono decise a monte da `applicaCorrezioni`, qui vanno solo
+// riapplicate così come sono.
+type ReconciliationSnapshot = { lead: Record<string, unknown>; attempt: AttemptSnapshot | null };
+
+export type AnnullaRunResult = { success: true; reverted: number } | { success: false; error: string };
+
+// Annulla una run già applicata: per ogni entry riporta `leads` (e
+// `salesAttempts`) esattamente allo stato salvato in `before`. È il rollback
+// che finora veniva scritto a mano in chat (luglio/agosto) — qui deve essere
+// un ripristino LETTERALE di uno stato noto, mai una nuova decisione di
+// business (per questo non passa da `resolveAttemptWrite`, che serve solo a
+// decidere insert-vs-update per esiti nuovi in fase di applicazione).
+export async function annullaRun(runId: string): Promise<AnnullaRunResult> {
+    const admin = await requireAdmin();
+    if (!admin) return { success: false, error: 'Non autorizzato.' };
+
+    const [run] = await db.select().from(riconciliazioneRuns)
+        .where(and(eq(riconciliazioneRuns.id, runId), eq(riconciliazioneRuns.companyId, COMPANY_ID)));
+    if (!run) return { success: false, error: 'Riconciliazione non trovata.' };
+    if (run.revertedAt) return { success: false, error: 'Questa riconciliazione è già stata annullata.' };
+
+    const entries = await db.select().from(riconciliazioneEntries)
+        .where(eq(riconciliazioneEntries.runId, runId));
+
+    const touched: Array<{ leadId: string; family: string }> = [];
+
+    try {
+        await db.transaction(async (tx) => {
+            // Ricontrollo DENTRO la transazione: se due admin cliccano "Annulla"
+            // sulla stessa run quasi in contemporanea, solo il primo deve vincere.
+            const [freshRun] = await tx.select({ revertedAt: riconciliazioneRuns.revertedAt })
+                .from(riconciliazioneRuns).where(eq(riconciliazioneRuns.id, runId));
+            if (!freshRun || freshRun.revertedAt) {
+                throw new Error('Questa riconciliazione è già stata annullata.');
+            }
+
+            for (const entry of entries) {
+                const before = entry.before as ReconciliationSnapshot;
+                const after = entry.after as ReconciliationSnapshot;
+
+                if (entry.createdLead) {
+                    // Famiglia lead-assente: il lead non esisteva prima della
+                    // riconciliazione, quindi non c'è "prima" a cui tornare — va
+                    // eliminato. salesAttempts.leadId ha onDelete:'cascade' (schema.ts
+                    // riga 942, verificato in sola lettura), quindi la riga di
+                    // tentativo collegata sparisce da sola senza una DELETE separata.
+                    if (entry.leadId) {
+                        await tx.delete(leads)
+                            .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
+                        touched.push({ leadId: entry.leadId, family: entry.family });
+                    }
+                    continue;
+                }
+
+                if (!entry.leadId) {
+                    // leadId è nullable con onDelete:'set null': il lead è già stato
+                    // cancellato per un'altra via nel frattempo. Non c'è più nulla su
+                    // cui riscrivere prima/dopo: si salta, non si fa fallire l'intero
+                    // annullamento per una riga ormai orfana.
+                    continue;
+                }
+
+                const [currentLead] = await tx.select({ version: leads.version })
+                    .from(leads)
+                    .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
+                if (!currentLead) {
+                    continue; // stesso caso di sopra, lead sparito nel frattempo
+                }
+
+                // Riscrive SOLO i campi presenti in `before.lead` (gli stessi toccati
+                // da applicaCorrezioni, mai l'intera riga) + bump di version, come da
+                // convenzione di ogni write path su `leads`.
+                await tx.update(leads)
+                    .set({ ...before.lead, version: currentLead.version + 1 })
+                    .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
+
+                // Ripristino letterale di salesAttempts: before.attempt/after.attempt
+                // sono uno SNAPSHOT COMPLETO della riga (Ruling A del Task 6), quindi
+                // qui basta un UPDATE o una DELETE per id, mai un nuovo insert deciso
+                // da resolveAttemptWrite.
+                if (after.attempt) {
+                    if (before.attempt) {
+                        await tx.update(salesAttempts).set({
+                            outcome: before.attempt.outcome,
+                            // Il tipo di AttemptSnapshot ammette null per prudenza, ma la
+                            // colonna è NOT NULL: applicaCorrezioni valorizza sempre una
+                            // Date reale prima di scriverci uno snapshot.
+                            outcomeAt: before.attempt.outcomeAt!,
+                            closeAmountEur: before.attempt.closeAmountEur,
+                            closeProduct: before.attempt.closeProduct,
+                            attemptNumber: before.attempt.attemptNumber,
+                        }).where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.id, after.attempt.id)));
+                    } else {
+                        // before.attempt === null → applicaCorrezioni aveva INSERITO
+                        // questa riga (nessun tentativo preesistente): annullare vuol
+                        // dire cancellarla, non svuotarla.
+                        await tx.delete(salesAttempts)
+                            .where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.id, after.attempt.id)));
+                    }
+                }
+
+                touched.push({ leadId: entry.leadId, family: entry.family });
+            }
+
+            await tx.update(riconciliazioneRuns).set({
+                revertedAt: new Date(),
+                revertedBy: admin.id,
+            }).where(eq(riconciliazioneRuns.id, runId));
+        });
+    } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Annullamento fallito, nessuna modifica salvata.' };
+    }
+
+    // Fuori dalla transazione, stesso motivo di applicaCorrezioni: l'annullamento
+    // è già al sicuro (committato o del tutto annullato sopra), il log evento è
+    // un audit trail aggiuntivo che non deve mai far sembrare fallito un
+    // annullamento già scritto — ogni chiamata isolata nel proprio try/catch.
+    for (const t of touched) {
+        try {
+            await logLeadEvent({
+                leadId: t.leadId,
+                eventType: 'RECONCILED',
+                userId: admin.id,
+                companyId: COMPANY_ID,
+                metadata: { runId, family: t.family, undo: true },
+            });
+        } catch (logErr) {
+            console.error('[annullaRun] logLeadEvent fallito (annullamento già committato, non blocca la risposta):', logErr);
+        }
+    }
+
+    revalidatePath('/riconciliazione');
+    return { success: true, reverted: touched.length };
+}
+
+export type RiconciliazioneRunSummary = {
+    id: string;
+    appliedAt: Date;
+    appliedBy: string;
+    entryCount: number;
+    revertedAt: Date | null;
+};
+
+// Elenca le run del mese, più recenti prima. `appliedBy` è già risolto a un
+// nome mostrabile (stessa convenzione displayName||name||id usata in tutto il
+// resto del CRM, es. confermeActions.ts:542): la UI non deve mai mostrare un
+// users.id crudo.
+export async function elencoRun(monthKey: string): Promise<RiconciliazioneRunSummary[]> {
+    if (!await requireAdmin()) return [];
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) return [];
+
+    const rows = await db.select({
+        id: riconciliazioneRuns.id,
+        appliedAt: riconciliazioneRuns.appliedAt,
+        appliedById: riconciliazioneRuns.appliedBy,
+        entryCount: riconciliazioneRuns.entryCount,
+        revertedAt: riconciliazioneRuns.revertedAt,
+    })
+        .from(riconciliazioneRuns)
+        .where(and(eq(riconciliazioneRuns.companyId, COMPANY_ID), eq(riconciliazioneRuns.monthKey, monthKey)))
+        .orderBy(desc(riconciliazioneRuns.appliedAt));
+
+    if (rows.length === 0) return [];
+
+    const userIds = Array.from(new Set(rows.map(r => r.appliedById)));
+    const people = await db.select({ id: users.id, name: users.name, displayName: users.displayName })
+        .from(users)
+        .where(inArray(users.id, userIds));
+    const nameOf = new Map(people.map(p => [p.id, p.displayName || p.name || p.id]));
+
+    return rows.map(r => ({
+        id: r.id,
+        appliedAt: r.appliedAt,
+        appliedBy: nameOf.get(r.appliedById) ?? r.appliedById,
+        entryCount: r.entryCount,
+        revertedAt: r.revertedAt,
+    }));
 }
