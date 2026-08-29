@@ -38,29 +38,38 @@ in un mese sta in una singola fascia — la prima del primo giorno disponibile. 
 ci finiscono tutti dentro. È la prova più pulita che la finestra sta guidando il
 comportamento invece di assecondarlo.
 
-## Cosa facciamo, e in che ordine
+## Cosa ne facciamo
 
-Prendiamo tutte e tre le vostre osservazioni e le trattiamo come nostre, perché
-lo sono:
+Le tre osservazioni sono nostre da valutare, e le valutiamo. **Ma non tocchiamo
+niente prima di aver deciso internamente**, perché la finestra di prenotazione
+non è solo un parametro tecnico: è una scelta commerciale.
 
-1. **La finestra a due giorni**: la allarghiamo. È la causa di tutto il resto e
-   la più semplice da correggere.
-2. **La freccia che salta di mese**: è il comportamento standard quando non c'è
-   nessun giorno disponibile nel mese — salta al primo mese con qualcosa, e se
-   sono tutti vuoti continua a saltare. Sparisce da sola quando la finestra si
-   allarga, ma la verifichiamo comunque perché è quella che i lead descrivono
-   con parole loro.
+Allargarla sposta le call più in là nel tempo, e più una call è lontana meno
+gente si presenta. Il numero che vi abbiamo dato prima — presenza al 17,1% sugli
+appuntamenti del bot — è misurato **con** la finestra stretta di oggi. Non
+sappiamo ancora se allargarla porti più prenotazioni che si presentano o più
+prenotazioni che evaporano, e non lo scopriremo cambiandola e basta.
+
+Quindi:
+
+1. **La finestra a due giorni**: la portiamo a chi decide, con i vostri numeri e
+   i nostri. È la causa di tutto il resto, ma è anche quella con l'effetto
+   collaterale meno prevedibile.
+2. **La freccia che salta di mese**: la verifichiamo a prescindere. È il
+   comportamento standard quando nel mese non c'è nessun giorno disponibile, e
+   dovrebbe rientrare da solo se la finestra cambia — ma è quella che i vostri
+   lead descrivono con parole loro, quindi va guardata comunque.
 3. **Le fasce del primo giorno (7 contro 13)**: la guardiamo. Non è una scelta
-   che abbiamo mai fatto consapevolmente, quindi molto probabilmente è un effetto
-   del preavviso minimo di prenotazione che mangia la mattina del giorno dopo.
+   che ricordiamo di aver fatto, quindi è probabile che sia un effetto del
+   preavviso minimo di prenotazione che mangia la mattina del giorno dopo.
 
-**Sul tetto giornaliero siamo d'accordo con voi: non mettetelo.** Avete
-ragione anche sul motivo — il collo di bottiglia non è quante call fissate, è
-quante il form ne lascia prenotare. Ridurre gli appuntamenti per farli stare
-dentro un bug sarebbe il modo peggiore di chiuderlo. Sistemiamo il form.
+**Sul tetto giornaliero siamo d'accordo con voi: non mettetelo.** Il collo di
+bottiglia non è quante call fissate, è quante il form ne lascia prenotare — su
+questo non c'è dubbio, ed è il motivo per cui la questione va affrontata dal lato
+del form e non riducendo gli appuntamenti.
 
-Vi diciamo quando è fatto, così potete rifare la prova dei trenta secondi e
-dirci se da fuori si vede uguale a noi.
+Vi facciamo sapere cosa decidiamo e quando è fatto, così potete rifare la prova
+dei trenta secondi e dirci se da fuori si vede uguale a noi.
 
 ## Sul resto: d'accordo, e una cosa che ci piace più della nostra
 
