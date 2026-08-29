@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, eq, gt, or, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, or, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { leadEvents, leads } from '@/db/schema';
+import { botContactRequests, leadEvents, leads, users } from '@/db/schema';
 import { verifySignature } from '@/lib/marketing-webhooks/signing';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +21,11 @@ export const dynamic = 'force-dynamic';
  *
  * Body:  { since: ISO 8601, limit?: number }   Firma: `x-bot-signature` (BOT_WEBHOOK_SECRET)
  * Reply: { leads: LeadStatus[], nextSince: string, hasMore: boolean }
+ *
+ * Ogni riga porta anche `contattoUmano`: chi ha preso in carico la richiesta di
+ * parlare con una persona, quando, e com'è finita (null se il lead non ne ha
+ * mai fatta una). Le mutazioni della coda toccano `leads.updatedAt` apposta,
+ * altrimenti quelle righe non uscirebbero mai da questo cursore.
  *
  * PERIMETRO (non allargare senza una ragione): escono SOLO i lead che il bot ha
  * davvero lavorato — quelli che gli abbiamo pushato o di cui ha recapitato
@@ -99,6 +104,38 @@ export async function POST(req: NextRequest) {
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
 
+    // Il ritorno che il fornitore ci chiede: chi l'ha presa, quando, com'è
+    // finita. Caricato solo per i lead di QUESTA pagina — una join sul cursore
+    // moltiplicherebbe le righe per i lead con più richieste.
+    // La più recente per lead: se il lead ha richiesto di essere richiamato di
+    // nuovo dopo giorni, è quella nuova che conta.
+    const pageLeadIds = page.map(r => r.leadId);
+    const requestRows = pageLeadIds.length > 0
+        ? await db.select({
+            leadId: botContactRequests.leadId,
+            assignedAt: botContactRequests.assignedAt,
+            outcome: botContactRequests.outcome,
+            outcomeAt: botContactRequests.outcomeAt,
+            note: botContactRequests.note,
+            status: botContactRequests.status,
+            createdAt: botContactRequests.createdAt,
+            operatorName: users.name,
+            operatorDisplayName: users.displayName,
+        })
+            .from(botContactRequests)
+            .leftJoin(users, eq(users.id, botContactRequests.assignedToId))
+            .where(and(
+                eq(botContactRequests.companyId, 'fenice'),
+                inArray(botContactRequests.leadId, pageLeadIds),
+            ))
+            .orderBy(desc(botContactRequests.createdAt))
+        : [];
+
+    const contactByLead = new Map<string, typeof requestRows[number]>();
+    for (const r of requestRows) {
+        if (!contactByLead.has(r.leadId)) contactByLead.set(r.leadId, r);
+    }
+
     const iso = (d: Date | null) => (d ? d.toISOString() : null);
     const payload = page.map(r => ({
         leadId: r.leadId,
@@ -120,6 +157,23 @@ export async function POST(req: NextRequest) {
         discardReason: r.discardReason,
         agendaStatus: r.agendaStatus,          // 'inviato' | 'consegnato' | 'fallito' | null
         updatedAt: iso(r.updatedAt),
+        // null per i lead che non hanno mai chiesto di parlare con una persona.
+        // Una richiesta ancora `pending` esce con esito null: dice al bot che
+        // l'abbiamo ricevuta ma non ancora lavorata, che è già più di quello
+        // che sa oggi.
+        contattoUmano: (() => {
+            const c = contactByLead.get(r.leadId);
+            if (!c) return null;
+            return {
+                presoInCaricoDa: c.operatorName || c.operatorDisplayName || null,
+                presoInCaricoIl: iso(c.assignedAt),
+                esito: c.outcome,
+                esitoIl: iso(c.outcomeAt),
+                nota: c.note,
+                stato: c.status,          // 'pending' | 'assigned' | 'closed'
+                richiestaIl: iso(c.createdAt),
+            };
+        })(),
     }));
 
     // `nextSince` è l'updatedAt dell'ultima riga servita, non "adesso": ripartire
