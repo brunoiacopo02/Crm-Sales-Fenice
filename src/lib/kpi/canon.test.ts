@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isNeverAnsweredLog, isAnsweredLog, NEVER_ANSWERED_DISCARD_REASONS } from './canon';
+import { isNeverAnsweredLog, isAnsweredLog, NEVER_ANSWERED_DISCARD_REASONS, isFunnelClosure } from './canon';
 
 // Il bug che questi test bloccano: "risposta del GDO" era implementata due
 // volte, in kpiAdvancedActions (con la regola "numero inesistente") e in
@@ -65,6 +65,39 @@ describe('isAnsweredLog', () => {
 
     test('outcome mancante non conta come risposta', () => {
         assert.equal(isAnsweredLog(null, null), false);
+    });
+});
+
+describe('isFunnelClosure', () => {
+    // Task 10 riconciliazione (2026-08-29): la riconciliazione fatturato puo'
+    // scrivere Chiuso su un lead mai presentato (famiglie lead-scartato/
+    // lead-assente). Questa e' la definizione unica da cui dipendono i
+    // numeratori dei tassi di conversione in gdoPerformanceActions,
+    // confermeKpiActions e productivityActions: se si rompe qui, si rompono
+    // silenziosamente anche li'.
+    const presente = new Date('2026-05-10T10:00:00Z');
+
+    test('Chiuso con una presenza vera = chiusura di funnel', () => {
+        assert.equal(isFunnelClosure({ salespersonOutcome: 'Chiuso', presentedAt: presente }), true);
+    });
+
+    test('Chiuso senza presenza (riconciliazione fuori funnel) = non e\' una chiusura di funnel', () => {
+        assert.equal(isFunnelClosure({ salespersonOutcome: 'Chiuso', presentedAt: null }), false);
+    });
+
+    test('Non chiuso non e\' mai una chiusura, presenza o no', () => {
+        assert.equal(isFunnelClosure({ salespersonOutcome: 'Non chiuso', presentedAt: presente }), false);
+        assert.equal(isFunnelClosure({ salespersonOutcome: 'Non chiuso', presentedAt: null }), false);
+    });
+
+    test('esito nullo/assente non e\' una chiusura', () => {
+        assert.equal(isFunnelClosure({ salespersonOutcome: null, presentedAt: presente }), false);
+        assert.equal(isFunnelClosure({ salespersonOutcome: null, presentedAt: null }), false);
+    });
+
+    test('l\'esito e\' case-insensitive', () => {
+        assert.equal(isFunnelClosure({ salespersonOutcome: 'CHIUSO', presentedAt: presente }), true);
+        assert.equal(isFunnelClosure({ salespersonOutcome: 'chiuso', presentedAt: presente }), true);
     });
 });
 

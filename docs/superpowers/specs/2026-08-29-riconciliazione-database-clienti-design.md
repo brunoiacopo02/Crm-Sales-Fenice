@@ -174,17 +174,50 @@ falso allarme: i tre punti sopra si romperebbero al primo giro reale, quando le 
 `lead-scartato`/`lead-assente` di aprile/maggio verranno applicate.
 
 Fix applicato — un solo file di verità (`isFunnelClosure` in `src/lib/kpi/canon.ts`,
-`Chiuso && presentedAt non nullo`) e nei tre punti sopra un contatore aggiuntivo
-`chiusiConPresenza` usato SOLO al numeratore del tasso; il conteggio grezzo `chiusi` (e il
-fatturato, dove presente) resta invariato — nessuna presenza finta, nessun taglio ai totali
-di fatturato. `npx tsc --noEmit`, `npm test` (219/219) e `npm run build` verdi dopo il fix.
+`Chiuso && presentedAt non nullo`, coperto da test in `canon.test.ts`) e nei tre punti
+sopra un contatore aggiuntivo `chiusiConPresenza` usato SOLO al numeratore del tasso; il
+conteggio grezzo `chiusi` (e il fatturato, dove presente) resta invariato — nessuna
+presenza finta, nessun taglio ai totali di fatturato.
 
-Nota collaterale (non corretta in questo task, fuori scope stretto): `marketingActions.ts`
-(`getMarketingStats`/`getMarketingStatsByGdo`) usa `appointmentDate`, non `presentedAt`,
-come gate sul fatturato/ROAS per-funnel — stesso meccanismo, campo diverso. Per la famiglia
-`lead-scartato` (funnel reale mantenuto, `appointmentDate` mai stato valorizzato) questo
-esclude silenziosamente quel fatturato da Marketing Analytics. Segnalato al PO/controller
-per un giro dedicato: cambiare le formule ROAS non è nello scope di questo task.
+**Correzione (review, 2026-08-29):** la prima stesura di questa nota affermava che le
+righe TOTALE, per-funnel **e trend settimanale** di `confermeKpiActions.ts` fossero
+tutte protette. Non era vero: solo `totals`/`perFunnel`/`ALTRI` (che passano da
+`withRatios`) usavano già `chiusiConPresenza`; il trend settimanale (riga
+`weeklyRows`, dentro `getConfermeTlOverview`) costruiva ancora `pctChius` a mano con
+`acc.chiusi / acc.presenziati` — lo stesso bug che il resto del fix elimina, lasciato
+vivo in un sotto-oggetto. Corretto: ora usa `acc.chiusiConPresenza` (già popolato da
+`accumulate()`, nessuna query o contatore nuovo). Verificato che non restino altri
+`.chiusi /` non filtrati nel file.
+
+`npx tsc --noEmit`, `npm test` (224/224, incluse le 5 nuove su `isFunnelClosure`) e
+`npm run build` verdi dopo il fix completo.
+
+`marketingActions.ts` (`getMarketingStats`/`getMarketingStatsByGdo`) usa
+`appointmentDate`, non `presentedAt`, come gate su `close`/`fatturato` per-funnel —
+stesso meccanismo di rischio di questo task, campo diverso. Per la famiglia
+`lead-scartato` (funnel reale mantenuto, `appointmentDate` mai valorizzato) questo
+esclude silenziosamente quel fatturato da Marketing Analytics/ROAS. Il controller ha
+messo questo punto in scope (Ruling B) con una condizione: applicare la correzione SOLO
+se una misura sui dati reali dimostra che è un no-op oggi (nessuna chiusura storica
+sarebbe toccata). La misura ha dato esito diverso da zero — vedi sotto — quindi la
+correzione **non è stata applicata**: resta una decisione del PO.
+
+```sql
+SELECT date_trunc('month', "salespersonOutcomeAt") AS mese, count(*)
+FROM leads
+WHERE "companyId" = 'fenice' AND "salespersonOutcome" = 'Chiuso' AND "appointmentDate" IS NULL
+GROUP BY 1 ORDER BY 1 DESC LIMIT 12;
+-- → 2026-07: 2, 2026-05: 1, 2026-04: 3   (6 chiusure storiche, NON un no-op)
+```
+
+Le 6 chiusure preesistenti (dettaglio per funnel/importo nel report di task): 2 Black
+Summer a luglio (€3.335), 1 ORG a maggio (€3.179), 1 CORSO 10 ORE + 1 ORG + 1
+TELEGRAM-TK ad aprile (€1.890 + €2.890 + €1.529). Non sono un effetto della
+riconciliazione (che non è ancora stata applicata su dati reali): sono chiusure
+esistenti prima di questo task, di origine non accertata in questa verifica. Rimuovere
+il gate su `appointmentDate` sposterebbe con effetto retroattivo il fatturato/ROAS di
+aprile, maggio e luglio di Marketing Analytics — un cambio di numeri storici che il PO
+deve decidere consapevolmente, non un effetto collaterale di un task di verifica.
 
 ## Fuori scope
 

@@ -691,7 +691,9 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
                 chiusi: acc.chiusi,
                 pctConf: acc.fissati > 0 ? acc.confermati / acc.fissati : null,
                 pctPres: acc.confermati > 0 ? acc.presenziati / acc.confermati : null,
-                pctChius: acc.presenziati > 0 ? acc.chiusi / acc.presenziati : null,
+                // Numeratore = solo chiusure con presenza vera (vedi withRatios/totalsRow):
+                // acc.chiusi resta il totale grezzo, acc.chiusiConPresenza già popolato da accumulate().
+                pctChius: acc.presenziati > 0 ? acc.chiusiConPresenza / acc.presenziati : null,
                 isCurrent: now >= s && now < e,
             })
             cursor = weekBoundsRome(new Date(cursor.getTime() + 7 * 86400_000 + 12 * 3600_000)).start
