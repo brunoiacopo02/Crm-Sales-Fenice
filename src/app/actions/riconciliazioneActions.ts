@@ -511,6 +511,39 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
 // riapplicate così come sono.
 type ReconciliationSnapshot = { lead: Record<string, unknown>; attempt: AttemptSnapshot | null };
 
+// Un valore Date scritto in una colonna jsonb (before/after) esce dal DB come
+// stringa ISO, non come Date: JSON non ha un tipo Date e Date.prototype.toJSON
+// lo trasforma in stringa alla serializzazione. Le colonne timestamp di Drizzle
+// però in scrittura chiamano value.toISOString() (vedi
+// node_modules/drizzle-orm/pg-core/columns/timestamp.js:mapToDriverValue) e
+// una stringa non ha quel metodo: passarla così com'è farebbe fallire ogni
+// UPDATE che tocca un campo data. Vanno "resuscitate" a Date prima di riusarle.
+function reviveDateOrNull(value: unknown): Date | null {
+    if (value === null || value === undefined) return null;
+    if (value instanceof Date) return value;
+    if (typeof value === 'string') return new Date(value);
+    throw new Error(`Valore data non valido nello storico riconciliazione: ${JSON.stringify(value)}`);
+}
+
+function reviveDate(value: unknown): Date {
+    const d = reviveDateOrNull(value);
+    if (!d) throw new Error('Valore data mancante nello storico riconciliazione (atteso non-null).');
+    return d;
+}
+
+// Uniche colonne timestamp di `leads` che le famiglie di riconciliazione
+// toccano oggi (vedi applicaCorrezioni: ramo esito-mancante/lead-scartato).
+// Se una futura famiglia tocca un altro campo data, va aggiunto qui.
+const LEAD_TIMESTAMP_FIELDS = ['salespersonOutcomeAt'] as const;
+
+function reviveLeadSnapshot(lead: Record<string, unknown>): Record<string, unknown> {
+    const revived: Record<string, unknown> = { ...lead };
+    for (const key of LEAD_TIMESTAMP_FIELDS) {
+        if (key in revived) revived[key] = reviveDateOrNull(revived[key]);
+    }
+    return revived;
+}
+
 export type AnnullaRunResult = { success: true; reverted: number } | { success: false; error: string };
 
 // Annulla una run già applicata: per ogni entry riporta `leads` (e
@@ -580,7 +613,7 @@ export async function annullaRun(runId: string): Promise<AnnullaRunResult> {
                 // da applicaCorrezioni, mai l'intera riga) + bump di version, come da
                 // convenzione di ogni write path su `leads`.
                 await tx.update(leads)
-                    .set({ ...before.lead, version: currentLead.version + 1 })
+                    .set({ ...reviveLeadSnapshot(before.lead), version: currentLead.version + 1 })
                     .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
 
                 // Ripristino letterale di salesAttempts: before.attempt/after.attempt
@@ -591,10 +624,11 @@ export async function annullaRun(runId: string): Promise<AnnullaRunResult> {
                     if (before.attempt) {
                         await tx.update(salesAttempts).set({
                             outcome: before.attempt.outcome,
-                            // Il tipo di AttemptSnapshot ammette null per prudenza, ma la
-                            // colonna è NOT NULL: applicaCorrezioni valorizza sempre una
-                            // Date reale prima di scriverci uno snapshot.
-                            outcomeAt: before.attempt.outcomeAt!,
+                            // salesAttempts.outcomeAt è NOT NULL: applicaCorrezioni valorizza
+                            // sempre una Date reale prima di scriverci uno snapshot. Va
+                            // "resuscitata" da stringa ISO (round-trip via jsonb, vedi
+                            // reviveDate) prima di riscriverla su una colonna timestamp.
+                            outcomeAt: reviveDate(before.attempt.outcomeAt),
                             closeAmountEur: before.attempt.closeAmountEur,
                             closeProduct: before.attempt.closeProduct,
                             attemptNumber: before.attempt.attemptNumber,
