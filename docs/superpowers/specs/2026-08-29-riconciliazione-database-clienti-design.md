@@ -131,6 +131,61 @@ quindi sui mesi già bonificati il motore deve produrre zero differenze. Se ne p
 Serve anche un test esplicito sul caso `#REF!` / foglio vuoto: deve alzare un errore, mai
 proporre correzioni.
 
+### Task 10 — verifica delle viste che dividono per le presenze (2026-08-29)
+
+Grep `presentedAt` su `src/app/actions` e `src/lib` (esclusi i test): 26 file, ~100 hit.
+Solo tre punti usano `presentedAt` come **denominatore** di un tasso di chiusura
+(`chiusi / presenziati`) senza gate su `salespersonUserId`/`confirmationsUserId` che
+escluda già le chiusure fuori funnel della riconciliazione:
+
+- `gdoPerformanceActions.ts` (`getManagerGdoTables`) → `percClosed` per-funnel e totale,
+  gate solo su `assignedToId` (il GDO che ha scartato il lead resta il GDO attribuito).
+- `confermeKpiActions.ts` (`getConfermeTlOverview`) → `pctChius`/`pctFissatoChiuso` di
+  TOTALE, per-funnel e trend settimanale (non gated su `confirmationsUserId`, quindi
+  non protetti come invece lo è `perOperator`).
+- `productivityActions.ts` (`getApptQuality`) → `chiusuraPct`, gate solo su
+  `assignedToId` + ruolo GDO.
+
+Tutti gli altri punti sono innocui: o contano `presentedAt` come numero grezzo (presenze,
+non un tasso), o sono già gated su un campo che una chiusura fuori funnel non avrà mai
+(`salespersonUserId`, `confirmationsUserId`, `apptLeadIds`/`fissatiSet` costruiti da
+`appointmentDate`) — vedi `kpiVenditoriActions.ts`, `achievementActions.ts`,
+`botStatsActions.ts`, `kpiAdvancedActions.ts` (per-GDO), gamification (`managerRpgActions.ts`,
+`questActions.ts`), `salesAlertsActions.ts`, `targetActions.ts`, `panoramicaActions.ts`,
+`marketingActions.ts` (i tassi), `metricsUtils.ts`, `presenceCounting.ts`.
+
+Misura sui dati reali (Supabase, `project_id=ncutwzsifzundikwllxp`):
+
+```sql
+SELECT date_trunc('month', "salespersonOutcomeAt") AS mese, count(*)
+FROM leads
+WHERE "companyId" = 'fenice' AND "salespersonOutcome" = 'Chiuso' AND "presentedAt" IS NULL
+GROUP BY 1 ORDER BY 1 DESC LIMIT 12;
+-- → []  (nessuna riga)
+
+SELECT count(*) AS total_chiusi, count(*) FILTER (WHERE "presentedAt" IS NULL) AS chiusi_senza_presenza
+FROM leads WHERE "companyId" = 'fenice' AND "salespersonOutcome" = 'Chiuso';
+-- → {"total_chiusi":298,"chiusi_senza_presenza":0}
+```
+
+Il caso è **zero su 298 chiusure**: non preesiste, perché la riconciliazione non è ancora
+stata applicata su dati reali (il primo giro su aprile/maggio è ancora da fare). Non è un
+falso allarme: i tre punti sopra si romperebbero al primo giro reale, quando le ~29 chiusure
+`lead-scartato`/`lead-assente` di aprile/maggio verranno applicate.
+
+Fix applicato — un solo file di verità (`isFunnelClosure` in `src/lib/kpi/canon.ts`,
+`Chiuso && presentedAt non nullo`) e nei tre punti sopra un contatore aggiuntivo
+`chiusiConPresenza` usato SOLO al numeratore del tasso; il conteggio grezzo `chiusi` (e il
+fatturato, dove presente) resta invariato — nessuna presenza finta, nessun taglio ai totali
+di fatturato. `npx tsc --noEmit`, `npm test` (219/219) e `npm run build` verdi dopo il fix.
+
+Nota collaterale (non corretta in questo task, fuori scope stretto): `marketingActions.ts`
+(`getMarketingStats`/`getMarketingStatsByGdo`) usa `appointmentDate`, non `presentedAt`,
+come gate sul fatturato/ROAS per-funnel — stesso meccanismo, campo diverso. Per la famiglia
+`lead-scartato` (funnel reale mantenuto, `appointmentDate` mai stato valorizzato) questo
+esclude silenziosamente quel fatturato da Marketing Analytics. Segnalato al PO/controller
+per un giro dedicato: cambiare le formule ROAS non è nello scope di questo task.
+
 ## Fuori scope
 
 - Scrivere sul foglio: la riconciliazione è a senso unico, dal foglio al CRM.

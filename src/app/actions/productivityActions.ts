@@ -53,7 +53,7 @@ import { and, gte, lte, lt, eq, isNotNull, or } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
 import { shiftBoundsFor, lateAndEarly, trainingAllowanceSec, isCollectiveTrainingDay, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN, WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN, romeDowOf } from "@/lib/cdr/shift"
-import { apptSetAt } from "@/lib/kpi/canon"
+import { apptSetAt, isFunnelClosure } from "@/lib/kpi/canon"
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
 
 /** Sotto questa soglia la giornata non è rappresentativa (mezze giornate, assenze). */
@@ -633,6 +633,10 @@ export type ApptQualityRow = {
     app: number
     presenziati: number
     chiusi: number
+    /** Chiusure con presenza vera dietro (isFunnelClosure): numeratore di
+     *  chiusuraPct. `chiusi` resta il totale grezzo, comprese le chiusure
+     *  fuori funnel scritte dalla riconciliazione fatturato. */
+    chiusiConPresenza: number
     fatturato: number
     presenzaPct: number
     chiusuraPct: number
@@ -694,7 +698,7 @@ export async function getApptQuality(
     const slot = (id: string, gdo: string) => {
         let s = agg.get(id)
         if (!s) {
-            s = { userId: id, gdo, app: 0, presenziati: 0, chiusi: 0, fatturato: 0, presenzaPct: 0, chiusuraPct: 0, euroPerApp: 0 }
+            s = { userId: id, gdo, app: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0, fatturato: 0, presenzaPct: 0, chiusuraPct: 0, euroPerApp: 0 }
             agg.set(id, s)
         }
         return s
@@ -709,6 +713,10 @@ export async function getApptQuality(
         if (r.salespersonOutcome?.toLowerCase() === 'chiuso' && inRange(r.salespersonOutcomeAt)) {
             s.chiusi += 1
             s.fatturato += r.closeAmountEur || 0
+            // Numeratore di chiusuraPct: solo chiusure con presenza vera (la
+            // riconciliazione fatturato può chiudere un lead scartato dal GDO,
+            // mai presentato — reale per i soldi, non per il tasso di conversione).
+            if (isFunnelClosure(r)) s.chiusiConPresenza += 1
         }
     }
 
@@ -718,7 +726,7 @@ export async function getApptQuality(
             ...s,
             fatturato: Math.round(s.fatturato),
             presenzaPct: s.app ? Math.round((100 * s.presenziati) / s.app) : 0,
-            chiusuraPct: s.presenziati ? Math.round((100 * s.chiusi) / s.presenziati) : 0,
+            chiusuraPct: s.presenziati ? Math.round((100 * s.chiusiConPresenza) / s.presenziati) : 0,
             euroPerApp: s.app ? Math.round(s.fatturato / s.app) : 0,
         }))
         .sort((a, b) => b.euroPerApp - a.euroPerApp)

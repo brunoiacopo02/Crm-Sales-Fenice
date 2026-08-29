@@ -7,6 +7,7 @@ import { format } from "date-fns"
 import { weekBoundsRome, monthBoundsRome, dayBoundsRome, toRomeDateStr, previousYearMonth } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isConfermeTl } from '@/lib/confermeTl'
+import { isFunnelClosure } from '@/lib/kpi/canon'
 
 /** Default Conferme bonus: T1=30 chiusure (€145), T2=38 chiusure (€290).
  *  Module-private (i file con "use server" possono esportare solo funzioni
@@ -366,11 +367,16 @@ export type TlFunnelRow = {
     confermati: number
     presenziati: number
     chiusi: number
+    /** Sottoinsieme di `chiusi` con una presenza vera dietro (isFunnelClosure):
+     *  numeratore di pctChius/pctFissatoChiuso. `chiusi` e `fatturatoEur`
+     *  restano sul totale grezzo, comprese le chiusure fuori funnel scritte
+     *  dalla riconciliazione fatturato (Database Clienti, PO 2026-08-29). */
+    chiusiConPresenza: number
     fatturatoEur: number
     pctConf: number | null            // confermati / fissati
     pctPres: number | null            // presenziati / confermati
-    pctChius: number | null           // chiusi / presenziati
-    pctFissatoChiuso: number | null   // chiusi / fissati
+    pctChius: number | null           // chiusiConPresenza / presenziati
+    pctFissatoChiuso: number | null   // chiusiConPresenza / fissati
     eurPerFissato: number | null      // fatturato / fissati
     /** true sulla riga di coda aggregata: i funnel sotto la top-N del mese. */
     isOther?: boolean
@@ -479,7 +485,7 @@ const apptSetAt = (r: TlLeadRow): Date | null =>
 
 function emptyRow(funnel: string): TlFunnelRow {
     return {
-        funnel, fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, fatturatoEur: 0,
+        funnel, fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0, fatturatoEur: 0,
         pctConf: null, pctPres: null, pctChius: null, pctFissatoChiuso: null, eurPerFissato: null,
     }
 }
@@ -489,8 +495,10 @@ function withRatios(r: TlFunnelRow): TlFunnelRow {
         ...r,
         pctConf: r.fissati > 0 ? r.confermati / r.fissati : null,
         pctPres: r.confermati > 0 ? r.presenziati / r.confermati : null,
-        pctChius: r.presenziati > 0 ? r.chiusi / r.presenziati : null,
-        pctFissatoChiuso: r.fissati > 0 ? r.chiusi / r.fissati : null,
+        // Numeratore = solo chiusure con presenza vera (vedi chiusiConPresenza):
+        // altrimenti una chiusura riconciliata fuori funnel gonfia il tasso.
+        pctChius: r.presenziati > 0 ? r.chiusiConPresenza / r.presenziati : null,
+        pctFissatoChiuso: r.fissati > 0 ? r.chiusiConPresenza / r.fissati : null,
         eurPerFissato: r.fissati > 0 ? r.fatturatoEur / r.fissati : null,
     }
 }
@@ -503,6 +511,9 @@ function accumulate(acc: TlFunnelRow, r: TlLeadRow, s: Date, e: Date): void {
     if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, s, e)) {
         acc.chiusi++
         acc.fatturatoEur += r.amount || 0
+        // Chiusura senza presenza (riconciliazione fatturato): vera per i
+        // soldi (fatturatoEur sopra), esclusa dal numeratore dei tassi.
+        if (isFunnelClosure(r)) acc.chiusiConPresenza++
     }
 }
 
@@ -590,6 +601,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
                 acc.confermati += r.confermati
                 acc.presenziati += r.presenziati
                 acc.chiusi += r.chiusi
+                acc.chiusiConPresenza += r.chiusiConPresenza
                 acc.fatturatoEur += r.fatturatoEur
                 return acc
             }, emptyRow('ALTRI'))
