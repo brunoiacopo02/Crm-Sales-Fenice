@@ -66,7 +66,7 @@ export function tutorToSalesCode(tutor: string | undefined | null): string | nul
     return TUTOR_TO_SALES[tutor.trim().toLowerCase()] ?? null;
 }
 
-function monthKeyOf(d: Date): string {
+export function monthKeyOf(d: Date): string {
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 

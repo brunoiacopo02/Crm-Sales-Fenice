@@ -1,4 +1,5 @@
 import type { SheetContract } from './sheetRows';
+import { monthKeyOf } from './sheetRows';
 
 export type Family = 'esito-mancante' | 'lead-scartato' | 'lead-assente' | 'importo' | 'solo-crm';
 
@@ -30,24 +31,30 @@ export type DiffEntry = {
 export const ROUNDING_TOLERANCE_EUR = 2;
 
 function indexCrm(crm: CrmClosure[]) {
-    const byPhone = new Map<string, CrmClosure>();
-    const byEmail = new Map<string, CrmClosure>();
+    // Indice per phone+month e email+month: stessa persona in mesi diversi
+    // è una vera re-firma, non deve essere collassata.
+    const byPhoneMonth = new Map<string, CrmClosure>();
+    const byEmailMonth = new Map<string, CrmClosure>();
     for (const c of crm) {
-        if (c.phone) byPhone.set(c.phone, c);
-        if (c.email) byEmail.set(c.email, c);
+        // outcomeAt nullo = niente mese = niente indice. Cadrà in solo-crm.
+        if (!c.outcomeAt) continue;
+        const month = monthKeyOf(c.outcomeAt);
+        if (c.phone) byPhoneMonth.set(`${c.phone}|${month}`, c);
+        if (c.email) byEmailMonth.set(`${c.email}|${month}`, c);
     }
-    return { byPhone, byEmail };
+    return { byPhoneMonth, byEmailMonth };
 }
 
 export function reconcile(sheet: SheetContract[], crm: CrmClosure[]): DiffEntry[] {
-    const { byPhone, byEmail } = indexCrm(crm);
+    const { byPhoneMonth, byEmailMonth } = indexCrm(crm);
     const matched = new Set<string>();
     const out: DiffEntry[] = [];
 
     for (const s of sheet) {
         // Telefono prima, mail come rete di sicurezza: nel CRM capita il numero
         // storpiato di una cifra, e senza la mail risulterebbe un contratto mancante.
-        const c = (s.phone && byPhone.get(s.phone)) || (s.email && byEmail.get(s.email)) || null;
+        // Lookup con phone+month e email+month per rispettare l'aggregazione per mese.
+        const c = (s.phone && byPhoneMonth.get(`${s.phone}|${s.monthKey}`)) || (s.email && byEmailMonth.get(`${s.email}|${s.monthKey}`)) || null;
         if (c) matched.add(c.leadId);
 
         const blockedReason = !s.salesCode
