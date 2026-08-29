@@ -256,6 +256,16 @@ Vittima confermata in DB: una sola, `0f90aa98-17b4-4291-ab08-d05917b1a448`
 (25/06) — appuntamento fissato alle 15:13, riassegnato come `chat_interrotta`
 alle 16:32, poi richiamato a freddo quattro volte, oggi `REJECTED`.
 
+**La stessa guardia mancante ha un secondo sapore**, trovato dalla verifica
+avversaria: **4 lead già `REJECTED` sono stati resuscitati a `NEW`** da una
+riassegnazione arrivata dopo un `DA_SCARTARE` (12/07, 27/07, 13/08, 17/08).
+Uno scarto è una decisione presa; un `INTERROTTO` che arriva dopo non la
+annulla. Va guardato anche questo — ma **separatamente** da `isLeadLocked`, che
+è un'invariante diversa: lì si protegge lo storico e l'attribuzione, qui si
+protegge una decisione. La distinzione conta, perché in
+`assignContactRequest` la resurrezione di un `REJECTED` è **voluta**: un lead
+scartato che chiede di essere richiamato torna in pipeline apposta.
+
 **Fix**, come prima istruzione dentro la transazione (riga 30), così copre anche
 futuri chiamanti:
 
@@ -282,10 +292,51 @@ callLog `APPUNTAMENTO`, `appointmentDate` e `appointmentCreatedAt` mai
 valorizzati, `agendaStatus` NULL. Ma la loro `botNote` dice che l'appuntamento
 era confermato in chat.
 
-Se regge, sono 7 persone che credono di avere una call che non esiste in nessun
-sistema. **Conclusione sotto verifica avversaria prima di essere comunicata al
-fornitore** — è un'accusa, non un dato, finché non ha retto a un tentativo serio
-di demolirla.
+**Verifica avversaria (29/08): il nucleo regge, due affermazioni no.**
+
+Cosa sopravvive, e con una prova più forte di quella iniziale:
+`updateLeadOutcome` scrive il callLog **prima** del controllo di concorrenza
+(`pipelineActions.ts:367-377`), quindi perfino un `APPUNTAMENTO` fallito con 409
+lascia una traccia indelebile. Nessun callLog `APPUNTAMENTO` significa che
+nessuna chiamata `APPUNTAMENTO` è mai arrivata al ramo di scrittura. Nel codice
+non esiste nessuna delete su `callLogs`. E su **tutto** lo storico — non solo 90
+giorni — esiste **un solo** lead con un appuntamento precedente a una
+riassegnazione: quello del 25/06. Il campione, semmai, era incompleto **a nostro
+sfavore**: le note di `REASSIGNED_FROM_BOT` che dichiarano un appuntamento
+confermato in chat sono ~45, non 7.
+
+Cosa **non** possiamo dire:
+
+1. **«Le otto call sono passate con 2xx quindi mentono»** non è verificabile: i
+   log HTTP Vercel del 15-24/08 non esistono più. E c'è una spiegazione
+   innocente da offrire *prima* di accusare: `NOTA`, `CONTATTO_UMANO` e lo
+   stesso `INTERROTTO` rispondono **davvero** 200 per contratto. Se la loro
+   telemetria registra «CRM notificato, 200 OK» senza distinguere l'outcome, i
+   loro 2xx sono veri ma riferiti a chiamate che per contratto non fissano
+   niente. In più un `APPUNTAMENTO` senza offset di fuso prende 400
+   (`route.ts:89-91`): se il loro client tratta male i 4xx, possono credere di
+   aver inviato ciò che non è mai passato.
+2. **«Il CRM non può fare quello che descrivete»** è falso. Può, ed è successo
+   una volta. Va riconosciuto per primo, non per ultimo.
+
+Non possiamo nemmeno affermare che il bot «non ha mai chiamato» l'endpoint con
+`APPUNTAMENTO`: solo che nessuna chiamata `APPUNTAMENTO` è mai andata a buon
+fine su quei lead. Quello che serve chiedere: gli **8 `leadId`**, i timestamp, e
+**payload e corpo della risposta** delle chiamate che dicono aver ricevuto 2xx.
+Con quelli si chiude in dieci minuti, in un senso o nell'altro.
+
+**Contesto della finestra**, verificato: i 360 `chat_interrotta` del 24/08 sono
+reali contro una media di ~12 al giorno, il picco parte il 20/08 con un pattern
+da cron orario, e **fra il 18 e il 24/08 non c'è stato nessun deploy nostro**.
+È compatibile con uno svuotamento massivo di chat stantie da parte loro — forse
+la risposta alla nostra contestazione del 6/08 sui «338 lead fermi». Da tenere
+presente prima di accusare: potremmo averlo chiesto noi.
+
+Dettaglio a doppio taglio: molte conferme in chat del 21-24/08 riguardano date
+**già passate** al momento del rilascio (es. `19ebf9fd`: il lead conferma
+«mercoledì 19 alle 12», rilasciato il 24/08 alle 23:06). Prova che il bot ha
+tenuto le chat oltre la data concordata — ma anche che, se pure ce li avesse
+mandati, quegli appuntamenti sarebbero stati inservibili.
 
 ## 6. I duplicati per numero di telefono
 
