@@ -23,6 +23,10 @@ const REPORTING_ALLOWLIST = [
   // Simulatore puro: non legge un solo lead, quindi non ha senso bloccarlo
   // quando l'admin è in modalità gruppo.
   '/previsionale',
+  // Riconciliazione: confronta CRM e foglio SOLO per Fenice (COMPANY_ID fisso
+  // in riconciliazioneActions.ts), è quindi un report di sola lettura anche
+  // quando l'admin è su "Tutte le aziende".
+  '/riconciliazione',
 ]
 
 export function AllCompaniesGate({
