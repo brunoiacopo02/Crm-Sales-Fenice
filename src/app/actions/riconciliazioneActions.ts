@@ -10,6 +10,7 @@ import { normalizePhoneStrict } from '@/lib/phoneNormalize';
 import { monthBoundsRome } from '@/lib/dateUtils';
 import { fetchDatabaseClientiRows } from '@/lib/riconciliazione/sheetsClient';
 import { parseSheetRows, SheetUnavailableError } from '@/lib/riconciliazione/sheetRows';
+import { parseCsv } from '@/lib/riconciliazione/csv';
 import { reconcile, type CrmClosure, type DiffEntry } from '@/lib/riconciliazione/match';
 import { resolveAttemptWrite } from '@/lib/venditorePerformance/guard';
 import { logLeadEvent } from '@/lib/eventLogger';
@@ -86,12 +87,16 @@ export type ConfrontoResult =
     | { success: true; entries: DiffEntry[]; sheetContracts: number; sheetTotalEur: number; crmTotalEur: number }
     | { success: false; error: string };
 
-export async function confrontaMese(monthKey: string): Promise<ConfrontoResult> {
-    if (!await requireAdmin()) return { success: false, error: 'Non autorizzato.' };
-    if (!/^\d{4}-\d{2}$/.test(monthKey)) return { success: false, error: 'Mese non valido.' };
-
+// Corpo condiviso dai due ingressi (foglio live e CSV caricato a mano): la
+// SOLA differenza fra i due percorsi è come si ottengono le `values` grezze
+// (string[][]). Da qui in poi — parseSheetRows, il calcolo dei totali, il
+// reconcile — è lo STESSO codice per entrambi, per costruzione: se questa
+// funzione dovesse mai biforcarsi per sorgente, le regole di business
+// (status escluso, somma contratti spezzati, lettura importi/date) potrebbero
+// divergere fra sheet e CSV, che è esattamente ciò che il design vuole evitare.
+async function confrontaMeseConValues(monthKey: string, getValues: () => Promise<string[][]>): Promise<ConfrontoResult> {
     try {
-        const values = await fetchDatabaseClientiRows();
+        const values = await getValues();
         const sheet = parseSheetRows(values, monthKey);
         const crm = await loadCrmClosures(monthKey);
         const entries = reconcile(sheet, crm);
@@ -106,6 +111,20 @@ export async function confrontaMese(monthKey: string): Promise<ConfrontoResult> 
         if (e instanceof SheetUnavailableError) return { success: false, error: e.message };
         return { success: false, error: 'Confronto fallito: ' + (e instanceof Error ? e.message : 'errore ignoto') };
     }
+}
+
+export async function confrontaMese(monthKey: string): Promise<ConfrontoResult> {
+    if (!await requireAdmin()) return { success: false, error: 'Non autorizzato.' };
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) return { success: false, error: 'Mese non valido.' };
+
+    return confrontaMeseConValues(monthKey, fetchDatabaseClientiRows);
+}
+
+export async function confrontaMeseDaCsv(monthKey: string, csv: string): Promise<ConfrontoResult> {
+    if (!await requireAdmin()) return { success: false, error: 'Non autorizzato.' };
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) return { success: false, error: 'Mese non valido.' };
+
+    return confrontaMeseConValues(monthKey, async () => parseCsv(csv));
 }
 
 export type ApplyResult = { success: true; runId: string; applied: number } | { success: false; error: string };
@@ -161,16 +180,20 @@ function resolveSalesUserId(
     );
 }
 
-export async function applicaCorrezioni(monthKey: string, keys: string[]): Promise<ApplyResult> {
+export async function applicaCorrezioni(monthKey: string, keys: string[], csv?: string): Promise<ApplyResult> {
     const admin = await requireAdmin();
     if (!admin) return { success: false, error: 'Non autorizzato.' };
     if (!/^\d{4}-\d{2}$/.test(monthKey)) return { success: false, error: 'Mese non valido.' };
 
-    // Il client manda SOLO le chiavi: le differenze si ricalcolano qui. Fidarsi
-    // delle entry mandate dal browser significherebbe accettare importi, famiglie
-    // o lead id scelti da chi apre i devtools — su un'azione che scrive fatturato
-    // non è negoziabile.
-    const fresh = await confrontaMese(monthKey);
+    // Il client manda SOLO le chiavi (più il testo del CSV quando la sorgente è
+    // quella: mai le entry già calcolate) — le differenze si ricalcolano SEMPRE
+    // qui. Fidarsi delle entry mandate dal browser significherebbe accettare
+    // importi, famiglie o lead id scelti da chi apre i devtools — su un'azione
+    // che scrive fatturato non è negoziabile, e vale ugualmente per il percorso
+    // CSV: il server ri-analizza il testo con lo stesso parseSheetRows, non fa
+    // rieseguire al client il match e poi si fida del risultato.
+    const source: 'sheet' | 'csv' = csv !== undefined ? 'csv' : 'sheet';
+    const fresh = source === 'csv' ? await confrontaMeseDaCsv(monthKey, csv!) : await confrontaMese(monthKey);
     if (!fresh.success) return { success: false, error: fresh.error };
 
     const wanted = new Set(keys);
@@ -204,7 +227,7 @@ export async function applicaCorrezioni(monthKey: string, keys: string[]): Promi
                 id: runId,
                 companyId: COMPANY_ID,
                 monthKey,
-                source: 'sheet',
+                source,
                 appliedBy: admin.id,
                 entryCount: todo.length,
             });

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
     AlertTriangle,
     CheckCircle2,
+    FileUp,
     History,
     RefreshCw,
     Scale,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
     confrontaMese,
+    confrontaMeseDaCsv,
     applicaCorrezioni,
     annullaRun,
     elencoRun,
@@ -95,14 +97,25 @@ export default function RiconciliazioneClient({ currentYearMonth }: { currentYea
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // `source`/`csvText` viaggiano SEMPRE insieme al resto del risultato: sono
+    // ciò che garantisce che un Applica vada verso la stessa sorgente da cui è
+    // arrivato il confronto mostrato a schermo (mai comparare da CSV e
+    // applicare contro il foglio live, o viceversa). `csvText` è il testo
+    // esatto già confrontato: applicaCorrezioni lo ri-userà per il ricalcolo
+    // server-side, non ne serve uno nuovo dal file (che nel frattempo l'admin
+    // potrebbe aver sostituito sul disco).
     const [result, setResult] = useState<{
         entries: DiffEntry[];
         sheetContracts: number;
         sheetTotalEur: number;
         crmTotalEur: number;
         monthKey: string;
+        source: 'sheet' | 'csv';
+        csvText: string | null;
     } | null>(null);
     const [checked, setChecked] = useState<Set<string>>(new Set());
+    const [csvLoading, setCsvLoading] = useState(false);
+    const [csvFileName, setCsvFileName] = useState<string | null>(null);
 
     const [runs, setRuns] = useState<RiconciliazioneRunSummary[] | null>(null);
     const [runsError, setRunsError] = useState<string | null>(null);
@@ -136,7 +149,8 @@ export default function RiconciliazioneClient({ currentYearMonth }: { currentYea
                 setResult(null);
                 setChecked(new Set());
             } else {
-                setResult({ entries: res.entries, sheetContracts: res.sheetContracts, sheetTotalEur: res.sheetTotalEur, crmTotalEur: res.crmTotalEur, monthKey });
+                setResult({ entries: res.entries, sheetContracts: res.sheetContracts, sheetTotalEur: res.sheetTotalEur, crmTotalEur: res.crmTotalEur, monthKey, source: 'sheet', csvText: null });
+                setCsvFileName(null);
                 // Default: spuntate solo esito-mancante/importo, e solo se applicabili
                 // (una riga bloccata non deve mai partire spuntata).
                 const initial = new Set(
@@ -151,6 +165,48 @@ export default function RiconciliazioneClient({ currentYearMonth }: { currentYea
         }
         await loadRuns(monthKey);
     }, [loadRuns]);
+
+    // Percorso di riserva: stesso normalizzatore (parseSheetRows), stesse regole,
+    // solo un'origine diversa per le righe grezze. `csvText` resta agganciato al
+    // risultato così l'Applica successivo ricalcola SEMPRE dallo stesso CSV, mai
+    // dal foglio live.
+    const runConfrontoCsv = useCallback(async (monthKey: string, csvText: string) => {
+        setCsvLoading(true);
+        setError(null);
+        setApplyMessage(null);
+        try {
+            const res = await confrontaMeseDaCsv(monthKey, csvText);
+            if (!res.success) {
+                setError(res.error);
+                setResult(null);
+                setChecked(new Set());
+            } else {
+                setResult({ entries: res.entries, sheetContracts: res.sheetContracts, sheetTotalEur: res.sheetTotalEur, crmTotalEur: res.crmTotalEur, monthKey, source: 'csv', csvText });
+                const initial = new Set(
+                    res.entries
+                        .filter(e => DEFAULT_CHECKED_FAMILIES.has(e.family) && e.appliable)
+                        .map(e => e.key),
+                );
+                setChecked(initial);
+            }
+        } finally {
+            setCsvLoading(false);
+        }
+        await loadRuns(monthKey);
+    }, [loadRuns]);
+
+    const handleCsvFile = useCallback((file: File) => {
+        setCsvFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = () => {
+            const text = typeof reader.result === 'string' ? reader.result : '';
+            runConfrontoCsv(selectedMonth, text);
+        };
+        reader.onerror = () => {
+            setError('Impossibile leggere il file CSV selezionato.');
+        };
+        reader.readAsText(file, 'utf-8');
+    }, [runConfrontoCsv, selectedMonth]);
 
     // Storico caricato anche all'apertura pagina, per il mese corrente, così
     // l'admin vede subito se qualcuno ha già lavorato il mese senza dover
@@ -197,12 +253,20 @@ export default function RiconciliazioneClient({ currentYearMonth }: { currentYea
         setApplyMessage(null);
         try {
             const keys = selectedEntries.map(e => e.key);
-            const res = await applicaCorrezioni(result.monthKey, keys);
+            // La sorgente dell'Applica è SEMPRE quella del confronto mostrato a
+            // schermo: se `result` viene da un CSV caricato, il ricalcolo
+            // server-side deve rileggere lo STESSO CSV, mai il foglio live (che
+            // potrebbe nel frattempo dire un'altra cosa, o essere proprio la
+            // ragione per cui l'admin è passato al CSV).
+            const res = result.source === 'csv'
+                ? await applicaCorrezioni(result.monthKey, keys, result.csvText!)
+                : await applicaCorrezioni(result.monthKey, keys);
             if (!res.success) {
                 setApplyMessage('Errore: ' + res.error);
             } else {
                 setApplyMessage(`Applicate ${res.applied} correzioni.`);
-                await runConfronto(result.monthKey);
+                if (result.source === 'csv') await runConfrontoCsv(result.monthKey, result.csvText!);
+                else await runConfronto(result.monthKey);
                 router.refresh();
             }
         } finally {
@@ -219,7 +283,12 @@ export default function RiconciliazioneClient({ currentYearMonth }: { currentYea
                 window.alert('Errore: ' + res.error);
             } else {
                 window.alert(`Annullate ${res.reverted} correzioni.`);
-                if (result) await runConfronto(result.monthKey);
+                // Ri-confronta con la STESSA sorgente mostrata a schermo (vedi
+                // handleApplica): l'annullamento è indipendente dalla sorgente
+                // (agisce sulle entries salvate, non ricalcola), ma il refresh
+                // successivo del confronto deve restare coerente con essa.
+                if (result?.source === 'csv') await runConfrontoCsv(result.monthKey, result.csvText!);
+                else if (result) await runConfronto(result.monthKey);
                 else await loadRuns(selectedMonth);
                 router.refresh();
             }
@@ -261,13 +330,48 @@ export default function RiconciliazioneClient({ currentYearMonth }: { currentYea
                 <div>
                     <button
                         type="button"
-                        disabled={loading}
+                        disabled={loading || csvLoading}
                         onClick={() => runConfronto(selectedMonth)}
                         className="inline-flex items-center gap-2 rounded-lg bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         {loading ? 'Confronto in corso…' : 'Confronta'}
                     </button>
+                </div>
+
+                {/*
+                    Riserva manuale: quando il service account perde l'accesso al
+                    foglio o l'IMPORTRANGE si rompe, confrontaMese torna un errore
+                    e l'admin non ha altro modo di chiudere il mese. Questo input
+                    carica il CSV esportato a mano dal tab "Database Clienti" e lo
+                    fa passare dallo STESSO parseSheetRows del percorso live
+                    (via confrontaMeseDaCsv): le regole non possono divergere.
+                */}
+                <div className="flex items-center gap-2 rounded-lg border border-dashed border-ash-300 bg-white px-3 py-2 shadow-sm">
+                    <label
+                        htmlFor="ric-csv-input"
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-ash-100 px-3 py-1.5 text-xs font-semibold text-ash-700 transition hover:bg-ash-200"
+                    >
+                        <FileUp className={`h-3.5 w-3.5 ${csvLoading ? 'animate-pulse' : ''}`} />
+                        {csvLoading ? 'Carico il CSV…' : 'Oppure carica il CSV del tab Database Clienti'}
+                    </label>
+                    <input
+                        id="ric-csv-input"
+                        type="file"
+                        accept=".csv,text/csv"
+                        disabled={loading || csvLoading}
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleCsvFile(file);
+                            // Reset per poter ricaricare lo stesso file una seconda volta
+                            // (onChange non spara se il valore non cambia).
+                            e.target.value = '';
+                        }}
+                        className="hidden"
+                    />
+                    {csvFileName && !csvLoading && (
+                        <span className="text-xs text-ash-500">{csvFileName}</span>
+                    )}
                 </div>
             </div>
 
@@ -287,6 +391,26 @@ export default function RiconciliazioneClient({ currentYearMonth }: { currentYea
 
             {result && (
                 <>
+                    {/*
+                        La sorgente del confronto mostrato dev'essere sempre visibile:
+                        un Applica va SEMPRE verso questa stessa sorgente (mai
+                        confrontare da CSV e applicare contro il foglio live), quindi
+                        l'admin deve poter vedere a colpo d'occhio da dove viene ciò
+                        che sta per approvare.
+                    */}
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ash-500">
+                        Sorgente confronto:
+                        {result.source === 'csv' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">
+                                <FileUp className="h-3 w-3" /> CSV caricato{csvFileName ? ` (${csvFileName})` : ''}
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
+                                Foglio Google (live)
+                            </span>
+                        )}
+                    </div>
+
                     {/* Riepilogo */}
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <SummaryCard label="Contratti nel foglio" value={String(result.sheetContracts)} />
