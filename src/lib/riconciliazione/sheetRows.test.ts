@@ -115,3 +115,12 @@ test('un mese senza contratti restituisce lista vuota, non un errore', () => {
     const out = parseSheetRows([HEADER, row({ data: '01/08/2026' })], '2026-01');
     assert.deepEqual(out, []);
 });
+
+test('data 01/08/2026 nel foglio continua a keyare a 2026-08 (Rome timezone invariante)', () => {
+    // Sheet dates sono a mezzogiorno UTC = 14:00 Roma lo stesso giorno.
+    // monthKeyOf con Rome timezone non deve cambiarli.
+    const out = parseSheetRows([HEADER, row({ data: '01/08/2026' })], '2026-08');
+    assert.equal(out.length, 1);
+    assert.equal(out[0].monthKey, '2026-08');
+    assert.equal(out[0].key, '+393663515565|2026-08');
+});

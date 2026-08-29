@@ -128,3 +128,30 @@ test('tutor non mappato con match perfetto CRM: blocca l\'applicazione anche se 
     assert.equal(d[0].appliable, false);
     assert.match(d[0].blockedReason!, /Matteo D\./);
 });
+
+test('chiusura al limite di mese (00:30 Roma primo agosto): matcha il contratto agosto, non torna lead-assente', () => {
+    // 2026-07-31T22:30:00Z è esattamente 2026-08-01T00:30:00+02:00 (00:30 Roma primo agosto).
+    // Deve matchare il contratto agosto, non essere trattato come lead-assente.
+    const d = reconcile(
+        [sheet({ monthKey: '2026-08' })],
+        [crm({ outcomeAt: new Date('2026-07-31T22:30:00Z') })]
+    );
+    assert.deepEqual(d, []);
+});
+
+test('chiusura dopo limite di mese (00:30 Roma primo settembre): NON matcha agosto', () => {
+    // 2026-08-31T22:30:00Z è esattamente 2026-09-01T00:30:00+02:00 (00:30 Roma primo settembre).
+    // Il contratto agosto NON deve matchare questa chiusura, che è in settembre.
+    const d = reconcile(
+        [sheet({ monthKey: '2026-08' })],
+        [crm({ outcomeAt: new Date('2026-08-31T22:30:00Z') })]
+    );
+    // Due differenze: contratto agosto è lead-assente (no CRM match agosto),
+    // chiusura settembre è solo-crm (no sheet match settembre).
+    assert.equal(d.length, 2);
+    const leadAssente = d.find(e => e.family === 'lead-assente');
+    assert.ok(leadAssente);
+    assert.equal(leadAssente!.sheet?.monthKey, '2026-08');
+    const soloCrm = d.find(e => e.family === 'solo-crm');
+    assert.ok(soloCrm);
+});

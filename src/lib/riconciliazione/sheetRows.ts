@@ -1,4 +1,5 @@
 import { normalizePhoneStrict } from '@/lib/phoneNormalize';
+import { toRomeDateStr } from '@/lib/dateUtils';
 
 /**
  * Il tab "Database Clienti" è un IMPORTRANGE: se il collegamento si rompe le
@@ -67,7 +68,9 @@ export function tutorToSalesCode(tutor: string | undefined | null): string | nul
 }
 
 export function monthKeyOf(d: Date): string {
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    // Computa il mese in Europe/Rome (non UTC) per allinearsi ai bounds di query.
+    // toRomeDateStr ritorna 'YYYY-MM-DD' come Roma lo legge, quindi il primo 7 char è il mese.
+    return toRomeDateStr(d).slice(0, 7);
 }
 
 export function parseSheetRows(values: string[][], monthKey: string): SheetContract[] {
