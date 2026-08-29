@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contactCategoryLabel, contactLane, isLeadLocked, normalizeContactCategory } from './contactRequests';
+import { contactCategoryLabel, contactLane, isLeadLocked, normalizeContactCategory, isRecoverableCategory } from './contactRequests';
 
 test('le categorie canoniche passano invariate', () => {
     assert.equal(normalizeContactCategory('prezzo'), 'prezzo');
@@ -66,4 +66,18 @@ test('normalizeContactCategory: il motivo del 3o NR non finisce in "altro"', () 
 
 test('normalizeContactCategory: un motivo ignoto resta "altro" e non fa fallire la richiesta', () => {
     assert.equal(normalizeContactCategory('qualcosa_che_non_conosciamo'), 'altro');
+});
+
+test('isRecoverableCategory: solo le due categorie con un si gia dato', () => {
+    assert.equal(isRecoverableCategory('risposta_dopo_terzo_nr'), true);
+    assert.equal(isRecoverableCategory('conferma_senza_appuntamento'), true);
+    assert.equal(isRecoverableCategory('richiamo'), false);
+    assert.equal(isRecoverableCategory('disdetta'), false);
+    assert.equal(isRecoverableCategory('altro'), false);
+});
+
+test('normalizeContactCategory: il motivo della conferma persa non finisce in "altro"', () => {
+    assert.equal(normalizeContactCategory('conferma_senza_appuntamento'), 'conferma_senza_appuntamento');
+    assert.equal(normalizeContactCategory('aveva_confermato'), 'conferma_senza_appuntamento');
+    assert.equal(normalizeContactCategory('Form Non Completato'), 'conferma_senza_appuntamento');
 });

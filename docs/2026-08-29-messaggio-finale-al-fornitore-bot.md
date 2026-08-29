@@ -74,6 +74,37 @@ risposto dopo il 3° NR — recuperabile») e tre alias (`risposta_dopo_3nr`,
 `risposta_dopo_terzo_tentativo`, `ha_risposto_dopo_nr`), per non dipendere dalla
 forma esatta. Non finisce in `altro`.
 
+### Il sì confermato adesso si vede in pipeline — e questa è vostra
+
+La vostra segnalazione «AVEVA CONFERMATO E L'APPUNTAMENTO NON C'È» è il
+contributo più utile che ci avete dato, e l'abbiamo cablata fino in fondo.
+
+Il problema che risolve è nostro e ce lo eravamo tenuto senza accorgercene: un
+lead che tornava dopo aver confermato entrava in pipeline **indistinguibile da un
+lead freddo qualunque**. Ad agosto sono stati 50, e **14 di loro non li ha mai
+chiamati nessuno**. Non era colpa di chi li aveva in carico: non c'era niente che
+li distinguesse dagli altri.
+
+Da oggi un lead con una vostra segnalazione aperta in una di queste due categorie
+**è marcato sulla card con un badge verde «Aveva detto sì», e va in cima alla
+lista** — prima chiamata, seconda, terza e richiami:
+
+| `motivo` | Quando |
+|---|---|
+| `risposta_dopo_terzo_nr` | ha risposto al messaggio dopo il 3° tentativo |
+| `conferma_senza_appuntamento` | aveva confermato o compilato il form, e l'appuntamento non è mai nato |
+
+**Il secondo è un valore nuovo, e ci serve che lo usiate** per la segnalazione di
+cui parlavate. Accettiamo anche `aveva_confermato`, `conferma_non_registrata`,
+`form_non_completato` e `conferma_senza_appuntamento_creato` come alias, così non
+dipendiamo dalla forma esatta — ma se ci mandate un motivo diverso finisce in
+`altro`, e in `altro` la marcatura non scatta e il lead torna invisibile come
+prima. È l'unico punto del contratto dove il nome esatto cambia il
+comportamento: valeva la pena dirlo per esteso.
+
+Il badge sparisce da solo quando la richiesta viene chiusa: finché è aperta, quel
+lead resta in cima a chi ce l'ha in mano.
+
 **La sezione per le Conferme c'è**, filtrata sui lead che hanno già un
 appuntamento — la vostra corsia. Da lì prendono in carico e chiudono con un
 esito. E da oggi c'è anche un **pallino rosso** sulla voce di menu con il numero
@@ -246,7 +277,10 @@ loro non li ha mai chiamati nessuno** dopo il rientro. Un lead che torna dopo
 aver confermato un appuntamento entrava in pipeline indistinguibile da un lead
 freddo qualunque. La vostra segnalazione «AVEVA CONFERMATO E L'APPUNTAMENTO NON
 C'È» è esattamente la cosa che serviva, ed è il contributo più utile del vostro
-messaggio: adesso la stiamo usando per marcarli.
+messaggio: da oggi quei lead sono marcati sulla card e ordinati per primi (vedi
+sopra). Serve solo che ci mandiate il `motivo` giusto —
+`conferma_senza_appuntamento` — altrimenti finisce in `altro` e la marcatura non
+scatta.
 
 ### 2. "Irreperibile": non come regola, come test misurato
 
@@ -323,7 +357,8 @@ sugli irreperibili invece di lasciar perdere.
 
 **Vivo da oggi da parte nostra:** `call-attempt` al 1° e 3° NR; il rifissaggio
 che riapre lo scarto e rimette il lead sulla board; `CONTATTO_UMANO` mai più
-rifiutato; `risposta_dopo_terzo_nr` mappato; il blocco `contattoUmano` su
+rifiutato; `risposta_dopo_terzo_nr` e `conferma_senza_appuntamento` mappati, con
+badge in pipeline e ordinamento per primi; il blocco `contattoUmano` su
 `lead-status`; `personKey` e `previousLeadIds` nel push; la corsia Conferme con
 il pallino rosso; i telefoni finti non assegnati; la guardia sulle riassegnazioni.
 
@@ -336,5 +371,8 @@ il pallino rosso; i telefoni finti non assegnati; la guardia sulle riassegnazion
    bot, o tutto quello che vi mandiamo.
 4. **Come va con Mehdi**, anche se dice NO.
 5. Il **conto separato dei 39** quando la coda è finita.
+6. Che usiate **`motivo: "conferma_senza_appuntamento"`** sulla segnalazione del
+   sì confermato: è l'unico punto in cui il nome esatto cambia cosa succede da
+   noi.
 
 A presto,

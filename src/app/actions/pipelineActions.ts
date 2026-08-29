@@ -2,8 +2,9 @@
 import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
-import { leads, callLogs, pipelineSnapshots, users, leadEvents } from "@/db/schema"
+import { leads, callLogs, pipelineSnapshots, users, leadEvents, botContactRequests } from "@/db/schema"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
+import { isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
 import { eq, and, ne, isNull, isNotNull, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
@@ -237,16 +238,50 @@ export async function getPipelineLeads() {
         console.error('[dupPhones] detection failed', e)
     }
     const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10)
-    const withDupFlag = <T extends { phone: string }>(arr: T[]) =>
-        arr.map(l => ({ ...l, duplicatePhone: dupPhoneKeys.has(phoneKey(l.phone)) }))
+
+    // Lead tornati dal bot con un sì già dato: aveva confermato e l'appuntamento
+    // non è mai nato, oppure ha risposto dopo il 3° NR. Finora rientravano in
+    // pipeline indistinguibili da un lead freddo qualunque — ad agosto sono stati
+    // 50, e 14 di loro non li ha richiamati nessuno. Non è colpa di chi li aveva
+    // in carico: non c'era niente che li distinguesse.
+    // Solo le richieste ancora aperte: una già chiusa non è più un richiamo urgente.
+    let recoverIds = new Set<string>()
+    try {
+        const rows = await db.select({ leadId: botContactRequests.leadId, category: botContactRequests.category })
+            .from(botContactRequests)
+            .where(and(
+                eq(botContactRequests.companyId, ctx.companyId),
+                ne(botContactRequests.status, 'closed'),
+            ))
+        recoverIds = new Set(rows.filter(r => isRecoverableCategory(r.category)).map(r => r.leadId))
+    } catch (e) {
+        console.error('[pipeline] flag conferme bot fallito', e)
+    }
+
+    const withDupFlag = <T extends { phone: string; id: string }>(arr: T[]) =>
+        arr.map(l => ({
+            ...l,
+            duplicatePhone: dupPhoneKeys.has(phoneKey(l.phone)),
+            confermatoAlBot: recoverIds.has(l.id),
+        }))
+
+    /**
+     * Chi aveva già detto sì va chiamato per primo: è l'unico ordinamento in cui
+     * la marcatura serve davvero a qualcosa. Dentro i due gruppi l'ordine
+     * preesistente resta identico — `sort` in JS è stabile, quindi non tocca il
+     * tiebreaker su `id` che tiene ferme le card fra un caricamento e l'altro
+     * (fix del 14/05: senza, i GDO vedevano "sparire" i lead).
+     */
+    const recoverableFirst = <T extends { confermatoAlBot: boolean }>(arr: T[]) =>
+        [...arr].sort((a, b) => Number(b.confermatoAlBot) - Number(a.confermatoAlBot))
 
     return {
-        firstCall: withDupFlag(firstCall),
-        secondCall: withDupFlag(secondCall),
-        thirdCall: withDupFlag(thirdCall),
+        firstCall: recoverableFirst(withDupFlag(firstCall)),
+        secondCall: recoverableFirst(withDupFlag(secondCall)),
+        thirdCall: recoverableFirst(withDupFlag(thirdCall)),
         fourthCall: fourthCallLeads,
         isFourthCallActive,
-        recalls: withDupFlag(recallsLeads),
+        recalls: recoverableFirst(withDupFlag(recallsLeads)),
         appointments: appointmentsLeads
     }
 }
