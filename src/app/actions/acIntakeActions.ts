@@ -6,6 +6,8 @@ import { eq, and, desc, isNull, gte, count, notLike, sql } from "drizzle-orm";
 import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
+import { logLeadEvent } from "@/lib/eventLogger";
+import { revalidatePath } from "next/cache";
 
 async function requireManager(): Promise<{ id: string; role: string; ctx: TenantContext }> {
     const supabase = await createClient();
@@ -512,4 +514,89 @@ export async function deleteAcWebhookByUrl(): Promise<{ success: boolean; error?
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) };
     }
+}
+
+export interface QuarantinedLeadRow {
+    id: string;
+    name: string;
+    phone: string;
+    email: string | null;
+    funnel: string | null;
+    createdAt: string;
+    /** Il numero grezzo che era arrivato da AC, se lo abbiamo. */
+    phoneRaw: string | null;
+}
+
+/**
+ * I lead entrati con un telefono che non è un numero e lasciati senza
+ * assegnatario. Il fornitore ne ha contati 21 su 177: sono telefonate che
+ * nessuno può fare, e ore di GDO buttate se le assegniamo.
+ */
+export async function listQuarantinedLeads(): Promise<QuarantinedLeadRow[]> {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const role = user?.user_metadata?.role;
+    if (!user || !['ADMIN', 'MANAGER', 'TL'].includes(role)) return [];
+
+    const rows = await db.select({
+        id: leads.id,
+        name: leads.name,
+        phone: leads.phone,
+        email: leads.email,
+        funnel: leads.funnel,
+        createdAt: leads.createdAt,
+    })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, 'fenice'),
+            eq(leads.phoneSuspicious, true),
+            isNull(leads.assignedToId),
+            eq(leads.status, 'NEW'),
+        ))
+        .orderBy(desc(leads.createdAt))
+        .limit(200);
+
+    return rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        email: r.email,
+        funnel: r.funnel,
+        createdAt: r.createdAt.toISOString(),
+        phoneRaw: null,
+    }));
+}
+
+/**
+ * L'admin ha corretto il numero a mano (o ha deciso che è buono) e lo manda a
+ * un GDO. `assignedAt` parte adesso: è ora che il lead entra davvero in circolo.
+ */
+export async function assignQuarantinedLead(leadId: string, gdoId: string): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || user.user_metadata?.role !== 'ADMIN') {
+        return { success: false, error: 'Solo gli ADMIN possono assegnare un lead in quarantena.' };
+    }
+
+    const [gdo] = await db.select({ id: users.id, role: users.role, isActive: users.isActive })
+        .from(users).where(and(eq(users.id, gdoId), eq(users.companyId, 'fenice'))).limit(1);
+    if (!gdo || gdo.role !== 'GDO' || !gdo.isActive) return { success: false, error: 'GDO non valido o non attivo.' };
+
+    const now = new Date();
+    const updated = await db.update(leads)
+        .set({ assignedToId: gdoId, assignedAt: now, updatedAt: now, phoneSuspicious: false })
+        .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice'), isNull(leads.assignedToId)))
+        .returning({ id: leads.id });
+    if (updated.length === 0) return { success: false, error: 'Lead non trovato o già assegnato.' };
+
+    await logLeadEvent({
+        leadId,
+        eventType: 'ASSIGNED',
+        userId: user.id,
+        metadata: { assignedToUser: gdoId, source: 'quarantena_telefono' },
+        companyId: 'fenice',
+    });
+
+    revalidatePath('/lead-automatici');
+    return { success: true };
 }

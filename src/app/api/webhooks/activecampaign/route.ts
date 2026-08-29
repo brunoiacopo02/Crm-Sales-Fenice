@@ -571,6 +571,39 @@ export async function POST(req: NextRequest) {
                 return { kind: 'cross_company_skip' as const, otherCompany: crossCompany.companyId };
             }
 
+            // Telefono inventato (000, 3, 0000000000): il lead entra, ma non va
+            // a nessuno. Bruciare il tempo di un GDO su un numero che non esiste
+            // è un costo certo; scartarlo automaticamente sarebbe più pulito nei
+            // numeri ma perderebbe un lead pagato ogni volta che isPlausiblePhone
+            // sbaglia — e sbaglia, per esempio sui formati esteri. Resta in una
+            // lista admin su /lead-automatici, da bonificare a mano.
+            // assignedAt resta null di proposito: il lead NON è entrato in circolo.
+            if (phoneSuspicious) {
+                await tx.insert(leads).values({
+                    id: newLeadId,
+                    name: fullName,
+                    phone: phoneFinal,
+                    email,
+                    funnel,
+                    source: 'activecampaign',
+                    acContactId: contactId,
+                    utmSource,
+                    utmMedium,
+                    utmCampaign,
+                    utmContent,
+                    utmTerm,
+                    phoneSuspicious: true,
+                    status: 'NEW',
+                    callCount: 0,
+                    assignedToId: null,
+                    assignedAt: null,
+                    createdAt: now,
+                    updatedAt: now,
+                    companyId: FENICE_COMPANY,
+                });
+                return { kind: 'quarantined' as const };
+            }
+
             // ===== A chi va questo lead: bot o GDO umani =====
             // La fascia oraria decide (src/lib/bot-fissatore/leadRouting.ts); il
             // round-robin per acLastAssignedAt resta il criterio DENTRO ogni pool,
@@ -713,6 +746,37 @@ export async function POST(req: NextRequest) {
                 payload: rawPayload,
             });
             return NextResponse.json({ skipped: 'no active gdo' });
+        }
+
+        if (txResult.kind === 'quarantined') {
+            // Niente push al bot: una chat WhatsApp su 0000000000 non esiste.
+            // Niente evento ASSIGNED e niente notifica: non è di nessuno.
+            await logLeadEvent({
+                leadId: newLeadId,
+                eventType: 'IMPORTED',
+                // Nessun `toSection`: 'Quarantena telefono' non è una SectionName
+                // valida (il tipo in eventLogger.ts elenca solo le sezioni della
+                // board GDO) e questo lead non sta in nessuna board — non è di
+                // nessuno. La destinazione sta in metadata.
+                metadata: {
+                    source: 'activecampaign',
+                    acContactId: contactId,
+                    provenienza: provenienza || null,
+                    phoneSuspicious: true,
+                    phoneRaw: rawPhone,
+                    quarantined: true,
+                    section: 'Quarantena telefono',
+                },
+                companyId: FENICE_COMPANY,
+            });
+            return NextResponse.json({
+                success: true,
+                leadId: newLeadId,
+                funnel,
+                phoneSuspicious: true,
+                quarantined: true,
+                assignedTo: null,
+            });
         }
 
         const assignedGdoId = txResult.assignedGdoId;
