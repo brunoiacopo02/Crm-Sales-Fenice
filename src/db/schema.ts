@@ -1421,6 +1421,14 @@ export const botContactRequests = pgTable('botContactRequests', {
     assignedAt: timestamp('assignedAt', { withTimezone: true, mode: 'date' }),
     closedAt: timestamp('closedAt', { withTimezone: true, mode: 'date' }),
     closedByUserId: text('closedByUserId').references(() => users.id),
+    // Il ritorno verso il bot: com'è finita la richiesta. Vocabolario condiviso
+    // col fornitore, così non serve tradurre ai due capi. Finché non esisteva,
+    // loro consegnavano la richiesta e restavano zitti su quella chat
+    // all'infinito, anche a caso chiuso da settimane.
+    // 'chiamato_ok' | 'non_raggiungibile' | 'rifissato' | 'disdetto' | 'non_gestito'
+    outcome: text('outcome'),
+    outcomeAt: timestamp('outcomeAt', { withTimezone: true, mode: 'date' }),
+    note: text('note'),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => {
