@@ -520,7 +520,13 @@ export async function POST(req: NextRequest) {
         const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
         const newLeadId = crypto.randomUUID();
         const now = new Date();
-        const dedupCutoff = new Date(now.getTime() - 10 * 60 * 1000);
+        // 24 ore e non 10 minuti: le ricomparse entro un giorno sono doppi
+        // submit veri (439 misurate sullo storico), non persone che rientrano.
+        // Oltre, chi rientra È un lead nuovo e va richiamato — la mediana fra
+        // una comparsa e l'altra è di 10,8 giorni.
+        // Vale solo per questo flusso: i pool database e Black Summer duplicano
+        // di proposito (decisione PO 20/07) e non passano di qui.
+        const dedupCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
         // Giorno solare corrente in Europe/Rome (per la soglia minima dei bot).
         // Lasciamo a Postgres la conversione tz: confronto createdAt >= today 00:00 Rome.
