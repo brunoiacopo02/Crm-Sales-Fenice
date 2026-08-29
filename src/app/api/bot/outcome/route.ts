@@ -456,6 +456,12 @@ export async function POST(req: NextRequest) {
     if (typedOutcome === 'NON_RISPOSTO' || typedOutcome === 'INTERROTTO') {
         const reason = typedOutcome === 'NON_RISPOSTO' ? 'mai_risposto' : 'chat_interrotta';
         const r = await reassignBotLeadToHumanPool(leadId, reason, actorUserId, note);
+        // Un 2xx che dice "reassigned: null" e basta è indistinguibile da un
+        // successo: il fornitore deve poter leggere DENTRO la risposta che la
+        // riassegnazione non è stata applicata, e perché.
+        if (r.assignedToId === null && 'note' in r && r.note !== 'no_eligible_gdo') {
+            return NextResponse.json({ ok: true, reassigned: null, skipped: r.note });
+        }
         return NextResponse.json({ ok: true, reassigned: r.assignedToId });
     }
 

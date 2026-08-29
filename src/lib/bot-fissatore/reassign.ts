@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { leads, users, leadEvents } from '@/db/schema';
 import { and, eq, asc, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
+import { isLeadLocked } from './contactRequests';
 
 const FENICE = 'fenice';
 
@@ -9,7 +10,7 @@ export type ReassignReason = 'mai_risposto' | 'chat_interrotta';
 
 type ReassignResult =
     | { ok: true; assignedToId: string }
-    | { ok: true; assignedToId: null; note: 'no_eligible_gdo' };
+    | { ok: true; assignedToId: null; note: 'no_eligible_gdo' | 'locked_appointment' | 'already_rejected' | 'lead_not_found' };
 
 /**
  * Restituisce al pool umano un lead che il bot non ha convertito (mai risposto /
@@ -27,6 +28,31 @@ export async function reassignBotLeadToHumanPool(
     botNote?: string | null,
 ): Promise<ReassignResult> {
     return await db.transaction(async (tx) => {
+        // Un lead che ha già un appuntamento o una presenza non torna nel pool:
+        // riportarlo a NEW lo fa sparire dalla board Conferme con la data ancora
+        // addosso, e la call passa senza che nessuno la faccia. È successo
+        // davvero (lead 0f90aa98, 25/06). La guardia sta QUI e non nel route
+        // perché così copre anche i chiamanti futuri.
+        const [cur] = await tx.select({ status: leads.status, presentedAt: leads.presentedAt })
+            .from(leads).where(eq(leads.id, leadId)).limit(1);
+        if (!cur) return { ok: true, assignedToId: null, note: 'lead_not_found' as const };
+        if (isLeadLocked(cur.status, cur.presentedAt)) {
+            return { ok: true, assignedToId: null, note: 'locked_appointment' as const };
+        }
+        // Uno scarto è una decisione presa: un INTERROTTO che arriva dopo non la
+        // annulla. Quattro lead già REJECTED sono stati resuscitati a NEW così
+        // (12/07, 27/07, 13/08, 17/08) e sono tornati in pipeline a chiamare
+        // gente che qualcuno aveva deciso di non chiamare più.
+        //
+        // Guardia SEPARATA da isLeadLocked di proposito: quella protegge storico
+        // e attribuzione, questa protegge una decisione. In assignContactRequest
+        // la resurrezione di un REJECTED è VOLUTA — un lead scartato che chiede
+        // di essere richiamato torna in pipeline apposta. Fonderle romperebbe
+        // quel flusso.
+        if (cur.status === 'REJECTED') {
+            return { ok: true, assignedToId: null, note: 'already_rejected' as const };
+        }
+
         const eligible = await tx.select({ id: users.id })
             .from(users)
             .where(and(
