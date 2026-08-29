@@ -220,11 +220,13 @@ export async function getPipelineLeads() {
     }
 
     // Detector duplicati telefono (non bloccante): numeri normalizzati alle
-    // ultime 9 cifre presenti su più lead della company. Le card mostrano un
-    // badge; il dettaglio si carica on-demand con getLeadsWithSamePhone().
+    // ultime 10 cifre presenti su più lead della company. Dieci e non nove: a
+    // nove si fondono 134 gruppi di numeri realmente diversi (6.565 gruppi a 9
+    // cifre contro 6.459 a 10). Le card mostrano un badge; il dettaglio si
+    // carica on-demand con getLeadsWithSamePhone().
     let dupPhoneKeys = new Set<string>()
     try {
-        const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 9)`
+        const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10)`
         const dupRows = await db.select({ key: phoneKeyExpr })
             .from(leads)
             .where(eq(leads.companyId, ctx.companyId))
@@ -234,7 +236,7 @@ export async function getPipelineLeads() {
     } catch (e) {
         console.error('[dupPhones] detection failed', e)
     }
-    const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-9)
+    const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10)
     const withDupFlag = <T extends { phone: string }>(arr: T[]) =>
         arr.map(l => ({ ...l, duplicatePhone: dupPhoneKeys.has(phoneKey(l.phone)) }))
 
@@ -251,7 +253,7 @@ export async function getPipelineLeads() {
 
 /**
  * Dettaglio duplicati: tutti gli ALTRI lead della company con lo stesso numero
- * (normalizzato alle ultime 9 cifre) del lead dato. Mostra chi li ha in carico,
+ * (normalizzato alle ultime 10 cifre) del lead dato. Mostra chi li ha in carico,
  * l'ultimo esito e le date — così il GDO evita di richiamare numeri già gestiti
  * da un collega. Sola lettura, non bloccante.
  */
@@ -265,10 +267,10 @@ export async function getLeadsWithSamePhone(leadId: string) {
         .limit(1)
     if (!target) return { success: false as const, error: 'Lead non trovato' }
 
-    const key = (target.phone || '').replace(/\D/g, '').slice(-9)
+    const key = (target.phone || '').replace(/\D/g, '').slice(-10)
     if (key.length < 6) return { success: true as const, duplicates: [] }
 
-    const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 9)`
+    const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10)`
     const rows = await db.select({
         id: leads.id,
         name: leads.name,

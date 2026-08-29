@@ -1,6 +1,9 @@
 import { signPayload } from '@/lib/marketing-webhooks/signing';
 import type { BotIntakePayload } from './types';
 import { logLeadEvent } from '@/lib/eventLogger';
+import { db } from '@/db';
+import { leads } from '@/db/schema';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
 
 /** Esito del tentativo di push, persistito su leadEvents.metadata per audit dal DB. */
 type PushResult =
@@ -25,6 +28,54 @@ async function auditPush(payload: BotIntakePayload, meta: PushResult): Promise<v
         });
     } catch (e) {
         console.error('[bot-fissatore] audit log failed', e);
+    }
+}
+
+/** Ultime 10 cifre: la chiave persona che il bot usa per riconoscere la chat. */
+export function personKeyOf(phone: string | null): string | null {
+    const digits = (phone || '').replace(/\D/g, '').slice(-10);
+    return digits.length >= 9 ? digits : null;
+}
+
+/**
+ * I lead precedenti della stessa persona. Non li fondiamo — un merge
+ * retroattivo toccherebbe 1.708 gruppi con presenze e fatturato e 5.251 con
+ * attribuzioni GDO diverse — ma il bot ha il diritto di sapere che quella chat
+ * l'ha già avuta, e con che esito. È l'unica cosa che sblocca i ~60 lead che
+ * gli risultano fermi in NEW mentre lui li aveva già lavorati.
+ *
+ * Best-effort: se la query fallisce il push parte comunque senza storico.
+ */
+export async function previousLeadsFor(leadId: string, phone: string | null, companyId: string) {
+    const key = personKeyOf(phone);
+    if (!key) return { personKey: undefined, previousLeadIds: undefined };
+    try {
+        const rows = await db.select({
+            leadId: leads.id,
+            status: leads.status,
+            outcome: leads.discardReason,
+            createdAt: leads.createdAt,
+        })
+            .from(leads)
+            .where(and(
+                eq(leads.companyId, companyId),
+                ne(leads.id, leadId),
+                sql`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10) = ${key}`,
+            ))
+            .orderBy(desc(leads.createdAt))
+            .limit(10);
+        return {
+            personKey: key,
+            previousLeadIds: rows.map(r => ({
+                leadId: r.leadId,
+                status: r.status,
+                outcome: r.outcome,
+                createdAt: r.createdAt.toISOString(),
+            })),
+        };
+    } catch (e) {
+        console.error('[bot-fissatore] previousLeadsFor failed', e);
+        return { personKey: key, previousLeadIds: undefined };
     }
 }
 
@@ -54,7 +105,13 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResu
     let urlHost: string | undefined;
     try { urlHost = new URL(url).host; } catch { /* url malformato: lasciamo undefined */ }
 
-    const rawBody = JSON.stringify(payload);
+    // Lo storico si calcola qui e non nel chiamante: così ogni percorso di push
+    // (webhook AC, backfill, riassegnazione) lo porta senza doverselo ricordare.
+    const enriched: BotIntakePayload = payload.personKey
+        ? payload
+        : { ...payload, ...(await previousLeadsFor(payload.leadId, payload.phone, payload.companyId)) };
+
+    const rawBody = JSON.stringify(enriched);
     const signature = signPayload(rawBody, secret);
 
     let meta: PushResult;
@@ -76,6 +133,6 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResu
         console.error(`[bot-fissatore] push failed for lead ${payload.leadId}`, e);
         meta = { result: 'network_error', error: String(e), urlHost };
     }
-    await auditPush(payload, meta);
+    await auditPush(enriched, meta);
     return meta;
 }
