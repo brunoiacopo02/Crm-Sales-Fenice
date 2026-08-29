@@ -13,6 +13,14 @@ export const CONTACT_CATEGORIES = {
     sfiducia_bot: 'Non si fida della chat',
     problema_tecnico: 'Problema tecnico',
     disdetta: 'Disdetta o spostamento',
+    // Contratto del 29/08: il bot segnala QUALSIASI risposta dopo il 3° tentativo,
+    // non solo chi chiede esplicitamente di parlare con una persona. Uno che
+    // scrive "scusate, ero al lavoro" per il bot era solo un lead che aveva
+    // risposto, e da noi restava scartato per sempre.
+    // È l'unica categoria in cui c'è un appuntamento da riaprire: mescolata ad
+    // `altro` si perde, ed è esattamente quello che il fornitore ci ha chiesto
+    // di non fare.
+    risposta_dopo_terzo_nr: 'Ha risposto dopo il 3° NR — recuperabile',
     altro: 'Altro',
 } as const;
 
@@ -42,6 +50,9 @@ const ALIASES: Record<string, ContactCategory> = {
     disdetta_o_sposta: 'disdetta',
     spostamento: 'disdetta',
     annullamento: 'disdetta',
+    risposta_dopo_3nr: 'risposta_dopo_terzo_nr',
+    risposta_dopo_terzo_tentativo: 'risposta_dopo_terzo_nr',
+    ha_risposto_dopo_nr: 'risposta_dopo_terzo_nr',
 };
 
 export function normalizeContactCategory(raw: unknown): ContactCategory {

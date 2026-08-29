@@ -57,3 +57,13 @@ test('contactLane: tutto il resto resta agli admin/GDO', () => {
     assert.equal(contactLane('IN_PROGRESS'), 'gdo');
     assert.equal(contactLane('REJECTED'), 'gdo');
 });
+
+test('normalizeContactCategory: il motivo del 3o NR non finisce in "altro"', () => {
+    assert.equal(normalizeContactCategory('risposta_dopo_terzo_nr'), 'risposta_dopo_terzo_nr');
+    assert.equal(normalizeContactCategory('risposta_dopo_3nr'), 'risposta_dopo_terzo_nr');
+    assert.equal(normalizeContactCategory('Risposta Dopo Terzo Tentativo'), 'risposta_dopo_terzo_nr');
+});
+
+test('normalizeContactCategory: un motivo ignoto resta "altro" e non fa fallire la richiesta', () => {
+    assert.equal(normalizeContactCategory('qualcosa_che_non_conosciamo'), 'altro');
+});
