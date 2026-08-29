@@ -5,6 +5,7 @@ import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { botContactRequests, leadEvents, leads, notifications, users } from '@/db/schema';
+import { contactLane, isLeadLocked } from '@/lib/bot-fissatore/contactRequests';
 import { createClient } from '@/utils/supabase/server';
 
 const COMPANY = 'fenice'; // il bot fissatore lavora solo lead Fenice
@@ -44,17 +45,6 @@ export interface ContactRequestsView {
     pending: ContactRequestRow[];
     handled: ContactRequestRow[];
     gdos: Array<{ id: string; label: string }>;
-}
-
-/**
- * Una richiesta non è spostabile quando il lead ha già prodotto storico
- * (appuntamento in corso o presenza latchata): ogni metrica per-GDO legge
- * l'assegnatario ATTUALE, quindi cambiarlo cancellerebbe presenze da cicli
- * bonus già pagati e fatturato già riconciliato. Stessa invariante della
- * guardia in /api/bot/outcome — se cambia lì, deve cambiare anche qui.
- */
-function isLocked(status: string, presentedAt: Date | null): boolean {
-    return status === 'APPOINTMENT' || presentedAt !== null;
 }
 
 type QueueRow = {
@@ -124,7 +114,7 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
         leadFunnel: r.leadFunnel,
         leadStatus: r.leadStatus,
         appointmentDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
-        locked: isLocked(r.leadStatus, r.presentedAt),
+        locked: isLeadLocked(r.leadStatus, r.presentedAt),
         category: r.r.category,
         reason: r.r.reason,
         leadInfo: (r.r.leadInfo as Record<string, unknown> | null) ?? null,
@@ -187,7 +177,7 @@ export async function assignContactRequest(requestId: string, gdoId: string): Pr
         return { ok: false, error: 'GDO non valido o non attivo.' };
     }
 
-    const locked = isLocked(row.leadStatus, row.presentedAt);
+    const locked = isLeadLocked(row.leadStatus, row.presentedAt);
     const now = new Date();
 
     if (!locked) {

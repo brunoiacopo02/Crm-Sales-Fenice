@@ -54,3 +54,30 @@ export function normalizeContactCategory(raw: unknown): ContactCategory {
 export function contactCategoryLabel(category: string): string {
     return CONTACT_CATEGORIES[category as ContactCategory] ?? CONTACT_CATEGORIES.altro;
 }
+
+/**
+ * Un lead è bloccato quando ha già prodotto storico: ogni metrica per-GDO legge
+ * l'assegnatario ATTUALE, quindi spostarlo cancellerebbe presenze da cicli bonus
+ * già pagati e fatturato già riconciliato. `presentedAt` è latchato dal 17/07:
+ * una volta vero non torna falso, nemmeno se il follow-up dice "Sparito".
+ *
+ * Questa funzione è l'UNICA definizione dell'invariante. Prima esisteva in due
+ * copie — una in contactRequestActions.ts e una che avrebbe dovuto esserci in
+ * reassign.ts e non c'era — con un commento che prometteva di tenerle allineate.
+ * Non ha funzionato: un lead ha perso l'appuntamento (0f90aa98, 25/06).
+ */
+export function isLeadLocked(status: string, presentedAt: Date | null): boolean {
+    return status === 'APPOINTMENT' || presentedAt !== null;
+}
+
+/**
+ * Di chi è la competenza su una richiesta di contatto umano.
+ *
+ * Derivata e non memorizzata: un lead che passa ad APPOINTMENT cambia corsia da
+ * solo, e non c'è nessuno stato da tenere allineato. Sono le 14 richieste su 64
+ * (22%) che oggi finiscono in coda per un GDO quando a chiamare quel lead il
+ * giorno prima della call sono le Conferme.
+ */
+export function contactLane(leadStatus: string): 'conferme' | 'gdo' {
+    return leadStatus === 'APPOINTMENT' ? 'conferme' : 'gdo';
+}

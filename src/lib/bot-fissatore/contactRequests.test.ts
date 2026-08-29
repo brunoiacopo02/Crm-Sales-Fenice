@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contactCategoryLabel, normalizeContactCategory } from './contactRequests';
+import { contactCategoryLabel, contactLane, isLeadLocked, normalizeContactCategory } from './contactRequests';
 
 test('le categorie canoniche passano invariate', () => {
     assert.equal(normalizeContactCategory('prezzo'), 'prezzo');
@@ -32,4 +32,28 @@ test('un motivo sconosciuto diventa altro invece di far fallire la richiesta', (
 test('ogni categoria ha un\'etichetta leggibile e le ignote ricadono su Altro', () => {
     assert.equal(contactCategoryLabel('sfiducia_bot'), 'Non si fida della chat');
     assert.equal(contactCategoryLabel('boh'), 'Altro');
+});
+
+test('isLeadLocked: un lead appuntato non si sposta', () => {
+    assert.equal(isLeadLocked('APPOINTMENT', null), true);
+});
+
+test('isLeadLocked: una presenza latchata blocca anche se lo status e cambiato', () => {
+    assert.equal(isLeadLocked('NEW', new Date('2026-07-01T10:00:00Z')), true);
+});
+
+test('isLeadLocked: un lead libero si sposta', () => {
+    assert.equal(isLeadLocked('NEW', null), false);
+    assert.equal(isLeadLocked('IN_PROGRESS', null), false);
+    assert.equal(isLeadLocked('REJECTED', null), false);
+});
+
+test('contactLane: un lead appuntato e delle Conferme', () => {
+    assert.equal(contactLane('APPOINTMENT'), 'conferme');
+});
+
+test('contactLane: tutto il resto resta agli admin/GDO', () => {
+    assert.equal(contactLane('NEW'), 'gdo');
+    assert.equal(contactLane('IN_PROGRESS'), 'gdo');
+    assert.equal(contactLane('REJECTED'), 'gdo');
 });
