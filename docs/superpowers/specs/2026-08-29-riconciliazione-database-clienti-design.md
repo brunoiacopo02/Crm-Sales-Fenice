@@ -24,9 +24,16 @@ tab **`Database Clienti`**.
    presenza ricostruiti a posteriori: i tassi di GDO e Conferme devono restare quelli veri.
 4. **Contratto senza alcun lead** → si crea un lead minimo con funnel `FUORI FUNNEL`,
    così il totale quadra e l'origine resta distinguibile nelle statistiche.
-5. **Accesso al foglio via service account**, con caricamento manuale dell'XLSX come riserva.
+5. **Accesso al foglio via service account**, con caricamento manuale come riserva. La
+   riserva è un **CSV** (esportazione del singolo tab), non un XLSX: evita di aggiungere una
+   dipendenza di parsing e riusa lo stesso normalizzatore del percorso automatico.
 6. **Mappatura TUTOR → venditore confermata dal PO:** 001 = Bruno B., 002 = Marco L.,
    003 = Mattia G., 004 = Paolo S., 008 = Giacomo O., 010 = Stefania C.
+   **La colonna K contiene nomi, non codici** (`Paolo S.`, `Giacomo O.`, …), e contiene anche
+   **cinque valori fuori mappatura**: `Matteo D.` (17 contratti), `Matteo Q.` (10),
+   `Amministrazione` (2), `Altro` (1), `Alberto C.` (1) — 31 contratti in tutto. Il motore
+   non li indovina: li mostra come "venditore non mappato" e si rifiuta di applicarli finché
+   il PO non dice a chi corrispondono.
 
 ## Architettura
 
