@@ -14,6 +14,9 @@ const AGENDA_BOT_URL = process.env.AGENDA_BOT_URL
 const APPOINTMENT_BOT_URL = process.env.APPOINTMENT_BOT_URL
     ?? 'https://web-app-messaggistica.vercel.app/api/appointment-set'
 
+const CALL_ATTEMPT_BOT_URL = process.env.CALL_ATTEMPT_BOT_URL
+    ?? 'https://web-app-messaggistica.vercel.app/api/bot/call-attempt'
+
 // Il fornitore risponde entro ~8s: oltre, chiude lui con `inviato`. Aspettiamo
 // qualche secondo in più così un loro ritardo fisiologico non diventa un nostro
 // errore di rete (che il GDO leggerebbe come "fallito" pur essendo partito).
@@ -226,5 +229,103 @@ export async function notifyAppointmentToBot(input: NotifyAppointmentInput): Pro
         }
     } catch (e) {
         console.error(`[agenda-bot] rete/timeout su appuntamento per lead ${lead.id}`, e)
+    }
+}
+
+export type NotifyCallAttemptInput = {
+    leadId: string
+    companyId: string
+    /** 1 o 3: il fornitore non ha un messaggio per il secondo tentativo. */
+    tentativo: 1 | 3
+    /** Istante del mancato contatto: il messaggio funziona finché il lead ha la chiamata persa sul telefono. */
+    at: Date
+    /** Data e ora della call. Senza, il messaggio diventa generico e recupera molto meno. */
+    appointmentAt: Date | null
+}
+
+/**
+ * Esito applicativo dal corpo della risposta. Il fornitore risponde SEMPRE 200,
+ * anche quando non scrive al lead: `inviato: false` con il `motivo` è una
+ * risposta valida, non un errore.
+ */
+export type CallAttemptOutcome = {
+    inviato: boolean
+    ramo?: string
+    motivo?: string
+}
+
+/**
+ * Comunica al bot che la Conferma ha provato a chiamare il lead senza risposta,
+ * così lui glielo scrive nella chat WhatsApp che ha già aperta.
+ *
+ * Lo scarto per "3 NR consecutivi" vale il 42% degli appuntamenti fissati dal
+ * bot e il 44% di quelli fissati dai GDO: ~1.288 appuntamenti persi dal 24
+ * giugno. È il collo di bottiglia più grande che abbiamo.
+ *
+ * NON filtriamo qui: il fornitore ha sette guardie sue (lead non suo, bot fermato
+ * a mano, disdetta già chiesta, chat passata a una persona, lead che ha già
+ * risposto, appuntamento passato, tentativo già scritto) e dice esplicitamente
+ * "chiamateci pure sempre, filtriamo noi". Duplicarle qui significherebbe due
+ * copie della stessa regola che divergono al primo cambio da parte loro.
+ *
+ * Non lancia MAI: un fornitore giù non deve impedire a una Conferma di
+ * registrare il mancato contatto.
+ */
+export async function notifyCallAttemptToBot(input: NotifyCallAttemptInput): Promise<CallAttemptOutcome> {
+    // Interruttore dedicato, NON AGENDA_CHANNEL: il recupero serve anche sugli
+    // appuntamenti fissati dai GDO, che hanno una chat aperta col bot solo
+    // perché l'agenda passa da lì. Vanno potuti spegnere separatamente.
+    if (process.env.BOT_CALL_ATTEMPT === 'off') {
+        return { inviato: false, motivo: 'kill_switch_off' }
+    }
+    // Serenamente ha il suo canale Twilio diretto, qui non c'entra.
+    if (input.companyId !== 'fenice') {
+        return { inviato: false, motivo: 'company_non_fenice' }
+    }
+
+    const secret = process.env.BOT_WEBHOOK_SECRET
+    if (!secret) {
+        console.error('[call-attempt] BOT_WEBHOOK_SECRET non impostato')
+        return { inviato: false, motivo: 'missing_secret' }
+    }
+
+    const rawBody = JSON.stringify({
+        leadId: input.leadId,
+        esito: 'no_answer',
+        tentativo: input.tentativo,
+        at: toRomeIso(input.at),
+        appointmentAt: input.appointmentAt ? toRomeIso(input.appointmentAt) : undefined,
+    })
+
+    try {
+        const res = await fetch(CALL_ATTEMPT_BOT_URL, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'x-bot-signature': signPayload(rawBody, secret),
+            },
+            body: rawBody,
+            signal: AbortSignal.timeout(8_000),
+        })
+        const text = await res.text().catch(() => '')
+        if (!res.ok) {
+            const error = protocolError(res.status, text)
+            console.error(`[call-attempt] ${error} (lead ${input.leadId}, tentativo ${input.tentativo})`)
+            return { inviato: false, motivo: error }
+        }
+        let data: any
+        try {
+            data = JSON.parse(text)
+        } catch {
+            return { inviato: false, motivo: 'risposta non JSON' }
+        }
+        return {
+            inviato: data?.inviato === true,
+            ramo: typeof data?.ramo === 'string' ? data.ramo : undefined,
+            motivo: typeof data?.motivo === 'string' ? data.motivo : undefined,
+        }
+    } catch (e) {
+        console.error(`[call-attempt] rete/timeout per lead ${input.leadId}`, e)
+        return { inviato: false, motivo: `rete: ${String(e).slice(0, 120)}` }
     }
 }
