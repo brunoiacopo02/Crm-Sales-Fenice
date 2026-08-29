@@ -12,7 +12,9 @@ import { incrementChestProgress } from "@/app/actions/chestActions"
 import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
 import { maybeDropCreature } from "@/app/actions/creatureActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
-import { notifyAppointmentToBot } from "@/lib/agendaBot"
+import { notifyAppointmentToBot, notifyCallAttemptToBot } from "@/lib/agendaBot"
+import { after } from "next/server"
+import { resolveCallAttempt } from "@/lib/bot-fissatore/callAttempt"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
 import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
@@ -920,6 +922,10 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
         if (!oldLead) return { success: false, error: "Lead not found" };
         if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
 
+        // Calcolato PRIMA dell'update: dopo, le date sono già scritte e non si
+        // distingue più quale tentativo abbiamo appena registrato.
+        const tentativo = resolveCallAttempt(oldLead);
+
         let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date(), confSnoozeAt: null };
         let isAutoDiscard = false;
 
@@ -994,6 +1000,43 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
                 : { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) },
             companyId: ctx.companyId,
         });
+
+        // Dentro after(): la scrittura DB e il ritorno alla UI avvengono subito,
+        // l'HTTP prosegue dopo la risposta. Una Conferma clicca NR di corsa su
+        // una board — un'attesa di qualche secondo per click renderebbe la
+        // feature odiata prima ancora che utile. Stessa primitiva con cui
+        // enqueueMarketingWebhook consegna i webhook marketing.
+        if (tentativo !== null) {
+            const attemptAt = new Date();
+            after(async () => {
+                const outcome = await notifyCallAttemptToBot({
+                    leadId,
+                    companyId: ctx.companyId,
+                    tentativo,
+                    at: attemptAt,
+                    appointmentAt: oldLead.appointmentDate ?? null,
+                });
+                // Senza questo evento non sapremmo mai se il recupero funziona —
+                // ed è esattamente il rimprovero che il fornitore fa a noi sui
+                // contatti umani. Best-effort: un audit fallito non deve
+                // propagarsi.
+                await db.insert(leadEvents).values({
+                    id: crypto.randomUUID(),
+                    leadId,
+                    eventType: 'BOT_CALL_ATTEMPT',
+                    userId: session.user.id,
+                    timestamp: new Date(),
+                    metadata: {
+                        tentativo,
+                        inviato: outcome.inviato,
+                        ramo: outcome.ramo ?? null,
+                        motivo: outcome.motivo ?? null,
+                        appointmentAt: oldLead.appointmentDate ? oldLead.appointmentDate.toISOString() : null,
+                    },
+                    companyId: ctx.companyId,
+                }).catch((e) => console.error('[call-attempt] audit err', e));
+            });
+        }
 
         return { success: true, autoDiscarded: isAutoDiscard };
     } catch (error: any) {
