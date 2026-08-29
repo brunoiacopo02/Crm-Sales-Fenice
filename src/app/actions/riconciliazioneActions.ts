@@ -1,7 +1,7 @@
 'use server';
 
 import crypto from 'node:crypto';
-import { and, eq, gte, lt, inArray, desc } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray, desc, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { leads, salesAttempts, riconciliazioneRuns, riconciliazioneEntries, users } from '@/db/schema';
@@ -544,6 +544,39 @@ function reviveLeadSnapshot(lead: Record<string, unknown>): Record<string, unkno
     return revived;
 }
 
+// Unico campo numerico che le famiglie di riconciliazione toccano su `leads`.
+// `closeAmountEur` è una colonna `real` (float32 Postgres): un valore scritto
+// e riletto NON torna bit-identico a quello calcolato in JS (float64) — es.
+// 1234.56 diventa 1234.56005859375. Senza tolleranza, il controllo "nessuno
+// ha toccato il lead" di Ruling B fallirebbe SEMPRE su questo campo anche a
+// zero modifiche esterne. 1 centesimo di tolleranza assorbe il rumore di
+// arrotondamento (~1e-4) senza nascondere una modifica reale (che cambia
+// l'importo di più di un centesimo).
+const LEAD_AMOUNT_FIELDS = new Set(['closeAmountEur']);
+
+// Confronta un campo di `leads` così come letto ORA dal DB (`live`) con lo
+// stesso campo così come l'ha scritto `applicaCorrezioni` (`snapshot`, uscito
+// da una colonna jsonb quindi eventualmente una stringa per le date). Serve a
+// Ruling B: se un venditore/admin ha modificato il lead dopo l'applicazione,
+// questo confronto deve accorgersene PRIMA che l'undo lo sovrascriva.
+function leadFieldMatches(key: string, live: unknown, snapshot: unknown): boolean {
+    if ((LEAD_TIMESTAMP_FIELDS as readonly string[]).includes(key)) {
+        const liveDate = reviveDateOrNull(live);
+        const snapDate = reviveDateOrNull(snapshot);
+        if (liveDate === null || snapDate === null) return liveDate === null && snapDate === null;
+        return liveDate.getTime() === snapDate.getTime();
+    }
+    if (LEAD_AMOUNT_FIELDS.has(key)) {
+        const liveNum = live === null || live === undefined ? null : Number(live);
+        const snapNum = snapshot === null || snapshot === undefined ? null : Number(snapshot);
+        if (liveNum === null || snapNum === null) return liveNum === null && snapNum === null;
+        return Math.abs(liveNum - snapNum) < 0.01;
+    }
+    // Testo/enum: confronto diretto, null e undefined trattati come equivalenti.
+    if (live === null || live === undefined) return snapshot === null || snapshot === undefined;
+    return live === snapshot;
+}
+
 export type AnnullaRunResult = { success: true; reverted: number } | { success: false; error: string };
 
 // Annulla una run già applicata: per ogni entry riporta `leads` (e
@@ -568,11 +601,20 @@ export async function annullaRun(runId: string): Promise<AnnullaRunResult> {
 
     try {
         await db.transaction(async (tx) => {
-            // Ricontrollo DENTRO la transazione: se due admin cliccano "Annulla"
-            // sulla stessa run quasi in contemporanea, solo il primo deve vincere.
-            const [freshRun] = await tx.select({ revertedAt: riconciliazioneRuns.revertedAt })
-                .from(riconciliazioneRuns).where(eq(riconciliazioneRuns.id, runId));
-            if (!freshRun || freshRun.revertedAt) {
+            // La riga della run stessa è il lock: la marchiamo PER PRIMA con una
+            // UPDATE condizionata su revertedAt IS NULL, invece di un SELECT-poi-
+            // decidi. Sotto READ COMMITTED (isolamento di default di Postgres,
+            // nessun isolationLevel impostato altrove nel progetto) due
+            // annullaRun(runId) concorrenti passerebbero entrambi un plain SELECT
+            // prima che l'altro faccia commit; una UPDATE con WHERE ... IS NULL
+            // no: Postgres serializza le UPDATE concorrenti sulla stessa riga, la
+            // seconda vede già revertedAt valorizzato e non affetta nessuna riga.
+            // Si procede alle entry SOLO se questa claim ha vinto.
+            const claimed = await tx.update(riconciliazioneRuns)
+                .set({ revertedAt: new Date(), revertedBy: admin.id })
+                .where(and(eq(riconciliazioneRuns.id, runId), isNull(riconciliazioneRuns.revertedAt)))
+                .returning({ id: riconciliazioneRuns.id });
+            if (claimed.length === 0) {
                 throw new Error('Questa riconciliazione è già stata annullata.');
             }
 
@@ -602,11 +644,46 @@ export async function annullaRun(runId: string): Promise<AnnullaRunResult> {
                     continue;
                 }
 
-                const [currentLead] = await tx.select({ version: leads.version })
+                // Selezioniamo `version` + il superset dei campi che qualche
+                // famiglia può aver toccato: serve sia per riscrivere `before.lead`
+                // sia per il controllo di Ruling B qui sotto (confrontare lo stato
+                // ATTUALE con `after.lead`, cioè con ciò che applicaCorrezioni ha
+                // scritto, PRIMA di sovrascriverlo).
+                const [currentLead] = await tx.select({
+                    version: leads.version,
+                    name: leads.name,
+                    salespersonOutcome: leads.salespersonOutcome,
+                    salespersonOutcomeAt: leads.salespersonOutcomeAt,
+                    closeAmountEur: leads.closeAmountEur,
+                    closeProduct: leads.closeProduct,
+                    salespersonOutcomeNotes: leads.salespersonOutcomeNotes,
+                    salespersonAssigned: leads.salespersonAssigned,
+                })
                     .from(leads)
                     .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
                 if (!currentLead) {
                     continue; // stesso caso di sopra, lead sparito nel frattempo
+                }
+
+                // Ruling B: prima di sovrascrivere, verifichiamo che nessuno abbia
+                // toccato il lead dopo l'applicazione. `after.lead` è esattamente
+                // ciò che applicaCorrezioni ha scritto: se lo stato attuale combacia
+                // campo per campo, nessuno l'ha modificato nel frattempo e possiamo
+                // procedere. Se anche un solo campo diverge, un venditore/admin ha
+                // legittimamente cambiato quel lead dopo la riconciliazione — l'undo
+                // lo cancellerebbe in silenzio, quindi si abortisce TUTTA la
+                // transazione (compresa la claim sulla run, che torna non annullata)
+                // e si nomina lead e campo perché l'admin decida a mano.
+                const currentLeadRecord = currentLead as unknown as Record<string, unknown>;
+                for (const [key, snapshotValue] of Object.entries(after.lead)) {
+                    const liveValue = currentLeadRecord[key];
+                    if (!leadFieldMatches(key, liveValue, snapshotValue)) {
+                        throw new Error(
+                            `Annullamento bloccato: il lead "${currentLead.name}" (${entry.leadId}) ha il campo "${key}" cambiato dopo la riconciliazione ` +
+                            `(la riconciliazione aveva scritto ${JSON.stringify(snapshotValue)}, ora è ${JSON.stringify(liveValue)}). ` +
+                            `Qualcuno ci ha lavorato sopra nel frattempo: verifica a mano prima di riprovare l'annullamento.`,
+                        );
+                    }
                 }
 
                 // Riscrive SOLO i campi presenti in `before.lead` (gli stessi toccati
@@ -644,11 +721,10 @@ export async function annullaRun(runId: string): Promise<AnnullaRunResult> {
 
                 touched.push({ leadId: entry.leadId, family: entry.family });
             }
-
-            await tx.update(riconciliazioneRuns).set({
-                revertedAt: new Date(),
-                revertedBy: admin.id,
-            }).where(eq(riconciliazioneRuns.id, runId));
+            // Il timbro revertedAt/revertedBy è già stato scritto come PRIMA
+            // istruzione della transazione (la claim più sopra): non va ripetuto
+            // qui, altrimenti si perderebbe la garanzia "la entries si processano
+            // solo se la claim ha vinto" di Ruling A.
         });
     } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : 'Annullamento fallito, nessuna modifica salvata.' };
@@ -688,9 +764,17 @@ export type RiconciliazioneRunSummary = {
 // nome mostrabile (stessa convenzione displayName||name||id usata in tutto il
 // resto del CRM, es. confermeActions.ts:542): la UI non deve mai mostrare un
 // users.id crudo.
+//
+// Ruling C: questa è la schermata da cui un admin TROVA la run da annullare —
+// [] deve significare SOLO "mese autorizzato, zero run", mai "non sei admin"
+// o "monthKey malformato". Per questo qui si LANCIA un errore vero (la
+// firma non ha una variante di errore, ma un throw arriva comunque al server
+// component chiamante) invece di appiattire tutto su un array vuoto, che su
+// una feature di recupero sarebbe il fallimento peggiore possibile: sembra
+// "niente da annullare qui" quando in realtà è un bug o un permesso negato.
 export async function elencoRun(monthKey: string): Promise<RiconciliazioneRunSummary[]> {
-    if (!await requireAdmin()) return [];
-    if (!/^\d{4}-\d{2}$/.test(monthKey)) return [];
+    if (!await requireAdmin()) throw new Error('Non autorizzato.');
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new Error('Mese non valido.');
 
     const rows = await db.select({
         id: riconciliazioneRuns.id,
