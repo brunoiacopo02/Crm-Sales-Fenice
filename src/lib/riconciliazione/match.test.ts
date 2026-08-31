@@ -32,6 +32,7 @@ function crm(over: Partial<CrmClosure> = {}): CrmClosure {
         amountEur: 1390,
         attemptsAmountEur: 1390,
         attemptsCount: 1,
+        status: 'APPOINTMENT',
         isRejected: false,
         salespersonAssigned: 'Sales 004',
         ...over,
@@ -243,4 +244,28 @@ test('un tentativo registrato che non torna resta bloccato', () => {
     assert.equal(d.length, 1);
     assert.equal(d[0].appliable, false);
     assert.match(d[0].blockedReason ?? '', /non concordano/);
+});
+
+test('fra piu\' schede della stessa persona vince quella arrivata piu\' avanti', () => {
+    // Caso reale di agosto: Mattia Della Bernarda ha tre lead, funnel GOOGLE,
+    // SOCIAL e TELEGRAM, nessuno con un esito. Senza un ordine, la chiusura da
+    // 2.079 € finiva sul primo che tornava dalla query — e con lei l'attribuzione
+    // del funnel. Il lead arrivato all'appuntamento e' quello a cui il contratto
+    // appartiene davvero; uno scartato e' l'ipotesi peggiore.
+    const scartato = crm({ leadId: 'scartato', funnel: 'SOCIAL', status: 'REJECTED', isRejected: true, outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const nuovo = crm({ leadId: 'nuovo', funnel: 'GOOGLE', status: 'NEW', isRejected: false, outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const appuntamento = crm({ leadId: 'appuntamento', funnel: 'TELEGRAM', status: 'APPOINTMENT', isRejected: false, outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+
+    for (const ordine of [[scartato, nuovo, appuntamento], [appuntamento, scartato, nuovo], [nuovo, appuntamento, scartato]]) {
+        const d = reconcile([sheet()], [], ordine);
+        assert.equal(d.length, 1);
+        assert.equal(d[0].crm?.leadId, 'appuntamento', `ordine ${ordine.map(c => c.leadId).join(',')}`);
+        assert.equal(d[0].family, 'esito-mancante');
+    }
+});
+
+test('se l\'unica scheda e\' scartata la famiglia resta lead-scartato', () => {
+    const scartato = crm({ leadId: 'scartato', status: 'REJECTED', isRejected: true, outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const d = reconcile([sheet()], [], [scartato]);
+    assert.equal(d[0].family, 'lead-scartato');
 });

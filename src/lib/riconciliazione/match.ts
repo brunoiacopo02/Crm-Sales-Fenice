@@ -18,6 +18,9 @@ export type CrmClosure = {
      *  chiusura precedente al 02/07/2026, quando la tabella non esisteva) da
      *  "tentativi registrati che non tornano" (l'unico caso da sanare). */
     attemptsCount: number;
+    /** Lo stato del lead nel CRM (`NEW`, `IN_PROGRESS`, `APPOINTMENT`,
+     *  `REJECTED`): serve solo a scegliere fra più schede della stessa persona. */
+    status: string | null;
     isRejected: boolean;
     salespersonAssigned: string | null;
 };
@@ -79,10 +82,21 @@ function indexCandidates(candidates: CrmClosure[]) {
 }
 
 /**
+ * Quanto lontano è arrivato un lead. Fra più schede della stessa persona il
+ * contratto appartiene a quella che ha fatto più strada: chi è arrivato
+ * all'appuntamento, non un doppione scartato che nessuno ha mai lavorato. Senza
+ * quest'ordine la scelta — e con lei l'attribuzione del funnel — la faceva
+ * l'ordine di ritorno della query.
+ */
+const STATUS_RANK: Record<string, number> = { APPOINTMENT: 3, IN_PROGRESS: 2, NEW: 1, REJECTED: 0 };
+const rank = (c: CrmClosure) => STATUS_RANK[c.status ?? ''] ?? 1;
+
+/**
  * Fra più lead che combaciano, quello giusto è — in quest'ordine — la chiusura
  * con l'importo del foglio (è una quadratura, non una correzione), una chiusura
- * qualsiasi, poi il primo che capita. Mai un lead senza esito quando ne esiste
- * uno chiuso: sarebbe una seconda chiusura sullo stesso contratto.
+ * qualsiasi, poi la scheda arrivata più avanti nel funnel. Mai un lead senza
+ * esito quando ne esiste uno chiuso: sarebbe una seconda chiusura sullo stesso
+ * contratto.
  */
 function pick(candidates: CrmClosure[] | undefined, amountEur: number): CrmClosure | null {
     if (!candidates || candidates.length === 0) return null;
@@ -91,7 +105,7 @@ function pick(candidates: CrmClosure[] | undefined, amountEur: number): CrmClosu
     if (chiusi.length > 0) {
         return chiusi.find(c => Math.abs((c.amountEur ?? 0) - amountEur) <= 0.01) ?? chiusi[0];
     }
-    return candidates[0];
+    return candidates.reduce((best, c) => (rank(c) > rank(best) ? c : best), candidates[0]);
 }
 
 export function reconcile(sheet: SheetContract[], crm: CrmClosure[], candidates: CrmClosure[] = []): DiffEntry[] {
