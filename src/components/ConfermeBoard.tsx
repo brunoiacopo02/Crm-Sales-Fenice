@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise, Archive } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
+import { markConfermeAlertHandled } from "@/app/actions/confermeAlertActions"
 
 import dynamic from "next/dynamic"
 
@@ -86,9 +87,13 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     // Il lead può stare in una qualsiasi delle liste caricate a seconda della
     // vista attiva. Il deep-link vale un colpo solo: se un drawer è già aperto
     // non glielo si strappa da sotto (si perderebbe quello che l'operatore sta
-    // scrivendo), e se a caricamento finito il lead non c'è — già esitato o
-    // fuori dalla finestra del kanban — si rinuncia in silenzio, invece di
-    // restare armati e far comparire il drawer mezz'ora dopo, a sorpresa.
+    // scrivendo).
+    //
+    // Se a caricamento finito il lead non è in nessuna lista — un richiamo
+    // parcheggiato da giorni, o un lead fuori dalla finestra del kanban — lo si
+    // carica da solo, invece di rinunciare in silenzio: l'avviso bloccante dei
+    // richiami manda qui proprio quei lead, e il bottone "Apri e chiamalo" deve
+    // aprire la scheda sempre.
     useEffect(() => {
         if (!pendingDeepLink) return
         if (isDrawerOpen) {
@@ -106,7 +111,21 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 return
             }
         }
-        if (!loading) setPendingDeepLink(null)
+        if (loading) return
+
+        let annullato = false
+        const target = pendingDeepLink
+        setPendingDeepLink(null)
+        getConfermeAppointments({ leadId: target.leadId, fetchMode: 'all', timeSlot: 'tutto', confermeStatus: 'tutti' })
+            .then(res => {
+                const item = res.flatList[0]
+                if (annullato || !item) return
+                setSelectedLead(item as any)
+                setDrawerInitialTab(target.tab)
+                setIsDrawerOpen(true)
+            })
+            .catch(() => { /* lead non accessibile: si rinuncia in silenzio */ })
+        return () => { annullato = true }
     }, [pendingDeepLink, isDrawerOpen, loading, kanbanData, tableData, storicoData, oggiLeads, domaniLeads])
 
     // Close-lead modal state (quick action "Chiuso" dallo storico)
@@ -238,38 +257,24 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
     }, [currentUser.id])
 
-    // --- SNOOZE WATCHER ---
-    const [alertedSnoozes, setAlertedSnoozes] = useState<Set<string>>(new Set())
-
+    // Aprire la scheda di un lead con un richiamo scaduto spegne l'avviso
+    // bloccante per TUTTE le Conferme (spec 2026-08-31). Sta qui in un solo
+    // effetto invece che sui singoli onClick perché il drawer si apre da cinque
+    // punti diversi della board, e uno dimenticato lascerebbe l'avviso a suonare
+    // addosso ai colleghi mentre il lead è già in lavorazione.
     useEffect(() => {
-        const interval = setInterval(() => {
-            const nowTime = new Date().getTime();
-            const allLeads = [...oggiLeads, ...domaniLeads];
+        if (!isDrawerOpen || !selectedLead) return
+        const snooze = (selectedLead as any)?.lead?.confSnoozeAt
+        const gestito = (selectedLead as any)?.lead?.confAlertHandledAt
+        if (!snooze || gestito) return
+        if (new Date(snooze).getTime() > Date.now()) return
+        markConfermeAlertHandled((selectedLead as any).lead.id).catch(() => { /* non blocca il lavoro */ })
+    }, [isDrawerOpen, selectedLead])
 
-            setAlertedSnoozes(prev => {
-                const updatedSet = new Set(prev);
-                let newlyAlerted = false;
-
-                allLeads.forEach(item => {
-                    const lead = item.lead;
-                    if (!lead.confirmationsOutcome && lead.confSnoozeAt) {
-                        const snoozeTime = new Date(lead.confSnoozeAt).getTime();
-                        if (snoozeTime <= nowTime && !updatedSet.has(lead.id)) {
-                            // Trigger alert!
-                            alert(`⏰ SVEGLIA SNOOZE (Richiamo Programmato Odierno)\n\nÈ arrivato il momento di chiamare:\n👤 ${lead.name}\n📞 ${lead.phone}`);
-                            updatedSet.add(lead.id);
-                            newlyAlerted = true;
-                        }
-                    }
-                });
-
-                return newlyAlerted ? updatedSet : prev;
-            });
-
-        }, 30000); // Check every 30 seconds
-
-        return () => clearInterval(interval);
-    }, [oggiLeads, domaniLeads]);
+    // La sveglia dei richiami scaduti non vive più qui: era un alert() nativo
+    // (bloccava il tab, partiva solo per chi stava sulla board, solo sui lead di
+    // oggi/domani e una volta sola per sessione). Ora è l'avviso bloccante
+    // globale ConfermeRecallBlockingAlert, montato nel layout dashboard.
 
     const handleDatePreset = (preset: string) => {
         setDatePreset(preset)

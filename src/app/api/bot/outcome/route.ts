@@ -9,6 +9,7 @@ import { reassignBotLeadToHumanPool } from '@/lib/bot-fissatore/reassign';
 import type { BotReport } from '@/lib/bot-fissatore/types';
 import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissatore/noteDedup';
 import { normalizeContactCategory } from '@/lib/bot-fissatore/contactRequests';
+import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -102,6 +103,11 @@ export async function POST(req: NextRequest) {
         appointmentDate: leads.appointmentDate,
         agendaStatus: leads.agendaStatus,
         presentedAt: leads.presentedAt,
+        // Serve al ramo di rifissaggio: un lead scartato dalle Conferme resta
+        // `status = 'APPOINTMENT'`, quindi senza questo campo il rifissaggio
+        // non saprebbe di dover riaprire lo scarto.
+        confirmationsOutcome: leads.confirmationsOutcome,
+        confirmationsDiscardReason: leads.confirmationsDiscardReason,
     }).from(leads).where(eq(leads.id, leadId)).limit(1);
 
     if (!lead) {
@@ -147,7 +153,15 @@ export async function POST(req: NextRequest) {
             || lead.agendaStatus === 'consegnato'
             || lead.agendaStatus === 'inviato';
 
-        if (!leadWasBotOwned) {
+        // CONTATTO_UMANO è l'unica eccezione, e passa sempre: è l'unico esito che
+        // non scrive NIENTE sul lead — mette una riga in coda e manda una notifica,
+        // nessuna transizione di stato, nessuna attribuzione toccata. Il danno
+        // massimo se il bot sbaglia lead è una riga di coda da chiudere; il danno
+        // di rifiutarlo è una persona che ha chiesto di essere richiamata e di cui
+        // nessuno saprà mai niente. È successo davvero: `e4ef3953` il 31/07 scriveva
+        // «farmi sentire la tua collega» e ha preso un 403.
+        // Decisione PO 2026-08-29.
+        if (!leadWasBotOwned && typedOutcome !== 'CONTATTO_UMANO') {
             return NextResponse.json({ error: 'forbidden', detail: 'lead mai passato dal bot' }, { status: 403 });
         }
         // Il lead è di un GDO umano. NOTA annota e basta — bastano push o sola agenda.
@@ -200,9 +214,42 @@ export async function POST(req: NextRequest) {
         }
 
         const previous = lead.appointmentDate;
+        // Un lead scartato per "3 NR consecutivi" resta `status = 'APPOINTMENT'`:
+        // cambia solo `confirmationsOutcome`. Senza questo reset il rifissaggio
+        // aggiornava la data ma il lead restava fuori dalla board "da lavorare"
+        // (che filtra su `confirmationsOutcome IS NULL`): la Conferma riceveva la
+        // notifica, la cliccava, e non trovava il lead da nessuna parte — lo
+        // stesso difetto per cui delle 53 richieste di contatto ne era stata
+        // lavorata una sola.
+        //
+        // Non è una policy nuova: `updateLeadOutcome` applica già lo stesso
+        // CONFERME_DISCARD_RESET quando un GDO fissa un appuntamento su un lead
+        // scartato (QA Conferme 2026-06-12). Questo ramo bypassa updateLeadOutcome
+        // di proposito — per non ritimbrare `appointmentCreatedAt` — e nel farlo
+        // si era perso il reset.
+        const reopensDiscard = lead.confirmationsOutcome === 'scartato';
         await db.update(leads)
-            .set({ appointmentDate: newSlot, updatedAt: new Date() })
+            .set({
+                ...(reopensDiscard ? CONFERME_DISCARD_RESET : {}),
+                appointmentDate: newSlot,
+                updatedAt: new Date(),
+            })
             .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')));
+
+        if (reopensDiscard) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'conferme_scarto_reset',
+                userId: actorUserId,
+                timestamp: new Date(),
+                metadata: {
+                    previousDiscardReason: lead.confirmationsDiscardReason,
+                    trigger: 'bot_reschedule',
+                },
+                companyId: 'fenice',
+            }).catch((e) => console.error('[bot-fissatore] scarto_reset event err', e));
+        }
 
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
@@ -230,8 +277,14 @@ export async function POST(req: NextRequest) {
                 id: crypto.randomUUID(),
                 recipientUserId: u.id,
                 type: 'bot_appuntamento_spostato',
-                title: '🔄 Appuntamento spostato in chat',
-                body: `${lead.name}: nuovo orario ${when}`,
+                // Un lead recuperato dopo lo scarto è una notizia diversa da uno
+                // spostamento qualsiasi: era già dato per perso, ed è appena
+                // tornato sulla board. Chi legge la campanella deve capirlo
+                // dal titolo, senza aprire niente.
+                title: reopensDiscard ? '🎣 Recuperato: era scartato, ha rifissato' : '🔄 Appuntamento spostato in chat',
+                body: reopensDiscard
+                    ? `${lead.name}: risponde dopo lo scarto, nuovo orario ${when} — è di nuovo da lavorare`
+                    : `${lead.name}: nuovo orario ${when}`,
                 metadata: { leadId },
                 status: 'unread',
                 createdAt: now,
@@ -372,7 +425,11 @@ export async function POST(req: NextRequest) {
             eventType: 'BOT_CONTACT_REQUEST',
             userId: actorUserId,
             timestamp: new Date(),
-            metadata: { note: text, category, info: leadInfo },
+            // `botOwned: false` = richiesta accettata pur senza prova che il bot
+            // avesse quel lead in carico. Non cambia niente per chi la lavora, ma
+            // se un giorno la coda si riempisse di richieste su lead altrui, è da
+            // qui che si vede senza dover reinterrogare gli eventi.
+            metadata: { note: text, category, info: leadInfo, botOwned: leadWasBotOwned },
             companyId: 'fenice',
         });
 

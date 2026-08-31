@@ -13,8 +13,32 @@ export const CONTACT_CATEGORIES = {
     sfiducia_bot: 'Non si fida della chat',
     problema_tecnico: 'Problema tecnico',
     disdetta: 'Disdetta o spostamento',
+    // Contratto del 29/08: il bot segnala QUALSIASI risposta dopo il 3° tentativo,
+    // non solo chi chiede esplicitamente di parlare con una persona. Uno che
+    // scrive "scusate, ero al lavoro" per il bot era solo un lead che aveva
+    // risposto, e da noi restava scartato per sempre.
+    // È l'unica categoria in cui c'è un appuntamento da riaprire: mescolata ad
+    // `altro` si perde, ed è esattamente quello che il fornitore ci ha chiesto
+    // di non fare.
+    risposta_dopo_terzo_nr: 'Ha risposto dopo il 3° NR — recuperabile',
+    // Il lead aveva detto sì e l'appuntamento non è mai nato: quasi sempre
+    // perché si è fermato sul form di prenotazione del fornitore. Ad agosto
+    // sono stati 50, e 14 di loro non li ha richiamati nessuno — tornavano in
+    // pipeline indistinguibili da un lead freddo qualunque.
+    conferma_senza_appuntamento: 'Aveva confermato, appuntamento mai creato',
     altro: 'Altro',
 } as const;
+
+/**
+ * Le due categorie in cui c'è un sì già dato da recuperare, e per cui la card
+ * va marcata e messa in cima alla pipeline. Tutto il resto è una richiesta di
+ * contatto normale: importante, ma non è un appuntamento a un passo dall'esserci.
+ */
+const RECOVERABLE: readonly ContactCategory[] = ['risposta_dopo_terzo_nr', 'conferma_senza_appuntamento'];
+
+export function isRecoverableCategory(category: string): boolean {
+    return (RECOVERABLE as readonly string[]).includes(category);
+}
 
 export type ContactCategory = keyof typeof CONTACT_CATEGORIES;
 
@@ -42,6 +66,13 @@ const ALIASES: Record<string, ContactCategory> = {
     disdetta_o_sposta: 'disdetta',
     spostamento: 'disdetta',
     annullamento: 'disdetta',
+    risposta_dopo_3nr: 'risposta_dopo_terzo_nr',
+    risposta_dopo_terzo_tentativo: 'risposta_dopo_terzo_nr',
+    ha_risposto_dopo_nr: 'risposta_dopo_terzo_nr',
+    conferma_senza_appuntamento_creato: 'conferma_senza_appuntamento',
+    aveva_confermato: 'conferma_senza_appuntamento',
+    conferma_non_registrata: 'conferma_senza_appuntamento',
+    form_non_completato: 'conferma_senza_appuntamento',
 };
 
 export function normalizeContactCategory(raw: unknown): ContactCategory {

@@ -172,6 +172,16 @@ export const leads = pgTable('leads', {
     confSnoozeAt: timestamp('confSnoozeAt', { withTimezone: true, mode: 'date' }),
     confRecallNotes: text('confRecallNotes'),
 
+    // Avviso bloccante sui richiami Conferme (migrazione 0032). Lo stato sta qui
+    // e non su una tabella dedicata perché il trigger della 0019 già manda un
+    // ping Broadcast 'leads' su crm:<companyId> a ogni UPDATE: il claim si
+    // propaga a tutti gli schermi senza un canale o un evento in più.
+    // Azzerate tutte e quattro da setConfermeSnooze a ogni nuovo richiamo.
+    confAlertSnoozedUntil: timestamp('confAlertSnoozedUntil', { withTimezone: true, mode: 'date' }),
+    confAlertClaimedById: text('confAlertClaimedById'),
+    confAlertClaimedAt: timestamp('confAlertClaimedAt', { withTimezone: true, mode: 'date' }),
+    confAlertHandledAt: timestamp('confAlertHandledAt', { withTimezone: true, mode: 'date' }),
+
     // Report strutturato scritto dal bot fissatore al momento dell'esito.
     // Forma attesa: { summary, painPoints[], budgetSignal, urgency, objections[], levaConsigliata }.
     // Renderizzato come card "🤖 Report Bot" nel ConfermeDrawer. Nullable: solo i lead bot lo hanno.

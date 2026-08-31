@@ -33,6 +33,8 @@ type LeadProps = {
         source?: string | null
         phoneSuspicious?: boolean | null
         duplicatePhone?: boolean
+        /** Tornato dal bot con un si' gia' dato: aveva confermato, o ha risposto dopo il 3o NR. */
+        confermatoAlBot?: boolean
         recallMissedAt?: Date | null
     }
     onOutcomeClick: (leadId: string) => void
@@ -242,6 +244,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             )}
                             {lead.callCount > 0 && (
                                 <div className="text-[10px] font-bold text-ash-500 bg-ash-100 px-1.5 py-0.5 rounded-md">{lead.callCount}° ch.</div>
+                            )}
+                            {lead.confermatoAlBot && (
+                                <div
+                                    className="flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 shrink-0"
+                                    title="Aveva gia' detto si' in chat col bot e l'appuntamento non e' mai nato. Chiamalo per primo: il si' c'e' gia'."
+                                >
+                                    <CheckCircle2 className="h-3 w-3" /> Aveva detto sì
+                                </div>
                             )}
                             {lead.recallMissedAt && (
                                 <div

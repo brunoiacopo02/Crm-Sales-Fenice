@@ -12,6 +12,7 @@ const DuelStartOverlay = dynamic(() => import("@/components/DuelStartOverlay").t
 const GlobalAlertListener = dynamic(() => import("@/components/GlobalAlertListener").then(mod => ({ default: mod.GlobalAlertListener })))
 const CrossCompanyRecallBanner = dynamic(() => import("@/components/CrossCompanyRecallBanner").then(mod => ({ default: mod.CrossCompanyRecallBanner })))
 const ConfermeRecallBanner = dynamic(() => import("@/components/ConfermeRecallBanner").then(mod => ({ default: mod.ConfermeRecallBanner })))
+const ConfermeRecallBlockingAlert = dynamic(() => import("@/components/ConfermeRecallBlockingAlert").then(mod => ({ default: mod.ConfermeRecallBlockingAlert })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { getUserTheme } from "@/lib/userTheme"
@@ -94,9 +95,15 @@ export default async function DashboardLayout({
                     {tctx.allowedCompanies.length > 1 && (
                         <SafeWrapper><CrossCompanyRecallBanner /></SafeWrapper>
                     )}
-                    {/* Richiami "risentire dopo" Conferme: banner blu globale, tutte le aziende */}
+                    {/* Richiami "risentire dopo" Conferme: banner blu globale, tutte le aziende.
+                        Il banner avvisa dei richiami IN ARRIVO; quelli già scaduti passano
+                        all'avviso bloccante qui sotto, così non ci sono due avvisi per la
+                        stessa cosa. */}
                     {session.user.role === 'CONFERME' && (
-                        <SafeWrapper><ConfermeRecallBanner /></SafeWrapper>
+                        <>
+                            <SafeWrapper><ConfermeRecallBanner /></SafeWrapper>
+                            <SafeWrapper><ConfermeRecallBlockingAlert /></SafeWrapper>
+                        </>
                     )}
                 </SalesCompanyProvider>
             </SidebarProvider>
