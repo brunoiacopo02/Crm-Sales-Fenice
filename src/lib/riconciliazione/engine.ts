@@ -21,6 +21,7 @@ import { reconcile, type CrmClosure, type DiffEntry } from '@/lib/riconciliazion
 import type { ConfrontoResult, ApplyResult, AnnullaRunResult, RiconciliazioneRunSummary } from '@/lib/riconciliazione/types';
 import { resolveAttemptWrite } from '@/lib/venditorePerformance/guard';
 import { logLeadEvent } from '@/lib/eventLogger';
+import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
 
 export const COMPANY_ID = 'fenice'; // il foglio non contiene Serenamente
 
@@ -239,6 +240,49 @@ function resolveSalesUserId(
     );
 }
 
+
+
+/**
+ * Avvisa il CRM marketing delle chiusure che questa riconciliazione ha creato o
+ * tolto.
+ *
+ * Serve perché `deal.closed_won`/`closed_lost` nascono da `saveVenditoreOutcome`,
+ * e la riconciliazione scrive fatturato senza passare di lì: il 31/08 quattro
+ * vendite applicate dallo script e una applicata dalla pagina non sono mai
+ * arrivate al marketing, e nessuno se ne sarebbe accorto senza guardare a mano.
+ * Il resync (`scripts/resyncMarketingClosures.ts`) resta la rete di sicurezza,
+ * non può essere il meccanismo.
+ *
+ * L'evento si sceglie dallo stato del lead DOPO la scrittura, così la stessa
+ * funzione serve sia l'applicazione sia l'annullamento (che riporta indietro lo
+ * stato e deve rimandarlo: un undo silenzioso lascerebbe al marketing una
+ * vendita che non esiste più — peggio del buco di partenza).
+ *
+ * La famiglia `importo` è ESCLUSA di proposito: lì la vendita al marketing c'è
+ * già e cambia solo la cifra. Finché non è chiarito se il loro receiver fa
+ * upsert per lead o accoda, un secondo `closed_won` sommerebbe invece di
+ * correggere — decisione del 26/08, quegli importi si sistemano a mano.
+ */
+async function notificaMarketing(touched: Array<{ leadId: string; family: string }>, adminUserId: string) {
+    for (const t of touched) {
+        if (t.family === 'importo') continue;
+        try {
+            const [l] = await db.select({ outcome: leads.salespersonOutcome })
+                .from(leads)
+                .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, t.leadId)));
+            if (!l?.outcome) continue; // nessun esito da comunicare
+            await enqueueMarketingWebhook({
+                eventType: l.outcome === 'Chiuso' ? 'deal.closed_won' : 'deal.closed_lost',
+                leadId: t.leadId,
+                actorUserId: adminUserId,
+            });
+        } catch (e) {
+            // Come per logLeadEvent: la run è già committata, un problema qui non
+            // deve far sembrare fallita una scrittura andata a buon fine.
+            console.error('[riconciliazione] enqueueMarketingWebhook fallito per', t.leadId, e);
+        }
+    }
+}
 
 export async function applicaCorrezioniCome(adminUserId: string, monthKey: string, keys: string[], csv?: string): Promise<ApplyResult> {
     if (!/^\d{4}-\d{2}$/.test(monthKey)) return { success: false, error: 'Mese non valido.' };
@@ -602,6 +646,8 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
         }
     }
 
+    await notificaMarketing(touched, adminUserId);
+
     return { success: true, runId, applied: touched.length };
 }
 
@@ -895,6 +941,8 @@ export async function annullaRunCome(adminUserId: string, runId: string): Promis
             console.error('[annullaRun] logLeadEvent fallito (annullamento già committato, non blocca la risposta):', logErr);
         }
     }
+
+    await notificaMarketing(touched, adminUserId);
 
     return { success: true, reverted: touched.length };
 }
