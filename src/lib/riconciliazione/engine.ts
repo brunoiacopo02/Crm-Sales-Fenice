@@ -475,7 +475,7 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                 // della riga (non solo i campi toccati) — al Task 7 serve poter
                 // ricreare o cancellare l'intera riga, non solo un valore.
                 let attemptBefore: AttemptSnapshot | null = null;
-                let attemptAfter: AttemptSnapshot;
+                let attemptAfter: AttemptSnapshot | null;
                 let attemptDbSet: Record<string, unknown> = {};
                 let attemptInsertValues: { id: string; salesUserId: string; attemptNumber: number; outcome: string; outcomeAt: Date; closeAmountEur: number | null } | null = null;
 
@@ -499,17 +499,33 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                         attemptDbSet = { outcome: 'Chiuso', outcomeAt: e.sheet!.signedAt, closeAmountEur: e.sheet!.amountEur };
                         attemptAfter = { ...attemptBefore, outcome: 'Chiuso', outcomeAt: e.sheet!.signedAt, closeAmountEur: e.sheet!.amountEur };
                     }
+                } else if (e.family === 'solo-crm' && !currentLead.salespersonUserId) {
+                    // Toglie fatturato a una chiusura che non ha né un tentativo
+                    // registrato né un venditore: tipico delle chiusure vecchie,
+                    // scritte prima che `salesAttempts` esistesse o da una
+                    // bonifica SQL. Qui NON si inventa un tentativo: non c'è
+                    // nessuno a cui attribuirlo con verità, e il compito della
+                    // famiglia è togliere una riga di fatturato, non aggiungere
+                    // una trattativa mai avvenuta. Nessun rischio di blocco
+                    // permanente: la guardia leads-vs-salesAttempts scatta solo
+                    // sulle chiusure, e questo lead smette di esserlo.
+                    attemptAfter = null as unknown as AttemptSnapshot;
+                    attemptInsertValues = null;
                 } else {
                     // Ramo raro: nessun attempt esisteva ancora per questo lead
                     // (tipico di esito-mancante/lead-scartato, mai chiusi prima).
                     // Ruling B: l'attribuzione segue il venditore del FOGLIO
                     // (risolto sopra), poi quello già assegnato sul lead; MAI
-                    // l'admin che applica la riconciliazione.
-                    const salesUserId = resolveSalesUserId(
-                        e.sheet?.salesCode ?? null,
-                        salesCodeToUserId,
-                        currentLead.salespersonUserId ?? null,
-                    );
+                    // l'admin che applica la riconciliazione. Su `solo-crm` il
+                    // foglio non ha una riga da cui leggere il codice, quindi
+                    // l'unica fonte lecita è il venditore già sul lead.
+                    const salesUserId = e.family === 'solo-crm'
+                        ? currentLead.salespersonUserId!
+                        : resolveSalesUserId(
+                            e.sheet?.salesCode ?? null,
+                            salesCodeToUserId,
+                            currentLead.salespersonUserId ?? null,
+                        );
                     const outcomeAt = e.family === 'solo-crm' ? (currentLead.salespersonOutcomeAt ?? new Date()) : e.sheet!.signedAt;
                     const closeAmountEur = e.family === 'solo-crm' ? null : e.sheet!.amountEur;
                     attemptInsertValues = {
@@ -550,7 +566,7 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                 if (write.mode === 'update') {
                     await tx.update(salesAttempts).set(attemptDbSet)
                         .where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.id, write.id)));
-                } else {
+                } else if (attemptInsertValues) {
                     await tx.insert(salesAttempts).values({
                         id: attemptInsertValues!.id,
                         leadId,
