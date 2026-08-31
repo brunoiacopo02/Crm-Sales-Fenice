@@ -240,6 +240,24 @@ function resolveSalesUserId(
 export async function applicaCorrezioni(monthKey: string, keys: string[], csv?: string): Promise<ApplyResult> {
     const admin = await requireAdmin();
     if (!admin) return { success: false, error: 'Non autorizzato.' };
+
+    const esito = await applicaCorrezioniCome(admin.id, monthKey, keys, csv);
+    if (esito.success) revalidatePath('/riconciliazione');
+    return esito;
+}
+
+/**
+ * Il corpo dell'applicazione, separato dal gate di autenticazione.
+ *
+ * `applicaCorrezioni` è la sola porta per gli utenti: risolve chi sei e chiama
+ * questa. La separazione serve perché la stessa scrittura possa partire anche da
+ * fuori una richiesta HTTP — uno script di allineamento una tantum — senza
+ * ricopiarne la logica: una seconda copia delle regole di scrittura del
+ * fatturato è esattamente il modo in cui le due strade divergono col tempo.
+ * `adminUserId` finisce in `riconciliazioneRuns.appliedBy`, quindi la run resta
+ * tracciata e annullabile dalla pagina come qualunque altra.
+ */
+export async function applicaCorrezioniCome(adminUserId: string, monthKey: string, keys: string[], csv?: string): Promise<ApplyResult> {
     if (!/^\d{4}-\d{2}$/.test(monthKey)) return { success: false, error: 'Mese non valido.' };
 
     // Il client manda SOLO le chiavi (più il testo del CSV quando la sorgente è
@@ -250,7 +268,12 @@ export async function applicaCorrezioni(monthKey: string, keys: string[], csv?: 
     // CSV: il server ri-analizza il testo con lo stesso parseSheetRows, non fa
     // rieseguire al client il match e poi si fida del risultato.
     const source: 'sheet' | 'csv' = csv !== undefined ? 'csv' : 'sheet';
-    const fresh = source === 'csv' ? await confrontaMeseDaCsv(monthKey, csv!) : await confrontaMese(monthKey);
+    // Si passa dal corpo interno, non dalle due action pubbliche: quelle
+    // rifarebbero il gate di autenticazione, che qui è già stato fatto dal
+    // chiamante (ed è assente quando la chiamata non nasce da una richiesta).
+    const fresh = source === 'csv'
+        ? await confrontaMeseConValues(monthKey, async () => parseCsv(csv!))
+        : await confrontaMeseConValues(monthKey, fetchDatabaseClientiRows);
     if (!fresh.success) return { success: false, error: fresh.error };
 
     const wanted = new Set(keys);
@@ -285,7 +308,7 @@ export async function applicaCorrezioni(monthKey: string, keys: string[], csv?: 
                 companyId: COMPANY_ID,
                 monthKey,
                 source,
-                appliedBy: admin.id,
+                appliedBy: adminUserId,
                 entryCount: todo.length,
             });
 
@@ -571,7 +594,7 @@ export async function applicaCorrezioni(monthKey: string, keys: string[], csv?: 
             await logLeadEvent({
                 leadId: t.leadId,
                 eventType: 'RECONCILED',
-                userId: admin.id,
+                userId: adminUserId,
                 companyId: COMPANY_ID,
                 metadata: { monthKey, family: t.family, runId },
             });
@@ -580,7 +603,6 @@ export async function applicaCorrezioni(monthKey: string, keys: string[], csv?: 
         }
     }
 
-    revalidatePath('/riconciliazione');
     return { success: true, runId, applied: touched.length };
 }
 
