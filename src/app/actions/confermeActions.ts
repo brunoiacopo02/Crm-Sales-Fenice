@@ -31,6 +31,11 @@ export async function getConfermeAppointments(filters: {
      *  Default: appointmentDate. Per lo storico si usa confirmationsTimestamp
      *  (il giorno in cui il lead è stato effettivamente confermato/scartato). */
     dateFilterField?: "appointmentDate" | "confirmationsTimestamp";
+    /** Un solo lead per id: usato dal deep-link /conferme?lead=<id> quando il
+     *  lead non è in nessuna delle liste già caricate dalla board (es. un
+     *  richiamo parcheggiato da giorni). Va passato con fetchMode 'all',
+     *  confermeStatus 'tutti' e senza date. */
+    leadId?: string;
 }) {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -46,6 +51,10 @@ export async function getConfermeAppointments(filters: {
         eq(leads.companyId, ctx.companyId),
         eq(leads.status, 'APPOINTMENT')
     ]
+
+    if (filters.leadId) {
+        conditions.push(eq(leads.id, filters.leadId))
+    }
 
     if (filters.searchQuery) {
         const q = `%${filters.searchQuery}%`
@@ -1302,6 +1311,12 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
 
         let toUpdate: any = {
             confSnoozeAt: snoozeAt,
+            // Nuovo richiamo = avviso bloccante da capo: si azzerano snooze,
+            // claim e "già gestito" della tornata precedente (migrazione 0032).
+            confAlertSnoozedUntil: null,
+            confAlertClaimedById: null,
+            confAlertClaimedAt: null,
+            confAlertHandledAt: null,
             version: oldLead.version + 1,
             updatedAt: new Date()
         };
@@ -1439,12 +1454,13 @@ export async function getConfermeRecallAlerts(): Promise<Array<{
     if (ctx.isAllCompanies) return []
 
     const soon = new Date(Date.now() + 30 * 60 * 1000)
-    // Solo richiami di OGGI (Europe/Rome): senza floor il banner mostrava
-    // snooze stantii di mesi prima come "ADESSO" (verificato in prod il
-    // 2026-06-12). Gli snooze vecchi restano visibili nei board.
-    const romeDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
-    const [ry, rm, rd] = romeDateStr.split('-').map(Number)
-    const todayStart = new Date(ry, rm - 1, rd, 0, 0, 0, 0)
+    // Solo richiami IN ARRIVO (da adesso ai prossimi 30 minuti): questo banner
+    // fa da preavviso. Quelli già scaduti sono passati all'avviso bloccante
+    // (ConfermeRecallBlockingAlert, spec 2026-08-31), che li mostra a schermo
+    // pieno — mostrarli anche qui vorrebbe dire due avvisi per la stessa cosa.
+    // Il floor era a inizio giornata perché senza floor comparivano snooze
+    // stantii di mesi prima etichettati "ADESSO" (prod, 2026-06-12).
+    const fromNow = new Date()
     const rows = await db.select({
         id: leads.id,
         name: leads.name,
@@ -1458,7 +1474,7 @@ export async function getConfermeRecallAlerts(): Promise<Array<{
             inArray(leads.companyId, ctx.allowedCompanies),
             isNull(leads.confirmationsOutcome),
             isNotNull(leads.confSnoozeAt),
-            gte(leads.confSnoozeAt, todayStart),
+            gte(leads.confSnoozeAt, fromNow),
             lte(leads.confSnoozeAt, soon),
         ))
         .orderBy(asc(leads.confSnoozeAt))
