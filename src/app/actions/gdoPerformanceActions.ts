@@ -163,10 +163,14 @@ export async function getManagerGdoTables(monthString: string) {
                 lt(leads.appointmentDate, endObj)
             )),
         // Chiusure del mese: data esito venditore (regola canonica chiusure).
+        // presentedAt serve SOLO per il numeratore di percClosed (vedi sotto):
+        // la riconciliazione fatturato può scrivere Chiuso su un lead mai
+        // presentato, e quella chiusura non deve gonfiare il tasso oltre il 100%.
         db.select({
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
             salespersonOutcomeAt: leads.salespersonOutcomeAt,
+            presentedAt: leads.presentedAt,
         }).from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
@@ -194,7 +198,7 @@ export async function getManagerGdoTables(monthString: string) {
                 chiusi: Array(weeks.length).fill(0)
             },
             totalStats: {
-                fissati: 0, confermati: 0, presenziati: 0, chiusi: 0
+                fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0
             },
             leadAssegnati: 0
         };
@@ -207,7 +211,7 @@ export async function getManagerGdoTables(monthString: string) {
         const f = lead.funnel || 'ALTRO';
 
         if (!gdoStats.funnelStats[f]) {
-            gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
+            gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0 };
         }
 
         // FISSATI: unica metrica che resta attribuita alla data di fissaggio
@@ -231,7 +235,7 @@ export async function getManagerGdoTables(monthString: string) {
             const gdoStats = gdoStatsMap[lead.assignedToId];
             const f = lead.funnel || 'ALTRO';
             if (!gdoStats.funnelStats[f]) {
-                gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
+                gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0 };
             }
             gdoStats.funnelStats[f][key]++;
             gdoStats.totalStats[key]++;
@@ -243,6 +247,24 @@ export async function getManagerGdoTables(monthString: string) {
     bucketInto(confirmedLeads, l => l.appointmentDate, 'confermati');
     bucketInto(presenceLeads, l => l.presentedAt, 'presenziati');
     bucketInto(closedLeads, l => l.salespersonOutcomeAt, 'chiusi');
+
+    // chiusiConPresenza: sottoinsieme di `chiusi` con una presenza vera dietro
+    // (vedi isFunnelClosure in lib/kpi/canon). `chiusi` resta il totale grezzo
+    // (la riconciliazione fatturato può chiudere un lead scartato dal GDO,
+    // mai presentato — quella chiusura è vera per i soldi ma non deve entrare
+    // nel numeratore di percClosed, altrimenti il tasso supera il 100%).
+    for (const lead of closedLeads) {
+        if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId]) continue;
+        if (lead.presentedAt === null) continue;
+        if (!lead.salespersonOutcomeAt) continue;
+        const gdoStats = gdoStatsMap[lead.assignedToId];
+        const f = lead.funnel || 'ALTRO';
+        if (!gdoStats.funnelStats[f]) {
+            gdoStats.funnelStats[f] = { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0 };
+        }
+        gdoStats.funnelStats[f].chiusiConPresenza++;
+        gdoStats.totalStats.chiusiConPresenza++;
+    }
 
     // Count leads assigned to each GDO in the month (totali + per-funnel)
     for (const lead of assignedLeadsRaw) {
@@ -265,7 +287,7 @@ export async function getManagerGdoTables(monthString: string) {
             const lb = gdo.leadAssegnatiFunnel[b] || 0;
             return lb - la;
         }).map(k => {
-            const row = gdo.funnelStats[k] || { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0 };
+            const row = gdo.funnelStats[k] || { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0 };
             const leadAssegnatiFunnel = gdo.leadAssegnatiFunnel[k] || 0;
             return {
                 funnel: k,
@@ -277,7 +299,9 @@ export async function getManagerGdoTables(monthString: string) {
                 percFiss: leadAssegnatiFunnel > 0 ? (row.fissati / leadAssegnatiFunnel * 100).toFixed(1) + '%' : '-',
                 percConf: row.fissati ? (row.confermati / row.fissati * 100).toFixed(0) + '%' : '-',
                 percPres: row.confermati ? (row.presenziati / row.confermati * 100).toFixed(0) + '%' : '-',
-                percClosed: row.presenziati ? (row.chiusi / row.presenziati * 100).toFixed(0) + '%' : '-',
+                // Numeratore = solo chiusure con presenza vera (row.chiusi resta il
+                // totale grezzo, comprese le chiusure fuori funnel riconciliate).
+                percClosed: row.presenziati ? (row.chiusiConPresenza / row.presenziati * 100).toFixed(0) + '%' : '-',
             };
         });
 
@@ -300,7 +324,8 @@ export async function getManagerGdoTables(monthString: string) {
                 chiusi: gdo.totalStats.chiusi,
                 percConf: gdo.totalStats.fissati ? (gdo.totalStats.confermati / gdo.totalStats.fissati * 100).toFixed(0) + '%' : '-',
                 percPres: gdo.totalStats.confermati ? (gdo.totalStats.presenziati / gdo.totalStats.confermati * 100).toFixed(0) + '%' : '-',
-                percClosed: gdo.totalStats.presenziati ? (gdo.totalStats.chiusi / gdo.totalStats.presenziati * 100).toFixed(0) + '%' : '-'
+                // Numeratore = solo chiusure con presenza vera, vedi funnelRows sopra.
+                percClosed: gdo.totalStats.presenziati ? (gdo.totalStats.chiusiConPresenza / gdo.totalStats.presenziati * 100).toFixed(0) + '%' : '-'
             },
             weeklyRows,
             weekNames: weeks.map(w => w.name)

@@ -19,6 +19,7 @@ import {
     Activity,
     PhoneIncoming,
     Calculator,
+    Scale,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -276,6 +277,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                     label: "Riservato",
                     items: [
                         { name: "Previsionale", href: "/previsionale", icon: Calculator },
+                        { name: "Riconciliazione", href: "/riconciliazione", icon: Scale },
                     ],
                 }] : []),
             ]

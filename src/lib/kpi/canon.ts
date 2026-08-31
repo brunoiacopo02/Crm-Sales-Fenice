@@ -75,6 +75,20 @@ export function isAnsweredLog(outcome: string | null, discardReason: string | nu
     return !isNeverAnsweredLog(outcome, discardReason)
 }
 
+/**
+ * Chiusura "di funnel": Chiuso con una presenza vera dietro (`presentedAt`
+ * non nullo). Dal 2026-08 la riconciliazione fatturato (Database Clienti)
+ * può scrivere Chiuso su un lead mai presentato — scartato dal GDO prima
+ * dell'appuntamento (famiglia lead-scartato) o mai entrato nel funnel
+ * (famiglia lead-assente, "FUORI FUNNEL"). Quella chiusura è vera per i
+ * soldi (va nei totali di fatturato) ma NON deve entrare nel NUMERATORE di
+ * un tasso di conversione: altrimenti un GDO/team può leggere un tasso di
+ * chiusura oltre il 100% (chiuso ma mai presentato). Vedi task 10 riconciliazione.
+ */
+export function isFunnelClosure(lead: { salespersonOutcome: string | null; presentedAt: Date | null }): boolean {
+    return (lead.salespersonOutcome ?? '').toLowerCase() === 'chiuso' && lead.presentedAt !== null
+}
+
 // Filtro standard per GDO "veri" nelle classifiche/medie (esclude il bot fissatore).
 export function isRealGdo(u: { role: string; isActive: boolean; isBot: boolean }): boolean {
     return u.role === 'GDO' && u.isActive && !u.isBot
