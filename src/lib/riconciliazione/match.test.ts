@@ -31,6 +31,7 @@ function crm(over: Partial<CrmClosure> = {}): CrmClosure {
         outcomeAt: new Date(Date.UTC(2026, 7, 1, 12)),
         amountEur: 1390,
         attemptsAmountEur: 1390,
+        attemptsCount: 1,
         isRejected: false,
         salespersonAssigned: 'Sales 004',
         ...over,
@@ -154,4 +155,92 @@ test('chiusura dopo limite di mese (00:30 Roma primo settembre): NON matcha agos
     assert.equal(leadAssente!.sheet?.monthKey, '2026-08');
     const soloCrm = d.find(e => e.family === 'solo-crm');
     assert.ok(soloCrm);
+});
+
+// --- Collaudo sui dati veri (31/08): tre difetti trovati su aprile-agosto ---
+
+test('lead scartato senza esito venditore → lead-scartato, non lead-assente', () => {
+    // Un lead REJECTED non ha `salespersonOutcomeAt`: non compare fra le chiusure
+    // del mese e va cercato fra i candidati, altrimenti il contratto sembra
+    // orfano e l'applicazione creerebbe un doppione del lead che esiste già.
+    const candidato = crm({
+        leadId: 'lead-scartato-1',
+        outcome: null,
+        outcomeAt: null,
+        amountEur: null,
+        attemptsAmountEur: 0,
+        attemptsCount: 0,
+        isRejected: true,
+        salespersonAssigned: null,
+    });
+
+    const d = reconcile([sheet()], [], [candidato]);
+    assert.equal(d.length, 1);
+    assert.equal(d[0].family, 'lead-scartato');
+    assert.equal(d[0].crm?.leadId, 'lead-scartato-1');
+    assert.equal(d[0].appliable, true);
+});
+
+test('lead in appuntamento mai esitato → esito-mancante, non lead-assente', () => {
+    const candidato = crm({
+        leadId: 'lead-appuntamento-1',
+        outcome: null, outcomeAt: null, amountEur: null,
+        attemptsAmountEur: 0, attemptsCount: 0, isRejected: false,
+    });
+
+    const d = reconcile([sheet()], [], [candidato]);
+    assert.equal(d.length, 1);
+    assert.equal(d[0].family, 'esito-mancante');
+    assert.equal(d[0].crm?.leadId, 'lead-appuntamento-1');
+});
+
+test('un candidato resta tale: senza contratto nel foglio non diventa solo-crm', () => {
+    const candidato = crm({ leadId: 'candidato', phone: '+393334445566', email: null, outcome: null, outcomeAt: null, attemptsCount: 0 });
+    assert.deepEqual(reconcile([], [], [candidato]), []);
+});
+
+test('la chiusura vera batte il doppione senza esito sullo stesso telefono', () => {
+    // Caso reale di luglio: due lead con lo stesso numero, uno "Sparito" e uno
+    // "Chiuso" da 3180. L'indice teneva l'ultimo letto: agganciava lo Sparito
+    // (→ esito-mancante, seconda chiusura da 3180) e lasciava il vero chiuso in
+    // solo-crm (→ cancellazione di una chiusura buona). Doppio danno.
+    const doppione = crm({ leadId: 'doppione', outcome: 'Sparito', amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const vero = crm({ leadId: 'vero', outcome: 'Chiuso', amountEur: 1390, attemptsAmountEur: 1390, attemptsCount: 1 });
+
+    for (const ordine of [[doppione, vero], [vero, doppione]]) {
+        assert.deepEqual(reconcile([sheet()], ordine), [], `ordine ${ordine.map(c => c.leadId).join(',')}`);
+    }
+});
+
+test('a parità di esito Chiuso vince quello con l\'importo del foglio', () => {
+    const altro = crm({ leadId: 'altro-importo', amountEur: 999, attemptsAmountEur: 999, attemptsCount: 1 });
+    const giusto = crm({ leadId: 'giusto', amountEur: 1390, attemptsAmountEur: 1390, attemptsCount: 1 });
+
+    for (const ordine of [[altro, giusto], [giusto, altro]]) {
+        const d = reconcile([sheet()], ordine);
+        // il contratto quadra col lead da 1390: su di lui nessuna differenza.
+        assert.equal(d.filter(e => e.crm?.leadId === 'giusto').length, 0, `ordine ${ordine.map(c => c.leadId).join(',')}`);
+        // l'altra chiusura resta scoperta: va segnalata, non abbinata a forza.
+        const resto = d.filter(e => e.crm?.leadId === 'altro-importo');
+        assert.equal(resto.length, 1);
+        assert.equal(resto[0].family, 'solo-crm');
+    }
+});
+
+test('nessun tentativo registrato non è una discordanza da sanare', () => {
+    // `salesAttempts` esiste dal 02/07/2026: per ogni chiusura precedente la
+    // somma dei tentativi è 0 per costruzione. Bloccarle tutte come "leads e
+    // salesAttempts non concordano" fermava 15 righe di maggio già quadrate.
+    const d = reconcile([sheet({ amountEur: 1500 })], [crm({ amountEur: 1390, attemptsAmountEur: 0, attemptsCount: 0 })]);
+    assert.equal(d.length, 1);
+    assert.equal(d[0].family, 'importo');
+    assert.equal(d[0].blockedReason, null);
+    assert.equal(d[0].appliable, true);
+});
+
+test('un tentativo registrato che non torna resta bloccato', () => {
+    const d = reconcile([sheet({ amountEur: 1500 })], [crm({ amountEur: 1390, attemptsAmountEur: 900, attemptsCount: 1 })]);
+    assert.equal(d.length, 1);
+    assert.equal(d[0].appliable, false);
+    assert.match(d[0].blockedReason ?? '', /non concordano/);
 });

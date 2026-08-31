@@ -230,3 +230,55 @@ deve decidere consapevolmente, non un effetto collaterale di un task di verifica
 **Aprile e maggio 2026**: ~29 contratti per €64k mai riportati nel CRM, quasi tutti su lead
 `REJECTED` dei funnel ORG e Database. È il buco più grosso rimasto e il banco di prova della
 famiglia 2.
+
+## Collaudo sui dati veri (2026-08-31)
+
+Primo confronto in sola lettura su cinque mesi (aprile → agosto), foglio live via
+service account: 3.723 righe grezze. Ha fatto emergere tre difetti che i test a
+tavolino non potevano vedere, tutti corretti prima di qualunque applicazione.
+
+**1. La famiglia `lead-scartato` non si accendeva mai — zero righe su 27.**
+`loadCrmClosures` cerca i candidati fra i lead con `salespersonOutcomeAt` nel
+mese. Un lead scartato dal GDO quell'esito non ce l'ha, per definizione: restava
+invisibile al confronto e il suo contratto finiva in `lead-assente`. Applicarlo
+avrebbe **creato un lead nuovo accanto a quello che esiste già** — 26 doppioni
+per 54.498 € fra aprile e maggio. È esattamente il buco che questa feature
+doveva chiudere, e la feature lo mancava. Aggiunta `loadCrmCandidates` (ricerca
+mirata per telefono/email dei soli contratti del mese, con e senza prefisso) e
+un terzo livello di lookup in `reconcile`.
+
+**2. Fra lead con lo stesso numero vinceva l'ultimo letto dalla query.**
+`indexCrm` teneva un solo record per chiave (`Map.set`). A luglio, sul contratto
+di Maurizio Conti, agganciava il doppione «Sparito» — producendo un
+`esito-mancante` che avrebbe scritto una **seconda chiusura da 3.180 €** — e
+lasciava la chiusura vera scoperta come `solo-crm`, cioè candidata alla
+cancellazione. Due errori opposti sullo stesso contratto, e l'esito dipendeva
+dall'ordine di una query senza `ORDER BY`. Ora l'indice tiene liste e `pick()`
+sceglie in ordine: la chiusura con l'importo del foglio, poi una chiusura
+qualsiasi, poi il resto.
+
+**3. Il guard su `salesAttempts` bloccava tutte le chiusure d'annata.**
+`salesAttempts` esiste dal 02/07/2026: per ogni chiusura precedente la somma dei
+tentativi è 0 per costruzione, non per un disallineamento. 15 righe di maggio già
+quadrate (delta 0 €) risultavano «leads e salesAttempts non concordano: va sanato
+prima». Il guard ora scatta solo se un tentativo esiste davvero
+(`attemptsCount > 0`).
+
+### Quadro dopo le correzioni
+
+| Mese | Foglio | Scarto vs CRM | Famiglie |
+|---|---|---|---|
+| 2026-04 | 46 contratti, 105.293 € | 19.299 € | 9 scartato (18.009 €), 1 esito-mancante, 1 importo (bloccato: tutor non mappato), 1 assente, 1 solo-crm |
+| 2026-05 | 101 contratti, 247.554 € | 43.696 € | 14 scartato (31.630 €), 7 esito-mancante (15.901 €), 2 solo-crm |
+| 2026-06 | 25 contratti, 59.414 € | 300 € | 1 scartato |
+| 2026-07 | 117 contratti, 268.290 € | 5.759 € | 3 scartato (5.259 €), 1 assente (500 €) |
+| 2026-08 | 45 contratti, 115.592 € | 2.926 € | 1 esito-mancante (1.890 €), 3 importo (8.959 €) |
+
+I due `lead-assente` rimasti (Alice Tamassia, Barbara Cemini) sono stati
+verificati a mano: nel CRM non esiste nessun lead con quel contatto, la famiglia
+è corretta. I `solo-crm` (Marianna Russo 1.890 €, Bruno Bulferi Bulferetti 945 €,
+Antonella 2.890 €) sono chiusure presenti nel CRM e assenti dal foglio: tolgono
+fatturato, restano non spuntate e vogliono un occhio umano.
+
+Nessuna correzione è stata applicata: l'applicazione resta un gesto umano dalla
+pagina `/riconciliazione`.

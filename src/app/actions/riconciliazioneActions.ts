@@ -1,7 +1,7 @@
 'use server';
 
 import crypto from 'node:crypto';
-import { and, eq, gte, lt, inArray, desc, isNull } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray, desc, isNull, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { leads, salesAttempts, riconciliazioneRuns, riconciliazioneEntries, users } from '@/db/schema';
@@ -9,7 +9,7 @@ import { createClient } from '@/utils/supabase/server';
 import { normalizePhoneStrict } from '@/lib/phoneNormalize';
 import { monthBoundsRome } from '@/lib/dateUtils';
 import { fetchDatabaseClientiRows } from '@/lib/riconciliazione/sheetsClient';
-import { parseSheetRows, SheetUnavailableError } from '@/lib/riconciliazione/sheetRows';
+import { parseSheetRows, SheetUnavailableError, type SheetContract } from '@/lib/riconciliazione/sheetRows';
 import { parseCsv } from '@/lib/riconciliazione/csv';
 import { reconcile, type CrmClosure, type DiffEntry } from '@/lib/riconciliazione/match';
 import { resolveAttemptWrite } from '@/lib/venditorePerformance/guard';
@@ -63,9 +63,11 @@ async function loadCrmClosures(monthKey: string): Promise<CrmClosure[]> {
         ));
 
     const attemptTotals = new Map<string, number>();
+    const attemptCounts = new Map<string, number>();
     for (const a of attempts) {
         if (a.outcome !== 'Chiuso') continue;
         attemptTotals.set(a.leadId, (attemptTotals.get(a.leadId) ?? 0) + (a.amountEur ?? 0));
+        attemptCounts.set(a.leadId, (attemptCounts.get(a.leadId) ?? 0) + 1);
     }
 
     return rows.map(r => ({
@@ -78,9 +80,63 @@ async function loadCrmClosures(monthKey: string): Promise<CrmClosure[]> {
         outcomeAt: r.outcomeAt,
         amountEur: r.amountEur,
         attemptsAmountEur: attemptTotals.get(r.id) ?? 0,
+        attemptsCount: attemptCounts.get(r.id) ?? 0,
         isRejected: r.status === 'REJECTED',
         salespersonAssigned: r.salespersonAssigned,
     }));
+}
+
+/**
+ * I lead che ESISTONO nel CRM ma non hanno un esito venditore nel mese: scartati
+ * dai GDO, o in appuntamento e mai esitati. `loadCrmClosures` non può vederli
+ * (filtra su `salespersonOutcomeAt`, che loro non hanno), quindi senza questa
+ * seconda lettura ogni loro contratto risultava orfano e l'applicazione avrebbe
+ * creato un doppione del lead già a sistema — 26 contratti per 54.498 EUR fra
+ * aprile e maggio, misurati durante il collaudo del 31/08.
+ *
+ * Si cercano solo i contatti che il foglio nomina davvero: la ricerca è mirata
+ * (indice su phone/email), non una scansione della tabella.
+ */
+async function loadCrmCandidates(sheet: SheetContract[], escludiLeadIds: Set<string>): Promise<CrmClosure[]> {
+    const phones = [...new Set(sheet.map(s => s.phone).filter((p): p is string => !!p))];
+    const emails = [...new Set(sheet.map(s => s.email).filter((e): e is string => !!e))];
+    if (phones.length === 0 && emails.length === 0) return [];
+
+    // Il CRM conserva i numeri in più forme (con e senza prefisso): il foglio è
+    // normalizzato a E.164, la colonna no. Si cercano entrambe le scritture.
+    const phoneVariants = [...new Set(phones.flatMap(p => [p, p.replace(/^\+39/, '')]))];
+
+    const rows = await db.select({
+        id: leads.id, phone: leads.phone, email: leads.email, name: leads.name,
+        funnel: leads.funnel, outcome: leads.salespersonOutcome, outcomeAt: leads.salespersonOutcomeAt,
+        amountEur: leads.closeAmountEur, status: leads.status, salespersonAssigned: leads.salespersonAssigned,
+    })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, COMPANY_ID),
+            isNull(leads.salespersonOutcome),
+            or(
+                phoneVariants.length ? inArray(leads.phone, phoneVariants) : sql`false`,
+                emails.length ? inArray(leads.email, emails) : sql`false`,
+            ),
+        ));
+
+    return rows
+        .filter(r => !escludiLeadIds.has(r.id))
+        .map(r => ({
+            leadId: r.id,
+            phone: normalizePhoneStrict(r.phone),
+            email: (r.email ?? '').trim().toLowerCase() || null,
+            fullName: r.name ?? '',
+            funnel: r.funnel,
+            outcome: r.outcome,
+            outcomeAt: r.outcomeAt,
+            amountEur: r.amountEur,
+            attemptsAmountEur: 0,
+            attemptsCount: 0,
+            isRejected: r.status === 'REJECTED',
+            salespersonAssigned: r.salespersonAssigned,
+        }));
 }
 
 export type ConfrontoResult =
@@ -99,7 +155,8 @@ async function confrontaMeseConValues(monthKey: string, getValues: () => Promise
         const values = await getValues();
         const sheet = parseSheetRows(values, monthKey);
         const crm = await loadCrmClosures(monthKey);
-        const entries = reconcile(sheet, crm);
+        const candidates = await loadCrmCandidates(sheet, new Set(crm.map(c => c.leadId)));
+        const entries = reconcile(sheet, crm, candidates);
         return {
             success: true,
             entries,
