@@ -18,9 +18,9 @@ import {
     applicaCorrezioni,
     annullaRun,
     elencoRun,
-    type RiconciliazioneRunSummary,
 } from '@/app/actions/riconciliazioneActions';
 import type { DiffEntry, Family } from '@/lib/riconciliazione/match';
+import type { RiconciliazioneRunSummary } from '@/lib/riconciliazione/types';
 
 const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 

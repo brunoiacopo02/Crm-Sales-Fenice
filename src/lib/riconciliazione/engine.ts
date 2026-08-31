@@ -18,6 +18,7 @@ import { fetchDatabaseClientiRows } from '@/lib/riconciliazione/sheetsClient';
 import { parseSheetRows, SheetUnavailableError, type SheetContract } from '@/lib/riconciliazione/sheetRows';
 import { parseCsv } from '@/lib/riconciliazione/csv';
 import { reconcile, type CrmClosure, type DiffEntry } from '@/lib/riconciliazione/match';
+import type { ConfrontoResult, ApplyResult, AnnullaRunResult, RiconciliazioneRunSummary } from '@/lib/riconciliazione/types';
 import { resolveAttemptWrite } from '@/lib/venditorePerformance/guard';
 import { logLeadEvent } from '@/lib/eventLogger';
 
@@ -156,9 +157,6 @@ async function loadCrmCandidates(sheet: SheetContract[], escludiLeadIds: Set<str
 }
 
 
-export type ConfrontoResult =
-    | { success: true; entries: DiffEntry[]; sheetContracts: number; sheetTotalEur: number; crmTotalEur: number }
-    | { success: false; error: string };
 
 // Corpo condiviso dai due ingressi (foglio live e CSV caricato a mano): la
 // SOLA differenza fra i due percorsi è come si ottengono le `values` grezze
@@ -189,7 +187,6 @@ export async function confrontaMeseConValues(monthKey: string, getValues: () => 
 }
 
 
-export type ApplyResult = { success: true; runId: string; applied: number } | { success: false; error: string };
 
 // Colonne di `leads` NOT NULL senza default (verificate su src/db/schema.ts, def.
 // pgTable 'leads'): id, name, phone. Tutte le altre o hanno un default (status,
@@ -694,7 +691,6 @@ function leadFieldMatches(key: string, live: unknown, snapshot: unknown): boolea
     return live === snapshot;
 }
 
-export type AnnullaRunResult = { success: true; reverted: number } | { success: false; error: string };
 
 // Annulla una run già applicata: per ogni entry riporta `leads` (e
 // `salesAttempts`) esattamente allo stato salvato in `before`. È il rollback
@@ -903,13 +899,6 @@ export async function annullaRunCome(adminUserId: string, runId: string): Promis
     return { success: true, reverted: touched.length };
 }
 
-export type RiconciliazioneRunSummary = {
-    id: string;
-    appliedAt: Date;
-    appliedBy: string;
-    entryCount: number;
-    revertedAt: Date | null;
-};
 
 // Elenca le run del mese, più recenti prima. `appliedBy` è già risolto a un
 // nome mostrabile (stessa convenzione displayName||name||id usata in tutto il

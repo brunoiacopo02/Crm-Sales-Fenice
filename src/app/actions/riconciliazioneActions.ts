@@ -9,13 +9,11 @@ import {
     applicaCorrezioniCome,
     annullaRunCome,
     elencoRunPerMese,
-    type ConfrontoResult,
-    type ApplyResult,
-    type AnnullaRunResult,
-    type RiconciliazioneRunSummary,
 } from '@/lib/riconciliazione/engine';
-
-export type { ConfrontoResult, ApplyResult, AnnullaRunResult, RiconciliazioneRunSummary };
+// I tipi NON si ri-esportano da qui: in un file 'use server' ogni export viene
+// registrato come server action a runtime, e un `export type` diventa un
+// ReferenceError che abbatte la pagina. Chi ne ha bisogno li prende da types.
+import type { ConfrontoResult, ApplyResult, AnnullaRunResult, RiconciliazioneRunSummary } from '@/lib/riconciliazione/types';
 
 async function requireAdmin(): Promise<{ id: string } | null> {
     const supabase = await createClient();
