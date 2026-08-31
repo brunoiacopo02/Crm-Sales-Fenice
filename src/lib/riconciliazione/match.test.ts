@@ -33,6 +33,10 @@ function crm(over: Partial<CrmClosure> = {}): CrmClosure {
         attemptsAmountEur: 1390,
         attemptsCount: 1,
         status: 'APPOINTMENT',
+        confirmationsOutcome: null,
+        appointmentDate: null,
+        presentedAt: null,
+        createdAt: new Date(Date.UTC(2026, 7, 1)),
         isRejected: false,
         salespersonAssigned: 'Sales 004',
         ...over,
@@ -268,4 +272,36 @@ test('se l\'unica scheda e\' scartata la famiglia resta lead-scartato', () => {
     const scartato = crm({ leadId: 'scartato', status: 'REJECTED', isRejected: true, outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
     const d = reconcile([sheet()], [], [scartato]);
     assert.equal(d[0].family, 'lead-scartato');
+});
+
+test('fra piu\' schede vince quella confermata, anche se un\'altra sembra piu\' avanti', () => {
+    // Regola del PO (31/08): "deve vincere, se c'e', la scheda confermata".
+    // Il caso di Mattia: la scheda giusta era confermata e presentata, mancava
+    // solo l'esito del venditore. Ordinare per stato la faceva vincere per caso;
+    // qui la conferma vince anche quando lo stato direbbe il contrario.
+    const inCorso = crm({ leadId: 'in-corso', status: 'IN_PROGRESS', outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const confermata = crm({ leadId: 'confermata', status: 'REJECTED', isRejected: true, confirmationsOutcome: 'confermato', outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+
+    for (const ordine of [[inCorso, confermata], [confermata, inCorso]]) {
+        const d = reconcile([sheet()], [], ordine);
+        assert.equal(d[0].crm?.leadId, 'confermata', `ordine ${ordine.map(c => c.leadId).join(',')}`);
+    }
+});
+
+test('senza nessuna scheda confermata decide la presenza, poi l\'appuntamento', () => {
+    const presentata = crm({ leadId: 'presentata', status: 'REJECTED', isRejected: true, presentedAt: new Date(Date.UTC(2026, 7, 20)), outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const conAppuntamento = crm({ leadId: 'con-appuntamento', status: 'APPOINTMENT', appointmentDate: new Date(Date.UTC(2026, 7, 22)), outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const nuova = crm({ leadId: 'nuova', status: 'NEW', outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+
+    assert.equal(reconcile([sheet()], [], [nuova, conAppuntamento, presentata])[0].crm?.leadId, 'presentata');
+    assert.equal(reconcile([sheet()], [], [nuova, conAppuntamento])[0].crm?.leadId, 'con-appuntamento');
+});
+
+test('a parita\' di tutto vince la scheda piu\' recente, non quella che capita', () => {
+    const vecchia = crm({ leadId: 'vecchia', status: 'NEW', createdAt: new Date(Date.UTC(2026, 7, 1)), outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+    const recente = crm({ leadId: 'recente', status: 'NEW', createdAt: new Date(Date.UTC(2026, 7, 25)), outcome: null, outcomeAt: null, amountEur: null, attemptsAmountEur: 0, attemptsCount: 0 });
+
+    for (const ordine of [[vecchia, recente], [recente, vecchia]]) {
+        assert.equal(reconcile([sheet()], [], ordine)[0].crm?.leadId, 'recente');
+    }
 });

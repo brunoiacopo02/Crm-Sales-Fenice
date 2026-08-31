@@ -39,6 +39,10 @@ async function loadCrmClosures(monthKey: string): Promise<CrmClosure[]> {
         outcomeAt: leads.salespersonOutcomeAt,
         amountEur: leads.closeAmountEur,
         status: leads.status,
+        confirmationsOutcome: leads.confirmationsOutcome,
+        appointmentDate: leads.appointmentDate,
+        presentedAt: leads.presentedAt,
+        createdAt: leads.createdAt,
         salespersonAssigned: leads.salespersonAssigned,
     })
         .from(leads)
@@ -81,6 +85,10 @@ async function loadCrmClosures(monthKey: string): Promise<CrmClosure[]> {
         attemptsAmountEur: attemptTotals.get(r.id) ?? 0,
         attemptsCount: attemptCounts.get(r.id) ?? 0,
         status: r.status,
+        confirmationsOutcome: r.confirmationsOutcome,
+        appointmentDate: r.appointmentDate,
+        presentedAt: r.presentedAt,
+        createdAt: r.createdAt,
         isRejected: r.status === 'REJECTED',
         salespersonAssigned: r.salespersonAssigned,
     }));
@@ -109,7 +117,10 @@ async function loadCrmCandidates(sheet: SheetContract[], escludiLeadIds: Set<str
     const rows = await db.select({
         id: leads.id, phone: leads.phone, email: leads.email, name: leads.name,
         funnel: leads.funnel, outcome: leads.salespersonOutcome, outcomeAt: leads.salespersonOutcomeAt,
-        amountEur: leads.closeAmountEur, status: leads.status, salespersonAssigned: leads.salespersonAssigned,
+        amountEur: leads.closeAmountEur, status: leads.status,
+        confirmationsOutcome: leads.confirmationsOutcome, appointmentDate: leads.appointmentDate,
+        presentedAt: leads.presentedAt, createdAt: leads.createdAt,
+        salespersonAssigned: leads.salespersonAssigned,
     })
         .from(leads)
         .where(and(
@@ -135,6 +146,10 @@ async function loadCrmCandidates(sheet: SheetContract[], escludiLeadIds: Set<str
             attemptsAmountEur: 0,
             attemptsCount: 0,
             status: r.status,
+            confirmationsOutcome: r.confirmationsOutcome,
+            appointmentDate: r.appointmentDate,
+            presentedAt: r.presentedAt,
+            createdAt: r.createdAt,
             isRejected: r.status === 'REJECTED',
             salespersonAssigned: r.salespersonAssigned,
         }));

@@ -18,9 +18,13 @@ export type CrmClosure = {
      *  chiusura precedente al 02/07/2026, quando la tabella non esisteva) da
      *  "tentativi registrati che non tornano" (l'unico caso da sanare). */
     attemptsCount: number;
-    /** Lo stato del lead nel CRM (`NEW`, `IN_PROGRESS`, `APPOINTMENT`,
-     *  `REJECTED`): serve solo a scegliere fra più schede della stessa persona. */
+    /** Questi cinque campi servono SOLO a scegliere fra più schede della stessa
+     *  persona: non entrano in nessun confronto di importi o di esiti. */
     status: string | null;
+    confirmationsOutcome: string | null;
+    appointmentDate: Date | null;
+    presentedAt: Date | null;
+    createdAt: Date | null;
     isRejected: boolean;
     salespersonAssigned: string | null;
 };
@@ -82,14 +86,41 @@ function indexCandidates(candidates: CrmClosure[]) {
 }
 
 /**
- * Quanto lontano è arrivato un lead. Fra più schede della stessa persona il
- * contratto appartiene a quella che ha fatto più strada: chi è arrivato
- * all'appuntamento, non un doppione scartato che nessuno ha mai lavorato. Senza
- * quest'ordine la scelta — e con lei l'attribuzione del funnel — la faceva
- * l'ordine di ritorno della query.
+ * Quale scheda è "quella vera" quando la stessa persona ne ha più d'una.
+ *
+ * Regola del PO (31/08): **vince la scheda confermata, se c'è.** Il caso che l'ha
+ * dettata è Mattia Della Bernarda, sei schede: quella giusta era confermata dalle
+ * Conferme e il cliente si era pure presentato — mancava solo che il venditore
+ * segnasse l'esito. Ordinare per stato la faceva vincere per caso, ed è una
+ * coincidenza su cui non si può contare: un lead scartato dopo il terzo mancato
+ * contatto, per dire, resta `APPOINTMENT` pur non avendo mai visto nessuno,
+ * mentre una scheda confermata può essere finita `REJECTED` per altre strade.
+ *
+ * Sotto la conferma decidono i fatti, dal più duro al più debole: si è
+ * presentato, aveva un appuntamento, quanto è avanzato di stato. In fondo la più
+ * recente, così che a parità di tutto la scelta non la faccia l'ordine di
+ * ritorno della query.
  */
 const STATUS_RANK: Record<string, number> = { APPOINTMENT: 3, IN_PROGRESS: 2, NEW: 1, REJECTED: 0 };
-const rank = (c: CrmClosure) => STATUS_RANK[c.status ?? ''] ?? 1;
+
+function meglioDi(a: CrmClosure, b: CrmClosure): boolean {
+    const confermata = (c: CrmClosure) => c.confirmationsOutcome === 'confermato';
+    if (confermata(a) !== confermata(b)) return confermata(a);
+    if (!!a.presentedAt !== !!b.presentedAt) return !!a.presentedAt;
+    if (!!a.appointmentDate !== !!b.appointmentDate) return !!a.appointmentDate;
+
+    const ra = STATUS_RANK[a.status ?? ''] ?? 1;
+    const rb = STATUS_RANK[b.status ?? ''] ?? 1;
+    if (ra !== rb) return ra > rb;
+
+    const ta = a.createdAt?.getTime() ?? 0;
+    const tb = b.createdAt?.getTime() ?? 0;
+    if (ta !== tb) return ta > tb;
+    return a.leadId > b.leadId;
+}
+
+const migliore = (candidates: CrmClosure[]) =>
+    candidates.reduce((best, c) => (meglioDi(c, best) ? c : best), candidates[0]);
 
 /**
  * Fra più lead che combaciano, quello giusto è — in quest'ordine — la chiusura
@@ -103,9 +134,9 @@ function pick(candidates: CrmClosure[] | undefined, amountEur: number): CrmClosu
     if (candidates.length === 1) return candidates[0];
     const chiusi = candidates.filter(c => c.outcome === 'Chiuso');
     if (chiusi.length > 0) {
-        return chiusi.find(c => Math.abs((c.amountEur ?? 0) - amountEur) <= 0.01) ?? chiusi[0];
+        return chiusi.find(c => Math.abs((c.amountEur ?? 0) - amountEur) <= 0.01) ?? migliore(chiusi);
     }
-    return candidates.reduce((best, c) => (rank(c) > rank(best) ? c : best), candidates[0]);
+    return migliore(candidates);
 }
 
 export function reconcile(sheet: SheetContract[], crm: CrmClosure[], candidates: CrmClosure[] = []): DiffEntry[] {
