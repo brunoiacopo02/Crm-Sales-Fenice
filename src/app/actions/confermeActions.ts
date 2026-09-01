@@ -592,6 +592,31 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         // gli impegni esterni GCal) e si coordinano al telefono: un "busy" su
         // Google non deve impedire di fissare l'appuntamento.
 
+        // Riassegnazione a un venditore DIVERSO da quello attuale: lo stato della
+        // trattativa precedente (check-in, esito, storia) appartiene al vecchio
+        // titolare e va azzerato. Senza questo reset il nuovo venditore eredita un
+        // lead che sembra già "fatto" (badge Non chiuso/Sparito in bacheca, guardia
+        // "Inizia trattativa" già sbloccata) e non ha alcun modo nell'app per
+        // registrare il proprio esito — solo un intervento manuale (Conferme/
+        // riconciliazione) può sbloccarlo. Bug reale: lead Milrose e Cristina
+        // Cioresco, 2026-08-31/09-01, chiusura dovuta forzare a mano.
+        const isReassignment = !!salespersonAssigned
+            && !!oldLead.salespersonUserId
+            && salespersonAssigned !== oldLead.salespersonUserId
+        const reassignmentReset = isReassignment ? {
+            negotiationStartedAt: null,
+            salespersonOutcome: null,
+            salespersonOutcomeNotes: null,
+            salespersonOutcomeAt: null,
+            closeProduct: null,
+            closeAmountEur: null,
+            notClosedReason: null,
+            followUp1Date: null,
+            followUp2Date: null,
+            inLavorazioneAt: null,
+            salesCycleStartAt: null,
+        } : {}
+
         const updated = await db.update(leads).set({
             confirmationsOutcome: outcome,
             confirmationsDiscardReason: outcome === 'scartato' ? (scheda?.whyNot ?? reason ?? null) : null,
@@ -600,6 +625,7 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             salespersonAssigned: await getSalespersonName(salespersonAssigned, ctx.companyId) || salespersonAssigned || null,
             salespersonUserId: salespersonAssigned || null,
             salespersonAssignedAt: salespersonAssigned ? new Date() : null,
+            ...reassignmentReset,
             version: oldLead.version + 1,
             updatedAt: new Date()
         }).where(and(
@@ -676,6 +702,22 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             metadata: { outcome, reason, salespersonAssigned },
             companyId: ctx.companyId,
         })
+
+        if (isReassignment) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: "salesperson_reassigned_reset",
+                userId: session.user.id,
+                timestamp: new Date(),
+                metadata: {
+                    fromSalespersonUserId: oldLead.salespersonUserId,
+                    toSalespersonUserId: salespersonAssigned,
+                    clearedPreviousOutcome: oldLead.salespersonOutcome,
+                },
+                companyId: ctx.companyId,
+            })
+        }
 
         // Gamification: award XP/coins to Conferme worker on confirmation.
         // Unified per-user gamification — every Conferme has their own chest/adventure/creatures.
