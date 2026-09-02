@@ -20,7 +20,8 @@ function candidate(over: Partial<AlertCandidate> & { id: string }): AlertCandida
         name: 'Mario Rossi',
         phone: '3331112222',
         companyId: 'fenice',
-        snoozeAt: minutiFa(5),
+        kind: 'snooze',
+        dueAt: minutiFa(5),
         notes: null,
         alertSnoozedUntil: null,
         claimedById: null,
@@ -42,8 +43,8 @@ test('nessun candidato → nessun avviso', () => {
 
 test('due richiami scaduti → vince il più vecchio, la coda ne conta due', () => {
     const res = select([
-        candidate({ id: 'recente', snoozeAt: minutiFa(2) }),
-        candidate({ id: 'vecchio', snoozeAt: minutiFa(40) }),
+        candidate({ id: 'recente', dueAt: minutiFa(2) }),
+        candidate({ id: 'vecchio', dueAt: minutiFa(40) }),
     ]);
     assert.equal(res.alert?.id, 'vecchio');
     assert.equal(res.queueTotal, 2);
@@ -55,9 +56,27 @@ test('richiamo già gestito (scheda aperta) → escluso per tutti', () => {
     assert.equal(res.queueTotal, 0);
 });
 
+test('richiamo parcheggiato scaduto (badge blu) → avvisa come lo snooze', () => {
+    const res = select([candidate({ id: 'parcheggiato', kind: 'parcheggiato', dueAt: minutiFa(3) })]);
+    assert.equal(res.alert?.id, 'parcheggiato');
+    assert.equal(res.alert?.kind, 'parcheggiato');
+});
+
+test('scheda aperta PRIMA della scadenza → il richiamo suona lo stesso', () => {
+    // Il caso dei parcheggiati: la scheda viene aperta il giorno in cui si
+    // programma il richiamo, giorni prima che scada.
+    const res = select([candidate({
+        id: 'aperto-ieri',
+        kind: 'parcheggiato',
+        dueAt: minutiFa(2),
+        handledAt: minutiFa(600),
+    })]);
+    assert.equal(res.alert?.id, 'aperto-ieri');
+});
+
 test(`richiamo scaduto da più di ${STALE_CUTOFF_DAYS} giorni → archeologia, escluso`, () => {
     const vecchissimo = new Date(NOW.getTime() - (STALE_CUTOFF_DAYS + 1) * 86_400_000);
-    const res = select([candidate({ id: 'aprile', snoozeAt: vecchissimo })]);
+    const res = select([candidate({ id: 'aprile', dueAt: vecchissimo })]);
     assert.equal(res.alert, null);
 });
 
@@ -100,8 +119,8 @@ test('la sveglia è il primo istante utile tra fine snooze e scadenza claim', ()
     const fineSnooze = minutiTra(9);
     const claimAt = minutiFa(6); // scade tra 4 minuti
     const res = select([
-        candidate({ id: 'a', snoozeAt: minutiFa(30), alertSnoozedUntil: fineSnooze }),
-        candidate({ id: 'b', snoozeAt: minutiFa(20), claimedById: ALTRA, claimedAt: claimAt }),
+        candidate({ id: 'a', dueAt: minutiFa(30), alertSnoozedUntil: fineSnooze }),
+        candidate({ id: 'b', dueAt: minutiFa(20), claimedById: ALTRA, claimedAt: claimAt }),
     ]);
     assert.equal(res.alert, null);
     assert.equal(res.nextWakeAt?.getTime(), claimAt.getTime() + CLAIM_TTL_MS);

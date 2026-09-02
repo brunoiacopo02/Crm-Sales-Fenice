@@ -264,11 +264,19 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     // addosso ai colleghi mentre il lead è già in lavorazione.
     useEffect(() => {
         if (!isDrawerOpen || !selectedLead) return
-        const snooze = (selectedLead as any)?.lead?.confSnoozeAt
-        const gestito = (selectedLead as any)?.lead?.confAlertHandledAt
-        if (!snooze || gestito) return
-        if (new Date(snooze).getTime() > Date.now()) return
-        markConfermeAlertHandled((selectedLead as any).lead.id).catch(() => { /* non blocca il lavoro */ })
+        const lead = (selectedLead as any)?.lead
+        if (!lead) return
+        // Due tipi di richiamo, stessa regola: lo snooze in giornata
+        // (confSnoozeAt) e il parcheggio ad altri giorni (recallDate, badge blu).
+        const scadenza = lead.confNeedsReschedule && lead.recallDate ? lead.recallDate : lead.confSnoozeAt
+        if (!scadenza) return
+        const scadenzaMs = new Date(scadenza).getTime()
+        if (scadenzaMs > Date.now()) return
+        // Un "gestito" più vecchio della scadenza è di una tornata precedente:
+        // va riscritto, altrimenti l'avviso di adesso resterebbe acceso.
+        const gestito = lead.confAlertHandledAt
+        if (gestito && new Date(gestito).getTime() >= scadenzaMs) return
+        markConfermeAlertHandled(lead.id).catch(() => { /* non blocca il lavoro */ })
     }, [isDrawerOpen, selectedLead])
 
     // La sveglia dei richiami scaduti non vive più qui: era un alert() nativo

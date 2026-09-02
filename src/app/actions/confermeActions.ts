@@ -1219,6 +1219,14 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             confVslSeen: payload.vslSeen,
             confNeedsReschedule: payload.needsReschedule || false,
             confRecallNotes: payload.recallNotes || null,
+            // Come per lo snooze: un richiamo nuovo è un avviso bloccante nuovo,
+            // quindi si azzerano snooze, claim e "già gestito" della tornata
+            // precedente (migrazione 0032). Senza questo un lead parcheggiato
+            // dopo un avviso già gestito non suonava più (prod, 2026-09-02).
+            confAlertSnoozedUntil: null,
+            confAlertClaimedById: null,
+            confAlertClaimedAt: null,
+            confAlertHandledAt: null,
             version: oldLead.version + 1,
             updatedAt: new Date()
         };
@@ -1428,6 +1436,13 @@ export async function cancelConfermeRecall(
         let toUpdate: any = {
             version: oldLead.version + 1,
             updatedAt: new Date(),
+            // Il richiamo non c'è più: con lui se ne va anche lo stato
+            // dell'avviso bloccante, che altrimenti resterebbe appeso al
+            // prossimo richiamo di questo lead (migrazione 0032).
+            confAlertSnoozedUntil: null,
+            confAlertClaimedById: null,
+            confAlertClaimedAt: null,
+            confAlertHandledAt: null,
         };
 
         if (recallType === "snooze") {

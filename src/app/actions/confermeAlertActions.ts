@@ -18,13 +18,14 @@
 
 import { db } from "@/db"
 import { leads } from "@/db/schema"
-import { and, asc, eq, gte, inArray, isNull, isNotNull, lte } from "drizzle-orm"
+import { and, asc, eq, gte, inArray, isNull, isNotNull, lt, lte, or, sql } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import {
     selectBlockingAlert,
     SNOOZE_MS,
     STALE_CUTOFF_DAYS,
     type AlertCandidate,
+    type AlertKind,
 } from "@/lib/conferme/blockingAlert"
 
 export type BlockingAlertPayload = {
@@ -33,7 +34,8 @@ export type BlockingAlertPayload = {
         name: string
         phone: string | null
         companyId: string
-        snoozeAt: string
+        kind: AlertKind
+        dueAt: string
         notes: string | null
         claimedByMe: boolean
     } | null
@@ -66,6 +68,8 @@ export async function getConfermeBlockingAlert(): Promise<BlockingAlertPayload> 
         phone: leads.phone,
         companyId: leads.companyId,
         snoozeAt: leads.confSnoozeAt,
+        recallDate: leads.recallDate,
+        needsReschedule: leads.confNeedsReschedule,
         notes: leads.confRecallNotes,
         alertSnoozedUntil: leads.confAlertSnoozedUntil,
         claimedById: leads.confAlertClaimedById,
@@ -76,26 +80,58 @@ export async function getConfermeBlockingAlert(): Promise<BlockingAlertPayload> 
         .where(and(
             inArray(leads.companyId, ctx.allowedCompanies),
             isNull(leads.confirmationsOutcome),
-            isNull(leads.confAlertHandledAt),
-            isNotNull(leads.confSnoozeAt),
-            gte(leads.confSnoozeAt, staleFloor),
-            lte(leads.confSnoozeAt, now),
+            or(
+                // "Risentire dopo": richiamo in giornata.
+                and(
+                    isNotNull(leads.confSnoozeAt),
+                    gte(leads.confSnoozeAt, staleFloor),
+                    lte(leads.confSnoozeAt, now),
+                    or(
+                        isNull(leads.confAlertHandledAt),
+                        lt(leads.confAlertHandledAt, leads.confSnoozeAt),
+                    ),
+                ),
+                // "Programma richiamo": il lead parcheggiato ad altri giorni
+                // (badge blu). `confNeedsReschedule` è la prova che il richiamo
+                // è delle Conferme: su `recallDate` da sola cadrebbero dentro
+                // anche i richiami dei GDO, che non c'entrano con questo avviso.
+                and(
+                    eq(leads.confNeedsReschedule, true),
+                    isNotNull(leads.recallDate),
+                    gte(leads.recallDate, staleFloor),
+                    lte(leads.recallDate, now),
+                    or(
+                        isNull(leads.confAlertHandledAt),
+                        lt(leads.confAlertHandledAt, leads.recallDate),
+                    ),
+                ),
+            ),
         ))
-        .orderBy(asc(leads.confSnoozeAt))
+        // La scadenza è su due colonne diverse a seconda del tipo di richiamo:
+        // si ordina sulla data che vale davvero, altrimenti il tetto di 20 righe
+        // taglierebbe a caso.
+        .orderBy(asc(sql`coalesce(case when ${leads.confNeedsReschedule} then ${leads.recallDate} end, ${leads.confSnoozeAt})`))
         .limit(20)
 
-    const candidates: AlertCandidate[] = rows.map(r => ({
-        id: r.id,
-        name: r.name,
-        phone: r.phone,
-        companyId: r.companyId,
-        snoozeAt: r.snoozeAt as Date,
-        notes: r.notes,
-        alertSnoozedUntil: r.alertSnoozedUntil,
-        claimedById: r.claimedById,
-        claimedAt: r.claimedAt,
-        handledAt: r.handledAt,
-    }))
+    // Se un lead ha tutt'e due le date, vince il parcheggio: è lo stato più
+    // recente (toglie l'appuntamento dalla board) e lo snooze resta appeso da
+    // prima. In prod i due campi non convivono mai (verificato 2026-09-02).
+    const candidates: AlertCandidate[] = rows.map(r => {
+        const parcheggiato = r.needsReschedule && r.recallDate
+        return {
+            id: r.id,
+            name: r.name,
+            phone: r.phone,
+            companyId: r.companyId,
+            kind: (parcheggiato ? 'parcheggiato' : 'snooze') as AlertKind,
+            dueAt: (parcheggiato ? r.recallDate : r.snoozeAt) as Date,
+            notes: r.notes,
+            alertSnoozedUntil: r.alertSnoozedUntil,
+            claimedById: r.claimedById,
+            claimedAt: r.claimedAt,
+            handledAt: r.handledAt,
+        }
+    })
 
     const res = selectBlockingAlert(candidates, { now, userId: ctx.userId })
 
@@ -105,7 +141,8 @@ export async function getConfermeBlockingAlert(): Promise<BlockingAlertPayload> 
             name: res.alert.name,
             phone: res.alert.phone,
             companyId: res.alert.companyId,
-            snoozeAt: res.alert.snoozeAt.toISOString(),
+            kind: res.alert.kind,
+            dueAt: res.alert.dueAt.toISOString(),
             notes: res.alert.notes,
             claimedByMe: res.alert.claimedById === ctx.userId,
         } : null,
@@ -153,9 +190,11 @@ export async function claimConfermeAlert(leadId: string): Promise<{ ok: boolean 
 }
 
 /**
- * La scheda è stata aperta: l'avviso si spegne per tutti. Idempotente — se
- * `confAlertHandledAt` c'è già non riscrive, per non generare UPDATE (e ping
- * Broadcast) inutili a ogni apertura del drawer.
+ * La scheda è stata aperta: l'avviso si spegne per tutti. Idempotente — se il
+ * "gestito" è già più recente della scadenza del richiamo non riscrive, per non
+ * generare UPDATE (e ping Broadcast) inutili a ogni apertura del drawer. Un
+ * "gestito" più vecchio della scadenza invece si riscrive: è di una tornata
+ * precedente, tipico dei parcheggiati aperti il giorno in cui li si programma.
  */
 export async function markConfermeAlertHandled(leadId: string): Promise<{ ok: boolean }> {
     const ctx = await confermeCtx()
@@ -169,8 +208,23 @@ export async function markConfermeAlertHandled(leadId: string): Promise<{ ok: bo
         .where(and(
             eq(leads.id, leadId),
             inArray(leads.companyId, ctx.allowedCompanies),
-            isNull(leads.confAlertHandledAt),
-            isNotNull(leads.confSnoozeAt),
+            or(
+                and(
+                    isNotNull(leads.confSnoozeAt),
+                    or(
+                        isNull(leads.confAlertHandledAt),
+                        lt(leads.confAlertHandledAt, leads.confSnoozeAt),
+                    ),
+                ),
+                and(
+                    eq(leads.confNeedsReschedule, true),
+                    isNotNull(leads.recallDate),
+                    or(
+                        isNull(leads.confAlertHandledAt),
+                        lt(leads.confAlertHandledAt, leads.recallDate),
+                    ),
+                ),
+            ),
         ))
 
     return { ok: true }

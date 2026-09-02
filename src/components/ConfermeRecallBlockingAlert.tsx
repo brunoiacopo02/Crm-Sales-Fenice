@@ -40,14 +40,22 @@ const COMPANY_CHIP: Record<string, { label: string; className: string }> = {
     fcd: { label: 'FCD', className: 'bg-purple-500/20 text-purple-200 border-purple-400/50' },
 }
 
-function ritardo(snoozeAt: string): string {
-    const diffMin = Math.max(0, Math.floor((Date.now() - new Date(snoozeAt).getTime()) / 60_000))
+function ritardo(dueAt: string): string {
+    const diffMin = Math.max(0, Math.floor((Date.now() - new Date(dueAt).getTime()) / 60_000))
     if (diffMin < 1) return "adesso"
     if (diffMin < 60) return `${diffMin} min fa`
     const h = Math.floor(diffMin / 60)
     if (h < 24) return `${h}h ${diffMin % 60}min fa`
     const g = Math.floor(h / 24)
     return g === 1 ? "ieri" : `${g} giorni fa`
+}
+
+/** Data e ora del richiamo, per quelli programmati ad altri giorni. */
+function quando(dueAt: string): string {
+    return new Intl.DateTimeFormat('it-IT', {
+        weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+        timeZone: 'Europe/Rome',
+    }).format(new Date(dueAt))
 }
 
 export function ConfermeRecallBlockingAlert() {
@@ -147,7 +155,7 @@ export function ConfermeRecallBlockingAlert() {
                         {chip.label}
                     </span>
                     <span className="text-xs font-bold uppercase tracking-widest text-red-300">
-                        Richiamo da fare · {ritardo(alert.snoozeAt)}
+                        {alert.kind === 'parcheggiato' ? 'Richiamo programmato' : 'Richiamo da fare'} · {ritardo(alert.dueAt)}
                     </span>
                     {data && data.queueTotal > 1 && (
                         <span className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] font-bold text-white/70">
@@ -157,6 +165,12 @@ export function ConfermeRecallBlockingAlert() {
                 </div>
 
                 <h2 className="mt-3 text-3xl font-black tracking-tight text-white">{alert.name}</h2>
+
+                {alert.kind === 'parcheggiato' && (
+                    <p className="mt-1 text-sm font-semibold text-white/60">
+                        Parcheggiato per {quando(alert.dueAt)} — appuntamento da rifissare
+                    </p>
+                )}
 
                 {alert.phone && (
                     <a

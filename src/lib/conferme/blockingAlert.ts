@@ -7,15 +7,25 @@
  * limita a portare le righe candidate dal DB e a scrivere i timestamp. Ogni
  * operatore Conferme fa la sua valutazione sugli stessi dati, quindi la stessa
  * riga può essere invisibile a me (l'ha claimata un collega) e visibile a lui.
+ *
+ * I richiami delle Conferme sono di due tipi e l'avviso li tratta allo stesso
+ * modo (2026-09-02: i "parcheggiati" non suonavano affatto):
+ *  - `snooze`       → "risentire dopo" in giornata, su `leads.confSnoozeAt`;
+ *  - `parcheggiato` → il badge blu, su `leads.recallDate` + `confNeedsReschedule`,
+ *                     con l'appuntamento tolto in attesa di essere rifissato.
  */
+
+export type AlertKind = 'snooze' | 'parcheggiato'
 
 export type AlertCandidate = {
     id: string
     name: string
     phone: string | null
     companyId: string
-    /** Quando era previsto il richiamo (leads.confSnoozeAt). */
-    snoozeAt: Date
+    /** Che tipo di richiamo è: cambia solo l'etichetta a schermo. */
+    kind: AlertKind
+    /** Quando era previsto il richiamo (confSnoozeAt oppure recallDate). */
+    dueAt: Date
     notes: string | null
     /** Silenzio globale da "Snooze 2 min". */
     alertSnoozedUntil: Date | null
@@ -61,14 +71,17 @@ export function selectBlockingAlert(
     const visible: AlertCandidate[] = []
     const wakeUps: number[] = []
 
-    const ordered = [...rows].sort((a, b) => a.snoozeAt.getTime() - b.snoozeAt.getTime())
+    const ordered = [...rows].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())
 
     for (const row of ordered) {
-        // Gestito: qualcuno ha aperto la scheda. Torna a suonare solo se viene
-        // programmato un nuovo richiamo (setConfermeSnooze azzera i campi).
-        if (row.handledAt) continue
+        const dueMs = row.dueAt.getTime()
 
-        const dueMs = row.snoozeAt.getTime()
+        // Gestito: qualcuno ha aperto la scheda DOPO che il richiamo era
+        // scaduto. Un "gestito" più vecchio della scadenza è di una tornata
+        // precedente (tipico dei parcheggiati: scheda aperta ieri, richiamo
+        // programmato per domani) e non deve spegnere il richiamo di adesso.
+        if (row.handledAt && row.handledAt.getTime() >= dueMs) continue
+
         if (dueMs < staleFloorMs) continue
         if (dueMs > nowMs) {
             // Non ancora scaduto: sveglia all'orario del richiamo.
