@@ -11,7 +11,8 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { dayBoundsRome } from "@/lib/dateUtils"
 import { EXCLUDED_FUNNEL } from "@/lib/surveys/questions"
 import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
-import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed, resolveAttemptWrite, type OutcomeOccasion } from "@/lib/venditorePerformance/guard"
+import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed, resolveAttemptWrite, resolveOutcomeClear, type OutcomeOccasion } from "@/lib/venditorePerformance/guard"
+import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { isConfermeTl } from "@/lib/confermeTl"
 // Gamification disabled for VENDITORE role — import removed
 
@@ -715,4 +716,242 @@ export async function getVenditoreStorico(sellerId: string) {
         phone: r.negotiationStartedAt ? r.phone : null,
         attempts: byLead.get(r.id) ?? [],
     }))
+}
+
+// ── Rimozione esito + rifissaggio dal venditore (spec 2026-09-03) ────────────
+
+// Rimuove l'esito registrato su un lead e lo riporta a "Da esitare".
+//
+// Il caso reale: un appuntamento NON svolto per cui il venditore è stato
+// costretto a registrare un esito, perché l'OutcomeGate blocca la dashboard
+// finché gli arretrati non sono esitati (lead Ombretta, 02-03/09/2026). Senza
+// questa azione non c'era modo di tornare indietro: "Inizia trattativa"
+// compare solo con negotiationStartedAt vuoto, e spostare la data
+// dell'appuntamento non tocca né il check-in né l'esito.
+//
+// LIMITE NOTO (marketing): non esiste un evento webhook di revoca. Se l'esito
+// rimosso era 'Chiuso', il deal.closed_won già consegnato resta di là finché
+// non viene registrato un nuovo esito (che rispedisce un deal.closed_*).
+// La rete di sicurezza resta scripts/resyncMarketingClosures.ts.
+export async function clearVenditoreOutcome(leadId: string, currentVersion?: number): Promise<{ success: boolean; error?: string }> {
+    const auth = await requireOwnLead(leadId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { lead, ctx, userId } = auth;
+
+    if (!lead.salespersonOutcome) {
+        return { success: false, error: 'Questo lead non ha un esito da rimuovere.' };
+    }
+    if (currentVersion !== undefined && lead.version !== currentVersion) {
+        return { success: false, error: 'CONCURRENCY_ERROR' };
+    }
+
+    const attempts = await db.select({
+        id: salesAttempts.id,
+        outcome: salesAttempts.outcome,
+        outcomeAt: salesAttempts.outcomeAt,
+        attemptNumber: salesAttempts.attemptNumber,
+    }).from(salesAttempts).where(and(
+        eq(salesAttempts.companyId, ctx.companyId),
+        eq(salesAttempts.leadId, leadId),
+    ));
+
+    const { attemptIdToDelete, resetCheckIn } = resolveOutcomeClear({
+        attempts,
+        cycleStartAt: lead.salesCycleStartAt ?? null,
+    });
+
+    const txResult = await db.transaction(async (tx) => {
+        const updated = await tx.update(leads)
+            .set({
+                salespersonOutcome: null,
+                salespersonOutcomeAt: null,
+                salespersonOutcomeNotes: null,
+                closeProduct: null,
+                closeAmountEur: null,
+                notClosedReason: null,
+                followUp1Date: null,
+                followUp2Date: null,
+                inLavorazioneAt: null,
+                // Con tentativi residui la trattativa è avvenuta davvero: il
+                // check-in e il latch presenze non si toccano (resolveOutcomeClear).
+                ...(resetCheckIn ? { negotiationStartedAt: null, presentedAt: null } : {}),
+                version: lead.version + 1,
+                updatedAt: new Date(),
+            })
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.id, leadId),
+                eq(leads.version, lead.version),
+            ))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false as const, error: 'CONCURRENCY_ERROR' as const };
+        }
+
+        if (attemptIdToDelete) {
+            await tx.delete(salesAttempts).where(and(
+                eq(salesAttempts.companyId, ctx.companyId),
+                eq(salesAttempts.id, attemptIdToDelete),
+            ));
+        }
+
+        // Audit: la timeline deve conservare cosa è stato rimosso e da chi,
+        // perché la riga di salesAttempts sparisce dal DB.
+        await tx.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'salesperson_outcome_cleared',
+            userId,
+            timestamp: new Date(),
+            metadata: {
+                clearedOutcome: lead.salespersonOutcome,
+                clearedOutcomeAt: lead.salespersonOutcomeAt,
+                clearedNotClosedReason: lead.notClosedReason,
+                clearedCloseProduct: lead.closeProduct,
+                clearedCloseAmountEur: lead.closeAmountEur,
+                clearedNotes: lead.salespersonOutcomeNotes,
+                clearedFollowUp1Date: lead.followUp1Date,
+                deletedAttemptId: attemptIdToDelete,
+                resetCheckIn,
+                clearedNegotiationStartedAt: resetCheckIn ? lead.negotiationStartedAt : null,
+                clearedPresentedAt: resetCheckIn ? lead.presentedAt : null,
+            },
+            companyId: ctx.companyId,
+        });
+
+        return { success: true as const };
+    });
+
+    if (!txResult.success) {
+        return { success: false, error: txResult.error };
+    }
+
+    // Esito rimosso = chiusure, presenze e fatturato cambiano: stessa
+    // invalidazione di saveVenditoreOutcome.
+    revalidatePath('/', 'layout');
+    return { success: true };
+}
+
+// Sposta la data dell'appuntamento senza registrare alcun esito.
+// È la risposta "No, va rifissato" alla domanda preliminare del drawer: prima
+// l'unica strada davanti a un appuntamento non svolto era inventare un esito.
+export async function rescheduleAppointmentFromSales(
+    leadId: string,
+    newDate: Date,
+    currentVersion?: number,
+): Promise<{ success: boolean; error?: string }> {
+    const auth = await requireOwnLead(leadId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { lead, ctx, userId } = auth;
+
+    if (!(newDate instanceof Date) || isNaN(newDate.getTime())) {
+        return { success: false, error: 'Data appuntamento non valida.' };
+    }
+    if (lead.salespersonOutcome) {
+        return { success: false, error: "Il lead ha già un esito: rimuovilo prima di rifissare l'appuntamento." };
+    }
+    if (currentVersion !== undefined && lead.version !== currentVersion) {
+        return { success: false, error: 'CONCURRENCY_ERROR' };
+    }
+
+    const previousDate = lead.appointmentDate ?? null;
+
+    // Il check-in vale per l'appuntamento che si sta spostando: se quello non è
+    // stato svolto, "Inizia trattativa" deve tornare disponibile sulla nuova
+    // data. Con tentativi già registrati (esito rimosso dopo dei follow-up) la
+    // trattativa c'è stata davvero e il check-in resta.
+    const [{ count: attemptCount } = { count: 0 }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(salesAttempts)
+        .where(and(
+            eq(salesAttempts.companyId, ctx.companyId),
+            eq(salesAttempts.leadId, leadId),
+        ));
+
+    const txResult = await db.transaction(async (tx) => {
+        const updated = await tx.update(leads)
+            .set({
+                appointmentDate: newDate,
+                ...(attemptCount === 0 ? { negotiationStartedAt: null } : {}),
+                version: lead.version + 1,
+                updatedAt: new Date(),
+            })
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                eq(leads.id, leadId),
+                eq(leads.version, lead.version),
+            ))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false as const, error: 'CONCURRENCY_ERROR' as const };
+        }
+
+        await tx.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'venditore_appointment_rescheduled',
+            userId,
+            timestamp: new Date(),
+            metadata: {
+                previousAppointmentDate: previousDate,
+                newAppointmentDate: newDate,
+                clearedNegotiationStartedAt: attemptCount === 0 ? lead.negotiationStartedAt : null,
+            },
+            companyId: ctx.companyId,
+        });
+
+        return { success: true as const };
+    });
+
+    if (!txResult.success) {
+        return { success: false, error: txResult.error };
+    }
+
+    // Marketing: prima il rescheduled (chiude il vecchio record SET), poi il
+    // nuovo set — stessa sequenza di updateGdoAppointment.
+    if (previousDate && previousDate.getTime() !== newDate.getTime()) {
+        await enqueueMarketingWebhook({
+            eventType: 'appointment.rescheduled',
+            leadId,
+            actorUserId: userId,
+            previousAppointmentDate: previousDate,
+            newAppointmentDate: newDate,
+        }).catch((e: unknown) => console.error('Marketing webhook (appointment.rescheduled) err:', e));
+    }
+    await enqueueMarketingWebhook({
+        eventType: 'appointment.set',
+        leadId,
+        actorUserId: userId,
+    }).catch((e: unknown) => console.error('Marketing webhook (appointment.set) err:', e));
+
+    // Il bot ripeterebbe la vecchia data al lead: va riallineato.
+    await notifyAppointmentToBot({
+        lead: { id: leadId, phone: lead.phone, name: lead.name, funnel: lead.funnel, companyId: ctx.companyId },
+        appointmentAt: newDate,
+        trigger: previousDate ? 'spostato' : 'fissato',
+    });
+
+    // GDO fissatore e Conferme devono sapere che la data è cambiata: sono loro
+    // a doverla ri-confermare col lead.
+    const targets = new Set<string>();
+    if (lead.assignedToId) targets.add(lead.assignedToId);
+    if (lead.confirmationsUserId) targets.add(lead.confirmationsUserId);
+    for (const recipientUserId of targets) {
+        await db.insert(notifications).values({
+            id: crypto.randomUUID(),
+            recipientUserId,
+            type: 'appointment_rescheduled_by_sales',
+            title: 'Appuntamento spostato dal venditore',
+            body: `L'appuntamento con ${lead.name} non è stato svolto ed è stato rifissato.`,
+            metadata: { leadId },
+            status: 'unread',
+            createdAt: new Date(),
+            companyId: ctx.companyId,
+        });
+    }
+
+    revalidatePath('/', 'layout');
+    return { success: true };
 }

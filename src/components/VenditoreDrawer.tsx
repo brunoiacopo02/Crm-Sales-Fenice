@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { saveVenditoreOutcome, rescheduleFollowUp } from "@/app/actions/venditoreActions"
+import { saveVenditoreOutcome, rescheduleFollowUp, clearVenditoreOutcome, rescheduleAppointmentFromSales } from "@/app/actions/venditoreActions"
 import { saveSalesSurvey, getSalesSurveyByLead } from "@/app/actions/surveyActions"
-import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle, Lock, Play, CalendarClock, Pencil } from "lucide-react"
+import { X, User, Phone, Mail, Clock, Save, Building, AlertCircle, Lock, Play, CalendarClock, Pencil, CalendarX2, RotateCcw } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
@@ -73,6 +73,19 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
     const [rescheduleValue, setRescheduleValue] = useState("")
     const [isRescheduling, setIsRescheduling] = useState(false)
 
+    // Preliminare "L'appuntamento è stato svolto?" (spec 2026-09-03).
+    // Finché il venditore non risponde non parte nessun check-in: prima l'unica
+    // strada davanti a un appuntamento non svolto era inventare un esito, perché
+    // l'OutcomeGate blocca la dashboard sugli arretrati.
+    const [showApptReschedule, setShowApptReschedule] = useState(false)
+    const [newApptValue, setNewApptValue] = useState("")
+    const [isMovingAppt, setIsMovingAppt] = useState(false)
+
+    // Rimozione esito: conferma inline a due passi (niente window.confirm, che
+    // blocca il browser).
+    const [confirmClear, setConfirmClear] = useState(false)
+    const [isClearing, setIsClearing] = useState(false)
+
     // Mai precompilare con una data già passata: risalvando "Non chiuso" si
     // ripianificherebbe un follow-up nel passato → il lead resta in "Scaduti"
     // per sempre e brucia uno dei follow-up disponibili.
@@ -131,6 +144,46 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
             onSaved()
         } finally {
             setIsRescheduling(false)
+        }
+    }
+
+    // "No, va rifissato": sposta l'appuntamento senza registrare alcun esito
+    // e senza fare il check-in della trattativa.
+    const handleMoveAppointment = async () => {
+        if (!newApptValue) return
+        const parsedDate = parseRomeDatetimeLocal(newApptValue)
+        if (!parsedDate) { alert("Data appuntamento non valida"); return }
+        setIsMovingAppt(true)
+        try {
+            const res = await rescheduleAppointmentFromSales(lead.id, parsedDate, lead.version)
+            if (!res.success) {
+                alert(res.error === 'CONCURRENCY_ERROR'
+                    ? "Questo lead è stato modificato da un altro utente. Ricarica la pagina e riprova."
+                    : (res.error || "Errore durante lo spostamento dell'appuntamento"))
+                return
+            }
+            onSaved()
+        } finally {
+            setIsMovingAppt(false)
+        }
+    }
+
+    // Rimuove l'esito registrato: il lead torna "Da esitare" e "Inizia
+    // trattativa" ricompare.
+    const handleClearOutcome = async () => {
+        setIsClearing(true)
+        try {
+            const res = await clearVenditoreOutcome(lead.id, lead.version)
+            if (!res.success) {
+                alert(res.error === 'CONCURRENCY_ERROR'
+                    ? "Questo lead è stato modificato da un altro utente. Ricarica la pagina e riprova."
+                    : (res.error || "Errore durante la rimozione dell'esito"))
+                return
+            }
+            onSaved()
+        } finally {
+            setIsClearing(false)
+            setConfirmClear(false)
         }
     }
 
@@ -240,6 +293,42 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
 
     const apptDate = lead?.appointmentDate ? new Date(lead.appointmentDate) : null
 
+    // Form di rifissaggio dell'appuntamento, condiviso fra il preliminare
+    // (trattativa non ancora avviata) e la scorciatoia sopra il form esito
+    // (check-in già fatto ma appuntamento poi saltato).
+    const apptRescheduleForm = (
+        <div className="space-y-3">
+            <div className="text-xs text-amber-800">
+                Nuova data e ora dell&apos;appuntamento. Non viene registrato nessun esito; GDO fissatore e Conferme ricevono la notifica.
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                    type="datetime-local"
+                    value={newApptValue}
+                    onChange={e => setNewApptValue(e.target.value)}
+                    className="input-fenice text-sm flex-1"
+                />
+                <button
+                    type="button"
+                    onClick={handleMoveAppointment}
+                    disabled={isMovingAppt || !newApptValue}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 shrink-0"
+                >
+                    <CalendarClock className="h-4 w-4" />
+                    {isMovingAppt ? 'Sposto…' : 'Sposta appuntamento'}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setShowApptReschedule(false)}
+                    disabled={isMovingAppt}
+                    className="px-4 py-2.5 rounded-lg text-sm font-semibold bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors disabled:opacity-50 shrink-0"
+                >
+                    Annulla
+                </button>
+            </div>
+        </div>
+    )
+
     return (
         <div className="flex flex-col h-full bg-white">
             {/* Header - sticky with glass effect */}
@@ -323,29 +412,70 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                     )}
                 </div>
 
-                {/* Check-in trattativa: CTA finché non avviata (telefono/esito restano bloccati) */}
+                {/* Preliminare: l'appuntamento è stato svolto? Solo rispondendo "Sì"
+                    parte il check-in. Rispondendo "No" si sposta la data, senza
+                    esito e senza check-in — così nessuno è più costretto a
+                    inventare un esito per sbloccare la dashboard. */}
                 {!isStarted && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                        <div className="flex-1">
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-4">
+                        <div>
                             <div className="text-sm font-bold text-amber-900 flex items-center gap-2">
-                                <Lock className="w-4 h-4" /> Trattativa non ancora avviata
+                                <Lock className="w-4 h-4" /> L&apos;appuntamento è stato svolto?
                             </div>
                             <div className="text-xs text-amber-700 mt-1">
-                                Avvia la trattativa per sbloccare il numero di telefono, il briefing e l'inserimento dell'esito.
+                                Rispondi prima di procedere: il numero, il briefing e l&apos;esito si sbloccano solo avviando la trattativa.
                             </div>
                         </div>
-                        <button
-                            onClick={onStartNegotiation}
-                            disabled={!onStartNegotiation || isStarting}
-                            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 shrink-0"
-                        >
-                            {isStarting ? (
-                                <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <Play className="h-4 w-4" />
-                            )}
-                            {isStarting ? 'Avvio…' : 'Inizia trattativa'}
-                        </button>
+
+                        {!showApptReschedule ? (
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button
+                                    onClick={onStartNegotiation}
+                                    disabled={!onStartNegotiation || isStarting}
+                                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50"
+                                >
+                                    {isStarting ? (
+                                        <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <Play className="h-4 w-4" />
+                                    )}
+                                    {isStarting ? 'Avvio…' : 'Sì — inizia trattativa'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowApptReschedule(true)
+                                        setNewApptValue(toRomeDatetimeLocal(new Date()))
+                                    }}
+                                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-sm font-semibold bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors"
+                                >
+                                    <CalendarX2 className="h-4 w-4" />
+                                    No — va rifissato
+                                </button>
+                            </div>
+                        ) : apptRescheduleForm}
+                    </div>
+                )}
+
+                {/* Check-in già fatto ma nessun esito: l'appuntamento può essere
+                    saltato lo stesso (il lead non si presenta, si rimanda). Senza
+                    questa via d'uscita l'unica mossa restava inventare un esito
+                    per sbloccare l'OutcomeGate. */}
+                {isStarted && !lead?.salespersonOutcome && !followUpMode && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        {!showApptReschedule ? (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowApptReschedule(true)
+                                    setNewApptValue(toRomeDatetimeLocal(new Date()))
+                                }}
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-amber-800 hover:text-amber-900 transition-colors"
+                            >
+                                <CalendarX2 className="h-4 w-4" />
+                                L&apos;appuntamento non è stato svolto — rifissalo invece di registrare un esito
+                            </button>
+                        ) : apptRescheduleForm}
                     </div>
                 )}
 
@@ -623,7 +753,44 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
 
             {/* Footer — solo a trattativa avviata */}
             {isStarted && (
-            <div className="p-6 border-t border-ash-200 bg-ash-50 flex justify-end gap-3 sticky bottom-0">
+            <div className="p-6 border-t border-ash-200 bg-ash-50 flex flex-wrap items-center justify-end gap-3 sticky bottom-0">
+                {/* Rimuovi esito: riporta il lead a "Da esitare" (appuntamento non
+                    svolto, esito registrato per errore). In modalità follow-up la
+                    strada giusta è "Correggi questo esito", non la rimozione. */}
+                {lead?.salespersonOutcome && !followUpMode && (
+                    confirmClear ? (
+                        <div className="mr-auto flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-ash-600 max-w-xs">
+                                Spariscono esito, tentativo{lead?.salespersonOutcome === 'Chiuso' ? ' e fatturato' : ''} e presenza: il lead torna &quot;Da esitare&quot;.
+                            </span>
+                            <button
+                                type="button"
+                                onClick={handleClearOutcome}
+                                disabled={isClearing}
+                                className="px-3 py-2 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                            >
+                                {isClearing ? 'Rimuovo…' : 'Confermo, rimuovi'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setConfirmClear(false)}
+                                disabled={isClearing}
+                                className="px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-600 hover:bg-ash-100 transition-colors disabled:opacity-50"
+                            >
+                                Annulla
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setConfirmClear(true)}
+                            className="mr-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-600 hover:border-red-300 hover:text-red-600 transition-colors"
+                        >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            Rimuovi esito
+                        </button>
+                    )
+                )}
                 <button
                     onClick={onClose}
                     className="btn-secondary text-sm py-2.5 px-6"

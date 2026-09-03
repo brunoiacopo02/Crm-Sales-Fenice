@@ -59,24 +59,28 @@ export function OutcomeGate({ overdue }: OutcomeGateProps) {
 
     if (overdue.length === 0) return null
 
-    const handleRegistra = (lead: OverdueLead) => {
+    // Apre la scheda SENZA fare il check-in: è il drawer a chiedere prima
+    // "L'appuntamento è stato svolto?". Avviare la trattativa da qui — come
+    // faceva la versione precedente — lasciava come unica uscita un esito
+    // inventato quando l'appuntamento non era stato svolto (lead Ombretta,
+    // 02-03/09/2026).
+    const handleApri = (lead: OverdueLead) => setSelectedLead(lead)
+
+    // Check-in richiesto dal drawer dopo un "Sì, l'ho svolto".
+    const handleStartNegotiation = (lead: OverdueLead) => {
         setPendingId(lead.id)
         startTransitionFn(async () => {
             try {
-                if (!lead.negotiationStartedAt) {
-                    const result = await startNegotiation(lead.id)
-                    if (!result.success) {
-                        alert(result.error || "Errore durante l'avvio della trattativa")
-                        return
-                    }
-                    setSelectedLead({
-                        ...lead,
-                        phone: result.phone ?? lead.phone,
-                        negotiationStartedAt: new Date().toISOString(),
-                    })
-                } else {
-                    setSelectedLead(lead)
+                const result = await startNegotiation(lead.id)
+                if (!result.success) {
+                    alert(result.error || "Errore durante l'avvio della trattativa")
+                    return
                 }
+                setSelectedLead({
+                    ...lead,
+                    phone: result.phone ?? lead.phone,
+                    negotiationStartedAt: new Date().toISOString(),
+                })
             } catch {
                 alert("Errore di rete. Riprova.")
             } finally {
@@ -102,7 +106,7 @@ export function OutcomeGate({ overdue }: OutcomeGateProps) {
                                 Hai {overdue.length} {overdue.length === 1 ? "esito" : "esiti"} da registrare prima di continuare
                             </h2>
                             <p className="text-sm text-red-700 mt-0.5">
-                                Registra gli esiti degli appuntamenti passati per sbloccare la dashboard.
+                                Apri ogni scheda per sbloccare la dashboard. Se l&apos;appuntamento non è stato svolto, dalla scheda puoi rifissarlo senza registrare un esito.
                             </p>
                         </div>
                     </div>
@@ -129,11 +133,11 @@ export function OutcomeGate({ overdue }: OutcomeGateProps) {
                                         )}
                                     </div>
                                     <button
-                                        onClick={() => handleRegistra(lead)}
+                                        onClick={() => handleApri(lead)}
                                         disabled={isThisPending}
                                         className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                                     >
-                                        {isThisPending ? "Avvio..." : "Registra esito"}
+                                        {isThisPending ? "Avvio..." : "Apri scheda"}
                                     </button>
                                 </div>
                             )
@@ -153,6 +157,8 @@ export function OutcomeGate({ overdue }: OutcomeGateProps) {
                         <VenditoreDrawer
                             lead={selectedLead}
                             onClose={closeDrawer}
+                            onStartNegotiation={() => handleStartNegotiation(selectedLead)}
+                            isStarting={isPending && pendingId === selectedLead?.id}
                             onSaved={() => {
                                 closeDrawer()
                                 router.refresh()

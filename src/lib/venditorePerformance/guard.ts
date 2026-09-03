@@ -108,3 +108,31 @@ export function findLastCycleNonClosed<T extends { outcome: string; outcomeAt: D
     if (!inCycle.length) return null;
     return inCycle.reduce((best, a) => (a.attemptNumber > best.attemptNumber ? a : best));
 }
+
+// Decide cosa fare quando si RIMUOVE l'esito di un lead ("Rimuovi esito"):
+// quale salesAttempt cancellare e se il lead torna anche "mai lavorato".
+//
+// Il caso che questa funzione serve: un appuntamento non svolto per cui il
+// venditore è stato costretto a registrare un esito (l'OutcomeGate blocca la
+// dashboard finché gli arretrati non sono esitati). Togliere l'esito deve
+// riportare il lead esattamente allo stato precedente, KPI compresi.
+//
+// - attemptIdToDelete: l'ultimo tentativo del ciclo corrente (attemptNumber
+//   massimo, stesso criterio deterministico di findLastCycleNonClosed).
+// - resetCheckIn: vero solo se dopo la cancellazione NON resta alcun tentativo
+//   sul lead. Con tentativi residui la trattativa È avvenuta davvero (si sta
+//   togliendo, per esempio, l'esito del 3° follow-up): negotiationStartedAt e
+//   presentedAt restano, coerenti col latch presenze (PO 2026-07-17).
+export function resolveOutcomeClear(input: {
+    attempts: AttemptRef[];
+    cycleStartAt: Date | null;
+}): { attemptIdToDelete: string | null; resetCheckIn: boolean } {
+    const inCycle = input.attempts.filter(a =>
+        !input.cycleStartAt || (a.outcomeAt !== null && a.outcomeAt >= input.cycleStartAt)
+    );
+    const target = inCycle.length
+        ? inCycle.reduce((best, a) => (a.attemptNumber > best.attemptNumber ? a : best))
+        : null;
+    const remaining = target ? input.attempts.length - 1 : input.attempts.length;
+    return { attemptIdToDelete: target?.id ?? null, resetCheckIn: remaining === 0 };
+}

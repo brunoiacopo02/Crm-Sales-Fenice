@@ -240,6 +240,8 @@ export function ContactDrawer({
             case 'contact_info_edited': return 'Dati Contatto Modificati'
             case 'followup_rescheduled': return 'Follow-up spostato'
             case 'lead_parked': return 'Messo in lavorazione'
+            case 'salesperson_outcome_cleared': return 'Esito venditore rimosso'
+            case 'venditore_appointment_rescheduled': return 'Appuntamento spostato dal venditore'
             case 'BOT_NOTE': return '📋 Nota dal Fissatore'
             case 'REASSIGNED_TO_BOT': return '🤖 Lead ripreso dal Fissatore'
             case 'BOT_CONTACT_REQUEST': return '☎️ Richiesta di contatto umano'

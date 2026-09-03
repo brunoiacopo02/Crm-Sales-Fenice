@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed, resolveAttemptWrite } from './guard.ts';
+import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed, resolveAttemptWrite, resolveOutcomeClear } from './guard.ts';
 
 test('Non chiuso senza follow-up → ok (follow-up facoltativo)', () => {
     const r = validateOutcomeTransition({ outcome: 'Non chiuso', nextFollowUpDate: null, priorNonClosedCount: 0 });
@@ -168,4 +168,57 @@ test('resolveAttemptWrite: la correzione ignora i tentativi fuori ciclo', () => 
         outcome: 'Sparito', cycleStartAt: new Date('2026-07-15T00:00:00Z'), leadHasOutcome: true, occasion: 'current',
     });
     assert.deepEqual(r, { mode: 'update', id: 'nc1' });
+});
+
+// ── resolveOutcomeClear ("Rimuovi esito") ────────────────────────────────────
+
+test('Rimuovi esito con un solo tentativo -> cancella quello e azzera il check-in', () => {
+    const r = resolveOutcomeClear({
+        attempts: [{ id: 'a0', outcome: 'Non chiuso', outcomeAt: new Date('2026-09-02T17:00:00Z'), attemptNumber: 0 }],
+        cycleStartAt: null,
+    });
+    assert.equal(r.attemptIdToDelete, 'a0');
+    assert.equal(r.resetCheckIn, true);
+});
+
+test('Rimuovi esito con tentativi residui -> cancella solo l ultimo, check-in e presenza restano', () => {
+    const r = resolveOutcomeClear({
+        attempts: [
+            { id: 'a0', outcome: 'Non chiuso', outcomeAt: new Date('2026-07-01T09:00:00Z'), attemptNumber: 0 },
+            { id: 'a1', outcome: 'Non chiuso', outcomeAt: new Date('2026-07-08T09:00:00Z'), attemptNumber: 1 },
+            { id: 'a2', outcome: 'Chiuso', outcomeAt: new Date('2026-07-15T09:00:00Z'), attemptNumber: 2 },
+        ],
+        cycleStartAt: null,
+    });
+    assert.equal(r.attemptIdToDelete, 'a2');
+    assert.equal(r.resetCheckIn, false);
+});
+
+test('Rimuovi esito su ciclo riaperto -> non tocca i tentativi del ciclo precedente', () => {
+    const r = resolveOutcomeClear({
+        attempts: [
+            { id: 'vecchio', outcome: 'Non chiuso', outcomeAt: new Date('2026-05-01T09:00:00Z'), attemptNumber: 0 },
+            { id: 'nuovo', outcome: 'Chiuso', outcomeAt: new Date('2026-07-20T09:00:00Z'), attemptNumber: 1 },
+        ],
+        cycleStartAt: new Date('2026-07-10T00:00:00Z'),
+    });
+    assert.equal(r.attemptIdToDelete, 'nuovo');
+    assert.equal(r.resetCheckIn, false);
+});
+
+test('Rimuovi esito senza alcun tentativo registrato -> niente da cancellare, check-in azzerato', () => {
+    const r = resolveOutcomeClear({ attempts: [], cycleStartAt: null });
+    assert.equal(r.attemptIdToDelete, null);
+    assert.equal(r.resetCheckIn, true);
+});
+
+test('Rimuovi esito sceglie per attemptNumber, non per outcomeAt retrodatato', () => {
+    const r = resolveOutcomeClear({
+        attempts: [
+            { id: 'a0', outcome: 'Non chiuso', outcomeAt: new Date('2026-09-01T09:00:00Z'), attemptNumber: 0 },
+            { id: 'a1', outcome: 'Sparito', outcomeAt: new Date('2026-08-20T09:00:00Z'), attemptNumber: 1 },
+        ],
+        cycleStartAt: null,
+    });
+    assert.equal(r.attemptIdToDelete, 'a1');
 });
