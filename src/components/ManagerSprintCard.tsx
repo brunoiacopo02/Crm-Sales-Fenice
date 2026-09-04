@@ -23,7 +23,8 @@ export function ManagerSprintCard({ managerId }: { managerId: string }) {
             }
         }
         fetchState()
-        const int = setInterval(fetchState, 10000)
+        // 60s come SprintBanner: stessa lettura pura getActiveSprint. Era 10s.
+        const int = setInterval(fetchState, 60000)
         return () => clearInterval(int)
     }, [])
 

@@ -145,7 +145,7 @@ export function LeaderboardClient({
         previousRanksRef.current = newPrevRanks
     }, [currentData])
 
-    // Background Polling (10s) per Real-Time Leaderboard Update
+    // Background Polling per Real-Time Leaderboard Update
     useEffect(() => {
         let mounted = true
         const pollLeaderboard = async () => {
@@ -161,7 +161,9 @@ export function LeaderboardClient({
                 // Silently fails to not break UX
             }
         }
-        const intervalId = setInterval(pollLeaderboard, 10000)
+        // 60s: le action della classifica sono letture pure (la insert di
+        // "sei stato superato" vive in checkLeaderboardOvertake, non qui). Era 10s.
+        const intervalId = setInterval(pollLeaderboard, 60000)
         return () => {
             mounted = false
             clearInterval(intervalId)

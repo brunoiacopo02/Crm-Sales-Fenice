@@ -54,7 +54,8 @@ function TeamDuelsMonitorInner() {
     // Initial + polling every 5s
     useEffect(() => {
         fetchDuels();
-        const interval = setInterval(fetchDuels, 5000);
+        // 15s come DuelWidget, stesso completeDuel sui duelli scaduti. Era 5s.
+        const interval = setInterval(fetchDuels, 15000);
         return () => clearInterval(interval);
     }, [fetchDuels]);
 

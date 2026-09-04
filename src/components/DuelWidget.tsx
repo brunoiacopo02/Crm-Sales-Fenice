@@ -46,8 +46,12 @@ function DuelWidgetInner({ userId }: { userId: string }) {
 
   useEffect(() => {
     fetchDuels();
-    // Polling ogni 5s per avere lo score sempre aggiornato durante il lavoro
-    const interval = setInterval(fetchDuels, 5000);
+
+    // 15s: getActiveDuelsForUser chiude i duelli scaduti (completeDuel), quindi
+    // il premio arriva al massimo 15s piu' tardi — il doppio pagamento e' gia'
+    // escluso dall'optimistic locking sullo status. Era 5s: il poller piu' costoso
+    // del CRM, montato sulla home.
+    const interval = setInterval(fetchDuels, 15000);
     return () => clearInterval(interval);
   }, [fetchDuels]);
 

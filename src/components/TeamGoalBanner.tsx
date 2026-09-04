@@ -19,7 +19,8 @@ export function TeamGoalBanner() {
         }
 
         fetchGoals()
-        const int = setInterval(fetchGoals, 10000) // Poll every 10s
+        // 60s: getActiveTeamGoals e' una lettura pura. Era 10s.
+        const int = setInterval(fetchGoals, 60000)
         return () => {
             mounted = false
             clearInterval(int)

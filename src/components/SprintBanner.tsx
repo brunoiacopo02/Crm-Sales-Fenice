@@ -32,7 +32,10 @@ export function SprintBanner() {
         }
 
         fetchState()
-        const int = setInterval(fetchState, 10000)
+        // 60s: getActiveSprint e getSprintLeaderboard sono letture pure (nessuna
+        // chiusura sprint passa di qui, checkAndCompleteExpiredSprint non ha caller
+        // nella UI). Era 10s: montato nel layout, girava su ogni pagina di ogni utente.
+        const int = setInterval(fetchState, 60000)
         return () => clearInterval(int)
     }, [isExpanded])
 
