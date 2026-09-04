@@ -33,13 +33,34 @@ export function RealtimeProvider({ userId, companies, children }: {
     const router = useRouter()
     const supabase = createClient()
     const channelRef = useRef<RealtimeChannel | null>(null)
+    /** true = e' arrivato un ping 'leads' mentre la scheda era nascosta. */
+    const refreshPending = useRef(false)
 
     useEffect(() => {
         const disconnect = initRealtimeBus(userId, companies)
 
+        // A schermo spento il router.refresh() e' lavoro buttato: rifa' tutte le
+        // query server della pagina per un utente che non la sta guardando, ed e'
+        // la richiesta piu' pesante che il CRM produca. Segniamo il debito e lo
+        // saldiamo con un refresh solo al ritorno sulla scheda.
+        // Gli avvisi (blocking alert, banner richiami) NON passano di qui: hanno
+        // i propri listener sul bus, quindi restano reattivi anche in background.
         const offLeads = onBusEvent('leads', () => {
+            if (typeof document !== 'undefined' && document.hidden) {
+                refreshPending.current = true
+                return
+            }
             router.refresh()
         })
+
+        const onVisible = () => {
+            if (!document.hidden && refreshPending.current) {
+                refreshPending.current = false
+                router.refresh()
+            }
+        }
+        document.addEventListener('visibilitychange', onVisible)
+
         const offLeadEvents = onBusEvent('leadEvents', (payload) => {
             try {
                 window.dispatchEvent(new CustomEvent('fomo_lead_event', { detail: payload }));
@@ -52,6 +73,7 @@ export function RealtimeProvider({ userId, companies, children }: {
         })
 
         return () => {
+            document.removeEventListener('visibilitychange', onVisible)
             offLeads()
             offLeadEvents()
             offAchievements()
