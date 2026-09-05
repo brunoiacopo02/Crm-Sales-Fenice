@@ -46,6 +46,12 @@ export interface LeadEntranteRaw {
     statoBot?: string | null;
     esito?: string | null;
     appuntamento?: string | null;
+    /**
+     * Il bot ha già mandato almeno un messaggio in quella chat (loro commit
+     * d58d2d6). Vedi `intakeSicuro` per il perché è la condizione che conta.
+     * Assente sul canale push, dove è sempre falso per costruzione.
+     */
+    botHaRisposto?: boolean | null;
 }
 
 export interface LeadEntranteNormalizzato {
@@ -63,6 +69,12 @@ export interface LeadEntranteNormalizzato {
     esito: string | null;
     /** Valorizzato solo con `esito === 'APPUNTAMENTO'` e data affidabile. */
     appuntamento: Date | null;
+    /**
+     * `null` = il campo non è arrivato, cioè non lo sappiamo. Non è `false`, ed
+     * è importante che resti distinguibile: entrambi bloccano l'intake, ma solo
+     * uno dei due è un guasto da guardare (vedi `intakeSicuro`).
+     */
+    botHaRisposto: boolean | null;
     /** Perché un `appuntamento` presente nel payload NON è stato accettato. */
     appuntamentoScartato?: string;
 }
@@ -80,16 +92,14 @@ export type MotivoScarto =
 /**
  * Stati in cui la conversazione col bot è VIVA.
  *
- * ATTENZIONE a cosa NON è: non è più il discrimine fra un intake muto e uno che
- * fa partire l'apertura "Ciao, sono Marta…". La guardia dall'altro lato
+ * ATTENZIONE a cosa NON è: non è il discrimine fra un intake muto e uno che fa
+ * partire l'apertura "Ciao, sono Marta…". La guardia dall'altro lato
  * (`apreSopraChatViva`, letta nel loro codice il 05/09) salta l'apertura su
  * qualunque conversazione senza `crm_lead_id`, e sulle righe di questa lista
- * quel campo è nullo per definizione — `closed` e `booked` inclusi.
+ * quel campo è nullo per definizione — `closed` e `booked` inclusi. Il campo che
+ * decide davvero è `botHaRisposto`: vedi `intakeSicuro`.
  *
- * Resta l'uscita di sicurezza `soloChatVive` della rotta admin, per la finestra
- * in cui un lead è stato adottato ma il bot non gli ha ancora risposto (fuori
- * fascia 08:30–20:30 la risposta è differita): lì la guardia non scatta perché
- * pretende un outbound già partito, e il payload della lista non dice se c'è.
+ * Resta utile per leggere la lista (quante conversazioni sono vive) e basta.
  *
  * `replying` esiste perché in produzione restano righe ferme su quel valore; per
  * noi è `active`. Il ramo di default tiene: uno stato nuovo lato fornitore non
@@ -99,6 +109,34 @@ const STATI_CHAT_APERTA = new Set(['active', 'replying']);
 
 export function chatApertaAlBot(statoBot: string | null | undefined): boolean {
     return STATI_CHAT_APERTA.has(String(statoBot ?? '').trim().toLowerCase());
+}
+
+/**
+ * Se mandare l'intake a questa chat è muto. È l'UNICA condizione che conta, ed è
+ * dura: non un'opzione, non un default scavalcabile da un flag.
+ *
+ * La guardia dell'altro lato salta l'apertura solo dopo aver visto che il bot ha
+ * già scritto almeno una volta in quella conversazione:
+ *
+ *     if (aiOwner !== 'mario' || !haOutboundPartito) return false;
+ *     if (crmLeadId === null) return true;
+ *
+ * Con zero outbound la prima riga esce subito e l'apertura parte. Normalmente
+ * quella finestra dura qualche decina di secondi — il tempo della risposta a
+ * testo libero, che NON passa dalla fascia 08:30-20:30 (quel gate vale per i
+ * template). Ma non ha limite superiore: se il drain si pianta — modello
+ * irraggiungibile, credito a zero, una raffica di 529 — la conversazione resta
+ * adottata e muta per ore. Il credito a zero è già successo.
+ *
+ * In quella finestra `statoBot` è `active`, quindi guardare lo stato non
+ * protegge da niente: serve proprio questo campo.
+ *
+ * `null` (campo non dichiarato: loro deploy vecchio, o un rollback) blocca come
+ * `false`. Preferisco un lead che resta fermo un giro a un'apertura mandata a
+ * qualcuno che ha scritto per chiedere altro.
+ */
+export function intakeSicuro(lead: Pick<LeadEntranteNormalizzato, 'botHaRisposto'>): boolean {
+    return lead.botHaRisposto === true;
 }
 
 /**
@@ -183,6 +221,7 @@ export function normalizzaLeadEntrante(raw: LeadEntranteRaw): NormalizeResult {
             statoBot: statoBot || 'sconosciuto',
             esito,
             appuntamento,
+            botHaRisposto: typeof raw.botHaRisposto === 'boolean' ? raw.botHaRisposto : null,
             ...(appuntamentoScartato ? { appuntamentoScartato } : {}),
         },
     };

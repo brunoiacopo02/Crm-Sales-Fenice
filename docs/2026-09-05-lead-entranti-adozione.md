@@ -14,7 +14,9 @@ bot adotta non ha un `leadId` — quindi il suo esito, appuntamento compreso, no
 | Client HMAC + normalizzazione del contratto (puro) | `src/lib/bot-fissatore/leadEntranti.ts` |
 | Test della normalizzazione e della dedup | `src/lib/bot-fissatore/leadEntranti.test.ts` |
 | Chiave persona, estratta da `push.ts` per non trascinare il DB nei moduli puri | `src/lib/bot-fissatore/personKey.ts` |
-| Rotta admin (anteprima + esecuzione) | `src/app/api/admin/lead-entranti/route.ts` |
+| Adozione condivisa dai due canali (dedup, lock, eventi) | `src/lib/bot-fissatore/adozione.ts` |
+| Rotta admin — lettura della lista (anteprima + esecuzione) | `src/app/api/admin/lead-entranti/route.ts` |
+| Rotta che riceve il push dal bot | `src/app/api/bot/lead-entrante/route.ts` |
 
 Env: `BOT_WEBHOOK_SECRET` (già presente, è lo stesso di intake e agenda) e, opzionale,
 `BOT_LEAD_ENTRANTI_URL` per puntare altrove. Default:
@@ -40,26 +42,57 @@ messaggio, quando è stato scritto e se c'è un appuntamento già fissato.
   "conferma": true,            // obbligatorio, non c'è un default
   "limit": 500,
   "spingiIntake": false,       // manda l'intake al bot: è l'unica cosa che riempie crm_lead_id
-  "soloChatVive": false,       // uscita di sicurezza: limita alle chat 'active'/'replying'
+  "soloChatVive": false,       // restringe alle chat 'active'/'replying' (non è la protezione)
   "applicaAppuntamenti": false // registra l'appuntamento che il bot aveva già fissato
 }
 ```
 
+## Il push dal bot
+
+`POST /api/bot/lead-entrante` — un lead per chiamata, firma HMAC identica a `/api/bot/outcome`, il
+middleware lascia già passare `/api/bot/*`. URL da mettere nelle loro env
+(`CRM_LEAD_ENTRANTE_URL`): `https://crm-sales-fenice.vercel.app/api/bot/lead-entrante`.
+
+Corpo: gli stessi nomi di campo di una riga della lista, meno `statoBot`/`esito`/`appuntamento`,
+che al momento dell'adozione non esistono ancora. Risposta:
+
+```jsonc
+{ "ok": true,  "leadId": "uuid", "creato": true }   // lead nuovo
+{ "ok": true,  "leadId": "uuid", "creato": false }  // numero già nostro, si riusa quello
+{ "ok": false, "motivo": "altra_azienda" }          // NON scrivere crm_lead_id
+{ "ok": false, "motivo": "telefono_non_valido" }
+```
+
+**Da qui non parte nessun intake, ed è deliberato.** L'intake serve a dire al bot che un lead è
+suo; qui è già suo e gli manca solo l'id, che si prende dalla risposta. Mandarglielo sarebbe anche
+pericoloso: arriverebbe *prima* che il bot abbia scritto in quella chat — vedi sotto.
+
+Il canale non sostituisce la lista: il loro push è fire-and-forget dentro il webhook Twilio e non
+ritenta, quindi un push perso è un caso reale e la lista è la rete che lo ripesca.
+
 ## Cosa può far arrivare un messaggio a una persona
 
-Solo il push dell'intake — e sui lead di questa lista non parte niente.
+Solo il push dell'intake dalla rotta admin, e solo in un caso preciso.
 
 La guardia dall'altro lato (`apreSopraChatViva`, letta nel loro codice il 05/09) salta l'apertura
-su **qualunque** conversazione senza `crm_lead_id`, non solo sulle chat vive. Le righe della lista
-hanno quel campo nullo per definizione, altrimenti non ci sarebbero: `closed` e `booked` inclusi.
-E nel ramo che salta l'apertura scrivono comunque `crm_lead_id`, quindi l'intake fa il suo lavoro
-senza spedire niente.
+su **qualunque** conversazione senza `crm_lead_id`, non solo sulle chat vive — `closed` e `booked`
+inclusi — e nel ramo che salta scrive comunque `crm_lead_id`, quindi l'intake fa il suo lavoro
+senza spedire niente. Ma la sua prima riga è:
 
-Resta **un** caso in cui l'apertura partirebbe: la guardia pretende anche che il bot abbia già
-mandato almeno un messaggio in quella chat. Fuori dalla fascia 08:30–20:30 la loro risposta è
-differita al cron, quindi fra l'adozione e la prima risposta c'è una finestra in cui un lead sta
-nella lista senza outbound. Il payload non dice se l'outbound è partito — richiesta girata a loro
-il 05/09. `soloChatVive: true` è l'uscita di sicurezza finché quella finestra non è chiusa.
+```ts
+if (aiOwner !== 'mario' || !haOutboundPartito) return false;
+```
+
+Con zero outbound esce subito e **l'apertura parte**. Di norma quella finestra dura qualche decina
+di secondi: la risposta a testo libero non passa dal gate 08:30–20:30, che vale per i template.
+Ma non ha limite superiore — se il loro drain si pianta (modello irraggiungibile, credito a zero:
+già successo) la conversazione resta adottata e muta per ore.
+
+Da qui la condizione, che è **dura e non un'opzione**: l'intake parte solo con
+`botHaRisposto: true` (loro commit `d58d2d6`). `spingiIntake` non la scavalca, `soloChatVive` non
+c'entra — in quella finestra lo stato È `active`, quindi guardare lo stato non protegge da niente.
+Il campo assente (deploy vecchio, rollback) blocca come `false`, ma resta contato a parte nel
+riepilogo: è un guasto da guardare, non un lead da aspettare.
 
 `conferma: true` da solo **crea i lead e basta**: nessun messaggio, a nessuno. `spingiIntake`
 resta false di default.
@@ -97,18 +130,20 @@ webhook AC in arrivo sullo stesso numero nello stesso istante creerebbe un secon
 
 ## Aperto
 
-1. **La finestra "adottato e non ancora risposto"** — chiesto all'altro lato di esporre se
-   l'outbound è già partito (o di escludere quelle righe dalla lista). È l'unico caso residuo in
-   cui un intake da qui farebbe partire un'apertura.
-2. **`booked` e la guardia sull'apertura** — riguarda i lead che il CRM possiede **già** e che
+1. **`altra_azienda`: il bot di Fenice sta parlando con un cliente di Serenamente.** Quando il
+   numero è già lead di un'altra azienda non creiamo un doppione e non diamo un `leadId` — ma
+   l'adozione e la risposta sono già partite prima del nostro verdetto. Lasciarlo parlare, fermarlo
+   a metà frase o passarlo a un umano è una decisione commerciale del PO. Lato loro registrano un
+   evento e un marcatore così il caso è visibile lo stesso giorno.
+3. **`booked` e la guardia sull'apertura** — riguarda i lead che il CRM possiede **già** e che
    vengono ri-arruolati, non quelli di questa lista: lì l'apertura parte, ed è il comportamento su
    cui si appoggia il rifissaggio del contratto v1.5. Decisione del PO, lato loro.
-3. **Il testo del riaggancio per i 29** — decisione del PO, lato loro.
-4. **Template UTILITY.** Prima di accendere qualunque cosa: verificare che il template di
+4. **Il testo del riaggancio per i 29** — decisione del PO, lato loro.
+5. **Template UTILITY.** Prima di accendere qualunque cosa: verificare che il template di
    riaggancio sia UTILITY o dentro `UTILITY_ONLY_ALLOW` in produzione. Il numero Fenice è a
    qualità LOW e c'è un precedente — il 24/08 dei template erano in env ma mai in allow-list, e
    27 lead sono rimasti muti per quattro giorni.
-5. **Regime continuo — deciso il 05/09: push dal bot.** Il flusso accelera (23 aperture in tutto
+6. **Regime continuo — deciso e implementato il 05/09: push dal bot.** Il flusso accelera (23 aperture in tutto
    agosto, 20 nei primi quattro giorni di settembre). Invece di un cron che rilegge la lista — cioè
    polling, tre giorni dopo aver tagliato $324 di overage Vercel — il bot pusha nel momento in cui
    adotta la chat. Da sapere: il lead nasce più povero (solo numero e primo messaggio, il bot non

@@ -4,6 +4,7 @@ import {
     normalizzaLeadEntrante,
     pianificaAdozione,
     chatApertaAlBot,
+    intakeSicuro,
     NOME_FALLBACK,
     FUNNEL_FALLBACK,
     type LeadEsistente,
@@ -196,4 +197,36 @@ test('formati diversi dello stesso numero contano come la stessa persona', () =>
         new Map(),
     );
     assert.equal(azioni[1].azione, 'scarta');
+});
+
+test('intakeSicuro: solo con botHaRisposto esplicitamente true', () => {
+    // La finestra "adottato e non ancora risposto" e' l'unico caso in cui la
+    // guardia dell'altro lato non scatta e l'apertura parte davvero. Di norma
+    // dura qualche decina di secondi, ma se il loro drain si pianta (credito a
+    // zero: gia' successo) non ha limite superiore.
+    const base = normalizzaLeadEntrante({ ...RIGA_BASE, botHaRisposto: true });
+    assert.equal(base.ok && intakeSicuro(base.lead), true);
+
+    const muto = normalizzaLeadEntrante({ ...RIGA_BASE, botHaRisposto: false });
+    assert.equal(muto.ok && muto.lead.botHaRisposto, false);
+    assert.equal(muto.ok && intakeSicuro(muto.lead), false);
+});
+
+test('botHaRisposto assente resta null e blocca come false', () => {
+    // Campo non dichiarato (deploy vecchio o rollback dall'altro lato): non e'
+    // un "no" ma nemmeno un "si". Blocca, e resta distinguibile nel riepilogo
+    // perche' e' un guasto da guardare, non un lead da aspettare.
+    const res = normalizzaLeadEntrante(RIGA_BASE);
+    assert.equal(res.ok, true);
+    if (!res.ok) return;
+    assert.equal(res.lead.botHaRisposto, null);
+    assert.equal(intakeSicuro(res.lead), false);
+});
+
+test('lo stato della chat non protegge dalla finestra senza outbound', () => {
+    // In quella finestra statoBot e' 'active': guardare lo stato non basta, ed
+    // e' il motivo per cui intakeSicuro non guarda lo stato.
+    const res = normalizzaLeadEntrante({ ...RIGA_BASE, statoBot: 'active', botHaRisposto: false });
+    assert.equal(res.ok && chatApertaAlBot(res.lead.statoBot), true);
+    assert.equal(res.ok && intakeSicuro(res.lead), false);
 });

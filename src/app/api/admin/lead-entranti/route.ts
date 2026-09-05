@@ -1,26 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { leads, leadEvents, users } from '@/db/schema';
+import { leads, users } from '@/db/schema';
 import { createClient } from '@/utils/supabase/server';
-import { logLeadEvent } from '@/lib/eventLogger';
 import { pushLeadToBot } from '@/lib/bot-fissatore/push';
 import { updateLeadOutcome } from '@/app/actions/pipelineActions';
 import {
     chatApertaAlBot,
     fetchLeadEntranti,
+    intakeSicuro,
     normalizzaLeadEntrante,
     pianificaAdozione,
-    SOURCE_INBOUND,
     type Azione,
     type LeadEntranteNormalizzato,
     type LeadEsistente,
 } from '@/lib/bot-fissatore/leadEntranti';
+import { adottaLead, FENICE } from '@/lib/bot-fissatore/adozione';
 
 export const dynamic = 'force-dynamic';
-
-const FENICE = 'fenice';
 
 /**
  * Adozione dei lead che scrivono per primi sul numero WhatsApp Fenice.
@@ -36,26 +33,13 @@ const FENICE = 'fenice';
  *
  * ================== COSA PUÒ FAR ARRIVARE UN MESSAGGIO ==================
  * Creare il lead nel CRM è muto: nessuno riceve niente. A far partire un
- * messaggio è solo il push dell'intake verso il bot.
+ * messaggio è solo il push dell'intake verso il bot, e solo quando il bot non ha
+ * ancora scritto in quella chat — vedi `intakeSicuro`, che è una condizione
+ * dura e non un'opzione: `spingiIntake` non la scavalca, nessun flag la
+ * scavalca. Un lead senza `botHaRisposto: true` non riceve l'intake, punto.
  *
- * Sui lead di QUESTA lista l'apertura "Ciao, sono Marta…" non parte, e non
- * perché lo stato sia `active`: la guardia dall'altro lato (`apreSopraChatViva`,
- * verificata nel loro codice il 05/09) salta l'apertura su qualunque
- * conversazione senza `crm_lead_id` — e per definizione della lista quel campo
- * è nullo, altrimenti la riga non ci sarebbe. `closed` e `booked` inclusi. Nel
- * ramo che salta l'apertura scrivono comunque `crm_lead_id`, quindi l'intake
- * fa il suo lavoro senza spedire niente.
- *
- * Resta UN caso in cui l'apertura partirebbe: la guardia pretende anche che il
- * bot abbia già mandato almeno un messaggio in quella chat. Fuori dalla fascia
- * 08:30–20:30 la loro risposta è differita al cron, quindi fra l'adozione e la
- * prima risposta esiste una finestra in cui un lead sta nella lista senza
- * outbound — e lì l'intake farebbe partire l'apertura. Il payload della lista
- * non dice se l'outbound è partito: richiesta girata a loro il 05/09.
- *
- * Perciò: `spingiIntake` resta false di default (niente parte da solo, mai), e
- * `soloChatVive` è l'uscita di sicurezza per limitarsi ad `active`/`replying`
- * finché quella finestra non è chiusa.
+ * `spingiIntake` resta false di default: `{"conferma": true}` da solo crea i
+ * lead e basta.
  * ========================================================================
  */
 
@@ -134,6 +118,16 @@ function riepiloga(azioni: Azione[]) {
          * resta il sottoinsieme che `soloChatVive` lascia passare.
          */
         chatVive: adottabili.filter((a) => chatApertaAlBot(a.lead.statoBot)).length,
+        /** Pronti a ricevere l'intake senza che parta niente. */
+        intakeSicuro: adottabili.filter((a) => intakeSicuro(a.lead)).length,
+        /**
+         * Adottati a cui il bot non ha ancora scritto. Normalmente sono zero o
+         * quasi (la risposta parte in qualche decina di secondi): un numero alto
+         * qui significa che il loro drain è fermo, ed è da guardare subito.
+         */
+        botNonHaAncoraRisposto: adottabili.filter((a) => a.lead.botHaRisposto === false).length,
+        /** Campo non dichiarato: loro deploy vecchio o rollback. Blocca come `false`. */
+        botHaRispostoNonDichiarato: adottabili.filter((a) => a.lead.botHaRisposto === null).length,
         conAppuntamentoDaRegistrare: conAppuntamento.length,
         appuntamentiSospetti,
     };
@@ -154,6 +148,8 @@ function dettaglio(azioni: Azione[]) {
             scrittoIl: a.lead.scrittoIl?.toISOString() ?? null,
             primoMessaggio: a.lead.primoMessaggio,
             chatViva: chatApertaAlBot(a.lead.statoBot),
+            botHaRisposto: a.lead.botHaRisposto,
+            intakeSicuro: intakeSicuro(a.lead),
             ...(a.azione === 'collega'
                 ? { leadIdEsistente: a.esistente.id, statusEsistente: a.esistente.status, bloccato: a.bloccato }
                 : {}),
@@ -210,9 +206,9 @@ interface CorpoPost {
     /** Manda l'intake al bot: è l'unica cosa che riempie `crm_lead_id` da quel lato. */
     spingiIntake?: boolean;
     /**
-     * Uscita di sicurezza: limita il push alle chat `active`/`replying`. Non
-     * serve per `closed`/`booked` — su quelli la guardia dell'altro lato scatta
-     * lo stesso — ma chiude la finestra "adottato e non ancora risposto".
+     * Restringe ulteriormente il push alle chat `active`/`replying`. NON è la
+     * protezione contro le aperture — quella è `intakeSicuro` e non si
+     * disattiva. Serve solo a chi vuole procedere per gradi.
      */
     soloChatVive?: boolean;
     /** Registra nel CRM l'appuntamento che il bot aveva già fissato. */
@@ -265,113 +261,29 @@ export async function POST(req: NextRequest) {
     }> = [];
 
     /** Coppie (leadId, dati della chat) su cui poi valutare intake e appuntamento. */
-    const adottati: Array<{ leadId: string; lead: LeadEntranteNormalizzato; bloccato: boolean; nuovo: boolean }> = [];
+    const adottati: Array<{ leadId: string; lead: LeadEntranteNormalizzato; bloccato: boolean }> = [];
 
     // ---------- 1. Creazione / collegamento ----------
+    // La logica sta in `adottaLead`, condivisa con /api/bot/lead-entrante: due
+    // copie divergerebbero, e i due canali devono comportarsi identici.
     for (const a of azioni!) {
         if (a.azione === 'scarta') continue;
-
-        if (a.azione === 'collega') {
-            adottati.push({ leadId: a.esistente.id, lead: a.lead, bloccato: a.bloccato, nuovo: false });
-            esiti.push({ telefono: a.lead.phone, leadId: a.esistente.id, collegato: true });
-            continue;
-        }
-
-        const nuovoId = crypto.randomUUID();
-        const adesso = new Date();
         try {
-            // Advisory lock sul numero, come nel webhook AC: senza, un webhook
-            // AC in arrivo sullo stesso numero nello stesso istante creerebbe un
-            // secondo lead. Il ricontrollo dentro la transazione chiude la
-            // finestra fra la lettura della lista e la scrittura.
-            const creato = await db.transaction(async (tx) => {
-                await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${a.lead.phone}, 0))`);
-
-                const [gia] = await tx.select({ id: leads.id })
-                    .from(leads)
-                    .where(sql`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10) = ${a.lead.personKey}`)
-                    .limit(1);
-                if (gia) return { id: gia.id, nuovo: false };
-
-                await tx.insert(leads).values({
-                    id: nuovoId,
-                    name: a.lead.name,
-                    phone: a.lead.phone,
-                    email: null,
-                    funnel: a.lead.funnel,
-                    source: SOURCE_INBOUND,
-                    status: 'NEW',
-                    callCount: 0,
-                    // La chat è già del bot: assegnarlo a un GDO umano gli
-                    // toglierebbe una conversazione che sta conducendo lui.
-                    assignedToId: bot.id,
-                    // `createdAt` = quando ha scritto: è quello il momento in cui
-                    // questa persona è arrivata, e le analisi di funnel devono
-                    // vederlo lì. `assignedAt` = adesso, perché è adesso che
-                    // entra in circolo (migr. 0027: i lead si contano da qui).
-                    createdAt: a.lead.scrittoIl ?? adesso,
-                    assignedAt: adesso,
-                    updatedAt: adesso,
-                    companyId: FENICE,
-                });
-                return { id: nuovoId, nuovo: true };
-            });
-
-            adottati.push({ leadId: creato.id, lead: a.lead, bloccato: false, nuovo: creato.nuovo });
-            esiti.push({ telefono: a.lead.phone, leadId: creato.id, creato: creato.nuovo, collegato: !creato.nuovo });
-
-            if (creato.nuovo) {
-                await logLeadEvent({
-                    leadId: creato.id,
-                    eventType: 'IMPORTED',
-                    toSection: 'Prima Chiamata',
-                    metadata: {
-                        source: SOURCE_INBOUND,
-                        provenienza: a.lead.funnel,
-                        conversationId: a.lead.conversationId,
-                        statoBot: a.lead.statoBot,
-                        scrittoIl: a.lead.scrittoIl?.toISOString() ?? null,
-                    },
-                    companyId: FENICE,
-                });
-                await logLeadEvent({
-                    leadId: creato.id,
-                    eventType: 'ASSIGNED',
-                    metadata: { assignedToUser: bot.id, source: SOURCE_INBOUND, adozioneChatEntrante: true },
-                    companyId: FENICE,
-                });
+            const res = await adottaLead(a.lead, bot.id);
+            if (res.esito === 'altra_azienda') {
+                esiti.push({ telefono: a.lead.phone, errore: `numero di un'altra azienda (${res.companyId})` });
+                continue;
             }
+            adottati.push({ leadId: res.leadId, lead: a.lead, bloccato: res.bloccato });
+            esiti.push({
+                telefono: a.lead.phone,
+                leadId: res.leadId,
+                creato: res.esito === 'creato',
+                collegato: res.esito === 'esistente',
+            });
         } catch (e) {
             esiti.push({ telefono: a.lead.phone, errore: String(e) });
         }
-    }
-
-    // ---------- 2. Il messaggio con cui la persona si è presentata ----------
-    // È l'unico contesto che quel lead ha dato, e va sulla timeline del lead
-    // qualunque cosa si decida su intake e appuntamenti. Idempotente: su un
-    // lead che ce l'ha già non si riscrive a ogni giro.
-    const idAdottati = adottati.map((x) => x.leadId);
-    const giaAnnotati = new Set<string>();
-    if (idAdottati.length > 0) {
-        const righe = await db.select({ leadId: leadEvents.leadId })
-            .from(leadEvents)
-            .where(and(inArray(leadEvents.leadId, idAdottati), eq(leadEvents.eventType, 'INBOUND_MESSAGE')));
-        for (const r of righe) giaAnnotati.add(r.leadId);
-    }
-    for (const x of adottati) {
-        if (giaAnnotati.has(x.leadId) || !x.lead.primoMessaggio) continue;
-        await logLeadEvent({
-            leadId: x.leadId,
-            eventType: 'INBOUND_MESSAGE',
-            metadata: {
-                primoMessaggio: x.lead.primoMessaggio,
-                scrittoIl: x.lead.scrittoIl?.toISOString() ?? null,
-                provenienza: x.lead.funnel,
-                conversationId: x.lead.conversationId,
-                statoBot: x.lead.statoBot,
-            },
-            companyId: FENICE,
-        });
     }
 
     // ---------- 3. Intake verso il bot ----------
@@ -380,10 +292,19 @@ export async function POST(req: NextRequest) {
     // può far arrivare un messaggio a una persona.
     if (spingiIntake) {
         for (const x of adottati) {
-            const stato = x.lead.statoBot;
-            if (soloChatVive && !chatApertaAlBot(stato)) {
-                const e = esiti.find((r) => r.leadId === x.leadId);
-                if (e) e.intakeSaltato = `stato '${stato}' escluso da soloChatVive`;
+            const e = esiti.find((r) => r.leadId === x.leadId);
+            // Condizione dura, prima di ogni opzione: senza un messaggio già
+            // partito dal bot, l'intake fa partire l'apertura.
+            if (!intakeSicuro(x.lead)) {
+                if (e) {
+                    e.intakeSaltato = x.lead.botHaRisposto === null
+                        ? 'il bot non dichiara botHaRisposto (deploy vecchio?)'
+                        : "il bot non ha ancora scritto in questa chat: l'apertura partirebbe";
+                }
+                continue;
+            }
+            if (soloChatVive && !chatApertaAlBot(x.lead.statoBot)) {
+                if (e) e.intakeSaltato = `stato '${x.lead.statoBot}' escluso da soloChatVive`;
                 continue;
             }
             const r = await pushLeadToBot({
@@ -394,7 +315,6 @@ export async function POST(req: NextRequest) {
                 funnel: x.lead.funnel,
                 companyId: FENICE,
             });
-            const e = esiti.find((row) => row.leadId === x.leadId);
             if (e) e.intake = 'status' in r ? `${r.result} (${r.status})` : r.result;
         }
     }
