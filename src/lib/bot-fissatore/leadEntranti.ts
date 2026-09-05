@@ -146,6 +146,33 @@ export function intakeSicuro(lead: Pick<LeadEntranteNormalizzato, 'botHaRisposto
  */
 const STATO_PASSATA_A_UMANO = 'handed_off';
 
+/**
+ * Un nome plausibile per una persona. Non è una validazione anagrafica: è un
+ * pavimento.
+ *
+ * Serve perché `nome` arriva da un sistema esterno e finisce dritto sulla card
+ * che un GDO ha davanti quando chiama. Oggi il bot manda sempre `null` — nella
+ * conversazione il nome non viene estratto da nessuna parte — ma il campo è nel
+ * contratto, e il giorno che qualcuno lo riempie (l'ipotesi in piedi è farlo
+ * estrarre al modello alla chiusura della chat) un'estrazione sbagliata
+ * scriverebbe su quella card il nome di un'altra persona.
+ *
+ * Cosa ferma davvero: cifre, stringhe lunghissime, URL ed email, e le frasi —
+ * "sono la mamma di Luca" ha cinque parole, un nome italiano completo ne ha al
+ * massimo quattro ("Maria Teresa Del Giudice").
+ *
+ * Cosa NON ferma, e va detto: "Piacere sono Monia" passa. Un'estrazione che
+ * consegna la frase invece del nome non la si corregge da qui — quella è
+ * qualità dell'estrazione, e sta dall'altro lato. Qui si evita solo che
+ * arrivi spazzatura riconoscibile.
+ */
+export function nomePlausibile(nome: string): boolean {
+    if (nome.length < 2 || nome.length > 60) return false;
+    if (/\d/.test(nome)) return false;
+    if (/[@<>/\\|]|https?:/i.test(nome)) return false;
+    return nome.split(/\s+/).filter(Boolean).length <= 4;
+}
+
 /** Un ISO senza fuso è ambiguo: l'appuntamento risulterebbe sfalsato di 1-2 ore. */
 const HA_OFFSET = /(?:Z|[+-]\d{2}:\d{2})$/;
 
@@ -180,7 +207,10 @@ export function normalizzaLeadEntrante(raw: LeadEntranteRaw): NormalizeResult {
     const personKey = personKeyOf(phone);
     if (!personKey) return { ok: false, motivo: 'telefono_troppo_corto', telefono: telefonoRaw };
 
-    const nome = typeof raw.nome === 'string' ? raw.nome.trim() : '';
+    const nomeGrezzo = typeof raw.nome === 'string' ? raw.nome.trim() : '';
+    // Un nome implausibile non fa scartare il lead: quella persona esiste e va
+    // chiamata. Ricade sul fallback, come un nome assente.
+    const nome = nomeGrezzo && nomePlausibile(nomeGrezzo) ? nomeGrezzo : '';
     const provenienza = typeof raw.provenienza === 'string' ? raw.provenienza.trim().toUpperCase() : '';
     const primoMessaggio = typeof raw.primoMessaggio === 'string' && raw.primoMessaggio.trim()
         ? raw.primoMessaggio.trim()

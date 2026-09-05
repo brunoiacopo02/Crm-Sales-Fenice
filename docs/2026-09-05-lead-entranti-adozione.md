@@ -63,12 +63,23 @@ che al momento dell'adozione non esistono ancora. Risposta:
 { "ok": false, "motivo": "telefono_non_valido" }
 ```
 
-**Il nome si può mandare dopo.** All'adozione quasi non c'è mai: il messaggio precompilato del
-canale Telegram non lo contiene. Se salta fuori nel secondo messaggio basta ripetere la stessa
-chiamata col nome dentro — il lead è lo stesso (dedup per numero) e il buco viene riempito.
-Solo un buco, mai una sovrascrittura: un nome vero già in anagrafica vince sempre. `nomeAggiornato`
-dice se è servito. Serve perché un lead che torna al pool umano non si presenti a un GDO come
-"Lead senza nome".
+**Il nome, oggi, non arriva mai.** Non è che arriva tardi: nel repo della messaggistica niente
+estrae il nome dalla conversazione — lo riempiono solo ActiveCampaign, le campagne e il nostro
+intake. Quando una persona scrive "Piacere sono Monia" nel secondo messaggio, quella parola resta
+dentro il testo e non diventa un dato da nessuna parte. Quindi `nome: null` è **definitivo**, non
+una promessa: se una card resta senza nome, oggi non c'è niente in coda che la riempirà.
+
+La rotta è comunque arricchibile e pronta: ripetere la stessa chiamata col nome dentro riempie il
+buco — il lead è lo stesso (dedup per numero) e `nomeAggiornato` dice se è servito. Solo un buco,
+mai una sovrascrittura: un nome vero già in anagrafica vince sempre. Serve perché un lead che torna
+al pool umano non si presenti a un GDO come "Lead senza nome", che è la differenza fra una chiamata
+e una card che nessuno prende. L'ipotesi in piedi dall'altro lato è far estrarre il nome al modello
+alla chiusura della conversazione: decisione del PO, perché un'estrazione sbagliata ("sono la mamma
+di Luca" → Luca) mette il nome di un'altra persona davanti a chi chiama.
+
+Nel frattempo `nome` viene validato in ingresso (`nomePlausibile`): cifre, URL, email, stringhe
+lunghissime e frasi (più di quattro parole) ricadono sul fallback invece di finire sulla card. È un
+pavimento, non una garanzia — "Piacere sono Monia" passa, e quella è qualità dell'estrazione.
 
 **Da qui non parte nessun intake, ed è deliberato.** L'intake serve a dire al bot che un lead è
 suo; qui è già suo e gli manca solo l'id, che si prende dalla risposta. Mandarglielo sarebbe anche

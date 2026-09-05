@@ -5,6 +5,7 @@ import {
     pianificaAdozione,
     chatApertaAlBot,
     intakeSicuro,
+    nomePlausibile,
     NOME_FALLBACK,
     FUNNEL_FALLBACK,
     type LeadEsistente,
@@ -229,4 +230,31 @@ test('lo stato della chat non protegge dalla finestra senza outbound', () => {
     const res = normalizzaLeadEntrante({ ...RIGA_BASE, statoBot: 'active', botHaRisposto: false });
     assert.equal(res.ok && chatApertaAlBot(res.lead.statoBot), true);
     assert.equal(res.ok && intakeSicuro(res.lead), false);
+});
+
+test('nomePlausibile: passa i nomi veri, ferma la spazzatura riconoscibile', () => {
+    for (const buono of ['Monia', 'Maria Teresa Del Giudice', "Giuseppe D'Amico", 'Jean-Luc Picard']) {
+        assert.equal(nomePlausibile(buono), true, buono);
+    }
+    for (const cattivo of [
+        'A',                                  // troppo corto
+        'Marco 3391234567',                   // cifre: e' un numero, non un nome
+        'mario.rossi@example.com',            // email
+        'https://esempio.it',                 // URL
+        'C:' + String.fromCharCode(92) + 'Users',  // percorso, non una persona
+        'sono la mamma di Luca',              // frase: 5 parole
+        'x'.repeat(61),                       // lunghezza assurda
+    ]) {
+        assert.equal(nomePlausibile(cattivo), false, cattivo);
+    }
+});
+
+test('un nome implausibile ricade sul fallback e NON scarta il lead', () => {
+    // Quella persona esiste e va chiamata: perdere il lead per un nome sbagliato
+    // sarebbe peggio del nome sbagliato.
+    const res = normalizzaLeadEntrante({ ...RIGA_BASE, nome: 'sono la mamma di Luca' });
+    assert.equal(res.ok, true);
+    if (!res.ok) return;
+    assert.equal(res.lead.name, NOME_FALLBACK);
+    assert.equal(res.lead.phone, '+393200431888');
 });
