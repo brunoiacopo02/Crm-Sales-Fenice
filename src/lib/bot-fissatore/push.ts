@@ -4,6 +4,7 @@ import { logLeadEvent } from '@/lib/eventLogger';
 import { db } from '@/db';
 import { leads } from '@/db/schema';
 import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { personKeyOf } from './personKey';
 
 /** Esito del tentativo di push, persistito su leadEvents.metadata per audit dal DB. */
 type PushResult =
@@ -31,11 +32,12 @@ async function auditPush(payload: BotIntakePayload, meta: PushResult): Promise<v
     }
 }
 
-/** Ultime 10 cifre: la chiave persona che il bot usa per riconoscere la chat. */
-export function personKeyOf(phone: string | null): string | null {
-    const digits = (phone || '').replace(/\D/g, '').slice(-10);
-    return digits.length >= 9 ? digits : null;
-}
+/**
+ * Ultime 10 cifre: la chiave persona che il bot usa per riconoscere la chat.
+ * Definita in ./personKey (modulo puro) e ri-esportata qui per non rompere i
+ * chiamanti storici che la importano da push.
+ */
+export { personKeyOf } from './personKey';
 
 /**
  * I lead precedenti della stessa persona. Non li fondiamo — un merge
