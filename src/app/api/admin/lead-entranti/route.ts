@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
     if (!fonte.ok) return NextResponse.json({ ok: false, fonte }, { status: 200 });
 
     const riepilogo = riepiloga(azioni!);
-    const esiti: Array<{
+    type Esito = {
         telefono: string;
         leadId?: string;
         creato?: boolean;
@@ -258,10 +258,17 @@ export async function POST(req: NextRequest) {
         intakeSaltato?: string;
         appuntamento?: string;
         errore?: string;
-    }> = [];
+    };
+    const esiti: Esito[] = [];
 
-    /** Coppie (leadId, dati della chat) su cui poi valutare intake e appuntamento. */
-    const adottati: Array<{ leadId: string; lead: LeadEntranteNormalizzato; bloccato: boolean }> = [];
+    /**
+     * I lead adottati, con il RIFERIMENTO alla loro riga di esito: i passi
+     * successivi ci scrivono sopra. Tenere l'oggetto invece di ricercarlo per
+     * `leadId` a ogni passo toglie di mezzo tutta una classe di sbagli (righe
+     * senza leadId, due righe sullo stesso lead) invece di doverla escludere
+     * caso per caso.
+     */
+    const adottati: Array<{ leadId: string; lead: LeadEntranteNormalizzato; bloccato: boolean; esito: Esito }> = [];
 
     // ---------- 1. Creazione / collegamento ----------
     // La logica sta in `adottaLead`, condivisa con /api/bot/lead-entrante: due
@@ -274,37 +281,36 @@ export async function POST(req: NextRequest) {
                 esiti.push({ telefono: a.lead.phone, errore: `numero di un'altra azienda (${res.companyId})` });
                 continue;
             }
-            adottati.push({ leadId: res.leadId, lead: a.lead, bloccato: res.bloccato });
-            esiti.push({
+            const esito: Esito = {
                 telefono: a.lead.phone,
                 leadId: res.leadId,
                 creato: res.esito === 'creato',
                 collegato: res.esito === 'esistente',
-            });
+            };
+            esiti.push(esito);
+            adottati.push({ leadId: res.leadId, lead: a.lead, bloccato: res.bloccato, esito });
         } catch (e) {
             esiti.push({ telefono: a.lead.phone, errore: String(e) });
         }
     }
 
-    // ---------- 3. Intake verso il bot ----------
+    // ---------- 2. Intake verso il bot ----------
     // È questo, e solo questo, a riempire `crm_lead_id` dall'altro lato e a far
     // uscire la riga dalla loro lista. Ed è anche l'unica cosa qui dentro che
     // può far arrivare un messaggio a una persona.
     if (spingiIntake) {
         for (const x of adottati) {
-            const e = esiti.find((r) => r.leadId === x.leadId);
+            const e = x.esito;
             // Condizione dura, prima di ogni opzione: senza un messaggio già
             // partito dal bot, l'intake fa partire l'apertura.
             if (!intakeSicuro(x.lead)) {
-                if (e) {
-                    e.intakeSaltato = x.lead.botHaRisposto === null
-                        ? 'il bot non dichiara botHaRisposto (deploy vecchio?)'
-                        : "il bot non ha ancora scritto in questa chat: l'apertura partirebbe";
-                }
+                e.intakeSaltato = x.lead.botHaRisposto === null
+                    ? 'il bot non dichiara botHaRisposto (deploy vecchio?)'
+                    : "il bot non ha ancora scritto in questa chat: l'apertura partirebbe";
                 continue;
             }
             if (soloChatVive && !chatApertaAlBot(x.lead.statoBot)) {
-                if (e) e.intakeSaltato = `stato '${x.lead.statoBot}' escluso da soloChatVive`;
+                e.intakeSaltato = `stato '${x.lead.statoBot}' escluso da soloChatVive`;
                 continue;
             }
             const r = await pushLeadToBot({
@@ -315,20 +321,20 @@ export async function POST(req: NextRequest) {
                 funnel: x.lead.funnel,
                 companyId: FENICE,
             });
-            if (e) e.intake = 'status' in r ? `${r.result} (${r.status})` : r.result;
+            e.intake = 'status' in r ? `${r.result} (${r.status})` : r.result;
         }
     }
 
-    // ---------- 4. L'appuntamento che il bot aveva già fissato ----------
+    // ---------- 3. L'appuntamento che il bot aveva già fissato ----------
     // Passa dal flusso canonico (`updateLeadOutcome` col serviceCtx del bot),
     // non da una UPDATE a mano: è lo stesso percorso di /api/bot/outcome, con
     // eventi, notifiche e transizione verso le Conferme.
     if (applicaAppuntamenti) {
         for (const x of adottati) {
             if (!x.lead.appuntamento) continue;
-            const e = esiti.find((row) => row.leadId === x.leadId);
+            const e = x.esito;
             if (x.bloccato) {
-                if (e) e.appuntamento = 'saltato: il lead ha gia un appuntamento o una presenza';
+                e.appuntamento = 'saltato: il lead ha gia un appuntamento o una presenza';
                 continue;
             }
             try {
@@ -343,9 +349,9 @@ export async function POST(req: NextRequest) {
                     undefined,
                     { companyId: FENICE, actorUserId: bot.id, isBot: true },
                 );
-                if (e) e.appuntamento = res?.success === true ? 'registrato' : `fallito: ${JSON.stringify(res)}`;
+                e.appuntamento = res?.success === true ? 'registrato' : `fallito: ${JSON.stringify(res)}`;
             } catch (err) {
-                if (e) e.appuntamento = `errore: ${String(err)}`;
+                e.appuntamento = `errore: ${String(err)}`;
             }
         }
     }
