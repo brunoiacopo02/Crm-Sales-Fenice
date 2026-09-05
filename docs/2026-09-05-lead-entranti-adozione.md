@@ -57,11 +57,18 @@ Corpo: gli stessi nomi di campo di una riga della lista, meno `statoBot`/`esito`
 che al momento dell'adozione non esistono ancora. Risposta:
 
 ```jsonc
-{ "ok": true,  "leadId": "uuid", "creato": true }   // lead nuovo
-{ "ok": true,  "leadId": "uuid", "creato": false }  // numero già nostro, si riusa quello
+{ "ok": true,  "leadId": "uuid", "creato": true,  "nomeAggiornato": false }  // lead nuovo
+{ "ok": true,  "leadId": "uuid", "creato": false, "nomeAggiornato": true }   // numero già nostro
 { "ok": false, "motivo": "altra_azienda" }          // NON scrivere crm_lead_id
 { "ok": false, "motivo": "telefono_non_valido" }
 ```
+
+**Il nome si può mandare dopo.** All'adozione quasi non c'è mai: il messaggio precompilato del
+canale Telegram non lo contiene. Se salta fuori nel secondo messaggio basta ripetere la stessa
+chiamata col nome dentro — il lead è lo stesso (dedup per numero) e il buco viene riempito.
+Solo un buco, mai una sovrascrittura: un nome vero già in anagrafica vince sempre. `nomeAggiornato`
+dice se è servito. Serve perché un lead che torna al pool umano non si presenti a un GDO come
+"Lead senza nome".
 
 **Da qui non parte nessun intake, ed è deliberato.** L'intake serve a dire al bot che un lead è
 suo; qui è già suo e gli manca solo l'id, che si prende dalla risposta. Mandarglielo sarebbe anche

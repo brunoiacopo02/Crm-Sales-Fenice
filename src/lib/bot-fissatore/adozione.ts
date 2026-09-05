@@ -15,13 +15,13 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { leads, leadEvents } from '@/db/schema';
 import { logLeadEvent } from '@/lib/eventLogger';
-import { SOURCE_INBOUND, type LeadEntranteNormalizzato } from './leadEntranti';
+import { NOME_FALLBACK, SOURCE_INBOUND, type LeadEntranteNormalizzato } from './leadEntranti';
 
 export const FENICE = 'fenice';
 
 export type EsitoAdozione =
-    | { esito: 'creato'; leadId: string; bloccato: false }
-    | { esito: 'esistente'; leadId: string; bloccato: boolean }
+    | { esito: 'creato'; leadId: string; bloccato: false; nomeAggiornato?: false }
+    | { esito: 'esistente'; leadId: string; bloccato: boolean; nomeAggiornato: boolean }
     | { esito: 'altra_azienda'; companyId: string };
 
 /**
@@ -52,6 +52,7 @@ export async function adottaLead(
         // (stessa guardia cross-tenant del webhook AC).
         const esistenti = await tx.select({
             id: leads.id,
+            name: leads.name,
             status: leads.status,
             presentedAt: leads.presentedAt,
             createdAt: leads.createdAt,
@@ -68,10 +69,29 @@ export async function adottaLead(
         if (fenice.length > 0) {
             // Il più recente: è quello su cui la persona sta lavorando adesso.
             const piuRecente = fenice.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+
+            // Il nome arriva dopo, e quasi sempre non arriva mai al primo giro:
+            // il messaggio precompilato del canale Telegram non lo contiene, e
+            // dal canale push il bot non ce l'ha ancora. Se salta fuori più
+            // tardi — nel secondo messaggio, o alla rilettura della lista —
+            // riempiamo il buco, così un lead che torna al pool umano non si
+            // presenta a un GDO come "Lead senza nome".
+            // Solo un buco, mai una sovrascrittura: un nome vero già in
+            // anagrafica vince sempre su quello che arriva dalla chat.
+            const nomeAttuale = (piuRecente.name ?? '').trim();
+            const daRiempire = nomeAttuale === '' || nomeAttuale === NOME_FALLBACK;
+            const nomeAggiornato = daRiempire && lead.name !== NOME_FALLBACK;
+            if (nomeAggiornato) {
+                await tx.update(leads)
+                    .set({ name: lead.name, updatedAt: new Date() })
+                    .where(eq(leads.id, piuRecente.id));
+            }
+
             return {
                 esito: 'esistente' as const,
                 leadId: piuRecente.id,
                 bloccato: piuRecente.status === 'APPOINTMENT' || piuRecente.presentedAt !== null,
+                nomeAggiornato,
             };
         }
 
@@ -117,6 +137,15 @@ export async function adottaLead(
             leadId: risultato.leadId,
             eventType: 'ASSIGNED',
             metadata: { assignedToUser: botId, source: SOURCE_INBOUND, adozioneChatEntrante: true },
+            companyId: FENICE,
+        });
+    }
+
+    if (risultato.esito === 'esistente' && risultato.nomeAggiornato) {
+        await logLeadEvent({
+            leadId: risultato.leadId,
+            eventType: 'contact_info_edited',
+            metadata: { campo: 'name', valore: lead.name, source: SOURCE_INBOUND, daChatEntrante: true },
             companyId: FENICE,
         });
     }

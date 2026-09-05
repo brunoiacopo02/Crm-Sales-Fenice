@@ -82,7 +82,15 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ok: false, motivo: 'altra_azienda' });
         }
 
-        return NextResponse.json({ ok: true, leadId: res.leadId, creato: res.esito === 'creato' });
+        return NextResponse.json({
+            ok: true,
+            leadId: res.leadId,
+            creato: res.esito === 'creato',
+            // `true` = questo push ha riempito un nome che mancava. Ripetere la
+            // chiamata quando il lead dice come si chiama e' il modo previsto
+            // per mandarcelo: non serve una rotta in piu'.
+            nomeAggiornato: res.esito === 'esistente' ? res.nomeAggiornato : false,
+        });
     } catch (e) {
         console.error('[lead-entrante] adozione fallita', e);
         // 500: qui ritentare ha senso, a differenza di un telefono impresentabile.
