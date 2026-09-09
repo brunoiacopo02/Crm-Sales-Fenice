@@ -12,6 +12,7 @@ import {
     currentYearMonthRome,
     parseYearMonth,
 } from "@/lib/workingDaysUtils";
+import { stageHits } from "@/lib/kpi/funnelStages";
 import crypto from "crypto";
 
 async function requireAdmin() {
@@ -870,9 +871,6 @@ async function getCrmFunnelCounts(
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
     const monthEnd = new Date(Date.UTC(year, month, 1));
 
-    const inMonth = (d: Date | null | undefined): boolean =>
-        !!d && d >= monthStart && d < monthEnd;
-
     const rows = await db.select().from(leads).where(and(
         eq(leads.companyId, companyId),
         sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
@@ -881,6 +879,10 @@ async function getCrmFunnelCounts(
             and(gte(leads.appointmentDate, monthStart), lt(leads.appointmentDate, monthEnd)),
             and(gte(leads.confirmationsTimestamp, monthStart), lt(leads.confirmationsTimestamp, monthEnd)),
             and(gte(leads.salespersonOutcomeAt, monthStart), lt(leads.salespersonOutcomeAt, monthEnd)),
+            // Le trattative si contano sul latch `presentedAt`: senza questo ramo
+            // una presenza del mese il cui ultimo esito cade in un mese diverso
+            // (follow-up successivo) non verrebbe nemmeno pescata.
+            and(gte(leads.presentedAt, monthStart), lt(leads.presentedAt, monthEnd)),
         ),
     ));
 
@@ -900,32 +902,29 @@ async function getCrmFunnelCounts(
         const origin = originOf(l.launchBucket, dbBuckets);
         const split: StageCounts | null = origin === 'altro' ? null : bucket[origin];
 
-        // App fissati: data fissaggio = appointmentCreatedAt (fallback appointmentDate per dati legacy).
-        const apptSetAt = l.appointmentCreatedAt || l.appointmentDate;
-        if (l.appointmentDate && inMonth(apptSetAt)) {
+        // Attribuzione al mese: regola unica condivisa con Marketing Analytics
+        // (src/lib/kpi/funnelStages.ts). Le trattative girano sul latch
+        // `presentedAt`, non su `salespersonOutcomeAt`: quest'ultimo si sposta a
+        // ogni follow-up e faceva migrare la stessa presenza di mese in mese.
+        const hits = stageHits(l, monthStart, monthEnd);
+        if (hits.app) {
             bucket.app++;
             if (split) split.app++;
         }
-        // Conferme: data esito Conferme nel mese.
-        if (l.confirmationsOutcome === 'confermato' && inMonth(l.confirmationsTimestamp)) {
+        if (hits.conferme) {
             bucket.conferme++;
             if (split) split.conferme++;
         }
-        // Trattative: presenziato nel mese (whitelist Chiuso/Non chiuso).
-        if (
-            (l.salespersonOutcome === 'Chiuso' || l.salespersonOutcome === 'Non chiuso')
-            && inMonth(l.salespersonOutcomeAt)
-        ) {
+        if (hits.trattative) {
             bucket.trattative++;
             if (split) split.trattative++;
         }
-        // Chiusure + fatturato: chiuso nel mese.
-        if (l.salespersonOutcome === 'Chiuso' && inMonth(l.salespersonOutcomeAt)) {
+        if (hits.close) {
             bucket.close++;
-            bucket.fatturato += l.closeAmountEur || 0;
+            bucket.fatturato += hits.fatturato;
             if (split) {
                 split.close++;
-                split.fatturato += l.closeAmountEur || 0;
+                split.fatturato += hits.fatturato;
             }
         }
     }
