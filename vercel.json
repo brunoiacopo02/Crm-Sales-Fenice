@@ -7,6 +7,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/sales-late-penalties",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/marketing/cron/sync-ac-contacts",
       "schedule": "0 2 * * *"
     },

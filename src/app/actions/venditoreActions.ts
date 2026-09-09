@@ -14,6 +14,7 @@ import { getSalesSurveyByLead } from "@/app/actions/surveyActions"
 import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed, resolveAttemptWrite, resolveOutcomeClear, type OutcomeOccasion } from "@/lib/venditorePerformance/guard"
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { isConfermeTl } from "@/lib/confermeTl"
+import { resolveLatePenalties } from "@/lib/venditore/latePenaltiesRunner";
 // Gamification disabled for VENDITORE role — import removed
 
 async function resolveIsStaff() {
@@ -403,6 +404,12 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     if (!txResult.success) {
         return { success: false, error: txResult.error }
     }
+
+    // Malus ritardi: l'esito è arrivato, chiudo i ritardi ancora aperti sul lead.
+    // La penale già maturata resta (è il ritardo, non l'assenza di esito), ma da
+    // qui si legge dopo quante ore è stata sanata.
+    await resolveLatePenalties(leadId, effectiveOutcomeAt)
+        .catch((e: unknown) => console.error('resolveLatePenalties err:', e));
 
     // Marketing webhook: deal closed (won/lost based on outcome)
     const closedEventType = payload.outcome === 'Chiuso' ? 'deal.closed_won' : 'deal.closed_lost';

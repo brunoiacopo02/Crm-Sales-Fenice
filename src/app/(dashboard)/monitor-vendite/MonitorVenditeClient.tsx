@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useMemo } from "react"
-import { Calendar as CalendarIcon, AlertTriangle, Users, RefreshCw, Loader2, Phone, ClipboardList, Clock } from "lucide-react"
+import { Calendar as CalendarIcon, AlertTriangle, Users, RefreshCw, Loader2, Phone, ClipboardList, Clock, Timer } from "lucide-react"
 import {
     getVenditoriMonitor,
     type VenditoriMonitorData,
@@ -30,6 +30,18 @@ function toDateInput(d: Date | string): string {
     return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
 
+/** Ultimi 12 mesi, dal corrente all'indietro: 'YYYY-MM' + etichetta italiana. */
+function lastMonths(count = 12): { key: string; label: string }[] {
+    const out: { key: string; label: string }[] = []
+    const now = new Date()
+    for (let i = 0; i < count; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        out.push({ key, label: d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }) })
+    }
+    return out
+}
+
 function apptStatusBadge(a: AppointmentRow) {
     if (a.salespersonOutcome === 'Chiuso') return { label: 'Chiuso', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
     if (a.salespersonOutcome === 'Non chiuso') return { label: 'Non chiuso', cls: 'bg-rose-100 text-rose-700 border-rose-200' }
@@ -44,8 +56,14 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
     const [startDate, setStartDate] = useState(toDateInput(initialStart))
     const [endDate, setEndDate] = useState(toDateInput(initialEnd))
     const [selectedVenditori, setSelectedVenditori] = useState<string[]>([])
+    const [penaltyMonth, setPenaltyMonth] = useState(initialData.penaltyMonthKey)
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
+    const months = useMemo(() => lastMonths(), [])
+    const totalMalus = useMemo(
+        () => data.latePenalties.reduce((sum, p) => sum + p.amountEur, 0),
+        [data.latePenalties],
+    )
 
     const apply = () => {
         setError(null)
@@ -53,7 +71,32 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
             try {
                 const s = new Date(startDate + 'T00:00:00')
                 const e = new Date(endDate + 'T23:59:59')
-                const fresh = await getVenditoriMonitor({ startDate: s, endDate: e, venditoreIds: selectedVenditori })
+                const fresh = await getVenditoriMonitor({
+                    startDate: s,
+                    endDate: e,
+                    venditoreIds: selectedVenditori,
+                    penaltyMonthKey: penaltyMonth,
+                })
+                setData(fresh)
+            } catch (err: any) {
+                setError(err?.message || 'Errore caricamento')
+            }
+        })
+    }
+
+    const changePenaltyMonth = (mk: string) => {
+        setPenaltyMonth(mk)
+        setError(null)
+        startTransition(async () => {
+            try {
+                const s = new Date(startDate + 'T00:00:00')
+                const e = new Date(endDate + 'T23:59:59')
+                const fresh = await getVenditoriMonitor({
+                    startDate: s,
+                    endDate: e,
+                    venditoreIds: selectedVenditori,
+                    penaltyMonthKey: mk,
+                })
                 setData(fresh)
             } catch (err: any) {
                 setError(err?.message || 'Errore caricamento')
@@ -67,8 +110,8 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
 
     // Stats per venditore — aiuta l'admin a vedere il carico a colpo d'occhio
     const perSellerStats = useMemo(() => {
-        const m = new Map<string, { name: string; appts: number; upcomingFu: number; overdueFu: number }>()
-        for (const v of data.venditori) m.set(v.id, { name: v.name, appts: 0, upcomingFu: 0, overdueFu: 0 })
+        const m = new Map<string, { name: string; appts: number; upcomingFu: number; overdueFu: number; ritardi: number; malusEur: number }>()
+        for (const v of data.venditori) m.set(v.id, { name: v.name, appts: 0, upcomingFu: 0, overdueFu: 0, ritardi: 0, malusEur: 0 })
         for (const a of data.appointments) {
             const s = m.get(a.venditoreId); if (s) s.appts++
         }
@@ -78,7 +121,13 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
         for (const f of data.overdueFollowUps) {
             const s = m.get(f.venditoreId); if (s) s.overdueFu++
         }
-        return Array.from(m.values()).filter(s => s.appts + s.upcomingFu + s.overdueFu > 0).sort((a, b) => b.appts - a.appts)
+        for (const p of data.latePenaltySummary) {
+            const s = m.get(p.venditoreId)
+            if (s) { s.ritardi = p.count; s.malusEur = p.totalEur }
+        }
+        return Array.from(m.values())
+            .filter(s => s.appts + s.upcomingFu + s.overdueFu + s.ritardi > 0)
+            .sort((a, b) => b.appts - a.appts)
     }, [data])
 
     return (
@@ -151,6 +200,8 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                     <th className="text-right py-2 font-semibold">Appuntamenti</th>
                                     <th className="text-right py-2 font-semibold">Follow-up prossimi</th>
                                     <th className="text-right py-2 font-semibold">Follow-up scaduti</th>
+                                    <th className="text-right py-2 font-semibold">Ritardi</th>
+                                    <th className="text-right py-2 font-semibold">Malus</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -160,6 +211,10 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                         <td className="text-right py-2 text-ash-700">{s.appts}</td>
                                         <td className="text-right py-2 text-ash-700">{s.upcomingFu}</td>
                                         <td className={`text-right py-2 font-semibold ${s.overdueFu > 0 ? 'text-rose-600' : 'text-ash-400'}`}>{s.overdueFu}</td>
+                                        <td className={`text-right py-2 font-semibold ${s.ritardi > 0 ? 'text-rose-600' : 'text-ash-400'}`}>{s.ritardi}</td>
+                                        <td className={`text-right py-2 font-semibold ${s.malusEur > 0 ? 'text-rose-700' : 'text-ash-400'}`}>
+                                            {s.malusEur > 0 ? `-${s.malusEur.toFixed(0)} €` : '—'}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -195,6 +250,81 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     </div>
                 </section>
             )}
+
+            {/* Ritardi del mese — scadenze uscite dalle liste operative */}
+            <section className="rounded-2xl border border-rose-200 bg-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-100 px-4 py-3">
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-rose-900">
+                        <Timer className="h-4 w-4 text-rose-600" />
+                        Ritardi
+                        <span className="ml-1 rounded-full bg-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-800">
+                            {data.latePenalties.length}
+                        </span>
+                        {totalMalus > 0 && (
+                            <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                                -{totalMalus.toFixed(0)} &euro;
+                            </span>
+                        )}
+                    </h2>
+                    <select
+                        value={penaltyMonth}
+                        onChange={e => changePenaltyMonth(e.target.value)}
+                        disabled={isPending}
+                        className="rounded-lg border border-ash-200 px-2 py-1 text-xs font-medium capitalize disabled:opacity-50"
+                    >
+                        {months.map(m => (
+                            <option key={m.key} value={m.key}>{m.label}</option>
+                        ))}
+                    </select>
+                </div>
+
+                {data.latePenalties.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-sm text-ash-500">
+                        Nessun ritardo in questo mese.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-ash-200 text-[11px] uppercase text-ash-500">
+                                    <th className="px-4 py-2 text-left font-semibold">Venditore</th>
+                                    <th className="px-4 py-2 text-left font-semibold">Lead</th>
+                                    <th className="px-4 py-2 text-left font-semibold">Tipo</th>
+                                    <th className="px-4 py-2 text-left font-semibold">Scadenza</th>
+                                    <th className="px-4 py-2 text-left font-semibold">Stato</th>
+                                    <th className="px-4 py-2 text-right font-semibold">Malus</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.latePenalties.map(p => (
+                                    <tr key={p.id} className="border-b border-ash-100 last:border-0">
+                                        <td className="px-4 py-2 font-medium text-ash-800">{p.venditoreName}</td>
+                                        <td className="px-4 py-2 text-ash-700">{p.leadName}</td>
+                                        <td className="px-4 py-2 text-ash-600">
+                                            {p.kind === 'APPOINTMENT' ? 'Appuntamento' : 'Follow-up'}
+                                        </td>
+                                        <td className="px-4 py-2 text-ash-600">{formatDateTimeIT(p.dueAt)}</td>
+                                        <td className="px-4 py-2">
+                                            {p.resolvedAt ? (
+                                                <span className="rounded-full border border-ash-200 bg-ash-50 px-2 py-0.5 text-[11px] font-semibold text-ash-700">
+                                                    Esitato dopo {p.hoursLate}h
+                                                </span>
+                                            ) : (
+                                                <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                                                    Ancora da esitare ({p.hoursLate}h)
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-2 text-right font-semibold text-rose-700">
+                                            -{p.amountEur.toFixed(0)} &euro;
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
 
             {/* Overdue follow-ups — alert */}
             {data.overdueFollowUps.length > 0 && (

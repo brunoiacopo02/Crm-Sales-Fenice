@@ -1,8 +1,9 @@
 "use server"
 
 import { db } from "@/db"
-import { leads, users, salesAttempts } from "@/db/schema"
-import { and, eq, isNotNull, isNull, gte, lte, or, asc, inArray, sql } from "drizzle-orm"
+import { leads, users, salesAttempts, salesLatePenalties } from "@/db/schema"
+import { and, eq, isNotNull, isNull, gte, lte, or, asc, desc, inArray, sql } from "drizzle-orm"
+import { penaltyKey, lateHours, romeMonthKey, type PenaltyKind } from "@/lib/venditore/latePenalties"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -53,6 +54,30 @@ export interface FollowUpRow {
     salespersonOutcomeNotes: string | null
 }
 
+/** Un ritardo a registro: scadenza mancata da un venditore. */
+export interface LatePenaltyRow {
+    id: string
+    leadId: string
+    leadName: string
+    venditoreId: string
+    venditoreName: string
+    kind: PenaltyKind
+    dueAt: Date
+    resolvedAt: Date | null
+    /** Ore trascorse fra la scadenza e l'esito (o adesso, se ancora scoperto). */
+    hoursLate: number
+    amountEur: number
+}
+
+export interface LatePenaltySummary {
+    venditoreId: string
+    venditoreName: string
+    count: number
+    /** Ritardi ancora senza esito: sono quelli che il manager deve sollecitare. */
+    openCount: number
+    totalEur: number
+}
+
 export interface InLavorazioneSummary {
     venditoreId: string
     venditoreName: string
@@ -66,6 +91,11 @@ export interface VenditoriMonitorData {
     upcomingFollowUps: FollowUpRow[]
     overdueFollowUps: FollowUpRow[]
     inLavorazione: InLavorazioneSummary[]
+    /** Ritardi del mese selezionato: le scadenze uscite dalle liste qui sopra. */
+    latePenalties: LatePenaltyRow[]
+    latePenaltySummary: LatePenaltySummary[]
+    /** Mese di competenza dei ritardi mostrati ('YYYY-MM'). */
+    penaltyMonthKey: string
 }
 
 export async function listVenditori(): Promise<VenditoreLite[]> {
@@ -97,6 +127,8 @@ export async function getVenditoriMonitor(filters: {
     startDate: Date
     endDate: Date
     venditoreIds: string[]
+    /** Mese dei ritardi da mostrare ('YYYY-MM'); default = mese corrente Rome. */
+    penaltyMonthKey?: string
 }): Promise<VenditoriMonitorData> {
     const { ctx } = await requireAdminOrManager()
 
@@ -105,11 +137,45 @@ export async function getVenditoriMonitor(filters: {
         ? filters.venditoreIds
         : venditori.map(v => v.id)
 
+    const penaltyMonthKey = filters.penaltyMonthKey || romeMonthKey(new Date())
+
     if (targetIds.length === 0) {
-        return { venditori, appointments: [], upcomingFollowUps: [], overdueFollowUps: [], inLavorazione: [] }
+        return {
+            venditori, appointments: [], upcomingFollowUps: [], overdueFollowUps: [],
+            inLavorazione: [], latePenalties: [], latePenaltySummary: [], penaltyMonthKey,
+        }
     }
 
     const nameOf = new Map(venditori.map(v => [v.id, v.name]))
+
+    // Ritardi a registro. Servono a due cose: escludere dalle liste le scadenze
+    // già "uscite dal monitor" (decisione PO 2026-09-09) e alimentare la sezione
+    // Ritardi del mese selezionato.
+    const penaltyRows = await db.select({
+        id: salesLatePenalties.id,
+        leadId: salesLatePenalties.leadId,
+        salesUserId: salesLatePenalties.salesUserId,
+        kind: salesLatePenalties.kind,
+        dueAt: salesLatePenalties.dueAt,
+        resolvedAt: salesLatePenalties.resolvedAt,
+        amountEur: salesLatePenalties.amountEur,
+        monthKey: salesLatePenalties.monthKey,
+        leadName: leads.name,
+    }).from(salesLatePenalties)
+      .innerJoin(leads, eq(leads.id, salesLatePenalties.leadId))
+      .where(and(
+          eq(salesLatePenalties.companyId, ctx.companyId),
+          inArray(salesLatePenalties.salesUserId, targetIds),
+      ))
+      .orderBy(desc(salesLatePenalties.dueAt))
+
+    // Chiavi delle scadenze penalizzate: una scadenza a registro non compare più
+    // nelle liste operative, è già passata al conteggio dei ritardi.
+    const penalisedKeys = new Set(penaltyRows.map(r => penaltyKey({
+        leadId: r.leadId,
+        kind: r.kind as PenaltyKind,
+        dueAt: r.dueAt,
+    })))
 
     // Appuntamenti nel range
     const apptRows = await db.select({
@@ -131,7 +197,11 @@ export async function getVenditoriMonitor(filters: {
         lte(leads.appointmentDate, filters.endDate),
     )).orderBy(asc(leads.appointmentDate))
 
-    const appointments: AppointmentRow[] = apptRows.map(r => ({
+    const appointments: AppointmentRow[] = apptRows.filter(r => !penalisedKeys.has(penaltyKey({
+        leadId: r.id,
+        kind: 'APPOINTMENT',
+        dueAt: r.appointmentDate as Date,
+    }))).map(r => ({
         leadId: r.id,
         leadName: r.name || 'Senza nome',
         leadPhone: r.phone ?? null,
@@ -199,7 +269,10 @@ export async function getVenditoriMonitor(filters: {
             salespersonOutcomeNotes: r.salespersonOutcomeNotes ?? null,
         }
         if (date < now) {
-            overdue.push(row)
+            // Un follow-up già passato al conteggio ritardi non torna in lista.
+            if (!penalisedKeys.has(penaltyKey({ leadId: r.leadId, kind: 'FOLLOWUP', dueAt: date }))) {
+                overdue.push(row)
+            }
         } else if (date >= filters.startDate && date <= filters.endDate) {
             upcoming.push(row)
         }
@@ -236,5 +309,79 @@ export async function getVenditoriMonitor(filters: {
         }))
         .sort((a, b) => b.maxDays - a.maxDays)
 
-    return { venditori, appointments, upcomingFollowUps: upcoming, overdueFollowUps: overdue, inLavorazione }
+    // Ritardi del mese selezionato + riepilogo per venditore.
+    const monthPenalties = penaltyRows.filter(r => r.monthKey === penaltyMonthKey)
+    const latePenalties: LatePenaltyRow[] = monthPenalties.map(r => ({
+        id: r.id,
+        leadId: r.leadId,
+        leadName: r.leadName || 'Senza nome',
+        venditoreId: r.salesUserId,
+        venditoreName: nameOf.get(r.salesUserId) || '—',
+        kind: r.kind as PenaltyKind,
+        dueAt: r.dueAt,
+        resolvedAt: r.resolvedAt ?? null,
+        hoursLate: lateHours(r.dueAt, r.resolvedAt ?? null, now),
+        amountEur: r.amountEur,
+    }))
+
+    const summaryMap = new Map<string, LatePenaltySummary>()
+    for (const p of latePenalties) {
+        const cur = summaryMap.get(p.venditoreId) ?? {
+            venditoreId: p.venditoreId,
+            venditoreName: p.venditoreName,
+            count: 0,
+            openCount: 0,
+            totalEur: 0,
+        }
+        cur.count += 1
+        if (!p.resolvedAt) cur.openCount += 1
+        cur.totalEur += p.amountEur
+        summaryMap.set(p.venditoreId, cur)
+    }
+    const latePenaltySummary = [...summaryMap.values()].sort((a, b) => b.count - a.count)
+
+    return {
+        venditori,
+        appointments,
+        upcomingFollowUps: upcoming,
+        overdueFollowUps: overdue,
+        inLavorazione,
+        latePenalties,
+        latePenaltySummary,
+        penaltyMonthKey,
+    }
+}
+
+/**
+ * Ritardi del venditore loggato nel mese corrente: alimenta il badge sulla sua
+ * dashboard. Ognuno vede solo i propri (staff incluso, per il proprio account).
+ */
+export async function getMyLatePenalties(monthKey?: string): Promise<{
+    monthKey: string
+    count: number
+    openCount: number
+    totalEur: number
+}> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { monthKey: monthKey || romeMonthKey(new Date()), count: 0, openCount: 0, totalEur: 0 }
+
+    const ctx = await currentTenant()
+    const mk = monthKey || romeMonthKey(new Date())
+
+    const rows = await db.select({
+        resolvedAt: salesLatePenalties.resolvedAt,
+        amountEur: salesLatePenalties.amountEur,
+    }).from(salesLatePenalties).where(and(
+        eq(salesLatePenalties.companyId, ctx.companyId),
+        eq(salesLatePenalties.salesUserId, user.id),
+        eq(salesLatePenalties.monthKey, mk),
+    ))
+
+    return {
+        monthKey: mk,
+        count: rows.length,
+        openCount: rows.filter(r => !r.resolvedAt).length,
+        totalEur: rows.reduce((s, r) => s + (r.amountEur || 0), 0),
+    }
 }

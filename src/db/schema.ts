@@ -1474,3 +1474,33 @@ export const riconciliazioneEntries = pgTable('riconciliazioneEntries', {
     before: jsonb('before').notNull(),
     after: jsonb('after').notNull(),
 });
+
+// Malus ritardi venditori (decisione PO 2026-09-09): una riga per SCADENZA non
+// esitata oltre OVERDUE_GRACE_HOURS. A fine mese ogni riga vale `amountEur` di
+// trattenuta. L'importo è congelato sulla riga: cambiare la tariffa domani non
+// riscrive lo storico già maturato.
+export const salesLatePenalties = pgTable('salesLatePenalties', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    leadId: text('leadId').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    // 'APPOINTMENT' = esito post-appuntamento mai registrato; 'FOLLOWUP' = follow-up scaduto.
+    kind: text('kind').notNull(),
+    // Scadenza che ha fatto scattare il malus: ora dell'appuntamento o del follow-up.
+    // Chiave dell'idempotenza: rifissare a una data nuova crea una scadenza nuova,
+    // ma la stessa scadenza non può mai generare due penali.
+    dueAt: timestamp('dueAt', { withTimezone: true, mode: 'date' }).notNull(),
+    // Istante in cui il malus è scattato (dueAt + grazia, arrotondato al giro di cron).
+    detectedAt: timestamp('detectedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    // Timbrato quando il venditore registra finalmente l'esito: dà le ore di ritardo reali.
+    resolvedAt: timestamp('resolvedAt', { withTimezone: true, mode: 'date' }),
+    amountEur: real('amountEur').default(10).notNull(),
+    // 'YYYY-MM' della scadenza in Europe/Rome: è il mese su cui si fa la trattenuta.
+    monthKey: text('monthKey').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        dueUnique: uniqueIndex('sales_late_penalties_due_uq').on(table.leadId, table.kind, table.dueAt),
+        userMonthIdx: index('sales_late_penalties_user_month_idx').on(table.companyId, table.salesUserId, table.monthKey),
+    };
+});

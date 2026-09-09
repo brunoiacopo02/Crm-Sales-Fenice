@@ -3,7 +3,8 @@
 import { useState, useEffect, useTransition } from "react"
 import { getVenditoreAppointments, getVenditoreFollowUps, saveVenditoreOutcome, startNegotiation, getLeadBriefing, rescheduleFollowUp, parkLead } from "@/app/actions/venditoreActions"
 import { getVenditorePerformance } from "@/app/actions/venditorePerformanceActions"
-import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History } from "lucide-react"
+import { getMyLatePenalties } from "@/app/actions/venditoriMonitorActions"
+import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History, Timer } from "lucide-react"
 import { toRomeDatetimeLocal, parseRomeDatetimeLocal } from "@/lib/dateUtils"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
@@ -32,6 +33,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
     const [perfMonth, setPerfMonth] = useState<string>(() => currentYearMonthRome())
     const [perfData, setPerfData] = useState<any>(null)
+    const [latePenalties, setLatePenalties] = useState<{ count: number; openCount: number; totalEur: number } | null>(null)
 
     // Filters
     const [search, setSearch] = useState("")
@@ -169,6 +171,9 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     useEffect(() => {
         fetchAppointments()
         fetchFollowUps()
+        getMyLatePenalties()
+            .then(setLatePenalties)
+            .catch(() => setLatePenalties(null))
 
         // Bus Broadcast (migrazione 0019): ping ad ogni cambio sulla tabella
         // leads della company; la refetch è già scoped al venditore.
@@ -227,6 +232,28 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     return (
         <div className="space-y-6 animate-fade-in">
             <WeeklyFocusBanner salesUserId={sellerId} />
+
+            {/* Malus ritardi: scadenze non esitate entro 2 ore dall'appuntamento o dal follow-up */}
+            {latePenalties && latePenalties.count > 0 && (
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                    <Timer className="h-5 w-5 shrink-0 text-rose-600" />
+                    <div className="text-sm text-rose-900">
+                        <span className="font-bold">
+                            {latePenalties.count} {latePenalties.count === 1 ? 'ritardo' : 'ritardi'} questo mese
+                        </span>
+                        <span className="mx-1.5 text-rose-400">&middot;</span>
+                        <span className="font-semibold">-{latePenalties.totalEur.toFixed(0)} &euro;</span>
+                        <span className="ml-2 text-rose-700/80">
+                            Ogni appuntamento o follow-up va esitato entro 2 ore.
+                        </span>
+                    </div>
+                    {latePenalties.openCount > 0 && (
+                        <span className="rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white">
+                            {latePenalties.openCount} ancora da esitare
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Toolbar */}
             <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-soft border border-ash-200/60 flex flex-col md:flex-row gap-4 items-center justify-between">
