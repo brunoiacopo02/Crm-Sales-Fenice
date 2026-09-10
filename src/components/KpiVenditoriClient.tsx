@@ -139,13 +139,14 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                     <th scope="col" className="px-6 py-4 text-center">Chiusi</th>
                                     <th scope="col" className="px-6 py-4 text-center">Non Chiusi</th>
                                     <th scope="col" className="px-6 py-4 text-center">Spariti</th>
+                                    <th scope="col" className="px-6 py-4 text-center">Presenze</th>
                                     <th scope="col" className="px-6 py-4 text-center">Closing Rate</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-ash-100/60">
                                 {kpiData.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="px-6 py-12 text-center text-ash-400">
+                                        <td colSpan={10} className="px-6 py-12 text-center text-ash-400">
                                             Nessun dato disponibile nel periodo.
                                         </td>
                                     </tr>
@@ -220,10 +221,19 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-ash-800 font-bold">{row.chiusi}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-ash-500">{row.nonChiusi}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-ash-400">{row.sparito}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-ash-600 font-semibold">{row.presenze}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                    <div className="flex items-center justify-center gap-1.5 font-bold text-ash-800">
-                                                        <Target className={`w-4 h-4 ${row.closingRate >= 20 ? 'text-emerald-500' : 'text-brand-orange-500'}`} />
-                                                        {row.closingRate}%
+                                                    {/* Closing rate di coorte: le presenze del periodo, non gli esiti
+                                                        registrati nel periodo (vedi lib/kpi/salesCohort.ts). La frazione
+                                                        sotto serve perche' "Chiusi" sono le firme del mese e possono non
+                                                        coincidere col numeratore della coorte: senza di essa la
+                                                        percentuale sembrerebbe sbagliata. */}
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <div className="flex items-center justify-center gap-1.5 font-bold text-ash-800">
+                                                            <Target className={`w-4 h-4 ${row.closingRate >= 20 ? 'text-emerald-500' : 'text-brand-orange-500'}`} />
+                                                            {row.closingRate}%
+                                                        </div>
+                                                        <div className="text-[10px] text-ash-400">{row.chiusiCoorte}/{row.presenze} presenze</div>
                                                     </div>
                                                 </td>
                                             </tr>

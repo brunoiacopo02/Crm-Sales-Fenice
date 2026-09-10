@@ -888,7 +888,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 open={!!closeModalLead}
                 leadName={closeModalLead?.name}
                 onCancel={() => setCloseModalLead(null)}
-                onSubmit={async ({ closeAmountEur, closedAtDateStr }) => {
+                onSubmit={async ({ closeAmountEur, closedAtDateStr, closeProduct }) => {
                     if (!closeModalLead) return;
                     // Costruisci un Date a mezzogiorno Europe/Rome del giorno scelto
                     // per evitare ambiguità di offset (DST) sui bordi settimana.
@@ -900,6 +900,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         undefined,
                         closeAmountEur,
                         closedAt,
+                        closeProduct,
                     );
                     if (res.success) {
                         setCloseModalLead(null);
@@ -913,7 +914,9 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                     ? 'Data chiusura obbligatoria.'
                                     : res.error === 'CLOSE_DATE_INVALID'
                                         ? 'Data chiusura non valida.'
-                                        : (res.error || 'Errore');
+                                        : res.error === 'CLOSE_PRODUCT_REQUIRED'
+                                            ? 'Prodotto obbligatorio.'
+                                            : (res.error || 'Errore');
                         throw new Error(msg);
                     }
                 }}

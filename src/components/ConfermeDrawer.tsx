@@ -95,6 +95,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
         }
         return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
     })
+    // Prodotto venduto — obbligatorio come l'importo quando l'esito è 'Chiuso'.
+    // Senza campo dedicato gli operatori lo scrivevano nelle note libere e lo
+    // storico restava senza mix prodotto.
+    const [spCloseProduct, setSpCloseProduct] = useState<string>(lead?.closeProduct || "")
     const [savingSpOutcome, setSavingSpOutcome] = useState(false)
 
     // Presence states
@@ -300,6 +304,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
             if (!spClosedAt || !/^\d{4}-\d{2}-\d{2}$/.test(spClosedAt)) {
                 return alert("Inserisci la data della chiusura");
             }
+            if (!spCloseProduct) {
+                return alert("Seleziona il prodotto venduto (Advance, Gold o Exclusive)");
+            }
         }
         setSavingSpOutcome(true)
         try {
@@ -315,9 +322,17 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                 spNotes,
                 amt,
                 closedAt,
+                spOutcome === 'Chiuso' ? spCloseProduct : undefined,
             )
             if (result && !result.success) {
-                alert(`Errore salvataggio esito venditore: ${result.error}`);
+                const msg = result.error === 'CLOSE_PRODUCT_REQUIRED'
+                    ? "Prodotto obbligatorio: seleziona Advance, Gold o Exclusive."
+                    : result.error === 'CLOSE_AMOUNT_REQUIRED'
+                        ? "Importo obbligatorio (> 0)."
+                        : result.error === 'CLOSE_DATE_REQUIRED'
+                            ? "Data chiusura obbligatoria."
+                            : result.error;
+                alert(`Errore salvataggio esito venditore: ${msg}`);
                 return;
             }
             if (result?.rewardData) {
@@ -947,8 +962,23 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                             className="w-full px-4 py-3 border-2 border-emerald-300 bg-emerald-50/40 rounded-xl font-bold text-ash-800 outline-none focus:border-emerald-500 shadow-sm"
                                                         />
                                                     </div>
+                                                    <div className="sm:col-span-2">
+                                                        <label className="block text-[11px] uppercase tracking-wider font-bold text-ash-600 mb-1.5">
+                                                            Prodotto venduto
+                                                        </label>
+                                                        <select
+                                                            value={spCloseProduct}
+                                                            onChange={e => setSpCloseProduct(e.target.value)}
+                                                            className="w-full px-4 py-3 border-2 border-emerald-300 bg-emerald-50/40 rounded-xl font-bold text-ash-800 outline-none focus:border-emerald-500 shadow-sm"
+                                                        >
+                                                            <option value="">Seleziona prodotto...</option>
+                                                            <option value="advance">Advance</option>
+                                                            <option value="gold">Gold</option>
+                                                            <option value="exclusive">Exclusive</option>
+                                                        </select>
+                                                    </div>
                                                     <p className="sm:col-span-2 -mt-1 text-[10px] text-ash-500">
-                                                        Importo e data sono entrambi obbligatori. La data determina in quale
+                                                        Importo, data e prodotto sono tutti obbligatori. La data determina in quale
                                                         settimana il lead viene contato nello storico chiusure.
                                                     </p>
                                                 </div>

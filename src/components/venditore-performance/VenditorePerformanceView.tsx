@@ -15,11 +15,17 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
 
 export function VenditorePerformanceView({ data }: { data: VenditorePerformanceData }) {
     const { closing: c, followUpFunnel: f, attemptsToClose: a } = data
+    // Closing rate di coorte: denominatore = presenze del mese. Le trattative ancora
+    // aperte stanno nel denominatore, quindi a metà mese il rate è fisiologicamente
+    // basso: senza dirlo sembra un crollo.
+    const closingSub = c.inLavorazione > 0
+        ? `${c.chiusi}/${c.presenze} presenze · ${c.inLavorazione} in lavorazione`
+        : `${c.chiusi}/${c.presenze} presenze`
     return (
         <div className="space-y-6">
             {/* KPI principali */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <Kpi label="Closing rate" value={`${c.closingPct}%`} sub={`${c.chiusi}/${c.totalEsitati} esitati`} />
+                <Kpi label="Closing rate" value={`${c.closingPct}%`} sub={closingSub} />
                 <Kpi label="Fatturato" value={`€${c.fatturato.toLocaleString('it-IT')}`} sub={`Ticket medio €${c.ticketMedio.toLocaleString('it-IT')}`} />
                 <Kpi label="Conversione follow-up" value={`${f.conversionPct}%`} sub={`${f.closed}/${f.enteredFollowUp} chiusi da richiamo`} />
                 <Kpi label="Tentativi medi a chiusura" value={`${a.avgAttempts}`} sub={`${a.firstShotPct}% chiusi al 1° colpo`} />

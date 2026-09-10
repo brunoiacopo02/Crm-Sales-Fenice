@@ -777,6 +777,15 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
     }
 }
 
+/**
+ * Valori ammessi per il prodotto venduto: sono le stringhe minuscole già usate
+ * su `leads.closeProduct` e `salesAttempts.closeProduct` (vedi schema.ts) e nei
+ * selettori lato venditore (VenditoreDrawer / StoricoTrattativeTab).
+ * Non esportato: questo file è "use server", può esportare solo funzioni async.
+ */
+const CLOSE_PRODUCTS = ['advance', 'gold', 'exclusive'] as const
+type CloseProduct = typeof CLOSE_PRODUCTS[number]
+
 export async function setSalespersonOutcome(
     leadId: string,
     currentVersion: number,
@@ -790,6 +799,17 @@ export async function setSalespersonOutcome(
      * default a `new Date()` (oggi).
      */
     closedAt?: Date | string | null,
+    /**
+     * Prodotto venduto ('advance' | 'gold' | 'exclusive'). OBBLIGATORIO quando
+     * outcome === 'Chiuso'. Fino al 2026-09 questa action non aveva nemmeno il
+     * parametro e scriveva `closeProduct: null`: gli operatori finivano per
+     * annotare il prodotto nelle note libere (es. "pm exc" su Cristina Cioresco,
+     * 01/09) e lo storico restava senza mix prodotto (4 chiusure a settembre,
+     * 9 ad agosto, 11 a luglio). Nessuna deduzione dall'importo: si sceglie a mano.
+     * NB: parametro IN FONDO alla firma perché gli argomenti sono posizionali e
+     * i chiamanti esistenti passano un numero variabile di argomenti.
+     */
+    closeProduct?: string | null,
 ) {
     try {
         const supabase = await createClient();
@@ -799,15 +819,18 @@ export async function setSalespersonOutcome(
             return { success: false, error: "Unauthorized" }
         }
 
-        // Validazione "Chiuso": importo + data sempre obbligatori. Senza
-        // di entrambi, lo storico chiusure perde precisione (giorno errato
-        // o fatturato mancante).
+        // Validazione "Chiuso": importo + data + prodotto sempre obbligatori. Senza
+        // di essi, lo storico chiusure perde precisione (giorno errato,
+        // fatturato mancante o mix prodotto sconosciuto).
         if (outcome === 'Chiuso') {
             if (typeof closeAmountEur !== 'number' || !(closeAmountEur > 0)) {
                 return { success: false, error: 'CLOSE_AMOUNT_REQUIRED' }
             }
             if (!closedAt) {
                 return { success: false, error: 'CLOSE_DATE_REQUIRED' }
+            }
+            if (!closeProduct || !CLOSE_PRODUCTS.includes(closeProduct as CloseProduct)) {
+                return { success: false, error: 'CLOSE_PRODUCT_REQUIRED' }
             }
         }
 
@@ -875,6 +898,13 @@ export async function setSalespersonOutcome(
             ? { closeAmountEur }
             : {};
 
+        // closeProduct: stesso pattern dell'importo. Si scrive SOLO su 'Chiuso'
+        // con un prodotto valido, così un successivo "Non chiuso" non azzera per
+        // sbaglio il prodotto di una chiusura già registrata.
+        const closeProductPatch = (outcome === 'Chiuso' && closeProduct && CLOSE_PRODUCTS.includes(closeProduct as CloseProduct))
+            ? { closeProduct: closeProduct as CloseProduct }
+            : {};
+
         const updated = await db.update(leads).set({
             salespersonOutcome: outcome,
             salespersonOutcomeNotes: notes || null,
@@ -890,6 +920,7 @@ export async function setSalespersonOutcome(
             version: oldLead.version + 1,
             updatedAt: new Date(),
             ...closeAmountPatch,
+            ...closeProductPatch,
         }).where(and(
             eq(leads.companyId, ctx.companyId),
             eq(leads.id, leadId),
@@ -918,7 +949,10 @@ export async function setSalespersonOutcome(
                     outcome,
                     notClosedReason: null,
                     nextFollowUpDate: null,
-                    closeProduct: null,
+                    // Il prodotto va specchiato qui come l'importo: /performance-venditori
+                    // legge SOLO salesAttempts, quindi un null qui rende invisibile il
+                    // mix prodotto anche quando il lead lo ha.
+                    closeProduct: (outcome === 'Chiuso' && closeProduct && CLOSE_PRODUCTS.includes(closeProduct as CloseProduct)) ? (closeProduct as CloseProduct) : null,
                     closeAmountEur: (outcome === 'Chiuso' && typeof closeAmountEur === 'number' && closeAmountEur > 0) ? closeAmountEur : null,
                     outcomeAt,
                     companyId: ctx.companyId,
@@ -943,7 +977,9 @@ export async function setSalespersonOutcome(
             eventType: "salesperson_outcome_set",
             userId: session.user.id,
             timestamp: new Date(),
-            metadata: { outcome, notes },
+            // Il prodotto entra nei metadata: la Timeline Eventi era l'unico posto
+            // dove si poteva ricostruire una chiusura, e finora non lo riportava.
+            metadata: { outcome, notes, closeProduct: closeProductPatch.closeProduct ?? null },
             companyId: ctx.companyId,
         })
 

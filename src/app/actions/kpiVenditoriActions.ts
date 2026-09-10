@@ -2,10 +2,11 @@
 
 import { db } from "@/db"
 import { leads, users } from "@/db/schema"
-import { eq, and, gte, lt, isNotNull } from "drizzle-orm"
+import { eq, and, or, gte, lt, isNotNull } from "drizzle-orm"
 import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy';
+import { cohortClosing } from "@/lib/kpi/salesCohort"
 
 // Normalizza il funnel come nel resto del codebase: trim + UPPER, vuoto/null → SCONOSCIUTO
 const normFunnel = (f: string | null | undefined) => (f ?? '').trim().toUpperCase() || 'SCONOSCIUTO'
@@ -57,45 +58,81 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         salesTargetEur: users.salesTargetEur,
     }).from(users).where(and(eq(users.role, 'VENDITORE'), companyScope(ctx, users.companyId)))
 
-    // Prendiamo tutti gli esiti dei venditori nel periodo (salespersonOutcomeAt
-    // come campo data canonico — vedi lib/metricsUtils mapping M5/M6).
+    // Una sola lettura per DUE metriche che vivono su date diverse (PO 2026-09-10):
+    //
+    //  - SOLDI (fatturato/chiusi/non chiusi/spariti/persi/totalEsitati): mese della
+    //    FIRMA, cioè `salespersonOutcomeAt` nel periodo. È la base di target, bonus
+    //    e riconciliazione col foglio: non si tocca.
+    //  - CLOSING RATE: rapporto di COORTE sulle PRESENZE del periodo
+    //    (`presentedAt`), regola canonica in `lib/kpi/salesCohort.ts`.
+    //
+    // Il closing rate calcolato sugli esiti del periodo era sbagliato perché
+    // `salespersonOutcomeAt` si sposta a OGNI follow-up: la presenza di agosto
+    // ricadeva nel denominatore di settembre appena il venditore registrava un
+    // richiamo, e le presenze di settembre non ancora esitate non ci entravano
+    // affatto (settembre 2026: 111 "esitati" contro 81 presenze reali).
+    //
+    // Per questo la WHERE prende i lead con presenza NEL periodo OPPURE esito NEL
+    // periodo, e `isNotNull(salespersonOutcome)` NON sta più nel filtro generale:
+    // altrimenti una presenza ancora in lavorazione (che nella coorte deve stare
+    // al denominatore) verrebbe scartata dalla query. La condizione è riapplicata
+    // sotto, solo sul sottoinsieme "firme del periodo".
     // Pattern bounds: gte(start) AND lt(end) — NO off-by-one ms.
-    const outcomes = await db.select({
+    const rows = await db.select({
         salespersonUserId: leads.salespersonUserId,
-        outcome: leads.salespersonOutcome,
+        salespersonOutcome: leads.salespersonOutcome,
+        outcomeAt: leads.salespersonOutcomeAt,
+        presentedAt: leads.presentedAt,
         amount: leads.closeAmountEur,
         funnel: leads.funnel
     }).from(leads).where(
         and(
             companyScope(ctx, leads.companyId),
-            isNotNull(leads.salespersonOutcome),
             isNotNull(leads.salespersonUserId),
-            gte(leads.salespersonOutcomeAt, startDate),
-            lt(leads.salespersonOutcomeAt, endDate)
+            or(
+                and(
+                    gte(leads.presentedAt, startDate),
+                    lt(leads.presentedAt, endDate)
+                ),
+                and(
+                    isNotNull(leads.salespersonOutcome),
+                    gte(leads.salespersonOutcomeAt, startDate),
+                    lt(leads.salespersonOutcomeAt, endDate)
+                )
+            )
         )
     )
 
     // Filtro per funnel: se selezionato un funnel specifico, ricalcola tutta la
-    // tabella (chiusi/non chiusi/spariti/CR/fatturato/posizioni) sul solo sottoinsieme.
+    // tabella (chiusi/non chiusi/spariti/CR/fatturato/posizioni) sul solo
+    // sottoinsieme — coorte delle presenze inclusa.
     const wantFunnel = funnelFilter && funnelFilter !== ALL_FUNNELS ? funnelFilter : null
-    const scopedOutcomes = wantFunnel
-        ? outcomes.filter(o => normFunnel(o.funnel) === wantFunnel)
-        : outcomes
+    const scopedRows = wantFunnel
+        ? rows.filter(r => normFunnel(r.funnel) === wantFunnel)
+        : rows
+
+    // Un lead è una "firma del periodo" se l'esito corrente è stato registrato
+    // nel periodo: è il sottoinsieme monetario di cui sopra.
+    const isSignedInPeriod = (r: typeof scopedRows[number]) =>
+        !!r.salespersonOutcome && !!r.outcomeAt && r.outcomeAt >= startDate && r.outcomeAt < endDate
 
     const results = venditori.map(v => {
-        const vOutcomes = scopedOutcomes.filter(o => o.salespersonUserId === v.id)
+        const vRows = scopedRows.filter(r => r.salespersonUserId === v.id)
+        const vOutcomes = vRows.filter(isSignedInPeriod)
 
-        const chiusi = vOutcomes.filter(o => o.outcome === 'Chiuso').length
-        const nonChiusi = vOutcomes.filter(o => o.outcome === 'Non chiuso').length
-        const sparito = vOutcomes.filter(o => o.outcome === 'Sparito').length
-        const perso = vOutcomes.filter(o => o.outcome === 'Perso').length
+        const chiusi = vOutcomes.filter(o => o.salespersonOutcome === 'Chiuso').length
+        const nonChiusi = vOutcomes.filter(o => o.salespersonOutcome === 'Non chiuso').length
+        const sparito = vOutcomes.filter(o => o.salespersonOutcome === 'Sparito').length
+        const perso = vOutcomes.filter(o => o.salespersonOutcome === 'Perso').length
 
         const totalEsitati = chiusi + nonChiusi + sparito + perso
-        const closingRate = totalEsitati > 0 ? (chiusi / totalEsitati) * 100 : 0
 
         const fatturato = vOutcomes
-            .filter(o => o.outcome === 'Chiuso')
+            .filter(o => o.salespersonOutcome === 'Chiuso')
             .reduce((sum, o) => sum + (o.amount || 0), 0)
+
+        // Closing rate di coorte: denominatore = presenze del periodo.
+        const coorte = cohortClosing(vRows, startDate, endDate)
 
         return {
             id: v.id,
@@ -105,7 +142,9 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
             sparito,
             perso,
             totalEsitati,
-            closingRate: Math.round(closingRate),
+            presenze: coorte.presenze,
+            chiusiCoorte: coorte.chiusi,
+            closingRate: coorte.closingPct,
             fatturato,
             salesTargetEur: v.salesTargetEur,
         }

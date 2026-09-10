@@ -27,7 +27,9 @@ export interface VenditorePerformanceData {
     reasonDistribution: { reason: string; count: number; pct: number }[];
     topReason: { reason: string; pct: number } | null;
     followUpFunnel: { enteredFollowUp: number; closed: number; conversionPct: number };
-    closing: { chiusi: number; nonChiusi: number; perso: number; sparito: number; totalEsitati: number; closingPct: number; fatturato: number; ticketMedio: number; topProduct: string | null };
+    // `presenze` = denominatore di coorte (lead con presentedAt nel mese), `inLavorazione`
+    // = presenze del mese ancora senza esito. `fatturato` resta sul mese della firma.
+    closing: { chiusi: number; nonChiusi: number; perso: number; sparito: number; inLavorazione: number; presenze: number; closingPct: number; fatturato: number; ticketMedio: number; topProduct: string | null };
     attemptsToClose: { avgAttempts: number; firstShotPct: number };
     overdueFollowUps: number;
     trend: { yearMonth: string; closingPct: number; followUpConversionPct: number }[];
@@ -54,7 +56,12 @@ export async function getVenditorePerformance(input: { salesUserId: string; year
         closeProduct: salesAttempts.closeProduct,
         closeAmountEur: salesAttempts.closeAmountEur,
         outcomeAt: salesAttempts.outcomeAt,
-    }).from(salesAttempts).where(and(
+        // Latch presenza del lead: serve al closing rate di coorte (stesso valore su
+        // tutte le righe dello stesso lead).
+        presentedAt: leads.presentedAt,
+    }).from(salesAttempts)
+      .innerJoin(leads, eq(leads.id, salesAttempts.leadId))
+      .where(and(
         companyScope(ctx, salesAttempts.companyId),
         eq(salesAttempts.salesUserId, input.salesUserId),
     ))
@@ -68,6 +75,7 @@ export async function getVenditorePerformance(input: { salesUserId: string; year
         closeProduct: r.closeProduct,
         closeAmountEur: r.closeAmountEur,
         outcomeAt: new Date(r.outcomeAt),
+        presentedAt: r.presentedAt ? new Date(r.presentedAt) : null,
     }))
 
     const { start, end } = monthBoundsRome(input.yearMonth)

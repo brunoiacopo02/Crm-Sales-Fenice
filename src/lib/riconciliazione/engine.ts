@@ -449,11 +449,33 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                     salespersonAssigned: leads.salespersonAssigned,
                     salespersonUserId: leads.salespersonUserId,
                     salesCycleStartAt: leads.salesCycleStartAt,
+                    // Servono al latch presenza e all'attribuzione FK di una
+                    // chiusura applicata dal foglio (vedi leadSet più sotto).
+                    presentedAt: leads.presentedAt,
+                    appointmentDate: leads.appointmentDate,
                 }).from(leads).where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, leadId)));
 
                 if (!currentLead) {
                     throw new Error(`Lead ${leadId} non trovato durante l'applicazione (famiglia ${e.family}).`);
                 }
+
+                // La storia passa SEMPRE da resolveAttemptWrite: è l'unica cosa che
+                // impedisce a una correzione di duplicare il tentativo e contare due
+                // volte il fatturato (il bug chiuso dalla guardia dopo l'incidente di
+                // luglio: ogni ri-registrazione inseriva un nuovo salesAttempts).
+                // Letti QUI e non più sotto perché servono anche a `leadSet`, che
+                // ripesca da un tentativo esistente il venditore da attribuire.
+                const attempts = await tx.select({
+                    id: salesAttempts.id,
+                    outcome: salesAttempts.outcome,
+                    outcomeAt: salesAttempts.outcomeAt,
+                    attemptNumber: salesAttempts.attemptNumber,
+                    closeAmountEur: salesAttempts.closeAmountEur,
+                    closeProduct: salesAttempts.closeProduct,
+                    salesUserId: salesAttempts.salesUserId,
+                })
+                    .from(salesAttempts)
+                    .where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.leadId, leadId)));
 
                 // Ogni famiglia tocca SOLO i campi che la sua regola elenca alla
                 // lettera — 'importo' in particolare corregge solo l'importo, non
@@ -471,13 +493,45 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                     leadSet.salespersonOutcomeNotes = `Riconciliazione ${monthKey}: assente dal foglio o Stand-by`;
                 } else {
                     // esito-mancante | lead-scartato: il foglio dice che ha firmato,
-                    // il CRM no. Non tocca status/presentedAt/appointmentDate/
+                    // il CRM no. Non tocca status/appointmentDate/
                     // confirmationsOutcome/funnel: la chiusura resta attribuita al
                     // funnel che il lead ha già.
                     leadSet.salespersonOutcome = 'Chiuso';
                     leadSet.salespersonOutcomeAt = e.sheet!.signedAt;
                     leadSet.closeAmountEur = e.sheet!.amountEur;
                     leadSet.salespersonAssigned = e.sheet!.salesCode ?? currentLead.salespersonAssigned;
+
+                    // Latch presenza (PO 2026-07-17). Una firma È una presenza: senza
+                    // questo, la chiusura applicata dal foglio finiva al NUMERATORE
+                    // del closing rate senza mai entrare nel denominatore, perché il
+                    // denominatore gira su `presentedAt` (src/lib/kpi/salesCohort.ts).
+                    // Erano 3 lead a fine agosto/settembre 2026 (Luca Pierdominici,
+                    // Martina Cioeta, Bechir Jaballah). Il latch non si sovrascrive
+                    // mai: si scrive solo se ancora vuoto.
+                    if (!currentLead.presentedAt) {
+                        leadSet.presentedAt = currentLead.appointmentDate ?? e.sheet!.signedAt;
+                    }
+
+                    // Attribuzione FK. Il motore risolveva il venditore per la riga
+                    // `salesAttempts` (salesUserId) ma sul lead scriveva solo
+                    // `salespersonAssigned`, che è testo: /kpi-venditori raggruppa su
+                    // `salespersonUserId` e quindi NON vedeva la vendita. Bechir
+                    // Jaballah, €3.670 di Sales 004 dell'08/09/2026, era invisibile
+                    // nella sua classifica. Anche qui si riempie solo se vuoto: non
+                    // si riassegna una vendita già attribuita.
+                    if (!currentLead.salespersonUserId) {
+                        const fromSheet = e.sheet?.salesCode
+                            ? salesCodeToUserId.get(e.sheet.salesCode) ?? null
+                            : null;
+                        // Fallback sul venditore di un tentativo già registrato. Non
+                        // si usa `resolveSalesUserId`: qui un codice non risolvibile
+                        // non deve abortire una run che oggi funziona — la scrittura
+                        // dell'attempt più sotto resta l'unico punto che pretende
+                        // un'attribuzione certa.
+                        const fromAttempt = attempts.find(a => a.salesUserId)?.salesUserId ?? null;
+                        const resolved = fromSheet ?? fromAttempt;
+                        if (resolved) leadSet.salespersonUserId = resolved;
+                    }
                 }
 
                 const leadBefore: Record<string, unknown> = {};
@@ -487,21 +541,6 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                     leadBefore[key] = (currentLead as Record<string, unknown>)[key];
                     leadAfter[key] = leadSet[key];
                 }
-
-                // La storia passa SEMPRE da resolveAttemptWrite: è l'unica cosa che
-                // impedisce a una correzione di duplicare il tentativo e contare due
-                // volte il fatturato (il bug chiuso dalla guardia dopo l'incidente di
-                // luglio: ogni ri-registrazione inseriva un nuovo salesAttempts).
-                const attempts = await tx.select({
-                    id: salesAttempts.id,
-                    outcome: salesAttempts.outcome,
-                    outcomeAt: salesAttempts.outcomeAt,
-                    attemptNumber: salesAttempts.attemptNumber,
-                    closeAmountEur: salesAttempts.closeAmountEur,
-                    closeProduct: salesAttempts.closeProduct,
-                })
-                    .from(salesAttempts)
-                    .where(and(eq(salesAttempts.companyId, COMPANY_ID), eq(salesAttempts.leadId, leadId)));
 
                 const attemptOutcome = e.family === 'solo-crm' ? 'Non chiuso' : 'Chiuso';
                 const write = resolveAttemptWrite({
@@ -682,7 +721,7 @@ function reviveDate(value: unknown): Date {
 // Uniche colonne timestamp di `leads` che le famiglie di riconciliazione
 // toccano oggi (vedi applicaCorrezioni: ramo esito-mancante/lead-scartato).
 // Se una futura famiglia tocca un altro campo data, va aggiunto qui.
-const LEAD_TIMESTAMP_FIELDS = ['salespersonOutcomeAt'] as const;
+const LEAD_TIMESTAMP_FIELDS = ['salespersonOutcomeAt', 'presentedAt'] as const;
 
 function reviveLeadSnapshot(lead: Record<string, unknown>): Record<string, unknown> {
     const revived: Record<string, unknown> = { ...lead };
@@ -852,6 +891,13 @@ export async function annullaRunCome(adminUserId: string, runId: string): Promis
                     closeProduct: leads.closeProduct,
                     salespersonOutcomeNotes: leads.salespersonOutcomeNotes,
                     salespersonAssigned: leads.salespersonAssigned,
+                    // Dal 2026-09-10 il ramo esito-mancante/lead-scartato scrive anche
+                    // questi due. Se mancassero qui, Ruling B leggerebbe `undefined`
+                    // contro il valore che la run ha davvero scritto e OGNI
+                    // annullamento verrebbe bloccato da un falso "qualcuno ci ha
+                    // lavorato sopra".
+                    presentedAt: leads.presentedAt,
+                    salespersonUserId: leads.salespersonUserId,
                 })
                     .from(leads)
                     .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));

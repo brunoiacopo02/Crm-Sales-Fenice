@@ -1,3 +1,5 @@
+import { cohortClosing } from '@/lib/kpi/salesCohort';
+
 export interface AttemptInput {
     leadId: string;
     attemptNumber: number;
@@ -7,6 +9,13 @@ export interface AttemptInput {
     closeProduct: string | null;
     closeAmountEur: number | null;
     outcomeAt: Date;
+    /**
+     * Latch della presenza del LEAD (`leads.presentedAt`), non della singola riga:
+     * è lo stesso valore su tutti i tentativi dello stesso `leadId`. Serve a
+     * ricostruire la coorte del mese senza una seconda query sui lead (ogni lead
+     * con `presentedAt` ha almeno un attempt: verificato in produzione).
+     */
+    presentedAt: Date | null;
 }
 
 const inRange = (a: AttemptInput, start: Date, end: Date) =>
@@ -42,14 +51,23 @@ export function followUpFunnel(attempts: AttemptInput[], start: Date, end: Date)
     return { enteredFollowUp: enteredLeads.size, closed, conversionPct: roundPct(closed, enteredLeads.size) };
 }
 
-// NOTA: il lead è bucketizzato sul suo esito GLOBALMENTE più recente (non sul primo
-// esito dentro [start,end)). Questo è intenzionale (point-in-time, lead-level, coerente
-// con getVenditoriKpi) ma implica che i numeri di chiusura/trend di un mese passato
-// possano cambiare retroattivamente quando arrivano nuovi tentativi: es. un "Non chiuso"
-// di giugno che si chiude ad agosto sposta quel lead fuori dai finals di giugno la
-// prossima volta che closingStats/monthlyTrend vengono ricalcolati.
+// NOTA: il closing rate è di COORTE (decisione PO 2026-09-10, regola canonica in
+// `@/lib/kpi/salesCohort`). Il denominatore sono le PRESENZE del mese — i lead con
+// `presentedAt` in [start,end) — e il numeratore quelle il cui esito corrente è 'Chiuso'.
+// Non si torna a bucketizzare sull'esito più recente: `outcomeAt` si sposta a OGNI
+// follow-up, quindi una presenza di agosto ricadeva nel denominatore di settembre appena
+// il venditore registrava un richiamo, e le presenze di settembre ancora da esitare non
+// ci entravano affatto (settembre 2026: 111 "esitati" contro 81 presenze reali, Sales 008
+// al 29% invece che al 47%). Le presenze ancora aperte restano nel denominatore: per
+// questo `inLavorazione` viene esposto e va mostrato accanto al rate.
+//
+// ⚠️ Sembra un'incoerenza ma non lo è: `fatturato`, `ticketMedio` e `topProduct` NON sono
+// di coorte. Restano attribuiti al mese di `outcomeAt` della chiusura, cioè al mese della
+// firma: è quello il mese in cui i soldi entrano ed è la base di target, bonus e
+// riconciliazione col foglio. Una chiusura di settembre su una presenza di agosto sta
+// quindi nel fatturato di settembre ma nel closing rate di agosto.
 export function closingStats(attempts: AttemptInput[], start: Date, end: Date) {
-    // Un lead conta UNA volta, per il suo esito più recente (coerente con getVenditoriKpi).
+    // Un lead conta UNA volta, per il suo esito più recente.
     const latestByLead = new Map<string, AttemptInput>();
     for (const a of attempts) {
         const cur = latestByLead.get(a.leadId);
@@ -57,21 +75,31 @@ export function closingStats(attempts: AttemptInput[], start: Date, end: Date) {
             latestByLead.set(a.leadId, a);
         }
     }
-    const finals = [...latestByLead.values()].filter(a => inRange(a, start, end));
-    const chiusi = finals.filter(a => a.outcome === 'Chiuso');
-    const nonChiusi = finals.filter(a => a.outcome === 'Non chiuso').length;
-    const perso = finals.filter(a => a.outcome === 'Perso').length;
-    const sparito = finals.filter(a => a.outcome === 'Sparito').length;
-    const totalEsitati = chiusi.length + nonChiusi + perso + sparito;
-    const fatturato = chiusi.reduce((s, a) => s + (a.closeAmountEur ?? 0), 0);
+    const latest = [...latestByLead.values()];
+
+    // Coorte: il modulo canonico filtra su `presentedAt` e scompone per esito corrente.
+    const cohort = cohortClosing(
+        latest.map(a => ({ presentedAt: a.presentedAt, salespersonOutcome: a.outcome })),
+        start, end,
+    );
+
+    // Soldi: mese della firma, non mese della presenza (vedi nota sopra).
+    const chiusiNelMese = latest.filter(a => a.outcome === 'Chiuso' && inRange(a, start, end));
+    const fatturato = chiusiNelMese.reduce((s, a) => s + (a.closeAmountEur ?? 0), 0);
     const prodCounts = new Map<string, number>();
-    for (const a of chiusi) if (a.closeProduct) prodCounts.set(a.closeProduct, (prodCounts.get(a.closeProduct) ?? 0) + 1);
+    for (const a of chiusiNelMese) if (a.closeProduct) prodCounts.set(a.closeProduct, (prodCounts.get(a.closeProduct) ?? 0) + 1);
     const topProduct = [...prodCounts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+
     return {
-        chiusi: chiusi.length, nonChiusi, perso, sparito, totalEsitati,
-        closingPct: roundPct(chiusi.length, totalEsitati),
+        chiusi: cohort.chiusi,
+        nonChiusi: cohort.nonChiusi,
+        perso: cohort.persi,
+        sparito: cohort.spariti,
+        inLavorazione: cohort.inLavorazione,
+        presenze: cohort.presenze,
+        closingPct: cohort.closingPct,
         fatturato,
-        ticketMedio: chiusi.length ? Math.round(fatturato / chiusi.length) : 0,
+        ticketMedio: chiusiNelMese.length ? Math.round(fatturato / chiusiNelMese.length) : 0,
         topProduct,
     };
 }
