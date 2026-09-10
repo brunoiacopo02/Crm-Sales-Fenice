@@ -8,6 +8,7 @@ import {
     romeMonthKey,
     selectLatePenalties,
     LATE_PENALTY_EUR,
+    penaltyRuleState,
     type DueCandidate,
 } from './latePenalties'
 
@@ -106,4 +107,32 @@ test('le ore di ritardo si fermano all esito registrato', () => {
     const now = new Date('2026-09-12T09:00:00Z')
     assert.equal(lateHours(due, new Date('2026-09-10T14:00:00Z'), now), 5)
     assert.equal(lateHours(due, null, now), 48, 'ancora da esitare: conta fino ad ora')
+})
+
+// --- Stato della regola: in vigore o no, e perché -------------------------
+
+test('senza data di attivazione la regola non e in vigore', () => {
+    assert.deepEqual(penaltyRuleState({}), { active: false, reason: 'not_activated', from: null })
+})
+
+test('una data di attivazione illeggibile vale come regola spenta', () => {
+    assert.deepEqual(
+        penaltyRuleState({ SALES_LATE_PENALTIES_FROM: 'domani mattina' }),
+        { active: false, reason: 'not_activated', from: null },
+    )
+})
+
+test('con una data valida la regola e in vigore da quella data', () => {
+    const state = penaltyRuleState({ SALES_LATE_PENALTIES_FROM: '2026-09-10T00:00:00+02:00' })
+    assert.equal(state.active, true)
+    assert.equal(state.from?.toISOString(), '2026-09-09T22:00:00.000Z')
+})
+
+test('il kill-switch vince sulla data di attivazione', () => {
+    const state = penaltyRuleState({
+        SALES_LATE_PENALTIES: 'off',
+        SALES_LATE_PENALTIES_FROM: '2026-09-10T00:00:00+02:00',
+    })
+    assert.equal(state.active, false)
+    assert.equal(state.active === false && state.reason, 'kill_switch')
 })

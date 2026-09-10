@@ -254,15 +254,23 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
             {/* Ritardi del mese — scadenze uscite dalle liste operative */}
             <section className="rounded-2xl border border-rose-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-100 px-4 py-3">
-                    <h2 className="flex items-center gap-2 text-sm font-bold text-rose-900">
+                    <h2 className="flex flex-wrap items-center gap-2 text-sm font-bold text-rose-900">
                         <Timer className="h-4 w-4 text-rose-600" />
                         Ritardi
-                        <span className="ml-1 rounded-full bg-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-800">
-                            {data.latePenalties.length}
-                        </span>
-                        {totalMalus > 0 && (
-                            <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white">
-                                -{totalMalus.toFixed(0)} &euro;
+                        {data.penaltyRule.active ? (
+                            <>
+                                <span className="ml-1 rounded-full bg-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-800">
+                                    {data.latePenalties.length}
+                                </span>
+                                {totalMalus > 0 && (
+                                    <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                                        -{totalMalus.toFixed(0)} &euro;
+                                    </span>
+                                )}
+                            </>
+                        ) : (
+                            <span className="rounded-full bg-ash-200 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-ash-600">
+                                Non in vigore
                             </span>
                         )}
                     </h2>
@@ -278,9 +286,25 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     </select>
                 </div>
 
-                {data.latePenalties.length === 0 ? (
+                {!data.penaltyRule.active ? (
+                    <div className="px-4 py-6 text-center text-sm text-ash-500">
+                        <p className="font-semibold text-ash-700">
+                            {data.penaltyRule.reason === 'kill_switch'
+                                ? 'Malus ritardi sospeso.'
+                                : 'Malus ritardi non ancora attivo.'}
+                        </p>
+                        <p className="mt-1">
+                            {data.penaltyRule.reason === 'kill_switch'
+                                ? 'Il kill-switch è acceso: le scadenze scoperte restano nelle liste qui sopra e non maturano trattenute.'
+                                : 'Nessuna scadenza sta maturando trattenute. La regola entra in vigore quando viene fissata la data di attivazione.'}
+                        </p>
+                    </div>
+                ) : data.latePenalties.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-ash-500">
                         Nessun ritardo in questo mese.
+                        <span className="ml-1 text-ash-400">
+                            Regola in vigore dal {formatDateIT(new Date(data.penaltyRule.from))}.
+                        </span>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">

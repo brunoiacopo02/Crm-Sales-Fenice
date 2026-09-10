@@ -106,3 +106,35 @@ export function lateHours(dueAt: Date, resolvedAt: Date | null, now: Date): numb
     const end = resolvedAt ?? now
     return Math.max(0, Math.floor((end.getTime() - dueAt.getTime()) / 3600_000))
 }
+
+/** Perché la regola non è in vigore, quando non lo è. */
+export type PenaltyRuleInactiveReason = 'not_activated' | 'kill_switch'
+
+/**
+ * Stato della regola. Serve al Monitor Vendite quanto al cron: una sezione
+ * Ritardi vuota perché nessuno è in ritardo e una vuota perché la regola non è
+ * mai stata accesa si assomigliano troppo, e la seconda sembra un guasto.
+ */
+export type PenaltyRuleState =
+    | { active: true; from: Date }
+    | { active: false; reason: PenaltyRuleInactiveReason; from: Date | null }
+
+/** Data di attivazione dalla env, o null se assente o illeggibile. */
+export function parseActivationDate(raw: string | undefined): Date | null {
+    if (!raw) return null
+    const d = new Date(raw)
+    return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Legge lo stato dalle env. Il kill-switch vince sulla data di attivazione:
+ * `SALES_LATE_PENALTIES=off` spegne tutto senza dover togliere la data.
+ */
+export function penaltyRuleState(
+    env: Record<string, string | undefined> = process.env,
+): PenaltyRuleState {
+    const from = parseActivationDate(env.SALES_LATE_PENALTIES_FROM)
+    if (env.SALES_LATE_PENALTIES === 'off') return { active: false, reason: 'kill_switch', from }
+    if (!from) return { active: false, reason: 'not_activated', from: null }
+    return { active: true, from }
+}

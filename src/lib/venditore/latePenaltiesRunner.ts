@@ -12,6 +12,7 @@ import { and, eq, isNotNull, isNull, gte, lt, inArray } from 'drizzle-orm'
 import {
     selectLatePenalties,
     penaltyKey,
+    penaltyRuleState,
     type DueCandidate,
     type PendingPenalty,
 } from './latePenalties'
@@ -26,12 +27,12 @@ export interface RunnerResult {
  * Data di attivazione della regola: nessun ritardo viene registrato su scadenze
  * anteriori. Senza la env il runner non scrive nulla — fail-safe, così una
  * variabile dimenticata non produce una multa retroattiva su tutto lo storico.
+ * Torna null anche col kill-switch acceso: spegnere la regola deve fermare il
+ * giro da qualunque punto venga invocato, non solo dalla route del cron.
  */
 export function activationDate(): Date | null {
-    const raw = process.env.SALES_LATE_PENALTIES_FROM
-    if (!raw) return null
-    const d = new Date(raw)
-    return isNaN(d.getTime()) ? null : d
+    const state = penaltyRuleState()
+    return state.active ? state.from : null
 }
 
 /** Appuntamenti passati e mai esitati. */

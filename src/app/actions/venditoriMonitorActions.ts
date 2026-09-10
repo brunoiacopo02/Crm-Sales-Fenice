@@ -3,7 +3,7 @@
 import { db } from "@/db"
 import { leads, users, salesAttempts, salesLatePenalties } from "@/db/schema"
 import { and, eq, isNotNull, isNull, gte, lte, or, asc, desc, inArray, sql } from "drizzle-orm"
-import { penaltyKey, lateHours, romeMonthKey, type PenaltyKind } from "@/lib/venditore/latePenalties"
+import { penaltyKey, lateHours, romeMonthKey, penaltyRuleState, type PenaltyKind, type PenaltyRuleState } from "@/lib/venditore/latePenalties"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -96,6 +96,12 @@ export interface VenditoriMonitorData {
     latePenaltySummary: LatePenaltySummary[]
     /** Mese di competenza dei ritardi mostrati ('YYYY-MM'). */
     penaltyMonthKey: string
+    /**
+     * Stato della regola. Senza questo, una sezione Ritardi vuota perche' la
+     * regola non e' in vigore e' indistinguibile da una vuota perche' nessuno
+     * e' in ritardo: il manager legge un guasto dove non c'e'.
+     */
+    penaltyRule: PenaltyRuleState
 }
 
 export async function listVenditori(): Promise<VenditoreLite[]> {
@@ -138,11 +144,13 @@ export async function getVenditoriMonitor(filters: {
         : venditori.map(v => v.id)
 
     const penaltyMonthKey = filters.penaltyMonthKey || romeMonthKey(new Date())
+    const penaltyRule = penaltyRuleState()
 
     if (targetIds.length === 0) {
         return {
             venditori, appointments: [], upcomingFollowUps: [], overdueFollowUps: [],
             inLavorazione: [], latePenalties: [], latePenaltySummary: [], penaltyMonthKey,
+            penaltyRule,
         }
     }
 
@@ -349,6 +357,7 @@ export async function getVenditoriMonitor(filters: {
         latePenalties,
         latePenaltySummary,
         penaltyMonthKey,
+        penaltyRule,
     }
 }
 
