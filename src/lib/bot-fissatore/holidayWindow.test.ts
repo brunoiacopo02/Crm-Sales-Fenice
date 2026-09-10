@@ -87,3 +87,32 @@ test('getActiveHolidayWindow dà l\'ultimo giorno incluso, per il testo in UI', 
         assert.equal(getActiveHolidayWindow(utc('2026-08-07T09:00:00Z')), null);
     });
 });
+
+test('BOT_HOLIDAY_WINDOW senza data di fine resta aperta a tempo indeterminato', () => {
+    withEnv('2026-09-09..', () => {
+        assert.deepEqual(getConfiguredWindow(), { from: '2026-09-09', until: null });
+        assert.equal(isBotHolidayWindow(utc('2026-09-08T09:00:00Z')), false, 'prima del from resta fuori');
+        assert.equal(isBotHolidayWindow(utc('2026-09-10T09:00:00Z')), true);
+        assert.equal(isBotHolidayWindow(utc('2027-06-01T09:00:00Z')), true, 'non scade da sola');
+    });
+});
+
+test('la finestra aperta si spegne solo con off, non col passare del tempo', () => {
+    withEnv('off', () => {
+        assert.equal(isBotHolidayWindow(utc('2027-06-01T09:00:00Z')), false);
+    });
+});
+
+test('una finestra aperta non ha ultimo giorno: la UI non deve promettere un rientro', () => {
+    withEnv('2026-09-09..', () => {
+        assert.deepEqual(getActiveHolidayWindow(utc('2026-09-10T09:00:00Z')), {
+            from: '2026-09-09', until: null, lastDay: null,
+        });
+    });
+});
+
+test('lo spazio attorno ai punti non cambia il senso di una finestra aperta', () => {
+    withEnv('  2026-09-09 ..  ', () => {
+        assert.deepEqual(getConfiguredWindow(), { from: '2026-09-09', until: null });
+    });
+});

@@ -29,7 +29,7 @@ interface Props {
     initialFailures: AcFailureRow[];
     initialStats: AcIntakeStats;
     /** Finestra ferie GDO attiva ADESSO (valutata dal server), o null fuori finestra. */
-    holidayWindow: { from: string; until: string; lastDay: string } | null;
+    holidayWindow: { from: string; until: string | null; lastDay: string | null } | null;
     /** Fascia di distribuzione in vigore + ripartizione di oggi. */
     routingStatus: BotRoutingStatus;
     /** Lead entrati con un telefono che non sembra un numero, senza assegnatario. */
@@ -247,10 +247,16 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                 <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
                     <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
                     <div className="text-sm text-amber-900">
-                        <span className="font-bold">Ferie GDO {giornoIt(holidayWindow.from)} – {giornoIt(holidayWindow.lastDay)}</span>
+                        <span className="font-bold">
+                            {holidayWindow.lastDay
+                                ? `Tutto al bot ${giornoIt(holidayWindow.from)} – ${giornoIt(holidayWindow.lastDay)}`
+                                : `Tutto al bot dal ${giornoIt(holidayWindow.from)}, senza scadenza`}
+                        </span>
                         {' '}— tutti i lead ActiveCampaign in arrivo vengono assegnati al bot (GDO 201), senza
-                        alcun limite giornaliero. Le selezioni qui sotto restano salvate e tornano attive da sole
-                        il {giornoIt(holidayWindow.until)}.
+                        alcun limite giornaliero. Le selezioni qui sotto restano salvate.
+                        {holidayWindow.until
+                            ? ` Tornano attive da sole il ${giornoIt(holidayWindow.until)}.`
+                            : ' Nessuna data di rientro: la finestra resta aperta finché non viene spenta a mano (BOT_HOLIDAY_WINDOW=off).'}
                     </div>
                 </div>
             )}
