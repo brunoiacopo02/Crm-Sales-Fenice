@@ -8,6 +8,12 @@
  *   - lead in prima chiamata (callCount=0), piu' le seconde chiamate degli
  *     ultimi 7 giorni se passi --seconde
  *   - niente richiami, niente scarti, niente appuntamenti
+ *   - NIENTE lead funnel Database (decisione PO 2026-09-10): il bot lavora i
+ *     lead AC. Non e' un filtro cosmetico — il 10/09 ho selezionato per GDO e
+ *     numero di chiamate senza guardare il funnel, e 5 lead Database della
+ *     pipeline del 118 sono finiti al bot con l'apertura WhatsApp gia' partita.
+ *     Erano i primi 5 della sua storia: prima di allora, zero su 4.621 push.
+ *     Con --includi-database si deroga, ma va chiesto al PO.
  *   - SOLO lead che il bot non ha mai visto: chi e' gia' passato di li' ed e'
  *     stato ridato indietro (REASSIGNED_FROM_BOT) o e' gia' stato pushato
  *     resta al GDO, altrimenti gli si rifa' girare la stessa sequenza addosso.
@@ -45,6 +51,8 @@ type Args = {
     recuperi: boolean
     /** Riassegna e basta: il push lo fa qualcun altro (vedi --out). */
     soloRiassegna: boolean
+    /** Deroga esplicita all'esclusione dei lead Database. */
+    includiDatabase: boolean
     /** Dove scrivere gli id riassegnati, per pusharli dalla sessione ADMIN. */
     out: string | null
 }
@@ -60,6 +68,7 @@ function parseArgs(argv: string[]): Args {
         intervallo: Number(get('intervallo') || 60),
         recuperi: has('recuperi'),
         soloRiassegna: has('solo-riassegna'),
+        includiDatabase: has('includi-database'),
         out: get('out') || null,
     }
 }
@@ -99,7 +108,7 @@ async function botAccount() {
     return bot.id
 }
 
-async function candidati(gdoIds: string[], seconde: boolean) {
+async function candidati(gdoIds: string[], seconde: boolean, includiDatabase: boolean) {
     const sezione = seconde
         ? or(
             eq(leads.callCount, 0),
@@ -111,6 +120,7 @@ async function candidati(gdoIds: string[], seconde: boolean) {
         id: leads.id,
         nome: leads.name,
         callCount: leads.callCount,
+        funnel: leads.funnel,
         assegnatario: leads.assignedToId,
         gdoCode: users.gdoCode,
     })
@@ -123,6 +133,9 @@ async function candidati(gdoIds: string[], seconde: boolean) {
             ne(leads.status, 'APPOINTMENT'),
             isNull(leads.recallDate),
             sezione,
+            // Il funnel puo' essere null: escludo solo chi dice Database, non
+            // chi non dice niente.
+            includiDatabase ? undefined : sql`coalesce(${leads.funnel}, '') <> 'Database'`,
             maiVistoDalBot(),
         ))
 }
@@ -279,7 +292,13 @@ async function main() {
         .where(and(eq(users.companyId, FENICE), inArray(users.gdoCode, args.gdo)))
     if (gdoRows.length !== args.gdo.length) throw new Error('GDO non trovati: ' + JSON.stringify(gdoRows))
 
-    const righe = await candidati(gdoRows.map(g => g.id), args.seconde)
+    const righe = await candidati(gdoRows.map(g => g.id), args.seconde, args.includiDatabase)
+    if (args.includiDatabase) console.log('⚠  --includi-database attivo: i lead Database NON sono esclusi.')
+    const perFunnel = righe.reduce<Record<string, number>>((acc, r) => {
+        const k = r.funnel || '(nessuno)'
+        acc[k] = (acc[k] || 0) + 1
+        return acc
+    }, {})
     const perGdo = righe.reduce<Record<string, { prima: number; seconda: number }>>((acc, r) => {
         const k = String(r.gdoCode)
         acc[k] = acc[k] || { prima: 0, seconda: 0 }
@@ -287,6 +306,7 @@ async function main() {
         return acc
     }, {})
     console.log(`Candidati: ${righe.length}`, perGdo)
+    console.log('Per funnel:', perFunnel)
 
     if (args.dry) return
     if (righe.length === 0) return
