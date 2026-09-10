@@ -15,6 +15,35 @@ type PushResult =
     | { result: 'network_error'; error: string; urlHost?: string };
 
 /**
+ * Quanto aspettiamo la risposta dell'intake del bot.
+ *
+ * NON e' un margine di rete: l'intake manda il template WhatsApp di apertura via
+ * Twilio DENTRO la richiesta, quindi allo scadere del nostro AbortSignal il lead
+ * da loro e' gia' arruolato e il "ciao" e' gia' partito. Un nostro timeout non e'
+ * un mancato arrivo, e' un esito ignoto — e ripescare quei lead manda una seconda
+ * apertura alla stessa persona (successo il 2026-09-09: 46 conversazioni).
+ *
+ * A 5 secondi la quota di falsi timeout e' passata dallo 0% di fine agosto al
+ * 22,5% del 10/09, mentre il p99 di intake misurato dal fornitore e' 1,7s: quei
+ * timeout erano coda e cold start nostri, non lentezza loro. 15 secondi danno
+ * ~9x di margine sul p99 e restano dentro il budget di un push a lotti.
+ *
+ * `BOT_INTAKE_TIMEOUT_MS` permette di correggere senza deploy. Una env assente,
+ * non numerica o fuori scala ricade sul default ALTO: il valore pericoloso e'
+ * quello basso, e non deve poter rientrare da una env scritta male.
+ */
+const DEFAULT_INTAKE_TIMEOUT_MS = 15_000;
+const MAX_INTAKE_TIMEOUT_MS = 30_000;
+
+function intakeTimeoutMs(): number {
+    const raw = process.env.BOT_INTAKE_TIMEOUT_MS;
+    if (raw === undefined) return DEFAULT_INTAKE_TIMEOUT_MS;
+    const n = Number(raw);
+    if (!isFinite(n) || n <= 0) return DEFAULT_INTAKE_TIMEOUT_MS;
+    return Math.min(Math.round(n), MAX_INTAKE_TIMEOUT_MS);
+}
+
+/**
  * Scrive un evento BOT_PUSHED con l'esito del push. Best-effort: un fallimento
  * dell'audit non deve mai propagarsi nel chiamante (gira dentro after()).
  * Permette di verificare i push dal DB senza dipendere dai runtime log Vercel.
@@ -125,7 +154,7 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResu
                 'x-bot-signature': signature,
             },
             body: rawBody,
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(intakeTimeoutMs()),
         });
         if (!res.ok) {
             console.error(`[bot-fissatore] push non-2xx: ${res.status} for lead ${payload.leadId}`);
