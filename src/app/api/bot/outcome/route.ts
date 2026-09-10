@@ -10,6 +10,7 @@ import type { BotReport } from '@/lib/bot-fissatore/types';
 import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissatore/noteDedup';
 import { normalizeContactCategory } from '@/lib/bot-fissatore/contactRequests';
 import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset';
+import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -137,15 +138,17 @@ export async function POST(req: NextRequest) {
     let leadWasWorkedByBot = assigneeIsBot;
     if (!assigneeIsBot) {
         // Solo i push andati a buon fine sono prova: `BOT_PUSHED` viene scritto anche
-        // per skipped_disabled / missing_env / http_error / network_error (vedi
-        // lib/bot-fissatore/push.ts), cioè per lead che al bot non sono mai arrivati.
-        // Stessa convenzione di lettura delle statistiche (botStatsActions.ts).
+        // per skipped_disabled / missing_env / http_error / rate_limited /
+        // network_error (vedi lib/bot-fissatore/push.ts), cioè per lead che al bot
+        // non sono mai arrivati. `duplicate` invece SI': e' il lead che il fornitore
+        // aveva gia' quando abbiamo ritentato. Nozione unica in pushAudit.ts, usata
+        // anche da /api/bot/lead-status e da botStatsActions.
         const [pushed] = await db.select({ id: leadEvents.id })
             .from(leadEvents)
             .where(and(
                 eq(leadEvents.leadId, leadId),
                 eq(leadEvents.eventType, 'BOT_PUSHED'),
-                sql`${leadEvents.metadata}->>'result' = 'sent'`,
+                sql`${leadEvents.metadata}->>'result' IN (${sql.raw(DELIVERED_PUSH_RESULTS_SQL)})`,
             ))
             .limit(1);
         leadWasWorkedByBot = !!pushed;

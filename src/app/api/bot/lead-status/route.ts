@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, inArray, or, isNotNull, sql } from 'drizzle-orm
 import { db } from '@/db';
 import { botContactRequests, leadEvents, leads, users } from '@/db/schema';
 import { verifySignature } from '@/lib/marketing-webhooks/signing';
+import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
             SELECT 1 FROM ${leadEvents} e
             WHERE e."leadId" = ${leads.id}
               AND e."eventType" = 'BOT_PUSHED'
-              AND e.metadata->>'result' = 'sent'
+              AND e.metadata->>'result' IN (${sql.raw(DELIVERED_PUSH_RESULTS_SQL)})
         )`,
     );
 

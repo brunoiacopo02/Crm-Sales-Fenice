@@ -5,6 +5,7 @@ import { leads, users, callLogs, leadEvents } from "@/db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { toRomeDateStr } from "@/lib/dateUtils";
+import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 
 /** Una riga per giorno di presa in carico: mostra come si smaltisce la coorte.
  *  Serve a leggere "in lavorazione" — che è un residuo, non un conteggio. */
@@ -150,7 +151,9 @@ async function computeWindowStats(
             .where(and(
                 eq(leadEvents.companyId, companyId),
                 eq(leadEvents.eventType, 'BOT_PUSHED'),
-                sql`${leadEvents.metadata}->>'result' = 'sent'`,
+                // Nozione unica di "consegnato al bot" (pushAudit.ts): include
+                // 'duplicate', il lead che il fornitore aveva gia' al nostro ritento.
+                sql`${leadEvents.metadata}->>'result' IN (${sql.raw(DELIVERED_PUSH_RESULTS_SQL)})`,
             ))
             .groupBy(leadEvents.leadId),
         db.select({

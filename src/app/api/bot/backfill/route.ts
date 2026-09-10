@@ -3,7 +3,7 @@ import { and, eq, isNull, inArray, asc } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '@/db';
 import { leads, users } from '@/db/schema';
-import { pushLeadToBot } from '@/lib/bot-fissatore/push';
+import { pushLeadsToBotPaced } from '@/lib/bot-fissatore/push';
 
 /**
  * Backfill one-off: spinge al bot i lead già assegnati all'account bot ma mai
@@ -14,6 +14,10 @@ import { pushLeadToBot } from '@/lib/bot-fissatore/push';
  * Body (JSON, tutto opzionale):
  *   { dryRun?: boolean, limit?: number, leadIds?: string[] }
  */
+// A 30 invii al minuto un lotto lungo va oltre il default: il resto torna al
+// chiamante in `remainingLeadIds` invece di essere troncato.
+export const maxDuration = 300;
+
 interface BackfillBody {
     dryRun?: boolean;
     limit?: number;
@@ -84,29 +88,27 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // Push sequenziale (gentile verso l'intake del bot). pushLeadToBot audita ogni esito.
-    const results: Array<{ leadId: string; name: string | null; result: string; status?: number }> = [];
-    for (const c of candidates) {
-        const r = await pushLeadToBot({
-            leadId: c.id,
-            name: c.name,
-            phone: c.phone,
-            email: c.email,
-            funnel: c.funnel,
-            companyId: c.companyId,
-        });
-        results.push({
-            leadId: c.id,
-            name: c.name,
-            result: r.result,
-            status: 'status' in r ? r.status : undefined,
-        });
-    }
+    // Push scaglionato a 30/min (vedi pushLeadsToBotPaced). pushLeadToBot audita ogni esito.
+    const { results, remaining } = await pushLeadsToBotPaced(candidates.map(c => ({
+        leadId: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        funnel: c.funnel,
+        companyId: c.companyId,
+    })));
 
     const summary = results.reduce<Record<string, number>>((acc, r) => {
         acc[r.result] = (acc[r.result] ?? 0) + 1;
         return acc;
     }, {});
 
-    return NextResponse.json({ dryRun: false, pushed: results.length, summary, results });
+    return NextResponse.json({
+        dryRun: false,
+        pushed: results.length,
+        remaining: remaining.length,
+        remainingLeadIds: remaining,
+        summary,
+        results,
+    });
 }

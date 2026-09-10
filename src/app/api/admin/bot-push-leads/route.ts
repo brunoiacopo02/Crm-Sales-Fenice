@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, isNull, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { leads, users } from '@/db/schema';
-import { pushLeadToBot } from '@/lib/bot-fissatore/push';
+import { pushLeadsToBotPaced } from '@/lib/bot-fissatore/push';
 import { createClient } from '@/utils/supabase/server';
 
 /**
@@ -15,6 +15,8 @@ import { createClient } from '@/utils/supabase/server';
  *
  * Body: { leadIds: string[] }
  */
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -59,28 +61,28 @@ export async function POST(req: NextRequest) {
         inArray(leads.id, leadIds),
     ));
 
-    const results: Array<{ leadId: string; name: string | null; result: string; status?: number }> = [];
-    for (const c of candidates) {
-        const r = await pushLeadToBot({
-            leadId: c.id,
-            name: c.name,
-            phone: c.phone,
-            email: c.email,
-            funnel: c.funnel,
-            companyId: c.companyId,
-        });
-        results.push({
-            leadId: c.id,
-            name: c.name,
-            result: r.result,
-            status: 'status' in r ? r.status : undefined,
-        });
-    }
+    // Scaglionato a 30/min come il backfill: stesso tetto concordato col fornitore.
+    const { results, remaining } = await pushLeadsToBotPaced(candidates.map(c => ({
+        leadId: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        funnel: c.funnel,
+        companyId: c.companyId,
+    })));
 
     const summary = results.reduce<Record<string, number>>((acc, r) => {
         acc[r.result] = (acc[r.result] ?? 0) + 1;
         return acc;
     }, {});
 
-    return NextResponse.json({ pushed: results.length, requested: leadIds.length, matched: candidates.length, summary, results });
+    return NextResponse.json({
+        pushed: results.length,
+        requested: leadIds.length,
+        matched: candidates.length,
+        remaining: remaining.length,
+        remainingLeadIds: remaining,
+        summary,
+        results,
+    });
 }
