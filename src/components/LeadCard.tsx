@@ -35,6 +35,12 @@ type LeadProps = {
         duplicatePhone?: boolean
         /** Tornato dal bot con un si' gia' dato: aveva confermato, o ha risposto dopo il 3o NR. */
         confermatoAlBot?: boolean
+        /** Ha chiesto di parlare con una persona: richiesta di contatto ancora aperta. */
+        tiHaCercato?: boolean
+        /** Parole del lead nella richiesta (tooltip del badge "Ti ha cercato"). */
+        cercatoMotivo?: string | null
+        /** Categoria leggibile della richiesta (es. "Vuole essere richiamato"). */
+        cercatoCategoria?: string | null
         recallMissedAt?: Date | null
     }
     onOutcomeClick: (leadId: string) => void
@@ -244,6 +250,17 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             )}
                             {lead.callCount > 0 && (
                                 <div className="text-[10px] font-bold text-ash-500 bg-ash-100 px-1.5 py-0.5 rounded-md">{lead.callCount}° ch.</div>
+                            )}
+                            {lead.tiHaCercato && (
+                                <div
+                                    className="flex items-center gap-1 rounded-md border border-brand-orange-300 bg-brand-orange-50 px-1.5 py-0.5 text-[10px] font-bold text-brand-orange-700 shrink-0"
+                                    title={[
+                                        lead.cercatoCategoria ? `Ti ha cercato · ${lead.cercatoCategoria}` : 'Ti ha cercato',
+                                        lead.cercatoMotivo || '',
+                                    ].filter(Boolean).join('\n')}
+                                >
+                                    <Phone className="h-3 w-3" /> Ti ha cercato
+                                </div>
                             )}
                             {lead.confermatoAlBot && (
                                 <div

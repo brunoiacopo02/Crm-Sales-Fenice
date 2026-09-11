@@ -4,8 +4,8 @@ import { createClient } from "@/utils/supabase/server"
 import { db } from "@/db"
 import { leads, callLogs, pipelineSnapshots, users, leadEvents, botContactRequests } from "@/db/schema"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
-import { isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
-import { eq, and, ne, isNull, isNotNull, lt, or, lte, desc, gte, sql } from "drizzle-orm"
+import { contactCategoryLabel, isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
+import { eq, and, ne, isNull, isNotNull, inArray, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
 import { subDays } from "date-fns"
@@ -66,13 +66,53 @@ export async function getPipelineLeads() {
 
     const now = new Date()
 
+    /**
+     * "Ti hanno cercato": i lead con una richiesta di contatto umano ancora aperta.
+     *
+     * Va letta PRIMA della pipeline perché decide chi entra: fino all'11/09 un lead
+     * assegnato dalla coda finiva in 2ª o 3ª chiamata (ha già il callCount del bot)
+     * in fondo a un centinaio di card e senza nessun segno — e se aveva già 3
+     * tentativi non compariva da nessuna parte, perché la pipeline filtra
+     * `callCount < 3`, i richiami vogliono una `recallDate`, il recupero di 4ª vuole
+     * `REJECTED`. La GDO riceveva la notifica e non trovava il lead: è successo a
+     * 106 (Romina Viscardi, ferma dal 28/08) e a 118 (paolamelani melani).
+     *
+     * Decisione PO 2026-09-11: vanno in 1ª chiamata, con un badge, qualunque sia il
+     * callCount. Sono poche decine, non spostano l'equilibrio della board.
+     */
+    const cercati = new Map<string, { category: string; reason: string }>()
+    let recoverIds = new Set<string>()
+    try {
+        const rows = await db.select({
+            leadId: botContactRequests.leadId,
+            category: botContactRequests.category,
+            reason: botContactRequests.reason,
+        })
+            .from(botContactRequests)
+            .where(and(
+                eq(botContactRequests.companyId, ctx.companyId),
+                ne(botContactRequests.status, 'closed'),
+            ))
+        // Più richieste sullo stesso lead: vince la più recente (l'ordine di select
+        // è quello di inserimento, quindi l'ultima scrittura sovrascrive).
+        for (const r of rows) cercati.set(r.leadId, { category: r.category, reason: r.reason })
+        recoverIds = new Set(rows.filter(r => isRecoverableCategory(r.category)).map(r => r.leadId))
+    } catch (e) {
+        console.error('[pipeline] lettura richieste contatto fallita', e)
+    }
+    const cercatiIds = [...cercati.keys()]
+
     // 1. Pipeline Calls (1, 2, 3) — tenant-scoped
     const pipelineBaseConditions = [
         eq(leads.companyId, ctx.companyId),
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
         isNull(leads.recallDate),
-        lt(leads.callCount, 3)
+        // Chi ci ha cercato entra anche con 3+ tentativi alle spalle: è il bot ad
+        // averli bruciati, e il lead ha appena chiesto che lo chiami una persona.
+        cercatiIds.length
+            ? or(lt(leads.callCount, 3), inArray(leads.id, cercatiIds))!
+            : lt(leads.callCount, 3),
     ]
     if (isGdo) pipelineBaseConditions.push(eq(leads.assignedToId, userId))
 
@@ -82,9 +122,11 @@ export async function getPipelineLeads() {
         .orderBy(desc(leads.createdAt), leads.id)  // più recenti in cima — `id` come tiebreaker per ordine stabile fra lead con stesso createdAt (es. bulk CSV import)
 
 
-    const firstCall = pipelineLeads.filter(l => l.callCount === 0)
-    const secondCall = pipelineLeads.filter(l => l.callCount === 1)
-    const thirdCall = pipelineLeads.filter(l => l.callCount === 2)
+    // Un lead che ci ha cercato sta in 1ª chiamata qualunque sia il suo callCount:
+    // è una chiamata da fare adesso, non il secondo tentativo di una sequenza.
+    const firstCall = pipelineLeads.filter(l => l.callCount === 0 || cercati.has(l.id))
+    const secondCall = pipelineLeads.filter(l => l.callCount === 1 && !cercati.has(l.id))
+    const thirdCall = pipelineLeads.filter(l => l.callCount === 2 && !cercati.has(l.id))
 
     // 2ª/3ª chiamata: i lead fermi da più tempo in cima, quelli appena
     // richiamati in fondo (richiesta GDO 2026-06-11). Ordina per lastCallDate
@@ -239,41 +281,33 @@ export async function getPipelineLeads() {
     }
     const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10)
 
-    // Lead tornati dal bot con un sì già dato: aveva confermato e l'appuntamento
-    // non è mai nato, oppure ha risposto dopo il 3° NR. Finora rientravano in
-    // pipeline indistinguibili da un lead freddo qualunque — ad agosto sono stati
-    // 50, e 14 di loro non li ha richiamati nessuno. Non è colpa di chi li aveva
-    // in carico: non c'era niente che li distinguesse.
-    // Solo le richieste ancora aperte: una già chiusa non è più un richiamo urgente.
-    let recoverIds = new Set<string>()
-    try {
-        const rows = await db.select({ leadId: botContactRequests.leadId, category: botContactRequests.category })
-            .from(botContactRequests)
-            .where(and(
-                eq(botContactRequests.companyId, ctx.companyId),
-                ne(botContactRequests.status, 'closed'),
-            ))
-        recoverIds = new Set(rows.filter(r => isRecoverableCategory(r.category)).map(r => r.leadId))
-    } catch (e) {
-        console.error('[pipeline] flag conferme bot fallito', e)
-    }
-
+    // Lead tornati dal bot con un sì già dato (aveva confermato e l'appuntamento non
+    // è mai nato, oppure ha risposto dopo il 3° NR) e, più in generale, chi ha chiesto
+    // di parlare con una persona: `cercati` e `recoverIds` sono letti in cima, prima
+    // della query di pipeline, perché decidono anche chi entra in board.
     const withDupFlag = <T extends { phone: string; id: string }>(arr: T[]) =>
         arr.map(l => ({
             ...l,
             duplicatePhone: dupPhoneKeys.has(phoneKey(l.phone)),
             confermatoAlBot: recoverIds.has(l.id),
+            tiHaCercato: cercati.has(l.id),
+            cercatoMotivo: cercati.get(l.id)?.reason ?? null,
+            cercatoCategoria: cercati.get(l.id)
+                ? contactCategoryLabel(cercati.get(l.id)!.category)
+                : null,
         }))
 
     /**
-     * Chi aveva già detto sì va chiamato per primo: è l'unico ordinamento in cui
-     * la marcatura serve davvero a qualcosa. Dentro i due gruppi l'ordine
-     * preesistente resta identico — `sort` in JS è stabile, quindi non tocca il
-     * tiebreaker su `id` che tiene ferme le card fra un caricamento e l'altro
-     * (fix del 14/05: senza, i GDO vedevano "sparire" i lead).
+     * Chi ci ha cercato va chiamato per primo, e subito dopo chi aveva già detto sì:
+     * è l'unico ordinamento in cui la marcatura serve davvero a qualcosa. Dentro i
+     * gruppi l'ordine preesistente resta identico — `sort` in JS è stabile, quindi
+     * non tocca il tiebreaker su `id` che tiene ferme le card fra un caricamento e
+     * l'altro (fix del 14/05: senza, i GDO vedevano "sparire" i lead).
      */
-    const recoverableFirst = <T extends { confermatoAlBot: boolean }>(arr: T[]) =>
-        [...arr].sort((a, b) => Number(b.confermatoAlBot) - Number(a.confermatoAlBot))
+    const urgentRank = (l: { tiHaCercato: boolean; confermatoAlBot: boolean }) =>
+        (l.tiHaCercato ? 2 : 0) + (l.confermatoAlBot ? 1 : 0)
+    const recoverableFirst = <T extends { tiHaCercato: boolean; confermatoAlBot: boolean }>(arr: T[]) =>
+        [...arr].sort((a, b) => urgentRank(b) - urgentRank(a))
 
     return {
         firstCall: recoverableFirst(withDupFlag(firstCall)),

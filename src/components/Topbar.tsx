@@ -123,7 +123,9 @@ export function Topbar() {
             // Le note del bot si leggono nella board Conferme, non nel drawer
             // della ricerca: è lì che l'operatore lavora il lead.
             if (meta?.leadId) router.push(`/conferme?lead=${meta.leadId}&tab=note`)
-        } else if (notif.type === 'appointment_confirmed' || notif.type === 'sales_outcome_set' || notif.type === 'appointment_assigned' || notif.type === 'bot_contatto_umano' || notif.type === 'appointment_rescheduled_by_sales') {
+        } else if (notif.type === 'appointment_confirmed' || notif.type === 'sales_outcome_set' || notif.type === 'appointment_assigned' || notif.type === 'bot_contatto_umano' || notif.type === 'contatto_umano_assegnato' || notif.type === 'appointment_rescheduled_by_sales') {
+            // `contatto_umano_assegnato` era l'unico tipo che notificava e basta: il GDO
+            // leggeva "Chiamalo tu", cliccava e non succedeva niente (11/09).
             // Se la notifica riguarda un lead, apriamo la drawer cercando globalmente
             if (meta?.leadId) {
                 setSelectedLeadId(meta.leadId)
