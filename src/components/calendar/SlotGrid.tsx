@@ -28,6 +28,12 @@ export interface SlotCellView {
     /** Tooltip nativo (es. l'elenco completo dei colleghi disponibili). */
     title?: string
     /**
+     * Cella non cliccabile anche in una griglia modificabile (es. un'ora gia'
+     * iniziata, che il server rifiuta comunque di riscrivere). Il `title` deve
+     * spiegare perche': si scopre il divieto leggendo, non sbattendoci contro.
+     */
+    cellDisabled?: boolean
+    /**
      * Il bottone "⋯" resta visibile ma spento, con `menuTitle` come
      * spiegazione: il venditore deve capire che la finestra è chiusa, non
      * credere a un guasto (spec §4.4).
@@ -125,8 +131,12 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                             const instant = daySlots[row]
                             const key = slotKey(instant)
                             const view = cells.get(key) ?? { state: 'libero' as const }
-                            const disabled = !!readOnly
-                            const showMenu = !disabled && !!onCellMenu
+                            const disabled = !!readOnly || !!view.cellDisabled
+                            // Il menu dipende da `readOnly`, non da `cellDisabled`:
+                            // una cella passata non si ri-dichiara, ma un blocco
+                            // si toglie sempre (spec §4.4, "lo sblocco è sempre
+                            // consentito").
+                            const showMenu = !readOnly && !!onCellMenu
                                 && (view.state === 'disponibile' || view.state === 'bloccato')
 
                             return (

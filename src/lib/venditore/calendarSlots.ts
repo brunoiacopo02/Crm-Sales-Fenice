@@ -98,6 +98,23 @@ export function weekSlots(weekStart: Date): Date[] {
     return out
 }
 
+/**
+ * Il lunedi di `delta` settimane dopo (o prima, con delta negativo).
+ *
+ * Sommare `delta * 7 * 86_400_000` a un istante NON funziona: nelle settimane
+ * del cambio d'ora l'aritmetica in millisecondi sbaglia di un'ora e il lunedi
+ * successivo cade alle 23:00 della domenica o all'1:00 del lunedi. Ricondotto
+ * a lunedi da `weekStartFor`, il risultato e' la settimana sbagliata: partendo
+ * dal 19/10/2026 "avanti" tornava di nuovo il 19/10 (freccia morta per tutta
+ * quella settimana), e dal 30/03/2026 "indietro" saltava al 16/03 scavalcandone
+ * una. Si naviga per DATA, con lo stesso mezzogiorno UTC di `weekSlots`.
+ */
+export function addWeeks(weekStart: Date, delta: number): Date {
+    const noon = new Date(`${toRomeDateStr(weekStart)}T12:00:00Z`)
+    const target = new Date(noon.getTime() + delta * 7 * 86_400_000)
+    return romeInstant(toRomeDateStr(target), 0)
+}
+
 /** Lunedi 14:00 italiane: la scadenza della compilazione. */
 export function weeklyDeadline(weekStart: Date): Date {
     return romeInstant(toRomeDateStr(weekStart), WEEKLY_DEADLINE_HOUR)

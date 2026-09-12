@@ -12,7 +12,7 @@ import { ChevronLeft, ChevronRight, Loader2, CalendarClock } from "lucide-react"
 import {
     getCalendarWeek, saveCalendarWeek, blockSlot, unblockSlot, type CalendarWeekView,
 } from "@/app/actions/salesCalendarActions"
-import { weekSlots, weekStartFor, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
+import { weekSlots, weekStartFor, addWeeks, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
 import { MANUAL_BLOCK_NOTICE_MINUTES } from "@/lib/venditore/calendarRules"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { SlotGrid, type SlotCellView } from "@/components/calendar/SlotGrid"
@@ -23,7 +23,6 @@ interface Props {
     role: string
 }
 
-const WEEK_MS = 7 * 86_400_000
 const MAX_WEEKS_FORWARD = 3
 
 const weekdayFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', weekday: 'long' })
@@ -157,15 +156,15 @@ export function MioCalendarioClient({ initial, role }: Props) {
         })
     }, [])
 
-    const maxForwardWeekMs = useMemo(() => {
-        const cur = weekStartFor(new Date())
-        return cur.getTime() + MAX_WEEKS_FORWARD * WEEK_MS
-    }, [])
+    const maxForwardWeekMs = useMemo(
+        () => addWeeks(weekStartFor(new Date()), MAX_WEEKS_FORWARD).getTime(),
+        [],
+    )
 
+    // `addWeeks`, mai `+ delta * 7 * 86_400_000`: l'aritmetica in millisecondi
+    // sbaglia settimana nelle due del cambio d'ora (vedi calendarSlots.ts).
     const goWeek = (delta: number) => {
-        const cur = new Date(data.weekStartIso)
-        const naive = new Date(cur.getTime() + delta * WEEK_MS)
-        const target = weekStartFor(naive)
+        const target = addWeeks(new Date(data.weekStartIso), delta)
         loadWeek(target.toISOString())
     }
 
@@ -191,6 +190,18 @@ export function MioCalendarioClient({ initial, role }: Props) {
             let subtitle: string | undefined
             let menuDisabled: boolean | undefined
             let menuTitle: string | undefined
+            let cellDisabled: boolean | undefined
+            let title: string | undefined
+
+            // Un'ora già iniziata non si ri-dichiara: è la prova di quello che
+            // era stato offerto, e le Conferme hanno 48 ore per segnalare
+            // un'assenza. Il divieto vero è in `saveCalendarWeek` (che ignora
+            // gli slot passati); qui si evita solo che lo si scopra con un
+            // salvataggio che sembra andato a buon fine e non cambia nulla.
+            if (slot <= now) {
+                cellDisabled = true
+                title = 'Le ore già iniziate non si modificano: restano come le avevi dichiarate.'
+            }
 
             if (appt) {
                 state = 'occupato'
@@ -198,12 +209,18 @@ export function MioCalendarioClient({ initial, role }: Props) {
             } else if (block) {
                 state = 'bloccato'
                 subtitle = block.kind === 'FOLLOWUP' ? `Follow-up: ${block.leadName ?? ''}` : 'Bloccato'
-                // `unblockSlot` rifiuta sempre i blocchi FOLLOWUP: il bottone
-                // resta visibile ma spento, con la spiegazione, non nascosto
-                // (stessa decisione della finestra di preavviso qui sotto).
-                if (block.kind === 'FOLLOWUP') {
+                // `unblockSlot` rifiuta i blocchi FOLLOWUP di un lead ancora
+                // assegnato: il bottone resta visibile ma spento, con la
+                // spiegazione, non nascosto (stessa decisione della finestra di
+                // preavviso qui sotto). Un blocco ORFANO (lead non più suo) si
+                // può invece togliere: senza, lo slot resterebbe occupato per
+                // sempre senza che nessuno possa farci niente.
+                if (block.kind === 'FOLLOWUP' && !block.orphan) {
                     menuDisabled = true
                     menuTitle = "Questo slot è occupato da un follow-up: spostalo o registrane l'esito."
+                } else if (block.kind === 'FOLLOWUP') {
+                    subtitle = 'Follow-up non più tuo'
+                    menuTitle = 'Questo lead non è più assegnato a te: puoi liberare lo slot.'
                 }
             } else if (selected.has(key)) {
                 state = 'disponibile'
@@ -233,6 +250,8 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 tone: cov?.status ?? 'neutro',
                 menuDisabled,
                 menuTitle,
+                cellDisabled,
+                title,
             })
         }
         return m
@@ -283,6 +302,7 @@ export function MioCalendarioClient({ initial, role }: Props) {
         if (!data.editable) return
         const cell = myCells.get(key)
         if (!cell) return
+        if (cell.cellDisabled) return
         if (cell.state === 'occupato' || cell.state === 'bloccato') return
         setSelected(prev => {
             const next = new Set(prev)

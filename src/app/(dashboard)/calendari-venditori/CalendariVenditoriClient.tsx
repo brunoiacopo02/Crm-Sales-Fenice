@@ -18,7 +18,7 @@ import { ChevronLeft, ChevronRight, Loader2, CalendarClock } from "lucide-react"
 import {
     getCalendarSupervision, voidCalendarPenalty, setCalendarExempt, type SupervisionView,
 } from "@/app/actions/salesCalendarAdminActions"
-import { weekSlots, weekStartFor, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
+import { weekSlots, weekStartFor, addWeeks, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
 import { previousYearMonth, nextYearMonth, monthBoundsRome } from "@/lib/dateUtils"
 import type { CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
 import { SlotGrid, type SlotCellView } from "@/components/calendar/SlotGrid"
@@ -29,7 +29,6 @@ interface Props {
     role: string
 }
 
-const WEEK_MS = 7 * 86_400_000
 const DAY_ABBR_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
 
 const weekdayFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', weekday: 'long' })
@@ -107,9 +106,10 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
 
     const reload = useCallback(() => load(data.weekStartIso, data.monthKey), [load, data.weekStartIso, data.monthKey])
 
+    // `addWeeks`, mai `+ delta * 7 * 86_400_000`: l'aritmetica in millisecondi
+    // sbaglia settimana nelle due del cambio d'ora (vedi calendarSlots.ts).
     const goWeek = (delta: number) => {
-        const cur = new Date(data.weekStartIso)
-        const target = weekStartFor(new Date(cur.getTime() + delta * WEEK_MS))
+        const target = addWeeks(new Date(data.weekStartIso), delta)
         load(target.toISOString(), data.monthKey)
     }
 
@@ -331,8 +331,16 @@ function CompilazioneTab({
                         return (
                             <tr key={row.salesUserId} className="align-middle">
                                 <td className="px-3 py-2 font-semibold text-ash-800">{v?.name ?? row.salesUserId}</td>
+                                {/* Un esente non è un inadempiente: la spec §4.3 dice
+                                    che non deve comparire fra i non compilati. Con la
+                                    pastiglia rossa "No", Sales 001 risultava colpevole
+                                    ogni settimana per sempre. */}
                                 <td className="px-3 py-2">
-                                    {row.submittedAtIso ? <Pill tone="green">Sì</Pill> : <Pill tone="red">No</Pill>}
+                                    {row.submittedAtIso
+                                        ? <Pill tone="green">Sì</Pill>
+                                        : row.exempt
+                                            ? <Pill tone="neutral">Esente</Pill>
+                                            : <Pill tone="red">No</Pill>}
                                 </td>
                                 <td className="px-3 py-2 text-ash-600">
                                     {row.submittedAtIso ? formatDateTime(row.submittedAtIso) : '—'}
@@ -342,7 +350,12 @@ function CompilazioneTab({
                                     {row.late ? <Pill tone="amber">In ritardo</Pill> : <span className="text-ash-400">—</span>}
                                 </td>
                                 <td className="px-3 py-2">
-                                    {row.penalised ? <Pill tone="red">50 €</Pill> : <span className="text-ash-400">—</span>}
+                                    {/* L'importo vero della riga, non una costante scritta a
+                                        mano: il giorno che i 50 € cambiano, questa colonna
+                                        continuerebbe a dire 50. */}
+                                    {row.penaltyEur !== null
+                                        ? <Pill tone="red">{eurFmt.format(row.penaltyEur)}</Pill>
+                                        : <span className="text-ash-400">—</span>}
                                 </td>
                                 <td className="px-3 py-2">
                                     <ExemptSwitch

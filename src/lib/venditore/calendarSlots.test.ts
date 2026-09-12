@@ -9,6 +9,7 @@ import {
     weekStartKey,
     weekStartFor,
     weekSlots,
+    addWeeks,
     weeklyDeadline,
     slotLabel,
 } from './calendarSlots'
@@ -83,4 +84,32 @@ test('weekStartFor torna la vera mezzanotte del lunedi anche dalla domenica del 
         weekStartFor(new Date('2026-09-19T20:00:00+02:00')).toISOString(),
         '2026-09-13T22:00:00.000Z',
     )
+})
+
+test('addWeeks avanza di una settimana anche attraverso il cambio d ora', () => {
+    // L'ora legale 2026 finisce domenica 25/10. La settimana del 19/10 e' quella
+    // che contiene la transizione: con l'aritmetica in millisecondi "avanti"
+    // tornava di nuovo il 19/10 e la freccia restava morta per tutta la settimana.
+    const lun19 = weekStartFor(new Date('2026-10-19T10:00:00+02:00'))
+    assert.equal(weekStartKey(lun19), '2026-10-19')
+    assert.equal(weekStartKey(addWeeks(lun19, 1)), '2026-10-26')
+    assert.equal(weekStartKey(addWeeks(lun19, -1)), '2026-10-12')
+    // Il lunedi 26/10 e' gia' ora solare: mezzanotte vera = 23:00Z del 25.
+    assert.equal(addWeeks(lun19, 1).toISOString(), '2026-10-25T23:00:00.000Z')
+})
+
+test('addWeeks torna indietro di una settimana sola nel cambio d ora di primavera', () => {
+    // L'ora legale 2026 inizia domenica 29/03: dalla settimana del 30/03
+    // l'aritmetica in millisecondi saltava al 16/03, scavalcando il 23/03.
+    const lun30 = weekStartFor(new Date('2026-03-30T10:00:00+02:00'))
+    assert.equal(weekStartKey(lun30), '2026-03-30')
+    assert.equal(weekStartKey(addWeeks(lun30, -1)), '2026-03-23')
+    assert.equal(weekStartKey(addWeeks(lun30, 1)), '2026-04-06')
+    // Il lunedi 23/03 e' ancora ora solare: mezzanotte vera = 23:00Z del 22.
+    assert.equal(addWeeks(lun30, -1).toISOString(), '2026-03-22T23:00:00.000Z')
+})
+
+test('addWeeks con delta 0 e l identita sul lunedi', () => {
+    const lun = weekStartFor(new Date('2026-09-16T10:00:00+02:00'))
+    assert.equal(addWeeks(lun, 0).toISOString(), lun.toISOString())
 })

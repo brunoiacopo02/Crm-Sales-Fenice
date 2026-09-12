@@ -29,8 +29,11 @@ type Venditore = {
     busySlots: BusySlot[]
     /** Chiavi `slotKey` dichiarate disponibili nell'intervallo caricato. */
     declaredSlots: string[]
-    /** Chiavi `slotKey` bloccate (follow-up o imprevisto) nell'intervallo. */
+    /** Chiavi `slotKey` bloccate PRIMA dell'inizio dello slot: sono le uniche
+     *  che valgono come "il venditore aveva avvisato" davanti a una multa. */
     blockedSlots: string[]
+    /** Tutti i blocchi dell'intervallo, con il motivo: servono a mostrarli. */
+    blockDetails: Array<{ slotKey: string; kind: string; leadName: string | null }>
     /** true = niente obbligo di calendario, niente multe (vedi users.calendarExempt). */
     calendarExempt: boolean
 }
@@ -333,6 +336,14 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                     const emptyDeclaredSlots = isPastDay(d)
                                                         ? v.declaredSlots.filter(k => k.startsWith(`${dateStr}@`) && !apptSlotKeys.has(k))
                                                         : []
+                                                    // Il motivo per cui un follow-up blocca lo slot è che le
+                                                    // Conferme lo vedano occupato e non ci fissino sopra un
+                                                    // appuntamento: senza questa riga il blocco esisteva ma
+                                                    // non arrivava a chi doveva vederlo. Solo oggi e il
+                                                    // futuro: sul passato non serve più a nessuno.
+                                                    const dayBlocks = isPastDay(d)
+                                                        ? []
+                                                        : v.blockDetails.filter(b => b.slotKey.startsWith(`${dateStr}@`))
                                                     return (
                                                         <DayCell
                                                             key={i}
@@ -342,6 +353,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                             venditoreId={v.id}
                                                             declaredSlots={v.declaredSlots}
                                                             blockedSlots={v.blockedSlots}
+                                                            dayBlocks={dayBlocks}
                                                             calendarExempt={v.calendarExempt}
                                                             emptyDeclaredSlots={emptyDeclaredSlots}
                                                             reportedSlots={reportedSet}
@@ -366,6 +378,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Scartato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-purple-300 border border-purple-400" /> Impegno esterno (Google Calendar)</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-300 border border-amber-400" /> Fuori disponibilità dichiarata</span>
+                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-ash-200 border border-ash-300" /> Slot occupato (follow-up o imprevisto)</span>
                 </div>
             </div>
         </div>
@@ -374,7 +387,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
 
 function DayCell({
     appointments, busy, isToday,
-    venditoreId, declaredSlots, blockedSlots, calendarExempt, emptyDeclaredSlots, reportedSlots, now, onReported,
+    venditoreId, declaredSlots, blockedSlots, dayBlocks, calendarExempt, emptyDeclaredSlots, reportedSlots, now, onReported,
 }: {
     appointments: Appointment[]
     busy: BusySlot[]
@@ -382,6 +395,8 @@ function DayCell({
     venditoreId: string
     declaredSlots: string[]
     blockedSlots: string[]
+    /** Blocchi di QUESTA giornata (solo oggi e futuro): ora + motivo. */
+    dayBlocks: Array<{ slotKey: string; kind: string; leadName: string | null }>
     calendarExempt: boolean
     /** Slot dichiarati per questo giorno senza appuntamento: solo per giornate passate. */
     emptyDeclaredSlots: string[]
@@ -391,7 +406,8 @@ function DayCell({
     now: Date
     onReported: () => void
 }) {
-    const hasContent = appointments.length > 0 || busy.length > 0 || emptyDeclaredSlots.length > 0
+    const hasContent = appointments.length > 0 || busy.length > 0
+        || emptyDeclaredSlots.length > 0 || dayBlocks.length > 0
     const bg = isToday ? 'bg-brand-orange/5' : !hasContent ? 'bg-ash-50/30' : 'bg-white'
     return (
         <div className={`border-b border-r border-ash-200 ${bg} p-1.5 min-h-[70px] space-y-1`}>
@@ -440,6 +456,26 @@ function DayCell({
                                         onSuccess={onReported}
                                     />
                                 )}
+                            </div>
+                        )
+                    })}
+                    {dayBlocks.map(b => {
+                        const [dateStr, hStr] = b.slotKey.split('@')
+                        const slotStart = romeInstant(dateStr, Number(hStr))
+                        const motivo = b.kind === 'FOLLOWUP'
+                            ? `Follow-up${b.leadName ? `: ${b.leadName}` : ''}`
+                            : 'Bloccato dal venditore'
+                        return (
+                            <div
+                                key={`block-${b.slotKey}-${b.kind}-${b.leadName ?? ''}`}
+                                className="rounded-md border border-ash-300 bg-ash-100 px-1.5 py-1 text-[10px] leading-tight"
+                                title={`${slotLabel(slotStart)} — ${motivo}. Il venditore non è disponibile in quest'ora.`}
+                            >
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className="font-mono font-bold text-ash-600">{slotLabel(slotStart)}</span>
+                                    <span className="text-ash-500 font-semibold">Occupato</span>
+                                </div>
+                                <div className="truncate text-ash-500 text-[9px] italic">{motivo}</div>
                             </div>
                         )
                     })}
