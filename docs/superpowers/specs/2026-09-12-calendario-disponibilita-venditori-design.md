@@ -303,6 +303,20 @@ valore. Spento, le Conferme tornano a fissare dove vogliono e non viene più reg
 nessuna forzatura. Serve perché l'alternativa, se lunedì mattina il muro si rivelasse
 ingestibile, sarebbe un revert e un redeploy sotto pressione con quattro persone ferme.
 
+**Kill-switch della materializzazione della settimana tipo**, il quarto della famiglia:
+`SALES_TEMPLATE_MATERIALIZE=off` ferma la trasformazione dei modelli in ore vere — solo
+quel valore esatto la spegne, nasce accesa e resta accesa con la env assente o con
+qualunque altro valore. L'interruttore è letto **all'ingresso** di `materializeTemplates`,
+quindi vale sia per il giro di cron sia per la materializzazione immediata che scatta
+quando un venditore salva il proprio modello. La materializzazione resta fuori dal gate
+delle multe (`calendarRuleState()`), per la ragione scritta sopra: gli slot alimentano
+anche il muro del fissaggio. Ma è anche l'operazione più pesante del modulo — **dichiara
+ore a nome di una persona**, ciascuna multabile 50 € per assenza, e apre il muro su
+quelle ore. Senza questa env, un modello sbagliato materializzato su più venditori e più
+settimane si potrebbe disfare solo cancellando righe a mano in SQL, sapendo che il giro
+dopo (ogni 30 minuti) le riscrive. Spenta, le settimane già materializzate restano dove
+sono: sono dichiarazioni a tutti gli effetti e si tolgono dalla griglia della settimana.
+
 ### 4.7 Multa "assente allo slot" — 50 €
 
 Il bottone vive nell'agenda venditori che le Conferme già aprono. È attivo solo se:

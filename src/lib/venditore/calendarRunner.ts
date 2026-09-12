@@ -53,6 +53,22 @@ const TEMPLATE_LOOKAHEAD_WEEKS = 4
  * una scansione dell'intero team. Il cron la chiama senza secondo argomento.
  */
 export async function materializeTemplates(now: Date = new Date(), salesUserId?: string): Promise<TemplateMaterializationResult> {
+    // Kill-switch, quarto della famiglia (SALES_CALENDAR_PENALTIES,
+    // SALES_CALENDAR_PENALTIES_FROM, BOOKING_WALL — spec §4.6): nasce ACCESO,
+    // solo il valore esatto `off` lo spegne ('OFF', 'false', '0' non bastano).
+    //
+    // Serve perché questa funzione fa la cosa più pesante di tutte: dichiara
+    // ore a nome di una persona, ciascuna multabile 50 € se non si presenta, e
+    // apre il muro del fissaggio su quelle ore. Se un modello sbagliato
+    // materializzasse su più venditori e più settimane, senza questa env
+    // l'unica strada sarebbe cancellare righe a mano in SQL sapendo che il
+    // giro dopo (ogni 30 minuti) le riscrive.
+    //
+    // Il controllo sta all'INGRESSO, non attorno alla chiamata del cron: così
+    // vale anche per `saveMyTemplate`, che materializza subito per la persona
+    // che ha appena salvato.
+    if (process.env.SALES_TEMPLATE_MATERIALIZE === 'off') return { weeks: 0, slots: 0, failed: 0 }
+
     // Nessun filtro companyId: tabella per-utente (vedi NOTA COMUNE in schema.ts).
     const templateRows = await db.select({
         salesUserId: salesWeekTemplateSlots.salesUserId,
@@ -118,16 +134,21 @@ export async function materializeTemplates(now: Date = new Date(), salesUserId?:
                 // insieme — altrimenti un'interruzione a metà lascia ore
                 // materializzate senza la riga del piano, e quel venditore
                 // verrebbe multato al giro dopo pur avendo già le disponibilità.
-                await db.transaction(async (tx) => {
-                    await tx.insert(salesAvailabilitySlots).values(wanted.map(slotStart => ({
-                        id: crypto.randomUUID(),
-                        companyId: venditore.companyId,
-                        salesUserId: venditore.id,
-                        slotStart,
-                        weekStart: weekKey,
-                    }))).onConflictDoNothing()
-
-                    await tx.insert(salesWeekPlans).values({
+                //
+                // PRIMA il piano, POI gli slot, e gli slot SOLO se il piano è
+                // stato davvero inserito. La `Set` `already` letta prima del
+                // ciclo è un filtro di comodo, non una guardia: fra quella
+                // lettura e questa scrittura la persona può salvare la sua
+                // settimana a mano. In quel caso l'insert del piano collide con
+                // `sales_week_plans_uq` e `.returning()` torna vuoto: si esce
+                // senza scrivere un solo slot. Con l'ordine opposto passavano
+                // invece 60 ore del modello (l'`onConflictDoNothing` degli slot
+                // non collide con niente, le righe della persona sono altre) a
+                // nome di chi le aveva appena tolte, con la riga di piano che
+                // continuava a dichiararne 10: nessuna traccia dell'accaduto, e
+                // ogni ora di troppo vale 50 € su segnalazione delle Conferme.
+                const scritto = await db.transaction(async (tx) => {
+                    const piano = await tx.insert(salesWeekPlans).values({
                         id: crypto.randomUUID(),
                         companyId: venditore.companyId,
                         salesUserId: venditore.id,
@@ -137,11 +158,28 @@ export async function materializeTemplates(now: Date = new Date(), salesUserId?:
                         slotCount: wanted.length,
                         late: false,
                         fromTemplate: true,
-                    }).onConflictDoNothing()
+                    }).onConflictDoNothing().returning({ id: salesWeekPlans.id })
+
+                    // Piano già presente: la settimana è di qualcun altro
+                    // (della persona, o di un giro precedente). Iterazione
+                    // saltata, non fallita.
+                    if (piano.length === 0) return false
+
+                    await tx.insert(salesAvailabilitySlots).values(wanted.map(slotStart => ({
+                        id: crypto.randomUUID(),
+                        companyId: venditore.companyId,
+                        salesUserId: venditore.id,
+                        slotStart,
+                        weekStart: weekKey,
+                    }))).onConflictDoNothing()
+
+                    return true
                 })
 
-                weeks++
-                slots += wanted.length
+                if (scritto) {
+                    weeks++
+                    slots += wanted.length
+                }
             } catch (e) {
                 // Un venditore in errore non deve fermare gli altri, né far
                 // fallire l'intero giro del cron (multe e promemoria compresi).
@@ -162,6 +200,8 @@ export async function runCalendarWeekly(now: Date = new Date()): Promise<Calenda
     // anche il muro sul fissaggio e la copertura, che hanno un interruttore loro
     // (BOOKING_WALL). Se spegnere le multe smettesse di materializzare, le
     // disponibilita' sparirebbero e il muro comincerebbe a bloccare tutto.
+    // Ha comunque il proprio interruttore, SALES_TEMPLATE_MATERIALIZE=off,
+    // letto dentro la funzione (vale anche per `saveMyTemplate`).
     const materialized = await materializeTemplates(now)
 
     const state = calendarRuleState()
