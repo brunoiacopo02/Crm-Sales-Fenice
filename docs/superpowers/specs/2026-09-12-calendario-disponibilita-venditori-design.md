@@ -394,7 +394,9 @@ Il semaforo di ogni cella:
 
 Voce di menu nuova per il ruolo VENDITORE, che oggi ha solo due voci.
 
-Un interruttore in cima: **Il mio calendario** / **Copertura squadra**.
+~~Un interruttore in cima: **Il mio calendario** / **Copertura squadra**.~~
+**Ripensamento PO, 2026-09-12 (Task 5)**: tre schede, non due — **Il mio
+calendario** / **Copertura squadra** / **Settimana tipo**.
 
 *Il mio calendario*: griglia 6 giorni × 13 ore, selettore settimana (corrente + 3
 successive, passate in sola lettura), click sulla cella per dichiarare o togliere, un
@@ -415,6 +417,14 @@ con l'ora del salvataggio e le ore dichiarate.
 *Copertura squadra*: la griglia di §5, con in ogni cella `N disponibili · ≈X attesi` e
 i nomi, più il riquadro "Fasce scoperte questa settimana". È il caso d'uso che il PO
 ha chiesto: *se vedo che giovedì alle 20 non c'è nessuno, mi organizzo*.
+
+**Aggiunta PO, 2026-09-12 (Task 5)**: *Settimana tipo* — terza scheda, solo per
+VENDITORE. Griglia 6 giorni × 13 ore identica per forma a quella sopra ma senza
+date (solo giorno-della-settimana e ora): qui il venditore imposta l'orario che
+offre di norma una volta sola, invece di spuntarlo ogni settimana. Vale finché
+non lo cambia; il cron lo materializza nelle settimane che non ha ancora
+compilato di persona (§2.1). Un bottone "Cancella la settimana tipo" con
+conferma inline lo azzera senza toccare le settimane già materializzate.
 
 L'admin può aprire la pagina con `?venditore=<id>` per vedere il calendario di
 chiunque, in sola lettura.

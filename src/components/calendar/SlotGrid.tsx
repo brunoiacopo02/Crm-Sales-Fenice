@@ -150,6 +150,23 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
     const menuButtonRefs = useRef(new Map<string, HTMLButtonElement>())
     const popoverRef = useRef<HTMLDivElement>(null)
+    const menuItemRefs = useRef(new Map<SlotMenuOption, HTMLButtonElement>())
+
+    // Il popover e' reso una volta sola in fondo al contenitore, non accanto
+    // al bottone che lo apre (vedi il commento sopra `menuPos`): senza questo
+    // aiuto esplicito, da tastiera il focus resterebbe sul "⋯" all'apertura
+    // (bisognerebbe attraversare con Tab tutte le celle rimanenti della
+    // griglia per raggiungere le tre voci) e non tornerebbe da nessuna parte
+    // alla chiusura. Il menu esiste PROPRIO per risolvere un problema di
+    // accessibilita' (il `title` invisibile sui bottoni disabilitati in
+    // Chrome): consegnarlo cosi' l'avrebbe risolto solo per chi usa il mouse.
+    const closeMenu = (restoreFocus: boolean) => {
+        const keyToRestore = openKey
+        setOpenKey(null)
+        if (restoreFocus && keyToRestore) {
+            menuButtonRefs.current.get(keyToRestore)?.focus()
+        }
+    }
 
     useEffect(() => {
         if (!openKey) return
@@ -157,12 +174,16 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
             const target = e.target as Node
             if (popoverRef.current?.contains(target)) return
             if (menuButtonRefs.current.get(openKey!)?.contains(target)) return
-            setOpenKey(null)
+            closeMenu(true)
         }
         function handleKeyDown(e: KeyboardEvent) {
-            if (e.key === 'Escape') setOpenKey(null)
+            if (e.key === 'Escape') closeMenu(true)
         }
         function handleScrollOrResize() {
+            // Chiusura "di cortesia" per non lasciare un pannello ancorato a
+            // una posizione ormai sbagliata: nessun ripristino del focus, per
+            // non far scattare lo scroll-into-view del browser proprio
+            // mentre l'utente sta scorrendo.
             setOpenKey(null)
         }
         document.addEventListener('mousedown', handlePointerDown)
@@ -175,6 +196,29 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
             window.removeEventListener('scroll', handleScrollOrResize, true)
             window.removeEventListener('resize', handleScrollOrResize)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openKey])
+
+    // All'apertura, il focus si sposta sulla prima voce ABILITATA del menu
+    // (Tab la trova subito, senza attraversare il resto della griglia). Se
+    // sono spente tutte e tre (es. follow-up non tuo), il focus va sul
+    // contenitore: niente da azionare, ma uno screen reader deve poter
+    // comunque leggere le tre ragioni.
+    useEffect(() => {
+        if (!openKey) return
+        const menu = cells.get(openKey)?.menu
+        if (!menu) return
+        const firstEnabled = MENU_OPTION_ORDER.find(opt => !menu[opt].disabled)
+        if (firstEnabled) {
+            menuItemRefs.current.get(firstEnabled)?.focus()
+        } else {
+            popoverRef.current?.focus()
+        }
+        // Solo all'apertura: `cells` cambia riferimento ad ogni tick del
+        // countdown nel genitore, e se fosse in dipendenza il focus verrebbe
+        // strappato via da sotto le dita a chi ha gia' spostato l'attenzione
+        // con Tab.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openKey])
 
     const toggleMenu = (key: string) => {
@@ -304,8 +348,13 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                     ref={popoverRef}
                     role="menu"
                     aria-label="Scegli lo stato dello slot"
+                    // Programmaticamente focalizzabile (vedi l'effetto sopra)
+                    // ma fuori dall'ordine di tabulazione: serve solo quando
+                    // tutte e tre le voci sono spente, per dare comunque un
+                    // punto d'appoggio a chi legge con uno screen reader.
+                    tabIndex={-1}
                     style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: MENU_WIDTH }}
-                    className="z-50 rounded-lg border border-ash-200 bg-white p-1 shadow-lg"
+                    className="z-50 rounded-lg border border-ash-200 bg-white p-1 shadow-lg focus:outline-none"
                 >
                     {MENU_OPTION_ORDER.map(option => {
                         const item = openView.menu![option]
@@ -315,9 +364,16 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                                 type="button"
                                 role="menuitem"
                                 disabled={!!item.disabled}
+                                ref={(el) => {
+                                    if (el) menuItemRefs.current.set(option, el)
+                                    else menuItemRefs.current.delete(option)
+                                }}
                                 onClick={() => {
                                     onCellMenu?.(openKey, option)
-                                    setOpenKey(null)
+                                    // Chi ha scelto una voce torna al bottone
+                                    // "⋯" che aveva aperto il menu: da
+                                    // tastiera non si riparte mai da capo.
+                                    closeMenu(true)
                                 }}
                                 className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors ${item.disabled ? 'cursor-default text-ash-300' : 'cursor-pointer text-ash-800 hover:bg-ash-50'}`}
                             >
