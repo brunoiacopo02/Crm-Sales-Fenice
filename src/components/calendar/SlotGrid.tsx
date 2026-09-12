@@ -21,10 +21,19 @@ export interface SlotCellView {
     badge?: string
     /** Testo breve sotto il contenuto principale della cella. */
     subtitle?: string
+    /** Seconda riga, più piccola, sotto `subtitle` (es. i nomi dei colleghi). */
+    detail?: string
     /** Colore del semaforo copertura per questo slot. */
     tone?: CoverageStatus
-    /** Tooltip nativo (es. nomi dei colleghi disponibili). */
+    /** Tooltip nativo (es. l'elenco completo dei colleghi disponibili). */
     title?: string
+    /**
+     * Il bottone "⋯" resta visibile ma spento, con `menuTitle` come
+     * spiegazione: il venditore deve capire che la finestra è chiusa, non
+     * credere a un guasto (spec §4.4).
+     */
+    menuDisabled?: boolean
+    menuTitle?: string
 }
 
 export interface SlotGridProps {
@@ -133,7 +142,7 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                                             e.preventDefault()
                                             onCellMenu(key)
                                         }}
-                                        className={`flex h-14 w-full flex-col items-center justify-center gap-0.5 border-2 border-transparent px-1 py-1 text-[10px] transition-colors ${STATE_STYLES[view.state]} ${disabled ? 'cursor-default' : 'cursor-pointer hover:brightness-95'}`}
+                                        className={`flex min-h-14 w-full flex-col items-center justify-center gap-0.5 border-2 border-transparent px-1 py-1 text-[10px] transition-colors ${STATE_STYLES[view.state]} ${disabled ? 'cursor-default' : 'cursor-pointer hover:brightness-95'}`}
                                     >
                                         {view.tone && (
                                             <div className={`absolute inset-x-0 top-0 h-[3px] ${TONE_STYLES[view.tone]}`} />
@@ -141,6 +150,11 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                                         {view.subtitle && (
                                             <span className="line-clamp-2 text-center leading-tight">
                                                 {view.subtitle}
+                                            </span>
+                                        )}
+                                        {view.detail && (
+                                            <span className="line-clamp-2 text-center text-[10px] leading-tight opacity-80">
+                                                {view.detail}
                                             </span>
                                         )}
                                     </button>
@@ -152,12 +166,15 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                                     {showMenu && (
                                         <button
                                             type="button"
+                                            disabled={!!view.menuDisabled}
+                                            title={view.menuTitle}
                                             aria-label="Altre azioni sullo slot"
                                             onClick={(e) => {
                                                 e.stopPropagation()
+                                                if (view.menuDisabled) return
                                                 onCellMenu?.(key)
                                             }}
-                                            className="absolute bottom-0.5 right-0.5 rounded bg-white/80 px-1 text-[10px] font-bold text-ash-500 hover:bg-white hover:text-ash-800"
+                                            className={`absolute bottom-0.5 right-0.5 rounded px-1 text-[10px] font-bold ${view.menuDisabled ? 'cursor-default bg-white/50 text-ash-300' : 'cursor-pointer bg-white/80 text-ash-500 hover:bg-white hover:text-ash-800'}`}
                                         >
                                             ⋯
                                         </button>

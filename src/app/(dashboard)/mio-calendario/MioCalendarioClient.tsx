@@ -13,6 +13,7 @@ import {
     getCalendarWeek, saveCalendarWeek, blockSlot, unblockSlot, type CalendarWeekView,
 } from "@/app/actions/salesCalendarActions"
 import { weekSlots, weekStartFor, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
+import { MANUAL_BLOCK_NOTICE_MINUTES } from "@/lib/venditore/calendarRules"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { SlotGrid, type SlotCellView } from "@/components/calendar/SlotGrid"
 import { CoverageLegend } from "@/components/calendar/CoverageLegend"
@@ -188,14 +189,33 @@ export function MioCalendarioClient({ initial, role }: Props) {
 
             let state: SlotCellView['state']
             let subtitle: string | undefined
+            let menuDisabled: boolean | undefined
+            let menuTitle: string | undefined
+
             if (appt) {
                 state = 'occupato'
                 subtitle = appt.leadName
             } else if (block) {
                 state = 'bloccato'
                 subtitle = block.kind === 'FOLLOWUP' ? `Follow-up: ${block.leadName ?? ''}` : 'Bloccato'
+                // `unblockSlot` rifiuta sempre i blocchi FOLLOWUP: il bottone
+                // resta visibile ma spento, con la spiegazione, non nascosto
+                // (stessa decisione della finestra di preavviso qui sotto).
+                if (block.kind === 'FOLLOWUP') {
+                    menuDisabled = true
+                    menuTitle = "Questo slot è occupato da un follow-up: spostalo o registrane l'esito."
+                }
             } else if (selected.has(key)) {
                 state = 'disponibile'
+                // Anticipazione lato client della stessa regola server-side
+                // (manualBlockCheck/MANUAL_BLOCK_NOTICE_MINUTES): il controllo
+                // vero resta nel server action, questo evita solo il click a
+                // vuoto seguito da un rifiuto che sembra un guasto.
+                const minutiDiPreavviso = (slot.getTime() - now.getTime()) / 60_000
+                if (minutiDiPreavviso <= MANUAL_BLOCK_NOTICE_MINUTES) {
+                    menuDisabled = true
+                    menuTitle = "Troppo tardi: uno slot si blocca almeno un'ora prima."
+                }
             } else {
                 state = 'libero'
             }
@@ -211,10 +231,12 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 subtitle,
                 badge: othersAvailable > 0 ? String(othersAvailable) : undefined,
                 tone: cov?.status ?? 'neutro',
+                menuDisabled,
+                menuTitle,
             })
         }
         return m
-    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet])
+    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet, now])
 
     const coverageCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()
@@ -223,17 +245,24 @@ export function MioCalendarioClient({ initial, role }: Props) {
             const cov = coverageByKey.get(key)
             const availableCount = cov?.available.length ?? 0
             const expected = (cov?.expectedPeople ?? 0).toLocaleString('it-IT', { maximumFractionDigits: 1 })
-            const names = cov && cov.available.length > 0
-                ? cov.available.map(id => venditoriById.get(id) ?? id).join(', ')
-                : undefined
+            const names = cov?.available.map(id => venditoriById.get(id) ?? id) ?? []
+            // I nomi vanno nel corpo della cella (spec §5.1): il `title` resta
+            // solo come comodità per chi ha il mouse, non l'unico posto dove
+            // esistono — su telefono l'hover non esiste.
+            const detail = names.length === 0
+                ? undefined
+                : names.length > 3
+                    ? `${names.slice(0, 3).join(', ')} +${names.length - 3}`
+                    : names.join(', ')
             m.set(key, {
                 // Il segnale primario qui è il semaforo (`tone`), non lo stato
                 // personale: teniamo il fondo cella neutro per non doppiare il
                 // messaggio.
                 state: 'libero',
                 subtitle: `${availableCount} disp · ≈${expected}`,
+                detail,
                 tone: cov?.status ?? 'neutro',
-                title: names,
+                title: names.length > 0 ? names.join(', ') : undefined,
             })
         }
         return m
@@ -267,7 +296,7 @@ export function MioCalendarioClient({ initial, role }: Props) {
         if (!data.editable) return
         const cell = myCells.get(key)
         const instant = instantByKey.get(key)
-        if (!cell || !instant) return
+        if (!cell || !instant || cell.menuDisabled) return
         const slotIso = instant.toISOString()
 
         if (cell.state === 'disponibile') {
