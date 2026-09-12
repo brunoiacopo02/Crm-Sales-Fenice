@@ -15,8 +15,9 @@ import {
 import { weekSlots, weekStartFor, addWeeks, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
 import { MANUAL_BLOCK_NOTICE_MINUTES } from "@/lib/venditore/calendarRules"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
-import { SlotGrid, type SlotCellView } from "@/components/calendar/SlotGrid"
+import { SlotGrid, type SlotCellView, type SlotMenuOption, type SlotMenuItemView } from "@/components/calendar/SlotGrid"
 import { CoverageLegend } from "@/components/calendar/CoverageLegend"
+import { TemplateEditor } from "@/components/calendar/TemplateEditor"
 
 interface Props {
     initial: CalendarWeekView
@@ -79,11 +80,36 @@ function fasciaLabel(cov: CoverageCell): string {
     return `${weekday} ${day} alle ${time} — ${chi}, ≈${attesi} attesi`
 }
 
-function StatusStrip({ data, now }: { data: CalendarWeekView; now: Date }) {
+function StatusStrip({ data, now, onOpenTemplate }: { data: CalendarWeekView; now: Date; onOpenTemplate: () => void }) {
     const deadline = new Date(data.deadlineIso)
 
     if (data.submittedAtIso) {
         const submitted = new Date(data.submittedAtIso)
+        // ATTENZIONE: `fromTemplate` da solo NON basta a dire "compilata dal
+        // modello" — torna vero anche per una proposta mai materializzata
+        // (nessun piano a DB, `submittedAtIso` nullo). Qui dentro
+        // `submittedAtIso` è già garantito non nullo da questo `if`, quindi
+        // combinato con `fromTemplate` significa davvero "il cron l'ha
+        // materializzata" (vedi il commento su `CalendarWeekView.fromTemplate`
+        // in `salesCalendarActions.ts`).
+        if (data.fromTemplate) {
+            return (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    <p>
+                        {`Compilata dalla tua settimana tipo il ${weekdayFmt.format(submitted)} ${dateSlashFmt.format(submitted)} alle ${timeFmt.format(submitted)} — ${data.slotCount} ore dichiarate. Puoi modificarla comunque.`}
+                    </p>
+                    <div className="mt-1">
+                        <button
+                            type="button"
+                            onClick={onOpenTemplate}
+                            className="cursor-pointer font-semibold text-emerald-900 underline hover:no-underline"
+                        >
+                            Gestisci la settimana tipo
+                        </button>
+                    </div>
+                </div>
+            )
+        }
         return (
             <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 {`Compilato ${weekdayFmt.format(submitted)} ${dateSlashFmt.format(submitted)} alle ${timeFmt.format(submitted)} — ${data.slotCount} ore dichiarate`}
@@ -110,7 +136,17 @@ function StatusStrip({ data, now }: { data: CalendarWeekView; now: Date }) {
         const ms = deadline.getTime() - now.getTime()
         return (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {`Compila entro ${weekdayFmt.format(deadline)} ${timeFmt.format(deadline)} — mancano ${formatCountdown(ms)}`}
+                <p>{`Compila entro ${weekdayFmt.format(deadline)} ${timeFmt.format(deadline)} — mancano ${formatCountdown(ms)}`}</p>
+                {data.template.length > 0 && (
+                    // Il modello esiste ma questa settimana non ha ancora un
+                    // piano a DB (`submittedAtIso` nullo sopra): è la proposta
+                    // del modello, non ancora una dichiarazione. Vero fino a
+                    // che il cron (o il prossimo salvataggio del modello) la
+                    // materializza.
+                    <p className="mt-1 text-xs text-amber-700">
+                        Hai una settimana tipo: se non intervieni si compila da sola entro la scadenza.
+                    </p>
+                )}
             </div>
         )
     }
@@ -126,7 +162,7 @@ function StatusStrip({ data, now }: { data: CalendarWeekView; now: Date }) {
 export function MioCalendarioClient({ initial, role }: Props) {
     const [data, setData] = useState<CalendarWeekView>(initial)
     const [selected, setSelected] = useState<Set<string>>(() => new Set(initial.mySlots))
-    const [view, setView] = useState<'mio' | 'copertura'>('mio')
+    const [view, setView] = useState<'mio' | 'copertura' | 'modello'>('mio')
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [now, setNow] = useState<Date>(() => new Date())
@@ -144,17 +180,23 @@ export function MioCalendarioClient({ initial, role }: Props) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data.weekStartIso])
 
+    // `salesUserId` va ripassato SEMPRE, anche quando si cambia solo settimana:
+    // senza, `getCalendarWeek` ricade sul chiamante e chi stava guardando il
+    // calendario di un collega (`?venditore=<id>`) alla prima freccia si
+    // ritrova davanti il proprio, senza che nulla lo segnali. Sul proprio
+    // calendario è un no-op: `targetUserId` coincide già con chi guarda.
+    const targetUserId = data.targetUserId
     const loadWeek = useCallback((weekStartIso: string) => {
         setError(null)
         startTransition(async () => {
             try {
-                const fresh = await getCalendarWeek({ weekStartIso })
+                const fresh = await getCalendarWeek({ weekStartIso, salesUserId: targetUserId })
                 setData(fresh)
             } catch (e: any) {
                 setError(e?.message || 'Errore caricamento calendario.')
             }
         })
-    }, [])
+    }, [targetUserId])
 
     const maxForwardWeekMs = useMemo(
         () => addWeeks(weekStartFor(new Date()), MAX_WEEKS_FORWARD).getTime(),
@@ -180,6 +222,8 @@ export function MioCalendarioClient({ initial, role }: Props) {
 
     const myCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()
+        const disabledMenuItem = (reason: string): SlotMenuItemView => ({ disabled: true, reason })
+
         for (const slot of slots) {
             const key = slotKey(slot)
             const appt = apptByKey.get(key)
@@ -188,10 +232,15 @@ export function MioCalendarioClient({ initial, role }: Props) {
 
             let state: SlotCellView['state']
             let subtitle: string | undefined
-            let menuDisabled: boolean | undefined
-            let menuTitle: string | undefined
             let cellDisabled: boolean | undefined
             let title: string | undefined
+            // Le tre voci del menu "⋯": assente = niente menu su questa cella
+            // (è il caso di un appuntamento, dove nessuna delle tre scelte ha
+            // senso). Le ragioni si scrivono qui, mai in un `title`: un
+            // bottone disabilitato non lo mostra in Chrome (spec §4.4).
+            let menu: SlotCellView['menu']
+
+            const pastHourReason = 'Le ore già iniziate non si modificano: restano come le avevi dichiarate.'
 
             // Un'ora già iniziata non si ri-dichiara: è la prova di quello che
             // era stato offerto, e le Conferme hanno 48 ore per segnalare
@@ -200,27 +249,44 @@ export function MioCalendarioClient({ initial, role }: Props) {
             // salvataggio che sembra andato a buon fine e non cambia nulla.
             if (slot <= now) {
                 cellDisabled = true
-                title = 'Le ore già iniziate non si modificano: restano come le avevi dichiarate.'
+                title = pastHourReason
             }
 
             if (appt) {
                 state = 'occupato'
                 subtitle = appt.leadName
+                // Nessun menu: uno slot occupato da un appuntamento non ha
+                // nessuna delle tre scelte disponibile.
             } else if (block) {
                 state = 'bloccato'
                 subtitle = block.kind === 'FOLLOWUP' ? `Follow-up: ${block.leadName ?? ''}` : 'Bloccato'
                 // `unblockSlot` rifiuta i blocchi FOLLOWUP di un lead ancora
-                // assegnato: il bottone resta visibile ma spento, con la
-                // spiegazione, non nascosto (stessa decisione della finestra di
-                // preavviso qui sotto). Un blocco ORFANO (lead non più suo) si
-                // può invece togliere: senza, lo slot resterebbe occupato per
-                // sempre senza che nessuno possa farci niente.
+                // assegnato: la riga resta visibile ma spenta, con la
+                // spiegazione, non nascosta (stessa decisione della finestra
+                // di preavviso qui sotto). Un blocco ORFANO (lead non più
+                // suo) si può invece togliere: senza, lo slot resterebbe
+                // occupato per sempre senza che nessuno possa farci niente.
                 if (block.kind === 'FOLLOWUP' && !block.orphan) {
-                    menuDisabled = true
-                    menuTitle = "Questo slot è occupato da un follow-up: spostalo o registrane l'esito."
-                } else if (block.kind === 'FOLLOWUP') {
-                    subtitle = 'Follow-up non più tuo'
-                    menuTitle = 'Questo lead non è più assegnato a te: puoi liberare lo slot.'
+                    const reason = "Questo slot è occupato da un follow-up: spostalo o registrane l'esito."
+                    menu = {
+                        disponibile: disabledMenuItem(reason),
+                        bloccato: disabledMenuItem('È già bloccato per il follow-up.'),
+                        nondisponibile: disabledMenuItem(reason),
+                    }
+                } else {
+                    if (block.kind === 'FOLLOWUP') subtitle = 'Follow-up non più tuo'
+                    const bloccatoReason = block.kind === 'FOLLOWUP'
+                        ? 'Era bloccato per un follow-up non più tuo.'
+                        : 'È già bloccato per imprevisto.'
+                    // Sbloccabile sempre (orfano, o blocco manuale): la scelta
+                    // finale (disponibile/non disponibile) decide solo la
+                    // selezione locale dopo lo sblocco, non tocca il server
+                    // due volte.
+                    menu = {
+                        disponibile: {},
+                        bloccato: disabledMenuItem(bloccatoReason),
+                        nondisponibile: {},
+                    }
                 }
             } else if (selected.has(key)) {
                 state = 'disponibile'
@@ -229,12 +295,30 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 // vero resta nel server action, questo evita solo il click a
                 // vuoto seguito da un rifiuto che sembra un guasto.
                 const minutiDiPreavviso = (slot.getTime() - now.getTime()) / 60_000
-                if (minutiDiPreavviso <= MANUAL_BLOCK_NOTICE_MINUTES) {
-                    menuDisabled = true
-                    menuTitle = "Troppo tardi: uno slot si blocca almeno un'ora prima."
+                const bloccatoItem: SlotMenuItemView = minutiDiPreavviso <= MANUAL_BLOCK_NOTICE_MINUTES
+                    ? disabledMenuItem("Troppo tardi: uno slot si blocca almeno un'ora prima.")
+                    : {}
+                menu = {
+                    disponibile: disabledMenuItem('È già disponibile.'),
+                    bloccato: bloccatoItem,
+                    nondisponibile: cellDisabled ? disabledMenuItem(pastHourReason) : {},
                 }
             } else {
-                state = 'libero'
+                // Rosso = "ha scelto di non esserci". È vero solo se una
+                // dichiarazione esiste davvero a DB (`data.declared`). Se
+                // `mySlots` è una PROPOSTA — default verde mai salvato,
+                // settimana tipo non ancora materializzata, settimana passata
+                // che nessuno ha mai compilato — la cella resta bianca
+                // (`libero`): nessuna scelta è stata fatta, e affermare il
+                // contrario è la stessa bugia del verde sui calendari altrui.
+                state = data.declared ? 'nondisponibile' : 'libero'
+                menu = {
+                    disponibile: cellDisabled ? disabledMenuItem(pastHourReason) : {},
+                    bloccato: disabledMenuItem('Devi prima segnarlo come disponibile.'),
+                    nondisponibile: disabledMenuItem(
+                        data.declared ? 'È già non disponibile.' : 'Non è fra le ore selezionate.',
+                    ),
+                }
             }
 
             // La copertura arriva dal DB (ultimo salvataggio), non dalla
@@ -248,14 +332,13 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 subtitle,
                 badge: othersAvailable > 0 ? String(othersAvailable) : undefined,
                 tone: cov?.status ?? 'neutro',
-                menuDisabled,
-                menuTitle,
+                menu,
                 cellDisabled,
                 title,
             })
         }
         return m
-    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet, now])
+    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet, now, data.declared])
 
     const coverageCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()
@@ -293,6 +376,15 @@ export function MioCalendarioClient({ initial, role }: Props) {
         return false
     }, [selected, data.mySlots])
 
+    // Il bottone Salva si spegne SOLO su una settimana già dichiarata e non
+    // toccata. Su una settimana mai dichiarata resta acceso anche senza
+    // modifiche: `mySlots` è una proposta (il default verde, o la settimana
+    // tipo non ancora materializzata) e coincide con la selezione iniziale,
+    // quindi `dirty` nasce falso — accettare la proposta così com'è era
+    // impossibile, e chi chiudeva la pagina credendosi a posto prendeva la
+    // multa delle 14:00 e restava imprenotabile per tutta la settimana.
+    const canSave = data.editable && (dirty || !data.declared)
+
     const uncovered = useMemo(
         () => data.coverage.filter(c => c.status === 'rosso' || c.status === 'ambra'),
         [data.coverage],
@@ -312,26 +404,67 @@ export function MioCalendarioClient({ initial, role }: Props) {
         })
     }
 
-    const handleCellMenu = (key: string) => {
+    // Le tre voci del menu portano a uno STATO FINALE (Disponibile / Imprevisto
+    // / Non disponibile), non a un'azione unica come prima. Da una cella
+    // bloccata, qualunque scelta diversa dal blocco stesso passa prima da uno
+    // sblocco lato server; da una cella non bloccata, "Imprevisto" chiama
+    // `blockSlot` e le altre due sono solo una modifica della selezione
+    // locale (il salvataggio resta il bottone "Salva").
+    const handleCellMenu = (key: string, option: SlotMenuOption) => {
         if (!data.editable) return
         const cell = myCells.get(key)
         const instant = instantByKey.get(key)
-        if (!cell || !instant || cell.menuDisabled) return
+        if (!cell || !instant) return
+        const menuItem = cell.menu?.[option]
+        if (!menuItem || menuItem.disabled) return
         const slotIso = instant.toISOString()
 
-        if (cell.state === 'disponibile') {
+        if (cell.state === 'bloccato') {
+            setError(null)
+            startTransition(async () => {
+                const res = await unblockSlot(slotIso)
+                if (!res.success) {
+                    setError(res.error ?? 'Sblocco non riuscito.')
+                    return
+                }
+                if (option === 'nondisponibile') {
+                    setSelected(prev => {
+                        const next = new Set(prev)
+                        next.delete(key)
+                        return next
+                    })
+                } else {
+                    // Lo sblocco da solo NON basta: un blocco FOLLOWUP orfano
+                    // può insistere su un'ora che non era dichiarata (il lead
+                    // non è più suo, il blocco è rimasto). Lì la selezione
+                    // locale non contiene la chiave, e senza questa riga il
+                    // menu diceva "Disponibile" e la cella restava rossa.
+                    // Sui blocchi manuali — ammessi solo su ore già dichiarate
+                    // — è un no-op.
+                    setSelected(prev => new Set(prev).add(key))
+                }
+                loadWeek(data.weekStartIso)
+            })
+            return
+        }
+
+        if (option === 'bloccato') {
             setError(null)
             startTransition(async () => {
                 const res = await blockSlot(slotIso)
                 if (!res.success) setError(res.error ?? 'Blocco non riuscito.')
                 else loadWeek(data.weekStartIso)
             })
-        } else if (cell.state === 'bloccato') {
-            setError(null)
-            startTransition(async () => {
-                const res = await unblockSlot(slotIso)
-                if (!res.success) setError(res.error ?? 'Sblocco non riuscito.')
-                else loadWeek(data.weekStartIso)
+            return
+        }
+
+        if (option === 'disponibile') {
+            setSelected(prev => new Set(prev).add(key))
+        } else {
+            setSelected(prev => {
+                const next = new Set(prev)
+                next.delete(key)
+                return next
             })
         }
     }
@@ -345,7 +478,10 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 return
             }
             try {
-                const fresh = await getCalendarWeek({ weekStartIso: data.weekStartIso })
+                // Stesso `salesUserId` di `loadWeek`: qui è sempre il proprio
+                // calendario (si salva solo il proprio), ma la regola vale una
+                // sola, così non c'è una seconda lettura da ricordarsi.
+                const fresh = await getCalendarWeek({ weekStartIso: data.weekStartIso, salesUserId: targetUserId })
                 setData(fresh)
             } catch (e: any) {
                 setError(e?.message || 'Salvato, ma il ricaricamento è fallito: aggiorna la pagina.')
@@ -366,33 +502,41 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 </p>
             </header>
 
-            {role === 'VENDITORE' && <StatusStrip data={data} now={now} />}
+            {role === 'VENDITORE' && (
+                <StatusStrip data={data} now={now} onOpenTemplate={() => setView('modello')} />
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => goWeek(-1)}
-                        disabled={isPending}
-                        aria-label="Settimana precedente"
-                        className="rounded-lg border border-ash-200 bg-white p-1.5 text-ash-700 hover:bg-ash-100 disabled:opacity-50"
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <div className="min-w-[10rem] text-center text-sm font-semibold text-ash-800">
-                        {formatWeekRange(data.weekStartIso)}
+                {view === 'modello' ? (
+                    // La settimana tipo non ha una settimana: il navigatore
+                    // qui non avrebbe senso da mostrare.
+                    <div className="text-sm text-ash-500">Vale ogni settimana, non solo quella corrente.</div>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => goWeek(-1)}
+                            disabled={isPending}
+                            aria-label="Settimana precedente"
+                            className="rounded-lg border border-ash-200 bg-white p-1.5 text-ash-700 hover:bg-ash-100 disabled:opacity-50"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <div className="min-w-[10rem] text-center text-sm font-semibold text-ash-800">
+                            {formatWeekRange(data.weekStartIso)}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => goWeek(1)}
+                            disabled={isPending || atMaxForward}
+                            aria-label="Settimana successiva"
+                            className="rounded-lg border border-ash-200 bg-white p-1.5 text-ash-700 hover:bg-ash-100 disabled:opacity-50"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+                        {isPending && <Loader2 className="h-4 w-4 animate-spin text-ash-400" />}
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => goWeek(1)}
-                        disabled={isPending || atMaxForward}
-                        aria-label="Settimana successiva"
-                        className="rounded-lg border border-ash-200 bg-white p-1.5 text-ash-700 hover:bg-ash-100 disabled:opacity-50"
-                    >
-                        <ChevronRight className="h-4 w-4" />
-                    </button>
-                    {isPending && <Loader2 className="h-4 w-4 animate-spin text-ash-400" />}
-                </div>
+                )}
 
                 <div className="inline-flex rounded-lg border border-ash-200 bg-white p-1 text-sm font-semibold">
                     <button
@@ -409,10 +553,19 @@ export function MioCalendarioClient({ initial, role }: Props) {
                     >
                         Copertura squadra
                     </button>
+                    {role === 'VENDITORE' && (
+                        <button
+                            type="button"
+                            onClick={() => setView('modello')}
+                            className={`rounded-md px-3 py-1.5 transition-colors ${view === 'modello' ? 'bg-brand-orange text-white' : 'text-ash-600 hover:bg-ash-100'}`}
+                        >
+                            Settimana tipo
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {roNote && (
+            {view !== 'modello' && roNote && (
                 <div className="text-xs italic text-ash-500">{roNote}</div>
             )}
 
@@ -422,7 +575,7 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 </div>
             )}
 
-            {view === 'mio' ? (
+            {view === 'mio' && (
                 <div className="space-y-3">
                     <SlotGrid
                         weekStartIso={data.weekStartIso}
@@ -431,13 +584,13 @@ export function MioCalendarioClient({ initial, role }: Props) {
                         onCellMenu={handleCellMenu}
                         readOnly={!data.editable}
                     />
-                    <CoverageLegend />
+                    <CoverageLegend variant="personale" />
                     {role === 'VENDITORE' && (
                         <div className="flex items-center justify-end">
                             <button
                                 type="button"
                                 onClick={handleSave}
-                                disabled={!data.editable || !dirty || isPending}
+                                disabled={!canSave || isPending}
                                 className="flex items-center gap-2 rounded-lg bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-95 disabled:cursor-default disabled:opacity-50"
                             >
                                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -446,14 +599,16 @@ export function MioCalendarioClient({ initial, role }: Props) {
                         </div>
                     )}
                 </div>
-            ) : (
+            )}
+
+            {view === 'copertura' && (
                 <div className="space-y-3">
                     <SlotGrid
                         weekStartIso={data.weekStartIso}
                         cells={coverageCells}
                         readOnly
                     />
-                    <CoverageLegend />
+                    <CoverageLegend variant="copertura" />
                     <div className="rounded-xl border border-ash-200 bg-white p-4">
                         <h2 className="mb-2 text-sm font-bold text-ash-800">Fasce scoperte questa settimana</h2>
                         {uncovered.length === 0 ? (
@@ -467,6 +622,13 @@ export function MioCalendarioClient({ initial, role }: Props) {
                         )}
                     </div>
                 </div>
+            )}
+
+            {view === 'modello' && role === 'VENDITORE' && (
+                <TemplateEditor
+                    initial={data.template}
+                    onSaved={() => loadWeek(data.weekStartIso)}
+                />
             )}
         </div>
     )

@@ -1594,9 +1594,30 @@ export const salesWeekPlans = pgTable('salesWeekPlans', {
     updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     slotCount: integer('slotCount').default(0).notNull(),
     late: boolean('late').default(false).notNull(),
+    // true = settimana compilata dal modello, non a mano.
+    fromTemplate: boolean('fromTemplate').default(false).notNull(),
 }, (table) => {
     return {
         planUnique: uniqueIndex('sales_week_plans_uq').on(table.salesUserId, table.weekStart),
         weekIdx: index('sales_week_plans_week_idx').on(table.companyId, table.weekStart),
+    };
+});
+
+/**
+ * Settimana tipo: le ore che un venditore offre di solito.
+ * Materializzata in `salesAvailabilitySlots` dal giro di cron — vedi
+ * `calendarTemplate.ts` per il perché non resta virtuale.
+ */
+export const salesWeekTemplateSlots = pgTable('salesWeekTemplateSlots', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // 1 = lunedì … 6 = sabato.
+    dow: integer('dow').notNull(),
+    hour: integer('hour').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        templateUnique: uniqueIndex('sales_week_template_uq').on(table.salesUserId, table.dow, table.hour),
     };
 });

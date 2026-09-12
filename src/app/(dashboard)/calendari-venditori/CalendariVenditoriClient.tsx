@@ -81,12 +81,13 @@ function reasonLabel(reason: string | null): string {
     return reason ?? '—'
 }
 
-function Pill({ tone, children }: { tone: 'green' | 'red' | 'amber' | 'neutral'; children: React.ReactNode }) {
+function Pill({ tone, children }: { tone: 'green' | 'red' | 'amber' | 'neutral' | 'blue'; children: React.ReactNode }) {
     const cls = {
         green: 'bg-emerald-100 text-emerald-800',
         red: 'bg-rose-100 text-rose-800',
         amber: 'bg-amber-100 text-amber-800',
         neutral: 'bg-ash-100 text-ash-600',
+        blue: 'bg-sky-100 text-sky-800',
     }[tone]
     return (
         <div className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>
@@ -240,7 +241,7 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
             {tab === 'copertura' && (
                 <div className="space-y-4">
                     <SlotGrid weekStartIso={data.weekStartIso} cells={coverageCells} readOnly />
-                    <CoverageLegend />
+                    <CoverageLegend variant="copertura" />
                     <MatrixCard matrix={data.matrix} venditoriById={venditoriById} slots={slots} />
                 </div>
             )}
@@ -359,10 +360,18 @@ function CompilazioneTab({
                                 {/* Un esente non è un inadempiente: la spec §4.3 dice
                                     che non deve comparire fra i non compilati. Con la
                                     pastiglia rossa "No", Sales 001 risultava colpevole
-                                    ogni settimana per sempre. */}
+                                    ogni settimana per sempre.
+                                    Chi risulta compilato si distingue poi fra chi ha
+                                    davvero guardato la settimana (A mano) e chi vive
+                                    su una fotografia vecchia rimaterializzata dal cron
+                                    (Da settimana tipo): senza questa distinzione la
+                                    scheda diventa cieca su chi si occupa sul serio del
+                                    proprio calendario (Task 6). */}
                                 <td className="px-3 py-2">
                                     {row.submittedAtIso
-                                        ? <Pill tone="green">Sì</Pill>
+                                        ? (row.fromTemplate
+                                            ? <Pill tone="blue">Da settimana tipo</Pill>
+                                            : <Pill tone="green">A mano</Pill>)
                                         : row.exempt
                                             ? <Pill tone="neutral">Esente</Pill>
                                             : <Pill tone="red">No</Pill>}

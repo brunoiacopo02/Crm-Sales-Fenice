@@ -26,7 +26,7 @@ direzione.
 | Segnalazione assenza | La multa scatta subito; l'admin può annullarla con motivo. |
 | Blocco tardivo (<1h) | Il sistema lo impedisce. |
 | Compilazione in ritardo | Multa da 50 € definitiva, ma il calendario resta apribile. Una sola multa per settimana. |
-| Soglia "compilato" | Basta aver salvato almeno una volta entro lunedì 14:00. Nessun minimo di ore. |
+| Soglia "compilato" | Basta aver salvato almeno una volta entro lunedì 14:00. Nessun minimo di ore. ~~(nessun altro modo di risultare compilato)~~ **Ripensamento PO, 2026-09-12 (Task 5, opzione B)**: chi ha impostato una settimana tipo risulta compilato in automatico — il cron la materializza in un piano vero (righe reali in `salesWeekPlans`/`salesAvailabilitySlots`) per le settimane che non ha ancora compilato di persona, e quel piano vale come salvataggio a tutti gli effetti: niente multa del lunedì. Attenzione a non leggere questo come "avere un modello basta": finché il piano non è stato materializzato (o compilato a mano) la settimana resta una proposta, non una compilazione — vedi §2.1. |
 | Sales 001 | Esente da obblighi, promemoria e multe. Resta visibile ovunque e il suo calendario funziona se vuole usarlo. |
 | Posizionamento | Due pagine nuove: `/mio-calendario` e `/calendari-venditori`. |
 | Blocco su slot già occupato | Rifiutato (regola proposta da Claude, accettata dal PO). |
@@ -35,6 +35,26 @@ direzione.
 La griglia 9–21 Lun–Sab è confermata dai dati: sugli ultimi 90 giorni gli appuntamenti
 assegnati a un venditore cadono quasi sempre a ora piena fra le 9 e le 21, con zero
 appuntamenti di domenica.
+
+### 2.1 Ripensamento PO, 2026-09-12 (Task 5): default verde e settimana tipo
+
+~~La griglia si apre vuota: ogni ora va spuntata a mano, una cella non toccata resta
+bianca ("libero", cioè non ancora dichiarata).~~ **Ripensamento**: la griglia si apre
+già piena — tutte le ore future della settimana preselezionate — e il venditore toglie
+quelle che non vanno bene. Una cella non selezionata è ora una scelta esplicita, "non
+disponibile", non un'assenza di scelta: la griglia la mostra rossa invece che bianca
+(`SlotGrid.tsx`, stato `nondisponibile`). Resta comunque vero che **non si scrive nulla
+a DB finché il venditore non preme Salva**: il default verde è una proposta lato
+client, non una dichiarazione.
+
+Il venditore può anche impostare una **settimana tipo** una volta sola — giorno della
+settimana + ora, senza una data (`salesWeekTemplateSlots`) — che vale finché non la
+cambia. Il cron la materializza in un piano vero nelle settimane che non ha ancora
+compilato di persona, entro la finestra che copre (oggi quattro settimane:
+`calendarRunner.ts`); una settimana così materializzata conta come compilata (vedi la
+riga aggiornata in §2) e resta comunque modificabile a mano dalla griglia normale.
+Editor: `TemplateEditor.tsx`, azioni `getMyTemplate`/`saveMyTemplate`/`clearMyTemplate`
+in `salesCalendarActions.ts`.
 
 ## 3. Modello dati (migrazione `0034_sales_calendar.sql`)
 
@@ -218,8 +238,19 @@ Sul punto 3 il messaggio è esplicito: *"C'è un appuntamento alle HH:MM: avvisa
 Conferme per spostarlo."* Senza questa regola basterebbe bloccare a 61 minuti
 dall'appuntamento per annullare la multa.
 
-Sotto i 60 minuti il bottone è disabilitato con la spiegazione, non nascosto: il
-venditore deve capire che la finestra è chiusa, non credere a un guasto.
+~~Sotto i 60 minuti il bottone è disabilitato con la spiegazione, non nascosto: il
+venditore deve capire che la finestra è chiusa, non credere a un guasto.~~
+
+**Ripensamento PO, 2026-09-12 (Task 5)**: quella era la regola sulla carta, ma in
+Chrome il `title` di un bottone disabilitato non si vede affatto — il PO l'ha
+notato di persona ("mi dice solo che non ho selezionato l'orario, ma devono dare
+le opzioni i tre puntini"), e il venditore che ci cliccava sopra non capiva
+perché non succedeva nulla. Il bottone "⋯" è ora un menu a **tre voci**
+(Disponibile, Imprevisto, Non disponibile): sotto i 60 minuti la voce
+"Imprevisto" resta visibile ma spenta, con la ragione scritta **dentro la riga
+del menu**, non in un tooltip. Il merito non cambia: il preavviso minimo resta
+di 60 minuti pieni e il rifiuto sul punto 3 (appuntamento già fissato) resta
+identico — è cambiato solo come si sceglie e come si legge il rifiuto.
 
 Lo sblocco è sempre consentito.
 
@@ -271,6 +302,20 @@ spegne, il muro nasce acceso e resta acceso con la env assente o con qualunque a
 valore. Spento, le Conferme tornano a fissare dove vogliono e non viene più registrata
 nessuna forzatura. Serve perché l'alternativa, se lunedì mattina il muro si rivelasse
 ingestibile, sarebbe un revert e un redeploy sotto pressione con quattro persone ferme.
+
+**Kill-switch della materializzazione della settimana tipo**, il quarto della famiglia:
+`SALES_TEMPLATE_MATERIALIZE=off` ferma la trasformazione dei modelli in ore vere — solo
+quel valore esatto la spegne, nasce accesa e resta accesa con la env assente o con
+qualunque altro valore. L'interruttore è letto **all'ingresso** di `materializeTemplates`,
+quindi vale sia per il giro di cron sia per la materializzazione immediata che scatta
+quando un venditore salva il proprio modello. La materializzazione resta fuori dal gate
+delle multe (`calendarRuleState()`), per la ragione scritta sopra: gli slot alimentano
+anche il muro del fissaggio. Ma è anche l'operazione più pesante del modulo — **dichiara
+ore a nome di una persona**, ciascuna multabile 50 € per assenza, e apre il muro su
+quelle ore. Senza questa env, un modello sbagliato materializzato su più venditori e più
+settimane si potrebbe disfare solo cancellando righe a mano in SQL, sapendo che il giro
+dopo (ogni 30 minuti) le riscrive. Spenta, le settimane già materializzate restano dove
+sono: sono dichiarazioni a tutti gli effetti e si tolgono dalla griglia della settimana.
 
 ### 4.7 Multa "assente allo slot" — 50 €
 
@@ -363,14 +408,21 @@ Il semaforo di ogni cella:
 
 Voce di menu nuova per il ruolo VENDITORE, che oggi ha solo due voci.
 
-Un interruttore in cima: **Il mio calendario** / **Copertura squadra**.
+~~Un interruttore in cima: **Il mio calendario** / **Copertura squadra**.~~
+**Ripensamento PO, 2026-09-12 (Task 5)**: tre schede, non due — **Il mio
+calendario** / **Copertura squadra** / **Settimana tipo**.
 
 *Il mio calendario*: griglia 6 giorni × 13 ore, selettore settimana (corrente + 3
 successive, passate in sola lettura), click sulla cella per dichiarare o togliere, un
 solo bottone "Salva". Ogni cella mostra, oltre al proprio stato: l'eventuale
 appuntamento fissato (nome lead), il lucchetto del blocco da follow-up, il blocco
 manuale, quanti colleghi sono disponibili in quell'ora, e lo sfondo dell'affluenza
-attesa. Menu per slot con "Blocca per imprevisto" (§4.4).
+attesa. ~~Menu per slot con "Blocca per imprevisto" (§4.4).~~ **Ripensamento PO,
+2026-09-12 (Task 5)**: menu per slot a tre voci — Disponibile, Imprevisto,
+Non disponibile (§4.4) — invece di un singolo bottone "Blocca per imprevisto".
+Quando una voce non è possibile la riga resta visibile con la ragione scritta
+dentro il menu, non su un bottone spento: un bottone disabilitato non mostra il
+suo `title` in Chrome, ed è il difetto che questo cambio chiude.
 
 In cima una striscia di stato: countdown a lunedì 14:00 se la settimana è ancora da
 compilare, oppure la multa registrata con la data, oppure la conferma di compilazione
@@ -379,6 +431,14 @@ con l'ora del salvataggio e le ore dichiarate.
 *Copertura squadra*: la griglia di §5, con in ogni cella `N disponibili · ≈X attesi` e
 i nomi, più il riquadro "Fasce scoperte questa settimana". È il caso d'uso che il PO
 ha chiesto: *se vedo che giovedì alle 20 non c'è nessuno, mi organizzo*.
+
+**Aggiunta PO, 2026-09-12 (Task 5)**: *Settimana tipo* — terza scheda, solo per
+VENDITORE. Griglia 6 giorni × 13 ore identica per forma a quella sopra ma senza
+date (solo giorno-della-settimana e ora): qui il venditore imposta l'orario che
+offre di norma una volta sola, invece di spuntarlo ogni settimana. Vale finché
+non lo cambia; il cron lo materializza nelle settimane che non ha ancora
+compilato di persona (§2.1). Un bottone "Cancella la settimana tipo" con
+conferma inline lo azzera senza toccare le settimane già materializzate.
 
 L'admin può aprire la pagina con `?venditore=<id>` per vedere il calendario di
 chiunque, in sola lettura.

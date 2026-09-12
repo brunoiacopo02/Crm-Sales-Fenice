@@ -197,6 +197,13 @@ export interface SupervisionView {
         penaltyEur: number | null
         /** Esente (spec §4.3): stato proprio, non "non compilato". */
         exempt: boolean
+        /**
+         * `salesWeekPlans.fromTemplate` di questa riga: qui `submittedAtIso` è
+         * garantito derivare da una riga vera (`planRows`, mai una proposta non
+         * materializzata come in `getCalendarWeek`), quindi combinarli è sicuro
+         * e dice se la settimana è stata compilata a mano o dal cron.
+         */
+        fromTemplate: boolean
     }>
     penalties: Array<{
         id: string
@@ -254,6 +261,7 @@ export async function getCalendarSupervision(
             submittedAt: salesWeekPlans.submittedAt,
             slotCount: salesWeekPlans.slotCount,
             late: salesWeekPlans.late,
+            fromTemplate: salesWeekPlans.fromTemplate,
         }).from(salesWeekPlans).where(
             // Per-utente, non per-azienda: vedi la nota in calendarQueries.ts.
             eq(salesWeekPlans.weekStart, weekStartStr),
@@ -327,6 +335,7 @@ export async function getCalendarSupervision(
             late: plan?.late ?? false,
             penaltyEur: penaltyByUser.get(v.id) ?? null,
             exempt: v.calendarExempt,
+            fromTemplate: plan?.fromTemplate ?? false,
         }
     })
     // Prima i non compilati: sono il motivo per cui qualcuno apre questa scheda.
