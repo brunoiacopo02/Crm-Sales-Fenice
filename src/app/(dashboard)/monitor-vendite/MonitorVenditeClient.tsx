@@ -78,14 +78,26 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const months = useMemo(() => lastMonths(), [])
-    // Le annullate restano in elenco (barrate), ma non entrano nel totale.
-    const totalMalus = useMemo(
-        () => data.latePenalties.reduce((sum, p) => sum + (p.voidedAtIso ? 0 : p.amountEur), 0),
-        [data.latePenalties],
-    )
+    // Righe che la tabella sta mostrando ADESSO (annullate incluse: restano
+    // visibili, barrate). Ogni numero dell'intestazione deve descrivere questo
+    // insieme, non il mese intero, altrimenti pastiglia/totale/tabella non
+    // raccontano la stessa cosa quando un filtro è attivo.
     const filteredPenalties = useMemo(
         () => penaltyKindFilter ? data.latePenalties.filter(p => p.kind === penaltyKindFilter) : data.latePenalties,
         [data.latePenalties, penaltyKindFilter],
+    )
+    // Il totale in euro segue il filtro attivo (somma solo le righe mostrate)
+    // ed esclude sempre le annullate: sono soldi non dovuti, non righe da
+    // nascondere. Quando un filtro è attivo l'etichetta lo dice esplicitamente
+    // (vedi `activeFilterLabel`), perché altrimenti "-120 €" sembrerebbe il
+    // totale del mese e non lo è.
+    const totalMalus = useMemo(
+        () => filteredPenalties.reduce((sum, p) => sum + (p.voidedAtIso ? 0 : p.amountEur), 0),
+        [filteredPenalties],
+    )
+    const activeFilterLabel = useMemo(
+        () => PENALTY_KIND_FILTERS.find(f => f.kind === penaltyKindFilter)?.label ?? null,
+        [penaltyKindFilter],
     )
 
     const apply = () => {
@@ -283,12 +295,13 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                         Ritardi e multe
                         {data.penaltyRule.active ? (
                             <>
+                                {/* Conteggio delle righe mostrate ADESSO (annullate incluse: sono visibili). */}
                                 <span className="ml-1 rounded-full bg-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-800">
-                                    {data.latePenalties.length}
+                                    {filteredPenalties.length}
                                 </span>
                                 {totalMalus > 0 && (
                                     <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white">
-                                        -{totalMalus.toFixed(0)} &euro;
+                                        -{totalMalus.toFixed(0)} &euro;{activeFilterLabel ? ` (${activeFilterLabel})` : ''}
                                     </span>
                                 )}
                             </>

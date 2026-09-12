@@ -81,7 +81,7 @@ export interface LatePenaltyRow {
     voidReason: string | null
 }
 
-/** Conteggi per tipo del mese selezionato, righe annullate escluse. */
+/** Conteggi per tipo del mese selezionato, righe annullate INCLUSE (sono comunque visibili in tabella). */
 export type PenaltyKindCounts = Record<'APPOINTMENT' | 'FOLLOWUP' | 'CALENDAR_MISSING' | 'ABSENT_SLOT', number>
 
 export interface LatePenaltySummary {
@@ -109,7 +109,7 @@ export interface VenditoriMonitorData {
     /** Ritardi del mese selezionato: le scadenze uscite dalle liste qui sopra. */
     latePenalties: LatePenaltyRow[]
     latePenaltySummary: LatePenaltySummary[]
-    /** Conteggi per tipo del mese selezionato (righe annullate escluse): alimentano le pastiglie-filtro. */
+    /** Conteggi per tipo del mese selezionato (righe annullate incluse, sono comunque a registro): alimentano le pastiglie-filtro. */
     penaltyKindCounts: PenaltyKindCounts
     /** Mese di competenza dei ritardi mostrati ('YYYY-MM'). */
     penaltyMonthKey: string
@@ -347,8 +347,8 @@ export async function getVenditoriMonitor(filters: {
         .sort((a, b) => b.maxDays - a.maxDays)
 
     // Ritardi + multe calendario del mese selezionato + riepilogo per venditore.
-    // Le annullate restano nell'elenco (barrate a video), ma sono escluse da
-    // ogni somma: sommario, conteggi per tipo e badge del venditore.
+    // Le annullate restano nell'elenco (barrate a video): il registro le mostra
+    // sempre, sono le SOMME a doverle escludere dove il denaro conta davvero.
     const monthPenalties = penaltyRows.filter(r => r.monthKey === penaltyMonthKey)
     const latePenalties: LatePenaltyRow[] = monthPenalties.map(r => ({
         id: r.id,
@@ -367,10 +367,18 @@ export async function getVenditoriMonitor(filters: {
         voidReason: r.voidReason ?? null,
     }))
 
-    const activePenalties = latePenalties.filter(p => !p.voidedAtIso)
+    // `latePenaltySummary` alimenta "Carico per venditore nel periodo", una
+    // tabella PREESISTENTE le cui colonne si chiamano "Ritardi" e "Malus": resta
+    // volutamente ritardi-only (kind APPOINTMENT/FOLLOWUP, annullate escluse).
+    // Il totale per venditore comprensivo delle multe da 50 € esiste già su
+    // /calendari-venditori — non "completare" questo aggregato con i kind
+    // calendario, cambierebbe il significato di una colonna che non è stata
+    // rinominata.
+    const ritardiAttivi = latePenalties.filter(p =>
+        !p.voidedAtIso && (p.kind === 'APPOINTMENT' || p.kind === 'FOLLOWUP'))
 
     const summaryMap = new Map<string, LatePenaltySummary>()
-    for (const p of activePenalties) {
+    for (const p of ritardiAttivi) {
         const cur = summaryMap.get(p.venditoreId) ?? {
             venditoreId: p.venditoreId,
             venditoreName: p.venditoreName,
@@ -385,11 +393,16 @@ export async function getVenditoriMonitor(filters: {
     }
     const latePenaltySummary = [...summaryMap.values()].sort((a, b) => b.count - a.count)
 
+    // `penaltyKindCounts` alimenta le pastiglie-filtro della sezione: contano
+    // TUTTE le righe del mese per quel kind, annullate incluse. Le annullate
+    // restano visibili in tabella (barrate), quindi il numero sulla pastiglia
+    // deve coincidere con le righe che il click rivela — altrimenti promette
+    // meno righe di quante se ne vedono davvero.
     const penaltyKindCounts: PenaltyKindCounts = {
-        APPOINTMENT: activePenalties.filter(p => p.kind === 'APPOINTMENT').length,
-        FOLLOWUP: activePenalties.filter(p => p.kind === 'FOLLOWUP').length,
-        CALENDAR_MISSING: activePenalties.filter(p => p.kind === 'CALENDAR_MISSING').length,
-        ABSENT_SLOT: activePenalties.filter(p => p.kind === 'ABSENT_SLOT').length,
+        APPOINTMENT: latePenalties.filter(p => p.kind === 'APPOINTMENT').length,
+        FOLLOWUP: latePenalties.filter(p => p.kind === 'FOLLOWUP').length,
+        CALENDAR_MISSING: latePenalties.filter(p => p.kind === 'CALENDAR_MISSING').length,
+        ABSENT_SLOT: latePenalties.filter(p => p.kind === 'ABSENT_SLOT').length,
     }
 
     return {
