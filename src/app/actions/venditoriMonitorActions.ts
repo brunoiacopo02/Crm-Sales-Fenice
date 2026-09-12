@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { leads, users, salesAttempts, salesLatePenalties } from "@/db/schema"
 import { and, eq, isNotNull, isNull, gte, lte, or, asc, desc, inArray, sql } from "drizzle-orm"
 import { penaltyKey, lateHours, romeMonthKey, penaltyRuleState, type PenaltyKind, type PenaltyRuleState } from "@/lib/venditore/latePenalties"
+import type { CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -54,20 +55,34 @@ export interface FollowUpRow {
     salespersonOutcomeNotes: string | null
 }
 
-/** Un ritardo a registro: scadenza mancata da un venditore. */
+/** Le quattro famiglie del registro unico: i due ritardi (10 €) + le due multe calendario (50 €). */
+export type LatePenaltyRowKind = PenaltyKind | CalendarPenaltyKind
+
+/** Un ritardo o una multa calendario a registro. */
 export interface LatePenaltyRow {
     id: string
-    leadId: string
-    leadName: string
+    /** Null per le multe CALENDAR_MISSING: non hanno un lead. */
+    leadId: string | null
+    leadName: string | null
     venditoreId: string
     venditoreName: string
-    kind: PenaltyKind
+    kind: LatePenaltyRowKind
     dueAt: Date
     resolvedAt: Date | null
     /** Ore trascorse fra la scadenza e l'esito (o adesso, se ancora scoperto). */
     hoursLate: number
     amountEur: number
+    /** Motivo/nota libera (valorizzata soprattutto per ABSENT_SLOT). */
+    note: string | null
+    /** Chi ha segnalato la multa a mano; null per quelle automatiche (cron). */
+    reportedByName: string | null
+    /** Annullamento admin (Task 10): riga barrata, fuori da ogni totale. */
+    voidedAtIso: string | null
+    voidReason: string | null
 }
+
+/** Conteggi per tipo del mese selezionato, righe annullate escluse. */
+export type PenaltyKindCounts = Record<'APPOINTMENT' | 'FOLLOWUP' | 'CALENDAR_MISSING' | 'ABSENT_SLOT', number>
 
 export interface LatePenaltySummary {
     venditoreId: string
@@ -94,6 +109,8 @@ export interface VenditoriMonitorData {
     /** Ritardi del mese selezionato: le scadenze uscite dalle liste qui sopra. */
     latePenalties: LatePenaltyRow[]
     latePenaltySummary: LatePenaltySummary[]
+    /** Conteggi per tipo del mese selezionato (righe annullate escluse): alimentano le pastiglie-filtro. */
+    penaltyKindCounts: PenaltyKindCounts
     /** Mese di competenza dei ritardi mostrati ('YYYY-MM'). */
     penaltyMonthKey: string
     /**
@@ -149,7 +166,9 @@ export async function getVenditoriMonitor(filters: {
     if (targetIds.length === 0) {
         return {
             venditori, appointments: [], upcomingFollowUps: [], overdueFollowUps: [],
-            inLavorazione: [], latePenalties: [], latePenaltySummary: [], penaltyMonthKey,
+            inLavorazione: [], latePenalties: [], latePenaltySummary: [],
+            penaltyKindCounts: { APPOINTMENT: 0, FOLLOWUP: 0, CALENDAR_MISSING: 0, ABSENT_SLOT: 0 },
+            penaltyMonthKey,
             penaltyRule,
         }
     }
@@ -159,6 +178,9 @@ export async function getVenditoriMonitor(filters: {
     // Ritardi a registro. Servono a due cose: escludere dalle liste le scadenze
     // già "uscite dal monitor" (decisione PO 2026-09-09) e alimentare la sezione
     // Ritardi del mese selezionato.
+    // `leftJoin` su leads: le multe CALENDAR_MISSING non hanno lead e con un
+    // innerJoin sparirebbero in silenzio dal registro e dal totale di fine
+    // mese — nessun errore, solo una trattenuta da 50 € invisibile.
     const penaltyRows = await db.select({
         id: salesLatePenalties.id,
         leadId: salesLatePenalties.leadId,
@@ -168,9 +190,15 @@ export async function getVenditoriMonitor(filters: {
         resolvedAt: salesLatePenalties.resolvedAt,
         amountEur: salesLatePenalties.amountEur,
         monthKey: salesLatePenalties.monthKey,
+        note: salesLatePenalties.note,
+        voidedAt: salesLatePenalties.voidedAt,
+        voidReason: salesLatePenalties.voidReason,
         leadName: leads.name,
+        reporterName: users.name,
+        reporterDisplayName: users.displayName,
     }).from(salesLatePenalties)
-      .innerJoin(leads, eq(leads.id, salesLatePenalties.leadId))
+      .leftJoin(leads, eq(leads.id, salesLatePenalties.leadId))
+      .leftJoin(users, eq(users.id, salesLatePenalties.reportedBy))
       .where(and(
           eq(salesLatePenalties.companyId, ctx.companyId),
           inArray(salesLatePenalties.salesUserId, targetIds),
@@ -178,12 +206,13 @@ export async function getVenditoriMonitor(filters: {
       .orderBy(desc(salesLatePenalties.dueAt))
 
     // Chiavi delle scadenze penalizzate: una scadenza a registro non compare più
-    // nelle liste operative, è già passata al conteggio dei ritardi.
-    const penalisedKeys = new Set(penaltyRows.map(r => penaltyKey({
-        leadId: r.leadId,
-        kind: r.kind as PenaltyKind,
-        dueAt: r.dueAt,
-    })))
+    // nelle liste operative, è già passata al conteggio dei ritardi. Solo
+    // APPOINTMENT/FOLLOWUP hanno un lead e alimentano le liste operative: le
+    // multe calendario (senza lead, o con kind diverso) non c'entrano.
+    const penalisedKeys = new Set(penaltyRows
+        .filter((r): r is typeof r & { leadId: string; kind: 'APPOINTMENT' | 'FOLLOWUP' } =>
+            !!r.leadId && (r.kind === 'APPOINTMENT' || r.kind === 'FOLLOWUP'))
+        .map(r => penaltyKey({ leadId: r.leadId, kind: r.kind, dueAt: r.dueAt })))
 
     // Appuntamenti nel range
     const apptRows = await db.select({
@@ -317,23 +346,31 @@ export async function getVenditoriMonitor(filters: {
         }))
         .sort((a, b) => b.maxDays - a.maxDays)
 
-    // Ritardi del mese selezionato + riepilogo per venditore.
+    // Ritardi + multe calendario del mese selezionato + riepilogo per venditore.
+    // Le annullate restano nell'elenco (barrate a video), ma sono escluse da
+    // ogni somma: sommario, conteggi per tipo e badge del venditore.
     const monthPenalties = penaltyRows.filter(r => r.monthKey === penaltyMonthKey)
     const latePenalties: LatePenaltyRow[] = monthPenalties.map(r => ({
         id: r.id,
         leadId: r.leadId,
-        leadName: r.leadName || 'Senza nome',
+        leadName: r.leadId ? (r.leadName || 'Senza nome') : null,
         venditoreId: r.salesUserId,
         venditoreName: nameOf.get(r.salesUserId) || '—',
-        kind: r.kind as PenaltyKind,
+        kind: r.kind as LatePenaltyRowKind,
         dueAt: r.dueAt,
         resolvedAt: r.resolvedAt ?? null,
         hoursLate: lateHours(r.dueAt, r.resolvedAt ?? null, now),
         amountEur: r.amountEur,
+        note: r.note ?? null,
+        reportedByName: r.reporterDisplayName || r.reporterName || null,
+        voidedAtIso: r.voidedAt ? r.voidedAt.toISOString() : null,
+        voidReason: r.voidReason ?? null,
     }))
 
+    const activePenalties = latePenalties.filter(p => !p.voidedAtIso)
+
     const summaryMap = new Map<string, LatePenaltySummary>()
-    for (const p of latePenalties) {
+    for (const p of activePenalties) {
         const cur = summaryMap.get(p.venditoreId) ?? {
             venditoreId: p.venditoreId,
             venditoreName: p.venditoreName,
@@ -348,6 +385,13 @@ export async function getVenditoriMonitor(filters: {
     }
     const latePenaltySummary = [...summaryMap.values()].sort((a, b) => b.count - a.count)
 
+    const penaltyKindCounts: PenaltyKindCounts = {
+        APPOINTMENT: activePenalties.filter(p => p.kind === 'APPOINTMENT').length,
+        FOLLOWUP: activePenalties.filter(p => p.kind === 'FOLLOWUP').length,
+        CALENDAR_MISSING: activePenalties.filter(p => p.kind === 'CALENDAR_MISSING').length,
+        ABSENT_SLOT: activePenalties.filter(p => p.kind === 'ABSENT_SLOT').length,
+    }
+
     return {
         venditori,
         appointments,
@@ -356,6 +400,7 @@ export async function getVenditoriMonitor(filters: {
         inLavorazione,
         latePenalties,
         latePenaltySummary,
+        penaltyKindCounts,
         penaltyMonthKey,
         penaltyRule,
     }
@@ -385,6 +430,9 @@ export async function getMyLatePenalties(monthKey?: string): Promise<{
         eq(salesLatePenalties.companyId, ctx.companyId),
         eq(salesLatePenalties.salesUserId, user.id),
         eq(salesLatePenalties.monthKey, mk),
+        // Una multa annullata (Task 10) non deve continuare a pesare sul
+        // badge di chi l'ha ricevuta.
+        isNull(salesLatePenalties.voidedAt),
     ))
 
     return {

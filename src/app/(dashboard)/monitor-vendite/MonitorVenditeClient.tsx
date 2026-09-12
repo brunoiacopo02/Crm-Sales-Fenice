@@ -7,6 +7,7 @@ import {
     type VenditoriMonitorData,
     type AppointmentRow,
     type FollowUpRow,
+    type LatePenaltyRowKind,
 } from "@/app/actions/venditoriMonitorActions"
 
 interface Props {
@@ -42,6 +43,22 @@ function lastMonths(count = 12): { key: string; label: string }[] {
     return out
 }
 
+/** Le quattro etichette italiane della colonna Tipo (registro unico ritardi + multe calendario). */
+const PENALTY_KIND_LABELS: Record<LatePenaltyRowKind, string> = {
+    APPOINTMENT: 'Appuntamento',
+    FOLLOWUP: 'Follow-up',
+    CALENDAR_MISSING: 'Calendario non compilato',
+    ABSENT_SLOT: 'Assente allo slot',
+}
+
+/** Etichette brevi delle pastiglie-filtro, in ordine di visualizzazione. */
+const PENALTY_KIND_FILTERS: { kind: LatePenaltyRowKind; label: string }[] = [
+    { kind: 'APPOINTMENT', label: 'Appuntamenti' },
+    { kind: 'FOLLOWUP', label: 'Follow-up' },
+    { kind: 'CALENDAR_MISSING', label: 'Calendario' },
+    { kind: 'ABSENT_SLOT', label: 'Assenze' },
+]
+
 function apptStatusBadge(a: AppointmentRow) {
     if (a.salespersonOutcome === 'Chiuso') return { label: 'Chiuso', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
     if (a.salespersonOutcome === 'Non chiuso') return { label: 'Non chiuso', cls: 'bg-rose-100 text-rose-700 border-rose-200' }
@@ -57,12 +74,18 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
     const [endDate, setEndDate] = useState(toDateInput(initialEnd))
     const [selectedVenditori, setSelectedVenditori] = useState<string[]>([])
     const [penaltyMonth, setPenaltyMonth] = useState(initialData.penaltyMonthKey)
+    const [penaltyKindFilter, setPenaltyKindFilter] = useState<LatePenaltyRowKind | null>(null)
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const months = useMemo(() => lastMonths(), [])
+    // Le annullate restano in elenco (barrate), ma non entrano nel totale.
     const totalMalus = useMemo(
-        () => data.latePenalties.reduce((sum, p) => sum + p.amountEur, 0),
+        () => data.latePenalties.reduce((sum, p) => sum + (p.voidedAtIso ? 0 : p.amountEur), 0),
         [data.latePenalties],
+    )
+    const filteredPenalties = useMemo(
+        () => penaltyKindFilter ? data.latePenalties.filter(p => p.kind === penaltyKindFilter) : data.latePenalties,
+        [data.latePenalties, penaltyKindFilter],
     )
 
     const apply = () => {
@@ -86,6 +109,7 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
 
     const changePenaltyMonth = (mk: string) => {
         setPenaltyMonth(mk)
+        setPenaltyKindFilter(null)
         setError(null)
         startTransition(async () => {
             try {
@@ -251,12 +275,12 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                 </section>
             )}
 
-            {/* Ritardi del mese — scadenze uscite dalle liste operative */}
+            {/* Ritardi e multe del mese — registro unico (10 € ritardi + 50 € calendario) */}
             <section className="rounded-2xl border border-rose-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-100 px-4 py-3">
                     <h2 className="flex flex-wrap items-center gap-2 text-sm font-bold text-rose-900">
                         <Timer className="h-4 w-4 text-rose-600" />
-                        Ritardi
+                        Ritardi e multe
                         {data.penaltyRule.active ? (
                             <>
                                 <span className="ml-1 rounded-full bg-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-800">
@@ -286,6 +310,39 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     </select>
                 </div>
 
+                {data.penaltyRule.active && data.latePenalties.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 border-b border-rose-100 bg-rose-50/40 px-4 py-2.5">
+                        {PENALTY_KIND_FILTERS.map(f => {
+                            const count = data.penaltyKindCounts[f.kind]
+                            const active = penaltyKindFilter === f.kind
+                            return (
+                                <div key={f.kind}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPenaltyKindFilter(active ? null : f.kind)}
+                                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${active
+                                            ? 'border-rose-600 bg-rose-600 text-white'
+                                            : 'border-rose-200 bg-white text-rose-700 hover:bg-rose-50'}`}
+                                    >
+                                        {f.label} <span className="opacity-80">({count})</span>
+                                    </button>
+                                </div>
+                            )
+                        })}
+                        {penaltyKindFilter && (
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => setPenaltyKindFilter(null)}
+                                    className="rounded-full px-2 py-1 text-[11px] text-ash-500 underline"
+                                >
+                                    pulisci filtro
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {!data.penaltyRule.active ? (
                     <div className="px-4 py-6 text-center text-sm text-ash-500">
                         <p className="font-semibold text-ash-700">
@@ -301,10 +358,14 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     </div>
                 ) : data.latePenalties.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-ash-500">
-                        Nessun ritardo in questo mese.
+                        Nessun ritardo o multa in questo mese.
                         <span className="ml-1 text-ash-400">
                             Regola in vigore dal {formatDateIT(new Date(data.penaltyRule.from))}.
                         </span>
+                    </div>
+                ) : filteredPenalties.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-sm text-ash-500">
+                        Nessuna riga per questo filtro.
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -316,34 +377,49 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                     <th className="px-4 py-2 text-left font-semibold">Tipo</th>
                                     <th className="px-4 py-2 text-left font-semibold">Scadenza</th>
                                     <th className="px-4 py-2 text-left font-semibold">Stato</th>
+                                    <th className="px-4 py-2 text-left font-semibold">Segnalata da</th>
                                     <th className="px-4 py-2 text-right font-semibold">Malus</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.latePenalties.map(p => (
-                                    <tr key={p.id} className="border-b border-ash-100 last:border-0">
-                                        <td className="px-4 py-2 font-medium text-ash-800">{p.venditoreName}</td>
-                                        <td className="px-4 py-2 text-ash-700">{p.leadName}</td>
-                                        <td className="px-4 py-2 text-ash-600">
-                                            {p.kind === 'APPOINTMENT' ? 'Appuntamento' : 'Follow-up'}
-                                        </td>
-                                        <td className="px-4 py-2 text-ash-600">{formatDateTimeIT(p.dueAt)}</td>
-                                        <td className="px-4 py-2">
-                                            {p.resolvedAt ? (
-                                                <span className="rounded-full border border-ash-200 bg-ash-50 px-2 py-0.5 text-[11px] font-semibold text-ash-700">
-                                                    Esitato dopo {p.hoursLate}h
-                                                </span>
-                                            ) : (
-                                                <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
-                                                    Ancora da esitare ({p.hoursLate}h)
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-2 text-right font-semibold text-rose-700">
-                                            -{p.amountEur.toFixed(0)} &euro;
-                                        </td>
-                                    </tr>
-                                ))}
+                                {filteredPenalties.map(p => {
+                                    const voided = !!p.voidedAtIso
+                                    return (
+                                        <tr
+                                            key={p.id}
+                                            className={`border-b border-ash-100 last:border-0 ${voided ? 'line-through text-ash-400' : ''}`}
+                                            title={voided ? (p.voidReason || 'Multa annullata') : undefined}
+                                        >
+                                            <td className="px-4 py-2 font-medium text-ash-800">{p.venditoreName}</td>
+                                            <td className="px-4 py-2 text-ash-700">{p.leadName ?? '—'}</td>
+                                            <td className="px-4 py-2 text-ash-600">
+                                                {PENALTY_KIND_LABELS[p.kind]}
+                                            </td>
+                                            <td className="px-4 py-2 text-ash-600">{formatDateTimeIT(p.dueAt)}</td>
+                                            <td className="px-4 py-2">
+                                                {p.kind === 'APPOINTMENT' || p.kind === 'FOLLOWUP' ? (
+                                                    p.resolvedAt ? (
+                                                        <span className="rounded-full border border-ash-200 bg-ash-50 px-2 py-0.5 text-[11px] font-semibold text-ash-700">
+                                                            Esitato dopo {p.hoursLate}h
+                                                        </span>
+                                                    ) : (
+                                                        <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                                                            Ancora da esitare ({p.hoursLate}h)
+                                                        </span>
+                                                    )
+                                                ) : (
+                                                    <span className="rounded-full border border-ash-200 bg-ash-50 px-2 py-0.5 text-[11px] font-semibold text-ash-700">
+                                                        Multa fissa
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-2 text-ash-600">{p.reportedByName || ''}</td>
+                                            <td className="px-4 py-2 text-right font-semibold text-rose-700">
+                                                -{p.amountEur.toFixed(0)} &euro;
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
                             </tbody>
                         </table>
                     </div>
