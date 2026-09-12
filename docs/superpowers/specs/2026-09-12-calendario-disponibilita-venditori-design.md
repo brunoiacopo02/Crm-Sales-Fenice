@@ -238,8 +238,19 @@ Sul punto 3 il messaggio è esplicito: *"C'è un appuntamento alle HH:MM: avvisa
 Conferme per spostarlo."* Senza questa regola basterebbe bloccare a 61 minuti
 dall'appuntamento per annullare la multa.
 
-Sotto i 60 minuti il bottone è disabilitato con la spiegazione, non nascosto: il
-venditore deve capire che la finestra è chiusa, non credere a un guasto.
+~~Sotto i 60 minuti il bottone è disabilitato con la spiegazione, non nascosto: il
+venditore deve capire che la finestra è chiusa, non credere a un guasto.~~
+
+**Ripensamento PO, 2026-09-12 (Task 5)**: quella era la regola sulla carta, ma in
+Chrome il `title` di un bottone disabilitato non si vede affatto — il PO l'ha
+notato di persona ("mi dice solo che non ho selezionato l'orario, ma devono dare
+le opzioni i tre puntini"), e il venditore che ci cliccava sopra non capiva
+perché non succedeva nulla. Il bottone "⋯" è ora un menu a **tre voci**
+(Disponibile, Imprevisto, Non disponibile): sotto i 60 minuti la voce
+"Imprevisto" resta visibile ma spenta, con la ragione scritta **dentro la riga
+del menu**, non in un tooltip. Il merito non cambia: il preavviso minimo resta
+di 60 minuti pieni e il rifiuto sul punto 3 (appuntamento già fissato) resta
+identico — è cambiato solo come si sceglie e come si legge il rifiuto.
 
 Lo sblocco è sempre consentito.
 
@@ -390,7 +401,12 @@ successive, passate in sola lettura), click sulla cella per dichiarare o toglier
 solo bottone "Salva". Ogni cella mostra, oltre al proprio stato: l'eventuale
 appuntamento fissato (nome lead), il lucchetto del blocco da follow-up, il blocco
 manuale, quanti colleghi sono disponibili in quell'ora, e lo sfondo dell'affluenza
-attesa. Menu per slot con "Blocca per imprevisto" (§4.4).
+attesa. ~~Menu per slot con "Blocca per imprevisto" (§4.4).~~ **Ripensamento PO,
+2026-09-12 (Task 5)**: menu per slot a tre voci — Disponibile, Imprevisto,
+Non disponibile (§4.4) — invece di un singolo bottone "Blocca per imprevisto".
+Quando una voce non è possibile la riga resta visibile con la ragione scritta
+dentro il menu, non su un bottone spento: un bottone disabilitato non mostra il
+suo `title` in Chrome, ed è il difetto che questo cambio chiude.
 
 In cima una striscia di stato: countdown a lunedì 14:00 se la settimana è ancora da
 compilare, oppure la multa registrata con la data, oppure la conferma di compilazione
