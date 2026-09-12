@@ -4,7 +4,7 @@ import { db } from "@/db"
 import { leads, users, salesAttempts, salesLatePenalties } from "@/db/schema"
 import { and, eq, isNotNull, isNull, gte, lte, or, asc, desc, inArray, sql } from "drizzle-orm"
 import { penaltyKey, lateHours, romeMonthKey, penaltyRuleState, type PenaltyKind, type PenaltyRuleState } from "@/lib/venditore/latePenalties"
-import type { CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
+import { calendarRuleState, type CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -119,6 +119,14 @@ export interface VenditoriMonitorData {
      * e' in ritardo: il manager legge un guasto dove non c'e'.
      */
     penaltyRule: PenaltyRuleState
+    /**
+     * Stato della regola CALENDARIO (SALES_CALENDAR_PENALTIES*), gemella e
+     * indipendente. Il cron delle due e' gia' disaccoppiato: senza questo campo
+     * la UI non lo era, e bastava spegnere il malus ritardi — che e' il motivo
+     * per cui quel kill-switch esiste — per far sparire dal registro le multe
+     * da 50 € che intanto continuavano a essere scritte.
+     */
+    calendarRule: PenaltyRuleState
 }
 
 export async function listVenditori(): Promise<VenditoreLite[]> {
@@ -162,6 +170,7 @@ export async function getVenditoriMonitor(filters: {
 
     const penaltyMonthKey = filters.penaltyMonthKey || romeMonthKey(new Date())
     const penaltyRule = penaltyRuleState()
+    const calendarRule = calendarRuleState()
 
     if (targetIds.length === 0) {
         return {
@@ -170,6 +179,7 @@ export async function getVenditoriMonitor(filters: {
             penaltyKindCounts: { APPOINTMENT: 0, FOLLOWUP: 0, CALENDAR_MISSING: 0, ABSENT_SLOT: 0 },
             penaltyMonthKey,
             penaltyRule,
+            calendarRule,
         }
     }
 
@@ -374,6 +384,10 @@ export async function getVenditoriMonitor(filters: {
     // /calendari-venditori — non "completare" questo aggregato con i kind
     // calendario, cambierebbe il significato di una colonna che non è stata
     // rinominata.
+    // È lo stesso motivo per cui questo numero NON coincide con il badge della
+    // dashboard venditore (`getMyLatePenalties`, che somma tutti e quattro i
+    // kind): là la domanda è "quanto mi trattengono questo mese", qui è "chi è
+    // in ritardo". Due domande diverse, due numeri diversi, per scelta.
     const ritardiAttivi = latePenalties.filter(p =>
         !p.voidedAtIso && (p.kind === 'APPOINTMENT' || p.kind === 'FOLLOWUP'))
 
@@ -416,16 +430,32 @@ export async function getVenditoriMonitor(filters: {
         penaltyKindCounts,
         penaltyMonthKey,
         penaltyRule,
+        calendarRule,
     }
 }
 
 /**
- * Ritardi del venditore loggato nel mese corrente: alimenta il badge sulla sua
- * dashboard. Ognuno vede solo i propri (staff incluso, per il proprio account).
+ * TRATTENUTE del venditore loggato nel mese: alimenta il badge sulla sua
+ * dashboard. Ognuno vede solo le proprie (staff incluso, per il proprio account).
+ *
+ * Volutamente TUTTI E QUATTRO i kind — i 10 € dei ritardi e i 50 € del
+ * calendario — perché una persona deve poter vedere in un posto solo quanto le
+ * viene trattenuto in totale questo mese. Nasconderle renderebbe il numero
+ * "pulito" a spese della trasparenza verso chi paga (ruling PO 2026-09-12).
+ *
+ * NON confondere con `latePenaltySummary` ("Carico per venditore" del Monitor
+ * Vendite), che resta ritardi-only: risponde a un'altra domanda, la puntualità
+ * operativa, non il denaro dovuto. Due numeri diversi, ciascuno etichettato per
+ * ciò che è: non "allinearli".
  */
 export async function getMyLatePenalties(monthKey?: string): Promise<{
     monthKey: string
     count: number
+    /**
+     * Solo APPOINTMENT/FOLLOWUP: "esitare" ha senso unicamente lì. Le multe
+     * calendario non hanno e non avranno mai `resolvedAt`, quindi contarle qui
+     * mandava il venditore a cercare un follow-up da chiudere che non esiste.
+     */
     openCount: number
     totalEur: number
 }> {
@@ -437,6 +467,7 @@ export async function getMyLatePenalties(monthKey?: string): Promise<{
     const mk = monthKey || romeMonthKey(new Date())
 
     const rows = await db.select({
+        kind: salesLatePenalties.kind,
         resolvedAt: salesLatePenalties.resolvedAt,
         amountEur: salesLatePenalties.amountEur,
     }).from(salesLatePenalties).where(and(
@@ -451,7 +482,8 @@ export async function getMyLatePenalties(monthKey?: string): Promise<{
     return {
         monthKey: mk,
         count: rows.length,
-        openCount: rows.filter(r => !r.resolvedAt).length,
+        openCount: rows.filter(r =>
+            !r.resolvedAt && (r.kind === 'APPOINTMENT' || r.kind === 'FOLLOWUP')).length,
         totalEur: rows.reduce((s, r) => s + (r.amountEur || 0), 0),
     }
 }

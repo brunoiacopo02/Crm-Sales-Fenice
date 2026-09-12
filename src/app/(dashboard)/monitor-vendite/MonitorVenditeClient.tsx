@@ -31,6 +31,19 @@ function toDateInput(d: Date | string): string {
     return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * Una riga sullo stato di UNA delle due regole del registro. Servono entrambe:
+ * i ritardi (SALES_LATE_PENALTIES*) e il calendario (SALES_CALENDAR_PENALTIES*)
+ * hanno kill-switch e data di attivazione indipendenti, e una sezione vuota
+ * perché una regola è spenta non è la stessa cosa di una vuota perché nessuno
+ * ha sbagliato.
+ */
+function ruleStateLine(rule: VenditoriMonitorData['penaltyRule'], nome: string): string {
+    if (rule.active) return `${nome}: in vigore dal ${formatDateIT(new Date(rule.from))}.`
+    if (rule.reason === 'kill_switch') return `${nome}: sospeso dal kill-switch.`
+    return `${nome}: non ancora attivo (manca la data di attivazione).`
+}
+
 /** Ultimi 12 mesi, dal corrente all'indietro: 'YYYY-MM' + etichetta italiana. */
 function lastMonths(count = 12): { key: string; label: string }[] {
     const out: { key: string; label: string }[] = []
@@ -95,6 +108,11 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
         () => filteredPenalties.reduce((sum, p) => sum + (p.voidedAtIso ? 0 : p.amountEur), 0),
         [filteredPenalties],
     )
+    // La sezione vive se ALMENO UNA delle due regole è in vigore. Il cron delle
+    // due è già disaccoppiato: con `SALES_LATE_PENALTIES=off` le multe da 50 €
+    // continuano a essere registrate, e prima di questa riga la pagina diceva
+    // "Malus ritardi sospeso" e non mostrava né righe né totale.
+    const anyRuleActive = data.penaltyRule.active || data.calendarRule.active
     const activeFilterLabel = useMemo(
         () => PENALTY_KIND_FILTERS.find(f => f.kind === penaltyKindFilter)?.label ?? null,
         [penaltyKindFilter],
@@ -293,7 +311,7 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     <h2 className="flex flex-wrap items-center gap-2 text-sm font-bold text-rose-900">
                         <Timer className="h-4 w-4 text-rose-600" />
                         Ritardi e multe
-                        {data.penaltyRule.active ? (
+                        {anyRuleActive ? (
                             <>
                                 {/* Conteggio delle righe mostrate ADESSO (annullate incluse: sono visibili). */}
                                 <span className="ml-1 rounded-full bg-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-800">
@@ -323,7 +341,7 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     </select>
                 </div>
 
-                {data.penaltyRule.active && data.latePenalties.length > 0 && (
+                {anyRuleActive && data.latePenalties.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 border-b border-rose-100 bg-rose-50/40 px-4 py-2.5">
                         {PENALTY_KIND_FILTERS.map(f => {
                             const count = data.penaltyKindCounts[f.kind]
@@ -356,25 +374,23 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     </div>
                 )}
 
-                {!data.penaltyRule.active ? (
+                {!anyRuleActive ? (
                     <div className="px-4 py-6 text-center text-sm text-ash-500">
-                        <p className="font-semibold text-ash-700">
-                            {data.penaltyRule.reason === 'kill_switch'
-                                ? 'Malus ritardi sospeso.'
-                                : 'Malus ritardi non ancora attivo.'}
-                        </p>
-                        <p className="mt-1">
-                            {data.penaltyRule.reason === 'kill_switch'
-                                ? 'Il kill-switch è acceso: le scadenze scoperte restano nelle liste qui sopra e non maturano trattenute.'
-                                : 'Nessuna scadenza sta maturando trattenute. La regola entra in vigore quando viene fissata la data di attivazione.'}
-                        </p>
+                        <p className="font-semibold text-ash-700">Nessuna delle due regole è in vigore.</p>
+                        <p className="mt-1">{ruleStateLine(data.penaltyRule, 'Malus ritardi')}</p>
+                        <p className="mt-1">{ruleStateLine(data.calendarRule, 'Multe calendario')}</p>
                     </div>
                 ) : data.latePenalties.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-ash-500">
                         Nessun ritardo o multa in questo mese.
-                        <span className="ml-1 text-ash-400">
-                            Regola in vigore dal {formatDateIT(new Date(data.penaltyRule.from))}.
-                        </span>
+                        {/* Con una regola sola accesa il registro può essere vuoto
+                            anche perché l'altra è spenta: dirlo evita di leggere
+                            "zero multe" come "nessuno ha sbagliato". */}
+                        <div className="mt-1 text-ash-400">
+                            {ruleStateLine(data.penaltyRule, 'Malus ritardi')}
+                            <span className="mx-1">·</span>
+                            {ruleStateLine(data.calendarRule, 'Multe calendario')}
+                        </div>
                     </div>
                 ) : filteredPenalties.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-ash-500">
@@ -391,6 +407,7 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                     <th className="px-4 py-2 text-left font-semibold">Scadenza</th>
                                     <th className="px-4 py-2 text-left font-semibold">Stato</th>
                                     <th className="px-4 py-2 text-left font-semibold">Segnalata da</th>
+                                    <th className="px-4 py-2 text-left font-semibold">Nota</th>
                                     <th className="px-4 py-2 text-right font-semibold">Malus</th>
                                 </tr>
                             </thead>
@@ -426,7 +443,16 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-2 text-ash-600">{p.reportedByName || ''}</td>
+                                            <td className="px-4 py-2 text-ash-600">{p.reportedByName || '—'}</td>
+                                            {/* La nota è il testo che spiega PERCHÉ una multa da
+                                                50 € esiste: era selezionata e mai mostrata. Se la
+                                                riga è annullata, il motivo dell'annullamento è la
+                                                cosa da leggere per prima. */}
+                                            <td className="px-4 py-2 text-ash-600">
+                                                {voided && p.voidReason
+                                                    ? <span className="italic">Annullata: {p.voidReason}</span>
+                                                    : (p.note || '—')}
+                                            </td>
                                             <td className="px-4 py-2 text-right font-semibold text-rose-700">
                                                 -{p.amountEur.toFixed(0)} &euro;
                                             </td>
