@@ -13,7 +13,7 @@
 
 import { db } from "@/db"
 import { leads, users, salesAvailabilitySlots, salesSlotBlocks, salesLatePenalties, notifications } from "@/db/schema"
-import { and, eq, gte, isNull, lt, or, sql } from "drizzle-orm"
+import { and, eq, gte, lt, or, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { slotStartFor } from "@/lib/venditore/calendarSlots"
@@ -78,10 +78,11 @@ export async function reportSalesAbsence(
                 eq(salesLatePenalties.salesUserId, salesUserId),
                 eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
                 eq(salesLatePenalties.dueAt, slot),
-                // Stesso insieme di fatti di reportedSlots (confermeActions.ts):
-                // una riga annullata dall'admin non deve bloccare una nuova
-                // segnalazione legittima per sempre.
-                isNull(salesLatePenalties.voidedAt),
+                // Conta anche le multe annullate: l'annullamento e' una decisione
+                // dell'admin su quello slot, non una cancellazione. Contarle e'
+                // anche cio' che tiene il controllo allineato all'indice unico,
+                // che non distingue le righe annullate: senza, l'inserimento
+                // verrebbe assorbito e risponderemmo "fatto" senza fare nulla.
             ))
 
         const decision = absenceReportCheck({

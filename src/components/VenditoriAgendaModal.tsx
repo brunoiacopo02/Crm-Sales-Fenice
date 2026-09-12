@@ -385,7 +385,8 @@ function DayCell({
     calendarExempt: boolean
     /** Slot dichiarati per questo giorno senza appuntamento: solo per giornate passate. */
     emptyDeclaredSlots: string[]
-    /** Chiavi `'<salesUserId>|<slotKey>'` già segnalate (assenza non annullata). */
+    /** Chiavi `'<salesUserId>|<slotKey>'` già segnalate, annullate incluse:
+     *  l'annullamento è definitivo per quello slot, non lo riapre. */
     reportedSlots: Set<string>
     now: Date
     onReported: () => void

@@ -1629,8 +1629,10 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
      *  pratica coincidono; un intervallo diverso vedrebbe la copertura della
      *  settimana in cui cade il suo inizio. */
     coverage: CoverageCell[];
-    /** Chiavi `'<salesUserId>|<slotKey>'` delle segnalazioni di assenza
-     *  (ABSENT_SLOT) non annullate, nell'intervallo richiesto. */
+    /** Chiavi `'<salesUserId>|<slotKey>'` con una segnalazione di assenza
+     *  (ABSENT_SLOT) già a registro nell'intervallo richiesto — annullate
+     *  incluse: l'annullamento è definitivo per quello slot (ruling PO),
+     *  non lo riapre alla segnalazione. */
     reportedSlots: string[];
 }> {
     const supabase = await createClient();
@@ -1703,7 +1705,11 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         }).from(salesLatePenalties).where(and(
             eq(salesLatePenalties.companyId, ctx.companyId),
             eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
-            isNull(salesLatePenalties.voidedAt),
+            // Anche le annullate: l'annullamento e' definitivo per quello slot
+            // (ruling PO), non riapre la segnalazione. Il bottone "Non c'era"
+            // deve restare spento con "Assenza già segnalata" anche dopo un
+            // void, coerentemente con reportSalesAbsence che rifiuta a sua
+            // volta senza guardare voidedAt.
             gte(salesLatePenalties.dueAt, startDate),
             lt(salesLatePenalties.dueAt, endDate),
         )),
