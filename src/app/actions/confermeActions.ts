@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents, salesAttempts, salesAvailabilitySlots, salesSlotBlocks, salesLatePenalties } from "@/db/schema"
-import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, lt, inArray, sql } from "drizzle-orm"
+import { eq, ne, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, lt, inArray, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
@@ -19,10 +19,11 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
 import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
-import { slotKey, slotStartFor, weekStartFor } from "@/lib/venditore/calendarSlots"
+import { slotKey, slotLabel, slotStartFor, weekStartFor, romeInstant } from "@/lib/venditore/calendarSlots"
+import { toRomeDateStr } from "@/lib/dateUtils"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
-import { bookingCheck, bookingRefusalMessage, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
+import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -344,16 +345,40 @@ export async function getConfermeAppointments(filters: {
 }
 
 /**
+ * Stesso appuntamento di prima?
+ *
+ * Il confronto e' per SLOT e non per istante perche' il form tronca a HH:mm e
+ * i secondi darebbero falsi positivi; il confronto per istante resta come rete
+ * per le date fuori griglia, dove `slotStartFor` non restituisce alcuno slot.
+ *
+ * Serve a updateLeadDataConferme e a scheduleConfermeRecall: il muro vale sui
+ * cambi di data, mai a ritroso (decisione PO 4). Salvare di nuovo la stessa ora
+ * non deve chiedere un motivo di forzatura ne' lasciare una forzatura in
+ * supervisione.
+ */
+function sameAppointmentSlot(oldDate: Date | null, newDate: Date | null | undefined): boolean {
+    if (!oldDate || !newDate) return false
+    const a = slotStartFor(new Date(oldDate))
+    const b = slotStartFor(new Date(newDate))
+    if (a && b) return a.getTime() === b.getTime()
+    return new Date(oldDate).getTime() === new Date(newDate).getTime()
+}
+
+/**
  * Il muro del fissaggio. Solo le Conferme ci sbattono contro: admin e manager
  * fissano dove vogliono (decisione PO 2026-09-12).
  *
  * Le tabelle del calendario sono per-utente e non per-azienda: nessun filtro
  * companyId qui, sarebbe un bug su Serenamente.
+ *
+ * `leadId` e' il lead che si sta fissando: va escluso dal conteggio degli
+ * appuntamenti gia' presi, altrimenti un lead si dichiarerebbe occupato da se'.
  */
 async function checkBookingAllowed(
     salesUserId: string | null | undefined,
     appointmentAt: Date | null | undefined,
     role: string | undefined,
+    leadId: string,
 ): Promise<BookingDecision> {
     // Interruttore gemello di quelli delle altre regole che vincolano
     // (SALES_CALENDAR_PENALTIES, BOT_ROUTING, ...): il muro nasce acceso, ma
@@ -362,21 +387,93 @@ async function checkBookingAllowed(
     if (role !== 'CONFERME') return { ok: true }
     if (!salesUserId || !appointmentAt) return { ok: true }
 
-    const slot = slotStartFor(new Date(appointmentAt))
-    if (!slot) return { ok: false, reason: 'fuori_griglia' }
+    // L'esenzione vale anche per il muro: un esente non compila il calendario,
+    // quindi non avrebbe mai uno slot dichiarato e OGNI suo appuntamento
+    // finirebbe in Forzature. Coerente con `absenceReportCheck`, che gia' non
+    // multa gli esenti.
+    const [venditore] = await db.select({ calendarExempt: users.calendarExempt })
+        .from(users).where(eq(users.id, salesUserId))
+    if (venditore?.calendarExempt) return { ok: true }
 
-    const [declared] = await db.select({ id: salesAvailabilitySlots.id })
-        .from(salesAvailabilitySlots).where(and(
-            eq(salesAvailabilitySlots.salesUserId, salesUserId),
-            eq(salesAvailabilitySlots.slotStart, slot),
-        ))
-    const [blocked] = await db.select({ id: salesSlotBlocks.id })
-        .from(salesSlotBlocks).where(and(
-            eq(salesSlotBlocks.salesUserId, salesUserId),
-            eq(salesSlotBlocks.slotStart, slot),
-        ))
+    const at = new Date(appointmentAt)
+    const slot = slotStartFor(at)
 
-    return bookingCheck({ slot, declared: !!declared, blocked: !!blocked })
+    // Si guarda l'intero giorno italiano, non il solo slot: con le stesse tre
+    // letture si risponde "si'/no" e si dice anche DOVE spostarsi
+    // (`freeHours`). Un rifiuto che non dice cosa fare costringe a indovinare,
+    // e indovinare finisce in forzatura.
+    const dayStart = romeInstant(toRomeDateStr(at), 0)
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+
+    const [daySlots, dayBlocks, dayAppointments] = await Promise.all([
+        db.select({ slotStart: salesAvailabilitySlots.slotStart })
+            .from(salesAvailabilitySlots).where(and(
+                eq(salesAvailabilitySlots.salesUserId, salesUserId),
+                gte(salesAvailabilitySlots.slotStart, dayStart),
+                lt(salesAvailabilitySlots.slotStart, dayEnd),
+            )),
+        db.select({ slotStart: salesSlotBlocks.slotStart })
+            .from(salesSlotBlocks).where(and(
+                eq(salesSlotBlocks.salesUserId, salesUserId),
+                gte(salesSlotBlocks.slotStart, dayStart),
+                lt(salesSlotBlocks.slotStart, dayEnd),
+            )),
+        // Niente filtro `companyId`, ed e' voluto: un venditore e' una persona
+        // sola, e un appuntamento su Serenamente gli occupa l'ora anche per
+        // Fenice. Di qui esce solo un booleano (l'ora e' presa o no) e
+        // l'etichetta dell'ora: nessun dato dell'altra azienda lascia questa
+        // funzione.
+        db.select({ appointmentDate: leads.appointmentDate })
+            .from(leads).where(and(
+                eq(leads.salespersonUserId, salesUserId),
+                isNotNull(leads.appointmentDate),
+                gte(leads.appointmentDate, dayStart),
+                lt(leads.appointmentDate, dayEnd),
+                ne(leads.id, leadId),
+            )),
+    ])
+
+    const blockedKeys = new Set(dayBlocks.map(b => slotKey(b.slotStart)))
+    const busyKeys = new Set(dayAppointments.map(a => slotKey(a.appointmentDate!)))
+    const freeHours = daySlots
+        .map(d => d.slotStart)
+        .filter(d => !blockedKeys.has(slotKey(d)) && !busyKeys.has(slotKey(d)))
+        .sort((a, b) => a.getTime() - b.getTime())
+        .map(slotLabel)
+
+    const key = slot ? slotKey(slot) : null
+    const decision = bookingCheck({
+        slot,
+        declared: !!key && daySlots.some(d => slotKey(d.slotStart) === key),
+        blocked: !!key && blockedKeys.has(key),
+        occupied: !!key && busyKeys.has(key),
+    })
+    return decision.ok ? decision : { ...decision, freeHours }
+}
+
+/**
+ * Il testo del rifiuto da rimandare alla Conferma, o `null` se il motivo di
+ * forzatura regge e si puo' procedere. Un motivo di una parola ("ok", ".") non
+ * spiega nulla a chi legge le Forzature giorni dopo: il muro si scavalca, ma
+ * lasciando una frase.
+ *
+ * Torna una stringa e non l'oggetto di risposta di proposito: i tre chiamanti
+ * devono continuare a scrivere il loro `return { success: false, ... }` come
+ * letterale, altrimenti TypeScript smette di normalizzare l'unione dei tipi di
+ * ritorno e i client perdono `needsForce` e `rewardData`.
+ */
+function bookingRefusalText(
+    gate: { reason: BookingRefusal; freeHours?: string[] },
+    appointmentAt: Date,
+    forceReason: string | undefined,
+): string | null {
+    const problema = forceReasonProblem(forceReason)
+    if (!problema) return null
+    const muro = bookingRefusalMessage(gate.reason, appointmentAt, gate.freeHours)
+    // Al primo rifiuto il motivo non e' ancora stato chiesto: mostrare li' la
+    // regola dei dieci caratteri sarebbe un rimprovero per qualcosa che nessuno
+    // ha ancora avuto modo di scrivere.
+    return forceReason?.trim() ? `${muro}\n\n${problema}` : muro
 }
 
 export async function updateLeadDataConferme(leadId: string, currentVersion: number, data: { name: string, email: string, appointmentDate: Date, appointmentNote: string }, forceReason?: string): Promise<{ success: boolean; error?: string; needsForce?: boolean }> {
@@ -407,31 +504,17 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
         // data, mai a ritroso. Qui un solo bottone ("Salva Tutti i Dati") salva
         // nome, email, nota E data: se l'appuntamento non si muove, correggere
         // un'email non deve chiedere un motivo di forzatura né lasciare una
-        // forzatura in supervisione. Il confronto è per slot e non per istante
-        // perché il form tronca a HH:mm e i secondi darebbero falsi positivi;
-        // il confronto per istante resta come rete per le date fuori griglia,
-        // dove `slotStartFor` non restituisce alcuno slot.
-        const oldApptSlot = oldLead.appointmentDate ? slotStartFor(new Date(oldLead.appointmentDate)) : null
-        const newApptSlot = data.appointmentDate ? slotStartFor(new Date(data.appointmentDate)) : null
-        const appointmentUnchanged = !!oldLead.appointmentDate && (
-            (!!oldApptSlot && !!newApptSlot && oldApptSlot.getTime() === newApptSlot.getTime())
-            || oldLead.appointmentDate.getTime() === data.appointmentDate?.getTime()
-        )
+        // forzatura in supervisione (il confronto è in `sameAppointmentSlot`).
+        const appointmentUnchanged = sameAppointmentSlot(oldLead.appointmentDate, data.appointmentDate)
 
         let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
         const gate: BookingDecision = appointmentUnchanged
             ? { ok: true }
-            : await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role)
+            : await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role, leadId)
         if (!gate.ok) {
-            const motivo = forceReason?.trim()
-            if (!motivo) {
-                return {
-                    success: false,
-                    error: bookingRefusalMessage(gate.reason, new Date(data.appointmentDate)),
-                    needsForce: true,
-                }
-            }
-            forcedBooking = { reason: gate.reason, motivo }
+            const rifiuto = bookingRefusalText(gate, new Date(data.appointmentDate), forceReason)
+            if (rifiuto) return { success: false, error: rifiuto, needsForce: true }
+            forcedBooking = { reason: gate.reason, motivo: forceReason!.trim() }
         }
 
         const updated = await db.update(leads).set({
@@ -696,17 +779,11 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
         if (outcome === 'confermato' && salespersonAssigned
             && (salespersonAssigned !== oldLead.salespersonUserId || oldLead.confirmationsOutcome !== 'confermato')) {
-            const gate = await checkBookingAllowed(salespersonAssigned, oldLead.appointmentDate, session.user.role)
+            const gate = await checkBookingAllowed(salespersonAssigned, oldLead.appointmentDate, session.user.role, leadId)
             if (!gate.ok) {
-                const motivo = forceReason?.trim()
-                if (!motivo) {
-                    return {
-                        success: false,
-                        error: bookingRefusalMessage(gate.reason, new Date(oldLead.appointmentDate!)),
-                        needsForce: true,
-                    }
-                }
-                forcedBooking = { reason: gate.reason, motivo }
+                const rifiuto = bookingRefusalText(gate, new Date(oldLead.appointmentDate!), forceReason)
+                if (rifiuto) return { success: false, error: rifiuto, needsForce: true }
+                forcedBooking = { reason: gate.reason, motivo: forceReason!.trim() }
             }
         }
 
@@ -1401,19 +1478,19 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
         // Il muro del fissaggio (decisione PO 2026-09-12): si applica solo
         // quando il richiamo sta davvero fissando una nuova data (il ramo
         // needsReschedule si limita ad azzerarla, niente da controllare lì).
+        // Riconfermare la STESSA ora non è un cambio di data: il vincolo non
+        // vale a ritroso, esattamente come in updateLeadDataConferme
+        // (decisione PO 4). Senza questa guardia un richiamo che ribadiva
+        // l'appuntamento già fissato chiedeva un motivo di forzatura.
         let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
         if (payload.newAppointmentDate) {
-            const gate = await checkBookingAllowed(oldLead.salespersonUserId, payload.newAppointmentDate, session.user.role)
+            const gate: BookingDecision = sameAppointmentSlot(oldLead.appointmentDate, payload.newAppointmentDate)
+                ? { ok: true }
+                : await checkBookingAllowed(oldLead.salespersonUserId, payload.newAppointmentDate, session.user.role, oldLead.id)
             if (!gate.ok) {
-                const motivo = forceReason?.trim()
-                if (!motivo) {
-                    return {
-                        success: false,
-                        error: bookingRefusalMessage(gate.reason, new Date(payload.newAppointmentDate)),
-                        needsForce: true,
-                    }
-                }
-                forcedBooking = { reason: gate.reason, motivo }
+                const rifiuto = bookingRefusalText(gate, new Date(payload.newAppointmentDate), forceReason)
+                if (rifiuto) return { success: false, error: rifiuto, needsForce: true }
+                forcedBooking = { reason: gate.reason, motivo: forceReason!.trim() }
             }
         }
 
@@ -1853,7 +1930,10 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         isNotNull(leads.salespersonUserId),
         isNotNull(leads.appointmentDate),
         gte(leads.appointmentDate, startDate),
-        lte(leads.appointmentDate, endDate),
+        // `lt` e non `lte`: l'intervallo è semiaperto come per disponibilità,
+        // blocchi e segnalazioni qui sotto. Con `lte` l'appuntamento esattamente
+        // su `endDate` entrava in agenda senza portarsi dietro né slot né blocco.
+        lt(leads.appointmentDate, endDate),
     )).orderBy(asc(leads.appointmentDate));
 
     // Disponibilità dichiarata, blocchi e segnalazioni di assenza nello stesso

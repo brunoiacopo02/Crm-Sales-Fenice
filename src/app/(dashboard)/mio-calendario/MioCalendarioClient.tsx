@@ -126,7 +126,6 @@ export function MioCalendarioClient({ initial, role }: Props) {
     const venditoriById = useMemo(() => new Map(data.venditori.map(v => [v.id, v.name])), [data.venditori])
     const blocksByKey = useMemo(() => new Map(data.myBlocks.map(b => [b.slotKey, b])), [data.myBlocks])
     const apptByKey = useMemo(() => new Map(data.myAppointments.map(a => [a.slotKey, a])), [data.myAppointments])
-    const mySlotsSet = useMemo(() => new Set(data.mySlots), [data.mySlots])
 
     const myCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()
@@ -229,11 +228,10 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 }
             }
 
-            // La copertura arriva dal DB (ultimo salvataggio), non dalla
-            // selezione locale non ancora salvata: per non contarmi due volte
-            // sottraggo me stesso solo se ero davvero disponibile server-side.
-            const amIAvailableServerSide = mySlotsSet.has(key) && !blocksByKey.has(key)
-            const othersAvailable = cov ? cov.available.length - (amIAvailableServerSide ? 1 : 0) : 0
+            // La copertura arriva dal DB: `available` non contiene chi ha un
+            // appuntamento in quell'ora (ne' chi l'ha bloccata), quindi per
+            // sapere quanti ALTRI ci sono basta escludere me stesso per id.
+            const othersAvailable = cov ? cov.available.filter(id => id !== data.targetUserId).length : 0
 
             m.set(key, {
                 state,
@@ -251,7 +249,7 @@ export function MioCalendarioClient({ initial, role }: Props) {
             })
         }
         return m
-    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet, now, data.declared])
+    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, now, data.declared, data.targetUserId])
 
     const coverageCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()

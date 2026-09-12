@@ -65,6 +65,7 @@ function reasonLabel(reason: string | null): string {
         fuori_griglia: 'Ora fuori dal calendario',
         non_dichiarato: 'Ora non dichiarata',
         bloccato: 'Ora bloccata dal venditore',
+        gia_occupato: 'Ora gia occupata da un altro appuntamento',
     }
     if (reason && reason in map) return map[reason as BookingRefusal]
     return reason ?? '—'

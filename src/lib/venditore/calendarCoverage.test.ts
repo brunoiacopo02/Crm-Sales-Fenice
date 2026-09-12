@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildDemand, buildCoverage, coverageStatus } from './calendarCoverage'
-import { weekSlots } from './calendarSlots'
+import { weekSlots, slotKey, romeInstant } from './calendarSlots'
 
 const LUNEDI = new Date('2026-09-14T00:00:00+02:00')
 
@@ -50,12 +50,12 @@ test('buildCoverage incrocia disponibili, bloccati, appuntamenti e attesi', () =
         demand: [{ dow: 1, hour: 15, expected: 3, showRate: 0.8, expectedPeople: 2.4 }],
     })
     const cell = cells.find(c => c.slotKey === '2026-09-14@15')!
-    assert.deepEqual(cell.available.sort(), ['s2', 's3'])  // s4 e' bloccato
+    assert.deepEqual(cell.available.sort(), ['s3'])        // s4 bloccato, s2 gia' occupato
     assert.deepEqual(cell.blocked, ['s4'])
     assert.equal(cell.busy.length, 1)
     assert.equal(cell.busy[0].leadName, 'Mario Rossi')
     assert.equal(cell.expectedPeople, 2.4)
-    assert.equal(cell.status, 'ambra')                     // 2 disponibili < 2.4 attesi
+    assert.equal(cell.status, 'ambra')                     // 1 disponibile < 2.4 attesi
 })
 
 test('buildCoverage restituisce una cella per ogni slot della settimana', () => {
@@ -82,4 +82,19 @@ test('buildDemand: una finestra di zero settimane non produce medie infinite', (
     assert.ok(Number.isFinite(mer15!.expected), 'expected deve restare finito')
     assert.ok(Number.isFinite(mer15!.expectedPeople), 'expectedPeople deve restare finito')
     assert.equal(mer15!.expected, 2)   // clampata a una settimana
+})
+
+test('chi ha gia un appuntamento non conta come disponibile, ma resta in busy', () => {
+    const slots = weekSlots(romeInstant('2026-09-14', 0))
+    const key = slotKey(slots[0])
+    const cells = buildCoverage({
+        slots,
+        availability: [{ salesUserId: 'a', slotKey: key }, { salesUserId: 'b', slotKey: key }],
+        blocks: [],
+        appointments: [{ salesUserId: 'a', slotKey: key, leadId: 'l1', leadName: 'Mario' }],
+        demand: [],
+    })
+    const cell = cells.find(c => c.slotKey === key)!
+    assert.deepEqual(cell.available, ['b'])
+    assert.equal(cell.busy.length, 1)
 })
