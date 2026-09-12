@@ -18,6 +18,7 @@ import { resolveCallAttempt } from "@/lib/bot-fissatore/callAttempt"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
 import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
+import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -717,6 +718,10 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
                 },
                 companyId: ctx.companyId,
             })
+
+            // Il lead è passato a un altro venditore: lo slot del precedente si libera.
+            // Non è una transazione (l'update sopra è già andato a buon fine): db, non tx.
+            await releaseFollowUpBlock(db, { leadId, salesUserId: oldLead.salespersonUserId! })
         }
 
         // Gamification: award XP/coins to Conferme worker on confirmation.

@@ -15,6 +15,7 @@ import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed,
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { isConfermeTl } from "@/lib/confermeTl"
 import { resolveLatePenalties } from "@/lib/venditore/latePenaltiesRunner";
+import { syncFollowUpBlock, releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks";
 // Gamification disabled for VENDITORE role — import removed
 
 async function resolveIsStaff() {
@@ -398,6 +399,19 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             companyId: ctx.companyId,
         })
 
+        // Esito registrato: il vecchio slot si libera. Se l'esito fissa un nuovo
+        // follow-up, syncFollowUpBlock lo riaggancia allo slot nuovo. Stesso calcolo
+        // di followUp1Date/attemptValues.nextFollowUpDate qui sopra: solo un esito
+        // "Non chiuso" prevede un prossimo follow-up.
+        const nextFollowUpAt = payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null
+        await syncFollowUpBlock(tx, {
+            companyId: ctx.companyId,
+            salesUserId: oldLead.salespersonUserId ?? session.user.id,
+            leadId,
+            followUpAt: nextFollowUpAt,
+            actorId: session.user.id,
+        })
+
         return { success: true as const }
     })
 
@@ -589,6 +603,15 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
             companyId: ctx.companyId,
         });
 
+        // Il follow-up si è spostato: il blocco calendario lo segue sul nuovo slot.
+        await syncFollowUpBlock(tx, {
+            companyId: ctx.companyId,
+            salesUserId: lead.salespersonUserId ?? userId,
+            leadId,
+            followUpAt: newDate,
+            actorId: userId,
+        });
+
         return { success: true as const };
     });
 
@@ -635,6 +658,9 @@ export async function parkLead(leadId: string): Promise<{ success: boolean; erro
             metadata: { previousFollowUpDate: lead.followUp1Date },
             companyId: ctx.companyId,
         });
+
+        // "In lavorazione" = nessuna data precisa: lo slot torna libero.
+        await releaseFollowUpBlock(tx, { leadId });
 
         return { success: true as const };
     });
