@@ -25,6 +25,9 @@ import type { CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
 import type { BookingRefusal } from "@/lib/venditore/calendarBooking"
 import { SlotGrid, type SlotCellView } from "@/components/calendar/SlotGrid"
 import { CoverageLegend } from "@/components/calendar/CoverageLegend"
+// Etichetta della settimana condivisa con `/mio-calendario`: era duplicata qui
+// parola per parola, e due copie si allineano solo finché nessuno tocca l'una.
+import { formatWeekRange } from "@/components/calendar/calendarFormat"
 
 interface Props {
     initial: SupervisionView
@@ -36,25 +39,11 @@ const DAY_ABBR_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
 const weekdayFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', weekday: 'long' })
 const dateSlashFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit' })
 const timeFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-const dayOnlyFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: 'numeric' })
-const monthOnlyFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', month: 'long' })
 const monthYearFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', month: 'long', year: 'numeric' })
 const eurFmt = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
 function capitalize(s: string): string {
     return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s
-}
-
-function formatWeekRange(weekStartIso: string): string {
-    const start = new Date(weekStartIso)
-    const end = new Date(start.getTime() + 5 * 86_400_000)
-    const startMonth = monthOnlyFmt.format(start)
-    const endMonth = monthOnlyFmt.format(end)
-    const startDay = dayOnlyFmt.format(start)
-    const endDay = dayOnlyFmt.format(end)
-    return startMonth === endMonth
-        ? `${startDay} – ${endDay} ${endMonth}`
-        : `${startDay} ${startMonth} – ${endDay} ${endMonth}`
 }
 
 function monthLabel(monthKey: string): string {
