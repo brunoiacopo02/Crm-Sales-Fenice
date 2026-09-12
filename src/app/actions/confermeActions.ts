@@ -5,7 +5,7 @@ import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents, salesAttempts, salesAvailabilitySlots, salesSlotBlocks, salesLatePenalties } from "@/db/schema"
 import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, lt, inArray, sql } from "drizzle-orm"
 import crypto from "crypto"
-import { createGoogleCalendarEvent, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
+import { createGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
 import { incrementChestProgress } from "@/app/actions/chestActions"
@@ -1746,7 +1746,6 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
     venditori: Array<{
         id: string;
         name: string;
-        hasGoogleCalendar: boolean;
         appointments: Array<{
             leadId: string;
             leadName: string;
@@ -1756,10 +1755,6 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
             appointmentNote: string | null;
             confirmationsOutcome: string | null;
         }>;
-        /** Slot occupati sul Google Calendar primario del venditore
-         *  (riunioni/impegni NON tracciati dal CRM). Vuoto se il venditore
-         *  non ha connesso Google. */
-        busySlots: Array<{ start: Date; end: Date }>;
         /** Chiavi `slotKey` (vedi calendarSlots.ts) dichiarate disponibili
          *  dal venditore nell'intervallo richiesto. */
         declaredSlots: string[];
@@ -1909,41 +1904,12 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
     // passa oggi intervalli lunedì→lunedì quindi in pratica coincidono.
     const coverage = await weekCoverage(ctx, weekStartFor(startDate));
 
-    // Fetch busy slots da Google Calendar in parallelo per ogni venditore.
-    // Best-effort: chi non ha connesso Google torna array vuoto.
-    const busyResults = await Promise.all(
-        venditori.map(async v => {
-            try {
-                const [slots, connected] = await Promise.all([
-                    getBusySlotsForUser(v.id, startDate, endDate),
-                    hasCalendarConnection(v.id),
-                ]);
-                return { id: v.id, slots, connected };
-            } catch {
-                return { id: v.id, slots: [], connected: false };
-            }
-        }),
-    );
-    const busyByVenditore = new Map(busyResults.map(b => [b.id, b]));
-
     return {
         venditori: venditori
             .map(v => {
-                const busy = busyByVenditore.get(v.id);
-                const apptSet = new Set(
-                    rows
-                        .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
-                        .map(r => (r.appointmentDate as Date).getTime()),
-                );
-                // Filtra gli slot busy Google che coincidono con appuntamenti CRM
-                // per evitare doppioni visivi (l'evento calendar creato dal CRM stesso).
-                const externalBusy = (busy?.slots || []).filter(
-                    s => !apptSet.has(s.start.getTime()),
-                );
                 return {
                     id: v.id,
                     name: v.displayName || v.name || 'Venditore',
-                    hasGoogleCalendar: busy?.connected ?? false,
                     appointments: rows
                         .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
                         .map(r => ({
@@ -1955,7 +1921,6 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
                             appointmentNote: r.appointmentNote ?? null,
                             confirmationsOutcome: r.confirmationsOutcome ?? null,
                         })),
-                    busySlots: externalBusy,
                     declaredSlots: declaredByVenditore.get(v.id) ?? [],
                     blockedSlots: blockedByVenditore.get(v.id) ?? [],
                     blockDetails: blockDetailsByVenditore.get(v.id) ?? [],
