@@ -1966,7 +1966,12 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
             salesUserId: salesLatePenalties.salesUserId,
             dueAt: salesLatePenalties.dueAt,
         }).from(salesLatePenalties).where(and(
-            eq(salesLatePenalties.companyId, ctx.companyId),
+            // Niente `eq(companyId)`: l'indice unico che governa la
+            // segnalazione è `sales_penalties_userkind_uq (salesUserId, kind,
+            // dueAt)`, per PERSONA e non per azienda. Con il filtro, una
+            // segnalazione fatta da Fenice lasciava il bottone "Non c'era"
+            // acceso su Serenamente, dove il click veniva poi rifiutato:
+            // il bottone deve spegnersi ovunque, come la multa è una sola.
             eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
             // Anche le annullate: l'annullamento e' definitivo per quello slot
             // (ruling PO), non riapre la segnalazione. Il bottone "Non c'era"

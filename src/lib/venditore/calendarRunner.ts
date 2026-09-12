@@ -14,7 +14,7 @@ import { and, eq, inArray, gte } from 'drizzle-orm'
 import { toRomeDateStr } from '../dateUtils'
 import { weekStartFor, weeklyDeadline, romeHour, romeDow, addWeeks } from './calendarSlots'
 import { slotsFromTemplate, type TemplateSlot } from './calendarTemplate'
-import { selectMissingCalendarPenalties, calendarRuleState, type CalendarUserRow } from './calendarRules'
+import { selectMissingCalendarPenalties, calendarRuleState, CALENDAR_PENALTY_EUR, type CalendarUserRow } from './calendarRules'
 
 export interface CalendarRunnerResult {
     registered: number
@@ -147,7 +147,7 @@ export async function materializeTemplates(now: Date = new Date(), salesUserId?:
                 // nome di chi le aveva appena tolte, con la riga di piano che
                 // continuava a dichiararne 10: nessuna traccia dell'accaduto, e
                 // ogni ora di troppo vale 50 € su segnalazione delle Conferme.
-                const scritto = await db.transaction(async (tx) => {
+                const scritti = await db.transaction(async (tx) => {
                     const piano = await tx.insert(salesWeekPlans).values({
                         id: crypto.randomUUID(),
                         companyId: venditore.companyId,
@@ -163,22 +163,37 @@ export async function materializeTemplates(now: Date = new Date(), salesUserId?:
                     // Piano già presente: la settimana è di qualcun altro
                     // (della persona, o di un giro precedente). Iterazione
                     // saltata, non fallita.
-                    if (piano.length === 0) return false
+                    if (piano.length === 0) return null
 
-                    await tx.insert(salesAvailabilitySlots).values(wanted.map(slotStart => ({
+                    const inseriti = await tx.insert(salesAvailabilitySlots).values(wanted.map(slotStart => ({
                         id: crypto.randomUUID(),
                         companyId: venditore.companyId,
                         salesUserId: venditore.id,
                         slotStart,
                         weekStart: weekKey,
-                    }))).onConflictDoNothing()
+                    }))).onConflictDoNothing().returning({ id: salesAvailabilitySlots.id })
 
-                    return true
+                    // `slotCount` = righe DAVVERO inserite, non `wanted.length`.
+                    // L'`onConflictDoNothing` qui sopra può assorbirne una parte
+                    // (slot già presenti da una modifica manuale su un'ora sola,
+                    // che non crea la riga di piano e quindi non ferma questo
+                    // ramo), e il piano resterebbe a dichiarare ore che a DB non
+                    // ci sono: la scheda Compilazione mostra un numero, la
+                    // griglia un altro. L'`update` viene DOPO l'insert del piano
+                    // apposta: l'ordine piano→slot è la guardia documentata qui
+                    // sopra e non si inverte per comodità di conteggio.
+                    if (inseriti.length !== wanted.length) {
+                        await tx.update(salesWeekPlans)
+                            .set({ slotCount: inseriti.length })
+                            .where(eq(salesWeekPlans.id, piano[0].id))
+                    }
+
+                    return inseriti.length
                 })
 
-                if (scritto) {
+                if (scritti !== null) {
                     weeks++
-                    slots += wanted.length
+                    slots += scritti
                 }
             } catch (e) {
                 // Un venditore in errore non deve fermare gli altri, né far
@@ -251,16 +266,20 @@ export async function runCalendarWeekly(now: Date = new Date()): Promise<Calenda
         }))).onConflictDoNothing().returning({ id: salesLatePenalties.id, salesUserId: salesLatePenalties.salesUserId })
         registered = inserted.length
 
-        for (const row of inserted) {
-            await db.insert(notifications).values({
+        // Una sola INSERT per tutte le notifiche, non una per riga: il giro
+        // gira ogni 30 minuti e il lunedì alle 14:00 può multare l'intero team
+        // in un colpo solo — N round-trip in serie, uno per venditore, per
+        // scrivere N righe identiche nella stessa tabella.
+        if (inserted.length > 0) {
+            await db.insert(notifications).values(inserted.map(row => ({
                 id: crypto.randomUUID(),
                 recipientUserId: row.salesUserId,
                 type: 'calendar_penalty',
                 title: 'Multa: calendario non compilato',
-                body: `Non hai compilato le disponibilità entro lunedì 14:00: trattenuta di 50 €. Puoi compilare comunque.`,
+                body: `Non hai compilato le disponibilità entro lunedì 14:00: trattenuta di ${CALENDAR_PENALTY_EUR} €. Puoi compilare comunque.`,
                 metadata: { weekStart: weekKey },
                 companyId: venditori.find(v => v.id === row.salesUserId)?.companyId ?? 'fenice',
-            })
+            })))
         }
     }
 
@@ -313,7 +332,7 @@ async function sendMondayReminders(
         title: 'Calendario da compilare',
         body: slot === 10
             ? 'Ricordati di dichiarare le tue disponibilità della settimana: scadenza oggi alle 14:00.'
-            : 'Ultimo avviso: mancano meno di due ore alla scadenza delle 14:00. Senza calendario scatta la multa da 50 €.',
+            : `Ultimo avviso: mancano meno di due ore alla scadenza delle 14:00. Senza calendario scatta la multa da ${CALENDAR_PENALTY_EUR} €.`,
         metadata: { weekStart: weekKey, slot },
         companyId: t.companyId,
     })))

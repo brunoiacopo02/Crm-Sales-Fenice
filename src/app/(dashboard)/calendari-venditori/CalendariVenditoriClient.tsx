@@ -358,13 +358,24 @@ function CompilazioneTab({
                                     scheda diventa cieca su chi si occupa sul serio del
                                     proprio calendario (Task 6). */}
                                 <td className="px-3 py-2">
-                                    {row.submittedAtIso
-                                        ? (row.fromTemplate
-                                            ? <Pill tone="blue">Da settimana tipo</Pill>
-                                            : <Pill tone="green">A mano</Pill>)
-                                        : row.exempt
-                                            ? <Pill tone="neutral">Esente</Pill>
-                                            : <Pill tone="red">No</Pill>}
+                                    {/* Compilato ZERO ore: formalmente in regola (la riga
+                                        di piano c'è, nessuna multa scatta), in pratica
+                                        imprenotabile tutta la settimana. Senza questa
+                                        pastiglia la differenza stava solo in un `0` nella
+                                        colonna Ore, indistinguibile da chi si è dichiarato
+                                        davvero disponibile. */}
+                                    <div className="flex flex-wrap items-center gap-1">
+                                        {row.submittedAtIso
+                                            ? (row.fromTemplate
+                                                ? <Pill tone="blue">Da settimana tipo</Pill>
+                                                : <Pill tone="green">A mano</Pill>)
+                                            : row.exempt
+                                                ? <Pill tone="neutral">Esente</Pill>
+                                                : <Pill tone="red">No</Pill>}
+                                        {row.submittedAtIso && row.slotCount === 0 && !row.exempt && (
+                                            <Pill tone="amber">0 ore: imprenotabile</Pill>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-3 py-2 text-ash-600">
                                     {row.submittedAtIso ? formatDateTime(row.submittedAtIso) : '—'}

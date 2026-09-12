@@ -26,7 +26,7 @@ import { leads, salesAvailabilitySlots, salesSlotBlocks } from "@/db/schema"
 import { and, eq, gte, isNotNull, lt } from "drizzle-orm"
 import type { TenantContext } from "@/lib/tenancy"
 import { toRomeDateStr } from "@/lib/dateUtils"
-import { slotKey, slotStartFor, weekSlots, weekStartFor } from "@/lib/venditore/calendarSlots"
+import { addWeeks, slotKey, slotStartFor, weekSlots, weekStartFor } from "@/lib/venditore/calendarSlots"
 import { buildCoverage, buildDemand, DEMAND_WEEKS, type CoverageCell } from "@/lib/venditore/calendarCoverage"
 
 /**
@@ -38,12 +38,17 @@ import { buildCoverage, buildDemand, DEMAND_WEEKS, type CoverageCell } from "@/l
  * navigando avanti/indietro fra settimane future.
  */
 export async function weekCoverage(ctx: TenantContext, weekStart: Date): Promise<CoverageCell[]> {
-    const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000)
+    // Stessa ragione del `demandStart` qui sotto: il lunedì successivo si
+    // calcola in giorni italiani, non in millisecondi.
+    const weekEnd = addWeeks(weekStart, 1)
     const weekStartStr = toRomeDateStr(weekStart)
 
     const currentWeekStart = weekStartFor(new Date())
     const demandEnd = currentWeekStart
-    const demandStart = new Date(currentWeekStart.getTime() - DEMAND_WEEKS * 7 * 86_400_000)
+    // `addWeeks` e non l'aritmetica in millisecondi: l'ultima settimana di
+    // marzo e quella di ottobre durano 167 e 169 ore, e con 7×86.400.000 la
+    // finestra storica scivolava di un'ora dentro la settimana accanto.
+    const demandStart = addWeeks(currentWeekStart, -DEMAND_WEEKS)
 
     const [availabilityRows, blockRows, appointmentRows, demandRows] = await Promise.all([
         db.select({

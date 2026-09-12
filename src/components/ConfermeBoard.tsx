@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useSearchParams } from "next/navigation"
-import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, AlertCircle, PhoneOff, Phone, Inbox, Sun, Sunrise, Archive } from "lucide-react"
+import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, Inbox, Sun, Sunrise, Archive } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
 import { markConfermeAlertHandled } from "@/app/actions/confermeAlertActions"
 
