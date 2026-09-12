@@ -228,43 +228,54 @@ export async function saveCalendarWeek(
         })
         .filter((d): d is Date => d !== null)
 
+    // Il client puo' mandare la stessa ora due volte: senza questa deduplica
+    // l'insert violerebbe l'unique (salesUserId, slotStart) dentro la transazione.
+    const perChiave = new Map<string, Date>()
+    for (const slot of valid) perChiave.set(slotKey(slot), slot)
+    const unici = [...perChiave.values()]
+
     const now = new Date()
     const weekStartStr = toRomeDateStr(weekStart)
     const late = now > weeklyDeadline(weekStart)
 
-    await db.transaction(async (tx) => {
-        await tx.delete(salesAvailabilitySlots).where(and(
-            eq(salesAvailabilitySlots.companyId, ctx.companyId),
-            eq(salesAvailabilitySlots.salesUserId, userId),
-            eq(salesAvailabilitySlots.weekStart, weekStartStr),
-        ))
+    try {
+        await db.transaction(async (tx) => {
+            await tx.delete(salesAvailabilitySlots).where(and(
+                eq(salesAvailabilitySlots.companyId, ctx.companyId),
+                eq(salesAvailabilitySlots.salesUserId, userId),
+                eq(salesAvailabilitySlots.weekStart, weekStartStr),
+            ))
 
-        if (valid.length > 0) {
-            await tx.insert(salesAvailabilitySlots).values(valid.map(slotStart => ({
+            if (unici.length > 0) {
+                await tx.insert(salesAvailabilitySlots).values(unici.map(slotStart => ({
+                    id: crypto.randomUUID(),
+                    companyId: ctx.companyId,
+                    salesUserId: userId,
+                    slotStart,
+                    weekStart: weekStartStr,
+                })))
+            }
+
+            await tx.insert(salesWeekPlans).values({
                 id: crypto.randomUUID(),
                 companyId: ctx.companyId,
                 salesUserId: userId,
-                slotStart,
                 weekStart: weekStartStr,
-            })))
-        }
-
-        await tx.insert(salesWeekPlans).values({
-            id: crypto.randomUUID(),
-            companyId: ctx.companyId,
-            salesUserId: userId,
-            weekStart: weekStartStr,
-            submittedAt: now,
-            updatedAt: now,
-            slotCount: valid.length,
-            late,
-        }).onConflictDoUpdate({
-            target: [salesWeekPlans.salesUserId, salesWeekPlans.weekStart],
-            // submittedAt e late NON si toccano: sono la prova del primo
-            // salvataggio, letta dal cron delle multe.
-            set: { slotCount: valid.length, updatedAt: now },
+                submittedAt: now,
+                updatedAt: now,
+                slotCount: unici.length,
+                late,
+            }).onConflictDoUpdate({
+                target: [salesWeekPlans.salesUserId, salesWeekPlans.weekStart],
+                // submittedAt e late NON si toccano: sono la prova del primo
+                // salvataggio, letta dal cron delle multe.
+                set: { slotCount: unici.length, updatedAt: now },
+            })
         })
-    })
+    } catch (e) {
+        console.error('saveCalendarWeek:', e)
+        return { success: false, error: 'Salvataggio non riuscito: riprova fra un momento.' }
+    }
 
     revalidatePath('/mio-calendario')
     return { success: true, late }
@@ -287,51 +298,59 @@ export async function blockSlot(
     if (!slot) return { success: false, error: 'Ora fuori dal calendario.' }
     const slotEnd = new Date(slot.getTime() + 60 * 60_000)
 
-    const [availRows, blockRows, apptRows] = await Promise.all([
-        db.select({ slotStart: salesAvailabilitySlots.slotStart })
-            .from(salesAvailabilitySlots)
-            .where(and(
-                eq(salesAvailabilitySlots.companyId, ctx.companyId),
-                eq(salesAvailabilitySlots.salesUserId, userId),
-                eq(salesAvailabilitySlots.slotStart, slot),
-            )).limit(1),
-        db.select({ id: salesSlotBlocks.id })
-            .from(salesSlotBlocks)
-            .where(and(
-                eq(salesSlotBlocks.companyId, ctx.companyId),
-                eq(salesSlotBlocks.salesUserId, userId),
-                eq(salesSlotBlocks.slotStart, slot),
-            )).limit(1),
-        db.select({ id: leads.id })
-            .from(leads)
-            .where(and(
-                eq(leads.companyId, ctx.companyId),
-                eq(leads.salespersonUserId, userId),
-                gte(leads.appointmentDate, slot),
-                lt(leads.appointmentDate, slotEnd),
-            )).limit(1),
-    ])
+    try {
+        const [availRows, blockRows, apptRows] = await Promise.all([
+            db.select({ slotStart: salesAvailabilitySlots.slotStart })
+                .from(salesAvailabilitySlots)
+                .where(and(
+                    eq(salesAvailabilitySlots.companyId, ctx.companyId),
+                    eq(salesAvailabilitySlots.salesUserId, userId),
+                    eq(salesAvailabilitySlots.slotStart, slot),
+                )).limit(1),
+            db.select({ id: salesSlotBlocks.id })
+                .from(salesSlotBlocks)
+                .where(and(
+                    eq(salesSlotBlocks.companyId, ctx.companyId),
+                    eq(salesSlotBlocks.salesUserId, userId),
+                    eq(salesSlotBlocks.slotStart, slot),
+                )).limit(1),
+            db.select({ id: leads.id })
+                .from(leads)
+                .where(and(
+                    eq(leads.companyId, ctx.companyId),
+                    eq(leads.salespersonUserId, userId),
+                    gte(leads.appointmentDate, slot),
+                    lt(leads.appointmentDate, slotEnd),
+                )).limit(1),
+        ])
 
-    const decision = manualBlockCheck({
-        slotStart: slot,
-        now: new Date(),
-        declared: availRows.length > 0,
-        hasAppointment: apptRows.length > 0,
-        alreadyBlocked: blockRows.length > 0,
-    })
-    if (!decision.ok) {
-        return { success: false, error: blockRefusalMessage(decision.reason, slot) }
+        const decision = manualBlockCheck({
+            slotStart: slot,
+            now: new Date(),
+            declared: availRows.length > 0,
+            hasAppointment: apptRows.length > 0,
+            alreadyBlocked: blockRows.length > 0,
+        })
+        if (!decision.ok) {
+            return { success: false, error: blockRefusalMessage(decision.reason, slot) }
+        }
+
+        // Il doppio click e' un no-op, non un errore: la guardia vera e' l'indice
+        // parziale a DB sales_slot_blocks_manual_uq (salesUserId, slotStart) WHERE
+        // kind='MANUAL' (Task 2) — niente transazione qui, basta il conflitto.
+        await db.insert(salesSlotBlocks).values({
+            id: crypto.randomUUID(),
+            companyId: ctx.companyId,
+            salesUserId: userId,
+            slotStart: slot,
+            kind: 'MANUAL',
+            createdBy: userId,
+            note: note ?? null,
+        }).onConflictDoNothing()
+    } catch (e) {
+        console.error('blockSlot:', e)
+        return { success: false, error: 'Blocco non riuscito: riprova fra un momento.' }
     }
-
-    await db.insert(salesSlotBlocks).values({
-        id: crypto.randomUUID(),
-        companyId: ctx.companyId,
-        salesUserId: userId,
-        slotStart: slot,
-        kind: 'MANUAL',
-        createdBy: userId,
-        note: note ?? null,
-    })
 
     revalidatePath('/mio-calendario')
     return { success: true }
@@ -350,24 +369,29 @@ export async function unblockSlot(slotIso: string): Promise<{ success: boolean; 
     const slot = slotStartFor(new Date(slotIso))
     if (!slot) return { success: false, error: 'Ora fuori dal calendario.' }
 
-    const [existing] = await db.select({ id: salesSlotBlocks.id, kind: salesSlotBlocks.kind })
-        .from(salesSlotBlocks)
-        .where(and(
+    try {
+        const [existing] = await db.select({ id: salesSlotBlocks.id, kind: salesSlotBlocks.kind })
+            .from(salesSlotBlocks)
+            .where(and(
+                eq(salesSlotBlocks.companyId, ctx.companyId),
+                eq(salesSlotBlocks.salesUserId, userId),
+                eq(salesSlotBlocks.slotStart, slot),
+            ))
+            .limit(1)
+
+        if (!existing) return { success: true }
+        if (existing.kind === 'FOLLOWUP') {
+            return { success: false, error: "Questo slot è occupato da un follow-up: spostalo o registrane l'esito." }
+        }
+
+        await db.delete(salesSlotBlocks).where(and(
             eq(salesSlotBlocks.companyId, ctx.companyId),
-            eq(salesSlotBlocks.salesUserId, userId),
-            eq(salesSlotBlocks.slotStart, slot),
+            eq(salesSlotBlocks.id, existing.id),
         ))
-        .limit(1)
-
-    if (!existing) return { success: true }
-    if (existing.kind === 'FOLLOWUP') {
-        return { success: false, error: "Questo slot è occupato da un follow-up: spostalo o registrane l'esito." }
+    } catch (e) {
+        console.error('unblockSlot:', e)
+        return { success: false, error: 'Sblocco non riuscito: riprova fra un momento.' }
     }
-
-    await db.delete(salesSlotBlocks).where(and(
-        eq(salesSlotBlocks.companyId, ctx.companyId),
-        eq(salesSlotBlocks.id, existing.id),
-    ))
 
     revalidatePath('/mio-calendario')
     return { success: true }
