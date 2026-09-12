@@ -2,8 +2,8 @@
 import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
-import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents, salesAttempts } from "@/db/schema"
-import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, inArray, sql } from "drizzle-orm"
+import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents, salesAttempts, salesAvailabilitySlots, salesSlotBlocks, salesLatePenalties } from "@/db/schema"
+import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, lt, inArray, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { createGoogleCalendarEvent, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
@@ -19,6 +19,9 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
 import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
+import { slotKey, weekStartFor } from "@/lib/venditore/calendarSlots"
+import { weekCoverage } from "@/lib/venditore/calendarQueries"
+import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -1612,7 +1615,21 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
          *  (riunioni/impegni NON tracciati dal CRM). Vuoto se il venditore
          *  non ha connesso Google. */
         busySlots: Array<{ start: Date; end: Date }>;
+        /** Chiavi `slotKey` (vedi calendarSlots.ts) dichiarate disponibili
+         *  dal venditore nell'intervallo richiesto. */
+        declaredSlots: string[];
+        /** Chiavi `slotKey` bloccate (follow-up o imprevisto) nell'intervallo. */
+        blockedSlots: string[];
     }>;
+    /** Copertura calendario venditori: sempre quella della settimana che
+     *  CONTIENE `startDate` (vedi weekCoverage), non dell'intervallo esatto
+     *  richiesto. Il modale passa oggi intervalli lunedì→lunedì, quindi in
+     *  pratica coincidono; un intervallo diverso vedrebbe la copertura della
+     *  settimana in cui cade il suo inizio. */
+    coverage: CoverageCell[];
+    /** Chiavi `'<salesUserId>|<slotKey>'` delle segnalazioni di assenza
+     *  (ABSENT_SLOT) non annullate, nell'intervallo richiesto. */
+    reportedSlots: string[];
 }> {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -1656,6 +1673,57 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         gte(leads.appointmentDate, startDate),
         lte(leads.appointmentDate, endDate),
     )).orderBy(asc(leads.appointmentDate));
+
+    // Disponibilità dichiarata, blocchi e segnalazioni di assenza nello stesso
+    // intervallo richiesto: alimentano declaredSlots/blockedSlots per
+    // venditore e reportedSlots per il bottone "Non c'era" del modale.
+    const [availabilityRows, blockRows, reportedRows] = await Promise.all([
+        db.select({
+            salesUserId: salesAvailabilitySlots.salesUserId,
+            slotStart: salesAvailabilitySlots.slotStart,
+        }).from(salesAvailabilitySlots).where(and(
+            eq(salesAvailabilitySlots.companyId, ctx.companyId),
+            gte(salesAvailabilitySlots.slotStart, startDate),
+            lt(salesAvailabilitySlots.slotStart, endDate),
+        )),
+        db.select({
+            salesUserId: salesSlotBlocks.salesUserId,
+            slotStart: salesSlotBlocks.slotStart,
+        }).from(salesSlotBlocks).where(and(
+            eq(salesSlotBlocks.companyId, ctx.companyId),
+            gte(salesSlotBlocks.slotStart, startDate),
+            lt(salesSlotBlocks.slotStart, endDate),
+        )),
+        db.select({
+            salesUserId: salesLatePenalties.salesUserId,
+            dueAt: salesLatePenalties.dueAt,
+        }).from(salesLatePenalties).where(and(
+            eq(salesLatePenalties.companyId, ctx.companyId),
+            eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
+            isNull(salesLatePenalties.voidedAt),
+            gte(salesLatePenalties.dueAt, startDate),
+            lt(salesLatePenalties.dueAt, endDate),
+        )),
+    ]);
+
+    const declaredByVenditore = new Map<string, string[]>();
+    for (const r of availabilityRows) {
+        const arr = declaredByVenditore.get(r.salesUserId) ?? [];
+        arr.push(slotKey(r.slotStart));
+        declaredByVenditore.set(r.salesUserId, arr);
+    }
+    const blockedByVenditore = new Map<string, string[]>();
+    for (const r of blockRows) {
+        const arr = blockedByVenditore.get(r.salesUserId) ?? [];
+        arr.push(slotKey(r.slotStart));
+        blockedByVenditore.set(r.salesUserId, arr);
+    }
+    const reportedSlots = reportedRows.map(r => `${r.salesUserId}|${slotKey(r.dueAt)}`);
+
+    // Copertura della settimana che contiene startDate (vedi commento sul
+    // tipo di ritorno): weekCoverage ragiona per settimana intera, il modale
+    // passa oggi intervalli lunedì→lunedì quindi in pratica coincidono.
+    const coverage = await weekCoverage(ctx, weekStartFor(startDate));
 
     // Fetch busy slots da Google Calendar in parallelo per ogni venditore.
     // Best-effort: chi non ha connesso Google torna array vuoto.
@@ -1704,9 +1772,13 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
                             confirmationsOutcome: r.confirmationsOutcome ?? null,
                         })),
                     busySlots: externalBusy,
+                    declaredSlots: declaredByVenditore.get(v.id) ?? [],
+                    blockedSlots: blockedByVenditore.get(v.id) ?? [],
                 };
             })
             .sort((a, b) => a.name.localeCompare(b.name, 'it')),
+        coverage,
+        reportedSlots,
     };
 }
 
