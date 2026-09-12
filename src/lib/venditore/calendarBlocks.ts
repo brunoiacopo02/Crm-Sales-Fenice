@@ -11,7 +11,7 @@
  */
 
 import { salesSlotBlocks } from '@/db/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, ne } from 'drizzle-orm'
 import { slotStartFor } from './calendarSlots'
 
 type Db = { insert: any; update: any; delete: any; select: any }
@@ -40,6 +40,18 @@ export async function syncFollowUpBlock(tx: Db, params: {
         await releaseFollowUpBlock(tx, { leadId: params.leadId })
         return
     }
+    // Righe dello stesso lead rimaste su ALTRI venditori (riassegnazioni o
+    // percorsi che in passato non liberavano): vanno tolte prima dell'UPDATE.
+    // L'unique parziale è (salesUserId, leadId): due orfane su due venditori
+    // diversi convivono a DB, ma l'UPDATE qui sotto le porterebbe entrambe
+    // sullo stesso salesUserId violando l'indice e facendo fallire il
+    // salvataggio di un esito. Un lead tiene un solo slot, per definizione.
+    await tx.delete(salesSlotBlocks).where(and(
+        eq(salesSlotBlocks.leadId, params.leadId),
+        eq(salesSlotBlocks.kind, 'FOLLOWUP'),
+        ne(salesSlotBlocks.salesUserId, params.salesUserId),
+    ))
+
     // L'unique parziale (salesUserId, leadId) where kind='FOLLOWUP' garantisce
     // che un lead tenga un solo slot: qui si aggiorna, non si accumula.
     const updated = await tx.update(salesSlotBlocks)

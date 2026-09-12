@@ -23,6 +23,8 @@ export interface CalendarUserRow {
     companyId: string
     isActive: boolean
     calendarExempt: boolean
+    /** Data di creazione dell'account: chi è entrato dopo la scadenza non la può aver rispettata. */
+    createdAt: Date
 }
 
 export interface PendingCalendarPenalty {
@@ -40,6 +42,12 @@ export interface PendingCalendarPenalty {
  * `notBefore` è la data di attivazione della regola: senza, o con una scadenza
  * anteriore, non si registra nulla. È la stessa protezione del malus ritardi —
  * una regola nuova non deve mai poter multare il passato.
+ *
+ * `createdAt` dell'utente è la protezione gemella dal lato della PERSONA:
+ * `notBefore` copre l'ingresso in vigore della regola, non l'ingresso di chi
+ * deve rispettarla. Un account creato mercoledì non può aver compilato entro
+ * il lunedì precedente, e una multa da 50 € per una scadenza anteriore alla
+ * propria assunzione non è difendibile davanti a nessuno.
  */
 export function selectMissingCalendarPenalties(
     users: CalendarUserRow[],
@@ -54,7 +62,11 @@ export function selectMissingCalendarPenalties(
     if (dueAt < notBefore) return []
 
     return users
-        .filter(u => u.isActive && !u.calendarExempt && !submittedUserIds.has(u.id))
+        .filter(u =>
+            u.isActive
+            && !u.calendarExempt
+            && !submittedUserIds.has(u.id)
+            && u.createdAt < dueAt)
         .map(u => ({
             salesUserId: u.id,
             companyId: u.companyId,

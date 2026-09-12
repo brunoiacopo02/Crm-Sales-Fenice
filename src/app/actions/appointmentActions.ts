@@ -10,6 +10,7 @@ import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
+import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -241,6 +242,14 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             metadata: { previousState, cancelledBy: role },
             companyId: ctx.companyId,
         });
+
+        // L'update qui sopra ha azzerato `salespersonUserId`: se quel venditore
+        // aveva un blocco follow-up su questo lead, resterebbe appeso al suo
+        // calendario senza che lui possa toglierlo (il lead non è più suo).
+        // Slot occupato per sempre, fuori copertura, non più segnalabile.
+        if (lead.salespersonUserId) {
+            await releaseFollowUpBlock(db, { leadId, salesUserId: lead.salespersonUserId });
+        }
 
         // Cancellare un appuntamento resetta esiti conferme/vendita: impatta
         // /appuntamenti, /conferme, /kpi-*, /panoramica-generale, /manager-targets.

@@ -8,6 +8,17 @@
  * il Task 10 (vista direzione) la richiamano da altri file di action: se
  * restasse una funzione privata di un modulo `"use server"` non sarebbe
  * riusabile da loro.
+ *
+ * NOTA SUL MULTI-TENANT — non "riparare" il filtro che sembra mancante.
+ * `salesAvailabilitySlots` e `salesSlotBlocks` si leggono SENZA
+ * `eq(companyId, …)`: sono tabelle PER-UTENTE, non per-azienda. I venditori
+ * sono staff condiviso (tutti con `allowedCompanies = ['fenice','serenamente']`)
+ * e dichiarano una disponibilità sola, valida ovunque; l'indice unico
+ * `sales_availability_slot_uq (salesUserId, slotStart)` non contiene
+ * `companyId` proprio per questo, e il cron le legge già senza filtro azienda.
+ * Con `eq(companyId)` un venditore loggato su Serenamente vede il calendario
+ * vuoto e la copertura a zero. `leads` invece resta giustamente scoped: gli
+ * appuntamenti appartengono a un tenant.
  */
 
 import { db } from "@/db"
@@ -38,15 +49,15 @@ export async function weekCoverage(ctx: TenantContext, weekStart: Date): Promise
         db.select({
             salesUserId: salesAvailabilitySlots.salesUserId,
             slotStart: salesAvailabilitySlots.slotStart,
-        }).from(salesAvailabilitySlots).where(and(
-            eq(salesAvailabilitySlots.companyId, ctx.companyId),
+        }).from(salesAvailabilitySlots).where(
+            // Per-utente, non per-azienda: vedi la nota in testa al file.
             eq(salesAvailabilitySlots.weekStart, weekStartStr),
-        )),
+        ),
         db.select({
             salesUserId: salesSlotBlocks.salesUserId,
             slotStart: salesSlotBlocks.slotStart,
         }).from(salesSlotBlocks).where(and(
-            eq(salesSlotBlocks.companyId, ctx.companyId),
+            // Per-utente, non per-azienda: vedi la nota in testa al file.
             gte(salesSlotBlocks.slotStart, weekStart),
             lt(salesSlotBlocks.slotStart, weekEnd),
         )),

@@ -13,8 +13,15 @@ const LUNEDI = new Date('2026-09-14T00:00:00+02:00')
 const SCADENZA = new Date('2026-09-14T14:00:00+02:00')
 const ATTIVAZIONE = new Date('2026-09-01T00:00:00+02:00')
 
+// Default: assunto molto prima della scadenza, cosi' i test che non parlano di
+// `createdAt` restano leggibili.
+const ASSUNTO_DA_SEMPRE = new Date('2025-01-01T00:00:00+01:00')
+
 function utente(over: Partial<CalendarUserRow> = {}): CalendarUserRow {
-    return { id: 'sales-2', companyId: 'fenice', isActive: true, calendarExempt: false, ...over }
+    return {
+        id: 'sales-2', companyId: 'fenice', isActive: true, calendarExempt: false,
+        createdAt: ASSUNTO_DA_SEMPRE, ...over,
+    }
 }
 
 test('dopo le 14 di lunedi chi non ha compilato prende 50 euro', () => {
@@ -49,6 +56,29 @@ test('chi ha compilato, chi e esente e chi e disattivato non prendono multe', ()
         new Date('2026-09-14T18:00:00+02:00'), ATTIVAZIONE,
     )
     assert.deepEqual(out.map(p => p.salesUserId), ['colpevole'])
+})
+
+test('chi e stato assunto dopo la scadenza non prende la multa di quella settimana', () => {
+    // Account creato mercoledi 16/09: la scadenza di lunedi 14/09 alle 14:00
+    // era gia' passata quando non esisteva ancora.
+    const out = selectMissingCalendarPenalties(
+        [
+            utente({ id: 'assunto-mercoledi', createdAt: new Date('2026-09-16T10:00:00+02:00') }),
+            utente({ id: 'c-era-gia' }),
+        ],
+        new Set(), LUNEDI,
+        new Date('2026-09-16T18:00:00+02:00'), ATTIVAZIONE,
+    )
+    assert.deepEqual(out.map(p => p.salesUserId), ['c-era-gia'])
+})
+
+test('chi e stato assunto un minuto prima della scadenza la multa la prende', () => {
+    const out = selectMissingCalendarPenalties(
+        [utente({ id: 'per-un-minuto', createdAt: new Date('2026-09-14T13:59:00+02:00') })],
+        new Set(), LUNEDI,
+        new Date('2026-09-14T18:00:00+02:00'), ATTIVAZIONE,
+    )
+    assert.deepEqual(out.map(p => p.salesUserId), ['per-un-minuto'])
 })
 
 test('senza data di attivazione non si registra nulla', () => {

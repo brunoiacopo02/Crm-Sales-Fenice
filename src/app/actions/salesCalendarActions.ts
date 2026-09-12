@@ -4,7 +4,7 @@ import { db } from "@/db"
 import {
     leads, users, salesAvailabilitySlots, salesSlotBlocks, salesWeekPlans, salesLatePenalties,
 } from "@/db/schema"
-import { and, eq, gte, lt, isNull, or, sql } from "drizzle-orm"
+import { and, eq, gt, gte, lt, isNull, or, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { toRomeDateStr } from "@/lib/dateUtils"
@@ -18,9 +18,19 @@ import { revalidatePath } from "next/cache"
 import crypto from "crypto"
 
 /**
- * Sessione sales minima. Nessun filtro di ruolo qui: ogni funzione esportata
- * decide da sé chi può fare cosa, questa serve solo a garantire un utente
- * autenticato e in area sales.
+ * Ruoli ammessi al calendario venditori (spec §7, riga "Vedere la copertura"):
+ * VENDITORE, CONFERME (il TL Conferme è un account CONFERME, vedi
+ * `src/lib/confermeTl.ts`), MANAGER, ADMIN. Un GDO non compare in nessuna riga
+ * di quella tabella: senza questo filtro leggeva copertura e nomi dei
+ * venditori chiamando `getCalendarWeek` a mano.
+ */
+const CALENDAR_ROLES = ['VENDITORE', 'CONFERME', 'MANAGER', 'ADMIN']
+
+/**
+ * Sessione sales minima + guardia di ruolo. Il "chi può fare cosa" fine
+ * (scrivere solo il proprio calendario, guardare quello altrui) resta dentro
+ * ogni funzione esportata: qui si chiude solo la porta a chi non ha titolo di
+ * entrare affatto.
  */
 async function requireSalesSession() {
     const supabase = await createClient()
@@ -29,6 +39,7 @@ async function requireSalesSession() {
 
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    if (!CALENDAR_ROLES.includes(ctx.role)) throw new Error("Unauthorized")
     return { userId: ctx.userId, role: ctx.role, email: ctx.email, ctx }
 }
 
@@ -67,7 +78,12 @@ export interface CalendarWeekView {
     readOnlyReason: 'settimana_passata' | 'altro_venditore' | null
     isExempt: boolean
     mySlots: string[]
-    myBlocks: Array<{ slotKey: string; kind: string; leadId: string | null; leadName: string | null }>
+    /**
+     * `orphan` = blocco FOLLOWUP il cui lead non e' piu' assegnato a questo
+     * venditore: e' l'unico che `unblockSlot` accetta di togliere, e la UI deve
+     * saperlo distinguere per non spegnere il bottone su uno stato senza uscita.
+     */
+    myBlocks: Array<{ slotKey: string; kind: string; leadId: string | null; leadName: string | null; orphan: boolean }>
     myAppointments: Array<{ slotKey: string; leadId: string; leadName: string }>
     submittedAtIso: string | null
     slotCount: number
@@ -109,10 +125,13 @@ export async function getCalendarWeek(input?: {
         : (!isSelf ? 'altro_venditore' : null)
 
     const [availRows, blockRows, apptRows, planRows, penaltyRows, coverage, venditoriRows] = await Promise.all([
+        // Niente `eq(companyId)` su queste tre tabelle: sono per-utente, non
+        // per-azienda (vedi la nota in `calendarQueries.ts`). Un venditore
+        // loggato su Serenamente deve vedere la disponibilità che ha dichiarato,
+        // non una pagina vuota.
         db.select({ slotStart: salesAvailabilitySlots.slotStart })
             .from(salesAvailabilitySlots)
             .where(and(
-                eq(salesAvailabilitySlots.companyId, ctx.companyId),
                 eq(salesAvailabilitySlots.salesUserId, targetUserId),
                 eq(salesAvailabilitySlots.weekStart, weekStartStr),
             )),
@@ -121,10 +140,10 @@ export async function getCalendarWeek(input?: {
             kind: salesSlotBlocks.kind,
             leadId: salesSlotBlocks.leadId,
             leadName: leads.name,
+            leadOwner: leads.salespersonUserId,
         }).from(salesSlotBlocks)
             .leftJoin(leads, eq(salesSlotBlocks.leadId, leads.id))
             .where(and(
-                eq(salesSlotBlocks.companyId, ctx.companyId),
                 eq(salesSlotBlocks.salesUserId, targetUserId),
                 gte(salesSlotBlocks.slotStart, weekStart),
                 lt(salesSlotBlocks.slotStart, weekEnd),
@@ -144,7 +163,6 @@ export async function getCalendarWeek(input?: {
             slotCount: salesWeekPlans.slotCount,
             late: salesWeekPlans.late,
         }).from(salesWeekPlans).where(and(
-            eq(salesWeekPlans.companyId, ctx.companyId),
             eq(salesWeekPlans.salesUserId, targetUserId),
             eq(salesWeekPlans.weekStart, weekStartStr),
         )).limit(1),
@@ -184,6 +202,7 @@ export async function getCalendarWeek(input?: {
             kind: r.kind,
             leadId: r.leadId,
             leadName: r.leadName,
+            orphan: r.kind === 'FOLLOWUP' && r.leadOwner !== targetUserId,
         })),
         myAppointments,
         submittedAtIso: plan?.submittedAt ? plan.submittedAt.toISOString() : null,
@@ -228,33 +247,61 @@ export async function saveCalendarWeek(
         })
         .filter((d): d is Date => d !== null)
 
+    const now = new Date()
+
+    // Le ore GIÀ INIZIATE non si toccano più, nemmeno nella settimana corrente.
+    // Sono la prova di quello che il venditore aveva offerto: la finestra di
+    // segnalazione delle Conferme dura 48 ore e si sovrappone a quella di
+    // modifica, quindi senza questa guardia bastava togliere la spunta alle
+    // 11:00 per cancellare la prova dell'assenza delle 9:00 e spegnere il
+    // bottone "Non c'era". La spec §4.7 dà per scontato che lo stato attuale
+    // di uno slot passato coincida con quello che era: questa riga è ciò che
+    // lo rende vero. Il resto della settimana continua a funzionare.
+    const futuri = valid.filter(slot => slot > now)
+
     // Il client puo' mandare la stessa ora due volte: senza questa deduplica
     // l'insert violerebbe l'unique (salesUserId, slotStart) dentro la transazione.
     const perChiave = new Map<string, Date>()
-    for (const slot of valid) perChiave.set(slotKey(slot), slot)
+    for (const slot of futuri) perChiave.set(slotKey(slot), slot)
     const unici = [...perChiave.values()]
 
-    const now = new Date()
     const weekStartStr = toRomeDateStr(weekStart)
     const late = now > weeklyDeadline(weekStart)
 
     try {
         await db.transaction(async (tx) => {
+            // Cancellazione limitata agli slot non ancora iniziati: le righe
+            // passate restano dove sono (vedi sopra). Niente `eq(companyId)`:
+            // tabella per-utente, non per-azienda.
             await tx.delete(salesAvailabilitySlots).where(and(
-                eq(salesAvailabilitySlots.companyId, ctx.companyId),
                 eq(salesAvailabilitySlots.salesUserId, userId),
                 eq(salesAvailabilitySlots.weekStart, weekStartStr),
+                gt(salesAvailabilitySlots.slotStart, now),
             ))
 
             if (unici.length > 0) {
                 await tx.insert(salesAvailabilitySlots).values(unici.map(slotStart => ({
                     id: crypto.randomUUID(),
+                    // `companyId` resta valorizzato come PROVENIENZA (da quale
+                    // azienda stava lavorando chi ha salvato), non come filtro:
+                    // la riga vale su tutte le aziende del venditore.
                     companyId: ctx.companyId,
                     salesUserId: userId,
                     slotStart,
                     weekStart: weekStartStr,
                 })))
             }
+
+            // `slotCount` sono le ore della settimana DOPO il salvataggio,
+            // quelle passate comprese: conta `unici` soltanto sarebbe un
+            // numero calante di ora in ora, e la scheda Compilazione
+            // mostrerebbe "0 ore" al sabato sera a chi aveva dichiarato tutto.
+            const rimaste = await tx.select({ id: salesAvailabilitySlots.id })
+                .from(salesAvailabilitySlots).where(and(
+                    eq(salesAvailabilitySlots.salesUserId, userId),
+                    eq(salesAvailabilitySlots.weekStart, weekStartStr),
+                ))
+            const slotCount = rimaste.length
 
             await tx.insert(salesWeekPlans).values({
                 id: crypto.randomUUID(),
@@ -263,13 +310,13 @@ export async function saveCalendarWeek(
                 weekStart: weekStartStr,
                 submittedAt: now,
                 updatedAt: now,
-                slotCount: unici.length,
+                slotCount,
                 late,
             }).onConflictDoUpdate({
                 target: [salesWeekPlans.salesUserId, salesWeekPlans.weekStart],
                 // submittedAt e late NON si toccano: sono la prova del primo
                 // salvataggio, letta dal cron delle multe.
-                set: { slotCount: unici.length, updatedAt: now },
+                set: { slotCount, updatedAt: now },
             })
         })
     } catch (e) {
@@ -303,14 +350,13 @@ export async function blockSlot(
             db.select({ slotStart: salesAvailabilitySlots.slotStart })
                 .from(salesAvailabilitySlots)
                 .where(and(
-                    eq(salesAvailabilitySlots.companyId, ctx.companyId),
+                    // Tabella per-utente, non per-azienda: vedi calendarQueries.ts.
                     eq(salesAvailabilitySlots.salesUserId, userId),
                     eq(salesAvailabilitySlots.slotStart, slot),
                 )).limit(1),
             db.select({ id: salesSlotBlocks.id })
                 .from(salesSlotBlocks)
                 .where(and(
-                    eq(salesSlotBlocks.companyId, ctx.companyId),
                     eq(salesSlotBlocks.salesUserId, userId),
                     eq(salesSlotBlocks.slotStart, slot),
                 )).limit(1),
@@ -357,11 +403,18 @@ export async function blockSlot(
 }
 
 /**
- * Toglie un blocco manuale. I blocchi `FOLLOWUP` non si toccano da qui: si
- * liberano spostando il follow-up o registrandone l'esito.
+ * Toglie un blocco manuale. I blocchi `FOLLOWUP` di un lead ancora assegnato
+ * non si toccano da qui: si liberano spostando il follow-up o registrandone
+ * l'esito.
+ *
+ * Unica eccezione: il blocco ORFANO, cioè quello di un lead che non è più del
+ * venditore (riassegnato, appuntamento annullato, esito rimosso da un percorso
+ * che non ha liberato). Lì il venditore non ha nessuna strada per toglierlo —
+ * il lead non è più suo — e lo slot resterebbe occupato per sempre, fuori dalla
+ * copertura e non più segnalabile come assenza.
  */
 export async function unblockSlot(slotIso: string): Promise<{ success: boolean; error?: string }> {
-    const { userId, role, ctx } = await requireSalesSession()
+    const { userId, role } = await requireSalesSession()
     if (role !== 'VENDITORE') {
         return { success: false, error: 'Solo i venditori sbloccano il proprio calendario.' }
     }
@@ -370,10 +423,13 @@ export async function unblockSlot(slotIso: string): Promise<{ success: boolean; 
     if (!slot) return { success: false, error: 'Ora fuori dal calendario.' }
 
     try {
-        const [existing] = await db.select({ id: salesSlotBlocks.id, kind: salesSlotBlocks.kind })
+        const [existing] = await db.select({
+            id: salesSlotBlocks.id,
+            kind: salesSlotBlocks.kind,
+            leadId: salesSlotBlocks.leadId,
+        })
             .from(salesSlotBlocks)
             .where(and(
-                eq(salesSlotBlocks.companyId, ctx.companyId),
                 eq(salesSlotBlocks.salesUserId, userId),
                 eq(salesSlotBlocks.slotStart, slot),
             ))
@@ -381,13 +437,18 @@ export async function unblockSlot(slotIso: string): Promise<{ success: boolean; 
 
         if (!existing) return { success: true }
         if (existing.kind === 'FOLLOWUP') {
-            return { success: false, error: "Questo slot è occupato da un follow-up: spostalo o registrane l'esito." }
+            // Il lead è ancora suo? Allora il blocco è vivo e va liberato dal
+            // percorso giusto. Se non lo è più (o non esiste più), è orfano.
+            const [lead] = existing.leadId
+                ? await db.select({ salespersonUserId: leads.salespersonUserId })
+                    .from(leads).where(eq(leads.id, existing.leadId)).limit(1)
+                : []
+            if (lead && lead.salespersonUserId === userId) {
+                return { success: false, error: "Questo slot è occupato da un follow-up: spostalo o registrane l'esito." }
+            }
         }
 
-        await db.delete(salesSlotBlocks).where(and(
-            eq(salesSlotBlocks.companyId, ctx.companyId),
-            eq(salesSlotBlocks.id, existing.id),
-        ))
+        await db.delete(salesSlotBlocks).where(eq(salesSlotBlocks.id, existing.id))
     } catch (e) {
         console.error('unblockSlot:', e)
         return { success: false, error: 'Sblocco non riuscito: riprova fra un momento.' }

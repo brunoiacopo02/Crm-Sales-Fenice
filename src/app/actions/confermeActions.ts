@@ -725,6 +725,15 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             // Il lead è passato a un altro venditore: lo slot del precedente si libera.
             // Non è una transazione (l'update sopra è già andato a buon fine): db, non tx.
             await releaseFollowUpBlock(db, { leadId, salesUserId: oldLead.salespersonUserId! })
+        } else if (!salespersonAssigned && oldLead.salespersonUserId) {
+            // Il lead resta SENZA venditore (scartato, o semplicemente salvato
+            // senza assegnazione): l'update qui sopra ha appena azzerato
+            // `salespersonUserId`. Senza questo rilascio il blocco del follow-up
+            // resta appeso al calendario del venditore precedente, che non ha
+            // più il lead e quindi non ha alcuna strada per toglierlo: lo slot
+            // resta occupato per sempre, fuori dalla copertura e non più
+            // segnalabile come assenza.
+            await releaseFollowUpBlock(db, { leadId, salesUserId: oldLead.salespersonUserId })
         }
 
         // Gamification: award XP/coins to Conferme worker on confirmation.
@@ -1618,8 +1627,14 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         /** Chiavi `slotKey` (vedi calendarSlots.ts) dichiarate disponibili
          *  dal venditore nell'intervallo richiesto. */
         declaredSlots: string[];
-        /** Chiavi `slotKey` bloccate (follow-up o imprevisto) nell'intervallo. */
+        /** Chiavi `slotKey` bloccate PRIMA dell'inizio dello slot: solo quelle
+         *  provano che il venditore aveva avvisato, ed e' l'unico insieme che
+         *  puo' spegnere il bottone "Non c'era". */
         blockedSlots: string[];
+        /** TUTTI i blocchi dell'intervallo, con il motivo: servono a mostrarli
+         *  alle Conferme sulla giornata, che e' il motivo per cui un follow-up
+         *  blocca lo slot. Qui la data di creazione non c'entra. */
+        blockDetails: Array<{ slotKey: string; kind: string; leadName: string | null }>;
         /** true = niente obbligo di calendario, niente multe (vedi users.calendarExempt). */
         calendarExempt: boolean;
     }>;
@@ -1687,18 +1702,24 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
             salesUserId: salesAvailabilitySlots.salesUserId,
             slotStart: salesAvailabilitySlots.slotStart,
         }).from(salesAvailabilitySlots).where(and(
-            eq(salesAvailabilitySlots.companyId, ctx.companyId),
+            // Niente `eq(companyId)`: disponibilita' e blocchi sono tabelle
+            // PER-UTENTE, non per-azienda (vedi la nota in calendarQueries.ts).
+            // Con il filtro, su Serenamente la copertura usciva a zero.
             gte(salesAvailabilitySlots.slotStart, startDate),
             lt(salesAvailabilitySlots.slotStart, endDate),
         )),
         db.select({
             salesUserId: salesSlotBlocks.salesUserId,
             slotStart: salesSlotBlocks.slotStart,
-        }).from(salesSlotBlocks).where(and(
-            eq(salesSlotBlocks.companyId, ctx.companyId),
-            gte(salesSlotBlocks.slotStart, startDate),
-            lt(salesSlotBlocks.slotStart, endDate),
-        )),
+            kind: salesSlotBlocks.kind,
+            createdAt: salesSlotBlocks.createdAt,
+            leadName: leads.name,
+        }).from(salesSlotBlocks)
+            .leftJoin(leads, eq(salesSlotBlocks.leadId, leads.id))
+            .where(and(
+                gte(salesSlotBlocks.slotStart, startDate),
+                lt(salesSlotBlocks.slotStart, endDate),
+            )),
         db.select({
             salesUserId: salesLatePenalties.salesUserId,
             dueAt: salesLatePenalties.dueAt,
@@ -1721,11 +1742,29 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         arr.push(slotKey(r.slotStart));
         declaredByVenditore.set(r.salesUserId, arr);
     }
+    // Due letture diverse degli stessi blocchi, e devono restare diverse.
+    //
+    // `blockedByVenditore` alimenta l'ammissibilita' della multa: conta solo i
+    // blocchi NATI PRIMA dell'inizio dello slot, perche' solo quelli provano che
+    // il venditore aveva avvisato. Un follow-up spostato a cose fatte su un'ora
+    // gia' passata e' un blocco retrodatato: spegnerebbe il bottone "Non c'era"
+    // con la motivazione falsa "il venditore aveva avvisato".
+    //
+    // `blockDetailsByVenditore` alimenta invece la pastiglia che le Conferme
+    // vedono sulla giornata: li' servono TUTTI i blocchi, perche' la domanda e'
+    // "posso fissare qui?" e la risposta non dipende da quando il blocco e' nato.
     const blockedByVenditore = new Map<string, string[]>();
+    const blockDetailsByVenditore = new Map<string, Array<{ slotKey: string; kind: string; leadName: string | null }>>();
     for (const r of blockRows) {
-        const arr = blockedByVenditore.get(r.salesUserId) ?? [];
-        arr.push(slotKey(r.slotStart));
-        blockedByVenditore.set(r.salesUserId, arr);
+        const key = slotKey(r.slotStart);
+        if (r.createdAt <= r.slotStart) {
+            const arr = blockedByVenditore.get(r.salesUserId) ?? [];
+            arr.push(key);
+            blockedByVenditore.set(r.salesUserId, arr);
+        }
+        const det = blockDetailsByVenditore.get(r.salesUserId) ?? [];
+        det.push({ slotKey: key, kind: r.kind, leadName: r.leadName });
+        blockDetailsByVenditore.set(r.salesUserId, det);
     }
     const reportedSlots = reportedRows.map(r => `${r.salesUserId}|${slotKey(r.dueAt)}`);
 
@@ -1783,6 +1822,7 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
                     busySlots: externalBusy,
                     declaredSlots: declaredByVenditore.get(v.id) ?? [],
                     blockedSlots: blockedByVenditore.get(v.id) ?? [],
+                    blockDetails: blockDetailsByVenditore.get(v.id) ?? [],
                     calendarExempt: v.calendarExempt,
                 };
             })

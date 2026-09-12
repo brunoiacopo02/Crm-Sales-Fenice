@@ -556,6 +556,15 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
     if (!(newDate instanceof Date) || isNaN(newDate.getTime())) {
         return { success: false, error: 'Data follow-up non valida.' };
     }
+    // Un follow-up si fissa in avanti, mai all'indietro. Non e' pignoleria:
+    // il blocco calendario segue la data, e un follow-up retrodatato su un'ora
+    // gia' passata creava un blocco "a cose fatte" che spegneva il bottone
+    // "Non c'era" delle Conferme con la motivazione falsa "il venditore aveva
+    // avvisato" (la guardia vera e' lato segnalazione, questa evita di
+    // produrre il dato sbagliato in partenza).
+    if (newDate.getTime() <= Date.now()) {
+        return { success: false, error: 'Il follow-up va fissato a una data futura.' };
+    }
     if (!lead.followUp1Date && !lead.inLavorazioneAt) {
         return { success: false, error: 'Nessun follow-up pendente da spostare per questo lead.' };
     }
@@ -852,6 +861,12 @@ export async function clearVenditoreOutcome(leadId: string, currentVersion?: num
             },
             companyId: ctx.companyId,
         });
+
+        // "Esito rimosso -> blocco rilasciato" (spec §4.5): `followUp1Date` e'
+        // appena stato azzerato, quindi lo slot non e' piu' occupato da nulla.
+        // Senza questa riga il blocco restava, e `unblockSlot` rifiuta i
+        // FOLLOWUP: uno stato senza uscita per il venditore.
+        await releaseFollowUpBlock(tx, { leadId });
 
         return { success: true as const };
     });

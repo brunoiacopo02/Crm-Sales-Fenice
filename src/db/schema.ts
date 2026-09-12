@@ -1517,8 +1517,28 @@ export const salesLatePenalties = pgTable('salesLatePenalties', {
 });
 
 /**
+ * NOTA COMUNE ALLE TRE TABELLE DEL CALENDARIO
+ * (`salesAvailabilitySlots`, `salesSlotBlocks`, `salesWeekPlans`)
+ *
+ * Sono PER-UTENTE, non per-azienda. I venditori sono staff condiviso: tutti
+ * hanno `allowedCompanies = ['fenice','serenamente']` e dichiarano UNA
+ * disponibilita' sola, valida ovunque lavorino. Per questo le letture e le
+ * cancellazioni NON filtrano su `companyId` — e l'indice unico
+ * `sales_availability_slot_uq (salesUserId, slotStart)` non lo contiene.
+ * La colonna resta valorizzata in scrittura come PROVENIENZA (da quale azienda
+ * stava lavorando chi ha salvato), mai come filtro.
+ *
+ * Non "riparare" il filtro che sembra mancante: con `eq(companyId)` un
+ * venditore loggato su Serenamente vede calendario vuoto e copertura a zero, e
+ * il salvataggio va in violazione di unicita' perche' prova a reinserire slot
+ * che esistono gia' con l'altra provenienza. La copertura su `leads` e
+ * appuntamenti resta invece giustamente scoped: quelli appartengono a un tenant.
+ */
+
+/**
  * Disponibilità dichiarata dai venditori. Una riga = uno slot offerto.
  * Assenza della riga = non disponibile: non serve un booleano.
+ * Tabella per-utente: vedi la NOTA COMUNE qui sopra.
  */
 export const salesAvailabilitySlots = pgTable('salesAvailabilitySlots', {
     id: text('id').primaryKey(),
@@ -1540,6 +1560,7 @@ export const salesAvailabilitySlots = pgTable('salesAvailabilitySlots', {
 /**
  * Blocchi su uno slot: 'MANUAL' (imprevisto, almeno 1h di preavviso) o
  * 'FOLLOWUP' (automatico, quando il venditore fissa un follow-up).
+ * Tabella per-utente: vedi la NOTA COMUNE sopra `salesAvailabilitySlots`.
  * Righe separate perché due follow-up possono cadere nella stessa ora:
  * il rilascio deve togliere solo il proprio blocco.
  */
@@ -1562,6 +1583,7 @@ export const salesSlotBlocks = pgTable('salesSlotBlocks', {
 /**
  * Registro della compilazione settimanale. `submittedAt` è il PRIMO salvataggio
  * e non si aggiorna più: è la prova che il cron del lunedì legge.
+ * Tabella per-utente: vedi la NOTA COMUNE sopra `salesAvailabilitySlots`.
  */
 export const salesWeekPlans = pgTable('salesWeekPlans', {
     id: text('id').primaryKey(),

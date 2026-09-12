@@ -13,7 +13,7 @@
 
 import { db } from "@/db"
 import { leads, users, salesAvailabilitySlots, salesSlotBlocks, salesWeekPlans, salesLatePenalties, notifications } from "@/db/schema"
-import { and, eq, gte, lt, or, sql, isNull, desc } from "drizzle-orm"
+import { and, eq, gte, lt, lte, or, sql, isNull, desc } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { slotStartFor, slotKey, weekStartFor, weeklyDeadline } from "@/lib/venditore/calendarSlots"
@@ -62,17 +62,25 @@ export async function reportSalesAbsence(
             .from(users).where(and(eq(users.id, salesUserId), tenantScope))
         if (!venditore) return { success: false, error: "Venditore non trovato." }
 
+        // Disponibilita' e blocchi si leggono SENZA `eq(companyId)`: sono
+        // tabelle per-utente, non per-azienda (vedi la nota in
+        // `calendarQueries.ts`). Con il filtro azienda una Conferma su
+        // Serenamente vedeva ogni slot come "non dichiarato".
         const [declared] = await db.select({ id: salesAvailabilitySlots.id })
             .from(salesAvailabilitySlots).where(and(
-                eq(salesAvailabilitySlots.companyId, ctx.companyId),
                 eq(salesAvailabilitySlots.salesUserId, salesUserId),
                 eq(salesAvailabilitySlots.slotStart, slot),
             ))
         const [blocked] = await db.select({ id: salesSlotBlocks.id })
             .from(salesSlotBlocks).where(and(
-                eq(salesSlotBlocks.companyId, ctx.companyId),
                 eq(salesSlotBlocks.salesUserId, salesUserId),
                 eq(salesSlotBlocks.slotStart, slot),
+                // Solo i blocchi NATI PRIMA dell'inizio dello slot valgono come
+                // "il venditore aveva avvisato". Un follow-up spostato a cose
+                // fatte su un'ora gia' passata creerebbe un blocco retrodatato
+                // e spegnerebbe il bottone "Non c'era" con una motivazione
+                // falsa: nessuno aveva avvisato nessuno.
+                lte(salesSlotBlocks.createdAt, slot),
             ))
         const [reported] = await db.select({ id: salesLatePenalties.id })
             .from(salesLatePenalties).where(and(
@@ -185,7 +193,10 @@ export interface SupervisionView {
         submittedAtIso: string | null
         slotCount: number
         late: boolean
-        penalised: boolean
+        /** Importo della multa "calendario non compilato" per questa settimana, o null. */
+        penaltyEur: number | null
+        /** Esente (spec §4.3): stato proprio, non "non compilato". */
+        exempt: boolean
     }>
     penalties: Array<{
         id: string
@@ -234,23 +245,26 @@ export async function getCalendarSupervision(
         db.select({
             salesUserId: salesAvailabilitySlots.salesUserId,
             slotStart: salesAvailabilitySlots.slotStart,
-        }).from(salesAvailabilitySlots).where(and(
-            eq(salesAvailabilitySlots.companyId, ctx.companyId),
+        }).from(salesAvailabilitySlots).where(
+            // Per-utente, non per-azienda: vedi la nota in calendarQueries.ts.
             eq(salesAvailabilitySlots.weekStart, weekStartStr),
-        )),
+        ),
         db.select({
             salesUserId: salesWeekPlans.salesUserId,
             submittedAt: salesWeekPlans.submittedAt,
             slotCount: salesWeekPlans.slotCount,
             late: salesWeekPlans.late,
-        }).from(salesWeekPlans).where(and(
-            eq(salesWeekPlans.companyId, ctx.companyId),
+        }).from(salesWeekPlans).where(
+            // Per-utente, non per-azienda: vedi la nota in calendarQueries.ts.
             eq(salesWeekPlans.weekStart, weekStartStr),
-        )),
+        ),
         // Chi ha già la multa "calendario non compilato" per QUESTA scadenza
         // (annullate escluse): serve solo alla pastiglia "Multa" della scheda
         // Compilazione, indipendente dal monthKey della scheda Multe.
-        db.select({ salesUserId: salesLatePenalties.salesUserId })
+        db.select({
+            salesUserId: salesLatePenalties.salesUserId,
+            amountEur: salesLatePenalties.amountEur,
+        })
             .from(salesLatePenalties).where(and(
                 eq(salesLatePenalties.companyId, ctx.companyId),
                 eq(salesLatePenalties.kind, 'CALENDAR_MISSING'),
@@ -301,7 +315,9 @@ export async function getCalendarSupervision(
     const matrix = venditori.map(v => ({ salesUserId: v.id, slotKeys: declaredByUser.get(v.id) ?? [] }))
 
     const planByUser = new Map(planRows.map(p => [p.salesUserId, p]))
-    const missingSet = new Set(missingRows.map(r => r.salesUserId))
+    // L'importo vero della multa, non una costante riscritta a video: il giorno
+    // che i 50 € cambiano, la scheda dice ancora la verità sulle righe vecchie.
+    const penaltyByUser = new Map(missingRows.map(r => [r.salesUserId, r.amountEur]))
     const compilation = venditori.map(v => {
         const plan = planByUser.get(v.id)
         return {
@@ -309,13 +325,19 @@ export async function getCalendarSupervision(
             submittedAtIso: plan?.submittedAt ? plan.submittedAt.toISOString() : null,
             slotCount: plan?.slotCount ?? 0,
             late: plan?.late ?? false,
-            penalised: missingSet.has(v.id),
+            penaltyEur: penaltyByUser.get(v.id) ?? null,
+            exempt: v.calendarExempt,
         }
     })
     // Prima i non compilati: sono il motivo per cui qualcuno apre questa scheda.
+    // Gli esenti NON sono "non compilati" (spec §4.3): restano in fondo insieme
+    // a chi ha compilato, altrimenti Sales 001 guiderebbe la lista degli
+    // inadempienti ogni settimana per sempre.
+    const inadempiente = (r: { submittedAtIso: string | null; exempt: boolean }) =>
+        !r.submittedAtIso && !r.exempt
     compilation.sort((a, b) => {
-        if (!a.submittedAtIso && b.submittedAtIso) return -1
-        if (a.submittedAtIso && !b.submittedAtIso) return 1
+        if (inadempiente(a) && !inadempiente(b)) return -1
+        if (!inadempiente(a) && inadempiente(b)) return 1
         return 0
     })
 

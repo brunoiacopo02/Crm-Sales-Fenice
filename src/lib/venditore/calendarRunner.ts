@@ -38,6 +38,9 @@ export async function runCalendarWeekly(now: Date = new Date()): Promise<Calenda
         companyId: users.companyId,
         isActive: users.isActive,
         calendarExempt: users.calendarExempt,
+        // Serve a `selectMissingCalendarPenalties`: chi è entrato dopo la
+        // scadenza non viene multato per una settimana in cui non esisteva.
+        createdAt: users.createdAt,
     }).from(users).where(eq(users.role, 'VENDITORE')))
 
     const plans = await db.select({ salesUserId: salesWeekPlans.salesUserId })
