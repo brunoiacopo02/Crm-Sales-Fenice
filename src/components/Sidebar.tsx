@@ -20,6 +20,7 @@ import {
     PhoneIncoming,
     Calculator,
     Scale,
+    CalendarClock,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -146,6 +147,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     } else if (role === "VENDITORE") {
         navItems = [
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
+            { name: "Il mio Calendario", href: "/mio-calendario", icon: CalendarClock },
             { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
         ]
     } else if (role === "TL") {
