@@ -31,6 +31,10 @@ export interface DemandStat {
 }
 
 export function buildDemand(samples: DemandSample[], weeks: number = DEMAND_WEEKS): DemandStat[] {
+    // Una finestra di zero settimane non è una domanda sensata: senza questo
+    // minimo la media diventa Infinity e si propaga come NaN fino al semaforo.
+    const finestra = Math.max(1, Math.floor(weeks))
+
     const acc = new Map<string, { dow: number; hour: number; total: number; presented: number }>()
     for (const s of samples) {
         const dow = romeDow(s.appointmentAt)
@@ -45,7 +49,7 @@ export function buildDemand(samples: DemandSample[], weeks: number = DEMAND_WEEK
     }
 
     return [...acc.values()].map(v => {
-        const expected = v.total / weeks
+        const expected = v.total / finestra
         const showRate = v.total > 0 ? v.presented / v.total : 0
         return { dow: v.dow, hour: v.hour, expected, showRate, expectedPeople: expected * showRate }
     })
@@ -54,6 +58,10 @@ export function buildDemand(samples: DemandSample[], weeks: number = DEMAND_WEEK
 export type CoverageStatus = 'rosso' | 'ambra' | 'verde' | 'neutro'
 
 export function coverageStatus(available: number, expectedPeople: number): CoverageStatus {
+    // Un numero non finito (finestra storica degenere) non è una copertura
+    // piena: senza questa guardia NaN scivolerebbe fino a 'verde', e la cella
+    // direbbe "stai tranquillo" proprio quando il dato è spazzatura.
+    if (!Number.isFinite(expectedPeople)) return 'neutro'
     if (expectedPeople <= 0) return 'neutro'
     if (available === 0) return 'rosso'
     if (available < expectedPeople) return 'ambra'

@@ -65,3 +65,21 @@ test('buildCoverage restituisce una cella per ogni slot della settimana', () => 
     assert.equal(cells.length, 78)
     assert.ok(cells.every(c => c.status === 'neutro'))
 })
+
+test('coverageStatus: un valore non finito e neutro, mai verde', () => {
+    assert.equal(coverageStatus(0, NaN), 'neutro')
+    assert.equal(coverageStatus(3, NaN), 'neutro')
+    assert.equal(coverageStatus(0, Infinity), 'neutro')
+})
+
+test('buildDemand: una finestra di zero settimane non produce medie infinite', () => {
+    const stats = buildDemand([
+        { appointmentAt: new Date('2026-09-09T15:00:00+02:00'), presented: true },
+        { appointmentAt: new Date('2026-09-02T15:00:00+02:00'), presented: false },
+    ], 0)
+    const mer15 = stats.find(s => s.dow === 3 && s.hour === 15)
+    assert.ok(mer15)
+    assert.ok(Number.isFinite(mer15!.expected), 'expected deve restare finito')
+    assert.ok(Number.isFinite(mer15!.expectedPeople), 'expectedPeople deve restare finito')
+    assert.equal(mer15!.expected, 2)   // clampata a una settimana
+})
