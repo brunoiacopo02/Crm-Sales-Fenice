@@ -361,6 +361,16 @@ export async function voidCalendarPenalty(
     const trimmed = reason?.trim()
     if (!trimmed) return { success: false, error: 'Serve un motivo.' }
 
+    // `salesLatePenalties` è una tabella sola per due registri distinti: i 50 €
+    // del calendario (qui) e i 10 € dei ritardi (Monitor Vendite, Task 11).
+    // Questa funzione è competente solo sul primo: senza questo filtro,
+    // chiamandola con l'id di una multa APPOINTMENT/FOLLOWUP la annullerebbe
+    // lo stesso, perché altrimenti il where guarda solo id+companyId.
+    const calendarKindScope = or(
+        eq(salesLatePenalties.kind, 'CALENDAR_MISSING'),
+        eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
+    )
+
     try {
         const [existing] = await db.select({
             id: salesLatePenalties.id,
@@ -368,6 +378,7 @@ export async function voidCalendarPenalty(
         }).from(salesLatePenalties).where(and(
             eq(salesLatePenalties.id, penaltyId),
             eq(salesLatePenalties.companyId, ctx.companyId),
+            calendarKindScope,
         )).limit(1)
 
         if (!existing) return { success: false, error: 'Multa non trovata.' }
@@ -380,6 +391,7 @@ export async function voidCalendarPenalty(
         }).where(and(
             eq(salesLatePenalties.id, penaltyId),
             eq(salesLatePenalties.companyId, ctx.companyId),
+            calendarKindScope,
         ))
     } catch (e) {
         console.error('voidCalendarPenalty:', e)
