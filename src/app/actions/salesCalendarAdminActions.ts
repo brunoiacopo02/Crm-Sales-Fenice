@@ -12,14 +12,14 @@
  */
 
 import { db } from "@/db"
-import { leads, users, salesAvailabilitySlots, salesSlotBlocks, salesWeekPlans, salesLatePenalties, notifications } from "@/db/schema"
-import { and, eq, gte, lt, lte, or, sql, isNull, desc } from "drizzle-orm"
+import { leads, users, salesAvailabilitySlots, salesSlotBlocks, salesWeekPlans, salesLatePenalties, notifications, leadEvents } from "@/db/schema"
+import { and, eq, gte, lt, lte, or, sql, isNull, inArray, desc } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { slotStartFor, slotKey, weekStartFor, weeklyDeadline } from "@/lib/venditore/calendarSlots"
 import { absenceReportCheck, absenceRefusalMessage, CALENDAR_PENALTY_EUR, type CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
 import { romeMonthKey } from "@/lib/venditore/latePenalties"
-import { formatRomeAppointmentLabel, toRomeDateStr } from "@/lib/dateUtils"
+import { formatRomeAppointmentLabel, toRomeDateStr, monthBoundsRome } from "@/lib/dateUtils"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { revalidatePath } from "next/cache"
@@ -451,4 +451,106 @@ export async function setCalendarExempt(
     revalidatePath('/calendari-venditori')
     revalidatePath('/mio-calendario')
     return { success: true }
+}
+
+export interface ForcedBooking {
+    id: string
+    /** Quando è avvenuta la forzatura (ISO), non l'ora dell'appuntamento. */
+    at: string
+    leadId: string
+    leadName: string | null
+    salesName: string | null
+    confermaName: string | null
+    /** L'ora forzata dell'appuntamento (ISO), letta da metadata.appointmentAt. */
+    appointmentAt: string | null
+    /** Motivo tecnico del rifiuto del muro: 'fuori_griglia' | 'non_dichiarato' | 'bloccato'. */
+    reason: string | null
+    /** Motivo scritto dalla Conferma per scavalcare il muro. */
+    motivo: string | null
+}
+
+/**
+ * Le forzature del mese (spec Task 5): ogni riga `leadEvents` con
+ * `eventType = 'appointment_forced'` è una Conferma che ha scritto un
+ * appuntamento fuori dal muro dichiarato dal venditore. Visibile anche a
+ * CONFERME (a differenza della scheda Multe): sono loro a produrle, e
+ * vederle scoraggia l'abuso della valvola "Fissa comunque".
+ *
+ * `leftJoin` su leads e su users: una riga di forzatura deve comparire anche
+ * se il lead è stato nel frattempo cancellato o la Conferme disattivata —
+ * un innerJoin la farebbe sparire in silenzio.
+ */
+export async function getForcedBookings(monthKey?: string): Promise<ForcedBooking[]> {
+    const { ctx } = await requireCalendarSupervisor()
+    const mk = monthKey || romeMonthKey(new Date())
+    const { start, end } = monthBoundsRome(mk)
+
+    const rows = await db.select({
+        id: leadEvents.id,
+        timestamp: leadEvents.timestamp,
+        leadId: leadEvents.leadId,
+        metadata: leadEvents.metadata,
+        leadName: leads.name,
+        confermaName: users.name,
+        confermaDisplayName: users.displayName,
+    })
+        .from(leadEvents)
+        .leftJoin(leads, eq(leadEvents.leadId, leads.id))
+        .leftJoin(users, eq(leadEvents.userId, users.id))
+        .where(and(
+            eq(leadEvents.companyId, ctx.companyId),
+            eq(leadEvents.eventType, 'appointment_forced'),
+            gte(leadEvents.timestamp, start),
+            lt(leadEvents.timestamp, end),
+        ))
+        .orderBy(desc(leadEvents.timestamp))
+
+    // Il venditore forzato vive dentro `metadata` (jsonb), non è una FK
+    // risolvibile in join: si risolve con una seconda query, sullo stesso
+    // scope di appartenenza dello staff condiviso (venditoreTenantScope) —
+    // stesso pattern del nome venditore altrove in questo file.
+    const salesIds = new Set<string>()
+    for (const r of rows) {
+        const meta = r.metadata as Record<string, unknown> | null
+        const sid = meta && typeof meta.salesUserId === 'string' ? meta.salesUserId : null
+        if (sid) salesIds.add(sid)
+    }
+    const salesNameById = new Map<string, string>()
+    if (salesIds.size > 0) {
+        const salesRows = await db.select({
+            id: users.id,
+            name: users.name,
+            displayName: users.displayName,
+        }).from(users).where(and(
+            venditoreTenantScope(ctx),
+            inArray(users.id, Array.from(salesIds)),
+        ))
+        for (const s of salesRows) salesNameById.set(s.id, s.displayName || s.name || s.id)
+    }
+
+    // Una riga scritta male (metadata incompleto o non un oggetto) non deve
+    // far esplodere la pagina: ogni campo si legge con un controllo di tipo,
+    // mai un accesso diretto che rischia un undefined.metadata.
+    return rows.map(r => {
+        const meta = (r.metadata && typeof r.metadata === 'object' ? r.metadata : {}) as Record<string, unknown>
+        const salesUserId = typeof meta.salesUserId === 'string' ? meta.salesUserId : null
+        const appointmentAtRaw = meta.appointmentAt
+        const appointmentAt = typeof appointmentAtRaw === 'string'
+            ? appointmentAtRaw
+            : (appointmentAtRaw instanceof Date ? appointmentAtRaw.toISOString() : null)
+        const reason = typeof meta.reason === 'string' ? meta.reason : null
+        const motivo = typeof meta.motivo === 'string' ? meta.motivo : null
+
+        return {
+            id: r.id,
+            at: r.timestamp.toISOString(),
+            leadId: r.leadId,
+            leadName: r.leadName,
+            salesName: salesUserId ? (salesNameById.get(salesUserId) ?? null) : null,
+            confermaName: r.confermaDisplayName || r.confermaName || null,
+            appointmentAt,
+            reason,
+            motivo,
+        }
+    })
 }

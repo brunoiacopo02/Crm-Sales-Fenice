@@ -22,7 +22,7 @@ direzione.
 | Tema | Decisione |
 |---|---|
 | Griglia | Ore piene 9:00–21:00, lunedì–sabato. Domenica non compilabile. |
-| Vincolo sulle Conferme | Avviso, non blocco. Possono fissare fuori disponibilità, ma quello slot non genera mai multa. |
+| Vincolo sulle Conferme | ~~Avviso, non blocco. Possono fissare fuori disponibilità, ma quello slot non genera mai multa.~~ **Ripensamento PO, 2026-09-12 (stesso giorno, dopo la prima stesura di questa spec): Blocco con forzatura motivata. Admin e manager esenti.** Uno slot forzato continua a non generare mai multa. |
 | Segnalazione assenza | La multa scatta subito; l'admin può annullarla con motivo. |
 | Blocco tardivo (<1h) | Il sistema lo impedisce. |
 | Compilazione in ritardo | Multa da 50 € definitiva, ma il calendario resta apribile. Una sola multa per settimana. |
@@ -265,6 +265,13 @@ data di entrata in vigore — senza quella env non viene registrato nulla, così
 regola non può partire retroattiva. È la lezione del malus ritardi, che sembrò rotto
 per giorni solo perché la env non era in produzione.
 
+**Kill-switch del muro del fissaggio** (§6.3), il terzo della famiglia:
+`BOOKING_WALL=off` sospende il blocco sulle Conferme — solo quel valore esatto lo
+spegne, il muro nasce acceso e resta acceso con la env assente o con qualunque altro
+valore. Spento, le Conferme tornano a fissare dove vogliono e non viene più registrata
+nessuna forzatura. Serve perché l'alternativa, se lunedì mattina il muro si rivelasse
+ingestibile, sarebbe un revert e un redeploy sotto pressione con quattro persone ferme.
+
 ### 4.7 Multa "assente allo slot" — 50 €
 
 Il bottone vive nell'agenda venditori che le Conferme già aprono. È attivo solo se:
@@ -278,6 +285,13 @@ Quando una condizione non vale, il bottone è disabilitato **con il motivo scrit
 In particolare, sullo slot fissato fuori disponibilità: *"Questo slot non era
 dichiarato disponibile: non può generare multa."* È la conseguenza diretta della
 scelta "avviso, non blocco".
+
+**Ripensamento PO, 2026-09-12: la scelta "avviso, non blocco" di §2 è diventata un
+blocco con forzatura motivata.** Questa conseguenza resta comunque vera, e non per
+caso: una forzatura avviene *solo* su uno slot non dichiarato o bloccato (§2 aggiornato),
+cioè esattamente le due condizioni che il punto 2 qui sopra già rifiuta. Uno slot
+forzato non può quindi mai generare multa, senza bisogno di codice apposta — è la
+stessa regola di sempre, letta con l'occhio della forzatura invece che dell'avviso.
 
 Sul punto 2 serve una precisazione, perché la disponibilità è mutevole: la verifica si
 fa sullo stato **attuale** delle righe, non su uno storico. Un venditore non può però
@@ -386,8 +400,18 @@ Modifiche a `VenditoriAgendaModal` e a `getVenditoriAgenda`:
 
 - riga di copertura in cima a ogni giornata (`9–13: 3 · 14–17: 4 · 18–21: 1`) con il
   dettaglio dei nomi al passaggio;
-- slot non dichiarati in grigio, con avviso — non blocco — se ci si fissa sopra;
-- bottone "Non c'era" sugli slot passati, con le regole di §4.7.
+- slot non dichiarati in grigio, con avviso — ~~non blocco~~ **ripensamento PO,
+  2026-09-12: ora è un blocco, scavalcabile solo scrivendo un motivo che resta
+  tracciato (evento `appointment_forced`); esenti solo admin e manager** — se ci si
+  fissa sopra;
+- ore dichiarate e ancora libere mostrate come pastiglia verde `Libero — 18:00` su
+  oggi e sui giorni futuri: la riga di copertura dice solo chi è disponibile in
+  **tutta** una fascia e perde chi ha dichiarato una sola ora, quindi da sola
+  indicava dove *non* si può fissare e mai dove si può. Sul futuro la pastiglia non
+  porta il bottone "Non c'era", che lì sarebbe solo un bottone spento;
+- bottone "Non c'era" sugli slot passati, con le regole di §4.7 — lì la pastiglia
+  resta quella grigia "Slot vuoto" di sempre;
+- il muro si spegne senza deploy con `BOOKING_WALL=off` (§4.6).
 
 ### 6.4 `/monitor-vendite`
 

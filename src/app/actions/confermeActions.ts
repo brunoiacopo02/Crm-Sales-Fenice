@@ -5,7 +5,7 @@ import { db } from "@/db"
 import { leads, users, confirmationsNotes, leadEvents, notifications, calendarEvents, salesAttempts, salesAvailabilitySlots, salesSlotBlocks, salesLatePenalties } from "@/db/schema"
 import { eq, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte, lt, inArray, sql } from "drizzle-orm"
 import crypto from "crypto"
-import { createGoogleCalendarEvent, getBusySlotsForUser, hasCalendarConnection } from "@/lib/googleCalendar"
+import { createGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
 import { awardXpAndCoins } from "@/lib/gamificationEngine"
 import { incrementChestProgress } from "@/app/actions/chestActions"
@@ -19,9 +19,10 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
 import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
-import { slotKey, weekStartFor } from "@/lib/venditore/calendarSlots"
+import { slotKey, slotStartFor, weekStartFor } from "@/lib/venditore/calendarSlots"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
+import { bookingCheck, bookingRefusalMessage, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -342,91 +343,180 @@ export async function getConfermeAppointments(filters: {
     };
 }
 
-export async function updateLeadDataConferme(leadId: string, currentVersion: number, data: { name: string, email: string, appointmentDate: Date, appointmentNote: string }) {
-    const supabase = await createClient();
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
-    if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
-        throw new Error("Unauthorized")
-    }
+/**
+ * Il muro del fissaggio. Solo le Conferme ci sbattono contro: admin e manager
+ * fissano dove vogliono (decisione PO 2026-09-12).
+ *
+ * Le tabelle del calendario sono per-utente e non per-azienda: nessun filtro
+ * companyId qui, sarebbe un bug su Serenamente.
+ */
+async function checkBookingAllowed(
+    salesUserId: string | null | undefined,
+    appointmentAt: Date | null | undefined,
+    role: string | undefined,
+): Promise<BookingDecision> {
+    // Interruttore gemello di quelli delle altre regole che vincolano
+    // (SALES_CALENDAR_PENALTIES, BOT_ROUTING, ...): il muro nasce acceso, ma
+    // si spegne dal pannello Vercel in trenta secondi, senza un deploy.
+    if (process.env.BOOKING_WALL === 'off') return { ok: true }
+    if (role !== 'CONFERME') return { ok: true }
+    if (!salesUserId || !appointmentAt) return { ok: true }
 
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
+    const slot = slotStartFor(new Date(appointmentAt))
+    if (!slot) return { ok: false, reason: 'fuori_griglia' }
 
-    // fetch old (tenant-scoped)
-    const oldLead = (await db.select().from(leads).where(and(
-        eq(leads.companyId, ctx.companyId),
-        eq(leads.id, leadId),
-    )))[0]
-    if (!oldLead) throw new Error("Lead not found")
+    const [declared] = await db.select({ id: salesAvailabilitySlots.id })
+        .from(salesAvailabilitySlots).where(and(
+            eq(salesAvailabilitySlots.salesUserId, salesUserId),
+            eq(salesAvailabilitySlots.slotStart, slot),
+        ))
+    const [blocked] = await db.select({ id: salesSlotBlocks.id })
+        .from(salesSlotBlocks).where(and(
+            eq(salesSlotBlocks.salesUserId, salesUserId),
+            eq(salesSlotBlocks.slotStart, slot),
+        ))
 
-    // Concurrency Check
-    if (oldLead.version !== currentVersion) {
-        throw new Error("CONCURRENCY_ERROR")
-    }
+    return bookingCheck({ slot, declared: !!declared, blocked: !!blocked })
+}
 
-    const updated = await db.update(leads).set({
-        name: data.name,
-        email: data.email,
-        appointmentDate: data.appointmentDate,
-        appointmentNote: data.appointmentNote,
-        version: oldLead.version + 1,
-        updatedAt: new Date()
-    }).where(and(
-        eq(leads.companyId, ctx.companyId),
-        eq(leads.id, leadId),
-        eq(leads.version, oldLead.version),
-    ))
-    .returning({ id: leads.id })
+export async function updateLeadDataConferme(leadId: string, currentVersion: number, data: { name: string, email: string, appointmentDate: Date, appointmentNote: string }, forceReason?: string): Promise<{ success: boolean; error?: string; needsForce?: boolean }> {
+    try {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
+            return { success: false, error: "Unauthorized" }
+        }
 
-    if (updated.length === 0) {
-        throw new Error("CONCURRENCY_ERROR")
-    }
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
 
-    // Marketing webhook: emit appointment.set only if the appointment date actually changed
-    if (oldLead.appointmentDate?.getTime() !== data.appointmentDate?.getTime()) {
-        // Se stiamo SPOSTANDO un appuntamento esistente (entrambe le date valorizzate),
-        // emettiamo prima un appointment.rescheduled così il marketing chiude il vecchio
-        // record SET invece di creare un secondo record orfano.
-        if (oldLead.appointmentDate && data.appointmentDate) {
+        // fetch old (tenant-scoped)
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0]
+        if (!oldLead) return { success: false, error: "Lead not found" }
+
+        // Concurrency Check
+        if (oldLead.version !== currentVersion) {
+            return { success: false, error: "CONCURRENCY_ERROR" }
+        }
+
+        // Decisione PO 4: il vincolo vale sulle assegnazioni nuove e sui cambi di
+        // data, mai a ritroso. Qui un solo bottone ("Salva Tutti i Dati") salva
+        // nome, email, nota E data: se l'appuntamento non si muove, correggere
+        // un'email non deve chiedere un motivo di forzatura né lasciare una
+        // forzatura in supervisione. Il confronto è per slot e non per istante
+        // perché il form tronca a HH:mm e i secondi darebbero falsi positivi;
+        // il confronto per istante resta come rete per le date fuori griglia,
+        // dove `slotStartFor` non restituisce alcuno slot.
+        const oldApptSlot = oldLead.appointmentDate ? slotStartFor(new Date(oldLead.appointmentDate)) : null
+        const newApptSlot = data.appointmentDate ? slotStartFor(new Date(data.appointmentDate)) : null
+        const appointmentUnchanged = !!oldLead.appointmentDate && (
+            (!!oldApptSlot && !!newApptSlot && oldApptSlot.getTime() === newApptSlot.getTime())
+            || oldLead.appointmentDate.getTime() === data.appointmentDate?.getTime()
+        )
+
+        let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
+        const gate: BookingDecision = appointmentUnchanged
+            ? { ok: true }
+            : await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role)
+        if (!gate.ok) {
+            const motivo = forceReason?.trim()
+            if (!motivo) {
+                return {
+                    success: false,
+                    error: bookingRefusalMessage(gate.reason, new Date(data.appointmentDate)),
+                    needsForce: true,
+                }
+            }
+            forcedBooking = { reason: gate.reason, motivo }
+        }
+
+        const updated = await db.update(leads).set({
+            name: data.name,
+            email: data.email,
+            appointmentDate: data.appointmentDate,
+            appointmentNote: data.appointmentNote,
+            version: oldLead.version + 1,
+            updatedAt: new Date()
+        }).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
+        .returning({ id: leads.id })
+
+        if (updated.length === 0) {
+            return { success: false, error: "CONCURRENCY_ERROR" }
+        }
+
+        // Marketing webhook: emit appointment.set only if the appointment date actually changed
+        if (oldLead.appointmentDate?.getTime() !== data.appointmentDate?.getTime()) {
+            // Se stiamo SPOSTANDO un appuntamento esistente (entrambe le date valorizzate),
+            // emettiamo prima un appointment.rescheduled così il marketing chiude il vecchio
+            // record SET invece di creare un secondo record orfano.
+            if (oldLead.appointmentDate && data.appointmentDate) {
+                await enqueueMarketingWebhook({
+                    eventType: 'appointment.rescheduled',
+                    leadId,
+                    actorUserId: session.user.id,
+                    previousAppointmentDate: oldLead.appointmentDate,
+                    newAppointmentDate: data.appointmentDate,
+                }).catch((e: unknown) => console.error("Marketing webhook (appointment.rescheduled) err:", e));
+            }
             await enqueueMarketingWebhook({
-                eventType: 'appointment.rescheduled',
+                eventType: 'appointment.set',
                 leadId,
                 actorUserId: session.user.id,
-                previousAppointmentDate: oldLead.appointmentDate,
-                newAppointmentDate: data.appointmentDate,
-            }).catch((e: unknown) => console.error("Marketing webhook (appointment.rescheduled) err:", e));
+            }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+
+            // Bot: riallinea la data anche di là (stessa condizione del webhook —
+            // solo se è cambiata davvero).
+            await notifyAppointmentToBot({
+                lead: { id: leadId, phone: oldLead.phone, name: data.name, funnel: oldLead.funnel, companyId: ctx.companyId },
+                appointmentAt: data.appointmentDate,
+                trigger: oldLead.appointmentDate ? 'spostato' : 'fissato',
+            });
         }
-        await enqueueMarketingWebhook({
-            eventType: 'appointment.set',
+
+        // Audit Log
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
             leadId,
-            actorUserId: session.user.id,
-        }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+            eventType: "conferme_edited_lead",
+            userId: session.user.id,
+            timestamp: new Date(),
+            metadata: {
+                old: { name: oldLead.name, email: oldLead.email, appointmentDate: oldLead.appointmentDate, appointmentNote: oldLead.appointmentNote },
+                new: data
+            },
+            companyId: ctx.companyId,
+        })
 
-        // Bot: riallinea la data anche di là (stessa condizione del webhook —
-        // solo se è cambiata davvero).
-        await notifyAppointmentToBot({
-            lead: { id: leadId, phone: oldLead.phone, name: data.name, funnel: oldLead.funnel, companyId: ctx.companyId },
-            appointmentAt: data.appointmentDate,
-            trigger: oldLead.appointmentDate ? 'spostato' : 'fissato',
-        });
+        if (forcedBooking) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'appointment_forced',
+                userId: session.user.id,
+                timestamp: new Date(),
+                metadata: {
+                    salesUserId: oldLead.salespersonUserId,
+                    appointmentAt: data.appointmentDate,
+                    reason: forcedBooking.reason,
+                    motivo: forcedBooking.motivo,
+                },
+                companyId: ctx.companyId,
+            })
+        }
+
+        return { success: true }
+    } catch (error: any) {
+        console.error("updateLeadDataConferme error:", error);
+        return { success: false, error: error?.message === "CONCURRENCY_ERROR" ? "CONCURRENCY_ERROR" : (error?.message || "Errore durante il salvataggio dei dati") };
     }
-
-    // Audit Log
-    await db.insert(leadEvents).values({
-        id: crypto.randomUUID(),
-        leadId,
-        eventType: "conferme_edited_lead",
-        userId: session.user.id,
-        timestamp: new Date(),
-        metadata: {
-            old: { name: oldLead.name, email: oldLead.email, appointmentDate: oldLead.appointmentDate, appointmentNote: oldLead.appointmentNote },
-            new: data
-        },
-        companyId: ctx.companyId,
-    })
-
-    return { success: true }
 }
 
 /**
@@ -555,7 +645,7 @@ async function getSalespersonName(userId: string | undefined, companyId: string)
     return user ? (user.displayName || user.name || userId) : userId;
 }
 
-export async function setConfermeOutcome(leadId: string, currentVersion: number, outcome: "scartato" | "confermato", reason?: string, salespersonAssigned?: string) {
+export async function setConfermeOutcome(leadId: string, currentVersion: number, outcome: "scartato" | "confermato", reason?: string, salespersonAssigned?: string, forceReason?: string) {
     try {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -592,9 +682,33 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         }
 
         // NB: nessun blocco FreeBusy su Google Calendar. Le Conferme vedono già
-        // l'agenda dei venditori dal CRM (VenditoriAgendaModal, che mostra anche
+        // l'agenda dei venditori dal CRM (VenditoriAgendaModal, che dal Task 3
+        // mostra solo gli appuntamenti del CRM e i blocchi dichiarati, non più
         // gli impegni esterni GCal) e si coordinano al telefono: un "busy" su
         // Google non deve impedire di fissare l'appuntamento.
+
+        // Il muro del fissaggio (decisione PO 2026-09-12): si applica solo
+        // quando questa chiamata sta davvero assegnando un appuntamento
+        // confermato a un venditore. Non su una riconferma a vuoto — stesso
+        // venditore e lead già confermato: lì non c'è né assegnazione nuova né
+        // cambio di data, e il vincolo non vale a ritroso (decisione PO 4).
+        // Il caso che conta, il riassegno a un venditore DIVERSO, resta coperto.
+        let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
+        if (outcome === 'confermato' && salespersonAssigned
+            && (salespersonAssigned !== oldLead.salespersonUserId || oldLead.confirmationsOutcome !== 'confermato')) {
+            const gate = await checkBookingAllowed(salespersonAssigned, oldLead.appointmentDate, session.user.role)
+            if (!gate.ok) {
+                const motivo = forceReason?.trim()
+                if (!motivo) {
+                    return {
+                        success: false,
+                        error: bookingRefusalMessage(gate.reason, new Date(oldLead.appointmentDate!)),
+                        needsForce: true,
+                    }
+                }
+                forcedBooking = { reason: gate.reason, motivo }
+            }
+        }
 
         // Riassegnazione a un venditore DIVERSO da quello attuale: lo stato della
         // trattativa precedente (check-in, esito, storia) appartiene al vecchio
@@ -706,6 +820,23 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             metadata: { outcome, reason, salespersonAssigned },
             companyId: ctx.companyId,
         })
+
+        if (forcedBooking) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'appointment_forced',
+                userId: session.user.id,
+                timestamp: new Date(),
+                metadata: {
+                    salesUserId: salespersonAssigned,
+                    appointmentAt: oldLead.appointmentDate,
+                    reason: forcedBooking.reason,
+                    motivo: forcedBooking.motivo,
+                },
+                companyId: ctx.companyId,
+            })
+        }
 
         if (isReassignment) {
             await db.insert(leadEvents).values({
@@ -1248,7 +1379,7 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
     newAppointmentDate?: Date | null,
     needsReschedule?: boolean,
     recallNotes?: string
-}) {
+}, forceReason?: string) {
     try {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -1266,6 +1397,25 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
         )))[0];
         if (!oldLead) throw new Error("Lead not found");
         if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
+
+        // Il muro del fissaggio (decisione PO 2026-09-12): si applica solo
+        // quando il richiamo sta davvero fissando una nuova data (il ramo
+        // needsReschedule si limita ad azzerarla, niente da controllare lì).
+        let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
+        if (payload.newAppointmentDate) {
+            const gate = await checkBookingAllowed(oldLead.salespersonUserId, payload.newAppointmentDate, session.user.role)
+            if (!gate.ok) {
+                const motivo = forceReason?.trim()
+                if (!motivo) {
+                    return {
+                        success: false,
+                        error: bookingRefusalMessage(gate.reason, new Date(payload.newAppointmentDate)),
+                        needsForce: true,
+                    }
+                }
+                forcedBooking = { reason: gate.reason, motivo }
+            }
+        }
 
         let toUpdate: any = {
             recallDate: payload.recallDate || null,
@@ -1386,6 +1536,23 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             metadata: { payload },
             companyId: ctx.companyId,
         });
+
+        if (forcedBooking) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'appointment_forced',
+                userId: session.user.id,
+                timestamp: new Date(),
+                metadata: {
+                    salesUserId: oldLead.salespersonUserId,
+                    appointmentAt: payload.newAppointmentDate,
+                    reason: forcedBooking.reason,
+                    motivo: forcedBooking.motivo,
+                },
+                companyId: ctx.companyId,
+            })
+        }
 
         return { success: true };
     } catch (e: any) {
@@ -1610,7 +1777,6 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
     venditori: Array<{
         id: string;
         name: string;
-        hasGoogleCalendar: boolean;
         appointments: Array<{
             leadId: string;
             leadName: string;
@@ -1620,10 +1786,6 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
             appointmentNote: string | null;
             confirmationsOutcome: string | null;
         }>;
-        /** Slot occupati sul Google Calendar primario del venditore
-         *  (riunioni/impegni NON tracciati dal CRM). Vuoto se il venditore
-         *  non ha connesso Google. */
-        busySlots: Array<{ start: Date; end: Date }>;
         /** Chiavi `slotKey` (vedi calendarSlots.ts) dichiarate disponibili
          *  dal venditore nell'intervallo richiesto. */
         declaredSlots: string[];
@@ -1773,41 +1935,12 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
     // passa oggi intervalli lunedì→lunedì quindi in pratica coincidono.
     const coverage = await weekCoverage(ctx, weekStartFor(startDate));
 
-    // Fetch busy slots da Google Calendar in parallelo per ogni venditore.
-    // Best-effort: chi non ha connesso Google torna array vuoto.
-    const busyResults = await Promise.all(
-        venditori.map(async v => {
-            try {
-                const [slots, connected] = await Promise.all([
-                    getBusySlotsForUser(v.id, startDate, endDate),
-                    hasCalendarConnection(v.id),
-                ]);
-                return { id: v.id, slots, connected };
-            } catch {
-                return { id: v.id, slots: [], connected: false };
-            }
-        }),
-    );
-    const busyByVenditore = new Map(busyResults.map(b => [b.id, b]));
-
     return {
         venditori: venditori
             .map(v => {
-                const busy = busyByVenditore.get(v.id);
-                const apptSet = new Set(
-                    rows
-                        .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
-                        .map(r => (r.appointmentDate as Date).getTime()),
-                );
-                // Filtra gli slot busy Google che coincidono con appuntamenti CRM
-                // per evitare doppioni visivi (l'evento calendar creato dal CRM stesso).
-                const externalBusy = (busy?.slots || []).filter(
-                    s => !apptSet.has(s.start.getTime()),
-                );
                 return {
                     id: v.id,
                     name: v.displayName || v.name || 'Venditore',
-                    hasGoogleCalendar: busy?.connected ?? false,
                     appointments: rows
                         .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
                         .map(r => ({
@@ -1819,7 +1952,6 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
                             appointmentNote: r.appointmentNote ?? null,
                             confirmationsOutcome: r.confirmationsOutcome ?? null,
                         })),
-                    busySlots: externalBusy,
                     declaredSlots: declaredByVenditore.get(v.id) ?? [],
                     blockedSlots: blockedByVenditore.get(v.id) ?? [],
                     blockDetails: blockDetailsByVenditore.get(v.id) ?? [],

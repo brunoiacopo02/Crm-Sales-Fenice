@@ -19,14 +19,10 @@ type Appointment = {
     confirmationsOutcome: string | null
 }
 
-type BusySlot = { start: Date | string; end: Date | string }
-
 type Venditore = {
     id: string
     name: string
-    hasGoogleCalendar: boolean
     appointments: Appointment[]
-    busySlots: BusySlot[]
     /** Chiavi `slotKey` dichiarate disponibili nell'intervallo caricato. */
     declaredSlots: string[]
     /** Chiavi `slotKey` bloccate PRIMA dell'inizio dello slot: sono le uniche
@@ -125,10 +121,6 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                 venditori: res.venditori.map(v => ({
                     ...v,
                     appointments: v.appointments.map(a => ({ ...a, appointmentDate: new Date(a.appointmentDate) })),
-                    busySlots: (v.busySlots || []).map(b => ({
-                        start: new Date(b.start),
-                        end: new Date(b.end),
-                    })),
                 })),
                 coverage: res.coverage,
                 reportedSlots: res.reportedSlots,
@@ -317,38 +309,42 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                     <div className="text-[10px] text-ash-500">
                                                         {weekCount} app{weekCount === 1 ? '' : '.'} / sett
                                                     </div>
-                                                    {v.hasGoogleCalendar ? (
-                                                        <div className="text-[9px] text-emerald-600 font-semibold mt-0.5">
-                                                            {v.busySlots.length > 0 ? `${v.busySlots.length} impegni ext` : 'GCal · libero'}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-[9px] text-ash-400 italic mt-0.5">GCal non connesso</div>
-                                                    )}
                                                 </div>
                                                 {days.map((d, i) => {
                                                     const items = v.appointments.filter(a =>
                                                         sameDay(a.appointmentDate as Date, d),
                                                     )
-                                                    const busy = v.busySlots.filter(b =>
-                                                        sameDay(b.start as Date, d),
-                                                    )
                                                     const dateStr = toRomeDateStr(d)
-                                                    const emptyDeclaredSlots = isPastDay(d)
-                                                        ? v.declaredSlots.filter(k => k.startsWith(`${dateStr}@`) && !apptSlotKeys.has(k))
-                                                        : []
+                                                    const past = isPastDay(d)
                                                     // Il motivo per cui un follow-up blocca lo slot è che le
                                                     // Conferme lo vedano occupato e non ci fissino sopra un
                                                     // appuntamento: senza questa riga il blocco esisteva ma
                                                     // non arrivava a chi doveva vederlo. Solo oggi e il
                                                     // futuro: sul passato non serve più a nessuno.
-                                                    const dayBlocks = isPastDay(d)
+                                                    const dayBlocks = past
                                                         ? []
                                                         : v.blockDetails.filter(b => b.slotKey.startsWith(`${dateStr}@`))
+                                                    // Le ore dichiarate e ancora libere. Sul passato alimentano il
+                                                    // bottone "Non c'era"; su oggi e sul futuro sono l'unica cosa
+                                                    // che dice alla Conferma DOVE si può fissare — la riga di
+                                                    // copertura elenca solo chi è disponibile in TUTTA la fascia e
+                                                    // perde chi ha dichiarato una sola ora. Finché era un avviso
+                                                    // bastava il verso negativo; ora che è un muro serve anche
+                                                    // quello positivo.
+                                                    const emptyDeclaredSlots = v.declaredSlots.filter(k => {
+                                                        if (!k.startsWith(`${dateStr}@`)) return false
+                                                        if (apptSlotKeys.has(k)) return false
+                                                        if (past) return true
+                                                        // Su oggi e sul futuro la pastiglia promette "qui si
+                                                        // fissa": un'ora già mostrata come "Occupato", o un'ora
+                                                        // di oggi già passata, non mantengono quella promessa.
+                                                        if (v.blockedSlots.includes(k)) return false
+                                                        return romeInstant(dateStr, Number(k.split('@')[1])) > now
+                                                    })
                                                     return (
                                                         <DayCell
                                                             key={i}
                                                             appointments={items}
-                                                            busy={busy}
                                                             isToday={sameDay(d, today)}
                                                             venditoreId={v.id}
                                                             declaredSlots={v.declaredSlots}
@@ -356,6 +352,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                             dayBlocks={dayBlocks}
                                                             calendarExempt={v.calendarExempt}
                                                             emptyDeclaredSlots={emptyDeclaredSlots}
+                                                            isPast={past}
                                                             reportedSlots={reportedSet}
                                                             now={now}
                                                             onReported={load}
@@ -376,9 +373,9 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" /> Aperto</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Confermato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Scartato</span>
-                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-purple-300 border border-purple-400" /> Impegno esterno (Google Calendar)</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-300 border border-amber-400" /> Fuori disponibilità dichiarata</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-ash-200 border border-ash-300" /> Slot occupato (follow-up o imprevisto)</span>
+                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-50 border border-emerald-200" /> Ora dichiarata e libera: qui si fissa senza forzare</span>
                 </div>
             </div>
         </div>
@@ -386,11 +383,10 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
 }
 
 function DayCell({
-    appointments, busy, isToday,
-    venditoreId, declaredSlots, blockedSlots, dayBlocks, calendarExempt, emptyDeclaredSlots, reportedSlots, now, onReported,
+    appointments, isToday,
+    venditoreId, declaredSlots, blockedSlots, dayBlocks, calendarExempt, emptyDeclaredSlots, isPast, reportedSlots, now, onReported,
 }: {
     appointments: Appointment[]
-    busy: BusySlot[]
     isToday: boolean
     venditoreId: string
     declaredSlots: string[]
@@ -398,15 +394,17 @@ function DayCell({
     /** Blocchi di QUESTA giornata (solo oggi e futuro): ora + motivo. */
     dayBlocks: Array<{ slotKey: string; kind: string; leadName: string | null }>
     calendarExempt: boolean
-    /** Slot dichiarati per questo giorno senza appuntamento: solo per giornate passate. */
+    /** Slot dichiarati per questo giorno senza appuntamento, per ogni giornata. */
     emptyDeclaredSlots: string[]
+    /** Giornata già chiusa: solo lì la pastiglia porta il bottone "Non c'era". */
+    isPast: boolean
     /** Chiavi `'<salesUserId>|<slotKey>'` già segnalate, annullate incluse:
      *  l'annullamento è definitivo per quello slot, non lo riapre. */
     reportedSlots: Set<string>
     now: Date
     onReported: () => void
 }) {
-    const hasContent = appointments.length > 0 || busy.length > 0
+    const hasContent = appointments.length > 0
         || emptyDeclaredSlots.length > 0 || dayBlocks.length > 0
     const bg = isToday ? 'bg-brand-orange/5' : !hasContent ? 'bg-ash-50/30' : 'bg-white'
     return (
@@ -479,29 +477,28 @@ function DayCell({
                             </div>
                         )
                     })}
-                    {busy.map((b, i) => {
-                        const s = b.start as Date
-                        const e = b.end as Date
-                        return (
-                            <div
-                                key={`busy-${i}`}
-                                className="rounded-md border border-dashed border-purple-300 bg-purple-50 px-1.5 py-1 text-[10px] leading-tight"
-                                title={`Impegno esterno (GCal) · ${formatHM(s)} – ${formatHM(e)}`}
-                            >
-                                <div className="flex items-center gap-1">
-                                    <span className="font-mono font-bold text-purple-800">{formatHM(s)}</span>
-                                    <span className="text-purple-400">–</span>
-                                    <span className="font-mono font-bold text-purple-800">{formatHM(e)}</span>
-                                </div>
-                                <div className="truncate text-purple-600 text-[9px] italic">Impegno esterno</div>
-                            </div>
-                        )
-                    })}
                     {emptyDeclaredSlots.length > 0 && (
                         <div className="space-y-1 border-t border-dashed border-ash-200 pt-1">
                             {emptyDeclaredSlots.map(k => {
                                 const [dateStr, hStr] = k.split('@')
                                 const slotStart = romeInstant(dateStr, Number(hStr))
+                                // Su oggi e sul futuro la pastiglia è il verso positivo del
+                                // muro: "qui si può fissare". Niente "Non c'era", che su una
+                                // giornata non ancora chiusa sarebbe solo un bottone spento.
+                                if (!isPast) {
+                                    return (
+                                        <div
+                                            key={k}
+                                            className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-1 text-[10px] leading-tight"
+                                            title={`${slotLabel(slotStart)} — ora dichiarata e libera: qui si può fissare senza forzare.`}
+                                        >
+                                            <div className="flex items-center justify-between gap-1">
+                                                <span className="font-mono font-bold text-emerald-700">{slotLabel(slotStart)}</span>
+                                                <span className="text-emerald-600 font-semibold">Libero</span>
+                                            </div>
+                                        </div>
+                                    )
+                                }
                                 return (
                                     <div
                                         key={k}
