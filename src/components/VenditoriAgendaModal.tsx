@@ -31,6 +31,8 @@ type Venditore = {
     declaredSlots: string[]
     /** Chiavi `slotKey` bloccate (follow-up o imprevisto) nell'intervallo. */
     blockedSlots: string[]
+    /** true = niente obbligo di calendario, niente multe (vedi users.calendarExempt). */
+    calendarExempt: boolean
 }
 
 const DAYS_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -340,6 +342,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                             venditoreId={v.id}
                                                             declaredSlots={v.declaredSlots}
                                                             blockedSlots={v.blockedSlots}
+                                                            calendarExempt={v.calendarExempt}
                                                             emptyDeclaredSlots={emptyDeclaredSlots}
                                                             reportedSlots={reportedSet}
                                                             now={now}
@@ -371,7 +374,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
 
 function DayCell({
     appointments, busy, isToday,
-    venditoreId, declaredSlots, blockedSlots, emptyDeclaredSlots, reportedSlots, now, onReported,
+    venditoreId, declaredSlots, blockedSlots, calendarExempt, emptyDeclaredSlots, reportedSlots, now, onReported,
 }: {
     appointments: Appointment[]
     busy: BusySlot[]
@@ -379,6 +382,7 @@ function DayCell({
     venditoreId: string
     declaredSlots: string[]
     blockedSlots: string[]
+    calendarExempt: boolean
     /** Slot dichiarati per questo giorno senza appuntamento: solo per giornate passate. */
     emptyDeclaredSlots: string[]
     /** Chiavi `'<salesUserId>|<slotKey>'` già segnalate (assenza non annullata). */
@@ -428,9 +432,7 @@ function DayCell({
                                             now,
                                             declared: declaredSlots.includes(key),
                                             blocked: blockedSlots.includes(key),
-                                            // L'esenzione non è nel contratto dati di questo modale: se il
-                                            // venditore è esente lo dice il server, con lo stesso messaggio.
-                                            exempt: false,
+                                            exempt: calendarExempt,
                                             alreadyReported: reportedSlots.has(`${venditoreId}|${key}`),
                                         })}
                                         onReport={() => reportSalesAbsence(venditoreId, slotStart.toISOString())}
@@ -479,7 +481,7 @@ function DayCell({
                                                 now,
                                                 declared: true,
                                                 blocked: blockedSlots.includes(k),
-                                                exempt: false,
+                                                exempt: calendarExempt,
                                                 alreadyReported: reportedSlots.has(`${venditoreId}|${k}`),
                                             })}
                                             onReport={() => reportSalesAbsence(venditoreId, slotStart.toISOString())}

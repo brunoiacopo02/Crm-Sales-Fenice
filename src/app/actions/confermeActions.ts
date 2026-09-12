@@ -1620,6 +1620,8 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         declaredSlots: string[];
         /** Chiavi `slotKey` bloccate (follow-up o imprevisto) nell'intervallo. */
         blockedSlots: string[];
+        /** true = niente obbligo di calendario, niente multe (vedi users.calendarExempt). */
+        calendarExempt: boolean;
     }>;
     /** Copertura calendario venditori: sempre quella della settimana che
      *  CONTIENE `startDate` (vedi weekCoverage), non dell'intervallo esatto
@@ -1648,6 +1650,7 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
         id: users.id,
         name: users.name,
         displayName: users.displayName,
+        calendarExempt: users.calendarExempt,
     }).from(users).where(and(
         or(
             sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
@@ -1774,6 +1777,7 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
                     busySlots: externalBusy,
                     declaredSlots: declaredByVenditore.get(v.id) ?? [],
                     blockedSlots: blockedByVenditore.get(v.id) ?? [],
+                    calendarExempt: v.calendarExempt,
                 };
             })
             .sort((a, b) => a.name.localeCompare(b.name, 'it')),
