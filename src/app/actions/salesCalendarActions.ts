@@ -82,6 +82,29 @@ export interface CalendarWeekView {
     isExempt: boolean
     mySlots: string[]
     /**
+     * true = ESISTE una riga `salesWeekPlans` per questa settimana, cioe'
+     * `mySlots` e' una DICHIARAZIONE. false = `mySlots` e' solo una PROPOSTA
+     * calcolata qui (il default verde o la settimana tipo non ancora
+     * materializzata) e a DB non c'e' nulla.
+     *
+     * Serve a due cose, entrambe invisibili senza questo campo:
+     * 1. il bottone Salva: con il default verde `mySlots` coincide gia' con la
+     *    selezione iniziale, quindi "modificato?" e' falso all'apertura e il
+     *    bottone nascerebbe spento proprio sul caso piu' frequente ("sono
+     *    disponibile tutta la settimana"). Chi accetta la proposta non
+     *    riuscirebbe a salvarla, e alle 14:00 prenderebbe la multa;
+     * 2. il colore delle celle NON selezionate: rosso ("non disponibile") e'
+     *    una scelta della persona e si mostra solo dove una scelta c'e' stata;
+     *    su una proposta restano bianche (`libero`).
+     *
+     * NOTA: oggi coincide con `submittedAtIso !== null` (la colonna
+     * `submittedAt` e' notNull, quindi piano presente <=> data presente), ma le
+     * due domande sono diverse — "esiste un piano?" contro "quando e' stato
+     * compilato?" — e la coincidenza regge solo finche' quella colonna resta
+     * notNull. Sta scritto qui perche' si legga, non si deduca.
+     */
+    declared: boolean
+    /**
      * La settimana tipo del venditore mostrato (indipendente da come e' nata
      * `mySlots`): serve al client per la scheda di gestione del modello.
      */
@@ -229,10 +252,25 @@ export async function getCalendarWeek(input?: {
         // le sue ore, senza scriverle.
         mySlots = slotsFromTemplate(template, weekStart, now).map(slotKey)
         fromTemplate = true
-    } else {
+    } else if (isSelf) {
         // 3) Nessun piano, nessun modello: il default verde. Tutte le ore
         // future della settimana, escluse quelle gia' passate.
+        //
+        // SOLO sul proprio calendario: il verde qui e' una PROPOSTA rivolta a
+        // chi guarda ("parto da tutto disponibile, togli quello che non va"),
+        // non un fatto sul venditore. Su un calendario altrui
+        // (`/mio-calendario?venditore=<id>`, aperto da ADMIN/MANAGER/CONFERME)
+        // diventerebbe l'affermazione "e' disponibile 78 ore", mentre la
+        // scheda Copertura dice "0 disponibili" e la supervisione dice "No":
+        // tre superfici, tre risposte diverse sullo stesso fatto.
         mySlots = weekSlots(weekStart).filter(s => s > now).map(slotKey)
+        fromTemplate = false
+    } else {
+        // 4) Calendario di un altro venditore senza piano ne' modello: niente
+        // da mostrare. Il client, vedendo `declared: false`, lascia le celle
+        // bianche (mai compilato) invece di tingerle di rosso (ha scelto di
+        // non esserci).
+        mySlots = []
         fromTemplate = false
     }
 
@@ -243,6 +281,7 @@ export async function getCalendarWeek(input?: {
         readOnlyReason,
         isExempt: targetInfo?.calendarExempt ?? false,
         mySlots,
+        declared: plan !== undefined,
         template,
         fromTemplate,
         myBlocks: blockRows.map(r => ({

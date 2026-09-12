@@ -298,11 +298,20 @@ export function MioCalendarioClient({ initial, role }: Props) {
                     nondisponibile: cellDisabled ? disabledMenuItem(pastHourReason) : {},
                 }
             } else {
-                state = 'nondisponibile'
+                // Rosso = "ha scelto di non esserci". È vero solo se una
+                // dichiarazione esiste davvero a DB (`data.declared`). Se
+                // `mySlots` è una PROPOSTA — default verde mai salvato,
+                // settimana tipo non ancora materializzata, settimana passata
+                // che nessuno ha mai compilato — la cella resta bianca
+                // (`libero`): nessuna scelta è stata fatta, e affermare il
+                // contrario è la stessa bugia del verde sui calendari altrui.
+                state = data.declared ? 'nondisponibile' : 'libero'
                 menu = {
                     disponibile: cellDisabled ? disabledMenuItem(pastHourReason) : {},
                     bloccato: disabledMenuItem('Devi prima segnarlo come disponibile.'),
-                    nondisponibile: disabledMenuItem('È già non disponibile.'),
+                    nondisponibile: disabledMenuItem(
+                        data.declared ? 'È già non disponibile.' : 'Non è fra le ore selezionate.',
+                    ),
                 }
             }
 
@@ -323,7 +332,7 @@ export function MioCalendarioClient({ initial, role }: Props) {
             })
         }
         return m
-    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet, now])
+    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet, now, data.declared])
 
     const coverageCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()
@@ -360,6 +369,15 @@ export function MioCalendarioClient({ initial, role }: Props) {
         for (const k of data.mySlots) if (!selected.has(k)) return true
         return false
     }, [selected, data.mySlots])
+
+    // Il bottone Salva si spegne SOLO su una settimana già dichiarata e non
+    // toccata. Su una settimana mai dichiarata resta acceso anche senza
+    // modifiche: `mySlots` è una proposta (il default verde, o la settimana
+    // tipo non ancora materializzata) e coincide con la selezione iniziale,
+    // quindi `dirty` nasce falso — accettare la proposta così com'è era
+    // impossibile, e chi chiudeva la pagina credendosi a posto prendeva la
+    // multa delle 14:00 e restava imprenotabile per tutta la settimana.
+    const canSave = data.editable && (dirty || !data.declared)
 
     const uncovered = useMemo(
         () => data.coverage.filter(c => c.status === 'rosso' || c.status === 'ambra'),
@@ -409,9 +427,16 @@ export function MioCalendarioClient({ initial, role }: Props) {
                         next.delete(key)
                         return next
                     })
+                } else {
+                    // Lo sblocco da solo NON basta: un blocco FOLLOWUP orfano
+                    // può insistere su un'ora che non era dichiarata (il lead
+                    // non è più suo, il blocco è rimasto). Lì la selezione
+                    // locale non contiene la chiave, e senza questa riga il
+                    // menu diceva "Disponibile" e la cella restava rossa.
+                    // Sui blocchi manuali — ammessi solo su ore già dichiarate
+                    // — è un no-op.
+                    setSelected(prev => new Set(prev).add(key))
                 }
-                // option === 'disponibile': lo sblocco basta, la selezione
-                // locale era ed è rimasta "disponibile".
                 loadWeek(data.weekStartIso)
             })
             return
@@ -550,13 +575,13 @@ export function MioCalendarioClient({ initial, role }: Props) {
                         onCellMenu={handleCellMenu}
                         readOnly={!data.editable}
                     />
-                    <CoverageLegend />
+                    <CoverageLegend variant="personale" />
                     {role === 'VENDITORE' && (
                         <div className="flex items-center justify-end">
                             <button
                                 type="button"
                                 onClick={handleSave}
-                                disabled={!data.editable || !dirty || isPending}
+                                disabled={!canSave || isPending}
                                 className="flex items-center gap-2 rounded-lg bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-95 disabled:cursor-default disabled:opacity-50"
                             >
                                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -574,7 +599,7 @@ export function MioCalendarioClient({ initial, role }: Props) {
                         cells={coverageCells}
                         readOnly
                     />
-                    <CoverageLegend />
+                    <CoverageLegend variant="copertura" />
                     <div className="rounded-xl border border-ash-200 bg-white p-4">
                         <h2 className="mb-2 text-sm font-bold text-ash-800">Fasce scoperte questa settimana</h2>
                         {uncovered.length === 0 ? (
