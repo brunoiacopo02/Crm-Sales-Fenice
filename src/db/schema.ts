@@ -84,6 +84,10 @@ export const users = pgTable('users', {
     // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.
     statsActive: boolean('statsActive').default(true).notNull(),
 
+    // true = esente dal calendario disponibilità: niente obbligo di compilare,
+    // niente promemoria, niente multe. Deciso per Sales 001 (PO 2026-09-12).
+    calendarExempt: boolean('calendarExempt').default(false).notNull(),
+
     // false = il turno di questa persona NON e' misurabile dai tabulati del
     // centralino, perche' divide l'orario con mansioni che non passano dal
     // telefono (es. le Conferme). La scheda "Tempo al telefono" di
@@ -1483,7 +1487,14 @@ export const salesLatePenalties = pgTable('salesLatePenalties', {
     id: text('id').primaryKey(),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
     salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    leadId: text('leadId').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    leadId: text('leadId').references(() => leads.id, { onDelete: 'cascade' }),
+    // 'ABSENT_SLOT': chi ha premuto "non c'era". Null per le multe automatiche.
+    reportedBy: text('reportedBy').references(() => users.id),
+    note: text('note'),
+    // Annullamento admin: la riga resta a registro, barrata, fuori da ogni totale.
+    voidedAt: timestamp('voidedAt', { withTimezone: true, mode: 'date' }),
+    voidedBy: text('voidedBy').references(() => users.id),
+    voidReason: text('voidReason'),
     // 'APPOINTMENT' = esito post-appuntamento mai registrato; 'FOLLOWUP' = follow-up scaduto.
     kind: text('kind').notNull(),
     // Scadenza che ha fatto scattare il malus: ora dell'appuntamento o del follow-up.
@@ -1502,5 +1513,90 @@ export const salesLatePenalties = pgTable('salesLatePenalties', {
     return {
         dueUnique: uniqueIndex('sales_late_penalties_due_uq').on(table.leadId, table.kind, table.dueAt),
         userMonthIdx: index('sales_late_penalties_user_month_idx').on(table.companyId, table.salesUserId, table.monthKey),
+    };
+});
+
+/**
+ * NOTA COMUNE ALLE TRE TABELLE DEL CALENDARIO
+ * (`salesAvailabilitySlots`, `salesSlotBlocks`, `salesWeekPlans`)
+ *
+ * Sono PER-UTENTE, non per-azienda. I venditori sono staff condiviso: tutti
+ * hanno `allowedCompanies = ['fenice','serenamente']` e dichiarano UNA
+ * disponibilita' sola, valida ovunque lavorino. Per questo le letture e le
+ * cancellazioni NON filtrano su `companyId` — e l'indice unico
+ * `sales_availability_slot_uq (salesUserId, slotStart)` non lo contiene.
+ * La colonna resta valorizzata in scrittura come PROVENIENZA (da quale azienda
+ * stava lavorando chi ha salvato), mai come filtro.
+ *
+ * Non "riparare" il filtro che sembra mancante: con `eq(companyId)` un
+ * venditore loggato su Serenamente vede calendario vuoto e copertura a zero, e
+ * il salvataggio va in violazione di unicita' perche' prova a reinserire slot
+ * che esistono gia' con l'altra provenienza. La copertura su `leads` e
+ * appuntamenti resta invece giustamente scoped: quelli appartengono a un tenant.
+ */
+
+/**
+ * Disponibilità dichiarata dai venditori. Una riga = uno slot offerto.
+ * Assenza della riga = non disponibile: non serve un booleano.
+ * Tabella per-utente: vedi la NOTA COMUNE qui sopra.
+ */
+export const salesAvailabilitySlots = pgTable('salesAvailabilitySlots', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Sempre un'ora piena Europe/Rome (vedi calendarSlots.ts).
+    slotStart: timestamp('slotStart', { withTimezone: true, mode: 'date' }).notNull(),
+    // Lunedì della settimana: ridondante ma evita di ricalcolarlo in ogni query.
+    weekStart: date('weekStart').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        slotUnique: uniqueIndex('sales_availability_slot_uq').on(table.salesUserId, table.slotStart),
+        weekIdx: index('sales_availability_week_idx').on(table.companyId, table.weekStart),
+        slotIdx: index('sales_availability_slot_idx').on(table.companyId, table.slotStart),
+    };
+});
+
+/**
+ * Blocchi su uno slot: 'MANUAL' (imprevisto, almeno 1h di preavviso) o
+ * 'FOLLOWUP' (automatico, quando il venditore fissa un follow-up).
+ * Tabella per-utente: vedi la NOTA COMUNE sopra `salesAvailabilitySlots`.
+ * Righe separate perché due follow-up possono cadere nella stessa ora:
+ * il rilascio deve togliere solo il proprio blocco.
+ */
+export const salesSlotBlocks = pgTable('salesSlotBlocks', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    slotStart: timestamp('slotStart', { withTimezone: true, mode: 'date' }).notNull(),
+    kind: text('kind').notNull(),
+    leadId: text('leadId').references(() => leads.id, { onDelete: 'cascade' }),
+    note: text('note'),
+    createdBy: text('createdBy').references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        userSlotIdx: index('sales_slot_blocks_user_slot_idx').on(table.companyId, table.salesUserId, table.slotStart),
+    };
+});
+
+/**
+ * Registro della compilazione settimanale. `submittedAt` è il PRIMO salvataggio
+ * e non si aggiorna più: è la prova che il cron del lunedì legge.
+ * Tabella per-utente: vedi la NOTA COMUNE sopra `salesAvailabilitySlots`.
+ */
+export const salesWeekPlans = pgTable('salesWeekPlans', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    weekStart: date('weekStart').notNull(),
+    submittedAt: timestamp('submittedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    slotCount: integer('slotCount').default(0).notNull(),
+    late: boolean('late').default(false).notNull(),
+}, (table) => {
+    return {
+        planUnique: uniqueIndex('sales_week_plans_uq').on(table.salesUserId, table.weekStart),
+        weekIdx: index('sales_week_plans_week_idx').on(table.companyId, table.weekStart),
     };
 });

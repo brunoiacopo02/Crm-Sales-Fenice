@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback } from "react"
 import { X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, RefreshCw, Users, Loader2 } from "lucide-react"
 import { getVenditoriAgenda } from "@/app/actions/confermeActions"
+import { reportSalesAbsence } from "@/app/actions/salesCalendarAdminActions"
+import { slotKey, slotStartFor, slotLabel, romeInstant } from "@/lib/venditore/calendarSlots"
+import { toRomeDateStr } from "@/lib/dateUtils"
+import { absenceReportCheck, absenceRefusalMessage, CALENDAR_PENALTY_EUR, type AbsenceDecision } from "@/lib/venditore/calendarRules"
+import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 
 type Appointment = {
     leadId: string
@@ -22,10 +27,27 @@ type Venditore = {
     hasGoogleCalendar: boolean
     appointments: Appointment[]
     busySlots: BusySlot[]
+    /** Chiavi `slotKey` dichiarate disponibili nell'intervallo caricato. */
+    declaredSlots: string[]
+    /** Chiavi `slotKey` bloccate PRIMA dell'inizio dello slot: sono le uniche
+     *  che valgono come "il venditore aveva avvisato" davanti a una multa. */
+    blockedSlots: string[]
+    /** Tutti i blocchi dell'intervallo, con il motivo: servono a mostrarli. */
+    blockDetails: Array<{ slotKey: string; kind: string; leadName: string | null }>
+    /** true = niente obbligo di calendario, niente multe (vedi users.calendarExempt). */
+    calendarExempt: boolean
 }
 
 const DAYS_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const DAYS_LONG_IT = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
+
+/** Le tre fasce di copertura mostrate alle Conferme. Coprono le 13 ore della
+ *  griglia (9-21) senza sovrapposizioni: 5 + 4 + 4. */
+const COVERAGE_BANDS: Array<{ label: string; from: number; to: number }> = [
+    { label: '9–13', from: 9, to: 13 },
+    { label: '14–17', from: 14, to: 17 },
+    { label: '18–21', from: 18, to: 21 },
+]
 
 /** Ritorna il lunedì (00:00 Europe/Rome) della settimana contenente `d` */
 function startOfWeek(d: Date): Date {
@@ -61,9 +83,34 @@ function outcomeBadge(outcome: string | null) {
     return { label: 'Aperto', cls: 'bg-amber-100 text-amber-700' }
 }
 
+/** Un giorno è "passato" quando la sua data civile italiana precede quella di oggi. */
+function isPastDay(d: Date): boolean {
+    return toRomeDateStr(d) < toRomeDateStr(new Date())
+}
+
+type BandStat = { count: number; tone: 'rosso' | 'ambra' | 'neutro'; names: string[] }
+
+/** Copertura minima della fascia: "in quella fascia c'è sempre almeno N". */
+function bandStats(coverage: CoverageCell[], dow: number, from: number, to: number, nameOf: (id: string) => string): BandStat {
+    const cells = coverage.filter(c => c.dow === dow && c.hour >= from && c.hour <= to)
+    if (cells.length === 0) return { count: 0, tone: 'neutro', names: [] }
+    const count = Math.min(...cells.map(c => c.available.length))
+    const avgExpected = cells.reduce((s, c) => s + c.expectedPeople, 0) / cells.length
+    const tone: BandStat['tone'] = count === 0 ? 'rosso' : (count < avgExpected ? 'ambra' : 'neutro')
+    const idSet = new Set<string>()
+    cells.forEach(c => c.available.forEach(id => idSet.add(id)))
+    return { count, tone, names: [...idSet].map(nameOf) }
+}
+
+function bandToneClasses(tone: BandStat['tone']): string {
+    if (tone === 'rosso') return 'bg-rose-100 text-rose-700'
+    if (tone === 'ambra') return 'bg-amber-100 text-amber-700'
+    return 'bg-ash-100 text-ash-600'
+}
+
 export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()))
-    const [data, setData] = useState<{ venditori: Venditore[] } | null>(null)
+    const [data, setData] = useState<{ venditori: Venditore[]; coverage: CoverageCell[]; reportedSlots: string[] } | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -83,6 +130,8 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                         end: new Date(b.end),
                     })),
                 })),
+                coverage: res.coverage,
+                reportedSlots: res.reportedSlots,
             })
         } catch (e: any) {
             setError(e?.message || 'Errore caricamento agenda')
@@ -99,7 +148,10 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
 
     const days: Date[] = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
     const today = new Date()
+    const now = new Date()
     const weekEnd = addDays(weekStart, 6)
+    const reportedSet = new Set(data?.reportedSlots ?? [])
+    const nameOf = (id: string) => data?.venditori.find(v => v.id === id)?.name ?? id
 
     return (
         <div className="fixed inset-0 z-[100] flex items-start justify-center p-2 sm:p-6 bg-ash-900/60 backdrop-blur-sm overflow-y-auto">
@@ -204,9 +256,60 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                         )
                                     })}
 
+                                    {/* Riga di copertura: quanti venditori sono davvero disponibili in
+                                        ogni fascia, prima di elencare gli appuntamenti. Dato dalla stessa
+                                        `weekCoverage` che alimenta /mio-calendario: stessi numeri ovunque. */}
+                                    <div className="contents">
+                                        <div className="sticky left-0 bg-ash-50 border-b border-r border-ash-200 px-3 py-2 z-10 text-[10px] font-bold uppercase tracking-wider text-ash-500">
+                                            Copertura
+                                        </div>
+                                        {days.map((d, i) => {
+                                            const isToday = sameDay(d, today)
+                                            const dow = i + 1 // Lun=1..Dom=7, stessa convenzione di calendarSlots.romeDow
+                                            if (dow === 7) {
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className={`border-b border-r border-ash-200 px-2 py-2 text-center text-[9px] italic text-ash-400 ${isToday ? 'bg-brand-orange/5' : 'bg-ash-50/60'}`}
+                                                    >
+                                                        Non compilabile
+                                                    </div>
+                                                )
+                                            }
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    className={`border-b border-r border-ash-200 px-1.5 py-1.5 flex flex-col gap-0.5 ${isToday ? 'bg-brand-orange/5' : 'bg-ash-50/60'}`}
+                                                >
+                                                    {COVERAGE_BANDS.map((band, bi) => {
+                                                        const stat = bandStats(data.coverage, dow, band.from, band.to, nameOf)
+                                                        const title = stat.names.length > 0
+                                                            ? `${band.label}: ${stat.names.join(', ')}`
+                                                            : `${band.label}: nessun venditore disponibile`
+                                                        return (
+                                                            <div
+                                                                key={bi}
+                                                                className={`rounded px-1 py-0.5 text-[9px] font-bold text-center ${bandToneClasses(stat.tone)}`}
+                                                                title={title}
+                                                            >
+                                                                {band.label}: {stat.count}
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
                                     {/* Rows per venditore */}
                                     {data.venditori.map((v) => {
                                         const weekCount = v.appointments.length
+                                        const apptSlotKeys = new Set(
+                                            v.appointments.flatMap(a => {
+                                                const s = slotStartFor(a.appointmentDate as Date)
+                                                return s ? [slotKey(s)] : []
+                                            }),
+                                        )
                                         return (
                                             <div key={v.id} className="contents">
                                                 <div className="sticky left-0 bg-white border-b border-r border-ash-200 px-3 py-2 z-10">
@@ -229,8 +332,34 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                     const busy = v.busySlots.filter(b =>
                                                         sameDay(b.start as Date, d),
                                                     )
+                                                    const dateStr = toRomeDateStr(d)
+                                                    const emptyDeclaredSlots = isPastDay(d)
+                                                        ? v.declaredSlots.filter(k => k.startsWith(`${dateStr}@`) && !apptSlotKeys.has(k))
+                                                        : []
+                                                    // Il motivo per cui un follow-up blocca lo slot è che le
+                                                    // Conferme lo vedano occupato e non ci fissino sopra un
+                                                    // appuntamento: senza questa riga il blocco esisteva ma
+                                                    // non arrivava a chi doveva vederlo. Solo oggi e il
+                                                    // futuro: sul passato non serve più a nessuno.
+                                                    const dayBlocks = isPastDay(d)
+                                                        ? []
+                                                        : v.blockDetails.filter(b => b.slotKey.startsWith(`${dateStr}@`))
                                                     return (
-                                                        <DayCell key={i} appointments={items} busy={busy} isToday={sameDay(d, today)} />
+                                                        <DayCell
+                                                            key={i}
+                                                            appointments={items}
+                                                            busy={busy}
+                                                            isToday={sameDay(d, today)}
+                                                            venditoreId={v.id}
+                                                            declaredSlots={v.declaredSlots}
+                                                            blockedSlots={v.blockedSlots}
+                                                            dayBlocks={dayBlocks}
+                                                            calendarExempt={v.calendarExempt}
+                                                            emptyDeclaredSlots={emptyDeclaredSlots}
+                                                            reportedSlots={reportedSet}
+                                                            now={now}
+                                                            onReported={load}
+                                                        />
                                                     )
                                                 })}
                                             </div>
@@ -248,14 +377,37 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Confermato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Scartato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-purple-300 border border-purple-400" /> Impegno esterno (Google Calendar)</span>
+                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-300 border border-amber-400" /> Fuori disponibilità dichiarata</span>
+                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-ash-200 border border-ash-300" /> Slot occupato (follow-up o imprevisto)</span>
                 </div>
             </div>
         </div>
     )
 }
 
-function DayCell({ appointments, busy, isToday }: { appointments: Appointment[]; busy: BusySlot[]; isToday: boolean }) {
+function DayCell({
+    appointments, busy, isToday,
+    venditoreId, declaredSlots, blockedSlots, dayBlocks, calendarExempt, emptyDeclaredSlots, reportedSlots, now, onReported,
+}: {
+    appointments: Appointment[]
+    busy: BusySlot[]
+    isToday: boolean
+    venditoreId: string
+    declaredSlots: string[]
+    blockedSlots: string[]
+    /** Blocchi di QUESTA giornata (solo oggi e futuro): ora + motivo. */
+    dayBlocks: Array<{ slotKey: string; kind: string; leadName: string | null }>
+    calendarExempt: boolean
+    /** Slot dichiarati per questo giorno senza appuntamento: solo per giornate passate. */
+    emptyDeclaredSlots: string[]
+    /** Chiavi `'<salesUserId>|<slotKey>'` già segnalate, annullate incluse:
+     *  l'annullamento è definitivo per quello slot, non lo riapre. */
+    reportedSlots: Set<string>
+    now: Date
+    onReported: () => void
+}) {
     const hasContent = appointments.length > 0 || busy.length > 0
+        || emptyDeclaredSlots.length > 0 || dayBlocks.length > 0
     const bg = isToday ? 'bg-brand-orange/5' : !hasContent ? 'bg-ash-50/30' : 'bg-white'
     return (
         <div className={`border-b border-r border-ash-200 ${bg} p-1.5 min-h-[70px] space-y-1`}>
@@ -266,6 +418,10 @@ function DayCell({ appointments, busy, isToday }: { appointments: Appointment[];
                     {appointments.map(a => {
                         const d = a.appointmentDate as Date
                         const badge = outcomeBadge(a.confirmationsOutcome)
+                        const key = slotKey(d)
+                        const outOfAvailability = !declaredSlots.includes(key)
+                        const slotStart = slotStartFor(d)
+                        const started = !!slotStart && now >= slotStart
                         return (
                             <div
                                 key={a.leadId}
@@ -278,6 +434,48 @@ function DayCell({ appointments, busy, isToday }: { appointments: Appointment[];
                                 </div>
                                 <div className="truncate font-semibold text-ash-800">{a.leadName}</div>
                                 {a.funnel && <div className="truncate text-ash-500 text-[9px]">{a.funnel}</div>}
+                                {outOfAvailability && (
+                                    <div
+                                        className="mt-1 rounded px-1 py-0.5 text-[9px] font-bold text-center bg-amber-100 text-amber-700"
+                                        title="Il venditore non aveva dichiarato quest'ora: questo slot non può generare multa."
+                                    >
+                                        Fuori disponibilità
+                                    </div>
+                                )}
+                                {started && slotStart && (
+                                    <AbsenceButton
+                                        decision={absenceReportCheck({
+                                            slotStart,
+                                            now,
+                                            declared: declaredSlots.includes(key),
+                                            blocked: blockedSlots.includes(key),
+                                            exempt: calendarExempt,
+                                            alreadyReported: reportedSlots.has(`${venditoreId}|${key}`),
+                                        })}
+                                        onReport={() => reportSalesAbsence(venditoreId, slotStart.toISOString())}
+                                        onSuccess={onReported}
+                                    />
+                                )}
+                            </div>
+                        )
+                    })}
+                    {dayBlocks.map(b => {
+                        const [dateStr, hStr] = b.slotKey.split('@')
+                        const slotStart = romeInstant(dateStr, Number(hStr))
+                        const motivo = b.kind === 'FOLLOWUP'
+                            ? `Follow-up${b.leadName ? `: ${b.leadName}` : ''}`
+                            : 'Bloccato dal venditore'
+                        return (
+                            <div
+                                key={`block-${b.slotKey}-${b.kind}-${b.leadName ?? ''}`}
+                                className="rounded-md border border-ash-300 bg-ash-100 px-1.5 py-1 text-[10px] leading-tight"
+                                title={`${slotLabel(slotStart)} — ${motivo}. Il venditore non è disponibile in quest'ora.`}
+                            >
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className="font-mono font-bold text-ash-600">{slotLabel(slotStart)}</span>
+                                    <span className="text-ash-500 font-semibold">Occupato</span>
+                                </div>
+                                <div className="truncate text-ash-500 text-[9px] italic">{motivo}</div>
                             </div>
                         )
                     })}
@@ -299,8 +497,107 @@ function DayCell({ appointments, busy, isToday }: { appointments: Appointment[];
                             </div>
                         )
                     })}
+                    {emptyDeclaredSlots.length > 0 && (
+                        <div className="space-y-1 border-t border-dashed border-ash-200 pt-1">
+                            {emptyDeclaredSlots.map(k => {
+                                const [dateStr, hStr] = k.split('@')
+                                const slotStart = romeInstant(dateStr, Number(hStr))
+                                return (
+                                    <div
+                                        key={k}
+                                        className="rounded-md border border-dashed border-ash-200 bg-ash-50/60 px-1.5 py-1 text-[10px] leading-tight"
+                                        title="Slot dichiarato disponibile, senza appuntamento."
+                                    >
+                                        <div className="flex items-center justify-between gap-1">
+                                            <span className="font-mono font-bold text-ash-500">{slotLabel(slotStart)}</span>
+                                            <span className="text-ash-400 italic">Slot vuoto</span>
+                                        </div>
+                                        <AbsenceButton
+                                            decision={absenceReportCheck({
+                                                slotStart,
+                                                now,
+                                                declared: true,
+                                                blocked: blockedSlots.includes(k),
+                                                exempt: calendarExempt,
+                                                alreadyReported: reportedSlots.has(`${venditoreId}|${k}`),
+                                            })}
+                                            onReport={() => reportSalesAbsence(venditoreId, slotStart.toISOString())}
+                                            onSuccess={onReported}
+                                        />
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
                 </>
             )}
+        </div>
+    )
+}
+
+/**
+ * Bottone "Non c'era": disabilitato con il motivo quando `decision` non è
+ * ammissibile (stessi messaggi di `absenceRefusalMessage`, non riformulati).
+ * Quando è ammissibile, la conferma è inline — niente `window.confirm`, che
+ * blocca l'estensione: un secondo click entro 5 secondi registra la multa.
+ */
+function AbsenceButton({
+    decision, onReport, onSuccess,
+}: {
+    decision: AbsenceDecision
+    onReport: () => Promise<{ success: boolean; error?: string }>
+    onSuccess: () => void
+}) {
+    const [armed, setArmed] = useState(false)
+    const [submitting, setSubmitting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (!armed) return
+        const t = setTimeout(() => setArmed(false), 5000)
+        return () => clearTimeout(t)
+    }, [armed])
+
+    if (!decision.ok) {
+        return (
+            <button
+                type="button"
+                disabled
+                title={absenceRefusalMessage(decision.reason)}
+                className="mt-1 w-full rounded px-1 py-0.5 text-[9px] font-bold text-center bg-ash-100 text-ash-400 cursor-not-allowed"
+            >
+                Non c&apos;era
+            </button>
+        )
+    }
+
+    return (
+        <div className="mt-1">
+            <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                    if (!armed) { setArmed(true); return }
+                    setSubmitting(true)
+                    setError(null)
+                    try {
+                        const res = await onReport()
+                        if (res.success) {
+                            setArmed(false)
+                            onSuccess()
+                        } else {
+                            setArmed(false)
+                            setError(res.error || 'Segnalazione non riuscita.')
+                        }
+                    } finally {
+                        setSubmitting(false)
+                    }
+                }}
+                className={`w-full rounded px-1 py-0.5 text-[9px] font-bold text-center transition-colors ${armed ? 'bg-rose-600 text-white' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'} ${submitting ? 'opacity-60' : ''}`}
+            >
+                {submitting ? 'Invio…' : armed ? `Confermi? ${CALENDAR_PENALTY_EUR} €` : "Non c'era"}
+            </button>
+            {error && <div className="mt-0.5 text-[9px] text-rose-600">{error}</div>}
         </div>
     )
 }

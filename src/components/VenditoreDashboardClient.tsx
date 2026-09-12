@@ -233,23 +233,27 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         <div className="space-y-6 animate-fade-in">
             <WeeklyFocusBanner salesUserId={sellerId} />
 
-            {/* Malus ritardi: scadenze non esitate entro 2 ore dall'appuntamento o dal follow-up */}
+            {/* Trattenute del mese: registro unico dei 10 € dei ritardi e dei 50 €
+                del calendario. L'etichetta copre tutte e quattro le famiglie —
+                "ritardi" era una bugia sulle multe da 50 €, che ritardi non sono
+                (ruling PO 2026-09-12). "Ancora da esitare" resta invece
+                ritardi-only: è l'unico caso in cui esitare vuol dire qualcosa. */}
             {latePenalties && latePenalties.count > 0 && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
                     <Timer className="h-5 w-5 shrink-0 text-rose-600" />
                     <div className="text-sm text-rose-900">
                         <span className="font-bold">
-                            {latePenalties.count} {latePenalties.count === 1 ? 'ritardo' : 'ritardi'} questo mese
+                            {latePenalties.count} {latePenalties.count === 1 ? 'trattenuta' : 'trattenute'} questo mese
                         </span>
                         <span className="mx-1.5 text-rose-400">&middot;</span>
                         <span className="font-semibold">-{latePenalties.totalEur.toFixed(0)} &euro;</span>
                         <span className="ml-2 text-rose-700/80">
-                            Ogni appuntamento o follow-up va esitato entro 2 ore.
+                            Ritardi sugli esiti e multe del calendario disponibilità.
                         </span>
                     </div>
                     {latePenalties.openCount > 0 && (
                         <span className="rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white">
-                            {latePenalties.openCount} ancora da esitare
+                            {latePenalties.openCount} {latePenalties.openCount === 1 ? 'ritardo' : 'ritardi'} ancora da esitare
                         </span>
                     )}
                 </div>

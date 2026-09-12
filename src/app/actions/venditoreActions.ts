@@ -15,6 +15,7 @@ import { validateOutcomeTransition, countCycleNonClosed, findLastCycleNonClosed,
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { isConfermeTl } from "@/lib/confermeTl"
 import { resolveLatePenalties } from "@/lib/venditore/latePenaltiesRunner";
+import { syncFollowUpBlock, releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks";
 // Gamification disabled for VENDITORE role — import removed
 
 async function resolveIsStaff() {
@@ -398,6 +399,19 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
             companyId: ctx.companyId,
         })
 
+        // Esito registrato: il vecchio slot si libera. Se l'esito fissa un nuovo
+        // follow-up, syncFollowUpBlock lo riaggancia allo slot nuovo. Stesso calcolo
+        // di followUp1Date/attemptValues.nextFollowUpDate qui sopra: solo un esito
+        // "Non chiuso" prevede un prossimo follow-up.
+        const nextFollowUpAt = payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null
+        await syncFollowUpBlock(tx, {
+            companyId: ctx.companyId,
+            salesUserId: oldLead.salespersonUserId,
+            leadId,
+            followUpAt: nextFollowUpAt,
+            actorId: session.user.id,
+        })
+
         return { success: true as const }
     })
 
@@ -542,6 +556,15 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
     if (!(newDate instanceof Date) || isNaN(newDate.getTime())) {
         return { success: false, error: 'Data follow-up non valida.' };
     }
+    // Un follow-up si fissa in avanti, mai all'indietro. Non e' pignoleria:
+    // il blocco calendario segue la data, e un follow-up retrodatato su un'ora
+    // gia' passata creava un blocco "a cose fatte" che spegneva il bottone
+    // "Non c'era" delle Conferme con la motivazione falsa "il venditore aveva
+    // avvisato" (la guardia vera e' lato segnalazione, questa evita di
+    // produrre il dato sbagliato in partenza).
+    if (newDate.getTime() <= Date.now()) {
+        return { success: false, error: 'Il follow-up va fissato a una data futura.' };
+    }
     if (!lead.followUp1Date && !lead.inLavorazioneAt) {
         return { success: false, error: 'Nessun follow-up pendente da spostare per questo lead.' };
     }
@@ -587,6 +610,15 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
             timestamp: new Date(),
             metadata: { oldDate: lead.followUp1Date, newDate },
             companyId: ctx.companyId,
+        });
+
+        // Il follow-up si è spostato: il blocco calendario lo segue sul nuovo slot.
+        await syncFollowUpBlock(tx, {
+            companyId: ctx.companyId,
+            salesUserId: lead.salespersonUserId,
+            leadId,
+            followUpAt: newDate,
+            actorId: userId,
         });
 
         return { success: true as const };
@@ -635,6 +667,9 @@ export async function parkLead(leadId: string): Promise<{ success: boolean; erro
             metadata: { previousFollowUpDate: lead.followUp1Date },
             companyId: ctx.companyId,
         });
+
+        // "In lavorazione" = nessuna data precisa: lo slot torna libero.
+        await releaseFollowUpBlock(tx, { leadId });
 
         return { success: true as const };
     });
@@ -826,6 +861,12 @@ export async function clearVenditoreOutcome(leadId: string, currentVersion?: num
             },
             companyId: ctx.companyId,
         });
+
+        // "Esito rimosso -> blocco rilasciato" (spec §4.5): `followUp1Date` e'
+        // appena stato azzerato, quindi lo slot non e' piu' occupato da nulla.
+        // Senza questa riga il blocco restava, e `unblockSlot` rifiuta i
+        // FOLLOWUP: uno stato senza uscita per il venditore.
+        await releaseFollowUpBlock(tx, { leadId });
 
         return { success: true as const };
     });

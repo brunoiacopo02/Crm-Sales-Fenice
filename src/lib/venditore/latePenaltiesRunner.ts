@@ -108,9 +108,12 @@ async function existingKeys(leadIds: string[]): Promise<Set<string>> {
         leadId: salesLatePenalties.leadId,
         kind: salesLatePenalties.kind,
         dueAt: salesLatePenalties.dueAt,
-    }).from(salesLatePenalties).where(inArray(salesLatePenalties.leadId, leadIds))
+    }).from(salesLatePenalties).where(and(
+        inArray(salesLatePenalties.leadId, leadIds),
+        inArray(salesLatePenalties.kind, ['APPOINTMENT', 'FOLLOWUP']),
+    ))
     return new Set(rows.map(r => penaltyKey({
-        leadId: r.leadId,
+        leadId: r.leadId!,
         kind: r.kind as DueCandidate['kind'],
         dueAt: r.dueAt,
     })))
@@ -173,6 +176,7 @@ export async function resolveLatePenalties(leadId: string, at: Date = new Date()
         .set({ resolvedAt: at })
         .where(and(
             eq(salesLatePenalties.leadId, leadId),
+            inArray(salesLatePenalties.kind, ['APPOINTMENT', 'FOLLOWUP']),
             isNull(salesLatePenalties.resolvedAt),
         ))
 }

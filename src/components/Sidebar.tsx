@@ -20,6 +20,7 @@ import {
     PhoneIncoming,
     Calculator,
     Scale,
+    CalendarClock,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -125,6 +126,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     } else if (role === "CONFERME") {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
+            { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
             // Stessa coda dell'admin, fetta diversa: alle Conferme arrivano solo
             // i lead già appuntati, che da quel momento sono di loro competenza.
             { name: "Ti hanno cercato", href: "/richieste-contatto", icon: PhoneIncoming, badge: contactPending },
@@ -146,6 +148,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     } else if (role === "VENDITORE") {
         navItems = [
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
+            { name: "Il mio Calendario", href: "/mio-calendario", icon: CalendarClock },
             { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
         ]
     } else if (role === "TL") {
@@ -222,6 +225,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                         { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                         ...(role === "ADMIN" ? [{ name: "Performance Venditori", href: "/performance-venditori", icon: Trophy }] : []),
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
+                        { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
                     ],
                 },
