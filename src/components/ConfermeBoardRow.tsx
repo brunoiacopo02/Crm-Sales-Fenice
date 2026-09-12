@@ -9,6 +9,7 @@ import { getAnimationsEnabled } from "@/lib/animationUtils"
 import { ConfermeCallTimer } from "@/components/ConfermeCallTimer"
 import { consumeTimerForLead } from "@/lib/confermeCallTimer"
 import { logConfermeCallDuration } from "@/app/actions/confermeAnalyticsActions"
+import { ForceBookingReason } from "@/components/ForceBookingReason"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, onRefresh, onRowClick, layoutMode = 'default' }: any) {
     const lead = item.lead
@@ -34,6 +35,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
     const [vslSeen, setVslSeen] = useState(lead.confVslSeen || false)
     const [recallNotes, setRecallNotes] = useState(lead.confRecallNotes || "")
     const [isSavingRecall, setIsSavingRecall] = useState(false)
+    // Muro del fissaggio (Task 2/4): scheduleConfermeRecall può rifiutare con
+    // needsForce quando payload.newAppointmentDate cade su un'ora non
+    // dichiarata/bloccata dal venditore. Mostriamo il messaggio per intero +
+    // il campo Motivo per "Fissa comunque" dentro lo stesso popover.
+    const [recallForceMessage, setRecallForceMessage] = useState<string | null>(null)
 
     // Click outside to close popovers
     const rowRef = useRef<HTMLDivElement>(null)
@@ -150,8 +156,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
         }
     }
 
-    const handleSaveRecall = async (e: React.MouseEvent) => {
-        e.stopPropagation()
+    const handleSaveRecall = async (forceReason?: string) => {
         if (!recallDate) return alert("Seleziona una data per il richiamo");
         setIsSavingRecall(true);
         try {
@@ -164,11 +169,17 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                 needsReschedule: true,
                 newAppointmentDate: null,
                 recallNotes
-            });
+            }, forceReason);
 
             if (res && (!res.success)) {
-                handleActionError(res.error || "Errore");
+                if (res.needsForce) {
+                    setRecallForceMessage(res.error || "")
+                } else {
+                    setRecallForceMessage(null)
+                    handleActionError(res.error || "Errore");
+                }
             } else {
+                setRecallForceMessage(null)
                 setShowRecallPopover(false);
                 setRecallNotes("");
                 await animateAndRefresh('pa-amber-pulse', 800);
@@ -421,7 +432,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                             {/* BOTTONE PROGRAMMA RICHIAMO */}
                             <div className="relative">
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); setShowRecallPopover(!showRecallPopover); setShowSnoozePopover(false); }}
+                                    onClick={(e) => { e.stopPropagation(); setShowRecallPopover(!showRecallPopover); setShowSnoozePopover(false); setRecallForceMessage(null); }}
                                     disabled={isLocked}
                                     className="bg-white hover:bg-blue-50 border border-ash-200 hover:border-blue-300 text-ash-500 hover:text-blue-600 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 flex items-center gap-1 shadow-soft hover:shadow-card"
                                 >
@@ -467,11 +478,20 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                                         />
 
                                         <div className="flex justify-end gap-2">
-                                            <button onClick={() => setShowRecallPopover(false)} className="px-2.5 py-1.5 text-xs text-ash-500 hover:text-ash-700 font-semibold transition-colors">Annulla</button>
-                                            <button onClick={handleSaveRecall} disabled={isSavingRecall || !recallDate} className="px-3.5 py-1.5 text-xs bg-gradient-to-b from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg font-bold disabled:opacity-50 shadow-soft transition-all">
+                                            <button onClick={() => { setShowRecallPopover(false); setRecallForceMessage(null); }} className="px-2.5 py-1.5 text-xs text-ash-500 hover:text-ash-700 font-semibold transition-colors">Annulla</button>
+                                            <button onClick={() => handleSaveRecall()} disabled={isSavingRecall || !recallDate} className="px-3.5 py-1.5 text-xs bg-gradient-to-b from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg font-bold disabled:opacity-50 shadow-soft transition-all">
                                                 {isSavingRecall ? "..." : "Parcheggia"}
                                             </button>
                                         </div>
+
+                                        {recallForceMessage && (
+                                            <ForceBookingReason
+                                                message={recallForceMessage}
+                                                busy={isSavingRecall}
+                                                compact
+                                                onConfirm={(reason) => handleSaveRecall(reason)}
+                                            />
+                                        )}
                                     </div>
                                 )}
                             </div>

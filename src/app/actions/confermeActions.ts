@@ -376,121 +376,126 @@ async function checkBookingAllowed(
 }
 
 export async function updateLeadDataConferme(leadId: string, currentVersion: number, data: { name: string, email: string, appointmentDate: Date, appointmentNote: string }, forceReason?: string): Promise<{ success: boolean; error?: string; needsForce?: boolean }> {
-    const supabase = await createClient();
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
-    if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
-        throw new Error("Unauthorized")
-    }
-
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
-
-    // fetch old (tenant-scoped)
-    const oldLead = (await db.select().from(leads).where(and(
-        eq(leads.companyId, ctx.companyId),
-        eq(leads.id, leadId),
-    )))[0]
-    if (!oldLead) throw new Error("Lead not found")
-
-    // Concurrency Check
-    if (oldLead.version !== currentVersion) {
-        throw new Error("CONCURRENCY_ERROR")
-    }
-
-    let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
-    const gate = await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role)
-    if (!gate.ok) {
-        const motivo = forceReason?.trim()
-        if (!motivo) {
-            return {
-                success: false,
-                error: bookingRefusalMessage(gate.reason, new Date(data.appointmentDate)),
-                needsForce: true,
-            }
+    try {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
+        if (!session || (session.user.role !== "CONFERME" && session.user.role !== "MANAGER" && session.user.role !== "ADMIN")) {
+            return { success: false, error: "Unauthorized" }
         }
-        forcedBooking = { reason: gate.reason, motivo }
-    }
 
-    const updated = await db.update(leads).set({
-        name: data.name,
-        email: data.email,
-        appointmentDate: data.appointmentDate,
-        appointmentNote: data.appointmentNote,
-        version: oldLead.version + 1,
-        updatedAt: new Date()
-    }).where(and(
-        eq(leads.companyId, ctx.companyId),
-        eq(leads.id, leadId),
-        eq(leads.version, oldLead.version),
-    ))
-    .returning({ id: leads.id })
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
 
-    if (updated.length === 0) {
-        throw new Error("CONCURRENCY_ERROR")
-    }
+        // fetch old (tenant-scoped)
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0]
+        if (!oldLead) return { success: false, error: "Lead not found" }
 
-    // Marketing webhook: emit appointment.set only if the appointment date actually changed
-    if (oldLead.appointmentDate?.getTime() !== data.appointmentDate?.getTime()) {
-        // Se stiamo SPOSTANDO un appuntamento esistente (entrambe le date valorizzate),
-        // emettiamo prima un appointment.rescheduled così il marketing chiude il vecchio
-        // record SET invece di creare un secondo record orfano.
-        if (oldLead.appointmentDate && data.appointmentDate) {
+        // Concurrency Check
+        if (oldLead.version !== currentVersion) {
+            return { success: false, error: "CONCURRENCY_ERROR" }
+        }
+
+        let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
+        const gate = await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role)
+        if (!gate.ok) {
+            const motivo = forceReason?.trim()
+            if (!motivo) {
+                return {
+                    success: false,
+                    error: bookingRefusalMessage(gate.reason, new Date(data.appointmentDate)),
+                    needsForce: true,
+                }
+            }
+            forcedBooking = { reason: gate.reason, motivo }
+        }
+
+        const updated = await db.update(leads).set({
+            name: data.name,
+            email: data.email,
+            appointmentDate: data.appointmentDate,
+            appointmentNote: data.appointmentNote,
+            version: oldLead.version + 1,
+            updatedAt: new Date()
+        }).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
+        .returning({ id: leads.id })
+
+        if (updated.length === 0) {
+            return { success: false, error: "CONCURRENCY_ERROR" }
+        }
+
+        // Marketing webhook: emit appointment.set only if the appointment date actually changed
+        if (oldLead.appointmentDate?.getTime() !== data.appointmentDate?.getTime()) {
+            // Se stiamo SPOSTANDO un appuntamento esistente (entrambe le date valorizzate),
+            // emettiamo prima un appointment.rescheduled così il marketing chiude il vecchio
+            // record SET invece di creare un secondo record orfano.
+            if (oldLead.appointmentDate && data.appointmentDate) {
+                await enqueueMarketingWebhook({
+                    eventType: 'appointment.rescheduled',
+                    leadId,
+                    actorUserId: session.user.id,
+                    previousAppointmentDate: oldLead.appointmentDate,
+                    newAppointmentDate: data.appointmentDate,
+                }).catch((e: unknown) => console.error("Marketing webhook (appointment.rescheduled) err:", e));
+            }
             await enqueueMarketingWebhook({
-                eventType: 'appointment.rescheduled',
+                eventType: 'appointment.set',
                 leadId,
                 actorUserId: session.user.id,
-                previousAppointmentDate: oldLead.appointmentDate,
-                newAppointmentDate: data.appointmentDate,
-            }).catch((e: unknown) => console.error("Marketing webhook (appointment.rescheduled) err:", e));
+            }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
+
+            // Bot: riallinea la data anche di là (stessa condizione del webhook —
+            // solo se è cambiata davvero).
+            await notifyAppointmentToBot({
+                lead: { id: leadId, phone: oldLead.phone, name: data.name, funnel: oldLead.funnel, companyId: ctx.companyId },
+                appointmentAt: data.appointmentDate,
+                trigger: oldLead.appointmentDate ? 'spostato' : 'fissato',
+            });
         }
-        await enqueueMarketingWebhook({
-            eventType: 'appointment.set',
-            leadId,
-            actorUserId: session.user.id,
-        }).catch((e: unknown) => console.error("Marketing webhook (appointment.set) err:", e));
 
-        // Bot: riallinea la data anche di là (stessa condizione del webhook —
-        // solo se è cambiata davvero).
-        await notifyAppointmentToBot({
-            lead: { id: leadId, phone: oldLead.phone, name: data.name, funnel: oldLead.funnel, companyId: ctx.companyId },
-            appointmentAt: data.appointmentDate,
-            trigger: oldLead.appointmentDate ? 'spostato' : 'fissato',
-        });
-    }
-
-    // Audit Log
-    await db.insert(leadEvents).values({
-        id: crypto.randomUUID(),
-        leadId,
-        eventType: "conferme_edited_lead",
-        userId: session.user.id,
-        timestamp: new Date(),
-        metadata: {
-            old: { name: oldLead.name, email: oldLead.email, appointmentDate: oldLead.appointmentDate, appointmentNote: oldLead.appointmentNote },
-            new: data
-        },
-        companyId: ctx.companyId,
-    })
-
-    if (forcedBooking) {
+        // Audit Log
         await db.insert(leadEvents).values({
             id: crypto.randomUUID(),
             leadId,
-            eventType: 'appointment_forced',
+            eventType: "conferme_edited_lead",
             userId: session.user.id,
             timestamp: new Date(),
             metadata: {
-                salesUserId: oldLead.salespersonUserId,
-                appointmentAt: data.appointmentDate,
-                reason: forcedBooking.reason,
-                motivo: forcedBooking.motivo,
+                old: { name: oldLead.name, email: oldLead.email, appointmentDate: oldLead.appointmentDate, appointmentNote: oldLead.appointmentNote },
+                new: data
             },
             companyId: ctx.companyId,
         })
-    }
 
-    return { success: true }
+        if (forcedBooking) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'appointment_forced',
+                userId: session.user.id,
+                timestamp: new Date(),
+                metadata: {
+                    salesUserId: oldLead.salespersonUserId,
+                    appointmentAt: data.appointmentDate,
+                    reason: forcedBooking.reason,
+                    motivo: forcedBooking.motivo,
+                },
+                companyId: ctx.companyId,
+            })
+        }
+
+        return { success: true }
+    } catch (error: any) {
+        console.error("updateLeadDataConferme error:", error);
+        return { success: false, error: error?.message === "CONCURRENCY_ERROR" ? "CONCURRENCY_ERROR" : (error?.message || "Errore durante il salvataggio dei dati") };
+    }
 }
 
 /**

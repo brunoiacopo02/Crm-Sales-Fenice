@@ -9,6 +9,7 @@ import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoCo
 import type { ConfermeNoteItem } from "@/app/actions/confermeActions"
 import { saveConfermeSurvey } from "@/app/actions/surveyActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
+import { ForceBookingReason } from "./ForceBookingReason"
 import { connectConfermePresence, setConfermeActivity, subscribeConfermePresence } from "@/lib/confermePresence"
 import { stopTimerAndLogForLead } from "@/lib/confermeCallTimer"
 import { format, formatDistanceToNow } from "date-fns"
@@ -67,6 +68,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     const [editTime, setEditTime] = useState(format(appointmentDateObj, 'HH:mm'))
     const [editNoteGdo, setEditNoteGdo] = useState(lead?.appointmentNote || "")
     const [savingData, setSavingData] = useState(false)
+    // Muro del fissaggio (Task 2/4): quando updateLeadDataConferme rifiuta con
+    // needsForce, mostriamo qui il messaggio del server per intero + il campo
+    // Motivo per "Fissa comunque".
+    const [dataForceMessage, setDataForceMessage] = useState<string | null>(null)
 
     // Notes states
     const [notes, setNotes] = useState<ConfermeNoteItem[]>([])
@@ -81,6 +86,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
 
     // Ref for inline Scheda Trattativa
     const schedaRef = useRef<SchedaEsitoHandle>(null)
+
+    // Stesso muro del fissaggio, per l'esito "Confermato ed Assegnato" (setConfermeOutcome).
+    const [outcomeForceMessage, setOutcomeForceMessage] = useState<string | null>(null)
 
     // Salesperson outcome states
     const [spOutcome, setSpOutcome] = useState(lead?.salespersonOutcome || "")
@@ -181,17 +189,27 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
 
     if (!isOpen || !item) return null;
 
-    const handleSaveData = async () => {
+    const handleSaveData = async (forceReason?: string) => {
         setSavingData(true)
         try {
             const { updateLeadDataConferme } = await import('@/app/actions/confermeActions');
             const combinedDate = new Date(`${editDate}T${editTime}:00`);
-            await updateLeadDataConferme(lead.id, localVersion, {
+            const result = await updateLeadDataConferme(lead.id, localVersion, {
                 name: editName,
                 email: editEmail,
                 appointmentDate: combinedDate,
                 appointmentNote: editNoteGdo
-            })
+            }, forceReason)
+            if (!result.success) {
+                if (result.needsForce) {
+                    setDataForceMessage(result.error || "")
+                } else {
+                    setDataForceMessage(null)
+                    handleActionError(result.error)
+                }
+                return
+            }
+            setDataForceMessage(null)
             setLocalVersion((v: number) => v + 1)
             onRefresh()
             alert("Dati salvati con successo")
@@ -241,7 +259,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
         }
     }
 
-    const handleSaveOutcome = async () => {
+    const handleSaveOutcome = async (forceReason?: string) => {
         if (outcome === "confermato") {
             if (!salesperson) return alert("Seleziona venditore assegnato");
             if (!editEmail) {
@@ -276,11 +294,17 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
             // slot corretto (callsMade + 1) dentro logConfermeCallDuration.
             await stopTimerAndLogForLead(lead.id, 'outcome');
             const { setConfermeOutcome } = await import('@/app/actions/confermeActions');
-            const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", undefined, salesperson)
+            const result = await setConfermeOutcome(lead.id, localVersion, outcome as "scartato" | "confermato", undefined, salesperson, forceReason)
             if (result && !result.success) {
-                alert(result.error || "Errore salvataggio esito")
+                if (result.needsForce) {
+                    setOutcomeForceMessage(result.error || "")
+                } else {
+                    setOutcomeForceMessage(null)
+                    alert(result.error || "Errore salvataggio esito")
+                }
                 return;
             }
+            setOutcomeForceMessage(null)
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
@@ -752,10 +776,17 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                 })()}
 
                                 <div className="pt-4 border-t border-ash-200">
-                                    <button onClick={handleSaveData} disabled={savingData} className="w-full flex justify-center items-center gap-2 py-3 bg-ash-900 hover:bg-black text-white rounded-xl transition-all font-bold shadow-md hover:shadow-lg disabled:opacity-50">
+                                    <button onClick={() => handleSaveData()} disabled={savingData} className="w-full flex justify-center items-center gap-2 py-3 bg-ash-900 hover:bg-black text-white rounded-xl transition-all font-bold shadow-md hover:shadow-lg disabled:opacity-50">
                                         <Save className="w-4 h-4" /> {savingData ? "Salvataggio in corso..." : "Salva Tutti i Dati"}
                                     </button>
                                     <p className="text-[11px] text-center text-ash-400 mt-3 font-medium">Le modifiche sono tracciate nell'Audit Log.</p>
+                                    {dataForceMessage && (
+                                        <ForceBookingReason
+                                            message={dataForceMessage}
+                                            busy={savingData}
+                                            onConfirm={(reason) => handleSaveData(reason)}
+                                        />
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -912,9 +943,16 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                         />
                                     )}
 
-                                    <button onClick={handleSaveOutcome} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
+                                    <button onClick={() => handleSaveOutcome()} disabled={savingOutcome || !outcome} className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl transition-all font-bold disabled:opacity-50 shadow-md">
                                         {savingOutcome ? "Salvataggio in corso..." : "Piazza Esito Definitivo"}
                                     </button>
+                                    {outcomeForceMessage && (
+                                        <ForceBookingReason
+                                            message={outcomeForceMessage}
+                                            busy={savingOutcome}
+                                            onConfirm={(reason) => handleSaveOutcome(reason)}
+                                        />
+                                    )}
                                 </div>
 
                                 {/* Salesperson Outcome (only if confirmed & assigned) */}
