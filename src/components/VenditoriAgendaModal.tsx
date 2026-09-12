@@ -315,17 +315,32 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                         sameDay(a.appointmentDate as Date, d),
                                                     )
                                                     const dateStr = toRomeDateStr(d)
-                                                    const emptyDeclaredSlots = isPastDay(d)
-                                                        ? v.declaredSlots.filter(k => k.startsWith(`${dateStr}@`) && !apptSlotKeys.has(k))
-                                                        : []
+                                                    const past = isPastDay(d)
                                                     // Il motivo per cui un follow-up blocca lo slot è che le
                                                     // Conferme lo vedano occupato e non ci fissino sopra un
                                                     // appuntamento: senza questa riga il blocco esisteva ma
                                                     // non arrivava a chi doveva vederlo. Solo oggi e il
                                                     // futuro: sul passato non serve più a nessuno.
-                                                    const dayBlocks = isPastDay(d)
+                                                    const dayBlocks = past
                                                         ? []
                                                         : v.blockDetails.filter(b => b.slotKey.startsWith(`${dateStr}@`))
+                                                    // Le ore dichiarate e ancora libere. Sul passato alimentano il
+                                                    // bottone "Non c'era"; su oggi e sul futuro sono l'unica cosa
+                                                    // che dice alla Conferma DOVE si può fissare — la riga di
+                                                    // copertura elenca solo chi è disponibile in TUTTA la fascia e
+                                                    // perde chi ha dichiarato una sola ora. Finché era un avviso
+                                                    // bastava il verso negativo; ora che è un muro serve anche
+                                                    // quello positivo.
+                                                    const emptyDeclaredSlots = v.declaredSlots.filter(k => {
+                                                        if (!k.startsWith(`${dateStr}@`)) return false
+                                                        if (apptSlotKeys.has(k)) return false
+                                                        if (past) return true
+                                                        // Su oggi e sul futuro la pastiglia promette "qui si
+                                                        // fissa": un'ora già mostrata come "Occupato", o un'ora
+                                                        // di oggi già passata, non mantengono quella promessa.
+                                                        if (v.blockedSlots.includes(k)) return false
+                                                        return romeInstant(dateStr, Number(k.split('@')[1])) > now
+                                                    })
                                                     return (
                                                         <DayCell
                                                             key={i}
@@ -337,6 +352,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                             dayBlocks={dayBlocks}
                                                             calendarExempt={v.calendarExempt}
                                                             emptyDeclaredSlots={emptyDeclaredSlots}
+                                                            isPast={past}
                                                             reportedSlots={reportedSet}
                                                             now={now}
                                                             onReported={load}
@@ -359,6 +375,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Scartato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-300 border border-amber-400" /> Fuori disponibilità dichiarata</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-ash-200 border border-ash-300" /> Slot occupato (follow-up o imprevisto)</span>
+                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-50 border border-emerald-200" /> Ora dichiarata e libera: qui si fissa senza forzare</span>
                 </div>
             </div>
         </div>
@@ -367,7 +384,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
 
 function DayCell({
     appointments, isToday,
-    venditoreId, declaredSlots, blockedSlots, dayBlocks, calendarExempt, emptyDeclaredSlots, reportedSlots, now, onReported,
+    venditoreId, declaredSlots, blockedSlots, dayBlocks, calendarExempt, emptyDeclaredSlots, isPast, reportedSlots, now, onReported,
 }: {
     appointments: Appointment[]
     isToday: boolean
@@ -377,8 +394,10 @@ function DayCell({
     /** Blocchi di QUESTA giornata (solo oggi e futuro): ora + motivo. */
     dayBlocks: Array<{ slotKey: string; kind: string; leadName: string | null }>
     calendarExempt: boolean
-    /** Slot dichiarati per questo giorno senza appuntamento: solo per giornate passate. */
+    /** Slot dichiarati per questo giorno senza appuntamento, per ogni giornata. */
     emptyDeclaredSlots: string[]
+    /** Giornata già chiusa: solo lì la pastiglia porta il bottone "Non c'era". */
+    isPast: boolean
     /** Chiavi `'<salesUserId>|<slotKey>'` già segnalate, annullate incluse:
      *  l'annullamento è definitivo per quello slot, non lo riapre. */
     reportedSlots: Set<string>
@@ -463,6 +482,23 @@ function DayCell({
                             {emptyDeclaredSlots.map(k => {
                                 const [dateStr, hStr] = k.split('@')
                                 const slotStart = romeInstant(dateStr, Number(hStr))
+                                // Su oggi e sul futuro la pastiglia è il verso positivo del
+                                // muro: "qui si può fissare". Niente "Non c'era", che su una
+                                // giornata non ancora chiusa sarebbe solo un bottone spento.
+                                if (!isPast) {
+                                    return (
+                                        <div
+                                            key={k}
+                                            className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-1 text-[10px] leading-tight"
+                                            title={`${slotLabel(slotStart)} — ora dichiarata e libera: qui si può fissare senza forzare.`}
+                                        >
+                                            <div className="flex items-center justify-between gap-1">
+                                                <span className="font-mono font-bold text-emerald-700">{slotLabel(slotStart)}</span>
+                                                <span className="text-emerald-600 font-semibold">Libero</span>
+                                            </div>
+                                        </div>
+                                    )
+                                }
                                 return (
                                     <div
                                         key={k}
