@@ -181,12 +181,16 @@ export function SlotGrid({
     // Pennellata: entrano nel gesto solo le celle che l'utente può davvero
     // ri-dichiarare. Occupate, bloccate e ore già iniziate restano fuori, così
     // passarci sopra col mouse non le tocca (e non interrompe la strisciata).
+    // Il fallback e' lo stesso del render (`?? { state: 'libero' }`): una
+    // chiave assente da `cells` si disegna come cella libera, quindi deve
+    // anche comportarsi come tale, altrimenti spezzerebbe la strisciata.
     const paintable = (key: string) => {
-        const v = cells.get(key)
-        return !!v && !v.cellDisabled && (v.state === 'disponibile' || v.state === 'nondisponibile' || v.state === 'libero')
+        const v: SlotCellView = cells.get(key) ?? { state: 'libero' }
+        return !v.cellDisabled && (v.state === 'disponibile' || v.state === 'nondisponibile' || v.state === 'libero')
     }
+    const paintEnabled = !readOnly && !!onCellPaint
     const { containerProps, shouldIgnoreClick } = useDragPaint({
-        enabled: !readOnly && !!onCellPaint,
+        enabled: paintEnabled,
         isPaintable: paintable,
         isOn: key => cells.get(key)?.state === 'disponibile',
         onPaint: (k, on) => onCellPaint?.(k, on),
@@ -308,7 +312,9 @@ export function SlotGrid({
     return (
         <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">
             <div
-                className="grid min-w-[720px] select-none"
+                // `select-none` solo dove si dipinge: nelle griglie di sola
+                // lettura i nomi dei colleghi restano selezionabili e copiabili.
+                className={`grid min-w-[720px] ${paintEnabled ? 'select-none' : ''}`}
                 style={{ gridTemplateColumns: '64px repeat(6, minmax(96px, 1fr))' }}
                 {...containerProps}
             >
@@ -362,7 +368,7 @@ export function SlotGrid({
                             // `title` sui bottoni disabilitati, e la spiegazione
                             // sparirebbe proprio dove serve.
                             const pastCell = !readOnly && !!view.cellDisabled
-                            const canPaint = !readOnly && !!onCellPaint && paintable(key)
+                            const canPaint = paintEnabled && paintable(key)
                             // Il menu dipende da `readOnly` e dalla presenza di
                             // `view.menu`, non da `cellDisabled`: una cella
                             // passata non si ri-dichiara, ma un blocco si
@@ -372,12 +378,21 @@ export function SlotGrid({
                             const badgeText = view.badge && /^\d+$/.test(view.badge) ? `+${view.badge}` : view.badge
 
                             return (
-                                <div key={key} className="group relative border-b border-r border-ash-200 last:border-r-0">
+                                <div
+                                    key={key}
+                                    // La chiave della pennellata sta sul
+                                    // contenitore, non sul bottone-cella: il
+                                    // "⋯" invisibile (`opacity-0`) intercetta
+                                    // `elementFromPoint` ed e' FRATELLO della
+                                    // cella, quindi da li' il `closest` non
+                                    // troverebbe mai la chiave.
+                                    data-paint-key={canPaint ? key : undefined}
+                                    className="group relative border-b border-r border-ash-200 last:border-r-0"
+                                >
                                     <button
                                         type="button"
                                         disabled={!!readOnly}
                                         aria-disabled={pastCell || undefined}
-                                        data-paint-key={canPaint ? key : undefined}
                                         title={view.title}
                                         aria-label={ariaLabelFor(instant, view)}
                                         onClick={() => {

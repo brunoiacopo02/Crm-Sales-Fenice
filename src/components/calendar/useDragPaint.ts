@@ -10,6 +10,13 @@ import { useRef, useCallback, type PointerEvent as ReactPointerEvent } from "rea
  * puntatore entra in una SECONDA cella. A quel punto l'origine viene
  * dipinta e il `click` che il browser emette al rilascio va ignorato
  * (`shouldIgnoreClick`), altrimenti l'origine cambierebbe due volte.
+ *
+ * La cattura del puntatore e' PIGRA, e per questo il click normale non passa
+ * mai per la cattura: catturare gia' sul `pointerdown` ri-targettizza
+ * `mouseup`/`click` sul contenitore, il `<button>` della cella non riceve
+ * piu' il suo `onClick` e il click singolo muore. Si cattura solo quando la
+ * strisciata parte davvero (seconda cella), dove serve per continuare a
+ * ricevere i `pointermove` anche uscendo dalla griglia.
  */
 export interface DragPaintOptions {
     enabled: boolean
@@ -21,7 +28,7 @@ export interface DragPaintOptions {
 }
 
 export function useDragPaint({ enabled, isPaintable, isOn, onPaint }: DragPaintOptions) {
-    const stroke = useRef<{ origin: string; on: boolean; painted: Set<string>; started: boolean } | null>(null)
+    const stroke = useRef<{ origin: string; on: boolean; painted: Set<string>; started: boolean; captured: boolean } | null>(null)
     const ignoreNextClick = useRef(false)
 
     const keyAt = (x: number, y: number): string | null => {
@@ -32,10 +39,11 @@ export function useDragPaint({ enabled, isPaintable, isOn, onPaint }: DragPaintO
     const onPointerDown = useCallback((e: ReactPointerEvent<HTMLElement>) => {
         if (!enabled) return
         if (e.pointerType === 'touch' || e.button !== 0) return
+        // Il "⋯" apre un menu: premerlo non deve mai iniziare una strisciata.
+        if ((e.target as HTMLElement).closest('button[aria-haspopup="menu"]')) return
         const key = (e.target as HTMLElement).closest<HTMLElement>('[data-paint-key]')?.dataset.paintKey
         if (!key || !isPaintable(key)) return
-        stroke.current = { origin: key, on: !isOn(key), painted: new Set(), started: false }
-        e.currentTarget.setPointerCapture(e.pointerId)
+        stroke.current = { origin: key, on: !isOn(key), painted: new Set(), started: false, captured: false }
     }, [enabled, isPaintable, isOn])
 
     const onPointerMove = useCallback((e: ReactPointerEvent<HTMLElement>) => {
@@ -47,6 +55,12 @@ export function useDragPaint({ enabled, isPaintable, isOn, onPaint }: DragPaintO
             if (key === s.origin) return
             s.started = true
             ignoreNextClick.current = true
+            // Solo ORA la cattura: `e.currentTarget` e' ancora il contenitore
+            // della griglia (vedi il commento in testa al file).
+            try {
+                e.currentTarget.setPointerCapture(e.pointerId)
+                s.captured = true
+            } catch { /* puntatore gia' sparito: la strisciata prosegue lo stesso */ }
             s.painted.add(s.origin)
             onPaint(s.origin, s.on)
         }
@@ -56,9 +70,14 @@ export function useDragPaint({ enabled, isPaintable, isOn, onPaint }: DragPaintO
     }, [isPaintable, onPaint])
 
     const endStroke = useCallback((e: ReactPointerEvent<HTMLElement>) => {
-        if (!stroke.current) return
+        const s = stroke.current
+        if (!s) return
         stroke.current = null
-        try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* già rilasciato */ }
+        // Si rilascia solo se si era davvero catturato: su un click singolo la
+        // cattura non c'e' mai stata.
+        if (s.captured && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+            try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* già rilasciato */ }
+        }
         // Il click arriva DOPO pointerup: il flag si azzera al primo click
         // successivo, o al prossimo giro di event loop se il click non arriva
         // (rilascio fuori dalla griglia).
