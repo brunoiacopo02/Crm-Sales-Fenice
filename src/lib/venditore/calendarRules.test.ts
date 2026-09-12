@@ -5,6 +5,7 @@ import {
     selectMissingCalendarPenalties,
     manualBlockCheck,
     absenceReportCheck,
+    calendarRuleState,
     type CalendarUserRow,
 } from './calendarRules'
 
@@ -87,6 +88,16 @@ test('blocco consentito a 61 minuti, negato a 59', () => {
     assert.equal(tardi.ok === false && tardi.reason, 'preavviso_insufficiente')
 })
 
+test('a 60 minuti esatti il blocco e gia tardi: il confine e chiuso', () => {
+    const d = manualBlockCheck({
+        slotStart: SLOT,
+        now: new Date('2026-09-16T17:00:00+02:00'),
+        declared: true, hasAppointment: false, alreadyBlocked: false,
+    })
+    assert.equal(d.ok, false)
+    assert.equal(d.ok === false && d.reason, 'preavviso_insufficiente')
+})
+
 test('non si blocca uno slot che ha gia un appuntamento', () => {
     const d = manualBlockCheck({
         slotStart: SLOT, now: new Date('2026-09-16T10:00:00+02:00'),
@@ -136,4 +147,35 @@ test('niente segnalazione sul futuro, oltre 48 ore, su esenti, fuori disponibili
         assert.equal(d.ok, false, `atteso rifiuto ${atteso}`)
         assert.equal(d.ok === false && d.reason, atteso)
     }
+})
+
+// --- stato della regola ---
+
+test('calendarRuleState: senza data di attivazione la regola non e in vigore', () => {
+    const s = calendarRuleState({})
+    assert.equal(s.active, false)
+    assert.equal(s.active === false && s.reason, 'not_activated')
+    assert.equal(s.active === false && s.from, null)
+})
+
+test('calendarRuleState: con la data la regola e in vigore da quella data', () => {
+    const s = calendarRuleState({ SALES_CALENDAR_PENALTIES_FROM: '2026-09-21T00:00:00+02:00' })
+    assert.equal(s.active, true)
+    assert.equal(s.active === true && s.from.toISOString(), '2026-09-20T22:00:00.000Z')
+})
+
+test('calendarRuleState: il kill-switch vince sulla data, ma la data resta leggibile', () => {
+    const s = calendarRuleState({
+        SALES_CALENDAR_PENALTIES: 'off',
+        SALES_CALENDAR_PENALTIES_FROM: '2026-09-21T00:00:00+02:00',
+    })
+    assert.equal(s.active, false)
+    assert.equal(s.active === false && s.reason, 'kill_switch')
+    assert.ok(s.active === false && s.from instanceof Date)
+})
+
+test('calendarRuleState: una data illeggibile vale come data assente', () => {
+    const s = calendarRuleState({ SALES_CALENDAR_PENALTIES_FROM: 'non-una-data' })
+    assert.equal(s.active, false)
+    assert.equal(s.active === false && s.reason, 'not_activated')
 })

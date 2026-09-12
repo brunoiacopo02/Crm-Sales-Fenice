@@ -7,7 +7,7 @@
  */
 
 import { weeklyDeadline } from './calendarSlots'
-import { romeMonthKey, type PenaltyRuleState } from './latePenalties'
+import { romeMonthKey, parseActivationDate, type PenaltyRuleState } from './latePenalties'
 
 /** Trattenuta delle due multe nuove. I 10 € dei ritardi restano dove sono. */
 export const CALENDAR_PENALTY_EUR = 50
@@ -159,14 +159,15 @@ export function absenceRefusalMessage(reason: AbsenceRefusal): string {
  * Stato della regola calendario, gemello di `penaltyRuleState` dei ritardi.
  * Una sezione vuota perché nessuno è in ritardo e una vuota perché la regola
  * non è mai stata accesa si assomigliano troppo: la seconda sembra un guasto.
+ *
+ * Le env arrivano come parametro, come nella gemella: è ciò che rende i tre
+ * rami testabili senza sporcare process.env.
  */
-export function calendarRuleState(): PenaltyRuleState {
-    const raw = process.env.SALES_CALENDAR_PENALTIES_FROM
-    const from = raw ? new Date(raw) : null
-    const valid = from && !isNaN(from.getTime()) ? from : null
-    if (process.env.SALES_CALENDAR_PENALTIES === 'off') {
-        return { active: false, reason: 'kill_switch', from: valid }
-    }
-    if (!valid) return { active: false, reason: 'not_activated', from: null }
-    return { active: true, from: valid }
+export function calendarRuleState(
+    env: Record<string, string | undefined> = process.env,
+): PenaltyRuleState {
+    const from = parseActivationDate(env.SALES_CALENDAR_PENALTIES_FROM)
+    if (env.SALES_CALENDAR_PENALTIES === 'off') return { active: false, reason: 'kill_switch', from }
+    if (!from) return { active: false, reason: 'not_activated', from: null }
+    return { active: true, from }
 }
