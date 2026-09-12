@@ -134,9 +134,15 @@ export async function materializeTemplates(now: Date = new Date()): Promise<Temp
 const REMINDER_HOURS = [10, 13]
 
 export async function runCalendarWeekly(now: Date = new Date()): Promise<CalendarRunnerResult> {
+    // Fuori dal gate delle multe di proposito: gli slot materializzati alimentano
+    // anche il muro sul fissaggio e la copertura, che hanno un interruttore loro
+    // (BOOKING_WALL). Se spegnere le multe smettesse di materializzare, le
+    // disponibilita' sparirebbero e il muro comincerebbe a bloccare tutto.
+    const materialized = await materializeTemplates(now)
+
     const state = calendarRuleState()
     if (!state.active) {
-        return { registered: 0, reminders: 0, skipped: state.reason, materialized: { weeks: 0, slots: 0 } }
+        return { registered: 0, reminders: 0, skipped: state.reason, materialized }
     }
 
     const weekStart = weekStartFor(now)
@@ -152,11 +158,10 @@ export async function runCalendarWeekly(now: Date = new Date()): Promise<Calenda
         createdAt: users.createdAt,
     }).from(users).where(eq(users.role, 'VENDITORE')))
 
-    // Prima delle multe: chi ha un modello risulta compilato in automatico, e
-    // la query di `plans` qui sotto (da cui nasce `submitted`) deve già
-    // vederlo — altrimenti lo si multerebbe un istante prima di materializzarlo.
-    const materialized = await materializeTemplates(now)
-
+    // La materializzazione (sopra, fuori dal gate) resta comunque prima del
+    // calcolo delle multe: chi ha un modello risulta compilato in automatico, e
+    // la query di `plans` qui sotto (da cui nasce `submitted`) deve già vederlo
+    // — altrimenti lo si multerebbe un istante prima di materializzarlo.
     const plans = await db.select({ salesUserId: salesWeekPlans.salesUserId })
         .from(salesWeekPlans)
         .where(eq(salesWeekPlans.weekStart, weekKey))
