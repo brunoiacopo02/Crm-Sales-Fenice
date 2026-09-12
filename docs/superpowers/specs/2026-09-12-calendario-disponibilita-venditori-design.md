@@ -26,7 +26,7 @@ direzione.
 | Segnalazione assenza | La multa scatta subito; l'admin può annullarla con motivo. |
 | Blocco tardivo (<1h) | Il sistema lo impedisce. |
 | Compilazione in ritardo | Multa da 50 € definitiva, ma il calendario resta apribile. Una sola multa per settimana. |
-| Soglia "compilato" | Basta aver salvato almeno una volta entro lunedì 14:00. Nessun minimo di ore. |
+| Soglia "compilato" | Basta aver salvato almeno una volta entro lunedì 14:00. Nessun minimo di ore. ~~(nessun altro modo di risultare compilato)~~ **Ripensamento PO, 2026-09-12 (Task 5, opzione B)**: chi ha impostato una settimana tipo risulta compilato in automatico — il cron la materializza in un piano vero (righe reali in `salesWeekPlans`/`salesAvailabilitySlots`) per le settimane che non ha ancora compilato di persona, e quel piano vale come salvataggio a tutti gli effetti: niente multa del lunedì. Attenzione a non leggere questo come "avere un modello basta": finché il piano non è stato materializzato (o compilato a mano) la settimana resta una proposta, non una compilazione — vedi §2.1. |
 | Sales 001 | Esente da obblighi, promemoria e multe. Resta visibile ovunque e il suo calendario funziona se vuole usarlo. |
 | Posizionamento | Due pagine nuove: `/mio-calendario` e `/calendari-venditori`. |
 | Blocco su slot già occupato | Rifiutato (regola proposta da Claude, accettata dal PO). |
@@ -35,6 +35,26 @@ direzione.
 La griglia 9–21 Lun–Sab è confermata dai dati: sugli ultimi 90 giorni gli appuntamenti
 assegnati a un venditore cadono quasi sempre a ora piena fra le 9 e le 21, con zero
 appuntamenti di domenica.
+
+### 2.1 Ripensamento PO, 2026-09-12 (Task 5): default verde e settimana tipo
+
+~~La griglia si apre vuota: ogni ora va spuntata a mano, una cella non toccata resta
+bianca ("libero", cioè non ancora dichiarata).~~ **Ripensamento**: la griglia si apre
+già piena — tutte le ore future della settimana preselezionate — e il venditore toglie
+quelle che non vanno bene. Una cella non selezionata è ora una scelta esplicita, "non
+disponibile", non un'assenza di scelta: la griglia la mostra rossa invece che bianca
+(`SlotGrid.tsx`, stato `nondisponibile`). Resta comunque vero che **non si scrive nulla
+a DB finché il venditore non preme Salva**: il default verde è una proposta lato
+client, non una dichiarazione.
+
+Il venditore può anche impostare una **settimana tipo** una volta sola — giorno della
+settimana + ora, senza una data (`salesWeekTemplateSlots`) — che vale finché non la
+cambia. Il cron la materializza in un piano vero nelle settimane che non ha ancora
+compilato di persona, entro la finestra che copre (oggi quattro settimane:
+`calendarRunner.ts`); una settimana così materializzata conta come compilata (vedi la
+riga aggiornata in §2) e resta comunque modificabile a mano dalla griglia normale.
+Editor: `TemplateEditor.tsx`, azioni `getMyTemplate`/`saveMyTemplate`/`clearMyTemplate`
+in `salesCalendarActions.ts`.
 
 ## 3. Modello dati (migrazione `0034_sales_calendar.sql`)
 
