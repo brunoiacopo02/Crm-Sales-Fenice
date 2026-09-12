@@ -22,7 +22,7 @@ direzione.
 | Tema | Decisione |
 |---|---|
 | Griglia | Ore piene 9:00–21:00, lunedì–sabato. Domenica non compilabile. |
-| Vincolo sulle Conferme | Avviso, non blocco. Possono fissare fuori disponibilità, ma quello slot non genera mai multa. |
+| Vincolo sulle Conferme | ~~Avviso, non blocco. Possono fissare fuori disponibilità, ma quello slot non genera mai multa.~~ **Ripensamento PO, 2026-09-12 (stesso giorno, dopo la prima stesura di questa spec): Blocco con forzatura motivata. Admin e manager esenti.** Uno slot forzato continua a non generare mai multa. |
 | Segnalazione assenza | La multa scatta subito; l'admin può annullarla con motivo. |
 | Blocco tardivo (<1h) | Il sistema lo impedisce. |
 | Compilazione in ritardo | Multa da 50 € definitiva, ma il calendario resta apribile. Una sola multa per settimana. |
@@ -279,6 +279,13 @@ In particolare, sullo slot fissato fuori disponibilità: *"Questo slot non era
 dichiarato disponibile: non può generare multa."* È la conseguenza diretta della
 scelta "avviso, non blocco".
 
+**Ripensamento PO, 2026-09-12: la scelta "avviso, non blocco" di §2 è diventata un
+blocco con forzatura motivata.** Questa conseguenza resta comunque vera, e non per
+caso: una forzatura avviene *solo* su uno slot non dichiarato o bloccato (§2 aggiornato),
+cioè esattamente le due condizioni che il punto 2 qui sopra già rifiuta. Uno slot
+forzato non può quindi mai generare multa, senza bisogno di codice apposta — è la
+stessa regola di sempre, letta con l'occhio della forzatura invece che dell'avviso.
+
 Sul punto 2 serve una precisazione, perché la disponibilità è mutevole: la verifica si
 fa sullo stato **attuale** delle righe, non su uno storico. Un venditore non può però
 cancellare a posteriori la disponibilità di uno slot passato — le settimane passate
@@ -386,7 +393,10 @@ Modifiche a `VenditoriAgendaModal` e a `getVenditoriAgenda`:
 
 - riga di copertura in cima a ogni giornata (`9–13: 3 · 14–17: 4 · 18–21: 1`) con il
   dettaglio dei nomi al passaggio;
-- slot non dichiarati in grigio, con avviso — non blocco — se ci si fissa sopra;
+- slot non dichiarati in grigio, con avviso — ~~non blocco~~ **ripensamento PO,
+  2026-09-12: ora è un blocco, scavalcabile solo scrivendo un motivo che resta
+  tracciato (evento `appointment_forced`); esenti solo admin e manager** — se ci si
+  fissa sopra;
 - bottone "Non c'era" sugli slot passati, con le regole di §4.7.
 
 ### 6.4 `/monitor-vendite`

@@ -19,9 +19,10 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isConfermeSchedaComplete } from "@/lib/surveys/scheda"
 import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
-import { slotKey, weekStartFor } from "@/lib/venditore/calendarSlots"
+import { slotKey, slotStartFor, weekStartFor } from "@/lib/venditore/calendarSlots"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
+import { bookingCheck, bookingRefusalMessage, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -342,7 +343,39 @@ export async function getConfermeAppointments(filters: {
     };
 }
 
-export async function updateLeadDataConferme(leadId: string, currentVersion: number, data: { name: string, email: string, appointmentDate: Date, appointmentNote: string }) {
+/**
+ * Il muro del fissaggio. Solo le Conferme ci sbattono contro: admin e manager
+ * fissano dove vogliono (decisione PO 2026-09-12).
+ *
+ * Le tabelle del calendario sono per-utente e non per-azienda: nessun filtro
+ * companyId qui, sarebbe un bug su Serenamente.
+ */
+async function checkBookingAllowed(
+    salesUserId: string | null | undefined,
+    appointmentAt: Date | null | undefined,
+    role: string | undefined,
+): Promise<BookingDecision> {
+    if (role !== 'CONFERME') return { ok: true }
+    if (!salesUserId || !appointmentAt) return { ok: true }
+
+    const slot = slotStartFor(new Date(appointmentAt))
+    if (!slot) return { ok: false, reason: 'fuori_griglia' }
+
+    const [declared] = await db.select({ id: salesAvailabilitySlots.id })
+        .from(salesAvailabilitySlots).where(and(
+            eq(salesAvailabilitySlots.salesUserId, salesUserId),
+            eq(salesAvailabilitySlots.slotStart, slot),
+        ))
+    const [blocked] = await db.select({ id: salesSlotBlocks.id })
+        .from(salesSlotBlocks).where(and(
+            eq(salesSlotBlocks.salesUserId, salesUserId),
+            eq(salesSlotBlocks.slotStart, slot),
+        ))
+
+    return bookingCheck({ slot, declared: !!declared, blocked: !!blocked })
+}
+
+export async function updateLeadDataConferme(leadId: string, currentVersion: number, data: { name: string, email: string, appointmentDate: Date, appointmentNote: string }, forceReason?: string): Promise<{ success: boolean; error?: string; needsForce?: boolean }> {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
@@ -363,6 +396,20 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
     // Concurrency Check
     if (oldLead.version !== currentVersion) {
         throw new Error("CONCURRENCY_ERROR")
+    }
+
+    let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
+    const gate = await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role)
+    if (!gate.ok) {
+        const motivo = forceReason?.trim()
+        if (!motivo) {
+            return {
+                success: false,
+                error: bookingRefusalMessage(gate.reason, new Date(data.appointmentDate)),
+                needsForce: true,
+            }
+        }
+        forcedBooking = { reason: gate.reason, motivo }
     }
 
     const updated = await db.update(leads).set({
@@ -425,6 +472,23 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
         },
         companyId: ctx.companyId,
     })
+
+    if (forcedBooking) {
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'appointment_forced',
+            userId: session.user.id,
+            timestamp: new Date(),
+            metadata: {
+                salesUserId: oldLead.salespersonUserId,
+                appointmentAt: data.appointmentDate,
+                reason: forcedBooking.reason,
+                motivo: forcedBooking.motivo,
+            },
+            companyId: ctx.companyId,
+        })
+    }
 
     return { success: true }
 }
@@ -555,7 +619,7 @@ async function getSalespersonName(userId: string | undefined, companyId: string)
     return user ? (user.displayName || user.name || userId) : userId;
 }
 
-export async function setConfermeOutcome(leadId: string, currentVersion: number, outcome: "scartato" | "confermato", reason?: string, salespersonAssigned?: string) {
+export async function setConfermeOutcome(leadId: string, currentVersion: number, outcome: "scartato" | "confermato", reason?: string, salespersonAssigned?: string, forceReason?: string) {
     try {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -595,6 +659,25 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         // l'agenda dei venditori dal CRM (VenditoriAgendaModal, che mostra anche
         // gli impegni esterni GCal) e si coordinano al telefono: un "busy" su
         // Google non deve impedire di fissare l'appuntamento.
+
+        // Il muro del fissaggio (decisione PO 2026-09-12): si applica solo
+        // quando questa chiamata sta davvero assegnando un appuntamento
+        // confermato a un venditore.
+        let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
+        if (outcome === 'confermato' && salespersonAssigned) {
+            const gate = await checkBookingAllowed(salespersonAssigned, oldLead.appointmentDate, session.user.role)
+            if (!gate.ok) {
+                const motivo = forceReason?.trim()
+                if (!motivo) {
+                    return {
+                        success: false,
+                        error: bookingRefusalMessage(gate.reason, new Date(oldLead.appointmentDate!)),
+                        needsForce: true,
+                    }
+                }
+                forcedBooking = { reason: gate.reason, motivo }
+            }
+        }
 
         // Riassegnazione a un venditore DIVERSO da quello attuale: lo stato della
         // trattativa precedente (check-in, esito, storia) appartiene al vecchio
@@ -706,6 +789,23 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             metadata: { outcome, reason, salespersonAssigned },
             companyId: ctx.companyId,
         })
+
+        if (forcedBooking) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'appointment_forced',
+                userId: session.user.id,
+                timestamp: new Date(),
+                metadata: {
+                    salesUserId: salespersonAssigned,
+                    appointmentAt: oldLead.appointmentDate,
+                    reason: forcedBooking.reason,
+                    motivo: forcedBooking.motivo,
+                },
+                companyId: ctx.companyId,
+            })
+        }
 
         if (isReassignment) {
             await db.insert(leadEvents).values({
@@ -1248,7 +1348,7 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
     newAppointmentDate?: Date | null,
     needsReschedule?: boolean,
     recallNotes?: string
-}) {
+}, forceReason?: string) {
     try {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -1266,6 +1366,25 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
         )))[0];
         if (!oldLead) throw new Error("Lead not found");
         if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
+
+        // Il muro del fissaggio (decisione PO 2026-09-12): si applica solo
+        // quando il richiamo sta davvero fissando una nuova data (il ramo
+        // needsReschedule si limita ad azzerarla, niente da controllare lì).
+        let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
+        if (payload.newAppointmentDate) {
+            const gate = await checkBookingAllowed(oldLead.salespersonUserId, payload.newAppointmentDate, session.user.role)
+            if (!gate.ok) {
+                const motivo = forceReason?.trim()
+                if (!motivo) {
+                    return {
+                        success: false,
+                        error: bookingRefusalMessage(gate.reason, new Date(payload.newAppointmentDate)),
+                        needsForce: true,
+                    }
+                }
+                forcedBooking = { reason: gate.reason, motivo }
+            }
+        }
 
         let toUpdate: any = {
             recallDate: payload.recallDate || null,
@@ -1386,6 +1505,23 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             metadata: { payload },
             companyId: ctx.companyId,
         });
+
+        if (forcedBooking) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'appointment_forced',
+                userId: session.user.id,
+                timestamp: new Date(),
+                metadata: {
+                    salesUserId: oldLead.salespersonUserId,
+                    appointmentAt: payload.newAppointmentDate,
+                    reason: forcedBooking.reason,
+                    motivo: forcedBooking.motivo,
+                },
+                companyId: ctx.companyId,
+            })
+        }
 
         return { success: true };
     } catch (e: any) {
