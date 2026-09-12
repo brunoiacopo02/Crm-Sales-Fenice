@@ -406,7 +406,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
         const nextFollowUpAt = payload.outcome === 'Non chiuso' ? (payload.nextFollowUpDate || null) : null
         await syncFollowUpBlock(tx, {
             companyId: ctx.companyId,
-            salesUserId: oldLead.salespersonUserId ?? session.user.id,
+            salesUserId: oldLead.salespersonUserId,
             leadId,
             followUpAt: nextFollowUpAt,
             actorId: session.user.id,
@@ -606,7 +606,7 @@ export async function rescheduleFollowUp(leadId: string, newDate: Date): Promise
         // Il follow-up si è spostato: il blocco calendario lo segue sul nuovo slot.
         await syncFollowUpBlock(tx, {
             companyId: ctx.companyId,
-            salesUserId: lead.salespersonUserId ?? userId,
+            salesUserId: lead.salespersonUserId,
             leadId,
             followUpAt: newDate,
             actorId: userId,

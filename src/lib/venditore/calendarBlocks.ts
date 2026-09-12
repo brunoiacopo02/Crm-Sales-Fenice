@@ -22,11 +22,19 @@ type Db = { insert: any; update: any; delete: any; select: any }
  */
 export async function syncFollowUpBlock(tx: Db, params: {
     companyId: string
-    salesUserId: string
+    /** Null = il lead non ha un venditore: non c'e' nessun calendario da occupare. */
+    salesUserId: string | null
     leadId: string
     followUpAt: Date | null
     actorId: string
 }): Promise<void> {
+    // Senza venditore non si blocca il calendario di nessuno — men che meno
+    // quello di chi sta agendo, che con questo lead non c'entra. L'eventuale
+    // blocco rimasto da un'assegnazione precedente si libera.
+    if (!params.salesUserId) {
+        await releaseFollowUpBlock(tx, { leadId: params.leadId })
+        return
+    }
     const slot = params.followUpAt ? slotStartFor(params.followUpAt) : null
     if (!slot) {
         await releaseFollowUpBlock(tx, { leadId: params.leadId })
