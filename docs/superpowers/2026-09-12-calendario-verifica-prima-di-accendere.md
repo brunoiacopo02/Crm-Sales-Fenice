@@ -81,3 +81,37 @@ Finché quella env non è in produzione la sezione multe resta vuota **per proge
 
 - **`saveVenditoreOutcome` non ha alcun controllo di proprietà del lead**, per nessun ruolo: un venditore può registrare l'esito su un lead assegnato a un altro. Preesistente. Il raggio d'azione si è allargato, perché quella funzione ora scrive anche sui blocchi del calendario del venditore titolare.
 - **`weekBoundsRome`** (`src/lib/dateUtils.ts`) riusa l'offset del giorno in ingresso per costruire il lunedì: nelle due domeniche del cambio d'ora sbaglia di un'ora, per tutti i suoi chiamanti. Il calendario non ne è affetto.
+
+---
+
+# Parte 2 — Il muro sul fissaggio (branch `feat/fissaggio-vincolato`)
+
+Da questo lavoro le Conferme possono fissare un appuntamento a un venditore **solo** su un'ora che lui ha dichiarato e non ha bloccato. Possono scavalcarlo scrivendo un motivo, che finisce nella scheda **Forzature** di `/calendari-venditori`. Admin e manager non sono soggetti. Gli impegni letti dal Google Calendar dei venditori sono stati tolti dall'agenda; la **creazione** degli eventi sul loro calendario resta e funziona anche sugli appuntamenti forzati.
+
+## L'interruttore
+
+`BOOKING_WALL=off` spegne il muro. Il muro nasce **acceso**: solo il valore esatto `off` lo spegne (`OFF`, `false`, `0` non bastano). Si cambia dal pannello Vercel senza un deploy.
+
+## La decisione di accensione
+
+Al 12/09, per la settimana del 14 avevano dichiarato le ore: Sales 002 (9), Sales 004 (13), Sales 008 (11); Sales 003 e Sales 010 **zero**. Sales 001 è esente. Le Conferme registrano 30-57 esiti "confermato" al giorno.
+
+Accendere il muro contro un calendario così significa che quasi ogni appuntamento diventa una forzatura, e in mezza giornata "Fissa comunque" diventa il bottone normale — a quel punto la scheda Forzature registra il lavoro ordinario e il muro non vincola più niente.
+
+**Guardare la scheda Compilazione lunedì dopo le 14:00 prima di decidere.**
+
+## Cosa verificare dal vivo
+
+1. Da **CONFERME**, su un venditore che ha dichiarato: fissare su un'ora dichiarata (passa senza attriti), su un'ora non dichiarata (muro + motivo + "Fissa comunque"), su un'ora che lui ha bloccato (muro), di domenica o alle 22 (muro "fuori griglia").
+2. Su un lead **già confermato e assegnato**: cambiare **solo l'email** dalla scheda Dati e salvare. Deve passare senza chiedere un motivo: è il caso in cui il muro scattava a vuoto.
+3. Riconfermare un lead **senza cambiare venditore**: deve passare. Riassegnarlo a un venditore **diverso**: il muro deve scattare.
+4. Da **ADMIN** e da **MANAGER**: fissare su un'ora non dichiarata — nessun muro, nessuna riga in Forzature.
+5. Dopo una forzatura: aprire `/calendari-venditori` → **Forzature** e controllare la riga (Conferma, lead, venditore, ora, motivo del rifiuto, motivo scritto); poi aprire il **Google Calendar del venditore** e verificare che l'evento sia arrivato.
+6. Lasciare che il **bot** fissi un appuntamento da `/api/bot/outcome`: non deve essere respinto e non deve generare righe in Forzature.
+7. Nell'agenda delle Conferme: sui giorni **futuri** devono comparire pastiglie verdi "Libero — HH:00" sulle ore dichiarate e libere; sui giorni **passati** resta la pastiglia grigia col bottone "Non c'era".
+
+## Aperto — decisioni da prendere
+
+1. **Le ore di oggi già passate non compaiono fra le pastiglie verdi.** Scelta dell'implementer, non richiesta: promettere "qui si fissa" su un'ora trascorsa sarebbe falso. Una riga da togliere se non convince.
+2. **Le pastiglie verdi sono per venditore, non per ora**: con quattro venditori disponibili alle 18:00 la colonna mostra quattro pastiglie. Questione di densità, non un difetto.
+3. **Nessun test automatico** sulle tre condizioni nuove del muro (confronto per slot, date fuori griglia, riconferma contro riassegnazione): vivono dentro server action e il progetto non ha mock. L'unica rete è la verifica manuale qui sopra.
