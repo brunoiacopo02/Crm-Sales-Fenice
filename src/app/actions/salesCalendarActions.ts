@@ -80,6 +80,16 @@ export interface CalendarWeekView {
     editable: boolean
     readOnlyReason: 'settimana_passata' | 'altro_venditore' | null
     isExempt: boolean
+    /**
+     * Di CHI e' il calendario in questa vista: chi guarda (il caso normale) o
+     * il venditore scelto con `?venditore=<id>` da ADMIN/MANAGER/CONFERME.
+     *
+     * Il client deve ripassarlo ad ogni ricarica — cambio settimana compreso.
+     * Senza, `getCalendarWeek` senza `salesUserId` ricade sul chiamante e la
+     * pagina scivola in silenzio sul proprio calendario: si crede di guardare
+     * lui e si stanno guardando le proprie ore.
+     */
+    targetUserId: string
     mySlots: string[]
     /**
      * true = ESISTE una riga `salesWeekPlans` per questa settimana, cioe'
@@ -247,9 +257,13 @@ export async function getCalendarWeek(input?: {
         // di oggi, invariato.
         mySlots = availRows.map(r => slotKey(r.slotStart))
         fromTemplate = plan.fromTemplate
-    } else if (template.length > 0) {
+    } else if (template.length > 0 && isSelf) {
         // 2) Nessun piano salvato, ma il venditore ha un modello: proponiamo
-        // le sue ore, senza scriverle.
+        // le sue ore, senza scriverle. Anche questa e' una PROPOSTA, quindi
+        // vale solo sul proprio calendario, per la stessa ragione del ramo 3
+        // qui sotto: su un calendario altrui una Conferma vedrebbe verde,
+        // proverebbe a fissare, e il muro la respingerebbe perche' a DB quelle
+        // ore non ci sono ancora.
         mySlots = slotsFromTemplate(template, weekStart, now).map(slotKey)
         fromTemplate = true
     } else if (isSelf) {
@@ -266,10 +280,11 @@ export async function getCalendarWeek(input?: {
         mySlots = weekSlots(weekStart).filter(s => s > now).map(slotKey)
         fromTemplate = false
     } else {
-        // 4) Calendario di un altro venditore senza piano ne' modello: niente
-        // da mostrare. Il client, vedendo `declared: false`, lascia le celle
-        // bianche (mai compilato) invece di tingerle di rosso (ha scelto di
-        // non esserci).
+        // 4) Calendario di un altro venditore senza piano: niente da mostrare.
+        // Su una persona diversa da chi guarda si mostrano solo i DATI VERI —
+        // il ramo 1 e basta. Il client, vedendo `declared: false`, lascia le
+        // celle bianche (mai compilato) invece di tingerle di rosso (ha scelto
+        // di non esserci).
         mySlots = []
         fromTemplate = false
     }
@@ -280,6 +295,7 @@ export async function getCalendarWeek(input?: {
         editable,
         readOnlyReason,
         isExempt: targetInfo?.calendarExempt ?? false,
+        targetUserId,
         mySlots,
         declared: plan !== undefined,
         template,

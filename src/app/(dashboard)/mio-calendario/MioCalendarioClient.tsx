@@ -180,17 +180,23 @@ export function MioCalendarioClient({ initial, role }: Props) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data.weekStartIso])
 
+    // `salesUserId` va ripassato SEMPRE, anche quando si cambia solo settimana:
+    // senza, `getCalendarWeek` ricade sul chiamante e chi stava guardando il
+    // calendario di un collega (`?venditore=<id>`) alla prima freccia si
+    // ritrova davanti il proprio, senza che nulla lo segnali. Sul proprio
+    // calendario è un no-op: `targetUserId` coincide già con chi guarda.
+    const targetUserId = data.targetUserId
     const loadWeek = useCallback((weekStartIso: string) => {
         setError(null)
         startTransition(async () => {
             try {
-                const fresh = await getCalendarWeek({ weekStartIso })
+                const fresh = await getCalendarWeek({ weekStartIso, salesUserId: targetUserId })
                 setData(fresh)
             } catch (e: any) {
                 setError(e?.message || 'Errore caricamento calendario.')
             }
         })
-    }, [])
+    }, [targetUserId])
 
     const maxForwardWeekMs = useMemo(
         () => addWeeks(weekStartFor(new Date()), MAX_WEEKS_FORWARD).getTime(),
@@ -472,7 +478,10 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 return
             }
             try {
-                const fresh = await getCalendarWeek({ weekStartIso: data.weekStartIso })
+                // Stesso `salesUserId` di `loadWeek`: qui è sempre il proprio
+                // calendario (si salva solo il proprio), ma la regola vale una
+                // sola, così non c'è una seconda lettura da ricordarsi.
+                const fresh = await getCalendarWeek({ weekStartIso: data.weekStartIso, salesUserId: targetUserId })
                 setData(fresh)
             } catch (e: any) {
                 setError(e?.message || 'Salvato, ma il ricaricamento è fallito: aggiorna la pagina.')
