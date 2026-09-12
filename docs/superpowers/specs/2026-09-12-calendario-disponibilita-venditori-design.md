@@ -265,6 +265,13 @@ data di entrata in vigore — senza quella env non viene registrato nulla, così
 regola non può partire retroattiva. È la lezione del malus ritardi, che sembrò rotto
 per giorni solo perché la env non era in produzione.
 
+**Kill-switch del muro del fissaggio** (§6.3), il terzo della famiglia:
+`BOOKING_WALL=off` sospende il blocco sulle Conferme — solo quel valore esatto lo
+spegne, il muro nasce acceso e resta acceso con la env assente o con qualunque altro
+valore. Spento, le Conferme tornano a fissare dove vogliono e non viene più registrata
+nessuna forzatura. Serve perché l'alternativa, se lunedì mattina il muro si rivelasse
+ingestibile, sarebbe un revert e un redeploy sotto pressione con quattro persone ferme.
+
 ### 4.7 Multa "assente allo slot" — 50 €
 
 Il bottone vive nell'agenda venditori che le Conferme già aprono. È attivo solo se:
@@ -397,7 +404,14 @@ Modifiche a `VenditoriAgendaModal` e a `getVenditoriAgenda`:
   2026-09-12: ora è un blocco, scavalcabile solo scrivendo un motivo che resta
   tracciato (evento `appointment_forced`); esenti solo admin e manager** — se ci si
   fissa sopra;
-- bottone "Non c'era" sugli slot passati, con le regole di §4.7.
+- ore dichiarate e ancora libere mostrate come pastiglia verde `Libero — 18:00` su
+  oggi e sui giorni futuri: la riga di copertura dice solo chi è disponibile in
+  **tutta** una fascia e perde chi ha dichiarato una sola ora, quindi da sola
+  indicava dove *non* si può fissare e mai dove si può. Sul futuro la pastiglia non
+  porta il bottone "Non c'era", che lì sarebbe solo un bottone spento;
+- bottone "Non c'era" sugli slot passati, con le regole di §4.7 — lì la pastiglia
+  resta quella grigia "Slot vuoto" di sempre;
+- il muro si spegne senza deploy con `BOOKING_WALL=off` (§4.6).
 
 ### 6.4 `/monitor-vendite`
 

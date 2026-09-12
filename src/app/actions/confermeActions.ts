@@ -355,6 +355,10 @@ async function checkBookingAllowed(
     appointmentAt: Date | null | undefined,
     role: string | undefined,
 ): Promise<BookingDecision> {
+    // Interruttore gemello di quelli delle altre regole che vincolano
+    // (SALES_CALENDAR_PENALTIES, BOT_ROUTING, ...): il muro nasce acceso, ma
+    // si spegne dal pannello Vercel in trenta secondi, senza un deploy.
+    if (process.env.BOOKING_WALL === 'off') return { ok: true }
     if (role !== 'CONFERME') return { ok: true }
     if (!salesUserId || !appointmentAt) return { ok: true }
 
@@ -399,8 +403,25 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
             return { success: false, error: "CONCURRENCY_ERROR" }
         }
 
+        // Decisione PO 4: il vincolo vale sulle assegnazioni nuove e sui cambi di
+        // data, mai a ritroso. Qui un solo bottone ("Salva Tutti i Dati") salva
+        // nome, email, nota E data: se l'appuntamento non si muove, correggere
+        // un'email non deve chiedere un motivo di forzatura né lasciare una
+        // forzatura in supervisione. Il confronto è per slot e non per istante
+        // perché il form tronca a HH:mm e i secondi darebbero falsi positivi;
+        // il confronto per istante resta come rete per le date fuori griglia,
+        // dove `slotStartFor` non restituisce alcuno slot.
+        const oldApptSlot = oldLead.appointmentDate ? slotStartFor(new Date(oldLead.appointmentDate)) : null
+        const newApptSlot = data.appointmentDate ? slotStartFor(new Date(data.appointmentDate)) : null
+        const appointmentUnchanged = !!oldLead.appointmentDate && (
+            (!!oldApptSlot && !!newApptSlot && oldApptSlot.getTime() === newApptSlot.getTime())
+            || oldLead.appointmentDate.getTime() === data.appointmentDate?.getTime()
+        )
+
         let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
-        const gate = await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role)
+        const gate: BookingDecision = appointmentUnchanged
+            ? { ok: true }
+            : await checkBookingAllowed(oldLead.salespersonUserId, data.appointmentDate, session.user.role)
         if (!gate.ok) {
             const motivo = forceReason?.trim()
             if (!motivo) {
@@ -661,15 +682,20 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         }
 
         // NB: nessun blocco FreeBusy su Google Calendar. Le Conferme vedono già
-        // l'agenda dei venditori dal CRM (VenditoriAgendaModal, che mostra anche
+        // l'agenda dei venditori dal CRM (VenditoriAgendaModal, che dal Task 3
+        // mostra solo gli appuntamenti del CRM e i blocchi dichiarati, non più
         // gli impegni esterni GCal) e si coordinano al telefono: un "busy" su
         // Google non deve impedire di fissare l'appuntamento.
 
         // Il muro del fissaggio (decisione PO 2026-09-12): si applica solo
         // quando questa chiamata sta davvero assegnando un appuntamento
-        // confermato a un venditore.
+        // confermato a un venditore. Non su una riconferma a vuoto — stesso
+        // venditore e lead già confermato: lì non c'è né assegnazione nuova né
+        // cambio di data, e il vincolo non vale a ritroso (decisione PO 4).
+        // Il caso che conta, il riassegno a un venditore DIVERSO, resta coperto.
         let forcedBooking: { reason: BookingRefusal; motivo: string } | null = null
-        if (outcome === 'confermato' && salespersonAssigned) {
+        if (outcome === 'confermato' && salespersonAssigned
+            && (salespersonAssigned !== oldLead.salespersonUserId || oldLead.confirmationsOutcome !== 'confermato')) {
             const gate = await checkBookingAllowed(salespersonAssigned, oldLead.appointmentDate, session.user.role)
             if (!gate.ok) {
                 const motivo = forceReason?.trim()
