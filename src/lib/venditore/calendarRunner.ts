@@ -9,16 +9,125 @@
  */
 
 import { db } from '@/db'
-import { users, salesWeekPlans, salesLatePenalties, notifications } from '@/db/schema'
+import { users, salesWeekPlans, salesLatePenalties, notifications, salesAvailabilitySlots, salesWeekTemplateSlots } from '@/db/schema'
 import { and, eq, inArray, gte } from 'drizzle-orm'
 import { toRomeDateStr } from '../dateUtils'
-import { weekStartFor, weeklyDeadline, romeHour, romeDow } from './calendarSlots'
+import { weekStartFor, weeklyDeadline, romeHour, romeDow, addWeeks } from './calendarSlots'
+import { slotsFromTemplate, type TemplateSlot } from './calendarTemplate'
 import { selectMissingCalendarPenalties, calendarRuleState, type CalendarUserRow } from './calendarRules'
 
 export interface CalendarRunnerResult {
     registered: number
     reminders: number
     skipped: string | null
+    materialized: TemplateMaterializationResult
+}
+
+export interface TemplateMaterializationResult {
+    weeks: number
+    slots: number
+}
+
+/** Quante settimane in avanti copre la materializzazione: la corrente + tre. */
+const TEMPLATE_LOOKAHEAD_WEEKS = 4
+
+/**
+ * Materializza la "settimana tipo" (`salesWeekTemplateSlots`) in ore vere
+ * (`salesAvailabilitySlots` + riga `salesWeekPlans`) per la settimana corrente
+ * e le tre successive, per ogni venditore attivo che ha impostato un modello.
+ *
+ * Tocca solo le settimane SENZA riga in `salesWeekPlans`: una settimana
+ * compilata a mano (o già materializzata) non si riscrive mai. Idempotente per
+ * costruzione — `onConflictDoNothing()` sugli slot e sul piano — così un
+ * secondo giro dello stesso cron (ogni 30 minuti) non produce nulla di nuovo.
+ *
+ * Deve girare PRIMA del calcolo delle multe in `runCalendarWeekly`: altrimenti
+ * il primo giro del lunedì dopo le 14:00 multerebbe qualcuno un istante prima
+ * di compilargli la settimana dal suo stesso modello.
+ */
+export async function materializeTemplates(now: Date = new Date()): Promise<TemplateMaterializationResult> {
+    // Nessun filtro companyId: tabella per-utente (vedi NOTA COMUNE in schema.ts).
+    const templateRows = await db.select({
+        salesUserId: salesWeekTemplateSlots.salesUserId,
+        dow: salesWeekTemplateSlots.dow,
+        hour: salesWeekTemplateSlots.hour,
+    }).from(salesWeekTemplateSlots)
+    if (templateRows.length === 0) return { weeks: 0, slots: 0 }
+
+    const templatesByUser = new Map<string, TemplateSlot[]>()
+    for (const row of templateRows) {
+        const arr = templatesByUser.get(row.salesUserId)
+        if (arr) arr.push({ dow: row.dow, hour: row.hour })
+        else templatesByUser.set(row.salesUserId, [{ dow: row.dow, hour: row.hour }])
+    }
+
+    // Solo isActive: gli esenti (calendarExempt) hanno comunque diritto al
+    // modello se lo impostano, escluderli sarebbe un'altra regola non chiesta.
+    const venditori = await db.select({
+        id: users.id,
+        companyId: users.companyId,
+    }).from(users).where(and(
+        eq(users.role, 'VENDITORE'),
+        eq(users.isActive, true),
+        inArray(users.id, [...templatesByUser.keys()]),
+    ))
+    if (venditori.length === 0) return { weeks: 0, slots: 0 }
+
+    const weekStarts: Date[] = []
+    for (let i = 0; i < TEMPLATE_LOOKAHEAD_WEEKS; i++) weekStarts.push(addWeeks(weekStartFor(now), i))
+    const weekKeys = weekStarts.map(toRomeDateStr)
+
+    // Nessun filtro companyId: tabella per-utente.
+    const existingPlans = await db.select({
+        salesUserId: salesWeekPlans.salesUserId,
+        weekStart: salesWeekPlans.weekStart,
+    }).from(salesWeekPlans).where(and(
+        inArray(salesWeekPlans.salesUserId, venditori.map(v => v.id)),
+        inArray(salesWeekPlans.weekStart, weekKeys),
+    ))
+    const already = new Set(existingPlans.map(p => `${p.salesUserId}@${p.weekStart}`))
+
+    let weeks = 0
+    let slots = 0
+
+    for (const venditore of venditori) {
+        const template = templatesByUser.get(venditore.id)
+        if (!template) continue
+
+        for (let i = 0; i < weekStarts.length; i++) {
+            const weekStart = weekStarts[i]
+            const weekKey = weekKeys[i]
+            if (already.has(`${venditore.id}@${weekKey}`)) continue
+
+            const wanted = slotsFromTemplate(template, weekStart, now)
+            if (wanted.length === 0) continue
+
+            await db.insert(salesAvailabilitySlots).values(wanted.map(slotStart => ({
+                id: crypto.randomUUID(),
+                companyId: venditore.companyId,
+                salesUserId: venditore.id,
+                slotStart,
+                weekStart: weekKey,
+            }))).onConflictDoNothing()
+
+            await db.insert(salesWeekPlans).values({
+                id: crypto.randomUUID(),
+                companyId: venditore.companyId,
+                salesUserId: venditore.id,
+                weekStart: weekKey,
+                submittedAt: now,
+                updatedAt: now,
+                slotCount: wanted.length,
+                late: false,
+                fromTemplate: true,
+            }).onConflictDoNothing()
+
+            weeks++
+            slots += wanted.length
+        }
+    }
+
+    return { weeks, slots }
 }
 
 /** Ore italiane in cui parte un promemoria del lunedì. */
@@ -27,7 +136,7 @@ const REMINDER_HOURS = [10, 13]
 export async function runCalendarWeekly(now: Date = new Date()): Promise<CalendarRunnerResult> {
     const state = calendarRuleState()
     if (!state.active) {
-        return { registered: 0, reminders: 0, skipped: state.reason }
+        return { registered: 0, reminders: 0, skipped: state.reason, materialized: { weeks: 0, slots: 0 } }
     }
 
     const weekStart = weekStartFor(now)
@@ -42,6 +151,11 @@ export async function runCalendarWeekly(now: Date = new Date()): Promise<Calenda
         // scadenza non viene multato per una settimana in cui non esisteva.
         createdAt: users.createdAt,
     }).from(users).where(eq(users.role, 'VENDITORE')))
+
+    // Prima delle multe: chi ha un modello risulta compilato in automatico, e
+    // la query di `plans` qui sotto (da cui nasce `submitted`) deve già
+    // vederlo — altrimenti lo si multerebbe un istante prima di materializzarlo.
+    const materialized = await materializeTemplates(now)
 
     const plans = await db.select({ salesUserId: salesWeekPlans.salesUserId })
         .from(salesWeekPlans)
@@ -82,7 +196,7 @@ export async function runCalendarWeekly(now: Date = new Date()): Promise<Calenda
     }
 
     const reminders = await sendMondayReminders(now, weekStart, weekKey, venditori, submitted)
-    return { registered, reminders, skipped: null }
+    return { registered, reminders, skipped: null, materialized }
 }
 
 /**
