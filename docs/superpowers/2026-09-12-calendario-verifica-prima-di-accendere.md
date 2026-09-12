@@ -115,3 +115,44 @@ Accendere il muro contro un calendario così significa che quasi ogni appuntamen
 1. **Le ore di oggi già passate non compaiono fra le pastiglie verdi.** Scelta dell'implementer, non richiesta: promettere "qui si fissa" su un'ora trascorsa sarebbe falso. Una riga da togliere se non convince.
 2. **Le pastiglie verdi sono per venditore, non per ora**: con quattro venditori disponibili alle 18:00 la colonna mostra quattro pastiglie. Questione di densità, non un difetto.
 3. **Nessun test automatico** sulle tre condizioni nuove del muro (confronto per slot, date fuori griglia, riconferma contro riassegnazione): vivono dentro server action e il progetto non ha mock. L'unica rete è la verifica manuale qui sopra.
+
+---
+
+# Parte 3 — Settimana tipo e griglia a default verde (branch `feat/settimana-tipo`)
+
+La griglia si apre **piena** e si tolgono le ore che non vanno bene; una cella non scelta è rossa. Il "⋯" di ogni cella apre un menu a tre voci — Disponibile, Imprevisto, Non disponibile — con le ragioni scritte dentro il menu. E c'è la **settimana tipo**: un orario abituale impostato una volta, che il cron materializza in ore vere sulle settimane non ancora compilate.
+
+**Decisione del PO (opzione B): la settimana tipo vale da sé.** Chi ne ha una risulta compilato in automatico e **non prende più la multa del lunedì**. Le ore materializzate sono dichiarazioni a tutti gli effetti: multabili 50 € per assenza, e prenotabili dalle Conferme.
+
+## Gli interruttori, e come NON usarli
+
+| Env | Spegne | Nasce |
+|---|---|---|
+| `SALES_CALENDAR_PENALTIES=off` | le multe del calendario | accesa |
+| `SALES_CALENDAR_PENALTIES_FROM` | senza, nessuna multa | impostata al 14/09 |
+| `BOOKING_WALL=off` | il muro sul fissaggio | acceso |
+| `SALES_TEMPLATE_MATERIALIZE=off` | la materializzazione della settimana tipo | accesa |
+
+Tutti col confronto stretto: solo il valore esatto `off` spegne.
+
+**TRAPPOLA — leggere prima di toccare `SALES_TEMPLATE_MATERIALIZE`.** Il cron materializza **prima** di calcolare le multe. Spegnere la materializzazione di lunedì mattina significa che alle 14:00 viene multato chi contava sulla settimana tipo per essere in regola — persone che non hanno sbagliato niente.
+
+Se serve spegnerla, **spegni nello stesso momento anche `SALES_CALENDAR_PENALTIES=off`**, e riaccendi le due insieme. L'interruttore del muro è invece indipendente e si può usare da solo.
+
+## Cosa verificare dal vivo, da un account venditore vero
+
+1. **Il caso che si rompeva.** Aprire una settimana mai compilata, non toccare niente, premere Salva. Deve funzionare e comparire la conferma con le ore dichiarate.
+2. **Guardare quelle ore in faccia.** Il verde propone anche il sabato sera e le 21:00 di ogni giorno: ogni ora accettata vale 50 € se una Conferma segnala l'assenza. Il primo salvataggio di ciascuno va guardato **insieme a lui**, non scoperto alla prima segnalazione.
+3. **Il modello non sovrascrive il lavoro a mano.** Con chi ha già compilato: impostare una settimana tipo diversa e verificare che la settimana già salvata resti identica, `fromTemplate = false`.
+4. **Le settimane future si riempiono** e nessuna ora finisce nel passato.
+5. **Cancellare il modello**: le settimane già riempite restano, e restano dichiarazioni della persona. Se questo sorprende chi lo prova, il testo va riscritto prima del rilascio.
+6. **Il menu su quattro celle diverse** — libera, occupata, bloccata da follow-up altrui, a meno di 60 minuti — controllando che la ragione si **legga dentro il menu**. Una passata anche da tastiera: è per questo che il menu esiste.
+7. **Il lunedì alle 14:00, in sequenza**: chi ha un modello non prende la multa, chi non ce l'ha e non ha compilato sì, e una sola. Far girare il cron una seconda volta e riverificare.
+8. **Dal lato Conferme**: fissare su un'ora materializzata dal modello deve passare senza forzatura.
+
+## Aperto — decisioni da prendere
+
+1. **Race simmetrica**: il cron che inserisce il piano mentre un salvataggio umano è a metà. Non aggiunge ore a nessuno nella sequenza pericolosa (quella è chiusa), ma chiuderla del tutto richiede di riordinare `saveCalendarWeek`, la funzione che scrive per chi è già in produzione.
+2. **`slotCount` ha due definizioni**: la materializzazione conta le sole ore future, il salvataggio a mano conta tutte le righe della settimana.
+3. **Una settimana le cui ore sono tutte passate si può salvare a zero ore** con un click, e questo evita la multa del lunedì: la regola guarda l'esistenza del piano, non il numero di ore.
+4. `getCalendarWeek` non verifica che l'id passato sia un venditore attivo del tenant (preesistente).
