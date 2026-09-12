@@ -13,14 +13,16 @@
  * CONFERME (spec §6.2).
  */
 
-import { useState, useMemo, useCallback, useTransition } from "react"
+import { useState, useMemo, useCallback, useEffect, useTransition } from "react"
 import { ChevronLeft, ChevronRight, Loader2, CalendarClock } from "lucide-react"
 import {
-    getCalendarSupervision, voidCalendarPenalty, setCalendarExempt, type SupervisionView,
+    getCalendarSupervision, voidCalendarPenalty, setCalendarExempt, getForcedBookings,
+    type SupervisionView, type ForcedBooking,
 } from "@/app/actions/salesCalendarAdminActions"
 import { weekSlots, weekStartFor, addWeeks, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
-import { previousYearMonth, nextYearMonth, monthBoundsRome } from "@/lib/dateUtils"
+import { previousYearMonth, nextYearMonth, monthBoundsRome, formatRomeAppointmentLabel } from "@/lib/dateUtils"
 import type { CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
+import type { BookingRefusal } from "@/lib/venditore/calendarBooking"
 import { SlotGrid, type SlotCellView } from "@/components/calendar/SlotGrid"
 import { CoverageLegend } from "@/components/calendar/CoverageLegend"
 
@@ -69,6 +71,16 @@ function kindLabel(kind: CalendarPenaltyKind): string {
     return kind === 'CALENDAR_MISSING' ? 'Calendario non compilato' : 'Assenza su slot'
 }
 
+function reasonLabel(reason: string | null): string {
+    const map: Record<BookingRefusal, string> = {
+        fuori_griglia: 'Ora fuori dal calendario',
+        non_dichiarato: 'Ora non dichiarata',
+        bloccato: 'Ora bloccata dal venditore',
+    }
+    if (reason && reason in map) return map[reason as BookingRefusal]
+    return reason ?? '—'
+}
+
 function Pill({ tone, children }: { tone: 'green' | 'red' | 'amber' | 'neutral'; children: React.ReactNode }) {
     const cls = {
         green: 'bg-emerald-100 text-emerald-800',
@@ -85,7 +97,7 @@ function Pill({ tone, children }: { tone: 'green' | 'red' | 'amber' | 'neutral';
 
 export function CalendariVenditoriClient({ initial, role }: Props) {
     const [data, setData] = useState<SupervisionView>(initial)
-    const [tab, setTab] = useState<'copertura' | 'compilazione' | 'multe'>('copertura')
+    const [tab, setTab] = useState<'copertura' | 'compilazione' | 'multe' | 'forzature'>('copertura')
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
 
@@ -181,6 +193,15 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
                         Multe calendario
                     </button>
                 )}
+                {/* Visibile anche a CONFERME (a differenza di Multe calendario, spec
+                    §6.2): sono loro a produrre le forzature, vederle scoraggia l'abuso. */}
+                <button
+                    type="button"
+                    onClick={() => setTab('forzature')}
+                    className={`rounded-md px-3 py-1.5 transition-colors ${tab === 'forzature' ? 'bg-brand-orange text-white' : 'text-ash-600 hover:bg-ash-100'}`}
+                >
+                    Forzature
+                </button>
             </div>
 
             {error && (
@@ -189,7 +210,7 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
                 </div>
             )}
 
-            {tab !== 'multe' && (
+            {tab !== 'multe' && tab !== 'forzature' && (
                 <div className="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
@@ -242,6 +263,10 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
                     onMonthChange={goMonth}
                     onChanged={reload}
                 />
+            )}
+
+            {tab === 'forzature' && (
+                <ForzatureTab initialMonthKey={data.monthKey} />
             )}
         </div>
     )
@@ -570,6 +595,121 @@ function VoidPenaltyControl({ penaltyId, onVoided }: { penaltyId: string; onVoid
                 </button>
             </div>
             {error && <div className="text-[10px] text-rose-600">{error}</div>}
+        </div>
+    )
+}
+
+/**
+ * Le forzature del mese: chi ha scavalcato il muro dell'agenda dichiarata,
+ * su chi, per quale lead e perché. Stato autonomo (monthKey proprio, non
+ * quello di `data`): `getForcedBookings` è una funzione a sé nell'action
+ * file, non un campo di `SupervisionView`, quindi cambiare mese qui non
+ * deve far ricaricare Copertura/Compilazione/Multe (e viceversa).
+ */
+function ForzatureTab({ initialMonthKey }: { initialMonthKey: string }) {
+    const [monthKey, setMonthKey] = useState(initialMonthKey)
+    const [rows, setRows] = useState<ForcedBooking[] | null>(null)
+    const [error, setError] = useState<string | null>(null)
+    const [isPending, startTransition] = useTransition()
+
+    const load = useCallback((mk: string) => {
+        setError(null)
+        startTransition(async () => {
+            try {
+                const fresh = await getForcedBookings(mk)
+                setRows(fresh)
+            } catch (e: any) {
+                setError(e?.message || 'Errore di caricamento.')
+            }
+        })
+    }, [])
+
+    useEffect(() => {
+        load(monthKey)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [monthKey])
+
+    const goMonth = (delta: number) => {
+        setMonthKey(mk => (delta > 0 ? nextYearMonth(mk) : previousYearMonth(mk)))
+    }
+
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => goMonth(-1)}
+                        disabled={isPending}
+                        aria-label="Mese precedente"
+                        className="rounded-lg border border-ash-200 bg-white p-1.5 text-ash-700 hover:bg-ash-100 disabled:opacity-50"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <div className="min-w-[9rem] text-center text-sm font-semibold text-ash-800">
+                        {monthLabel(monthKey)}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => goMonth(1)}
+                        disabled={isPending}
+                        aria-label="Mese successivo"
+                        className="rounded-lg border border-ash-200 bg-white p-1.5 text-ash-700 hover:bg-ash-100 disabled:opacity-50"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                    {isPending && <Loader2 className="h-4 w-4 animate-spin text-ash-400" />}
+                </div>
+            </div>
+
+            {error && (
+                <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {error}
+                </div>
+            )}
+
+            <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">
+                <table className="w-full min-w-[880px] text-left text-sm">
+                    <thead className="bg-ash-50 text-[11px] font-bold uppercase tracking-wider text-ash-500">
+                        <tr>
+                            <th className="px-3 py-2">Quando</th>
+                            <th className="px-3 py-2">Conferma</th>
+                            <th className="px-3 py-2">Lead</th>
+                            <th className="px-3 py-2">Venditore</th>
+                            <th className="px-3 py-2">Ora dell&apos;appuntamento</th>
+                            <th className="px-3 py-2">Motivo del rifiuto</th>
+                            <th className="px-3 py-2">Motivo scritto</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-ash-100">
+                        {rows === null && !error && (
+                            <tr>
+                                <td colSpan={7} className="px-3 py-6 text-center text-ash-500">Caricamento…</td>
+                            </tr>
+                        )}
+                        {rows !== null && rows.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-3 py-6 text-center text-ash-500">Nessuna forzatura questo mese.</td>
+                            </tr>
+                        )}
+                        {rows?.map(r => (
+                            <tr key={r.id} className="align-top">
+                                <td className="px-3 py-2 text-ash-600">{formatDateTime(r.at)}</td>
+                                <td className="px-3 py-2 font-semibold text-ash-800">{r.confermaName ?? '—'}</td>
+                                <td className="px-3 py-2 text-ash-700">{r.leadName ?? '—'}</td>
+                                <td className="px-3 py-2 text-ash-700">{r.salesName ?? '—'}</td>
+                                <td className="px-3 py-2 text-ash-600">
+                                    {r.appointmentAt ? formatRomeAppointmentLabel(new Date(r.appointmentAt)) : '—'}
+                                </td>
+                                <td className="px-3 py-2">
+                                    <Pill tone="amber">{reasonLabel(r.reason)}</Pill>
+                                </td>
+                                <td className="px-3 py-2 text-ash-600">{r.motivo ?? '—'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     )
 }
