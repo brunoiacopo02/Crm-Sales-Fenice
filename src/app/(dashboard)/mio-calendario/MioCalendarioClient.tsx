@@ -305,10 +305,17 @@ export function MioCalendarioClient({ initial, role }: Props) {
     // altrimenti si intralcia anche chi sta solo guardando.
     useEffect(() => {
         if (!dirty || !data.editable) return
-        const h = (e: BeforeUnloadEvent) => { e.preventDefault() }
+        const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
         window.addEventListener('beforeunload', h)
         return () => window.removeEventListener('beforeunload', h)
     }, [dirty, data.editable])
+
+    // Il riquadro "modifiche non salvate" si chiude da solo appena smette di
+    // essere vero (salvataggio riuscito altrove, scarto, ecc.): senza questo
+    // effetto restava a schermo anche a `dirty` tornato falso.
+    useEffect(() => {
+        if (!dirty) setPendingWeekDelta(null)
+    }, [dirty])
 
     const uncovered = useMemo(
         () => data.coverage.filter(c => c.status === 'rosso' || c.status === 'ambra'),
@@ -543,39 +550,6 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 </div>
             </div>
 
-            {pendingWeekDelta !== null && (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <div>Hai modifiche non salvate su questa settimana.</div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => { const d = pendingWeekDelta; setPendingWeekDelta(null); saveThen(() => goWeekNow(d)) }}
-                            className="cursor-pointer rounded-lg bg-brand-orange px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95"
-                        >
-                            Salva e cambia
-                        </button>
-                        <button
-                            type="button"
-                            // `discardChanges` prima di `goWeekNow` è
-                            // ridondante (l'effetto su `weekStartIso` rifà
-                            // `selected` dal server appena i dati arrivano) ma
-                            // innocuo, e tiene la griglia coerente nel frattempo.
-                            onClick={() => { const d = pendingWeekDelta; setPendingWeekDelta(null); discardChanges(); goWeekNow(d) }}
-                            className="cursor-pointer rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
-                        >
-                            Scarta e cambia
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setPendingWeekDelta(null)}
-                            className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
-                        >
-                            Resta qui
-                        </button>
-                    </div>
-                </div>
-            )}
-
             {view !== 'modello' && roNote && (
                 <div className="text-xs italic text-ash-500">{roNote}</div>
             )}
@@ -588,6 +562,43 @@ export function MioCalendarioClient({ initial, role }: Props) {
 
             {view === 'mio' && (
                 <div className="space-y-3">
+                    {pendingWeekDelta !== null && (
+                        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            <div>Hai modifiche non salvate su questa settimana.</div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { const d = pendingWeekDelta; setPendingWeekDelta(null); saveThen(() => goWeekNow(d)) }}
+                                    className="cursor-pointer rounded-lg bg-brand-orange px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95"
+                                >
+                                    Salva e cambia
+                                </button>
+                                <button
+                                    type="button"
+                                    // `discardChanges` prima di `goWeekNow` è
+                                    // ridondante (l'effetto su `weekStartIso` rifà
+                                    // `selected` dal server appena i dati arrivano) ma
+                                    // innocuo, e tiene la griglia coerente nel frattempo.
+                                    onClick={() => { const d = pendingWeekDelta; setPendingWeekDelta(null); discardChanges(); goWeekNow(d) }}
+                                    className="cursor-pointer rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                >
+                                    Scarta e cambia
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPendingWeekDelta(null)}
+                                    className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                >
+                                    Resta qui
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {role === 'VENDITORE' && data.editable && (
+                        <div className="text-xs text-ash-500">
+                            Clicca un&apos;ora per tutta la riga, un giorno per tutta la colonna, oppure trascina col mouse.
+                        </div>
+                    )}
                     <SlotGrid
                         weekStartIso={data.weekStartIso}
                         cells={myCells}
