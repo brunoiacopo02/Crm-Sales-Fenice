@@ -126,6 +126,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     } else if (role === "CONFERME") {
         navItems = [
             { name: "Dashboard Conferme", href: "/conferme", icon: Calendar },
+            { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
             // Stessa coda dell'admin, fetta diversa: alle Conferme arrivano solo
             // i lead già appuntati, che da quel momento sono di loro competenza.
             { name: "Ti hanno cercato", href: "/richieste-contatto", icon: PhoneIncoming, badge: contactPending },
@@ -224,6 +225,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                         { name: "KPI Venditori", href: "/kpi-venditori", icon: Trophy },
                         ...(role === "ADMIN" ? [{ name: "Performance Venditori", href: "/performance-venditori", icon: Trophy }] : []),
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
+                        { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
                     ],
                 },
