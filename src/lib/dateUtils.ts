@@ -17,7 +17,7 @@
 import { parseYearMonth } from "./workingDaysUtils";
 
 /** Restituisce l'offset Europe/Rome (es. "+02:00") per la data data. */
-function romeOffset(at: Date): string {
+export function romeOffset(at: Date): string {
     const parts = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Europe/Rome',
         timeZoneName: 'longOffset',
