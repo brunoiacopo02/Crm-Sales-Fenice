@@ -133,7 +133,7 @@ export function TemplateEditor({ initial, onSaved }: Props) {
     return (
         <div className="space-y-3">
             <div className="rounded-xl border border-ash-200 bg-ash-50 px-4 py-3 text-sm text-ash-600">
-                Vale ogni settimana. Le settimane che non hai ancora compilato si riempiono da sola.
+                Vale ogni settimana. Le settimane che non hai ancora compilato si riempiono da sole.
             </div>
 
             {error && (
@@ -205,7 +205,20 @@ export function TemplateEditor({ initial, onSaved }: Props) {
                         </button>
                     ) : (
                         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                            <span>Cancellare la settimana tipo? Le settimane già salvate non cambiano.</span>
+                            {/*
+                              * Cancellare il modello ferma le settimane FUTURE, non
+                              * disfa quelle che il sistema ha già riempito: quelle ore
+                              * sono ormai dichiarazioni sue a tutti gli effetti — le
+                              * Conferme ci fissano sopra e valgono 50 € di multa per
+                              * ogni assenza. È l'unico punto in cui quella conseguenza
+                              * incrocia una persona che sta facendo il gesto opposto:
+                              * va detta qui, non scoperta con una trattenuta.
+                              */}
+                            <span>
+                                Cancellare la settimana tipo? Le settimane che ha già riempito restano
+                                dichiarazioni tue: gli appuntamenti si fissano lì e se non ti presenti
+                                la multa scatta lo stesso. Toglile a mano dalla griglia della settimana.
+                            </span>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"

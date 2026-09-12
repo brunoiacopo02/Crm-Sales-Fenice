@@ -241,7 +241,7 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
             {tab === 'copertura' && (
                 <div className="space-y-4">
                     <SlotGrid weekStartIso={data.weekStartIso} cells={coverageCells} readOnly />
-                    <CoverageLegend />
+                    <CoverageLegend variant="copertura" />
                     <MatrixCard matrix={data.matrix} venditoriById={venditoriById} slots={slots} />
                 </div>
             )}
