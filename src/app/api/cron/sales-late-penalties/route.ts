@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runLatePenalties, activationDate } from '@/lib/venditore/latePenaltiesRunner';
+import { runCalendarWeekly } from '@/lib/venditore/calendarRunner';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -18,14 +19,19 @@ export async function GET(req: Request) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
+    // Il giro del calendario ha kill-switch e attivazione propri: gira anche
+    // quando i ritardi sono sospesi, e viceversa — nessuno dei due return
+    // anticipati qui sotto lo deve tenere in ostaggio.
+    const calendar = await runCalendarWeekly();
+
     if (process.env.SALES_LATE_PENALTIES === 'off') {
-        return NextResponse.json({ skipped: true, reason: 'kill_switch_off' });
+        return NextResponse.json({ skipped: true, reason: 'kill_switch_off', calendar });
     }
 
     if (!activationDate()) {
-        return NextResponse.json({ skipped: true, reason: 'missing_activation_date' });
+        return NextResponse.json({ skipped: true, reason: 'missing_activation_date', calendar });
     }
 
     const result = await runLatePenalties();
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, calendar });
 }
