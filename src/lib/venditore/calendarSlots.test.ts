@@ -7,6 +7,7 @@ import {
     slotStartFor,
     slotKey,
     weekStartKey,
+    weekStartFor,
     weekSlots,
     weeklyDeadline,
     slotLabel,
@@ -70,4 +71,16 @@ test('weekSlots regge il cambio di ora legale: la settimana resta di 78 slot', (
 test('weeklyDeadline e il lunedi alle 14 italiane', () => {
     const d = weeklyDeadline(new Date('2026-09-14T00:00:00+02:00'))
     assert.equal(d.toISOString(), '2026-09-14T12:00:00.000Z')
+})
+
+test('weekStartFor torna la vera mezzanotte del lunedi anche dalla domenica del cambio d ora', () => {
+    // Domenica 25/10/2026, ora solare (+1). Il lunedi di quella settimana e' il
+    // 19/10, ancora in ora legale (+2): la mezzanotte vera e' le 22:00Z del 18.
+    const s = weekStartFor(new Date('2026-10-25T15:00:00+01:00'))
+    assert.equal(s.toISOString(), '2026-10-18T22:00:00.000Z')
+    // Controprova su una settimana senza transizione.
+    assert.equal(
+        weekStartFor(new Date('2026-09-19T20:00:00+02:00')).toISOString(),
+        '2026-09-13T22:00:00.000Z',
+    )
 })

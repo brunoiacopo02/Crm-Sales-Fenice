@@ -72,7 +72,12 @@ export function slotLabel(at: Date): string {
 
 /** Lunedi 00:00 italiane della settimana che contiene `at`. */
 export function weekStartFor(at: Date): Date {
-    return weekBoundsRome(at).start
+    // weekBoundsRome riusa l'offset di `at` anche per costruire il lunedi: nelle
+    // due domeniche del cambio d'ora l'istante esce sfalsato di un'ora. La DATA
+    // del lunedi che produce e' pero' sempre giusta, quindi ricostruiamo
+    // l'istante da qui. Il lunedi non e' mai giorno di transizione in UE, percio'
+    // il campionamento dell'offset a mezzogiorno di romeInstant e' sempre valido.
+    return romeInstant(toRomeDateStr(weekBoundsRome(at).start), 0)
 }
 
 /** 'YYYY-MM-DD' del lunedi: e' la colonna `weekStart` sul DB. */
