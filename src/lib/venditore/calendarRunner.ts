@@ -26,6 +26,8 @@ export interface CalendarRunnerResult {
 export interface TemplateMaterializationResult {
     weeks: number
     slots: number
+    /** Iterazioni venditore×settimana fallite: DB in errore, non "niente da fare". */
+    failed: number
 }
 
 /** Quante settimane in avanti copre la materializzazione: la corrente + tre. */
@@ -44,15 +46,21 @@ const TEMPLATE_LOOKAHEAD_WEEKS = 4
  * Deve girare PRIMA del calcolo delle multe in `runCalendarWeekly`: altrimenti
  * il primo giro del lunedì dopo le 14:00 multerebbe qualcuno un istante prima
  * di compilargli la settimana dal suo stesso modello.
+ *
+ * `salesUserId`, se passato, restringe la scansione a un solo venditore: il
+ * salvataggio del modello (Task 4) la richiama per la persona che ha appena
+ * salvato, e senza questo filtro ogni salvataggio individuale scatenerebbe
+ * una scansione dell'intero team. Il cron la chiama senza secondo argomento.
  */
-export async function materializeTemplates(now: Date = new Date()): Promise<TemplateMaterializationResult> {
+export async function materializeTemplates(now: Date = new Date(), salesUserId?: string): Promise<TemplateMaterializationResult> {
     // Nessun filtro companyId: tabella per-utente (vedi NOTA COMUNE in schema.ts).
     const templateRows = await db.select({
         salesUserId: salesWeekTemplateSlots.salesUserId,
         dow: salesWeekTemplateSlots.dow,
         hour: salesWeekTemplateSlots.hour,
     }).from(salesWeekTemplateSlots)
-    if (templateRows.length === 0) return { weeks: 0, slots: 0 }
+        .where(salesUserId ? eq(salesWeekTemplateSlots.salesUserId, salesUserId) : undefined)
+    if (templateRows.length === 0) return { weeks: 0, slots: 0, failed: 0 }
 
     const templatesByUser = new Map<string, TemplateSlot[]>()
     for (const row of templateRows) {
@@ -71,7 +79,7 @@ export async function materializeTemplates(now: Date = new Date()): Promise<Temp
         eq(users.isActive, true),
         inArray(users.id, [...templatesByUser.keys()]),
     ))
-    if (venditori.length === 0) return { weeks: 0, slots: 0 }
+    if (venditori.length === 0) return { weeks: 0, slots: 0, failed: 0 }
 
     const weekStarts: Date[] = []
     for (let i = 0; i < TEMPLATE_LOOKAHEAD_WEEKS; i++) weekStarts.push(addWeeks(weekStartFor(now), i))
@@ -89,6 +97,7 @@ export async function materializeTemplates(now: Date = new Date()): Promise<Temp
 
     let weeks = 0
     let slots = 0
+    let failed = 0
 
     for (const venditore of venditori) {
         const template = templatesByUser.get(venditore.id)
@@ -102,32 +111,47 @@ export async function materializeTemplates(now: Date = new Date()): Promise<Temp
             const wanted = slotsFromTemplate(template, weekStart, now)
             if (wanted.length === 0) continue
 
-            await db.insert(salesAvailabilitySlots).values(wanted.map(slotStart => ({
-                id: crypto.randomUUID(),
-                companyId: venditore.companyId,
-                salesUserId: venditore.id,
-                slotStart,
-                weekStart: weekKey,
-            }))).onConflictDoNothing()
+            try {
+                // Una transazione per iterazione (venditore × settimana), non
+                // una sola attorno a tutto: se un venditore fallisce, quelli
+                // già scritti restano scritti. Slot e piano devono atterrare
+                // insieme — altrimenti un'interruzione a metà lascia ore
+                // materializzate senza la riga del piano, e quel venditore
+                // verrebbe multato al giro dopo pur avendo già le disponibilità.
+                await db.transaction(async (tx) => {
+                    await tx.insert(salesAvailabilitySlots).values(wanted.map(slotStart => ({
+                        id: crypto.randomUUID(),
+                        companyId: venditore.companyId,
+                        salesUserId: venditore.id,
+                        slotStart,
+                        weekStart: weekKey,
+                    }))).onConflictDoNothing()
 
-            await db.insert(salesWeekPlans).values({
-                id: crypto.randomUUID(),
-                companyId: venditore.companyId,
-                salesUserId: venditore.id,
-                weekStart: weekKey,
-                submittedAt: now,
-                updatedAt: now,
-                slotCount: wanted.length,
-                late: false,
-                fromTemplate: true,
-            }).onConflictDoNothing()
+                    await tx.insert(salesWeekPlans).values({
+                        id: crypto.randomUUID(),
+                        companyId: venditore.companyId,
+                        salesUserId: venditore.id,
+                        weekStart: weekKey,
+                        submittedAt: now,
+                        updatedAt: now,
+                        slotCount: wanted.length,
+                        late: false,
+                        fromTemplate: true,
+                    }).onConflictDoNothing()
+                })
 
-            weeks++
-            slots += wanted.length
+                weeks++
+                slots += wanted.length
+            } catch (e) {
+                // Un venditore in errore non deve fermare gli altri, né far
+                // fallire l'intero giro del cron (multe e promemoria compresi).
+                failed++
+                console.error(`materializeTemplates: venditore ${venditore.id}, settimana ${weekKey}:`, e)
+            }
         }
     }
 
-    return { weeks, slots }
+    return { weeks, slots, failed }
 }
 
 /** Ore italiane in cui parte un promemoria del lunedì. */
