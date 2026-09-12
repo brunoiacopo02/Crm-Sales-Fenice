@@ -364,7 +364,10 @@ export async function saveCalendarWeek(
                 target: [salesWeekPlans.salesUserId, salesWeekPlans.weekStart],
                 // submittedAt e late NON si toccano: sono la prova del primo
                 // salvataggio, letta dal cron delle multe.
-                set: { slotCount, updatedAt: now },
+                // Un salvataggio dalla griglia e' un atto della persona: la settimana smette
+                // di essere "da settimana tipo" anche se il modello l'aveva materializzata.
+                // submittedAt e late restano: sono la prova del PRIMO salvataggio.
+                set: { slotCount, updatedAt: now, fromTemplate: false },
             })
         })
     } catch (e) {
