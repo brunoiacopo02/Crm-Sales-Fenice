@@ -12,12 +12,15 @@ import { ChevronLeft, ChevronRight, Loader2, CalendarClock } from "lucide-react"
 import {
     getCalendarWeek, saveCalendarWeek, blockSlot, unblockSlot, type CalendarWeekView,
 } from "@/app/actions/salesCalendarActions"
-import { weekSlots, weekStartFor, addWeeks, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
+import { weekSlots, weekStartFor, addWeeks, slotKey, slotLabel, romeHour, SLOT_HOURS } from "@/lib/venditore/calendarSlots"
+import { toggleGroup, applyPaint } from "@/lib/venditore/calendarSelection"
 import { MANUAL_BLOCK_NOTICE_MINUTES } from "@/lib/venditore/calendarRules"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { SlotGrid, type SlotCellView, type SlotMenuOption, type SlotMenuItemView } from "@/components/calendar/SlotGrid"
 import { CoverageLegend } from "@/components/calendar/CoverageLegend"
 import { TemplateEditor } from "@/components/calendar/TemplateEditor"
+import { weekdayFmt, dayOnlyFmt, formatWeekRange, capitalize } from "@/components/calendar/calendarFormat"
+import { StatusStrip } from "./StatusStrip"
 
 interface Props {
     initial: CalendarWeekView
@@ -26,35 +29,6 @@ interface Props {
 
 const MAX_WEEKS_FORWARD = 3
 
-const weekdayFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', weekday: 'long' })
-const dateSlashFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit' })
-const timeFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-const dayOnlyFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: 'numeric' })
-const monthOnlyFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', month: 'long' })
-
-function formatCountdown(ms: number): string {
-    if (ms <= 0) return '0m'
-    const totalMinutes = Math.floor(ms / 60_000)
-    const days = Math.floor(totalMinutes / (24 * 60))
-    const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
-    const minutes = totalMinutes % 60
-    if (days > 0) return `${days}g ${hours}h`
-    if (hours > 0) return `${hours}h ${minutes}m`
-    return `${minutes}m`
-}
-
-function formatWeekRange(weekStartIso: string): string {
-    const start = new Date(weekStartIso)
-    const end = new Date(start.getTime() + 5 * 86_400_000) // sabato: mai/dom mai attraversata da DST
-    const startMonth = monthOnlyFmt.format(start)
-    const endMonth = monthOnlyFmt.format(end)
-    const startDay = dayOnlyFmt.format(start)
-    const endDay = dayOnlyFmt.format(end)
-    return startMonth === endMonth
-        ? `${startDay} – ${endDay} ${endMonth}`
-        : `${startDay} ${startMonth} – ${endDay} ${endMonth}`
-}
-
 function readOnlyNote(editable: boolean, reason: CalendarWeekView['readOnlyReason']): string | null {
     if (editable) return null
     if (reason === 'settimana_passata') return 'Settimana passata: sola lettura.'
@@ -62,10 +36,6 @@ function readOnlyNote(editable: boolean, reason: CalendarWeekView['readOnlyReaso
     // Caso limite: un non-VENDITORE (admin/manager/conferme) guarda il proprio
     // account. Niente motivo specifico dal contratto dati: non lasciarlo muto.
     return 'Sola lettura.'
-}
-
-function capitalize(s: string): string {
-    return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s
 }
 
 function fasciaLabel(cov: CoverageCell): string {
@@ -80,85 +50,6 @@ function fasciaLabel(cov: CoverageCell): string {
     return `${weekday} ${day} alle ${time} — ${chi}, ≈${attesi} attesi`
 }
 
-function StatusStrip({ data, now, onOpenTemplate }: { data: CalendarWeekView; now: Date; onOpenTemplate: () => void }) {
-    const deadline = new Date(data.deadlineIso)
-
-    if (data.submittedAtIso) {
-        const submitted = new Date(data.submittedAtIso)
-        // ATTENZIONE: `fromTemplate` da solo NON basta a dire "compilata dal
-        // modello" — torna vero anche per una proposta mai materializzata
-        // (nessun piano a DB, `submittedAtIso` nullo). Qui dentro
-        // `submittedAtIso` è già garantito non nullo da questo `if`, quindi
-        // combinato con `fromTemplate` significa davvero "il cron l'ha
-        // materializzata" (vedi il commento su `CalendarWeekView.fromTemplate`
-        // in `salesCalendarActions.ts`).
-        if (data.fromTemplate) {
-            return (
-                <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                    <p>
-                        {`Compilata dalla tua settimana tipo il ${weekdayFmt.format(submitted)} ${dateSlashFmt.format(submitted)} alle ${timeFmt.format(submitted)} — ${data.slotCount} ore dichiarate. Puoi modificarla comunque.`}
-                    </p>
-                    <div className="mt-1">
-                        <button
-                            type="button"
-                            onClick={onOpenTemplate}
-                            className="cursor-pointer font-semibold text-emerald-900 underline hover:no-underline"
-                        >
-                            Gestisci la settimana tipo
-                        </button>
-                    </div>
-                </div>
-            )
-        }
-        return (
-            <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                {`Compilato ${weekdayFmt.format(submitted)} ${dateSlashFmt.format(submitted)} alle ${timeFmt.format(submitted)} — ${data.slotCount} ore dichiarate`}
-                {data.late && ' (in ritardo)'}
-            </div>
-        )
-    }
-    if (data.isExempt) {
-        return (
-            <div className="rounded-xl border border-ash-200 bg-ash-50 px-4 py-3 text-sm text-ash-600">
-                Sei esente dall&apos;obbligo di compilazione.
-            </div>
-        )
-    }
-    if (data.penaltyIso) {
-        const penalty = new Date(data.penaltyIso)
-        return (
-            <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-                {`Calendario non compilato: multa di 50 € registrata ${weekdayFmt.format(penalty)} ${dateSlashFmt.format(penalty)}. Puoi compilare comunque.`}
-            </div>
-        )
-    }
-    if (now < deadline) {
-        const ms = deadline.getTime() - now.getTime()
-        return (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                <p>{`Compila entro ${weekdayFmt.format(deadline)} ${timeFmt.format(deadline)} — mancano ${formatCountdown(ms)}`}</p>
-                {data.template.length > 0 && (
-                    // Il modello esiste ma questa settimana non ha ancora un
-                    // piano a DB (`submittedAtIso` nullo sopra): è la proposta
-                    // del modello, non ancora una dichiarazione. Vero fino a
-                    // che il cron (o il prossimo salvataggio del modello) la
-                    // materializza.
-                    <p className="mt-1 text-xs text-amber-700">
-                        Hai una settimana tipo: se non intervieni si compila da sola entro la scadenza.
-                    </p>
-                )}
-            </div>
-        )
-    }
-    // Scadenza passata ma la multa non risulta ancora registrata (es. cron non
-    // ancora eseguito): non inventiamo un importo, solo lo stato dei fatti.
-    return (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {`Calendario non compilato: la scadenza delle ${timeFmt.format(deadline)} di ${weekdayFmt.format(deadline)} è passata.`}
-        </div>
-    )
-}
-
 export function MioCalendarioClient({ initial, role }: Props) {
     const [data, setData] = useState<CalendarWeekView>(initial)
     const [selected, setSelected] = useState<Set<string>>(() => new Set(initial.mySlots))
@@ -166,6 +57,11 @@ export function MioCalendarioClient({ initial, role }: Props) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [now, setNow] = useState<Date>(() => new Date())
+    // Freccia settimana premuta con modifiche in sospeso: il riquadro inline
+    // sotto il navigatore tiene qui il `delta` finché non si decide. Niente
+    // `window.confirm` (vietato nel progetto, e su mobile è una finestra di
+    // sistema che non si può nemmeno leggere per intero).
+    const [pendingWeekDelta, setPendingWeekDelta] = useState<number | null>(null)
 
     // Countdown ricalcolato ogni minuto, mai a ogni render.
     useEffect(() => {
@@ -205,9 +101,21 @@ export function MioCalendarioClient({ initial, role }: Props) {
 
     // `addWeeks`, mai `+ delta * 7 * 86_400_000`: l'aritmetica in millisecondi
     // sbaglia settimana nelle due del cambio d'ora (vedi calendarSlots.ts).
-    const goWeek = (delta: number) => {
+    const goWeekNow = (delta: number) => {
         const target = addWeeks(new Date(data.weekStartIso), delta)
         loadWeek(target.toISOString())
+    }
+
+    // Con modifiche non salvate la freccia non naviga: apre il riquadro sotto
+    // il navigatore e lascia decidere. `loadWeek` ricarica `mySlots` dal
+    // server e l'effetto su `weekStartIso` ributta via `selected`: senza questa
+    // guardia un'intera settimana spuntata spariva con un click di troppo.
+    const goWeek = (delta: number) => {
+        if (dirty && data.editable) {
+            setPendingWeekDelta(delta)
+            return
+        }
+        goWeekNow(delta)
     }
 
     const atMaxForward = new Date(data.weekStartIso).getTime() >= maxForwardWeekMs
@@ -218,7 +126,6 @@ export function MioCalendarioClient({ initial, role }: Props) {
     const venditoriById = useMemo(() => new Map(data.venditori.map(v => [v.id, v.name])), [data.venditori])
     const blocksByKey = useMemo(() => new Map(data.myBlocks.map(b => [b.slotKey, b])), [data.myBlocks])
     const apptByKey = useMemo(() => new Map(data.myAppointments.map(a => [a.slotKey, a])), [data.myAppointments])
-    const mySlotsSet = useMemo(() => new Set(data.mySlots), [data.mySlots])
 
     const myCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()
@@ -321,14 +228,18 @@ export function MioCalendarioClient({ initial, role }: Props) {
                 }
             }
 
-            // La copertura arriva dal DB (ultimo salvataggio), non dalla
-            // selezione locale non ancora salvata: per non contarmi due volte
-            // sottraggo me stesso solo se ero davvero disponibile server-side.
-            const amIAvailableServerSide = mySlotsSet.has(key) && !blocksByKey.has(key)
-            const othersAvailable = cov ? cov.available.length - (amIAvailableServerSide ? 1 : 0) : 0
+            // La copertura arriva dal DB: `available` non contiene chi ha un
+            // appuntamento in quell'ora (ne' chi l'ha bloccata), quindi per
+            // sapere quanti ALTRI ci sono basta escludere me stesso per id.
+            const othersAvailable = cov ? cov.available.filter(id => id !== data.targetUserId).length : 0
 
             m.set(key, {
                 state,
+                // Il glifo raddoppia il colore: spunta = disponibile, trattino
+                // = non disponibile. Su `libero` nessun glifo, perché non c'è
+                // nessuna scelta da confermare (vedi il commento sul verde
+                // "proposta" qui sopra).
+                icon: state === 'disponibile' ? 'check' : state === 'nondisponibile' ? 'minus' : undefined,
                 subtitle,
                 badge: othersAvailable > 0 ? String(othersAvailable) : undefined,
                 tone: cov?.status ?? 'neutro',
@@ -338,7 +249,7 @@ export function MioCalendarioClient({ initial, role }: Props) {
             })
         }
         return m
-    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, mySlotsSet, now, data.declared])
+    }, [slots, apptByKey, blocksByKey, coverageByKey, selected, now, data.declared, data.targetUserId])
 
     const coverageCells = useMemo(() => {
         const m = new Map<string, SlotCellView>()
@@ -385,6 +296,25 @@ export function MioCalendarioClient({ initial, role }: Props) {
     // multa delle 14:00 e restava imprenotabile per tutta la settimana.
     const canSave = data.editable && (dirty || !data.declared)
 
+    // Chiudere la scheda con una settimana spuntata a metà significa restare
+    // imprenotabili senza saperlo: il browser chiede conferma. Il testo lo
+    // decide Chrome/Firefox (quello nostro è ignorato da anni), a noi basta
+    // `preventDefault`. Nessun listener quando non c'è niente da perdere:
+    // altrimenti si intralcia anche chi sta solo guardando.
+    useEffect(() => {
+        if (!dirty || !data.editable) return
+        const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+        window.addEventListener('beforeunload', h)
+        return () => window.removeEventListener('beforeunload', h)
+    }, [dirty, data.editable])
+
+    // Il riquadro "modifiche non salvate" si chiude da solo appena smette di
+    // essere vero (salvataggio riuscito altrove, scarto, ecc.): senza questo
+    // effetto restava a schermo anche a `dirty` tornato falso.
+    useEffect(() => {
+        if (!dirty) setPendingWeekDelta(null)
+    }, [dirty])
+
     const uncovered = useMemo(
         () => data.coverage.filter(c => c.status === 'rosso' || c.status === 'ambra'),
         [data.coverage],
@@ -402,6 +332,39 @@ export function MioCalendarioClient({ initial, role }: Props) {
             else next.add(key)
             return next
         })
+    }
+
+    // Le celle che i gesti di massa (pennellata, riga, colonna) non possono
+    // toccare: appuntamenti, blocchi e ore già iniziate. È la stessa regola di
+    // `handleCellClick`, scritta una volta sola perché ora la usano in tre.
+    const lockedKey = (key: string) => {
+        const c = myCells.get(key)
+        return !c || !!c.cellDisabled || c.state === 'occupato' || c.state === 'bloccato'
+    }
+
+    // Il verso lo ha già deciso `SlotGrid` guardando la cella d'origine: qui si
+    // applica e basta, cella per cella, saltando quelle bloccate.
+    const handleCellPaint = (key: string, on: boolean) => {
+        if (!data.editable) return
+        if (lockedKey(key)) return
+        setSelected(prev => applyPaint(prev, key, on))
+    }
+
+    // Scorciatoia di riga: tutte le occorrenze di quell'ora nella settimana.
+    const handleHourToggle = (hour: number) => {
+        if (!data.editable) return
+        const keys = slots.filter(s => romeHour(s) === hour).map(slotKey)
+        setSelected(prev => toggleGroup(prev, keys, lockedKey))
+    }
+
+    // Scorciatoia di colonna: le 13 ore di un giorno. `weekSlots` è
+    // giorno-maggiore (lunedì 9 → sabato 21), lo stesso ordine con cui
+    // `SlotGrid` costruisce le colonne: la fetta è quindi esattamente il
+    // giorno `dayIndex` (0 = lunedì … 5 = sabato).
+    const handleDayToggle = (dayIndex: number) => {
+        if (!data.editable) return
+        const keys = slots.slice(dayIndex * SLOT_HOURS.length, (dayIndex + 1) * SLOT_HOURS.length).map(slotKey)
+        setSelected(prev => toggleGroup(prev, keys, lockedKey))
     }
 
     // Le tre voci del menu portano a uno STATO FINALE (Disponibile / Imprevisto
@@ -469,25 +432,45 @@ export function MioCalendarioClient({ initial, role }: Props) {
         }
     }
 
-    const handleSave = () => {
+    /**
+     * Il salvataggio vero, staccato dal bottone: torna `true` solo se il server
+     * ha accettato. Serve a "Salva e cambia" — cambiare settimana dopo un
+     * salvataggio FALLITO butterebbe via proprio le modifiche che l'utente
+     * stava cercando di mettere al sicuro.
+     */
+    const saveWeek = async (): Promise<boolean> => {
         setError(null)
+        const res = await saveCalendarWeek(data.weekStartIso, [...selected])
+        if (!res.success) {
+            setError(res.error ?? 'Salvataggio non riuscito: riprova fra un momento.')
+            return false
+        }
+        try {
+            // Stesso `salesUserId` di `loadWeek`: qui è sempre il proprio
+            // calendario (si salva solo il proprio), ma la regola vale una
+            // sola, così non c'è una seconda lettura da ricordarsi.
+            const fresh = await getCalendarWeek({ weekStartIso: data.weekStartIso, salesUserId: targetUserId })
+            setData(fresh)
+        } catch (e: any) {
+            // Il salvataggio è comunque andato: la settimana a DB è aggiornata,
+            // qui è fallita solo la rilettura. Non si torna `false`, o
+            // "Salva e cambia" resterebbe bloccato su un lavoro già fatto.
+            setError(e?.message || 'Salvato, ma il ricaricamento è fallito: aggiorna la pagina.')
+        }
+        return true
+    }
+
+    const handleSave = () => {
+        startTransition(async () => { await saveWeek() })
+    }
+
+    const saveThen = (after: () => void) => {
         startTransition(async () => {
-            const res = await saveCalendarWeek(data.weekStartIso, [...selected])
-            if (!res.success) {
-                setError(res.error ?? 'Salvataggio non riuscito: riprova fra un momento.')
-                return
-            }
-            try {
-                // Stesso `salesUserId` di `loadWeek`: qui è sempre il proprio
-                // calendario (si salva solo il proprio), ma la regola vale una
-                // sola, così non c'è una seconda lettura da ricordarsi.
-                const fresh = await getCalendarWeek({ weekStartIso: data.weekStartIso, salesUserId: targetUserId })
-                setData(fresh)
-            } catch (e: any) {
-                setError(e?.message || 'Salvato, ma il ricaricamento è fallito: aggiorna la pagina.')
-            }
+            if (await saveWeek()) after()
         })
     }
+
+    const discardChanges = () => setSelected(new Set(data.mySlots))
 
     const roNote = readOnlyNote(data.editable, data.readOnlyReason)
 
@@ -577,25 +560,106 @@ export function MioCalendarioClient({ initial, role }: Props) {
 
             {view === 'mio' && (
                 <div className="space-y-3">
+                    {pendingWeekDelta !== null && (
+                        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            <div>Hai modifiche non salvate su questa settimana.</div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { const d = pendingWeekDelta; setPendingWeekDelta(null); saveThen(() => goWeekNow(d)) }}
+                                    className="cursor-pointer rounded-lg bg-brand-orange px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95"
+                                >
+                                    Salva e cambia
+                                </button>
+                                <button
+                                    type="button"
+                                    // `discardChanges` prima di `goWeekNow` è
+                                    // ridondante (l'effetto su `weekStartIso` rifà
+                                    // `selected` dal server appena i dati arrivano) ma
+                                    // innocuo, e tiene la griglia coerente nel frattempo.
+                                    onClick={() => { const d = pendingWeekDelta; setPendingWeekDelta(null); discardChanges(); goWeekNow(d) }}
+                                    className="cursor-pointer rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                >
+                                    Scarta e cambia
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPendingWeekDelta(null)}
+                                    className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                >
+                                    Resta qui
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {role === 'VENDITORE' && data.editable && (
+                        <div className="text-xs text-ash-500">
+                            Clicca un&apos;ora per tutta la riga, un giorno per tutta la colonna, oppure trascina col mouse.
+                        </div>
+                    )}
                     <SlotGrid
                         weekStartIso={data.weekStartIso}
                         cells={myCells}
                         onCellClick={handleCellClick}
                         onCellMenu={handleCellMenu}
+                        // I gesti di massa esistono solo dove c'è qualcosa da
+                        // cambiare: senza queste prop `SlotGrid` rende le
+                        // intestazioni come semplice testo, non come bottoni
+                        // che promettono un'azione impossibile (calendario
+                        // altrui, settimana passata, ruolo non venditore).
+                        onCellPaint={role === 'VENDITORE' && data.editable ? handleCellPaint : undefined}
+                        onHourToggle={role === 'VENDITORE' && data.editable ? handleHourToggle : undefined}
+                        onDayToggle={role === 'VENDITORE' && data.editable ? handleDayToggle : undefined}
                         readOnly={!data.editable}
                     />
                     <CoverageLegend variant="personale" />
-                    {role === 'VENDITORE' && (
-                        <div className="flex items-center justify-end">
-                            <button
-                                type="button"
-                                onClick={handleSave}
-                                disabled={!canSave || isPending}
-                                className="flex items-center gap-2 rounded-lg bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-95 disabled:cursor-default disabled:opacity-50"
-                            >
-                                {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                                {`Salva (${selected.size} ore)`}
-                            </button>
+                    {/*
+                      * La barra resta appiccicata al fondo dello schermo
+                      * mentre si scorre la griglia: il bottone in coda alla
+                      * pagina si vedeva solo arrivati in fondo, e su una
+                      * settimana lunga si usciva credendo di aver salvato.
+                      * Compare solo quando c'è davvero qualcosa da fare
+                      * (`canSave`), così non copre nulla il resto del tempo.
+                      */}
+                    {role === 'VENDITORE' && canSave && (
+                        <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-2 shadow-lg backdrop-blur">
+                            {selected.size === 0 ? (
+                                // Salvare zero ore è ammesso, ma deve essere
+                                // una scelta: una settimana senza ore non è
+                                // prenotabile da nessuno, e finora la barra
+                                // diceva solo "0 ore" come fosse un numero
+                                // qualsiasi.
+                                <div className="text-sm text-rose-800">
+                                    <span className="font-semibold">Nessuna ora disponibile</span> — le Conferme non potranno fissarti nessun appuntamento questa settimana
+                                </div>
+                            ) : (
+                                <div className="text-sm text-amber-900">
+                                    {dirty
+                                        ? <><span className="font-semibold">Modifiche non salvate</span> — {selected.size} ore disponibili</>
+                                        : <><span className="font-semibold">Conferma la settimana</span> — {selected.size} ore disponibili</>}
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                                {dirty && (
+                                    <button
+                                        type="button"
+                                        onClick={discardChanges}
+                                        disabled={isPending}
+                                        className="cursor-pointer rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-default disabled:opacity-50"
+                                    >
+                                        Scarta
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handleSave}
+                                    disabled={isPending}
+                                    className="flex cursor-pointer items-center gap-2 rounded-lg bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-95 disabled:cursor-default disabled:opacity-50"
+                                >
+                                    {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    Salva
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>

@@ -74,7 +74,7 @@ export interface CoverageCell {
     slotStart: string
     dow: number
     hour: number
-    /** Chi è davvero disponibile: dichiarato e non bloccato. */
+    /** Chi è davvero disponibile: dichiarato, non bloccato e senza appuntamento in quell'ora. */
     available: string[]
     /** Chi ha dichiarato ma è bloccato (follow-up o imprevisto). */
     blocked: string[]
@@ -114,7 +114,11 @@ export function buildCoverage(params: {
         const hour = romeHour(slot)
         const declared = declaredBy.get(key) || new Set<string>()
         const blockedSet = blockedBy.get(key) || new Set<string>()
-        const available = [...declared].filter(u => !blockedSet.has(u))
+        // Un'ora dichiarata è un'ora offerta, e un appuntamento la consuma:
+        // chi sta già ricevendo un cliente non è disponibile per un secondo.
+        // Resta in `busy`, che è la vista di chi c'è, non di chi è libero.
+        const busyUsers = new Set((busyBy.get(key) || []).map(b => b.salesUserId))
+        const available = [...declared].filter(u => !blockedSet.has(u) && !busyUsers.has(u))
         const blocked = [...declared].filter(u => blockedSet.has(u))
         const d = demandBy.get(`${dow}-${hour}`)
         const expectedPeople = d?.expectedPeople ?? 0

@@ -10,7 +10,7 @@ import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { toRomeDateStr } from "@/lib/dateUtils"
 import {
-    weekSlots, weekStartFor, weeklyDeadline, slotKey, slotStartFor, romeInstant,
+    weekSlots, weekStartFor, weeklyDeadline, slotKey, slotStartFor, romeInstant, addWeeks,
 } from "@/lib/venditore/calendarSlots"
 import { manualBlockCheck, blockRefusalMessage } from "@/lib/venditore/calendarRules"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
@@ -28,6 +28,50 @@ import crypto from "crypto"
  * venditori chiamando `getCalendarWeek` a mano.
  */
 const CALENDAR_ROLES = ['VENDITORE', 'CONFERME', 'MANAGER', 'ADMIN']
+
+/**
+ * Forma di una chiave di slot come la manda il client: `YYYY-MM-DD@H`.
+ * Serve come primo setaccio prima di `romeInstant`: `Number('abc')` è `NaN` e
+ * una data invalida arrivava fino alla query, dove diventa un errore Postgres
+ * (cioè un salvataggio fallito senza motivo leggibile) invece di una chiave
+ * semplicemente scartata.
+ */
+const SLOT_KEY_RE = /^\d{4}-\d{2}-\d{2}@\d{1,2}$/
+
+/**
+ * Traduzione degli errori di SESSIONE in messaggi leggibili.
+ *
+ * `requireSalesSession` lancia `Unauthorized`, `assertSalesArea` un
+ * `Forbidden: …`: se la chiamata sta fuori dal `try` l'eccezione risale al
+ * client come errore di render invece che come "ricarica la pagina".
+ *
+ * Si riconosce il PREFISSO, non il messaggio esatto: `src/lib/tenancy.ts` non
+ * lancia mai le due parole nude. `currentTenant` lancia `Unauthorized: no
+ * Supabase user`, `assertSalesArea` `Forbidden: user … has area …`,
+ * `assertSingleCompany` `Forbidden: azione non disponibile in modalità "Tutte
+ * le aziende"`, `assertLeadInCompany` `Forbidden: lead … not found …`. Con un
+ * match esatto nessuna di queste sarebbe stata riconosciuta e l'utente avrebbe
+ * letto "riprova fra un momento" su un rifiuto che riprovando non cambia.
+ *
+ * Del testo dopo `Forbidden: ` si mostra SOLO quello di `assertSingleCompany`
+ * (riconosciuto da "Tutte le aziende"): è l'unico scritto per un umano, e
+ * appiattirlo su "Non autorizzato." mandava a cercare un problema di permessi
+ * dove il problema era solo lo switch azienda. Gli altri rifiuti di tenancy.ts
+ * portano uuid e nomi di area — diagnostica interna che a schermo non aiuta
+ * nessuno e che non va mostrata: per quelli resta "Non autorizzato.".
+ */
+function sessionErrorMessage(e: unknown): string | null {
+    if (!(e instanceof Error)) return null
+    const msg = e.message
+    if (msg === 'Unauthorized' || msg.startsWith('Unauthorized:')) {
+        return 'Sessione scaduta: ricarica la pagina.'
+    }
+    if (msg.startsWith('Forbidden')) {
+        const dettaglio = msg.slice('Forbidden'.length).replace(/^:\s*/, '').trim()
+        return dettaglio.includes('Tutte le aziende') ? dettaglio : 'Non autorizzato.'
+    }
+    return null
+}
 
 /**
  * Sessione sales minima + guardia di ruolo. Il "chi può fare cosa" fine
@@ -153,10 +197,17 @@ export async function getCalendarWeek(input?: {
 }): Promise<CalendarWeekView> {
     const { userId, role, ctx } = await requireSalesSession()
 
-    const weekStart = input?.weekStartIso
-        ? weekStartFor(new Date(input.weekStartIso))
+    // Una data illeggibile dal client ricade sulla settimana corrente: senza,
+    // `Invalid Date` arrivava fino alle query e la pagina si rompeva.
+    const richiesta = input?.weekStartIso ? new Date(input.weekStartIso) : null
+    const weekStart = richiesta && !Number.isNaN(richiesta.getTime())
+        ? weekStartFor(richiesta)
         : weekStartFor(new Date())
-    const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000)
+    // `addWeeks`, mai `+ 7 * 86_400_000`: nelle due settimane del cambio d'ora
+    // l'aritmetica in millisecondi sposta il confine di un'ora, e blocchi e
+    // appuntamenti del sabato sera (o del lunedì alle 9) cadevano fuori dalla
+    // finestra — cioè sparivano dalla griglia proprio in quelle due settimane.
+    const weekEnd = addWeeks(weekStart, 1)
     const weekStartStr = toRomeDateStr(weekStart)
     const deadline = weeklyDeadline(weekStart)
 
@@ -327,51 +378,59 @@ export async function saveCalendarWeek(
     weekStartIso: string,
     slotKeys: string[],
 ): Promise<{ success: boolean; error?: string; late?: boolean }> {
-    const { userId, role, ctx } = await requireSalesSession()
-    if (role !== 'VENDITORE') {
-        return { success: false, error: 'Solo i venditori compilano il proprio calendario.' }
-    }
-
-    const weekStart = weekStartFor(new Date(weekStartIso))
-    if (weekStart < weekStartFor(new Date())) {
-        return { success: false, error: 'Le settimane passate non si modificano.' }
-    }
-
-    // Ricostruisce ogni chiave ricevuta dal client e la scarta se non
-    // appartiene alla griglia di questa settimana: un client può mandare
-    // qualunque cosa, non ci fidiamo delle chiavi in ingresso.
-    const validKeys = new Set(weekSlots(weekStart).map(s => slotKey(s)))
-    const valid = slotKeys
-        .map(key => {
-            const [dateStr, h] = key.split('@')
-            if (!dateStr || !h) return null
-            const instant = romeInstant(dateStr, Number(h))
-            return validKeys.has(slotKey(instant)) ? instant : null
-        })
-        .filter((d): d is Date => d !== null)
-
-    const now = new Date()
-
-    // Le ore GIÀ INIZIATE non si toccano più, nemmeno nella settimana corrente.
-    // Sono la prova di quello che il venditore aveva offerto: la finestra di
-    // segnalazione delle Conferme dura 48 ore e si sovrappone a quella di
-    // modifica, quindi senza questa guardia bastava togliere la spunta alle
-    // 11:00 per cancellare la prova dell'assenza delle 9:00 e spegnere il
-    // bottone "Non c'era". La spec §4.7 dà per scontato che lo stato attuale
-    // di uno slot passato coincida con quello che era: questa riga è ciò che
-    // lo rende vero. Il resto della settimana continua a funzionare.
-    const futuri = valid.filter(slot => slot > now)
-
-    // Il client puo' mandare la stessa ora due volte: senza questa deduplica
-    // l'insert violerebbe l'unique (salesUserId, slotStart) dentro la transazione.
-    const perChiave = new Map<string, Date>()
-    for (const slot of futuri) perChiave.set(slotKey(slot), slot)
-    const unici = [...perChiave.values()]
-
-    const weekStartStr = toRomeDateStr(weekStart)
-    const late = now > weeklyDeadline(weekStart)
-
+    // Sessione e validazione dell'input DENTRO il try: `requireSalesSession`
+    // lancia, e da fuori quell'eccezione arrivava al client come pagina rotta
+    // invece che come messaggio ("Sessione scaduta: ricarica la pagina").
+    let late = false
     try {
+        const { userId, role, ctx } = await requireSalesSession()
+        if (role !== 'VENDITORE') {
+            return { success: false, error: 'Solo i venditori compilano il proprio calendario.' }
+        }
+
+        const richiesta = new Date(weekStartIso)
+        if (Number.isNaN(richiesta.getTime())) {
+            return { success: false, error: 'Data non valida.' }
+        }
+        const weekStart = weekStartFor(richiesta)
+        if (weekStart < weekStartFor(new Date())) {
+            return { success: false, error: 'Le settimane passate non si modificano.' }
+        }
+
+        // Ricostruisce ogni chiave ricevuta dal client e la scarta se non
+        // appartiene alla griglia di questa settimana: un client può mandare
+        // qualunque cosa, non ci fidiamo delle chiavi in ingresso.
+        const validKeys = new Set(weekSlots(weekStart).map(s => slotKey(s)))
+        const valid = (Array.isArray(slotKeys) ? slotKeys : [])
+            .map(key => {
+                if (typeof key !== 'string' || !SLOT_KEY_RE.test(key)) return null
+                const [dateStr, h] = key.split('@')
+                const instant = romeInstant(dateStr, Number(h))
+                return validKeys.has(slotKey(instant)) ? instant : null
+            })
+            .filter((d): d is Date => d !== null)
+
+        const now = new Date()
+
+        // Le ore GIÀ INIZIATE non si toccano più, nemmeno nella settimana corrente.
+        // Sono la prova di quello che il venditore aveva offerto: la finestra di
+        // segnalazione delle Conferme dura 48 ore e si sovrappone a quella di
+        // modifica, quindi senza questa guardia bastava togliere la spunta alle
+        // 11:00 per cancellare la prova dell'assenza delle 9:00 e spegnere il
+        // bottone "Non c'era". La spec §4.7 dà per scontato che lo stato attuale
+        // di uno slot passato coincida con quello che era: questa riga è ciò che
+        // lo rende vero. Il resto della settimana continua a funzionare.
+        const futuri = valid.filter(slot => slot > now)
+
+        // Il client puo' mandare la stessa ora due volte: senza questa deduplica
+        // l'insert violerebbe l'unique (salesUserId, slotStart) dentro la transazione.
+        const perChiave = new Map<string, Date>()
+        for (const slot of futuri) perChiave.set(slotKey(slot), slot)
+        const unici = [...perChiave.values()]
+
+        const weekStartStr = toRomeDateStr(weekStart)
+        late = now > weeklyDeadline(weekStart)
+
         await db.transaction(async (tx) => {
             // Cancellazione limitata agli slot non ancora iniziati: le righe
             // passate restano dove sono (vedi sopra). Niente `eq(companyId)`:
@@ -393,6 +452,14 @@ export async function saveCalendarWeek(
                     slotStart,
                     weekStart: weekStartStr,
                 })))
+                    // La DELETE qui sopra ha già ripulito il futuro di questa
+                    // settimana: una riga uguale può essere arrivata solo dal
+                    // cron (`materializeTemplates`) fra la DELETE e questa
+                    // INSERT, e dichiara esattamente la stessa ora per la stessa
+                    // persona — vale quanto la nostra. Senza, quella corsa
+                    // faceva fallire l'intera transazione e il venditore vedeva
+                    // "Salvataggio non riuscito" su un salvataggio legittimo.
+                    .onConflictDoNothing()
             }
 
             // `slotCount` sono le ore della settimana DOPO il salvataggio,
@@ -426,6 +493,8 @@ export async function saveCalendarWeek(
             })
         })
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('saveCalendarWeek:', e)
         return { success: false, error: 'Salvataggio non riuscito: riprova fra un momento.' }
     }
@@ -442,16 +511,19 @@ export async function blockSlot(
     slotIso: string,
     note?: string,
 ): Promise<{ success: boolean; error?: string }> {
-    const { userId, role, ctx } = await requireSalesSession()
-    if (role !== 'VENDITORE') {
-        return { success: false, error: 'Solo i venditori bloccano il proprio calendario.' }
-    }
-
-    const slot = slotStartFor(new Date(slotIso))
-    if (!slot) return { success: false, error: 'Ora fuori dal calendario.' }
-    const slotEnd = new Date(slot.getTime() + 60 * 60_000)
-
     try {
+        // Sessione e validazione dentro il try: vedi `saveCalendarWeek`.
+        const { userId, role, ctx } = await requireSalesSession()
+        if (role !== 'VENDITORE') {
+            return { success: false, error: 'Solo i venditori bloccano il proprio calendario.' }
+        }
+
+        const richiesta = new Date(slotIso)
+        if (Number.isNaN(richiesta.getTime())) return { success: false, error: 'Data non valida.' }
+        const slot = slotStartFor(richiesta)
+        if (!slot) return { success: false, error: 'Ora fuori dal calendario.' }
+        const slotEnd = new Date(slot.getTime() + 60 * 60_000)
+
         const [availRows, blockRows, apptRows] = await Promise.all([
             db.select({ slotStart: salesAvailabilitySlots.slotStart })
                 .from(salesAvailabilitySlots)
@@ -500,6 +572,8 @@ export async function blockSlot(
             note: note ?? null,
         }).onConflictDoNothing()
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('blockSlot:', e)
         return { success: false, error: 'Blocco non riuscito: riprova fra un momento.' }
     }
@@ -520,15 +594,18 @@ export async function blockSlot(
  * copertura e non più segnalabile come assenza.
  */
 export async function unblockSlot(slotIso: string): Promise<{ success: boolean; error?: string }> {
-    const { userId, role } = await requireSalesSession()
-    if (role !== 'VENDITORE') {
-        return { success: false, error: 'Solo i venditori sbloccano il proprio calendario.' }
-    }
-
-    const slot = slotStartFor(new Date(slotIso))
-    if (!slot) return { success: false, error: 'Ora fuori dal calendario.' }
-
     try {
+        // Sessione e validazione dentro il try: vedi `saveCalendarWeek`.
+        const { userId, role } = await requireSalesSession()
+        if (role !== 'VENDITORE') {
+            return { success: false, error: 'Solo i venditori sbloccano il proprio calendario.' }
+        }
+
+        const richiesta = new Date(slotIso)
+        if (Number.isNaN(richiesta.getTime())) return { success: false, error: 'Data non valida.' }
+        const slot = slotStartFor(richiesta)
+        if (!slot) return { success: false, error: 'Ora fuori dal calendario.' }
+
         const [existing] = await db.select({
             id: salesSlotBlocks.id,
             kind: salesSlotBlocks.kind,
@@ -556,6 +633,8 @@ export async function unblockSlot(slotIso: string): Promise<{ success: boolean; 
 
         await db.delete(salesSlotBlocks).where(eq(salesSlotBlocks.id, existing.id))
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('unblockSlot:', e)
         return { success: false, error: 'Sblocco non riuscito: riprova fra un momento.' }
     }
@@ -569,6 +648,10 @@ export async function unblockSlot(slotIso: string): Promise<{ success: boolean; 
  * qui, coerente con `getCalendarWeek`.
  */
 export async function getMyTemplate(): Promise<TemplateSlot[]> {
+    // Sessione FUORI dal try, a differenza delle action che tornano
+    // `{ success, error }`: qui non c'è un campo dove infilare un messaggio, e
+    // un `[]` al posto di un errore di sessione direbbe "nessuna settimana
+    // tipo" a chi invece ne ha una.
     const { userId, role } = await requireSalesSession()
     if (role !== 'VENDITORE') return []
 
@@ -597,19 +680,23 @@ export async function getMyTemplate(): Promise<TemplateSlot[]> {
  * salvato: la recupera il cron entro mezz'ora.
  */
 export async function saveMyTemplate(slots: TemplateSlot[]): Promise<{ success: boolean; error?: string }> {
-    const { userId, role, ctx } = await requireSalesSession()
-    if (role !== 'VENDITORE') {
-        return { success: false, error: 'Solo i venditori impostano la propria settimana tipo.' }
-    }
-
-    const valid = (Array.isArray(slots) ? slots : []).filter(isValidTemplateSlot)
-    // Dedup per (dow, hour): il client puo' mandare doppioni, e l'insert
-    // violerebbe l'unique (salesUserId, dow, hour) dentro la transazione.
-    const perChiave = new Map<string, TemplateSlot>()
-    for (const s of valid) perChiave.set(templateKey(s.dow, s.hour), s)
-    const unici = [...perChiave.values()]
-
+    let userId: string
     try {
+        // Sessione e validazione dentro il try: vedi `saveCalendarWeek`.
+        const sessione = await requireSalesSession()
+        userId = sessione.userId
+        if (sessione.role !== 'VENDITORE') {
+            return { success: false, error: 'Solo i venditori impostano la propria settimana tipo.' }
+        }
+        const ctx = sessione.ctx
+
+        const valid = (Array.isArray(slots) ? slots : []).filter(isValidTemplateSlot)
+        // Dedup per (dow, hour): il client puo' mandare doppioni, e l'insert
+        // violerebbe l'unique (salesUserId, dow, hour) dentro la transazione.
+        const perChiave = new Map<string, TemplateSlot>()
+        for (const s of valid) perChiave.set(templateKey(s.dow, s.hour), s)
+        const unici = [...perChiave.values()]
+
         await db.transaction(async (tx) => {
             await tx.delete(salesWeekTemplateSlots).where(eq(salesWeekTemplateSlots.salesUserId, userId))
 
@@ -624,6 +711,8 @@ export async function saveMyTemplate(slots: TemplateSlot[]): Promise<{ success: 
             }
         })
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('saveMyTemplate:', e)
         return { success: false, error: 'Salvataggio della settimana tipo non riuscito: riprova fra un momento.' }
     }
@@ -648,14 +737,17 @@ export async function saveMyTemplate(slots: TemplateSlot[]): Promise<{ success: 
  * gli effetti.
  */
 export async function clearMyTemplate(): Promise<{ success: boolean; error?: string }> {
-    const { userId, role } = await requireSalesSession()
-    if (role !== 'VENDITORE') {
-        return { success: false, error: 'Solo i venditori gestiscono la propria settimana tipo.' }
-    }
-
     try {
+        // Sessione dentro il try: vedi `saveCalendarWeek`.
+        const { userId, role } = await requireSalesSession()
+        if (role !== 'VENDITORE') {
+            return { success: false, error: 'Solo i venditori gestiscono la propria settimana tipo.' }
+        }
+
         await db.delete(salesWeekTemplateSlots).where(eq(salesWeekTemplateSlots.salesUserId, userId))
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('clearMyTemplate:', e)
         return { success: false, error: 'Rimozione della settimana tipo non riuscita: riprova fra un momento.' }
     }

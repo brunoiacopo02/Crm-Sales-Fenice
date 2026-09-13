@@ -5,7 +5,8 @@ import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle
 import { SchedaEsitoInline, type SchedaEsitoHandle } from "./conferme/SchedaEsitoInline"
 import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { ConfermeCallTimer } from "./ConfermeCallTimer"
-import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall } from "@/app/actions/confermeActions"
+import { getConfermeNotes, setSalespersonOutcome, recordConfermeNoAnswer, undoConfermeNoAnswer, scheduleConfermeRecall, setConfermeSnooze, cancelConfermeRecall, getVenditoriAgenda } from "@/app/actions/confermeActions"
+import { romeInstant, slotStartFor, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
 import type { ConfermeNoteItem } from "@/app/actions/confermeActions"
 import { saveConfermeSurvey } from "@/app/actions/surveyActions"
 import { getTeamAccounts } from "@/app/actions/teamActions"
@@ -68,6 +69,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     const [editTime, setEditTime] = useState(format(appointmentDateObj, 'HH:mm'))
     const [editNoteGdo, setEditNoteGdo] = useState(lead?.appointmentNote || "")
     const [savingData, setSavingData] = useState(false)
+    // Riscontro inline del salvataggio dei Dati Lead: si spegne da solo dopo 3s.
+    const [savedAt, setSavedAt] = useState<number | null>(null)
     // Muro del fissaggio (Task 2/4): quando updateLeadDataConferme rifiuta con
     // needsForce, mostriamo qui il messaggio del server per intero + il campo
     // Motivo per "Fissa comunque".
@@ -187,6 +190,119 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
         }
     }, [isOpen, lead?.id])
 
+    useEffect(() => {
+        if (!savedAt) return
+        const t = setTimeout(() => setSavedAt(null), 3000)
+        return () => clearTimeout(t)
+    }, [savedAt])
+
+    // Ore libere del venditore per il giorno scelto (A1 + A8).
+    //
+    // È la stessa aritmetica del muro lato server (`checkBookingAllowed`):
+    // dichiarate − bloccate − già occupate, escluso questo lead, che
+    // altrimenti si dichiarerebbe occupato da sé. Dire DOVE si può fissare
+    // costa una lettura; farlo indovinare costa una forzatura.
+    //
+    // La chiamata parte solo quando qualcosa può davvero comparire: i due tab
+    // che la usano, e o un venditore già assegnato (le pastiglie) o il tab
+    // Esiti (le etichette della `<select>`, che servono prima della scelta).
+    // Debounce 300 ms (l'`<input type="date">` cambia valore a ogni cifra
+    // digitata) e un contatore che scarta le risposte arrivate fuori ordine —
+    // bumpato anche in chiusura, perché una risposta in volo non raggiunga il
+    // lead successivo. Un errore qui non si mostra: le pastiglie semplicemente
+    // non compaiono.
+    const needsAgenda = isOpen
+        && (activeTab === "dati" || activeTab === "esito")
+        && (!!salesperson || activeTab === "esito")
+
+    /** L'appuntamento come è SALVATO a DB (null se non c'è o è illeggibile). */
+    const savedApptAt = lead?.appointmentDate ? new Date(lead.appointmentDate) : null
+    const savedApptValid = !!savedApptAt && !isNaN(savedApptAt.getTime())
+    /**
+     * Il giorno su cui si interroga l'agenda, e cambia con il tab.
+     *
+     * Tab Dati: il giorno nei due input, perché lì il giorno lo si sta
+     * scegliendo e le pastiglie devono seguirlo.
+     *
+     * Tab Esiti: il giorno dell'appuntamento SALVATO, perché l'etichetta
+     * accanto al venditore anticipa il muro di `setConfermeOutcome`, che
+     * valuta `lead.appointmentDate` e non i due input. Con `editDate` una
+     * data digitata e mai salvata faceva dire "libero alle 15:00" mentre il
+     * server rifiutava sull'ora vera.
+     * Il fuso passa solo da `slotKey` (helper di calendarSlots).
+     */
+    const agendaDay = activeTab === "esito"
+        ? (savedApptValid ? slotKey(savedApptAt as Date).split('@')[0] : null)
+        : editDate
+    const agendaReqRef = useRef(0)
+    const [agenda, setAgenda] = useState<{
+        leadId: string
+        day: string
+        /** Dichiarate, non bloccate, non occupate: TUTTE, passato compreso.
+         *  È la diagnosi, e deve coincidere con quella del muro lato server,
+         *  che non guarda l'orologio. Alle 14:00 su un appuntamento delle
+         *  10:00 di stamattina "non disponibile a quest'ora" sarebbe falso. */
+        declaredFree: Record<string, string[]>
+        /** Il sottoinsieme ancora futuro: solo le pastiglie cliccabili, perché
+         *  proporre "libero alle 10:00" alle 18:00 manda a sbattere di nuovo. */
+        futureFree: Record<string, string[]>
+        exempt: string[]
+    } | null>(null)
+
+    useEffect(() => {
+        if (!needsAgenda || !lead?.id || !agendaDay || !/^\d{4}-\d{2}-\d{2}$/.test(agendaDay)) return
+        const req = ++agendaReqRef.current
+        const day = agendaDay
+        const leadId: string = lead.id
+        // Invalidazione alla chiusura: il contatore basta a scartare le
+        // risposte fuori ordine mentre il drawer è aperto, ma non quella
+        // ancora in volo quando l'effetto viene smontato (drawer chiuso, o
+        // riaperto su un altro lead). Questo flag copre esattamente quel caso.
+        let cancelled = false
+        const t = setTimeout(async () => {
+            try {
+                const dayStart = romeInstant(day, 0)
+                const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+                // `{ coverage: false }`: al drawer la striscia di copertura non
+                // serve (usa solo declaredSlots/blockDetails/appointments/
+                // calendarExempt) e costerebbe 4 query in più per apertura, una
+                // delle quali scansiona 8 settimane di `leads`. Su 30-57
+                // aperture al giorno, e con il DB già saturato a luglio, è il
+                // percorso più caldo delle Conferme: non si paga.
+                const res = await getVenditoriAgenda(dayStart, dayEnd, { coverage: false })
+                if (cancelled || req !== agendaReqRef.current) return
+                const nowMs = Date.now()
+                const declaredFree: Record<string, string[]> = {}
+                const futureFree: Record<string, string[]> = {}
+                const exempt: string[] = []
+                for (const v of res.venditori) {
+                    if (v.calendarExempt) exempt.push(v.id)
+                    // `blockDetails` e non `blockedSlots`: il muro guarda TUTTI i
+                    // blocchi del giorno, non solo quelli nati in tempo utile.
+                    const busy = new Set<string>(v.blockDetails.map(b => b.slotKey))
+                    for (const a of v.appointments) {
+                        if (a.leadId === leadId) continue
+                        const s = slotStartFor(new Date(a.appointmentDate))
+                        if (s) busy.add(slotKey(s))
+                    }
+                    const ore = v.declaredSlots
+                        .filter(k => !busy.has(k))
+                        .map(k => romeInstant(k.split('@')[0], Number(k.split('@')[1])))
+                        .sort((a, b) => a.getTime() - b.getTime())
+                    declaredFree[v.id] = ore.map(slotLabel)
+                    futureFree[v.id] = ore.filter(d => d.getTime() > nowMs).map(slotLabel)
+                }
+                setAgenda({ leadId, day, declaredFree, futureFree, exempt })
+            } catch {
+                if (!cancelled && req === agendaReqRef.current) setAgenda(null)
+            }
+        }, 300)
+        return () => {
+            clearTimeout(t)
+            cancelled = true
+        }
+    }, [needsAgenda, agendaDay, lead?.id])
+
     if (!isOpen || !item) return null;
 
     const handleSaveData = async (forceReason?: string) => {
@@ -212,7 +328,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
             setDataForceMessage(null)
             setLocalVersion((v: number) => v + 1)
             onRefresh()
-            alert("Dati salvati con successo")
+            // Niente `alert`: su 30-57 salvataggi al giorno è un click in più
+            // ogni volta, e blocca la pagina finché non lo si chiude.
+            setSavedAt(Date.now())
         } catch (error) {
             alert(`Errore salvataggio: ${error instanceof Error ? error.message : String(error)}`)
         } finally {
@@ -464,6 +582,47 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     const lastNR = getLastNRDate();
 
     const isLocked = activeUsers.length > 0;
+
+    // Le ore libere valgono solo per il lead e il giorno che sono davvero
+    // sotto gli occhi: dopo un cambio data — o dopo che il drawer si è
+    // riaperto su un altro lead — finché la nuova risposta non arriva non si
+    // mostra nulla, invece delle ore di quello di prima.
+    const agendaForDay = agenda && agenda.day === agendaDay && agenda.leadId === lead.id ? agenda : null;
+    const selectedExempt = !!agendaForDay && !!salesperson && agendaForDay.exempt.includes(salesperson);
+    /** Le ore ancora cliccabili: solo il futuro, sono un suggerimento. */
+    const freeHoursForSelected = agendaForDay && salesperson && !selectedExempt
+        ? (agendaForDay.futureFree[salesperson] ?? [])
+        : null;
+    /** La diagnosi "quel giorno non ha dichiarato niente" si legge invece su
+     *  TUTTE le ore dichiarate e libere, orologio escluso: è la stessa cosa
+     *  che dirà il muro lato server. */
+    const declaredFreeForSelected = agendaForDay && salesperson && !selectedExempt
+        ? (agendaForDay.declaredFree[salesperson] ?? [])
+        : null;
+
+    /** L'ora dell'appuntamento SALVATO, o null se non c'è.
+     *  È `lead.appointmentDate` e non i due input: l'etichetta della `<select>`
+     *  del tab Esiti anticipa il muro di `setConfermeOutcome`, che guarda il
+     *  valore a DB. Una data digitata e non salvata non deve poter cambiare
+     *  quello che si legge accanto al venditore. */
+    const apptSlotHour = (() => {
+        if (!savedApptValid) return null;
+        const d = savedApptAt as Date;
+        const s = slotStartFor(d);
+        // Fuori griglia (domenica, prima delle 9, dopo le 21) nessuno può
+        // averla dichiarata: l'etichetta resta, ma è sempre "non disponibile".
+        return s ? slotLabel(s) : '';
+    })();
+
+    /** Etichetta da appendere al nome del venditore nella `<select>` del tab
+     *  Esiti: dice se quella persona è libera all'ora dell'appuntamento. */
+    const venditoreHint = (id: string): string => {
+        if (!agendaForDay || apptSlotHour === null) return '';
+        if (agendaForDay.exempt.includes(id)) return '';
+        const free = agendaForDay.declaredFree[id] ?? [];
+        if (apptSlotHour && free.includes(apptSlotHour)) return ` · libero alle ${apptSlotHour}`;
+        return " · non disponibile a quest'ora";
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end">
@@ -721,6 +880,35 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                         <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className="input-fenice text-sm font-medium" />
                                     </div>
                                 </div>
+
+                                {/* Le ore su cui si fissa senza forzare, per il venditore
+                                    assegnato e il giorno scelto. Un click imposta l'ora.
+                                    Cliccabili solo quelle ancora da venire; il consiglio
+                                    di cambiare giorno lo dà invece la diagnosi completa,
+                                    altrimenti su un appuntamento di stamattina si
+                                    leggerebbe "nessuna ora dichiarata" a torto. */}
+                                {declaredFreeForSelected !== null && (
+                                    freeHoursForSelected && freeHoursForSelected.length > 0 ? (
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className="text-[11px] font-bold text-ash-500 uppercase tracking-wider mr-0.5">Ore libere</span>
+                                            {freeHoursForSelected.map(h => (
+                                                <button
+                                                    key={h}
+                                                    type="button"
+                                                    onClick={() => setEditTime(h)}
+                                                    className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 pointer-coarse:py-2"
+                                                >
+                                                    {h}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : declaredFreeForSelected.length === 0 ? (
+                                        <div className="text-[11px] text-ash-500">Nessuna ora dichiarata quel giorno: cambia giorno o venditore.</div>
+                                    ) : (
+                                        <div className="text-[11px] text-ash-500">Le ore libere di quel giorno sono già passate: cambia giorno o venditore.</div>
+                                    )
+                                )}
+
                                 {lead.confNeedsReschedule && (
                                     <p className="text-[11px] text-blue-600 font-medium ml-1 leading-tight">
                                         Questo lead è un Richiamo. Puoi comunque modificare la data e l'ora originaria dell'appuntamento fissato dal GDO se necessario.
@@ -779,6 +967,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                     <button onClick={() => handleSaveData()} disabled={savingData} className="w-full flex justify-center items-center gap-2 py-3 bg-ash-900 hover:bg-black text-white rounded-xl transition-all font-bold shadow-md hover:shadow-lg disabled:opacity-50">
                                         <Save className="w-4 h-4" /> {savingData ? "Salvataggio in corso..." : "Salva Tutti i Dati"}
                                     </button>
+                                    {savedAt && (
+                                        <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Dati salvati.</div>
+                                    )}
                                     <p className="text-[11px] text-center text-ash-400 mt-3 font-medium">Le modifiche sono tracciate nell'Audit Log.</p>
                                     {dataForceMessage && (
                                         <ForceBookingReason
@@ -926,7 +1117,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                 <select value={salesperson} onChange={e => setSalesperson(e.target.value)} className="w-full px-4 py-2.5 border-2 border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400 bg-white text-emerald-900 font-bold shadow-sm">
                                                     <option value="">-- Assegna a un Venditore --</option>
                                                     {salespeopleList.map(s => (
-                                                        <option key={s.id} value={s.id}>{s.name || s.email}</option>
+                                                        <option key={s.id} value={s.id}>{s.name || s.email}{venditoreHint(s.id)}</option>
                                                     ))}
                                                 </select>
                                                 <p className="text-[11px] text-emerald-600 font-medium mt-2 leading-tight">Salvando, confermerai l'appuntamento, il lead verrà smistato al venditore e verrà creato l'evento sul Google Calendar con invito via email.</p>

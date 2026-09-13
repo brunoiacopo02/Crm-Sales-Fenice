@@ -159,11 +159,11 @@ export function absenceReportCheck(input: {
 export function absenceRefusalMessage(reason: AbsenceRefusal): string {
     switch (reason) {
         case 'venditore_esente': return 'Questo venditore è esente dal calendario.'
-        case 'slot_futuro': return "Lo slot non è ancora iniziato."
+        case 'slot_futuro': return "Quest'ora non è ancora iniziata."
         case 'finestra_scaduta': return 'Sono passate più di 48 ore: la segnalazione non è più possibile.'
-        case 'non_dichiarato': return 'Questo slot non era dichiarato disponibile: non può generare multa.'
-        case 'slot_bloccato': return 'Lo slot era bloccato: il venditore aveva avvisato.'
-        case 'gia_segnalato': return 'Assenza già segnalata per questo slot.'
+        case 'non_dichiarato': return "Quest'ora non era dichiarata disponibile: non può generare multa."
+        case 'slot_bloccato': return "Quest'ora era bloccata: il venditore aveva avvisato."
+        case 'gia_segnalato': return "Assenza già segnalata per quest'ora."
     }
 }
 

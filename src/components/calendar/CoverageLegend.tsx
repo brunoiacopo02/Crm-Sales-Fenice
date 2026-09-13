@@ -8,7 +8,10 @@
  *   bianco (`libero`) è tornato in legenda perché è tornato nella griglia: una
  *   settimana mai compilata — passata, o ancora solo proposta dal default
  *   verde — non è "non disponibile", è "nessuna scelta fatta", e le due si
- *   distinguono solo con il colore.
+ *   distinguono solo con il colore. Chiude l'elenco il "+N" in alto a
+ *   sinistra sulle celle: è l'unico segno della griglia personale che non è
+ *   uno stato ma un conteggio (i colleghi disponibili in quell'ora), e senza
+ *   una riga di legenda restava un numero senza nome.
  * - `copertura` (le due griglie di sola copertura, qui e in
  *   `/calendari-venditori`): lì ogni cella è `libero`, cioè un contenitore
  *   neutro per il semaforo e i nomi. L'unico segnale è il semaforo. Elencare
@@ -45,6 +48,7 @@ export function CoverageLegend({ variant = 'personale' }: Props) {
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-ash-300 bg-ash-100 px-2 py-0.5 text-ash-500">
                             <span className="h-2 w-2 rounded-full bg-ash-400" /> Bloccato
                         </span>
+                        <span className="text-ash-500">+N = altri colleghi disponibili in quell&apos;ora</span>
                     </div>
                     <div className="hidden h-4 w-px bg-ash-200 sm:block" />
                 </>

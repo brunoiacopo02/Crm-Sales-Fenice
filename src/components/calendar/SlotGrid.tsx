@@ -5,6 +5,10 @@
  * (09:00-21:00, lunedì-sabato). Non conosce server action né regole di
  * dominio: riceve celle già decise (`SlotCellView`) e inoltra solo i click.
  *
+ * Gestisce anche la pennellata "premi e trascina" (vedi `useDragPaint`) e le
+ * scorciatoie riga/colonna sulle intestazioni, ma resta presentazionale: il
+ * verso della pennellata e i toggle di riga/giorno li decide il genitore.
+ *
  * Riusata da Task 10 per le altre due schermate (Conferme, direzione): per
  * questo non deve mai importare `salesCalendarActions` o sapere cos'è una multa.
  *
@@ -19,9 +23,11 @@
  */
 
 import { useEffect, useRef, useState } from "react"
+import { Check, Minus } from "lucide-react"
 import { toRomeDateStr } from "@/lib/dateUtils"
 import { SLOT_HOURS, SLOT_DAYS, weekSlots, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
 import type { CoverageStatus } from "@/lib/venditore/calendarCoverage"
+import { useDragPaint } from "./useDragPaint"
 
 export type SlotCellState = 'libero' | 'disponibile' | 'nondisponibile' | 'occupato' | 'bloccato'
 
@@ -41,7 +47,12 @@ export interface SlotMenuItemView {
 
 export interface SlotCellView {
     state: SlotCellState
-    /** Numero/testo breve mostrato in alto a destra sulla cella. */
+    /**
+     * Glifo al centro della cella: lo stato non si affida al solo colore
+     * (daltonismo, stampa in bianco e nero, schermi sbiaditi in ufficio).
+     */
+    icon?: 'check' | 'minus'
+    /** Numero/testo breve mostrato in alto a sinistra sulla cella. */
     badge?: string
     /** Testo breve sotto il contenuto principale della cella. */
     subtitle?: string
@@ -70,6 +81,16 @@ export interface SlotGridProps {
     cells: Map<string, SlotCellView>
     onCellClick?: (slotKey: string) => void
     onCellMenu?: (slotKey: string, option: SlotMenuOption) => void
+    /**
+     * Chiamata per OGNI cella attraversata da una pennellata, origine
+     * compresa. Il verso lo decide la griglia guardando l'origine
+     * (`on = stato origine !== 'disponibile'`): il genitore applica e basta.
+     */
+    onCellPaint?: (slotKey: string, on: boolean) => void
+    /** Scorciatoia di riga: click sull'etichetta dell'ora (9..21). */
+    onHourToggle?: (hour: number) => void
+    /** Scorciatoia di colonna: click sull'intestazione del giorno (0=lun … 5=sab). */
+    onDayToggle?: (dayIndex: number) => void
     readOnly?: boolean
 }
 
@@ -77,11 +98,18 @@ const DAY_ABBR_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
 
 const STATE_STYLES: Record<SlotCellState, string> = {
     libero: 'bg-white border-ash-200 text-ash-400',
-    disponibile: 'bg-emerald-50 border-emerald-300 text-emerald-800',
-    nondisponibile: 'bg-rose-50 border-rose-200 text-rose-700',
-    occupato: 'bg-sky-50 border-sky-300 text-sky-900',
+    disponibile: 'bg-emerald-100 border-emerald-300 text-emerald-900',
+    nondisponibile: 'bg-rose-100/70 border-rose-200 text-rose-800',
+    occupato: 'bg-sky-100 border-sky-300 text-sky-900',
     bloccato: 'bg-ash-100 border-ash-300 text-ash-500 line-through',
 }
+
+/**
+ * Righe diagonali sottili per le ore già iniziate: la cella si legge come
+ * "fuori gioco" senza spegnerne il colore e senza l'attributo `disabled`,
+ * che in Chrome nasconderebbe anche il `title` con la spiegazione.
+ */
+const PAST_CELL_HATCH = 'bg-[repeating-linear-gradient(135deg,transparent_0_6px,rgba(0,0,0,0.05)_6px_8px)]'
 
 const TONE_STYLES: Record<CoverageStatus, string> = {
     rosso: 'bg-rose-500',
@@ -132,7 +160,16 @@ function ariaLabelFor(instant: Date, view: SlotCellView): string {
     return `${weekday} ${dayMonth} alle ${hm} — ${STATE_LABEL_IT[view.state]}`
 }
 
-export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnly }: SlotGridProps) {
+export function SlotGrid({
+    weekStartIso,
+    cells,
+    onCellClick,
+    onCellMenu,
+    onCellPaint,
+    onHourToggle,
+    onDayToggle,
+    readOnly,
+}: SlotGridProps) {
     const weekStart = new Date(weekStartIso)
     const slots = weekSlots(weekStart)
     const hoursPerDay = SLOT_HOURS.length
@@ -140,6 +177,24 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
     for (let d = 0; d < SLOT_DAYS; d++) {
         days.push(slots.slice(d * hoursPerDay, (d + 1) * hoursPerDay))
     }
+
+    // Pennellata: entrano nel gesto solo le celle che l'utente può davvero
+    // ri-dichiarare. Occupate, bloccate e ore già iniziate restano fuori, così
+    // passarci sopra col mouse non le tocca (e non interrompe la strisciata).
+    // Il fallback e' lo stesso del render (`?? { state: 'libero' }`): una
+    // chiave assente da `cells` si disegna come cella libera, quindi deve
+    // anche comportarsi come tale, altrimenti spezzerebbe la strisciata.
+    const paintable = (key: string) => {
+        const v: SlotCellView = cells.get(key) ?? { state: 'libero' }
+        return !v.cellDisabled && (v.state === 'disponibile' || v.state === 'nondisponibile' || v.state === 'libero')
+    }
+    const paintEnabled = !readOnly && !!onCellPaint
+    const { containerProps, shouldIgnoreClick } = useDragPaint({
+        enabled: paintEnabled,
+        isPaintable: paintable,
+        isOn: key => cells.get(key)?.state === 'disponibile',
+        onPaint: (k, on) => onCellPaint?.(k, on),
+    })
 
     // Il menu "⋯" e' un pannello a `position: fixed`, ancorato al bottone che
     // lo apre ma calcolato fuori dal flusso della griglia: la griglia scorre
@@ -248,59 +303,120 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
 
     const openView = openKey ? cells.get(openKey) : undefined
 
+    // La colonna delle ore resta ferma mentre la griglia scorre verso sabato:
+    // il contenitore e' `overflow-x-auto` con `min-w-[720px]`, e sul telefono
+    // le ore uscivano dallo schermo proprio mentre servivano per orientarsi.
+    // `pointer-coarse:min-h-11`: quando queste intestazioni sono bottoni
+    // (`onDayToggle`/`onHourToggle`) selezionano un giorno o una riga intera, e
+    // col dito erano il bersaglio piu' piccolo della griglia — meta' dei 44px
+    // delle celle, che `min-h-11` ha gia'. Solo su puntatore grosso: col mouse
+    // la riga resta compatta.
+    const hourCellClasses = 'sticky left-0 z-10 flex items-center border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-xs font-semibold text-ash-500 pointer-coarse:min-h-11'
+    const dayHeadClasses = 'border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-center text-[11px] font-bold text-ash-700 last:border-r-0 pointer-coarse:min-h-11'
+
     return (
         <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">
             <div
-                className="grid min-w-[720px]"
+                // `select-none` solo dove si dipinge: nelle griglie di sola
+                // lettura i nomi dei colleghi restano selezionabili e copiabili.
+                className={`grid min-w-[720px] ${paintEnabled ? 'select-none' : ''}`}
                 style={{ gridTemplateColumns: '64px repeat(6, minmax(96px, 1fr))' }}
+                {...containerProps}
             >
-                <div className="border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-ash-400">
+                <div className="sticky left-0 z-10 border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-ash-400">
                     Ora
                 </div>
                 {days.map((_, d) => (
-                    <div
-                        key={d}
-                        className="border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-center text-[11px] font-bold text-ash-700 last:border-r-0"
-                    >
-                        {headerLabel(d)}
-                    </div>
+                    !readOnly && onDayToggle ? (
+                        <button
+                            key={d}
+                            type="button"
+                            onClick={() => onDayToggle(d)}
+                            aria-label={`Seleziona o deseleziona tutte le ore di ${headerLabel(d)}`}
+                            title="Tutto il giorno"
+                            className={`${dayHeadClasses} cursor-pointer transition-colors hover:bg-ash-100`}
+                        >
+                            {headerLabel(d)}
+                        </button>
+                    ) : (
+                        <div key={d} className={dayHeadClasses}>
+                            {headerLabel(d)}
+                        </div>
+                    )
                 ))}
 
                 {SLOT_HOURS.map((hour, row) => (
                     <div key={hour} className="contents">
-                        <div className="flex items-center border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-xs font-semibold text-ash-500">
-                            {String(hour).padStart(2, '0')}:00
-                        </div>
+                        {!readOnly && onHourToggle ? (
+                            <button
+                                type="button"
+                                onClick={() => onHourToggle(hour)}
+                                aria-label={`Seleziona o deseleziona le ${String(hour).padStart(2, '0')}:00 su tutti i giorni`}
+                                title="Tutta la riga"
+                                className={`${hourCellClasses} cursor-pointer transition-colors hover:bg-ash-100`}
+                            >
+                                {String(hour).padStart(2, '0')}:00
+                            </button>
+                        ) : (
+                            <div className={hourCellClasses}>
+                                {String(hour).padStart(2, '0')}:00
+                            </div>
+                        )}
                         {days.map((daySlots, d) => {
                             const instant = daySlots[row]
                             const key = slotKey(instant)
                             const view = cells.get(key) ?? { state: 'libero' as const }
-                            const disabled = !!readOnly || !!view.cellDisabled
+                            // In sola lettura il `disabled` nativo va benissimo:
+                            // non c'e' niente da spiegare. In una griglia
+                            // modificabile invece l'ora gia' iniziata resta un
+                            // bottone abilitato ma inerte: Chrome non mostra il
+                            // `title` sui bottoni disabilitati, e la spiegazione
+                            // sparirebbe proprio dove serve.
+                            const pastCell = !readOnly && !!view.cellDisabled
+                            const canPaint = paintEnabled && paintable(key)
                             // Il menu dipende da `readOnly` e dalla presenza di
                             // `view.menu`, non da `cellDisabled`: una cella
                             // passata non si ri-dichiara, ma un blocco si
                             // toglie sempre (spec §4.4, "lo sblocco è sempre
                             // consentito").
                             const showMenu = !readOnly && !!onCellMenu && !!view.menu
+                            const badgeText = view.badge && /^\d+$/.test(view.badge) ? `+${view.badge}` : view.badge
 
                             return (
-                                <div key={key} className="relative border-b border-r border-ash-200 last:border-r-0">
+                                <div
+                                    key={key}
+                                    // La chiave della pennellata sta sul
+                                    // contenitore, non sul bottone-cella: il
+                                    // "⋯" invisibile (`opacity-0`) intercetta
+                                    // `elementFromPoint` ed e' FRATELLO della
+                                    // cella, quindi da li' il `closest` non
+                                    // troverebbe mai la chiave.
+                                    data-paint-key={canPaint ? key : undefined}
+                                    className="group relative border-b border-r border-ash-200 last:border-r-0"
+                                >
                                     <button
                                         type="button"
-                                        disabled={disabled}
+                                        disabled={!!readOnly}
+                                        aria-disabled={pastCell || undefined}
                                         title={view.title}
                                         aria-label={ariaLabelFor(instant, view)}
-                                        onClick={() => onCellClick?.(key)}
+                                        onClick={() => {
+                                            if (shouldIgnoreClick()) return
+                                            if (view.cellDisabled) return
+                                            onCellClick?.(key)
+                                        }}
                                         onContextMenu={(e) => {
                                             if (!showMenu) return
                                             e.preventDefault()
                                             toggleMenu(key)
                                         }}
-                                        className={`flex min-h-14 w-full flex-col items-center justify-center gap-0.5 border-2 border-transparent px-1 py-1 text-[10px] transition-colors ${STATE_STYLES[view.state]} ${disabled ? 'cursor-default' : 'cursor-pointer hover:brightness-95'}`}
+                                        className={`flex min-h-11 w-full flex-col items-center justify-center gap-0.5 border-2 border-transparent px-1 py-1 text-[10px] transition-colors ${STATE_STYLES[view.state]} ${pastCell ? `cursor-not-allowed ${PAST_CELL_HATCH}` : readOnly ? 'cursor-default' : 'cursor-pointer hover:brightness-95'}`}
                                     >
                                         {view.tone && (
                                             <div className={`absolute inset-x-0 top-0 h-[3px] ${TONE_STYLES[view.tone]}`} />
                                         )}
+                                        {view.icon === 'check' && <Check className="h-3.5 w-3.5" aria-hidden />}
+                                        {view.icon === 'minus' && <Minus className="h-3.5 w-3.5 opacity-60" aria-hidden />}
                                         {view.subtitle && (
                                             <span className="line-clamp-2 text-center leading-tight">
                                                 {view.subtitle}
@@ -312,9 +428,9 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                                             </span>
                                         )}
                                     </button>
-                                    {view.badge && (
-                                        <div className="pointer-events-none absolute right-1 top-1 rounded bg-ash-800/80 px-1 text-[10px] font-bold text-white">
-                                            {view.badge}
+                                    {badgeText && (
+                                        <div className="pointer-events-none absolute left-1 top-1 text-[9px] font-semibold leading-none text-ash-500">
+                                            {badgeText}
                                         </div>
                                     )}
                                     {showMenu && (
@@ -331,7 +447,7 @@ export function SlotGrid({ weekStartIso, cells, onCellClick, onCellMenu, readOnl
                                                 e.stopPropagation()
                                                 toggleMenu(key)
                                             }}
-                                            className="absolute bottom-0.5 right-0.5 cursor-pointer rounded bg-white/80 px-1 text-[10px] font-bold text-ash-500 hover:bg-white hover:text-ash-800"
+                                            className={`absolute bottom-0.5 right-0.5 cursor-pointer rounded bg-white/80 px-1.5 py-0.5 text-[10px] font-bold leading-none text-ash-500 transition-opacity hover:bg-white hover:text-ash-800 pointer-coarse:opacity-100 ${openKey === key ? 'opacity-100' : 'opacity-0 group-focus-within:opacity-100 group-hover:opacity-100'}`}
                                         >
                                             ⋯
                                         </button>

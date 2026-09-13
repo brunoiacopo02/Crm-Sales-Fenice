@@ -25,6 +25,43 @@ import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { revalidatePath } from "next/cache"
 
 /**
+ * Traduzione degli errori di SESSIONE in messaggi leggibili.
+ *
+ * `requireCalendarSupervisor` e `assertSalesArea` lanciano: se la chiamata sta
+ * fuori dal `try` l'eccezione risale al client come "An error occurred in the
+ * Server Components render", cioè una schermata rossa al posto di "ricarica la
+ * pagina". Dentro il `try`, questa funzione riconosce i due casi che hanno un
+ * messaggio utile da dare; tutto il resto resta un errore generico + log.
+ *
+ * Si riconosce il PREFISSO, non il messaggio esatto: `src/lib/tenancy.ts` non
+ * lancia mai le due parole nude. `currentTenant` lancia `Unauthorized: no
+ * Supabase user`, `assertSalesArea` `Forbidden: user … has area …`,
+ * `assertSingleCompany` `Forbidden: azione non disponibile in modalità "Tutte
+ * le aziende"`, `assertLeadInCompany` `Forbidden: lead … not found …`. Con un
+ * match esatto nessuna di queste sarebbe stata riconosciuta e l'utente avrebbe
+ * letto "riprova fra un momento" su un rifiuto che riprovando non cambia.
+ *
+ * Del testo dopo `Forbidden: ` si mostra SOLO quello di `assertSingleCompany`
+ * (riconosciuto da "Tutte le aziende"): è l'unico scritto per un umano, e
+ * appiattirlo su "Non autorizzato." mandava a cercare un problema di permessi
+ * dove il problema era solo lo switch azienda. Gli altri rifiuti di tenancy.ts
+ * portano uuid e nomi di area — diagnostica interna che a schermo non aiuta
+ * nessuno e che non va mostrata: per quelli resta "Non autorizzato.".
+ */
+function sessionErrorMessage(e: unknown): string | null {
+    if (!(e instanceof Error)) return null
+    const msg = e.message
+    if (msg === 'Unauthorized' || msg.startsWith('Unauthorized:')) {
+        return 'Sessione scaduta: ricarica la pagina.'
+    }
+    if (msg.startsWith('Forbidden')) {
+        const dettaglio = msg.slice('Forbidden'.length).replace(/^:\s*/, '').trim()
+        return dettaglio.includes('Tutte le aziende') ? dettaglio : 'Non autorizzato.'
+    }
+    return null
+}
+
+/**
  * "Il venditore aveva lo slot libero e non c'era": multa da 50 €, subito.
  * L'admin può annullarla (voidCalendarPenalty): attrito zero per chi segnala,
  * controllo a posteriori per chi decide.
@@ -34,20 +71,22 @@ export async function reportSalesAbsence(
     slotIso: string,
     note?: string,
 ): Promise<{ success: boolean; error?: string }> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    const role = user?.user_metadata?.role as string | undefined
-    if (!user || !role || !["CONFERME", "ADMIN"].includes(role)) {
-        return { success: false, error: "Non autorizzato." }
-    }
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
-
-    const slot = slotStartFor(new Date(slotIso))
-    if (!slot) return { success: false, error: "Ora fuori dal calendario." }
-    const slotEnd = new Date(slot.getTime() + 3_600_000)
-
     try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        const role = user?.user_metadata?.role as string | undefined
+        if (!user || !role || !["CONFERME", "ADMIN"].includes(role)) {
+            return { success: false, error: "Non autorizzato." }
+        }
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const slotDate = new Date(slotIso)
+        if (Number.isNaN(slotDate.getTime())) return { success: false, error: "Data non valida." }
+        const slot = slotStartFor(slotDate)
+        if (!slot) return { success: false, error: "Ora fuori dal calendario." }
+        const slotEnd = new Date(slot.getTime() + 3_600_000)
+
         // Staff condiviso multi-tenant: stesso pattern di getVenditoriAgenda
         // (allowedCompanies). Senza questo filtro un salesUserId di un'altra
         // azienda passerebbe comunque, e la multa/notifica finirebbero scritte
@@ -84,7 +123,12 @@ export async function reportSalesAbsence(
             ))
         const [reported] = await db.select({ id: salesLatePenalties.id })
             .from(salesLatePenalties).where(and(
-                eq(salesLatePenalties.companyId, ctx.companyId),
+                // Niente `eq(companyId)`: l'indice unico che difende davvero
+                // questo slot è `sales_penalties_userkind_uq (salesUserId, kind,
+                // dueAt)`, che l'azienda NON la contiene. Con il filtro, una
+                // Conferma su Serenamente non vedeva la segnalazione fatta su
+                // Fenice, credeva lo slot libero e l'insert le veniva assorbito
+                // dal conflitto: "segnalato" a video, nessuna multa nuova.
                 eq(salesLatePenalties.salesUserId, salesUserId),
                 eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
                 eq(salesLatePenalties.dueAt, slot),
@@ -129,25 +173,31 @@ export async function reportSalesAbsence(
             note: note || null,
         }).onConflictDoNothing().returning({ id: salesLatePenalties.id })
 
-        // Se onConflictDoNothing non ha scritto nulla (corsa fra due
-        // segnalazioni sullo stesso slot), la multa esiste già: niente
-        // seconda notifica "hai preso una multa da 50 €" per una multa sola.
-        if (inserted.length > 0) {
-            await db.insert(notifications).values({
-                id: crypto.randomUUID(),
-                recipientUserId: salesUserId,
-                type: 'calendar_penalty',
-                title: 'Multa: assenza su slot disponibile',
-                body: `Segnalata assenza ${formatRomeAppointmentLabel(slot)}: trattenuta di ${CALENDAR_PENALTY_EUR} €.`,
-                metadata: { slot: slot.toISOString() },
-                companyId: ctx.companyId,
-            })
+        // Se onConflictDoNothing non ha scritto nulla, la multa su quello slot
+        // esiste già (corsa fra due segnalazioni, o una riga di un'altra
+        // azienda che il pre-check qui sopra ora vede). Rispondere `success:
+        // true` sarebbe una bugia: nessuna multa nuova è stata scritta, e chi
+        // segnala meritava di saperlo invece di vedere "fatto".
+        if (inserted.length === 0) {
+            return { success: false, error: "Assenza già segnalata per quest'ora." }
         }
+
+        await db.insert(notifications).values({
+            id: crypto.randomUUID(),
+            recipientUserId: salesUserId,
+            type: 'calendar_penalty',
+            title: 'Multa: assenza su slot disponibile',
+            body: `Segnalata assenza ${formatRomeAppointmentLabel(slot)}: trattenuta di ${CALENDAR_PENALTY_EUR} €.`,
+            metadata: { slot: slot.toISOString() },
+            companyId: ctx.companyId,
+        })
 
         revalidatePath('/conferme')
         revalidatePath('/calendari-venditori')
         return { success: true }
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('reportSalesAbsence:', e)
         return { success: false, error: 'Segnalazione non riuscita: riprova fra un momento.' }
     }
@@ -204,6 +254,16 @@ export interface SupervisionView {
          * e dice se la settimana è stata compilata a mano o dal cron.
          */
         fromTemplate: boolean
+        /**
+         * Ha compilato, ma ZERO ore: formalmente in regola, in pratica
+         * imprenotabile tutta la settimana. Nasce qui e basta — l'ordinamento
+         * di questa lista, la pastiglia "0 ore: imprenotabile" e il conteggio
+         * in testa alla scheda leggono tutti questo campo. Quando la
+         * definizione viveva in tre copie (una per posto) bastava che una
+         * dimenticasse `!exempt` per far comparire gli esenti fra gli
+         * imprenotabili in un punto solo dei tre.
+         */
+        zeroOre: boolean
     }>
     penalties: Array<{
         id: string
@@ -225,17 +285,67 @@ export interface SupervisionView {
  * Vista completa di supervisione: stessa `weekCoverage` delle altre due
  * schermate (mai un secondo calcolo), più compilazione e multe del mese
  * richiesto (default: il mese corrente).
+ *
+ * La scheda Multe è riservata ad ADMIN/MANAGER (spec §6.2): per un account
+ * CONFERME il registro non viene nemmeno LETTO, e la risposta esce con
+ * `penalties: []` e `totalEur: 0`. Nasconderlo solo a video (`showMulte` nel
+ * client) lasciava le righe dentro il payload della server action, leggibili
+ * da chiunque aprisse la scheda di rete: la trattenuta di un collega è un dato
+ * di paga, non un dettaglio di UI.
+ *
+ * Resta invece visibile a tutti la pastiglia "Multa" della scheda Compilazione
+ * (`missingRows`): dice che QUELLA settimana non è stata compilata, ed è il
+ * fatto su cui le Conferme lavorano — non il registro del mese.
  */
 export async function getCalendarSupervision(
     weekStartIso?: string,
     monthKeyInput?: string,
 ): Promise<SupervisionView> {
-    const { ctx } = await requireCalendarSupervisor()
+    const { role, ctx } = await requireCalendarSupervisor()
 
-    const weekStart = weekStartIso ? weekStartFor(new Date(weekStartIso)) : weekStartFor(new Date())
+    // Una data illeggibile dal client ricade sulla settimana corrente invece di
+    // propagare `Invalid Date` fin dentro le query (dove diventa un errore di
+    // Postgres, cioè una pagina rotta).
+    const richiesta = weekStartIso ? new Date(weekStartIso) : null
+    const weekStart = richiesta && !Number.isNaN(richiesta.getTime())
+        ? weekStartFor(richiesta)
+        : weekStartFor(new Date())
     const weekStartStr = toRomeDateStr(weekStart)
     const deadline = weeklyDeadline(weekStart)
     const monthKey = monthKeyInput || romeMonthKey(new Date())
+
+    // Costruita sempre, ESEGUITA solo se chi guarda ha diritto al registro:
+    // una query Drizzle non parte finché non la si attende.
+    // `leftJoin` su leads: le multe CALENDAR_MISSING non hanno lead e
+    // sparirebbero con un innerJoin (lo stesso bug che il Task 11 corregge
+    // altrove — non va introdotto qui).
+    const penaltyRegistryQuery = db.select({
+        id: salesLatePenalties.id,
+        salesUserId: salesLatePenalties.salesUserId,
+        kind: salesLatePenalties.kind,
+        dueAt: salesLatePenalties.dueAt,
+        amountEur: salesLatePenalties.amountEur,
+        note: salesLatePenalties.note,
+        voidedAt: salesLatePenalties.voidedAt,
+        voidReason: salesLatePenalties.voidReason,
+        leadName: leads.name,
+        reporterName: users.name,
+        reporterDisplayName: users.displayName,
+    }).from(salesLatePenalties)
+        .leftJoin(leads, eq(salesLatePenalties.leadId, leads.id))
+        .leftJoin(users, eq(salesLatePenalties.reportedBy, users.id))
+        .where(and(
+            eq(salesLatePenalties.companyId, ctx.companyId),
+            or(
+                eq(salesLatePenalties.kind, 'CALENDAR_MISSING'),
+                eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
+            ),
+            eq(salesLatePenalties.monthKey, monthKey),
+        ))
+        .orderBy(desc(salesLatePenalties.dueAt))
+    type PenaltyRegistryRow = Awaited<typeof penaltyRegistryQuery>[number]
+    const penaltyRegistry: PenaltyRegistryRow[] | Promise<PenaltyRegistryRow[]> =
+        role === 'CONFERME' ? [] : penaltyRegistryQuery
 
     const [coverage, venditoriRows, availRows, planRows, missingRows, penaltyRows] = await Promise.all([
         weekCoverage(ctx, weekStart),
@@ -279,33 +389,9 @@ export async function getCalendarSupervision(
                 eq(salesLatePenalties.dueAt, deadline),
                 isNull(salesLatePenalties.voidedAt),
             )),
-        // `leftJoin` su leads: le multe CALENDAR_MISSING non hanno lead e
-        // sparirebbero con un innerJoin (lo stesso bug che il Task 11 corregge
-        // altrove — non va introdotto qui).
-        db.select({
-            id: salesLatePenalties.id,
-            salesUserId: salesLatePenalties.salesUserId,
-            kind: salesLatePenalties.kind,
-            dueAt: salesLatePenalties.dueAt,
-            amountEur: salesLatePenalties.amountEur,
-            note: salesLatePenalties.note,
-            voidedAt: salesLatePenalties.voidedAt,
-            voidReason: salesLatePenalties.voidReason,
-            leadName: leads.name,
-            reporterName: users.name,
-            reporterDisplayName: users.displayName,
-        }).from(salesLatePenalties)
-            .leftJoin(leads, eq(salesLatePenalties.leadId, leads.id))
-            .leftJoin(users, eq(salesLatePenalties.reportedBy, users.id))
-            .where(and(
-                eq(salesLatePenalties.companyId, ctx.companyId),
-                or(
-                    eq(salesLatePenalties.kind, 'CALENDAR_MISSING'),
-                    eq(salesLatePenalties.kind, 'ABSENT_SLOT'),
-                ),
-                eq(salesLatePenalties.monthKey, monthKey),
-            ))
-            .orderBy(desc(salesLatePenalties.dueAt)),
+        // Registro del mese. Per CONFERME è già un array vuoto: vedi la nota in
+        // testa alla funzione.
+        penaltyRegistry,
     ])
 
     const venditori = venditoriRows.map(v => ({
@@ -328,27 +414,43 @@ export async function getCalendarSupervision(
     const penaltyByUser = new Map(missingRows.map(r => [r.salesUserId, r.amountEur]))
     const compilation = venditori.map(v => {
         const plan = planByUser.get(v.id)
+        const submittedAtIso = plan?.submittedAt ? plan.submittedAt.toISOString() : null
+        // Le ore VERE della settimana, non il denormalizzato del piano: è la
+        // stessa lista che disegna la matrice Venditore × ore e la griglia
+        // di copertura, già in memoria qui sopra. `salesWeekPlans.slotCount`
+        // è una copia, e una copia si disallinea (un'ora tolta a mano su una
+        // settimana materializzata dal modello non tocca la riga di piano):
+        // la scheda diceva "12 ore" accanto a una riga che ne mostrava 10.
+        const slotCount = declaredByUser.get(v.id)?.length ?? 0
         return {
             salesUserId: v.id,
-            submittedAtIso: plan?.submittedAt ? plan.submittedAt.toISOString() : null,
-            slotCount: plan?.slotCount ?? 0,
+            submittedAtIso,
+            slotCount,
             late: plan?.late ?? false,
             penaltyEur: penaltyByUser.get(v.id) ?? null,
             exempt: v.calendarExempt,
             fromTemplate: plan?.fromTemplate ?? false,
+            // Unica definizione di "compilato zero ore" di tutto il modulo:
+            // vedi il commento sul campo nel tipo qui sopra.
+            zeroOre: !!submittedAtIso && slotCount === 0 && !v.calendarExempt,
         }
     })
     // Prima i non compilati: sono il motivo per cui qualcuno apre questa scheda.
     // Gli esenti NON sono "non compilati" (spec §4.3): restano in fondo insieme
     // a chi ha compilato, altrimenti Sales 001 guiderebbe la lista degli
     // inadempienti ogni settimana per sempre.
+    //
+    // Subito dopo, chi ha compilato ZERO ore. Formalmente ha adempiuto — la
+    // riga di piano c'è, nessuna multa automatica scatta — ma il risultato per
+    // l'azienda è identico a non aver compilato: quel venditore è imprenotabile
+    // tutta la settimana e nella scheda spariva in mezzo ai "A mano" verdi, con
+    // un innocuo `0` nella colonna Ore. Qui sale dove si vede; se debba
+    // diventare multa è una decisione del PO, non di questo ordinamento.
     const inadempiente = (r: { submittedAtIso: string | null; exempt: boolean }) =>
         !r.submittedAtIso && !r.exempt
-    compilation.sort((a, b) => {
-        if (inadempiente(a) && !inadempiente(b)) return -1
-        if (!inadempiente(a) && inadempiente(b)) return 1
-        return 0
-    })
+    const rango = (r: { submittedAtIso: string | null; exempt: boolean; zeroOre: boolean }) =>
+        inadempiente(r) ? 0 : (r.zeroOre ? 1 : 2)
+    compilation.sort((a, b) => rango(a) - rango(b))
 
     const penalties = penaltyRows.map(r => ({
         id: r.id,
@@ -386,12 +488,6 @@ export async function voidCalendarPenalty(
     penaltyId: string,
     reason: string,
 ): Promise<{ success: boolean; error?: string }> {
-    const { userId, role, ctx } = await requireCalendarSupervisor()
-    if (role !== 'ADMIN') return { success: false, error: 'Non autorizzato.' }
-
-    const trimmed = reason?.trim()
-    if (!trimmed) return { success: false, error: 'Serve un motivo.' }
-
     // `salesLatePenalties` è una tabella sola per due registri distinti: i 50 €
     // del calendario (qui) e i 10 € dei ritardi (Monitor Vendite, Task 11).
     // Questa funzione è competente solo sul primo: senza questo filtro,
@@ -403,6 +499,15 @@ export async function voidCalendarPenalty(
     )
 
     try {
+        // Sessione e validazione DENTRO il try: una sessione scaduta qui
+        // lanciava "Unauthorized" fino al client, che mostrava una pagina
+        // rotta invece di "ricarica la pagina".
+        const { userId, role, ctx } = await requireCalendarSupervisor()
+        if (role !== 'ADMIN') return { success: false, error: 'Non autorizzato.' }
+
+        const trimmed = reason?.trim()
+        if (!trimmed) return { success: false, error: 'Serve un motivo.' }
+
         const [existing] = await db.select({
             id: salesLatePenalties.id,
             voidedAt: salesLatePenalties.voidedAt,
@@ -425,6 +530,8 @@ export async function voidCalendarPenalty(
             calendarKindScope,
         ))
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('voidCalendarPenalty:', e)
         return { success: false, error: 'Annullamento non riuscito: riprova fra un momento.' }
     }
@@ -441,10 +548,11 @@ export async function setCalendarExempt(
     salesUserId: string,
     exempt: boolean,
 ): Promise<{ success: boolean; error?: string }> {
-    const { role, ctx } = await requireCalendarSupervisor()
-    if (role !== 'ADMIN') return { success: false, error: 'Non autorizzato.' }
-
     try {
+        // Sessione dentro il try, come in `voidCalendarPenalty`.
+        const { role, ctx } = await requireCalendarSupervisor()
+        if (role !== 'ADMIN') return { success: false, error: 'Non autorizzato.' }
+
         const updated = await db.update(users).set({ calendarExempt: exempt }).where(and(
             eq(users.id, salesUserId),
             eq(users.role, 'VENDITORE'),
@@ -453,6 +561,8 @@ export async function setCalendarExempt(
 
         if (updated.length === 0) return { success: false, error: 'Venditore non trovato.' }
     } catch (e) {
+        const sessione = sessionErrorMessage(e)
+        if (sessione) return { success: false, error: sessione }
         console.error('setCalendarExempt:', e)
         return { success: false, error: 'Aggiornamento non riuscito: riprova fra un momento.' }
     }

@@ -185,9 +185,23 @@ export async function getVenditoriMonitor(filters: {
 
     const nameOf = new Map(venditori.map(v => [v.id, v.name]))
 
-    // Ritardi a registro. Servono a due cose: escludere dalle liste le scadenze
-    // già "uscite dal monitor" (decisione PO 2026-09-09) e alimentare la sezione
-    // Ritardi del mese selezionato.
+    // DUE letture del registro, perché servono a due cose che NON hanno lo
+    // stesso perimetro — prima erano una query sola senza filtro di mese, cioè
+    // l'intero storico di tutti i venditori caricato ad ogni apertura del
+    // Monitor per poi buttarne via quasi tutto in memoria:
+    //
+    // 1. `penaltyRows` alimenta la sezione Ritardi e i suoi totali: solo il
+    //    MESE selezionato, filtrato a DB (il filtro in memoria più sotto resta
+    //    come rete, non come meccanismo);
+    // 2. `penalisedRows` alimenta `penalisedKeys`, cioè l'esclusione dalle
+    //    liste operative delle scadenze già passate al conteggio. Quella NON
+    //    può essere limitata al mese: i follow-up scaduti si mostrano senza
+    //    limite di data indietro nel tempo (vedi il ciclo più sotto: `date <
+    //    now`, non `>= filters.startDate`), quindi una multa di due mesi fa
+    //    farebbe ricomparire in lista una scadenza già archiviata. Resta
+    //    magra apposta — tre colonne, nessun join, solo i due kind che hanno
+    //    un lead.
+    //
     // `leftJoin` su leads: le multe CALENDAR_MISSING non hanno lead e con un
     // innerJoin sparirebbero in silenzio dal registro e dal totale di fine
     // mese — nessun errore, solo una trattenuta da 50 € invisibile.
@@ -212,6 +226,7 @@ export async function getVenditoriMonitor(filters: {
       .where(and(
           eq(salesLatePenalties.companyId, ctx.companyId),
           inArray(salesLatePenalties.salesUserId, targetIds),
+          eq(salesLatePenalties.monthKey, penaltyMonthKey),
       ))
       .orderBy(desc(salesLatePenalties.dueAt))
 
@@ -219,7 +234,17 @@ export async function getVenditoriMonitor(filters: {
     // nelle liste operative, è già passata al conteggio dei ritardi. Solo
     // APPOINTMENT/FOLLOWUP hanno un lead e alimentano le liste operative: le
     // multe calendario (senza lead, o con kind diverso) non c'entrano.
-    const penalisedKeys = new Set(penaltyRows
+    const penalisedRows = await db.select({
+        leadId: salesLatePenalties.leadId,
+        kind: salesLatePenalties.kind,
+        dueAt: salesLatePenalties.dueAt,
+    }).from(salesLatePenalties).where(and(
+        eq(salesLatePenalties.companyId, ctx.companyId),
+        inArray(salesLatePenalties.salesUserId, targetIds),
+        inArray(salesLatePenalties.kind, ['APPOINTMENT', 'FOLLOWUP']),
+    ))
+
+    const penalisedKeys = new Set(penalisedRows
         .filter((r): r is typeof r & { leadId: string; kind: 'APPOINTMENT' | 'FOLLOWUP' } =>
             !!r.leadId && (r.kind === 'APPOINTMENT' || r.kind === 'FOLLOWUP'))
         .map(r => penaltyKey({ leadId: r.leadId, kind: r.kind, dueAt: r.dueAt })))
