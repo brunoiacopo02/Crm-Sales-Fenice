@@ -203,26 +203,51 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     // altrimenti si dichiarerebbe occupato da sé. Dire DOVE si può fissare
     // costa una lettura; farlo indovinare costa una forzatura.
     //
-    // La chiamata parte solo dai due tab che la usano, con 300 ms di debounce
-    // (l'`<input type="date">` cambia valore a ogni cifra digitata) e un
-    // contatore che scarta le risposte arrivate fuori ordine. Un errore qui
-    // non si mostra: le pastiglie semplicemente non compaiono.
-    const needsAgenda = isOpen && (activeTab === "dati" || activeTab === "esito")
+    // La chiamata parte solo quando qualcosa può davvero comparire: i due tab
+    // che la usano, e o un venditore già assegnato (le pastiglie) o il tab
+    // Esiti (le etichette della `<select>`, che servono prima della scelta).
+    // Debounce 300 ms (l'`<input type="date">` cambia valore a ogni cifra
+    // digitata) e un contatore che scarta le risposte arrivate fuori ordine —
+    // bumpato anche in chiusura, perché una risposta in volo non raggiunga il
+    // lead successivo. Un errore qui non si mostra: le pastiglie semplicemente
+    // non compaiono.
+    const needsAgenda = isOpen
+        && (activeTab === "dati" || activeTab === "esito")
+        && (!!salesperson || activeTab === "esito")
     const agendaReqRef = useRef(0)
-    const [agenda, setAgenda] = useState<{ day: string; free: Record<string, string[]>; exempt: string[] } | null>(null)
+    const [agenda, setAgenda] = useState<{
+        leadId: string
+        day: string
+        /** Dichiarate, non bloccate, non occupate: TUTTE, passato compreso.
+         *  È la diagnosi, e deve coincidere con quella del muro lato server,
+         *  che non guarda l'orologio. Alle 14:00 su un appuntamento delle
+         *  10:00 di stamattina "non disponibile a quest'ora" sarebbe falso. */
+        declaredFree: Record<string, string[]>
+        /** Il sottoinsieme ancora futuro: solo le pastiglie cliccabili, perché
+         *  proporre "libero alle 10:00" alle 18:00 manda a sbattere di nuovo. */
+        futureFree: Record<string, string[]>
+        exempt: string[]
+    } | null>(null)
 
     useEffect(() => {
         if (!needsAgenda || !lead?.id || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) return
         const req = ++agendaReqRef.current
         const day = editDate
+        const leadId: string = lead.id
+        // Invalidazione alla chiusura: il contatore basta a scartare le
+        // risposte fuori ordine mentre il drawer è aperto, ma non quella
+        // ancora in volo quando l'effetto viene smontato (drawer chiuso, o
+        // riaperto su un altro lead). Questo flag copre esattamente quel caso.
+        let cancelled = false
         const t = setTimeout(async () => {
             try {
                 const dayStart = romeInstant(day, 0)
                 const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
                 const res = await getVenditoriAgenda(dayStart, dayEnd)
-                if (req !== agendaReqRef.current) return
+                if (cancelled || req !== agendaReqRef.current) return
                 const nowMs = Date.now()
-                const free: Record<string, string[]> = {}
+                const declaredFree: Record<string, string[]> = {}
+                const futureFree: Record<string, string[]> = {}
                 const exempt: string[] = []
                 for (const v of res.venditori) {
                     if (v.calendarExempt) exempt.push(v.id)
@@ -230,25 +255,26 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                     // blocchi del giorno, non solo quelli nati in tempo utile.
                     const busy = new Set<string>(v.blockDetails.map(b => b.slotKey))
                     for (const a of v.appointments) {
-                        if (a.leadId === lead.id) continue
+                        if (a.leadId === leadId) continue
                         const s = slotStartFor(new Date(a.appointmentDate))
                         if (s) busy.add(slotKey(s))
                     }
-                    free[v.id] = v.declaredSlots
+                    const ore = v.declaredSlots
                         .filter(k => !busy.has(k))
                         .map(k => romeInstant(k.split('@')[0], Number(k.split('@')[1])))
-                        // Un'ora già iniziata non è più un suggerimento: alle 18
-                        // "libero alle 10:00" manda a sbattere di nuovo.
-                        .filter(d => d.getTime() > nowMs)
                         .sort((a, b) => a.getTime() - b.getTime())
-                        .map(slotLabel)
+                    declaredFree[v.id] = ore.map(slotLabel)
+                    futureFree[v.id] = ore.filter(d => d.getTime() > nowMs).map(slotLabel)
                 }
-                setAgenda({ day, free, exempt })
+                setAgenda({ leadId, day, declaredFree, futureFree, exempt })
             } catch {
-                if (req === agendaReqRef.current) setAgenda(null)
+                if (!cancelled && req === agendaReqRef.current) setAgenda(null)
             }
         }, 300)
-        return () => clearTimeout(t)
+        return () => {
+            clearTimeout(t)
+            cancelled = true
+        }
     }, [needsAgenda, editDate, lead?.id])
 
     if (!isOpen || !item) return null;
@@ -531,12 +557,21 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
 
     const isLocked = activeUsers.length > 0;
 
-    // Le ore libere valgono solo per il giorno che è davvero nell'input: dopo
-    // un cambio data, finché la nuova risposta non arriva non si mostra nulla.
-    const agendaForDay = agenda && agenda.day === editDate ? agenda : null;
+    // Le ore libere valgono solo per il lead e il giorno che sono davvero
+    // sotto gli occhi: dopo un cambio data — o dopo che il drawer si è
+    // riaperto su un altro lead — finché la nuova risposta non arriva non si
+    // mostra nulla, invece delle ore di quello di prima.
+    const agendaForDay = agenda && agenda.day === editDate && agenda.leadId === lead.id ? agenda : null;
     const selectedExempt = !!agendaForDay && !!salesperson && agendaForDay.exempt.includes(salesperson);
+    /** Le ore ancora cliccabili: solo il futuro, sono un suggerimento. */
     const freeHoursForSelected = agendaForDay && salesperson && !selectedExempt
-        ? (agendaForDay.free[salesperson] ?? [])
+        ? (agendaForDay.futureFree[salesperson] ?? [])
+        : null;
+    /** La diagnosi "quel giorno non ha dichiarato niente" si legge invece su
+     *  TUTTE le ore dichiarate e libere, orologio escluso: è la stessa cosa
+     *  che dirà il muro lato server. */
+    const declaredFreeForSelected = agendaForDay && salesperson && !selectedExempt
+        ? (agendaForDay.declaredFree[salesperson] ?? [])
         : null;
 
     /** L'ora dell'appuntamento come è ora nei due input, o null se non c'è. */
@@ -555,7 +590,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     const venditoreHint = (id: string): string => {
         if (!agendaForDay || apptSlotHour === null) return '';
         if (agendaForDay.exempt.includes(id)) return '';
-        const free = agendaForDay.free[id] ?? [];
+        const free = agendaForDay.declaredFree[id] ?? [];
         if (apptSlotHour && free.includes(apptSlotHour)) return ` · libero alle ${apptSlotHour}`;
         return " · non disponibile a quest'ora";
     };
@@ -818,9 +853,13 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                 </div>
 
                                 {/* Le ore su cui si fissa senza forzare, per il venditore
-                                    assegnato e il giorno scelto. Un click imposta l'ora. */}
-                                {freeHoursForSelected !== null && (
-                                    freeHoursForSelected.length > 0 ? (
+                                    assegnato e il giorno scelto. Un click imposta l'ora.
+                                    Cliccabili solo quelle ancora da venire; il consiglio
+                                    di cambiare giorno lo dà invece la diagnosi completa,
+                                    altrimenti su un appuntamento di stamattina si
+                                    leggerebbe "nessuna ora dichiarata" a torto. */}
+                                {declaredFreeForSelected !== null && (
+                                    freeHoursForSelected && freeHoursForSelected.length > 0 ? (
                                         <div className="flex flex-wrap items-center gap-1.5">
                                             <span className="text-[11px] font-bold text-ash-500 uppercase tracking-wider mr-0.5">Ore libere</span>
                                             {freeHoursForSelected.map(h => (
@@ -834,8 +873,10 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                 </button>
                                             ))}
                                         </div>
-                                    ) : (
+                                    ) : declaredFreeForSelected.length === 0 ? (
                                         <div className="text-[11px] text-ash-500">Nessuna ora dichiarata quel giorno: cambia giorno o venditore.</div>
+                                    ) : (
+                                        <div className="text-[11px] text-ash-500">Le ore libere di quel giorno sono già passate: cambia giorno o venditore.</div>
                                     )
                                 )}
 

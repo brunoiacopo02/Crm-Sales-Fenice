@@ -161,11 +161,15 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
     const nameOf = (id: string) => data?.venditori.find(v => v.id === id)?.name ?? id
 
     return (
-        <div
-            className="fixed inset-0 z-[100] flex items-start justify-center p-2 sm:p-6 bg-ash-900/60 backdrop-blur-sm overflow-y-auto"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-        >
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl my-4 flex flex-col max-h-[95vh]">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-2 sm:p-6 bg-ash-900/60 backdrop-blur-sm overflow-y-auto">
+            {/* Il click-fuori sta su un overlay dedicato e NON sul contenitore
+                scrollabile: lì dentro anche un click sulla barra di scorrimento
+                colpisce `currentTarget`, e chiudeva la modale mentre si scorreva. */}
+            <div className="fixed inset-0" onClick={onClose} />
+            <div
+                className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl my-4 flex flex-col max-h-[95vh]"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-ash-200 px-4 sm:px-6 py-3 sticky top-0 bg-white rounded-t-2xl z-10">
                     <div className="flex items-center gap-2 min-w-0">
@@ -614,12 +618,20 @@ function AbsenceButton({
     const [done, setDone] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const armedAt = useRef(0)
+    const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
         if (!armed) return
         const t = setTimeout(() => setArmed(false), 5000)
         return () => clearTimeout(t)
     }, [armed])
+
+    // Chiudere la modale (Escape, click fuori) entro il secondo di riscontro
+    // smonta questa cella: senza questa pulizia il timer sopravvivrebbe e
+    // chiamerebbe `load()` su un componente che non c'è più.
+    useEffect(() => () => {
+        if (successTimer.current) clearTimeout(successTimer.current)
+    }, [])
 
     if (!decision.ok) {
         if ((ABSENCE_SILENT_REASONS as readonly string[]).includes(decision.reason)) return null
@@ -660,7 +672,7 @@ function AbsenceButton({
                         if (res.success) {
                             setArmed(false)
                             setDone(true)
-                            setTimeout(() => onSuccess(), 1200)
+                            successTimer.current = setTimeout(() => onSuccess(), 1200)
                         } else {
                             setArmed(false)
                             setError(res.error || 'Segnalazione non riuscita.')

@@ -16,19 +16,18 @@ import { forceReasonProblem } from "@/lib/venditore/calendarBooking"
  *
  * Nessun window.confirm: tutto inline, come richiesto dal task.
  */
-export function ForceBookingReason({ message, onConfirm, busy, compact }: {
+export function ForceBookingReason({ message, onConfirm, busy }: {
     message: string
     onConfirm: (reason: string) => void
     busy?: boolean
-    compact?: boolean
 }) {
     const [reason, setReason] = useState("")
     const trimmed = reason.trim()
     const problem = forceReasonProblem(reason)
 
     return (
-        <div className={`rounded-lg border border-amber-300 bg-amber-50 ${compact ? 'p-2 mt-2' : 'p-3 mt-3'}`}>
-            <p className={`text-amber-800 font-semibold whitespace-pre-wrap leading-snug ${compact ? 'text-[11px]' : 'text-sm'}`}>
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 mt-3">
+            <p className="text-sm text-amber-800 font-semibold whitespace-pre-wrap leading-snug">
                 {message}
             </p>
             <textarea
