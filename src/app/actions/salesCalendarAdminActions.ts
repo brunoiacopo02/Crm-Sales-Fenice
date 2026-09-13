@@ -33,15 +33,29 @@ import { revalidatePath } from "next/cache"
  * pagina". Dentro il `try`, questa funzione riconosce i due casi che hanno un
  * messaggio utile da dare; tutto il resto resta un errore generico + log.
  *
- * Match ESATTO sui due messaggi, mai `startsWith`: `assertSingleCompany` e
- * `assertLeadInCompany` lanciano anch'esse messaggi che cominciano per
- * `Forbidden: …` ma dicono un'altra cosa, e un prefisso le appiattiva tutte su
- * "Non autorizzato.", che manda a cercare un problema di permessi dove non c'è.
+ * Si riconosce il PREFISSO, non il messaggio esatto: `src/lib/tenancy.ts` non
+ * lancia mai le due parole nude. `currentTenant` lancia `Unauthorized: no
+ * Supabase user`, `assertSalesArea` `Forbidden: user … has area …`,
+ * `assertSingleCompany` `Forbidden: azione non disponibile in modalità "Tutte
+ * le aziende"`, `assertLeadInCompany` `Forbidden: lead … not found …`. Con un
+ * match esatto nessuna di queste sarebbe stata riconosciuta e l'utente avrebbe
+ * letto "riprova fra un momento" su un rifiuto che riprovando non cambia.
+ *
+ * Il testo dopo `Forbidden: ` viene restituito com'è quando c'è: è il modo in
+ * cui `assertSingleCompany` spiega la modalità "Tutte le aziende", e
+ * appiattirlo su "Non autorizzato." mandava a cercare un problema di permessi
+ * dove il problema era solo lo switch azienda.
  */
 function sessionErrorMessage(e: unknown): string | null {
     if (!(e instanceof Error)) return null
-    if (e.message === 'Unauthorized') return 'Sessione scaduta: ricarica la pagina.'
-    if (e.message === 'Forbidden') return 'Non autorizzato.'
+    const msg = e.message
+    if (msg === 'Unauthorized' || msg.startsWith('Unauthorized:')) {
+        return 'Sessione scaduta: ricarica la pagina.'
+    }
+    if (msg.startsWith('Forbidden')) {
+        const dettaglio = msg.slice('Forbidden'.length).replace(/^:\s*/, '').trim()
+        return dettaglio.length > 0 ? dettaglio : 'Non autorizzato.'
+    }
     return null
 }
 
@@ -238,6 +252,16 @@ export interface SupervisionView {
          * e dice se la settimana è stata compilata a mano o dal cron.
          */
         fromTemplate: boolean
+        /**
+         * Ha compilato, ma ZERO ore: formalmente in regola, in pratica
+         * imprenotabile tutta la settimana. Nasce qui e basta — l'ordinamento
+         * di questa lista, la pastiglia "0 ore: imprenotabile" e il conteggio
+         * in testa alla scheda leggono tutti questo campo. Quando la
+         * definizione viveva in tre copie (una per posto) bastava che una
+         * dimenticasse `!exempt` per far comparire gli esenti fra gli
+         * imprenotabili in un punto solo dei tre.
+         */
+        zeroOre: boolean
     }>
     penalties: Array<{
         id: string
@@ -388,20 +412,25 @@ export async function getCalendarSupervision(
     const penaltyByUser = new Map(missingRows.map(r => [r.salesUserId, r.amountEur]))
     const compilation = venditori.map(v => {
         const plan = planByUser.get(v.id)
+        const submittedAtIso = plan?.submittedAt ? plan.submittedAt.toISOString() : null
+        // Le ore VERE della settimana, non il denormalizzato del piano: è la
+        // stessa lista che disegna la matrice Venditore × ore e la griglia
+        // di copertura, già in memoria qui sopra. `salesWeekPlans.slotCount`
+        // è una copia, e una copia si disallinea (un'ora tolta a mano su una
+        // settimana materializzata dal modello non tocca la riga di piano):
+        // la scheda diceva "12 ore" accanto a una riga che ne mostrava 10.
+        const slotCount = declaredByUser.get(v.id)?.length ?? 0
         return {
             salesUserId: v.id,
-            submittedAtIso: plan?.submittedAt ? plan.submittedAt.toISOString() : null,
-            // Le ore VERE della settimana, non il denormalizzato del piano: è la
-            // stessa lista che disegna la matrice Venditore × ore e la griglia
-            // di copertura, già in memoria qui sopra. `salesWeekPlans.slotCount`
-            // è una copia, e una copia si disallinea (un'ora tolta a mano su una
-            // settimana materializzata dal modello non tocca la riga di piano):
-            // la scheda diceva "12 ore" accanto a una riga che ne mostrava 10.
-            slotCount: declaredByUser.get(v.id)?.length ?? 0,
+            submittedAtIso,
+            slotCount,
             late: plan?.late ?? false,
             penaltyEur: penaltyByUser.get(v.id) ?? null,
             exempt: v.calendarExempt,
             fromTemplate: plan?.fromTemplate ?? false,
+            // Unica definizione di "compilato zero ore" di tutto il modulo:
+            // vedi il commento sul campo nel tipo qui sopra.
+            zeroOre: !!submittedAtIso && slotCount === 0 && !v.calendarExempt,
         }
     })
     // Prima i non compilati: sono il motivo per cui qualcuno apre questa scheda.
@@ -417,10 +446,8 @@ export async function getCalendarSupervision(
     // diventare multa è una decisione del PO, non di questo ordinamento.
     const inadempiente = (r: { submittedAtIso: string | null; exempt: boolean }) =>
         !r.submittedAtIso && !r.exempt
-    const zeroOre = (r: { submittedAtIso: string | null; slotCount: number; exempt: boolean }) =>
-        !!r.submittedAtIso && r.slotCount === 0 && !r.exempt
-    const rango = (r: { submittedAtIso: string | null; slotCount: number; exempt: boolean }) =>
-        inadempiente(r) ? 0 : (zeroOre(r) ? 1 : 2)
+    const rango = (r: { submittedAtIso: string | null; exempt: boolean; zeroOre: boolean }) =>
+        inadempiente(r) ? 0 : (r.zeroOre ? 1 : 2)
     compilation.sort((a, b) => rango(a) - rango(b))
 
     const penalties = penaltyRows.map(r => ({

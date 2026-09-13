@@ -155,9 +155,18 @@ export function CalendariVenditoriClient({ initial, role, ruleState }: Props) {
 
     // `coverage` vuoto vale quanto "tutte le celle a zero": in entrambi i casi
     // per questa settimana non esiste un'ora dichiarata da nessuno.
+    //
+    // Solo dalla settimana corrente in avanti, però: su una settimana passata
+    // la griglia vuota non è un problema da risolvere ma un dato di fatto — e
+    // l'invito "Vedi chi non ha compilato" manderebbe a sollecitare qualcuno
+    // per una settimana finita. `data.weekStartIso` è già un lunedì (lo produce
+    // il server); l'oggi va ricondotto al suo con `weekStartFor`, mai con
+    // `getDay`/`setDate` (vedi calendarSlots.ts) — così la settimana in corso
+    // resta "aperta" anche il sabato sera.
     const nessunaDisponibilita = useMemo(
-        () => data.coverage.every(c => c.available.length === 0),
-        [data.coverage],
+        () => new Date(data.weekStartIso) >= weekStartFor(new Date())
+            && data.coverage.every(c => c.available.length === 0),
+        [data.weekStartIso, data.coverage],
     )
 
     return (
@@ -245,7 +254,11 @@ export function CalendariVenditoriClient({ initial, role, ruleState }: Props) {
                         o se semplicemente nessuno l'ha ancora compilata: sono due
                         problemi diversi con due rimedi diversi, e senza questa
                         striscia la Direzione andava a cercare i venditori uno a uno. */}
-                    {nessunaDisponibilita && (
+                    {/* Mai durante un caricamento: cambiando settimana i dati
+                        vecchi restano a video finché arrivano i nuovi, e la
+                        striscia lampeggiava su una settimana che non si stava
+                        nemmeno più guardando. */}
+                    {nessunaDisponibilita && !isPending && (
                         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
                             <div>Nessun venditore ha ancora dichiarato le ore di questa settimana.</div>
                             <button
@@ -362,7 +375,11 @@ function CompilazioneTab({
     // (l'esente non è un inadempiente) e con le ore a zero accanto, perché per
     // l'agenda valgono quanto un calendario mai compilato.
     const nonCompilati = data.compilation.filter(r => !r.submittedAtIso && !r.exempt).length
-    const aZeroOre = data.compilation.filter(r => !!r.submittedAtIso && r.slotCount === 0 && !r.exempt).length
+    // `r.zeroOre` arriva dal server (`getCalendarSupervision`), che è anche
+    // l'unico posto dove quella definizione vive: qui la si legge, non la si
+    // riscrive — altrimenti l'ordinamento della lista e questo conteggio
+    // possono divergere senza che nessuno se ne accorga.
+    const aZeroOre = data.compilation.filter(r => r.zeroOre).length
     const codaZeroOre = aZeroOre > 0
         ? ` · ${aZeroOre} a zero ore`
         : ''
@@ -434,7 +451,7 @@ function CompilazioneTab({
                                                 : row.exempt
                                                     ? <Pill tone="neutral">Esente</Pill>
                                                     : <Pill tone="red">No</Pill>}
-                                            {row.submittedAtIso && row.slotCount === 0 && !row.exempt && (
+                                            {row.zeroOre && (
                                                 <Pill tone="amber">0 ore: imprenotabile</Pill>
                                             )}
                                         </div>
@@ -468,7 +485,7 @@ function CompilazioneTab({
                         })}
                     </tbody>
                 </table>
-                </div>
+            </div>
         </div>
     )
 }
@@ -518,8 +535,13 @@ function ExemptSwitch({
                     Esentare {name}? Non compila più e non prende multe.
                 </div>
                 <div className="flex gap-1">
+                    {/* `autoFocus`: aprendo la conferma lo switch viene smontato
+                        e con lui se ne va il focus, che tornava su `<body>` —
+                        chi naviga a tastiera si ritrovava a ripartire dall'inizio
+                        della pagina per rispondere a una domanda appena comparsa. */}
                     <button
                         type="button"
+                        autoFocus
                         disabled={pending}
                         onClick={() => applica(true)}
                         className="rounded bg-brand-orange px-2 py-1 text-xs font-bold text-white hover:brightness-95 disabled:opacity-50"
@@ -542,13 +564,16 @@ function ExemptSwitch({
 
     return (
         <div className="flex flex-col gap-1">
+            {/* `aria-label` col nome dentro, non "questo venditore": in una
+                tabella di otto righe uguali lo screen reader leggeva otto volte
+                la stessa etichetta e non si capiva su chi si stesse per agire. */}
             <button
                 type="button"
                 disabled={pending}
                 aria-pressed={exempt}
                 aria-label={exempt
-                    ? "Togli l'esenzione dal calendario a questo venditore"
-                    : "Metti l'esenzione dal calendario a questo venditore"}
+                    ? `Togli l'esenzione dal calendario a ${name}`
+                    : `Metti l'esenzione dal calendario a ${name}`}
                 title={exempt
                     ? 'Esente: non compila il calendario e non prende multe. Clicca per rimetterlo sotto la regola.'
                     : 'Non esente: compila il calendario e può prendere multe. Clicca per esentarlo.'}

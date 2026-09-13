@@ -45,16 +45,29 @@ const SLOT_KEY_RE = /^\d{4}-\d{2}-\d{2}@\d{1,2}$/
  * `Forbidden: …`: se la chiamata sta fuori dal `try` l'eccezione risale al
  * client come errore di render invece che come "ricarica la pagina".
  *
- * Match ESATTO sui due messaggi, mai `startsWith`: `assertSingleCompany` e
- * `assertLeadInCompany` lanciano anch'esse messaggi che cominciano per
- * `Forbidden: …` ma dicono un'altra cosa (modalità "Tutte le aziende", lead di
- * un'altra azienda), e un prefisso le appiattiva tutte su "Non autorizzato.",
- * che manda a cercare un problema di permessi dove non c'è.
+ * Si riconosce il PREFISSO, non il messaggio esatto: `src/lib/tenancy.ts` non
+ * lancia mai le due parole nude. `currentTenant` lancia `Unauthorized: no
+ * Supabase user`, `assertSalesArea` `Forbidden: user … has area …`,
+ * `assertSingleCompany` `Forbidden: azione non disponibile in modalità "Tutte
+ * le aziende"`, `assertLeadInCompany` `Forbidden: lead … not found …`. Con un
+ * match esatto nessuna di queste sarebbe stata riconosciuta e l'utente avrebbe
+ * letto "riprova fra un momento" su un rifiuto che riprovando non cambia.
+ *
+ * Il testo dopo `Forbidden: ` viene restituito com'è quando c'è: è il modo in
+ * cui `assertSingleCompany` spiega la modalità "Tutte le aziende", e
+ * appiattirlo su "Non autorizzato." mandava a cercare un problema di permessi
+ * dove il problema era solo lo switch azienda.
  */
 function sessionErrorMessage(e: unknown): string | null {
     if (!(e instanceof Error)) return null
-    if (e.message === 'Unauthorized') return 'Sessione scaduta: ricarica la pagina.'
-    if (e.message === 'Forbidden') return 'Non autorizzato.'
+    const msg = e.message
+    if (msg === 'Unauthorized' || msg.startsWith('Unauthorized:')) {
+        return 'Sessione scaduta: ricarica la pagina.'
+    }
+    if (msg.startsWith('Forbidden')) {
+        const dettaglio = msg.slice('Forbidden'.length).replace(/^:\s*/, '').trim()
+        return dettaglio.length > 0 ? dettaglio : 'Non autorizzato.'
+    }
     return null
 }
 
