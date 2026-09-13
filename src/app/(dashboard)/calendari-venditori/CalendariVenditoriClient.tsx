@@ -57,7 +57,7 @@ function formatDateTime(iso: string): string {
 }
 
 function kindLabel(kind: CalendarPenaltyKind): string {
-    return kind === 'CALENDAR_MISSING' ? 'Calendario non compilato' : 'Assenza su slot'
+    return kind === 'CALENDAR_MISSING' ? 'Calendario non compilato' : 'Assenza a un appuntamento'
 }
 
 function reasonLabel(reason: string | null): string {
@@ -65,7 +65,7 @@ function reasonLabel(reason: string | null): string {
         fuori_griglia: 'Ora fuori dal calendario',
         non_dichiarato: 'Ora non dichiarata',
         bloccato: 'Ora bloccata dal venditore',
-        gia_occupato: 'Ora gia occupata da un altro appuntamento',
+        gia_occupato: 'Ora già occupata da un altro appuntamento',
     }
     if (reason && reason in map) return map[reason as BookingRefusal]
     return reason ?? '—'
@@ -272,7 +272,7 @@ function MatrixCard({
 }) {
     return (
         <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white p-4">
-            <h2 className="mb-1 text-sm font-bold text-ash-800">Venditore × slot</h2>
+            <h2 className="mb-1 text-sm font-bold text-ash-800">Venditore × ore</h2>
             <p className="mb-3 text-xs text-ash-500">
                 Ogni quadratino è un'ora dichiarata disponibile: serve a vedere a colpo d'occhio chi si accumula sulle stesse ore.
             </p>

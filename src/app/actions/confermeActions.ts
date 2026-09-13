@@ -387,14 +387,6 @@ async function checkBookingAllowed(
     if (role !== 'CONFERME') return { ok: true }
     if (!salesUserId || !appointmentAt) return { ok: true }
 
-    // L'esenzione vale anche per il muro: un esente non compila il calendario,
-    // quindi non avrebbe mai uno slot dichiarato e OGNI suo appuntamento
-    // finirebbe in Forzature. Coerente con `absenceReportCheck`, che gia' non
-    // multa gli esenti.
-    const [venditore] = await db.select({ calendarExempt: users.calendarExempt })
-        .from(users).where(eq(users.id, salesUserId))
-    if (venditore?.calendarExempt) return { ok: true }
-
     const at = new Date(appointmentAt)
     const slot = slotStartFor(at)
 
@@ -405,7 +397,13 @@ async function checkBookingAllowed(
     const dayStart = romeInstant(toRomeDateStr(at), 0)
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
 
-    const [daySlots, dayBlocks, dayAppointments] = await Promise.all([
+    // L'esenzione viaggia insieme alle altre tre letture invece che prima:
+    // era un round-trip in piu' su OGNI salvataggio delle Conferme, pagato
+    // anche dal 99% dei casi in cui il venditore non e' esente. L'esito si
+    // scarta subito dopo se lo e': la logica non cambia.
+    const [venditoreRows, daySlots, dayBlocks, dayAppointments] = await Promise.all([
+        db.select({ calendarExempt: users.calendarExempt })
+            .from(users).where(eq(users.id, salesUserId)),
         db.select({ slotStart: salesAvailabilitySlots.slotStart })
             .from(salesAvailabilitySlots).where(and(
                 eq(salesAvailabilitySlots.salesUserId, salesUserId),
@@ -433,10 +431,20 @@ async function checkBookingAllowed(
             )),
     ])
 
+    // L'esenzione vale anche per il muro: un esente non compila il calendario,
+    // quindi non avrebbe mai uno slot dichiarato e OGNI suo appuntamento
+    // finirebbe in Forzature. Coerente con `absenceReportCheck`, che gia' non
+    // multa gli esenti.
+    if (venditoreRows[0]?.calendarExempt) return { ok: true }
+
+    const now = new Date()
     const blockedKeys = new Set(dayBlocks.map(b => slotKey(b.slotStart)))
     const busyKeys = new Set(dayAppointments.map(a => slotKey(a.appointmentDate!)))
     const freeHours = daySlots
         .map(d => d.slotStart)
+        // Un'ora gia' iniziata non e' un suggerimento: alle 18:00 di oggi
+        // "quel giorno e' libero alle 10:00" manda a sbattere una seconda volta.
+        .filter(d => d > now)
         .filter(d => !blockedKeys.has(slotKey(d)) && !busyKeys.has(slotKey(d)))
         .sort((a, b) => a.getTime() - b.getTime())
         .map(slotLabel)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, RefreshCw, Users, Loader2 } from "lucide-react"
 import { getVenditoriAgenda } from "@/app/actions/confermeActions"
 import { reportSalesAbsence } from "@/app/actions/salesCalendarAdminActions"
@@ -84,18 +84,24 @@ function isPastDay(d: Date): boolean {
     return toRomeDateStr(d) < toRomeDateStr(new Date())
 }
 
-type BandStat = { count: number; tone: 'rosso' | 'ambra' | 'neutro'; names: string[] }
+type BandStat = { count: number; max: number; tone: 'rosso' | 'ambra' | 'neutro'; names: string[] }
 
-/** Copertura minima della fascia: "in quella fascia c'è sempre almeno N". */
+/**
+ * Copertura della fascia: `count` è il minimo ("in quella fascia c'è sempre
+ * almeno N"), `max` il massimo. Il solo minimo faceva leggere "1" a una fascia
+ * con un'ora scoperta in mezzo a tre ore da quattro venditori: il numero era
+ * vero e l'impressione falsa.
+ */
 function bandStats(coverage: CoverageCell[], dow: number, from: number, to: number, nameOf: (id: string) => string): BandStat {
     const cells = coverage.filter(c => c.dow === dow && c.hour >= from && c.hour <= to)
-    if (cells.length === 0) return { count: 0, tone: 'neutro', names: [] }
+    if (cells.length === 0) return { count: 0, max: 0, tone: 'neutro', names: [] }
     const count = Math.min(...cells.map(c => c.available.length))
+    const max = Math.max(...cells.map(c => c.available.length))
     const avgExpected = cells.reduce((s, c) => s + c.expectedPeople, 0) / cells.length
     const tone: BandStat['tone'] = count === 0 ? 'rosso' : (count < avgExpected ? 'ambra' : 'neutro')
     const idSet = new Set<string>()
     cells.forEach(c => c.available.forEach(id => idSet.add(id)))
-    return { count, tone, names: [...idSet].map(nameOf) }
+    return { count, max, tone, names: [...idSet].map(nameOf) }
 }
 
 function bandToneClasses(tone: BandStat['tone']): string {
@@ -136,6 +142,15 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
         if (isOpen) load()
     }, [isOpen, load])
 
+    // Escape chiude: è il gesto che tutti provano per primo su una modale a
+    // schermo pieno, e finora non faceva niente.
+    useEffect(() => {
+        if (!isOpen) return
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+    }, [isOpen, onClose])
+
     if (!isOpen) return null
 
     const days: Date[] = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -146,7 +161,10 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
     const nameOf = (id: string) => data?.venditori.find(v => v.id === id)?.name ?? id
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center p-2 sm:p-6 bg-ash-900/60 backdrop-blur-sm overflow-y-auto">
+        <div
+            className="fixed inset-0 z-[100] flex items-start justify-center p-2 sm:p-6 bg-ash-900/60 backdrop-blur-sm overflow-y-auto"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+        >
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl my-4 flex flex-col max-h-[95vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-ash-200 px-4 sm:px-6 py-3 sticky top-0 bg-white rounded-t-2xl z-10">
@@ -167,22 +185,28 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                 {/* Toolbar */}
                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-ash-100 bg-ash-50/50">
                     <div className="flex items-center gap-1">
+                        {/* Spenti mentre carica: tre click di fila sulla freccia
+                            partivano tutti e l'ultima risposta ad arrivare vinceva,
+                            non l'ultima settimana chiesta. */}
                         <button
                             onClick={() => setWeekStart(addDays(weekStart, -7))}
-                            className="p-1.5 rounded-lg border border-ash-200 bg-white hover:bg-ash-100 text-ash-700"
+                            disabled={loading}
+                            className="p-1.5 rounded-lg border border-ash-200 bg-white hover:bg-ash-100 text-ash-700 disabled:opacity-50"
                             title="Settimana precedente"
                         >
                             <ChevronLeft className="h-4 w-4" />
                         </button>
                         <button
                             onClick={() => setWeekStart(startOfWeek(new Date()))}
-                            className="px-2.5 py-1 rounded-lg border border-ash-200 bg-white hover:bg-ash-100 text-xs font-semibold text-ash-700"
+                            disabled={loading}
+                            className="px-2.5 py-1 rounded-lg border border-ash-200 bg-white hover:bg-ash-100 text-xs font-semibold text-ash-700 disabled:opacity-50"
                         >
                             Oggi
                         </button>
                         <button
                             onClick={() => setWeekStart(addDays(weekStart, 7))}
-                            className="p-1.5 rounded-lg border border-ash-200 bg-white hover:bg-ash-100 text-ash-700"
+                            disabled={loading}
+                            className="p-1.5 rounded-lg border border-ash-200 bg-white hover:bg-ash-100 text-ash-700 disabled:opacity-50"
                             title="Settimana successiva"
                         >
                             <ChevronRight className="h-4 w-4" />
@@ -219,6 +243,15 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                         <div className="p-8 text-center text-sm text-ash-500">
                             <Users className="h-8 w-8 text-ash-300 mx-auto mb-2" />
                             Nessun venditore attivo.
+                        </div>
+                    )}
+
+                    {/* Una griglia tutta vuota si legge come un guasto. Se nessuno
+                        ha compilato, il muro del fissaggio chiederà un motivo a
+                        ogni appuntamento: meglio dirlo prima di provarci. */}
+                    {data && data.venditori.length > 0 && data.coverage.every(c => c.available.length === 0) && (
+                        <div className="m-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                            Nessun venditore ha ancora dichiarato le ore di questa settimana. Ogni fissaggio qui chiederà un motivo.
                         </div>
                     )}
 
@@ -284,7 +317,18 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                                 className={`rounded px-1 py-0.5 text-[9px] font-bold text-center ${bandToneClasses(stat.tone)}`}
                                                                 title={title}
                                                             >
-                                                                {band.label}: {stat.count}
+                                                                <div>
+                                                                    {band.label}: {stat.count === stat.max ? stat.count : `${stat.count}–${stat.max}`}
+                                                                </div>
+                                                                {/* I nomi restano nel `title` per il mouse, ma ora esistono
+                                                                    anche in chiaro: chi assegna non deve passare sopra
+                                                                    ventun pastiglie per sapere di chi si parla. */}
+                                                                {stat.names.length > 0 && (
+                                                                    <div className="text-[8px] font-medium leading-tight opacity-80 truncate">
+                                                                        {stat.names.slice(0, 2).join(', ')}
+                                                                        {stat.names.length > 2 ? ` +${stat.names.length - 2}` : ''}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )
                                                     })}
@@ -295,7 +339,12 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
 
                                     {/* Rows per venditore */}
                                     {data.venditori.map((v) => {
-                                        const weekCount = v.appointments.length
+                                        // Il carico della settimana è quello che il venditore
+                                        // dovrà davvero ricevere: gli scartati sono appuntamenti
+                                        // che non esistono più e gonfiavano il numero su cui si
+                                        // decide a chi assegnare il prossimo.
+                                        const discardedCount = v.appointments.filter(a => a.confirmationsOutcome === 'scartato').length
+                                        const weekCount = v.appointments.length - discardedCount
                                         const apptSlotKeys = new Set(
                                             v.appointments.flatMap(a => {
                                                 const s = slotStartFor(a.appointmentDate as Date)
@@ -308,6 +357,9 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                     <div className="text-xs font-bold text-ash-900 truncate" title={v.name}>{v.name}</div>
                                                     <div className="text-[10px] text-ash-500">
                                                         {weekCount} app{weekCount === 1 ? '' : '.'} / sett
+                                                        {discardedCount > 0 && (
+                                                            <span className="text-ash-400"> · {discardedCount} scart.</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 {days.map((d, i) => {
@@ -374,7 +426,7 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Confermato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Scartato</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-300 border border-amber-400" /> Fuori disponibilità dichiarata</span>
-                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-ash-200 border border-ash-300" /> Slot occupato (follow-up o imprevisto)</span>
+                    <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-ash-200 border border-ash-300" /> Ora occupata (follow-up o imprevisto)</span>
                     <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-50 border border-emerald-200" /> Ora dichiarata e libera: qui si fissa senza forzare</span>
                 </div>
             </div>
@@ -435,7 +487,7 @@ function DayCell({
                                 {outOfAvailability && (
                                     <div
                                         className="mt-1 rounded px-1 py-0.5 text-[9px] font-bold text-center bg-amber-100 text-amber-700"
-                                        title="Il venditore non aveva dichiarato quest'ora: questo slot non può generare multa."
+                                        title="Il venditore non aveva dichiarato quest'ora: non può generare multa."
                                     >
                                         Fuori disponibilità
                                     </div>
@@ -503,11 +555,11 @@ function DayCell({
                                     <div
                                         key={k}
                                         className="rounded-md border border-dashed border-ash-200 bg-ash-50/60 px-1.5 py-1 text-[10px] leading-tight"
-                                        title="Slot dichiarato disponibile, senza appuntamento."
+                                        title="Ora dichiarata disponibile, senza appuntamento."
                                     >
                                         <div className="flex items-center justify-between gap-1">
                                             <span className="font-mono font-bold text-ash-500">{slotLabel(slotStart)}</span>
-                                            <span className="text-ash-400 italic">Slot vuoto</span>
+                                            <span className="text-ash-400 italic">Ora libera, nessun appuntamento</span>
                                         </div>
                                         <AbsenceButton
                                             decision={absenceReportCheck({
@@ -532,9 +584,21 @@ function DayCell({
     )
 }
 
+/** Le due ragioni che non riguardano il venditore di questa cella: mostrare un
+ *  bottone spento per "è esente" o "sono passate 48 ore" aggiunge rumore a ogni
+ *  ora della griglia senza dire niente di azionabile. */
+const ABSENCE_SILENT_REASONS = ['finestra_scaduta', 'venditore_esente'] as const
+
+/** Un secondo click non può confermare prima di questo intervallo: sotto, è il
+ *  doppio click partito per errore sul primo, non una conferma. */
+const ABSENCE_ARM_GUARD_MS = 700
+
 /**
- * Bottone "Non c'era": disabilitato con il motivo quando `decision` non è
- * ammissibile (stessi messaggi di `absenceRefusalMessage`, non riformulati).
+ * Bottone "Non c'era": quando `decision` non è ammissibile diventa un testo
+ * spento con il motivo per esteso (stessi messaggi di `absenceRefusalMessage`,
+ * non riformulati). Non è un bottone disabilitato perché Chrome non mostra il
+ * `title` sui bottoni disabilitati: il motivo sarebbe rimasto invisibile.
+ *
  * Quando è ammissibile, la conferma è inline — niente `window.confirm`, che
  * blocca l'estensione: un secondo click entro 5 secondi registra la multa.
  */
@@ -547,7 +611,9 @@ function AbsenceButton({
 }) {
     const [armed, setArmed] = useState(false)
     const [submitting, setSubmitting] = useState(false)
+    const [done, setDone] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const armedAt = useRef(0)
 
     useEffect(() => {
         if (!armed) return
@@ -556,15 +622,21 @@ function AbsenceButton({
     }, [armed])
 
     if (!decision.ok) {
+        if ((ABSENCE_SILENT_REASONS as readonly string[]).includes(decision.reason)) return null
         return (
-            <button
-                type="button"
-                disabled
-                title={absenceRefusalMessage(decision.reason)}
-                className="mt-1 w-full rounded px-1 py-0.5 text-[9px] font-bold text-center bg-ash-100 text-ash-400 cursor-not-allowed"
-            >
-                Non c&apos;era
-            </button>
+            <div className="mt-1 text-[9px] text-ash-500 leading-tight">
+                {absenceRefusalMessage(decision.reason)}
+            </div>
+        )
+    }
+
+    // Il riscontro della multa registrata resta un attimo sotto gli occhi prima
+    // che `onSuccess` ricarichi la settimana e la cella si riscriva.
+    if (done) {
+        return (
+            <div className="mt-1 w-full rounded px-1 py-0.5 text-[9px] font-bold text-center bg-emerald-100 text-emerald-700">
+                Segnalata · {CALENDAR_PENALTY_EUR} €
+            </div>
         )
     }
 
@@ -574,14 +646,21 @@ function AbsenceButton({
                 type="button"
                 disabled={submitting}
                 onClick={async () => {
-                    if (!armed) { setArmed(true); return }
+                    if (!armed) {
+                        setArmed(true)
+                        armedAt.current = Date.now()
+                        return
+                    }
+                    // Un doppio click involontario non deve poter trattenere 50 €.
+                    if (Date.now() - armedAt.current < ABSENCE_ARM_GUARD_MS) return
                     setSubmitting(true)
                     setError(null)
                     try {
                         const res = await onReport()
                         if (res.success) {
                             setArmed(false)
-                            onSuccess()
+                            setDone(true)
+                            setTimeout(() => onSuccess(), 1200)
                         } else {
                             setArmed(false)
                             setError(res.error || 'Segnalazione non riuscita.')
