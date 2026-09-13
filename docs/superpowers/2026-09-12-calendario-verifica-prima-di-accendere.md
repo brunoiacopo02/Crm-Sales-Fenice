@@ -156,3 +156,23 @@ Se serve spegnerla, **spegni nello stesso momento anche `SALES_CALENDAR_PENALTIE
 2. **`slotCount` ha due definizioni**: la materializzazione conta le sole ore future, il salvataggio a mano conta tutte le righe della settimana.
 3. **Una settimana le cui ore sono tutte passate si può salvare a zero ore** con un click, e questo evita la multa del lunedì: la regola guarda l'esistenza del piano, non il numero di ore.
 4. `getCalendarWeek` non verifica che l'id passato sia un venditore attivo del tenant (preesistente).
+
+## Parte 4 — pass UX e correzioni dagli audit (LIVE 13/09/2026, merge c1e06c0)
+
+Verifiche dal vivo NON fatte (la scheda Chrome era nascosta durante la sessione: nessuna schermata riuscita):
+1. `/mio-calendario` da laptop: premi su un'ora libera e trascina col mouse → tutte le celle attraversate cambiano insieme, l'origine non "rimbalza"; un click secco cambia una cella sola.
+2. Click su "09:00" (riga) e su "Lun 14/09" (colonna): saltano celle occupate/bloccate/passate.
+3. Barra gialla "Modifiche non salvate" in basso, resta visibile scorrendo; "Scarta" ripristina; a 0 ore il testo diventa rosso.
+4. Freccia settimana con modifiche in sospeso → riquadro inline con Salva e cambia / Scarta e cambia / Resta qui.
+5. Telefono (~400px): colonna delle ore ferma scorrendo verso sabato; "⋯" sempre visibile; tap singolo funziona (la pennellata è solo mouse/penna).
+6. Conferme, drawer tab Dati Lead con venditore assegnato: sotto data/ora compaiono le pastiglie delle ore libere di quel giorno; nel tab Esiti la select dice "libero alle HH:00 / non disponibile a quest'ora".
+7. Conferme, rifiuto del muro: il messaggio elenca le ore libere di quel giorno; "Fissa comunque" resta spento sotto i 10 caratteri di motivo.
+8. Agenda venditori: "Non c'era" richiede due click distanziati (≥0,7 s) e mostra "Segnalata · 50 €"; Esc e click fuori chiudono.
+9. Direzione: scheda Compilazione con il riepilogo "N venditori non hanno compilato" in testa; scheda Multe con la striscia di stato della regola; switch Esente con conferma quando si attiva.
+10. Sales 001 (esente): una Conferma può fissargli un appuntamento senza motivo di forzatura.
+
+Decisioni aperte per Bruno:
+- **Salvare 0 ore conta come compilato** (nessuna multa, ma il venditore è imprenotabile tutta la settimana). Oggi è solo evidenziato in Compilazione ("0 ore: imprenotabile"). Alternativa: il cron lo tratta come non compilato.
+- Esenzione letta al momento del cron: cambiarla a metà settimana agisce sulla scadenza del lunedì già passato.
+- La griglia di copertura non vede gli appuntamenti dell'altra azienda (i nomi dei lead non possono attraversare i tenant), mentre il muro li conta: su Serenamente una pastiglia "libera" può essere seguita da "ha già un appuntamento".
+- Navigazione dalla sidebar con modifiche non salvate: non intercettata (solo chiusura scheda e frecce settimana).
