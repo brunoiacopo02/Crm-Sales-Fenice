@@ -8,7 +8,7 @@
  * schermate (venditore, Conferme): mai un secondo calcolo, mai numeri diversi.
  *
  * `voidCalendarPenalty` e `setCalendarExempt` sono solo ADMIN (spec §7): per
- * chiunque altro lo switch e il bottone "Annulla" sono statici/assenti, mai
+ * chiunque altro lo switch e il bottone "Annulla multa" sono statici/assenti, mai
  * disabilitati a metà — la scheda Multe calendario non si mostra affatto a
  * CONFERME (spec §6.2).
  */
@@ -22,6 +22,7 @@ import {
 import { weekSlots, weekStartFor, addWeeks, slotKey, slotLabel } from "@/lib/venditore/calendarSlots"
 import { previousYearMonth, nextYearMonth, monthBoundsRome, formatRomeAppointmentLabel } from "@/lib/dateUtils"
 import type { CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
+import type { PenaltyRuleState } from "@/lib/venditore/latePenalties"
 import type { BookingRefusal } from "@/lib/venditore/calendarBooking"
 import { SlotGrid, type SlotCellView } from "@/components/calendar/SlotGrid"
 import { CoverageLegend } from "@/components/calendar/CoverageLegend"
@@ -32,6 +33,8 @@ import { formatWeekRange } from "@/components/calendar/calendarFormat"
 interface Props {
     initial: SupervisionView
     role: string
+    /** Letto dalle env sul server (`page.tsx`): dice se la regola multa davvero. */
+    ruleState: PenaltyRuleState
 }
 
 const DAY_ABBR_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
@@ -40,6 +43,7 @@ const weekdayFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', w
 const dateSlashFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit' })
 const timeFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 const monthYearFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', month: 'long', year: 'numeric' })
+const dayMonthYearFmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: 'long', year: 'numeric' })
 const eurFmt = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
 function capitalize(s: string): string {
@@ -86,7 +90,7 @@ function Pill({ tone, children }: { tone: 'green' | 'red' | 'amber' | 'neutral' 
     )
 }
 
-export function CalendariVenditoriClient({ initial, role }: Props) {
+export function CalendariVenditoriClient({ initial, role, ruleState }: Props) {
     const [data, setData] = useState<SupervisionView>(initial)
     const [tab, setTab] = useState<'copertura' | 'compilazione' | 'multe' | 'forzature'>('copertura')
     const [isPending, startTransition] = useTransition()
@@ -148,6 +152,13 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
         }
         return m
     }, [slots, coverageByKey, venditoriById])
+
+    // `coverage` vuoto vale quanto "tutte le celle a zero": in entrambi i casi
+    // per questa settimana non esiste un'ora dichiarata da nessuno.
+    const nessunaDisponibilita = useMemo(
+        () => data.coverage.every(c => c.available.length === 0),
+        [data.coverage],
+    )
 
     return (
         <div className="mx-auto max-w-6xl space-y-4">
@@ -230,6 +241,22 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
 
             {tab === 'copertura' && (
                 <div className="space-y-4">
+                    {/* Una griglia tutta grigia non dice se la settimana è scoperta
+                        o se semplicemente nessuno l'ha ancora compilata: sono due
+                        problemi diversi con due rimedi diversi, e senza questa
+                        striscia la Direzione andava a cercare i venditori uno a uno. */}
+                    {nessunaDisponibilita && (
+                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                            <div>Nessun venditore ha ancora dichiarato le ore di questa settimana.</div>
+                            <button
+                                type="button"
+                                onClick={() => setTab('compilazione')}
+                                className="mt-1 font-bold underline"
+                            >
+                                Vedi chi non ha compilato
+                            </button>
+                        </div>
+                    )}
                     <SlotGrid weekStartIso={data.weekStartIso} cells={coverageCells} readOnly />
                     <CoverageLegend variant="copertura" />
                     <MatrixCard matrix={data.matrix} venditoriById={venditoriById} slots={slots} />
@@ -251,6 +278,7 @@ export function CalendariVenditoriClient({ initial, role }: Props) {
                     venditoriById={venditoriById}
                     canWrite={canWrite}
                     isPending={isPending}
+                    ruleState={ruleState}
                     onMonthChange={goMonth}
                     onChanged={reload}
                 />
@@ -288,16 +316,22 @@ function MatrixCard({
                                 <div className="w-32 shrink-0 truncate text-xs font-semibold text-ash-700" title={name}>
                                     {name}
                                 </div>
-                                <div className="flex flex-1 flex-wrap gap-px">
+                                {/* Quadratini da 8px (erano 6): a 6 il puntatore
+                                    mancava la cella e il `title` non usciva mai.
+                                    Lo stacco ogni 13 celle è la fine della giornata:
+                                    senza, le 78 ore erano un nastro indistinto e
+                                    contare fino al mercoledì era un esercizio di pazienza. */}
+                                <div className="flex flex-1 flex-wrap gap-[1px]">
                                     {slots.map((s, i) => {
                                         const key = slotKey(s)
                                         const on = declared.has(key)
                                         const dayIdx = Math.floor(i / 13)
+                                        const fineGiornata = i % 13 === 12
                                         return (
                                             <div
                                                 key={key}
                                                 title={`${DAY_ABBR_IT[dayIdx]} ${slotLabel(s)} — ${on ? 'disponibile' : 'non disponibile'}`}
-                                                className={`h-[6px] w-[6px] rounded-[1px] ${on ? 'bg-emerald-500' : 'bg-ash-200'}`}
+                                                className={`h-2 w-2 rounded-[1px] ${fineGiornata ? 'mr-1.5' : ''} ${on ? 'bg-emerald-500' : 'bg-ash-200'}`}
                                             />
                                         )
                                     })}
@@ -322,106 +356,188 @@ function CompilazioneTab({
     canWrite: boolean
     onChanged: () => void
 }) {
+    // La risposta del lunedì mattina è UNA: quanti non hanno compilato. Stava
+    // in fondo a sette colonne, da ricavare contando le pastiglie rosse riga
+    // per riga; qui sta in testa, con lo stesso criterio dell'ordinamento
+    // (l'esente non è un inadempiente) e con le ore a zero accanto, perché per
+    // l'agenda valgono quanto un calendario mai compilato.
+    const nonCompilati = data.compilation.filter(r => !r.submittedAtIso && !r.exempt).length
+    const aZeroOre = data.compilation.filter(r => !!r.submittedAtIso && r.slotCount === 0 && !r.exempt).length
+    const codaZeroOre = aZeroOre > 0
+        ? ` · ${aZeroOre} a zero ore`
+        : ''
+
     return (
-        <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">
-            <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-ash-50 text-[11px] font-bold uppercase tracking-wider text-ash-500">
-                    <tr>
-                        <th className="px-3 py-2">Venditore</th>
-                        <th className="px-3 py-2">Compilato</th>
-                        <th className="px-3 py-2">Quando</th>
-                        <th className="px-3 py-2">Ore dichiarate</th>
-                        <th className="px-3 py-2">Ritardo</th>
-                        <th className="px-3 py-2">Multa</th>
-                        <th className="px-3 py-2">Esente</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-ash-100">
-                    {data.compilation.length === 0 && (
+        <div className="space-y-3">
+            {/* Nessun venditore attivo: la tabella lo dice già, e un "Hanno
+                compilato tutti" verde sopra una lista vuota sarebbe una buona
+                notizia inventata. */}
+            {data.compilation.length > 0 && (
+                <div
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${nonCompilati > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}
+                >
+                    {nonCompilati === 0
+                        ? 'Hanno compilato tutti.'
+                        : nonCompilati === 1
+                            ? '1 venditore non ha compilato questa settimana'
+                            : `${nonCompilati} venditori non hanno compilato questa settimana`}
+                    {codaZeroOre}
+                </div>
+            )}
+
+            <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="bg-ash-50 text-[11px] font-bold uppercase tracking-wider text-ash-500">
                         <tr>
-                            <td colSpan={7} className="px-3 py-6 text-center text-ash-500">Nessun venditore attivo.</td>
+                            <th className="px-3 py-2">Venditore</th>
+                            <th className="px-3 py-2">Compilato</th>
+                            <th className="px-3 py-2">Quando</th>
+                            <th className="px-3 py-2">Ore dichiarate</th>
+                            <th className="px-3 py-2">Ritardo</th>
+                            <th className="px-3 py-2">Multa</th>
+                            <th className="px-3 py-2">Esente</th>
                         </tr>
-                    )}
-                    {data.compilation.map(row => {
-                        const v = venditoriById.get(row.salesUserId)
-                        return (
-                            <tr key={row.salesUserId} className="align-middle">
-                                <td className="px-3 py-2 font-semibold text-ash-800">{v?.name ?? row.salesUserId}</td>
-                                {/* Un esente non è un inadempiente: la spec §4.3 dice
-                                    che non deve comparire fra i non compilati. Con la
-                                    pastiglia rossa "No", Sales 001 risultava colpevole
-                                    ogni settimana per sempre.
-                                    Chi risulta compilato si distingue poi fra chi ha
-                                    davvero guardato la settimana (A mano) e chi vive
-                                    su una fotografia vecchia rimaterializzata dal cron
-                                    (Da settimana tipo): senza questa distinzione la
-                                    scheda diventa cieca su chi si occupa sul serio del
-                                    proprio calendario (Task 6). */}
-                                <td className="px-3 py-2">
-                                    {/* Compilato ZERO ore: formalmente in regola (la riga
-                                        di piano c'è, nessuna multa scatta), in pratica
-                                        imprenotabile tutta la settimana. Senza questa
-                                        pastiglia la differenza stava solo in un `0` nella
-                                        colonna Ore, indistinguibile da chi si è dichiarato
-                                        davvero disponibile. */}
-                                    <div className="flex flex-wrap items-center gap-1">
-                                        {row.submittedAtIso
-                                            ? (row.fromTemplate
-                                                ? <Pill tone="blue">Da settimana tipo</Pill>
-                                                : <Pill tone="green">A mano</Pill>)
-                                            : row.exempt
-                                                ? <Pill tone="neutral">Esente</Pill>
-                                                : <Pill tone="red">No</Pill>}
-                                        {row.submittedAtIso && row.slotCount === 0 && !row.exempt && (
-                                            <Pill tone="amber">0 ore: imprenotabile</Pill>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-3 py-2 text-ash-600">
-                                    {row.submittedAtIso ? formatDateTime(row.submittedAtIso) : '—'}
-                                </td>
-                                <td className="px-3 py-2 text-ash-600">{row.slotCount}</td>
-                                <td className="px-3 py-2">
-                                    {row.late ? <Pill tone="amber">In ritardo</Pill> : <span className="text-ash-400">—</span>}
-                                </td>
-                                <td className="px-3 py-2">
-                                    {/* L'importo vero della riga, non una costante scritta a
-                                        mano: il giorno che i 50 € cambiano, questa colonna
-                                        continuerebbe a dire 50. */}
-                                    {row.penaltyEur !== null
-                                        ? <Pill tone="red">{eurFmt.format(row.penaltyEur)}</Pill>
-                                        : <span className="text-ash-400">—</span>}
-                                </td>
-                                <td className="px-3 py-2">
-                                    <ExemptSwitch
-                                        salesUserId={row.salesUserId}
-                                        exempt={v?.calendarExempt ?? false}
-                                        canWrite={canWrite}
-                                        onChanged={onChanged}
-                                    />
-                                </td>
+                    </thead>
+                    <tbody className="divide-y divide-ash-100">
+                        {data.compilation.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-3 py-6 text-center text-ash-500">Nessun venditore attivo.</td>
                             </tr>
-                        )
-                    })}
-                </tbody>
-            </table>
+                        )}
+                        {data.compilation.map(row => {
+                            const v = venditoriById.get(row.salesUserId)
+                            return (
+                                <tr key={row.salesUserId} className="align-middle">
+                                    <td className="px-3 py-2 font-semibold text-ash-800">{v?.name ?? row.salesUserId}</td>
+                                    {/* Un esente non è un inadempiente: la spec §4.3 dice
+                                        che non deve comparire fra i non compilati. Con la
+                                        pastiglia rossa "No", Sales 001 risultava colpevole
+                                        ogni settimana per sempre.
+                                        Chi risulta compilato si distingue poi fra chi ha
+                                        davvero guardato la settimana (A mano) e chi vive
+                                        su una fotografia vecchia rimaterializzata dal cron
+                                        (Da settimana tipo): senza questa distinzione la
+                                        scheda diventa cieca su chi si occupa sul serio del
+                                        proprio calendario (Task 6). */}
+                                    <td className="px-3 py-2">
+                                        {/* Compilato ZERO ore: formalmente in regola (la riga
+                                            di piano c'è, nessuna multa scatta), in pratica
+                                            imprenotabile tutta la settimana. Senza questa
+                                            pastiglia la differenza stava solo in un `0` nella
+                                            colonna Ore, indistinguibile da chi si è dichiarato
+                                            davvero disponibile. */}
+                                        <div className="flex flex-wrap items-center gap-1">
+                                            {row.submittedAtIso
+                                                ? (row.fromTemplate
+                                                    ? <Pill tone="blue">Da settimana tipo</Pill>
+                                                    : <Pill tone="green">A mano</Pill>)
+                                                : row.exempt
+                                                    ? <Pill tone="neutral">Esente</Pill>
+                                                    : <Pill tone="red">No</Pill>}
+                                            {row.submittedAtIso && row.slotCount === 0 && !row.exempt && (
+                                                <Pill tone="amber">0 ore: imprenotabile</Pill>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-ash-600">
+                                        {row.submittedAtIso ? formatDateTime(row.submittedAtIso) : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-ash-600">{row.slotCount}</td>
+                                    <td className="px-3 py-2">
+                                        {row.late ? <Pill tone="amber">In ritardo</Pill> : <span className="text-ash-400">—</span>}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        {/* L'importo vero della riga, non una costante scritta a
+                                            mano: il giorno che i 50 € cambiano, questa colonna
+                                            continuerebbe a dire 50. */}
+                                        {row.penaltyEur !== null
+                                            ? <Pill tone="red">{eurFmt.format(row.penaltyEur)}</Pill>
+                                            : <span className="text-ash-400">—</span>}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <ExemptSwitch
+                                            salesUserId={row.salesUserId}
+                                            name={v?.name ?? row.salesUserId}
+                                            exempt={v?.calendarExempt ?? false}
+                                            canWrite={canWrite}
+                                            onChanged={onChanged}
+                                        />
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+                </div>
         </div>
     )
 }
 
+/**
+ * L'interruttore "Esente". Era muto in tutti i sensi: nessuna etichetta per chi
+ * naviga a tastiera o con lo screen reader (una pastiglia grigia in una colonna
+ * larga 60px), e un click solo per togliere un venditore dal calendario per
+ * sempre — niente più compilazione, niente più multe, nessuna traccia del perché.
+ * Mettere l'esenzione ora chiede conferma inline (stesso pattern a due tempi di
+ * `VoidPenaltyControl`: mai `window.confirm`); toglierla resta un click, perché
+ * rimettere qualcuno sotto la regola non è un atto distruttivo.
+ */
 function ExemptSwitch({
-    salesUserId, exempt, canWrite, onChanged,
+    salesUserId, name, exempt, canWrite, onChanged,
 }: {
     salesUserId: string
+    name: string
     exempt: boolean
     canWrite: boolean
     onChanged: () => void
 }) {
     const [pending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
+    const [chiede, setChiede] = useState(false)
+
+    const applica = (prossimo: boolean) => {
+        setError(null)
+        startTransition(async () => {
+            const res = await setCalendarExempt(salesUserId, prossimo)
+            if (!res.success) setError(res.error ?? 'Errore.')
+            else {
+                setChiede(false)
+                onChanged()
+            }
+        })
+    }
 
     if (!canWrite) {
         return <Pill tone={exempt ? 'neutral' : 'green'}>{exempt ? 'Esente' : 'No'}</Pill>
+    }
+
+    if (chiede) {
+        return (
+            <div className="flex min-w-[11rem] flex-col gap-1">
+                <div className="text-[11px] font-semibold text-ash-700">
+                    Esentare {name}? Non compila più e non prende multe.
+                </div>
+                <div className="flex gap-1">
+                    <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => applica(true)}
+                        className="rounded bg-brand-orange px-2 py-1 text-xs font-bold text-white hover:brightness-95 disabled:opacity-50"
+                    >
+                        {pending ? 'Invio…' : 'Conferma'}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => { setChiede(false); setError(null) }}
+                        className="rounded border border-ash-300 px-2 py-1 text-xs font-semibold text-ash-600 hover:bg-ash-50"
+                    >
+                        Annulla
+                    </button>
+                </div>
+                {error && <div className="text-[10px] text-rose-600">{error}</div>}
+            </div>
+        )
     }
 
     return (
@@ -430,14 +546,13 @@ function ExemptSwitch({
                 type="button"
                 disabled={pending}
                 aria-pressed={exempt}
-                onClick={() => {
-                    setError(null)
-                    startTransition(async () => {
-                        const res = await setCalendarExempt(salesUserId, !exempt)
-                        if (!res.success) setError(res.error ?? 'Errore.')
-                        else onChanged()
-                    })
-                }}
+                aria-label={exempt
+                    ? "Togli l'esenzione dal calendario a questo venditore"
+                    : "Metti l'esenzione dal calendario a questo venditore"}
+                title={exempt
+                    ? 'Esente: non compila il calendario e non prende multe. Clicca per rimetterlo sotto la regola.'
+                    : 'Non esente: compila il calendario e può prendere multe. Clicca per esentarlo.'}
+                onClick={() => { if (exempt) applica(false); else setChiede(true) }}
                 className={`inline-flex h-6 w-11 items-center rounded-full border transition-colors disabled:opacity-50 ${exempt ? 'border-brand-orange bg-brand-orange/80' : 'border-ash-300 bg-ash-200'}`}
             >
                 <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${exempt ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -448,12 +563,13 @@ function ExemptSwitch({
 }
 
 function MulteTab({
-    data, venditoriById, canWrite, isPending, onMonthChange, onChanged,
+    data, venditoriById, canWrite, isPending, ruleState, onMonthChange, onChanged,
 }: {
     data: SupervisionView
     venditoriById: Map<string, { id: string; name: string; calendarExempt: boolean }>
     canWrite: boolean
     isPending: boolean
+    ruleState: PenaltyRuleState
     onMonthChange: (delta: number) => void
     onChanged: () => void
 }) {
@@ -488,6 +604,22 @@ function MulteTab({
                     Totale mese: {eurFmt.format(data.totalEur)}
                 </div>
             </div>
+
+            {/* Una tabella vuota perché nessuno ha sgarrato e una vuota perché la
+                regola è spenta si assomigliano troppo: senza questa striscia la
+                Direzione leggeva "Nessuna multa in questo mese" come una buona
+                notizia mentre l'interruttore era giù da settimane. */}
+            {!ruleState.active ? (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                    {ruleState.reason === 'kill_switch'
+                        ? "Regola sospesa dall'interruttore: nessuna multa viene registrata."
+                        : 'Regola non ancora attivata: finché manca la data di partenza non si registra nessuna multa.'}
+                </div>
+            ) : (
+                <div className="text-xs text-ash-500">
+                    Multe attive dal {dayMonthYearFmt.format(ruleState.from)}
+                </div>
+            )}
 
             <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">
                 <table className="w-full min-w-[880px] text-left text-sm">
@@ -559,7 +691,7 @@ function VoidPenaltyControl({ penaltyId, onVoided }: { penaltyId: string; onVoid
                     onClick={() => setOpen(true)}
                     className="rounded-lg border border-rose-300 bg-white px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
                 >
-                    Annulla
+                    Annulla multa
                 </button>
             </div>
         )
@@ -576,9 +708,12 @@ function VoidPenaltyControl({ penaltyId, onVoided }: { penaltyId: string; onVoid
                 className="rounded border border-ash-300 px-2 py-1 text-xs"
             />
             <div className="flex gap-1">
+                {/* `disabled` finché il motivo è vuoto: il server lo rifiuta
+                    comunque, ma prima la richiesta partiva e tornava con un
+                    errore rosso al posto di un bottone semplicemente spento. */}
                 <button
                     type="button"
-                    disabled={pending}
+                    disabled={pending || !reason.trim()}
                     onClick={() => {
                         setError(null)
                         startTransition(async () => {
@@ -601,7 +736,7 @@ function VoidPenaltyControl({ penaltyId, onVoided }: { penaltyId: string; onVoid
                     onClick={() => { setOpen(false); setReason(''); setError(null) }}
                     className="rounded border border-ash-300 px-2 py-1 text-xs font-semibold text-ash-600 hover:bg-ash-50"
                 >
-                    Annulla
+                    Chiudi
                 </button>
             </div>
             {error && <div className="text-[10px] text-rose-600">{error}</div>}

@@ -14,16 +14,22 @@ export const maxDuration = 60;
  * viene registrato nulla, così non può partire una multa retroattiva.
  */
 export async function GET(req: Request) {
-    // Senza la env, `Bearer undefined` è una password valida: chiunque
-    // conoscesse l'URL farebbe girare multe e notifiche. Meglio un 500
-    // rumoroso — che si vede nei log di Vercel — di una porta aperta.
-    if (!process.env.CRON_SECRET) {
-        return NextResponse.json({ error: 'CRON_SECRET non impostata' }, { status: 500 });
+    // PRIMA il Bearer, POI la diagnosi sulla env. Con l'ordine opposto un
+    // anonimo che chiamava l'URL senza header riceveva "CRON_SECRET non
+    // impostata": un 500 che racconta a chi passa qual è il buco.
+    //
+    // Il confronto regge anche senza la env: `Bearer undefined` resta una
+    // password valida solo per chi la indovina, e chi la indovina si ferma
+    // comunque al 500 qui sotto senza far girare multe e notifiche. Il 500 è
+    // voluto rumoroso — si vede nei log di Vercel — perché una env mancante è
+    // un guasto di configurazione, non un tentativo di intrusione.
+    const secret = process.env.CRON_SECRET;
+    if (req.headers.get('authorization') !== `Bearer ${secret}`) {
+        return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-        return new NextResponse('Unauthorized', { status: 401 });
+    if (!secret) {
+        return NextResponse.json({ error: 'CRON_SECRET non impostata' }, { status: 500 });
     }
 
     // Il giro del calendario ha kill-switch e attivazione propri: gira anche

@@ -173,21 +173,36 @@ export async function materializeTemplates(now: Date = new Date(), salesUserId?:
                         weekStart: weekKey,
                     }))).onConflictDoNothing().returning({ id: salesAvailabilitySlots.id })
 
-                    // `slotCount` = righe DAVVERO inserite, non `wanted.length`.
-                    // L'`onConflictDoNothing` qui sopra può assorbirne una parte
-                    // (slot già presenti da una modifica manuale su un'ora sola,
-                    // che non crea la riga di piano e quindi non ferma questo
-                    // ramo), e il piano resterebbe a dichiarare ore che a DB non
-                    // ci sono: la scheda Compilazione mostra un numero, la
-                    // griglia un altro. L'`update` viene DOPO l'insert del piano
-                    // apposta: l'ordine piano→slot è la guardia documentata qui
-                    // sopra e non si inverte per comodità di conteggio.
-                    if (inseriti.length !== wanted.length) {
+                    // `slotCount` = le ore che questa settimana ha a DB DOPO
+                    // l'insert, contate con una SELECT nella stessa transazione
+                    // (come fa `saveCalendarWeek`), non `wanted.length` e nemmeno
+                    // `inseriti.length`.
+                    //
+                    // L'unique degli slot è `(salesUserId, slotStart)`: una riga
+                    // assorbita dall'`onConflictDoNothing` qui sopra ESISTE già
+                    // per questa settimana e va contata. Contando i soli inseriti
+                    // il piano dichiarava MENO ore di quelle davvero disponibili
+                    // — chi aveva spuntato a mano un paio di ore prima del cron
+                    // si ritrovava un piano da 58 su 60 ore reali, e la scheda
+                    // Compilazione diceva un numero, la griglia un altro.
+                    //
+                    // L'`update` viene DOPO l'insert del piano apposta: l'ordine
+                    // piano→slot è la guardia documentata qui sopra e non si
+                    // inverte per comodità di conteggio.
+                    const righe = await tx.select({ id: salesAvailabilitySlots.id })
+                        .from(salesAvailabilitySlots).where(and(
+                            eq(salesAvailabilitySlots.salesUserId, venditore.id),
+                            eq(salesAvailabilitySlots.weekStart, weekKey),
+                        ))
+                    if (righe.length !== wanted.length) {
                         await tx.update(salesWeekPlans)
-                            .set({ slotCount: inseriti.length })
+                            .set({ slotCount: righe.length })
                             .where(eq(salesWeekPlans.id, piano[0].id))
                     }
 
+                    // Il contatore del giro resta sulle righe DAVVERO scritte da
+                    // noi: `slots` nel risultato del cron dice quanto ha
+                    // materializzato questa esecuzione, non quanto c'è a DB.
                     return inseriti.length
                 })
 

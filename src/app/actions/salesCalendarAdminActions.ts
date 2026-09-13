@@ -32,11 +32,16 @@ import { revalidatePath } from "next/cache"
  * Server Components render", cioè una schermata rossa al posto di "ricarica la
  * pagina". Dentro il `try`, questa funzione riconosce i due casi che hanno un
  * messaggio utile da dare; tutto il resto resta un errore generico + log.
+ *
+ * Match ESATTO sui due messaggi, mai `startsWith`: `assertSingleCompany` e
+ * `assertLeadInCompany` lanciano anch'esse messaggi che cominciano per
+ * `Forbidden: …` ma dicono un'altra cosa, e un prefisso le appiattiva tutte su
+ * "Non autorizzato.", che manda a cercare un problema di permessi dove non c'è.
  */
 function sessionErrorMessage(e: unknown): string | null {
     if (!(e instanceof Error)) return null
     if (e.message === 'Unauthorized') return 'Sessione scaduta: ricarica la pagina.'
-    if (e.message.startsWith('Forbidden')) return 'Non autorizzato.'
+    if (e.message === 'Forbidden') return 'Non autorizzato.'
     return null
 }
 
@@ -386,7 +391,13 @@ export async function getCalendarSupervision(
         return {
             salesUserId: v.id,
             submittedAtIso: plan?.submittedAt ? plan.submittedAt.toISOString() : null,
-            slotCount: plan?.slotCount ?? 0,
+            // Le ore VERE della settimana, non il denormalizzato del piano: è la
+            // stessa lista che disegna la matrice Venditore × ore e la griglia
+            // di copertura, già in memoria qui sopra. `salesWeekPlans.slotCount`
+            // è una copia, e una copia si disallinea (un'ora tolta a mano su una
+            // settimana materializzata dal modello non tocca la riga di piano):
+            // la scheda diceva "12 ore" accanto a una riga che ne mostrava 10.
+            slotCount: declaredByUser.get(v.id)?.length ?? 0,
             late: plan?.late ?? false,
             penaltyEur: penaltyByUser.get(v.id) ?? null,
             exempt: v.calendarExempt,

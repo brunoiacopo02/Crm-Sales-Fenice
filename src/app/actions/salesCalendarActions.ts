@@ -10,7 +10,7 @@ import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { toRomeDateStr } from "@/lib/dateUtils"
 import {
-    weekSlots, weekStartFor, weeklyDeadline, slotKey, slotStartFor, romeInstant,
+    weekSlots, weekStartFor, weeklyDeadline, slotKey, slotStartFor, romeInstant, addWeeks,
 } from "@/lib/venditore/calendarSlots"
 import { manualBlockCheck, blockRefusalMessage } from "@/lib/venditore/calendarRules"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
@@ -44,11 +44,17 @@ const SLOT_KEY_RE = /^\d{4}-\d{2}-\d{2}@\d{1,2}$/
  * `requireSalesSession` lancia `Unauthorized`, `assertSalesArea` un
  * `Forbidden: …`: se la chiamata sta fuori dal `try` l'eccezione risale al
  * client come errore di render invece che come "ricarica la pagina".
+ *
+ * Match ESATTO sui due messaggi, mai `startsWith`: `assertSingleCompany` e
+ * `assertLeadInCompany` lanciano anch'esse messaggi che cominciano per
+ * `Forbidden: …` ma dicono un'altra cosa (modalità "Tutte le aziende", lead di
+ * un'altra azienda), e un prefisso le appiattiva tutte su "Non autorizzato.",
+ * che manda a cercare un problema di permessi dove non c'è.
  */
 function sessionErrorMessage(e: unknown): string | null {
     if (!(e instanceof Error)) return null
     if (e.message === 'Unauthorized') return 'Sessione scaduta: ricarica la pagina.'
-    if (e.message.startsWith('Forbidden')) return 'Non autorizzato.'
+    if (e.message === 'Forbidden') return 'Non autorizzato.'
     return null
 }
 
@@ -182,7 +188,11 @@ export async function getCalendarWeek(input?: {
     const weekStart = richiesta && !Number.isNaN(richiesta.getTime())
         ? weekStartFor(richiesta)
         : weekStartFor(new Date())
-    const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000)
+    // `addWeeks`, mai `+ 7 * 86_400_000`: nelle due settimane del cambio d'ora
+    // l'aritmetica in millisecondi sposta il confine di un'ora, e blocchi e
+    // appuntamenti del sabato sera (o del lunedì alle 9) cadevano fuori dalla
+    // finestra — cioè sparivano dalla griglia proprio in quelle due settimane.
+    const weekEnd = addWeeks(weekStart, 1)
     const weekStartStr = toRomeDateStr(weekStart)
     const deadline = weeklyDeadline(weekStart)
 
