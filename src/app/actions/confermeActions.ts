@@ -1857,8 +1857,19 @@ export async function getConfermeRecallAlerts(): Promise<Array<{
  * salespersonUserId e appointmentDate valorizzati) nell'intervallo
  * richiesto. Raggruppato per venditore. Usato dalle Conferme per
  * decidere a chi assegnare nuovi appuntamenti in base al carico.
+ *
+ * `opts.coverage` (default true) governa la sola striscia di copertura:
+ * `weekCoverage` costa da solo 4 query, una delle quali scansiona OTTO
+ * settimane di `leads`. Il drawer delle Conferme apre questa action su ogni
+ * lead (30-57 aperture al giorno) e della copertura non usa niente: gli
+ * servono solo declaredSlots/blockDetails/appointments/calendarExempt. Con
+ * il DB Micro già saturato a luglio (incident 2026-07-07) quelle query in più
+ * sul percorso più caldo delle Conferme non si pagano: chi non disegna la
+ * striscia passa `{ coverage: false }` e riceve `coverage: []`.
+ * Il default resta `true` perché `VenditoriAgendaModal` — l'unico che la
+ * striscia la disegna davvero — non cambi di una virgola.
  */
-export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promise<{
+export async function getVenditoriAgenda(startDate: Date, endDate: Date, opts?: { coverage?: boolean }): Promise<{
     venditori: Array<{
         id: string;
         name: string;
@@ -1889,7 +1900,8 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
      *  CONTIENE `startDate` (vedi weekCoverage), non dell'intervallo esatto
      *  richiesto. Il modale passa oggi intervalli lunedì→lunedì, quindi in
      *  pratica coincidono; un intervallo diverso vedrebbe la copertura della
-     *  settimana in cui cade il suo inizio. */
+     *  settimana in cui cade il suo inizio.
+     *  Vuoto quando il chiamante passa `{ coverage: false }`. */
     coverage: CoverageCell[];
     /** Chiavi `'<salesUserId>|<slotKey>'` con una segnalazione di assenza
      *  (ABSENT_SLOT) già a registro nell'intervallo richiesto — annullate
@@ -2026,7 +2038,11 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date): Promis
     // Copertura della settimana che contiene startDate (vedi commento sul
     // tipo di ritorno): weekCoverage ragiona per settimana intera, il modale
     // passa oggi intervalli lunedì→lunedì quindi in pratica coincidono.
-    const coverage = await weekCoverage(ctx, weekStartFor(startDate));
+    // Saltata quando il chiamante dichiara di non disegnarla (vedi `opts`):
+    // sono 4 query in meno, una delle quali scansiona 8 settimane di `leads`.
+    const coverage: CoverageCell[] = opts?.coverage === false
+        ? []
+        : await weekCoverage(ctx, weekStartFor(startDate));
 
     return {
         venditori: venditori

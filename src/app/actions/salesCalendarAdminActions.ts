@@ -41,10 +41,12 @@ import { revalidatePath } from "next/cache"
  * match esatto nessuna di queste sarebbe stata riconosciuta e l'utente avrebbe
  * letto "riprova fra un momento" su un rifiuto che riprovando non cambia.
  *
- * Il testo dopo `Forbidden: ` viene restituito com'è quando c'è: è il modo in
- * cui `assertSingleCompany` spiega la modalità "Tutte le aziende", e
+ * Del testo dopo `Forbidden: ` si mostra SOLO quello di `assertSingleCompany`
+ * (riconosciuto da "Tutte le aziende"): è l'unico scritto per un umano, e
  * appiattirlo su "Non autorizzato." mandava a cercare un problema di permessi
- * dove il problema era solo lo switch azienda.
+ * dove il problema era solo lo switch azienda. Gli altri rifiuti di tenancy.ts
+ * portano uuid e nomi di area — diagnostica interna che a schermo non aiuta
+ * nessuno e che non va mostrata: per quelli resta "Non autorizzato.".
  */
 function sessionErrorMessage(e: unknown): string | null {
     if (!(e instanceof Error)) return null
@@ -54,7 +56,7 @@ function sessionErrorMessage(e: unknown): string | null {
     }
     if (msg.startsWith('Forbidden')) {
         const dettaglio = msg.slice('Forbidden'.length).replace(/^:\s*/, '').trim()
-        return dettaglio.length > 0 ? dettaglio : 'Non autorizzato.'
+        return dettaglio.includes('Tutte le aziende') ? dettaglio : 'Non autorizzato.'
     }
     return null
 }
@@ -177,7 +179,7 @@ export async function reportSalesAbsence(
         // true` sarebbe una bugia: nessuna multa nuova è stata scritta, e chi
         // segnala meritava di saperlo invece di vedere "fatto".
         if (inserted.length === 0) {
-            return { success: false, error: 'Assenza già segnalata per questo slot.' }
+            return { success: false, error: "Assenza già segnalata per quest'ora." }
         }
 
         await db.insert(notifications).values({

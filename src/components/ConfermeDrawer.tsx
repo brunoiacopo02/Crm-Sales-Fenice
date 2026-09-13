@@ -214,6 +214,26 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     const needsAgenda = isOpen
         && (activeTab === "dati" || activeTab === "esito")
         && (!!salesperson || activeTab === "esito")
+
+    /** L'appuntamento come è SALVATO a DB (null se non c'è o è illeggibile). */
+    const savedApptAt = lead?.appointmentDate ? new Date(lead.appointmentDate) : null
+    const savedApptValid = !!savedApptAt && !isNaN(savedApptAt.getTime())
+    /**
+     * Il giorno su cui si interroga l'agenda, e cambia con il tab.
+     *
+     * Tab Dati: il giorno nei due input, perché lì il giorno lo si sta
+     * scegliendo e le pastiglie devono seguirlo.
+     *
+     * Tab Esiti: il giorno dell'appuntamento SALVATO, perché l'etichetta
+     * accanto al venditore anticipa il muro di `setConfermeOutcome`, che
+     * valuta `lead.appointmentDate` e non i due input. Con `editDate` una
+     * data digitata e mai salvata faceva dire "libero alle 15:00" mentre il
+     * server rifiutava sull'ora vera.
+     * Il fuso passa solo da `slotKey` (helper di calendarSlots).
+     */
+    const agendaDay = activeTab === "esito"
+        ? (savedApptValid ? slotKey(savedApptAt as Date).split('@')[0] : null)
+        : editDate
     const agendaReqRef = useRef(0)
     const [agenda, setAgenda] = useState<{
         leadId: string
@@ -230,9 +250,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     } | null>(null)
 
     useEffect(() => {
-        if (!needsAgenda || !lead?.id || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) return
+        if (!needsAgenda || !lead?.id || !agendaDay || !/^\d{4}-\d{2}-\d{2}$/.test(agendaDay)) return
         const req = ++agendaReqRef.current
-        const day = editDate
+        const day = agendaDay
         const leadId: string = lead.id
         // Invalidazione alla chiusura: il contatore basta a scartare le
         // risposte fuori ordine mentre il drawer è aperto, ma non quella
@@ -243,7 +263,13 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
             try {
                 const dayStart = romeInstant(day, 0)
                 const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
-                const res = await getVenditoriAgenda(dayStart, dayEnd)
+                // `{ coverage: false }`: al drawer la striscia di copertura non
+                // serve (usa solo declaredSlots/blockDetails/appointments/
+                // calendarExempt) e costerebbe 4 query in più per apertura, una
+                // delle quali scansiona 8 settimane di `leads`. Su 30-57
+                // aperture al giorno, e con il DB già saturato a luglio, è il
+                // percorso più caldo delle Conferme: non si paga.
+                const res = await getVenditoriAgenda(dayStart, dayEnd, { coverage: false })
                 if (cancelled || req !== agendaReqRef.current) return
                 const nowMs = Date.now()
                 const declaredFree: Record<string, string[]> = {}
@@ -275,7 +301,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
             clearTimeout(t)
             cancelled = true
         }
-    }, [needsAgenda, editDate, lead?.id])
+    }, [needsAgenda, agendaDay, lead?.id])
 
     if (!isOpen || !item) return null;
 
@@ -561,7 +587,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
     // sotto gli occhi: dopo un cambio data — o dopo che il drawer si è
     // riaperto su un altro lead — finché la nuova risposta non arriva non si
     // mostra nulla, invece delle ore di quello di prima.
-    const agendaForDay = agenda && agenda.day === editDate && agenda.leadId === lead.id ? agenda : null;
+    const agendaForDay = agenda && agenda.day === agendaDay && agenda.leadId === lead.id ? agenda : null;
     const selectedExempt = !!agendaForDay && !!salesperson && agendaForDay.exempt.includes(salesperson);
     /** Le ore ancora cliccabili: solo il futuro, sono un suggerimento. */
     const freeHoursForSelected = agendaForDay && salesperson && !selectedExempt
@@ -574,11 +600,14 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
         ? (agendaForDay.declaredFree[salesperson] ?? [])
         : null;
 
-    /** L'ora dell'appuntamento come è ora nei due input, o null se non c'è. */
+    /** L'ora dell'appuntamento SALVATO, o null se non c'è.
+     *  È `lead.appointmentDate` e non i due input: l'etichetta della `<select>`
+     *  del tab Esiti anticipa il muro di `setConfermeOutcome`, che guarda il
+     *  valore a DB. Una data digitata e non salvata non deve poter cambiare
+     *  quello che si legge accanto al venditore. */
     const apptSlotHour = (() => {
-        if (!editDate || !editTime) return null;
-        const d = new Date(`${editDate}T${editTime}:00`);
-        if (isNaN(d.getTime())) return null;
+        if (!savedApptValid) return null;
+        const d = savedApptAt as Date;
         const s = slotStartFor(d);
         // Fuori griglia (domenica, prima delle 9, dopo le 21) nessuno può
         // averla dichiarata: l'etichetta resta, ma è sempre "non disponibile".
@@ -867,7 +896,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                     key={h}
                                                     type="button"
                                                     onClick={() => setEditTime(h)}
-                                                    className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+                                                    className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 pointer-coarse:py-2"
                                                 >
                                                     {h}
                                                 </button>

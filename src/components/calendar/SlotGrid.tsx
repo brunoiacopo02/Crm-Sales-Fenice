@@ -306,8 +306,13 @@ export function SlotGrid({
     // La colonna delle ore resta ferma mentre la griglia scorre verso sabato:
     // il contenitore e' `overflow-x-auto` con `min-w-[720px]`, e sul telefono
     // le ore uscivano dallo schermo proprio mentre servivano per orientarsi.
-    const hourCellClasses = 'sticky left-0 z-10 flex items-center border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-xs font-semibold text-ash-500'
-    const dayHeadClasses = 'border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-center text-[11px] font-bold text-ash-700 last:border-r-0'
+    // `pointer-coarse:min-h-11`: quando queste intestazioni sono bottoni
+    // (`onDayToggle`/`onHourToggle`) selezionano un giorno o una riga intera, e
+    // col dito erano il bersaglio piu' piccolo della griglia — meta' dei 44px
+    // delle celle, che `min-h-11` ha gia'. Solo su puntatore grosso: col mouse
+    // la riga resta compatta.
+    const hourCellClasses = 'sticky left-0 z-10 flex items-center border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-xs font-semibold text-ash-500 pointer-coarse:min-h-11'
+    const dayHeadClasses = 'border-b border-r border-ash-200 bg-ash-50 px-2 py-2 text-center text-[11px] font-bold text-ash-700 last:border-r-0 pointer-coarse:min-h-11'
 
     return (
         <div className="overflow-x-auto rounded-xl border border-ash-200 bg-white">

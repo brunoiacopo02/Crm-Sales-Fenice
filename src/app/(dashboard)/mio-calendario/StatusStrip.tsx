@@ -9,6 +9,10 @@
 
 import type { CalendarWeekView } from "@/app/actions/salesCalendarActions"
 import { weekdayFmt, dateSlashFmt, timeFmt, formatCountdown } from "@/components/calendar/calendarFormat"
+// L'importo non si riscrive a mano: `calendarRules` è puro (nessun import
+// server) ed è già la fonte per il modale delle Conferme. Un 50 € battuto qui
+// dentro sarebbe la prima cosa a mentire il giorno che la cifra cambia.
+import { CALENDAR_PENALTY_EUR } from "@/lib/venditore/calendarRules"
 
 export function StatusStrip({ data, now, onOpenTemplate }: { data: CalendarWeekView; now: Date; onOpenTemplate: () => void }) {
     const deadline = new Date(data.deadlineIso)
@@ -58,7 +62,7 @@ export function StatusStrip({ data, now, onOpenTemplate }: { data: CalendarWeekV
         const penalty = new Date(data.penaltyIso)
         return (
             <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-                {`Calendario non compilato: multa di 50 € registrata ${weekdayFmt.format(penalty)} ${dateSlashFmt.format(penalty)}. Puoi compilare comunque.`}
+                {`Calendario non compilato: multa di ${CALENDAR_PENALTY_EUR} € registrata ${weekdayFmt.format(penalty)} ${dateSlashFmt.format(penalty)}. Puoi compilare comunque.`}
             </div>
         )
     }

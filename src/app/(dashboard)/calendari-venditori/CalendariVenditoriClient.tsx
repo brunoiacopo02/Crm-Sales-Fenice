@@ -99,6 +99,15 @@ export function CalendariVenditoriClient({ initial, role, ruleState }: Props) {
     const canWrite = role === 'ADMIN'
     const showMulte = role !== 'CONFERME'
 
+    // L'orologio si legge solo dopo il mount. Server e client rendono a due
+    // istanti diversi, e a cavallo della mezzanotte di lunedì `new Date()` nel
+    // render dà due settimane correnti diverse: la striscia comparirebbe da una
+    // parte e non dall'altra (mismatch di idratazione). Finché è null nessuna
+    // striscia: un frame in meno è meglio di un warning e di un testo che
+    // sfarfalla.
+    const [clientNow, setClientNow] = useState<Date | null>(null)
+    useEffect(() => { setClientNow(new Date()) }, [])
+
     const load = useCallback((weekStartIso: string, monthKey: string) => {
         setError(null)
         startTransition(async () => {
@@ -163,10 +172,14 @@ export function CalendariVenditoriClient({ initial, role, ruleState }: Props) {
     // il server); l'oggi va ricondotto al suo con `weekStartFor`, mai con
     // `getDay`/`setDate` (vedi calendarSlots.ts) — così la settimana in corso
     // resta "aperta" anche il sabato sera.
+    //
+    // L'oggi è `clientNow`, non `new Date()` nel render: vedi il commento sullo
+    // stato. Prima del mount la striscia non si mostra.
     const nessunaDisponibilita = useMemo(
-        () => new Date(data.weekStartIso) >= weekStartFor(new Date())
+        () => clientNow !== null
+            && new Date(data.weekStartIso) >= weekStartFor(clientNow)
             && data.coverage.every(c => c.available.length === 0),
-        [data.weekStartIso, data.coverage],
+        [clientNow, data.weekStartIso, data.coverage],
     )
 
     return (
