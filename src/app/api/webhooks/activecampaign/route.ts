@@ -17,8 +17,12 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import {
+    isLancioIntakeEnabled, decideLancioIntake, buildLancioLeadRow, buildLancioIntakeEventRows,
+    lancioPayloadField, LANCIO_LIST_NAME_NORMALIZED, LANCIO_BUCKET, LANCIO_FUNNEL, type LancioDecision,
+} from "@/lib/lancio/intake";
 import { db } from "@/db";
-import { leads, users, acIntakeFailures, notifications } from "@/db/schema";
+import { leads, leadEvents, users, acIntakeFailures, notifications } from "@/db/schema";
 import { eq, and, asc, sql, isNull, gte, desc, or, like } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
@@ -94,17 +98,17 @@ async function acGet(path: string, attempt = 0): Promise<any> {
     return res.json();
 }
 
-// Cache in-memory degli ID delle liste bloccate. Si ripopola da AC ogni
-// 10 min per tollerare rinomine/aggiunte senza redeploy. Pagina fino a
-// 500 liste (5 pagine da 100) per sicurezza.
-let blockedListIdsCache: { ids: Set<string>; expires: number } | null = null;
-async function getBlockedListIds(): Promise<Set<string>> {
-    if (BLOCKED_LIST_NAMES_NORMALIZED.size === 0) return new Set();
+// Cache in-memory nome-normalizzato → id di TUTTE le liste AC. Si ripopola
+// da AC ogni 10 min per tollerare rinomine/aggiunte senza redeploy. Pagina
+// fino a 500 liste (5 pagine da 100). Serve sia alle liste bloccate sia alla
+// lista del lancio: una sola chiamata AC per entrambe.
+let listIdsByNameCache: { byName: Map<string, string>; expires: number } | null = null;
+async function getListIdsByName(): Promise<Map<string, string>> {
     const now = Date.now();
-    if (blockedListIdsCache && blockedListIdsCache.expires > now) {
-        return blockedListIdsCache.ids;
+    if (listIdsByNameCache && listIdsByNameCache.expires > now) {
+        return listIdsByNameCache.byName;
     }
-    const ids = new Set<string>();
+    const byName = new Map<string, string>();
     try {
         for (let offset = 0; offset < 500; offset += 100) {
             const res = await acGet(`/lists?limit=100&offset=${offset}`);
@@ -112,43 +116,65 @@ async function getBlockedListIds(): Promise<Set<string>> {
             if (lists.length === 0) break;
             for (const l of lists) {
                 const nameNorm = String(l?.name ?? '').trim().toLowerCase();
-                if (nameNorm && BLOCKED_LIST_NAMES_NORMALIZED.has(nameNorm) && l?.id != null) {
-                    ids.add(String(l.id));
-                }
+                if (nameNorm && l?.id != null) byName.set(nameNorm, String(l.id));
             }
             if (lists.length < 100) break;
         }
-        console.log(`[AC webhook] getBlockedListIds: ${ids.size} blocked list(s) found — ids=${Array.from(ids).join(',')}`);
     } catch (e) {
-        console.error('[AC webhook] getBlockedListIds error:', e);
+        console.error('[AC webhook] getListIdsByName error:', e);
     }
-    blockedListIdsCache = { ids, expires: now + 10 * 60 * 1000 };
+    listIdsByNameCache = { byName, expires: now + 10 * 60 * 1000 };
+    // Log SOLO al refresh della cache (una volta ogni 10 min), non a ogni
+    // webhook: e' la riga che serviva a capire quali liste risultano bloccate,
+    // e la risoluzione dei nomi ora avviene qui.
+    const blockedIds = Array.from(BLOCKED_LIST_NAMES_NORMALIZED).map((n) => byName.get(n)).filter(Boolean);
+    console.log(`[AC webhook] liste AC in cache: ${byName.size} — bloccate: ${blockedIds.join(',')} — lancio: ${byName.get(LANCIO_LIST_NAME_NORMALIZED) ?? '-'}`);
+    return byName;
+}
+
+async function getBlockedListIds(): Promise<Set<string>> {
+    if (BLOCKED_LIST_NAMES_NORMALIZED.size === 0) return new Set();
+    const byName = await getListIdsByName();
+    const ids = new Set<string>();
+    for (const name of BLOCKED_LIST_NAMES_NORMALIZED) {
+        const id = byName.get(name);
+        if (id) ids.add(id);
+    }
     return ids;
 }
 
+/** Id della lista del lancio (per nome normalizzato), o null se su AC non c'e'. */
+async function getLancioListId(): Promise<string | null> {
+    const byName = await getListIdsByName();
+    return byName.get(LANCIO_LIST_NAME_NORMALIZED) ?? null;
+}
+
 /**
- * Verifica via AC API se un contatto è iscritto ad almeno una delle
- * liste bloccate. Usato come fallback quando il payload del webhook
- * non include il campo `list` (alcune configurazioni AC non lo
- * mandano). Stato 1 = iscrizione attiva.
+ * Le liste a cui il contatto e' iscritto con stato attivo (status '1'), via
+ * /contacts/{id}/contactLists. Una chiamata sola, riusata dal ramo lancio e
+ * dal ramo liste bloccate. In errore torna un set vuoto (come prima: il
+ * contatto passa, non e' bloccato).
  */
-async function isContactInBlockedList(contactId: string): Promise<{ blocked: boolean; listId: string | null }> {
-    const blocked = await getBlockedListIds();
-    if (blocked.size === 0) return { blocked: false, listId: null };
+async function getContactActiveListIds(contactId: string): Promise<Set<string>> {
+    const ids = new Set<string>();
     try {
         const res = await acGet(`/contacts/${contactId}/contactLists`);
         const memberships = Array.isArray(res.contactLists) ? res.contactLists : [];
         for (const m of memberships) {
             const listId = String(m?.list ?? '');
             const status = String(m?.status ?? '');
-            if (listId && blocked.has(listId) && status === '1') {
-                return { blocked: true, listId };
-            }
+            if (listId && status === '1') ids.add(listId);
         }
     } catch (e) {
-        console.error(`[AC webhook] isContactInBlockedList error for contact ${contactId}:`, e);
+        console.error(`[AC webhook] getContactActiveListIds error for contact ${contactId}:`, e);
     }
-    return { blocked: false, listId: null };
+    return ids;
+}
+
+/** La prima lista bloccata fra le membership attive del contatto, o null. */
+function blockedListOf(activeListIds: Set<string>, blocked: Set<string>): string | null {
+    for (const id of activeListIds) if (blocked.has(id)) return id;
+    return null;
 }
 
 function readFieldLocal(fieldValues: Array<{ field: string; value: string | null }>, fieldId: string): string | null {
@@ -276,6 +302,146 @@ async function notifyManagersIfNeeded() {
     }
 }
 
+/**
+ * Ingresso di un lead del lancio (spec §4.1). Bypassa fasce orarie, tetto del
+ * bot, finestra ferie e acAutoIntake: va al bot e basta, e il bot lo riceve
+ * subito con provenienza lancio. Dedup solo dentro il bucket (acContactId o
+ * telefono): un contatto gia' lead di un altro funnel entra lo stesso
+ * (duplicati cross-funnel voluti, decisione 14/09 n.1).
+ */
+async function handleLancioIntake(
+    contactId: string,
+    rawPayload: Record<string, string>,
+    decision: Extract<LancioDecision, { lancio: true }>,
+): Promise<NextResponse> {
+    // Tipizzato invece di `any` (il flusso storico sotto usa any): qui servono
+    // solo questi quattro campi del contatto AC.
+    let contact: { firstName?: string; lastName?: string; email?: string; phone?: string } | null = null;
+    let fieldValues: Array<{ field: string; value: string | null }> = [];
+    try {
+        const [contactResp, fvResp] = await Promise.all([
+            acGet(`/contacts/${contactId}`),
+            acGet(`/contacts/${contactId}/fieldValues`),
+        ]);
+        contact = contactResp.contact;
+        fieldValues = fvResp.fieldValues || [];
+    } catch (apiErr) {
+        await recordFailure({
+            reason: `Errore fetch AC API: ${apiErr instanceof Error ? apiErr.message.substring(0, 200) : String(apiErr)}`,
+            acContactId: contactId,
+            payload: rawPayload,
+        });
+        return NextResponse.json({ error: 'ac api failure', retryable: true }, { status: 502 });
+    }
+    if (!contact) {
+        await recordFailure({ reason: 'Contatto non trovato su AC', acContactId: contactId, payload: rawPayload });
+        return NextResponse.json({ error: 'contact not found' }, { status: 404 });
+    }
+
+    const firstName = String(contact.firstName || '').trim();
+    const lastName = String(contact.lastName || '').trim();
+    const email = String(contact.email || '').trim() || null;
+    const rawPhone = String(contact.phone || '').trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
+
+    if (!rawPhone) {
+        await recordFailure({ reason: 'Telefono assente', acContactId: contactId, provenienza: LANCIO_FUNNEL, email, phoneRaw: null, payload: rawPayload });
+        return NextResponse.json({ skipped: 'missing phone', lancio: true });
+    }
+    const phoneStrict = normalizePhoneStrict(rawPhone);
+    const phoneFinalNormalized = phoneStrict ?? normalizePhoneLenient(rawPhone);
+    const phoneFinal = phoneFinalNormalized?.startsWith('+39') ? phoneFinalNormalized.slice(3) : phoneFinalNormalized;
+    if (!phoneFinal) {
+        await recordFailure({ reason: `Telefono non utilizzabile (nessuna cifra): "${rawPhone}"`, acContactId: contactId, provenienza: LANCIO_FUNNEL, email, phoneRaw: rawPhone, payload: rawPayload });
+        return NextResponse.json({ skipped: 'invalid phone', lancio: true });
+    }
+    const phoneSuspicious = !isPlausiblePhone(phoneStrict);
+
+    const utm = {
+        utmSource: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmSource),
+        utmMedium: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmMedium),
+        utmCampaign: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign),
+        utmContent: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent),
+        utmTerm: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm),
+    };
+
+    const now = new Date();
+    const newLeadId = crypto.randomUUID();
+
+    const txResult = await db.transaction(async (tx) => {
+        // Stessi lock del flusso normale: due webhook sullo stesso contatto o
+        // numero non devono creare due lead nel bucket.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${phoneFinal}, 0))`);
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${contactId}, 1))`);
+
+        const [existing] = await tx.select({ id: leads.id }).from(leads).where(and(
+            eq(leads.companyId, FENICE_COMPANY),
+            eq(leads.launchBucket, LANCIO_BUCKET),
+            or(eq(leads.acContactId, contactId), eq(leads.phone, phoneFinal)),
+        )).limit(1);
+        if (existing) return { kind: 'duplicate' as const, existingLeadId: existing.id };
+
+        const [bot] = await tx.select({ id: users.id }).from(users).where(and(
+            eq(users.companyId, FENICE_COMPANY),
+            eq(users.role, 'GDO'),
+            eq(users.isBot, true),
+            eq(users.isActive, true),
+        )).limit(1);
+        const botId = bot?.id ?? null;
+
+        const row = buildLancioLeadRow({
+            id: newLeadId, name: fullName, phone: phoneFinal, email,
+            acContactId: contactId, phoneSuspicious, botId, now, utm,
+        });
+        await tx.insert(leads).values(row);
+        if (row.assignedToId) {
+            await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, row.assignedToId));
+        }
+        return { kind: 'created' as const, assignedToId: row.assignedToId };
+    });
+
+    if (txResult.kind === 'duplicate') {
+        return NextResponse.json({ skipped: 'lancio_duplicate', acContactId: contactId, existingLeadId: txResult.existingLeadId });
+    }
+
+    // Il push parte in after() a risposta inviata. Niente notifica al bot:
+    // non legge la UI.
+    if (txResult.assignedToId) {
+        after(() => pushLeadToBot({
+            leadId: newLeadId,
+            name: fullName,
+            phone: phoneFinal,
+            email,
+            funnel: LANCIO_FUNNEL,
+            companyId: FENICE_COMPANY,
+            lancio: lancioPayloadField('lista'),
+        }));
+    } else if (!phoneSuspicious) {
+        console.error(`[AC webhook] lancio: account bot non trovato, lead ${newLeadId} nel bucket senza padrone`);
+    }
+
+    await db.insert(leadEvents).values(buildLancioIntakeEventRows({
+        leadId: newLeadId,
+        botId: txResult.assignedToId,
+        adminId: null,
+        acContactId: contactId,
+        source: 'activecampaign',
+        via: decision.via,
+        listId: decision.listId,
+        now,
+    }));
+
+    return NextResponse.json({
+        success: true,
+        leadId: newLeadId,
+        lancio: true,
+        funnel: LANCIO_FUNNEL,
+        phoneSuspicious,
+        assignedTo: txResult.assignedToId,
+        via: decision.via,
+    });
+}
+
 export async function POST(req: NextRequest) {
     let rawPayload: Record<string, string> = {};
     try {
@@ -300,6 +466,34 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'missing contact id' }, { status: 400 });
         }
 
+        const triggerListId = rawPayload['list'] || rawPayload['list[id]'] || null;
+
+        // ===== RAMO LANCIO (spec 2026-09-14 §4.1) — PRIMA delle liste bloccate =====
+        // La lista del lancio sta ANCHE nel default di BLOCKED_LIST_NAMES_NORMALIZED:
+        // a interruttore spento (LANCIO_WEBDEV_INTAKE != 'on') si cade nel ramo
+        // sotto e il contatto finisce in acIntakeFailures come oggi, da dove il
+        // sync di recupero su /import lo ripesca. Le membership del contatto si
+        // leggono UNA volta e si riusano per il controllo delle liste bloccate.
+        const lancioEnabled = isLancioIntakeEnabled();
+        const lancioListId = lancioEnabled ? await getLancioListId() : null;
+        let activeListIds: Set<string> | null = null;
+        let lancioDecision: LancioDecision = decideLancioIntake({
+            enabled: lancioEnabled, lancioListId, triggerListId, activeListIds: null,
+        });
+        if (!lancioDecision.lancio && lancioDecision.motivo === 'non_in_lista') {
+            activeListIds = await getContactActiveListIds(contactId);
+            lancioDecision = decideLancioIntake({ enabled: lancioEnabled, lancioListId, triggerListId, activeListIds });
+        }
+        if (lancioDecision.lancio) {
+            if (eventType === 'update') {
+                // Un update su un contatto del lancio non ha niente da aggiornare
+                // (il funnel non e' SCONOSCIUTO) e NON deve produrre una riga
+                // blocked_list in /lead-automatici.
+                return NextResponse.json({ skipped: 'lancio_update', acContactId: contactId });
+            }
+            return await handleLancioIntake(contactId, rawPayload, lancioDecision);
+        }
+
         // Lista sorgente del subscribe: se corrisponde a una lista
         // bloccata (es. campagna lancio futuro) skippiamo senza creare
         // lead né failure record. Non è un errore: è intenzionale.
@@ -313,37 +507,35 @@ export async function POST(req: NextRequest) {
         //    includono `list` nel payload webhook — si era visto su 2
         //    lead della lista 'Lead Lancio Video Editor 2026' passati
         //    al CRM il 2026-04-24 nonostante il filtro.
-        const triggerListId = rawPayload['list'] || rawPayload['list[id]'] || null;
-        if (triggerListId) {
-            const blocked = await getBlockedListIds();
-            if (blocked.has(String(triggerListId))) {
-                console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (payload) ${triggerListId}`);
-                // Tracciato in acIntakeFailures (reason 'blocked_list:<id>') così l'admin
-                // lo vede in /lead-automatici invece che sparire in silenzio. Escluso da
-                // "Riprova tutti" (rifinirebbe bloccato in loop): recuperabile solo col
-                // retry singolo, per quando la lista viene sbloccata. Con dedup: eventi
-                // ripetuti sullo stesso contatto non accumulano righe.
-                await recordBlockedListSkip(contactId, String(triggerListId), rawPayload);
-                return NextResponse.json({
-                    skipped: 'blocked_list',
-                    listId: String(triggerListId),
-                    acContactId: contactId,
-                    via: 'payload',
-                });
-            }
+        const blocked = await getBlockedListIds();
+        if (triggerListId && blocked.has(String(triggerListId))) {
+            console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (payload) ${triggerListId}`);
+            // Tracciato in acIntakeFailures (reason 'blocked_list:<id>') così l'admin
+            // lo vede in /lead-automatici invece che sparire in silenzio. Escluso da
+            // "Riprova tutti" (rifinirebbe bloccato in loop): recuperabile solo col
+            // retry singolo, per quando la lista viene sbloccata. Con dedup: eventi
+            // ripetuti sullo stesso contatto non accumulano righe.
+            await recordBlockedListSkip(contactId, String(triggerListId), rawPayload);
+            return NextResponse.json({
+                skipped: 'blocked_list',
+                listId: String(triggerListId),
+                acContactId: contactId,
+                via: 'payload',
+            });
         }
 
         // Fallback membership check (run sempre, sia con che senza triggerListId,
         // perché il trigger potrebbe essere una lista non bloccata ma il
         // contatto potrebbe essere ANCHE in una bloccata).
-        {
-            const membership = await isContactInBlockedList(contactId);
-            if (membership.blocked) {
-                console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (membership) ${membership.listId}`);
-                await recordBlockedListSkip(contactId, membership.listId, rawPayload);
+        if (blocked.size > 0) {
+            if (activeListIds === null) activeListIds = await getContactActiveListIds(contactId);
+            const blockedListId = blockedListOf(activeListIds, blocked);
+            if (blockedListId) {
+                console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (membership) ${blockedListId}`);
+                await recordBlockedListSkip(contactId, blockedListId, rawPayload);
                 return NextResponse.json({
                     skipped: 'blocked_list',
-                    listId: membership.listId,
+                    listId: blockedListId,
                     acContactId: contactId,
                     via: 'membership',
                 });
