@@ -25,6 +25,8 @@ export function determineLeadSection(lead: any): SectionName {
 type LogEventParams = {
     leadId: string
     eventType: 'IMPORTED' | 'ASSIGNED' | 'CALL_LOGGED' | 'SECTION_MOVED' | 'DISCARDED' | 'RECALL_SET' | 'APPOINTMENT_SET' | 'AGENDA_SENT' | 'AGENDA_DELIVERED' | 'AC_UPDATED' | 'BOT_PUSHED' | 'VIDEO_OPENED' | 'RECONCILED' | 'INBOUND_MESSAGE' | 'contact_info_edited'
+        // Lancio Web Dev AI (spec 2026-09-14 §3.1). In B1 si scrive solo LANCIO_INTAKE.
+        | 'LANCIO_INTAKE' | 'LANCIO_CALL_NOW_ASSIGNED' | 'LANCIO_BOOKED' | 'LANCIO_RETURNED_TO_POOL' | 'LANCIO_SHIFT_CHANGED'
     userId?: string | null
     fromSection?: SectionName | null
     toSection?: SectionName | null
