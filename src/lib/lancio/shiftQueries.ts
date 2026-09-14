@@ -6,8 +6,8 @@
  * "occupazione" di un venditore vale su ogni azienda (vedi la nota in
  * schema.ts sopra salesAvailabilitySlots e checkBookingAllowed): nessuna delle
  * tre letture filtra companyId. Non "ripararlo". Il companyId resta solo dove
- * la riga appartiene davvero a un tenant: il turno (`launchShifts`) e
- * l'account (`users`).
+ * la riga appartiene davvero a un tenant: il turno (`launchShifts`). Su `users`
+ * NON si filtra — i venditori sono staff condiviso (vedi getShiftMembers).
  */
 import { db } from '@/db'
 import { launchShifts, leads, salesAvailabilitySlots, salesSlotBlocks, users } from '@/db/schema'

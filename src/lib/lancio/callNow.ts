@@ -18,18 +18,29 @@ export function callNowColumn(lead: { lancioCallNowAttempts: number; salesperson
     return 'esitati'
 }
 
+/** Il giorno italiano dopo `dateStr`. Mezzogiorno: nessun cambio d'ora legale lo sposta. */
+function giornoSuccessivo(dateStr: string): string {
+    return toRomeDateStr(new Date(romeInstant(dateStr, 12).getTime() + 24 * 60 * 60 * 1000))
+}
+
 /**
  * Quando le Conferme devono richiamare chi non ha risposto tre volte:
  * le 09:00 del giorno dopo, o — se sono già passate — la prossima ora tonda
  * che lascia almeno un'ora di respiro.
  *
- * Oltre l'ultima ora servita dalle Conferme il 6/10 (le 20:00) si scivola alle
- * 09:00 del 7/10: senza questo, un terzo NR della sera del 6 fissava le 22:00 o
+ * Oltre l'ultima ora servita dalle Conferme (le 20:00) si scivola alle 09:00
+ * del giorno dopo: senza questo, un terzo NR della sera fissava le 22:00 o
  * l'una di notte, ore in cui non c'è nessuno al telefono e che nemmeno
  * `classifyAt` accetterebbe.
+ *
+ * La finestra 9-20 si applica a QUALUNQUE giorno, non solo al 6/10: quando la
+ * regola guardava solo `cfg.giornoDopo`, ogni `now` del 7/10 cadeva nel ramo
+ * "scivola" e tornava le 09:00 del 7/10 — cioè un appuntamento nel passato.
+ * Questa funzione non restituisce mai un istante prima di `now`.
  */
 export function handoffAppointmentAt(now: Date, cfg: LancioConfig = LANCIO_WEBDEV): Date {
-    const nove = romeInstant(cfg.giornoDopo, 9)
+    const prima = cfg.oreVenditori[0] ?? 9
+    const nove = romeInstant(cfg.giornoDopo, prima)
     if (now.getTime() < nove.getTime()) return nove
     const min = new Date(now.getTime() + MIN_LEAD_TIME_MS)
     const dateStr = toRomeDateStr(min)
@@ -39,7 +50,8 @@ export function handoffAppointmentAt(now: Date, cfg: LancioConfig = LANCIO_WEBDE
     // Il controllo si fa su data+ora e NON sull'istante costruito: dopo le 23:00
     // `hour` vale 24 e `romeInstant` non saprebbe che farsene.
     const ultima = cfg.orePomeriggio[cfg.orePomeriggio.length - 1] ?? 20
-    if (dateStr !== cfg.giornoDopo || hour > ultima) return romeInstant(cfg.dopodomani, 9)
+    if (hour > ultima) return romeInstant(giornoSuccessivo(dateStr), prima)
+    if (hour < prima) return romeInstant(dateStr, prima)
     return romeInstant(dateStr, hour)
 }
 

@@ -41,6 +41,15 @@ test('oltre le 20:00 del 6/10 il richiamo scivola alle 09:00 del 7/10', () => {
     assert.deepEqual(handoffAppointmentAt(new Date('2026-10-06T19:00:00+02:00')), new Date('2026-10-06T20:00:00+02:00'))
 })
 
+test('il 7/10 il richiamo non torna mai indietro alle 09:00 gia passate', () => {
+    // Regressione: la regola guardava solo il 6/10, quindi ogni `now` del 7/10
+    // finiva su romeInstant(dopodomani, 9) — un appuntamento nel passato.
+    assert.deepEqual(handoffAppointmentAt(new Date('2026-10-07T10:30:00+02:00')), new Date('2026-10-07T12:00:00+02:00'))
+    assert.deepEqual(handoffAppointmentAt(new Date('2026-10-07T20:30:00+02:00')), new Date('2026-10-08T09:00:00+02:00'))
+    // Prima delle 8 del 7/10 la prossima ora utile e' l'apertura, non le 6 del mattino.
+    assert.deepEqual(handoffAppointmentAt(new Date('2026-10-07T05:00:00+02:00')), new Date('2026-10-07T09:00:00+02:00'))
+})
+
 test('i tentativi non superano mai il tetto', () => {
     assert.deepEqual(nextCallNowState(3, SERA), { kind: 'handoff', attempts: 3, appointmentAt: new Date('2026-10-06T09:00:00+02:00') })
     assert.deepEqual(nextCallNowState(9, SERA), { kind: 'handoff', attempts: 3, appointmentAt: new Date('2026-10-06T09:00:00+02:00') })
