@@ -32,7 +32,8 @@
 
 **Creati**
 - `drizzle/migrations/0037_launch_shifts.sql` — tabella `launchShifts`.
-- `src/lib/lancio/config.ts` — `LANCIO_WEBDEV` (date/ore) + tipi `LancioScelta`, `LancioBotInfo`.
+- `src/lib/lancio/config.ts` — `LANCIO_WEBDEV` (date/ore) + tipi `LancioScelta`, `LancioBotInfo`; ri-esporta `LANCIO_BUCKET`/`LANCIO_FUNNEL`/`LANCIO_SLUG`/`LANCIO_COMPANY` da `intake.ts` (B1), non li ridefinisce.
+- `src/lib/lancio/conferme.ts` + `conferme.test.ts` — regole pure della board Conferme (`isLeadLancio`, `isCallNowHandoff`, `lancioPriority`, `lancioFirst`, `lancioSceltaLabel`, `lancioBotRisposte`).
 - `src/lib/lancio/rules.ts` + `rules.test.ts` — ammissibilità di `at` (`classifyAt`), chiave ora (`hourKey`), dedup (`sameInstant`).
 - `src/lib/lancio/slots.ts` + `slots.test.ts` — ore libere della mattina da fatti già letti (`mattinaSlots`), round robin puro (`pickRoundRobin`).
 - `src/lib/lancio/callNow.ts` + `callNow.test.ts` — ciclo NR delle chiamate subito (`nextCallNowState`, `callNowColumn`, `handoffAppointmentAt`).
@@ -51,9 +52,10 @@
 - `src/components/Sidebar.tsx` — voce "Lancio Web Dev" (ADMIN/MANAGER).
 - `src/app/actions/venditoreActions.ts` — `getVenditoreAppointments` espone `lancioScelta`.
 - `src/app/(dashboard)/venditore/page.tsx` — OutcomeGate esclude `chiamata_subito`.
-- `src/components/VenditoreDashboardClient.tsx` — tab "Lancio" + esclusione dalla Lista.
+- `src/components/VenditoreDashboardClient.tsx` — tab "Lancio" + esclusione dalla Lista (Task 10); atterraggio da `?view=lancio` (Task 11).
 - `src/lib/venditore/latePenaltiesRunner.ts` — esclusione multe.
-- `src/components/ConfermeBoard.tsx`, `ConfermeBoardRow.tsx`, `ConfermeDrawer.tsx` — badge, ordinamento, blocco "Dal bot – lancio".
+- `src/app/actions/confermeActions.ts` — `getConfermeAppointments` ordina i lead lancio in cima (`lancioFirst`, sort stabile).
+- `src/components/ConfermeBoard.tsx`, `ConfermeBoardRow.tsx`, `ConfermeDrawer.tsx` — badge LANCIO in riga e in Confermati (con venditore), blocco "Dal bot – lancio" nel tab Note.
 - `src/components/Topbar.tsx` — routing delle notifiche `lancio_call_now` e `lancio_appuntamento`.
 
 ---
@@ -65,10 +67,10 @@
 
 - [ ] **Step 1: Verifica che B1 sia a bordo**
 
-Run: `grep -n "lancioScelta\|lancioBotInfo\|lancioCallNowAttempts\|lancioCallNowNextAt\|lancioIngresso\|lancioSceltaAt" src/db/schema.ts && ls drizzle/migrations | tail -3`
-Expected: 6 colonne trovate nel blocco `leads`, e l'ultima migrazione è la `0036_*` di B1.
+Run: `grep -n "lancioScelta\|lancioBotInfo\|lancioCallNowAttempts\|lancioCallNowNextAt\|lancioIngresso\|lancioSceltaAt" src/db/schema.ts && ls drizzle/migrations | tail -3 && grep -n "export const LANCIO_BUCKET\|export const LANCIO_FUNNEL\|export const LANCIO_SLUG\|export const LANCIO_COMPANY" src/lib/lancio/intake.ts`
+Expected: 6 colonne trovate nel blocco `leads`, l'ultima migrazione è la `0036_*` di B1, e `src/lib/lancio/intake.ts` esporta le quattro costanti `LANCIO_BUCKET`, `LANCIO_FUNNEL`, `LANCIO_SLUG`, `LANCIO_COMPANY` (nota di riconciliazione `2026-09-14-lancio-00-riconciliazione-interfacce.md`: `config.ts` di Task 2 le importa da lì).
 
-Se una delle sei colonne manca: **FERMATI** e segnala al PO che B1 va eseguito prima. Non aggiungere le colonne da qui: sarebbero duplicate nella migrazione di B1.
+Se una delle sei colonne manca, o `intake.ts` non esiste: **FERMATI** e segnala al PO che B1 va eseguito prima. Non aggiungere le colonne da qui (sarebbero duplicate nella migrazione di B1) e non creare `intake.ts` da qui (lo crea B1 Task 2 con i suoi test).
 
 - [ ] **Step 2: Baseline verde**
 
@@ -176,12 +178,13 @@ git commit -m "feat(lancio): tabella launchShifts per i turni venditori del lanc
 - Modify: `package.json` (riga `test`)
 
 **Interfaces:**
-- Consumes: `romeInstant`, `romeHour` da `@/lib/venditore/calendarSlots`; `toRomeDateStr` da `@/lib/dateUtils`.
+- Consumes: `romeInstant`, `romeHour` da `@/lib/venditore/calendarSlots`; `toRomeDateStr` da `@/lib/dateUtils`; `LANCIO_BUCKET`, `LANCIO_FUNNEL`, `LANCIO_SLUG`, `LANCIO_COMPANY` da `./intake` (B1 Task 2, verificato in Task 0).
 - Produces:
-  - `LANCIO_WEBDEV: LancioConfig` con `{ bucket:'LANCIO_WEBDEV_2026', funnel:'Lancio Web Dev AI', webinarAt:'2026-10-05T21:00:00+02:00', giornoDopo:'2026-10-06', dopodomani:'2026-10-07', oreVenditori:[9,10,11,12,13,14], orePomeriggio:[15,16,17,18,19,20] }`.
+  - Ri-esportazioni `LANCIO_BUCKET`, `LANCIO_FUNNEL`, `LANCIO_SLUG`, `LANCIO_COMPANY` (stesse costanti di `intake.ts`: chi sta in `src/lib/lancio/` può importarle da `./config` o da `./intake`, sono lo stesso valore).
+  - `LANCIO_WEBDEV: LancioConfig` con `{ bucket: LANCIO_BUCKET, funnel: LANCIO_FUNNEL, webinarAt:'2026-10-05T21:00:00+02:00', giornoDopo:'2026-10-06', dopodomani:'2026-10-07', oreVenditori:[9,10,11,12,13,14], orePomeriggio:[15,16,17,18,19,20] }` (a runtime `bucket === 'LANCIO_WEBDEV_2026'`, `funnel === 'Lancio Web Dev AI'`).
   - `type LancioScelta = 'chiamata_subito'|'app_mattina'|'app_pomeriggio'|'app_dopodomani'|'followup'`.
-  - `type LancioBotInfo = Record<string, string>` (le due risposte di riscaldamento, chiave = domanda breve, valore = risposta).
-  - `MIN_LEAD_TIME_MS = 60*60*1000`.
+  - `interface LancioBotInfo { risposte?: string[]; slotsMostratiAt?: string | null; [k: string]: unknown }` (le risposte di riscaldamento in ordine; chiavi in più tollerate).
+  - `MIN_LEAD_TIME_MS = 60*60*1000`; `CALL_NOW_MAX_ATTEMPTS = 3`; `CALL_NOW_RETRY_MINUTES = 30`; `type ShiftKind = 'SERA'|'GIORNO_DOPO'`.
   - `classifyAt(at: Date, now: Date, cfg?: LancioConfig): { ok:true; kind:'mattina'|'pomeriggio'|'dopodomani'; dateStr:string; hour:number } | { ok:false; motivo:'fuori_regole' }`.
   - `hourKey(dateStr: string, hour: number): string` → `'2026-10-06@9'` (stessa forma di `slotKey`).
   - `sameInstant(a: Date|null, b: Date, toleranceMs = 60_000): boolean`.
@@ -189,7 +192,7 @@ git commit -m "feat(lancio): tabella launchShifts per i turni venditori del lanc
 
 - [ ] **Step 1: Scrivi `src/lib/lancio/config.ts`**
 
-Nota di allineamento con B1: se B1 ha creato `src/lib/lancio/intake.ts` con `LANCIO_BUCKET` / `LANCIO_FUNNEL`, in `config.ts` NON ridefinire le stringhe: `import { LANCIO_BUCKET, LANCIO_FUNNEL } from './intake'` e usarle come valori di `bucket` e `funnel` (una sola fonte per il nome del bucket). Se `intake.ts` non esiste, valgono i letterali qui sotto.
+Nota di riconciliazione (vince sui piani): bucket, funnel, slug e company del lancio hanno UNA sola definizione, in `src/lib/lancio/intake.ts` (B1). Qui si importano e si ri-esportano: nessun letterale `'LANCIO_WEBDEV_2026'` o `'Lancio Web Dev AI'` in questo file. Task 0 ha già verificato che `intake.ts` esista.
 
 ```ts
 /**
@@ -197,7 +200,14 @@ Nota di allineamento con B1: se B1 ha creato `src/lib/lancio/intake.ts` con `LAN
  * Unica sorgente: API, pagina /lancio, scheda venditore e test leggono da qui.
  * I test passano un `now` esplicito: nessuna funzione di questa cartella
  * chiama `new Date()` da sola se può riceverlo.
+ *
+ * Bucket/funnel/slug/company NON si ridefiniscono: vivono in intake.ts (B1) e
+ * qui si ri-esportano, così chi sta in src/lib/lancio/ ha un solo import.
  */
+import { LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_FUNNEL, LANCIO_SLUG } from './intake'
+
+export { LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_FUNNEL, LANCIO_SLUG }
+
 export interface LancioConfig {
     bucket: string
     funnel: string
@@ -213,8 +223,8 @@ export interface LancioConfig {
 }
 
 export const LANCIO_WEBDEV: LancioConfig = {
-    bucket: 'LANCIO_WEBDEV_2026',
-    funnel: 'Lancio Web Dev AI',
+    bucket: LANCIO_BUCKET,
+    funnel: LANCIO_FUNNEL,
     webinarAt: '2026-10-05T21:00:00+02:00',
     giornoDopo: '2026-10-06',
     dopodomani: '2026-10-07',
@@ -849,12 +859,13 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { leads, users } from '@/db/schema'
 import { verifySignature } from '@/lib/marketing-webhooks/signing'
-import { LANCIO_WEBDEV, type LancioConfig } from './config'
+import { LANCIO_COMPANY, LANCIO_WEBDEV, type LancioConfig } from './config'
 import { slotDateKind } from './rules'
 import { mattinaSlots } from './slots'
 import { dayFactsFor, getShiftMembers } from './shiftQueries'
 
-export const FENICE = 'fenice'
+/** Alias locale della company del lancio (intake.ts via config.ts): il lancio è solo Fenice. */
+export const FENICE = LANCIO_COMPANY
 
 export async function authBotRequest(req: NextRequest): Promise<{ ok: true; body: any } | { ok: false; res: NextResponse }> {
     const secret = process.env.BOT_WEBHOOK_SECRET
@@ -2155,3 +2166,481 @@ git commit -m "feat(lancio): scheda venditore chiamate subito, NR con passaggio 
 ```
 
 ---
+
+### Task 11: Conferme — badge LANCIO, ordinamento, blocco "Dal bot – lancio", routing notifiche
+
+**Files:**
+- Create: `src/lib/lancio/conferme.ts`
+- Test: `src/lib/lancio/conferme.test.ts`
+- Modify: `package.json` (riga `test`)
+- Modify: `src/app/actions/confermeActions.ts:294-345` (`getConfermeAppointments`: dopo `withNotes`, prima del raggruppamento per ora)
+- Modify: `src/components/ConfermeBoardRow.tsx:4` (import lucide) e `:263-265` (badge accanto a `botReport`)
+- Modify: `src/components/ConfermeBoard.tsx:5` (import lucide) e `:682-686` (cella "Esito Conferma" dello Storico, ramo `confermato`)
+- Modify: `src/components/ConfermeDrawer.tsx:4` (import lucide) e `:987` (tab Note, prima di `{loadingNotes ? (`)
+- Modify: `src/components/Topbar.tsx:119-134` (`handleNotifClick`)
+- Modify: `src/components/VenditoreDashboardClient.tsx:12` (import `useSearchParams`) e dopo il `useEffect` di mount (~riga 187)
+
+**Interfaces:**
+- Consumes: `LANCIO_BUCKET`, `CALL_NOW_MAX_ATTEMPTS`, `LancioBotInfo` (Task 2, `./config`); i campi scritti sul lead da Task 7 (`lancioScelta='app_pomeriggio'|'app_dopodomani'|'app_mattina'`, `lancioBotInfo`, `lancioSceltaAt`, `salespersonAssigned` sui mattina) e da Task 10 (passaggio A1: `lancioScelta='chiamata_subito'`, `lancioCallNowAttempts=3`, `salespersonUserId=null`, `confirmationsOutcome=null`); le notifiche `type:'lancio_appuntamento'` (Task 7 `notifyConfermeLancio`, riusata da Task 10) e `type:'lancio_call_now'` (Task 8), entrambe con `metadata:{ leadId }`; il deep-link esistente `/conferme?lead=<id>&tab=note` di `ConfermeBoard.tsx:67-135` (carica il lead da solo se non è in nessuna lista); la vista `'LANCIO'` e `fetchLancio()` di `VenditoreDashboardClient` (Task 10).
+- Produces (`src/lib/lancio/conferme.ts`, puro):
+  ```ts
+  export interface LancioConfermeFields {
+      launchBucket: string | null; status: string; lancioScelta: string | null
+      lancioCallNowAttempts: number | null; salespersonUserId: string | null; confirmationsOutcome: string | null
+  }
+  export function isLeadLancio(lead: Pick<LancioConfermeFields, 'launchBucket' | 'status'>, bucket?: string): boolean
+  export function isCallNowHandoff(lead: Pick<LancioConfermeFields, 'lancioScelta' | 'lancioCallNowAttempts' | 'salespersonUserId'>): boolean
+  export function lancioPriority(lead: LancioConfermeFields, bucket?: string): 0 | 1
+  export function lancioFirst<T extends { lead: LancioConfermeFields }>(rows: T[], bucket?: string): T[]   // sort stabile, non muta
+  export function lancioSceltaLabel(scelta: string | null, handoff?: boolean): string
+  export function lancioBotRisposte(info: unknown): string[]
+  ```
+- Nessuna colonna nuova e nessuna modifica alla `select` della board: `getConfermeAppointments` seleziona `lead: leads` (la riga intera), quindi `launchBucket`, `lancioScelta`, `lancioSceltaAt`, `lancioBotInfo`, `lancioCallNowAttempts` arrivano già alla UI appena B1 li mette nello schema. Il lavoro è: ordinare, marcare, mostrare, instradare.
+- Chi va **in cima** (priorità 1): lead del bucket lancio, `status='APPOINTMENT'`, senza esito Conferme, con `lancioScelta` `app_pomeriggio` o `app_dopodomani`, oppure tornato dal venditore dopo tre NR (`chiamata_subito` + `salespersonUserId` nullo + `lancioCallNowAttempts >= 3`). Gli `app_mattina` NON contano: sono già confermati e non stanno nel kanban "da lavorare" (la query di default filtra `confirmationsOutcome IS NULL`); si vedono in Storico → Confermati.
+- Il sort è **stabile** e sta nella server action, come `recoverableFirst` in `pipelineActions.ts:301-311`: dentro i due gruppi l'ordine del DB (`ORDER BY appointmentCreatedAt DESC`) resta identico. Non si tocca l'`orderBy` della query.
+
+- [ ] **Step 1: Scrivi il test `src/lib/lancio/conferme.test.ts`**
+
+```ts
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import {
+    isCallNowHandoff, isLeadLancio, lancioBotRisposte, lancioFirst, lancioPriority, lancioSceltaLabel,
+    type LancioConfermeFields,
+} from './conferme'
+
+const BUCKET = 'LANCIO_WEBDEV_2026'
+
+function lead(over: Partial<LancioConfermeFields> = {}): LancioConfermeFields {
+    return {
+        launchBucket: BUCKET, status: 'APPOINTMENT', lancioScelta: 'app_pomeriggio',
+        lancioCallNowAttempts: 0, salespersonUserId: null, confirmationsOutcome: null,
+        ...over,
+    }
+}
+
+test('isLeadLancio: bucket del lancio e status APPOINTMENT', () => {
+    assert.equal(isLeadLancio(lead()), true)
+    assert.equal(isLeadLancio(lead({ launchBucket: 'BLACK_SUMMER' })), false)
+    assert.equal(isLeadLancio(lead({ launchBucket: null })), false)
+    assert.equal(isLeadLancio(lead({ status: 'NEW' })), false)
+    assert.equal(isLeadLancio(lead({ launchBucket: 'ALTRO' }), 'ALTRO'), true)
+})
+
+test('isCallNowHandoff: chiamata subito, tre tentativi, senza venditore', () => {
+    assert.equal(isCallNowHandoff(lead({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 3, salespersonUserId: null })), true)
+    assert.equal(isCallNowHandoff(lead({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 3, salespersonUserId: 'v1' })), false)
+    assert.equal(isCallNowHandoff(lead({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 2, salespersonUserId: null })), false)
+    assert.equal(isCallNowHandoff(lead({ lancioScelta: 'app_pomeriggio', lancioCallNowAttempts: 3, salespersonUserId: null })), false)
+    assert.equal(isCallNowHandoff(lead({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: null, salespersonUserId: null })), false)
+})
+
+test('lancioPriority: pomeriggio, dopodomani e passaggio A1 vanno in cima; mattina, esitati e non-lancio no', () => {
+    assert.equal(lancioPriority(lead({ lancioScelta: 'app_pomeriggio' })), 1)
+    assert.equal(lancioPriority(lead({ lancioScelta: 'app_dopodomani' })), 1)
+    assert.equal(lancioPriority(lead({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 3, salespersonUserId: null })), 1)
+    assert.equal(lancioPriority(lead({ lancioScelta: 'app_mattina', confirmationsOutcome: 'confermato', salespersonUserId: 'v1' })), 0)
+    assert.equal(lancioPriority(lead({ lancioScelta: 'app_pomeriggio', confirmationsOutcome: 'scartato' })), 0)
+    assert.equal(lancioPriority(lead({ lancioScelta: 'followup' })), 0)
+    assert.equal(lancioPriority(lead({ lancioScelta: null })), 0)
+    assert.equal(lancioPriority(lead({ launchBucket: null })), 0)
+    assert.equal(lancioPriority(lead({ status: 'NEW' })), 0)
+})
+
+test('lancioFirst: i lancio in cima, ordine di arrivo conservato dentro i gruppi, input non mutato', () => {
+    const rows = [
+        { lead: { ...lead({ launchBucket: null }), id: 'n1' } },
+        { lead: { ...lead({ lancioScelta: 'app_dopodomani' }), id: 'l1' } },
+        { lead: { ...lead({ launchBucket: null }), id: 'n2' } },
+        { lead: { ...lead({ lancioScelta: 'app_pomeriggio' }), id: 'l2' } },
+        { lead: { ...lead({ lancioScelta: 'app_mattina', confirmationsOutcome: 'confermato' }), id: 'm1' } },
+    ]
+    const out = lancioFirst(rows)
+    assert.deepEqual(out.map(r => r.lead.id), ['l1', 'l2', 'n1', 'n2', 'm1'])
+    assert.deepEqual(rows.map(r => r.lead.id), ['n1', 'l1', 'n2', 'l2', 'm1'])
+    assert.deepEqual(lancioFirst([]), [])
+})
+
+test('lancioSceltaLabel: una frase per scelta, il passaggio A1 vince sulla scelta', () => {
+    assert.match(lancioSceltaLabel('app_pomeriggio'), /pomeriggio/i)
+    assert.match(lancioSceltaLabel('app_dopodomani'), /dopodomani/i)
+    assert.match(lancioSceltaLabel('app_mattina'), /nessuna chiamata/i)
+    assert.match(lancioSceltaLabel('chiamata_subito'), /venditore/i)
+    assert.match(lancioSceltaLabel('chiamata_subito', true), /tre chiamate a vuoto/i)
+    assert.match(lancioSceltaLabel('followup'), /follow-up/i)
+    assert.match(lancioSceltaLabel(null), /lancio/i)
+})
+
+test('lancioBotRisposte: solo stringhe non vuote, in ordine, da un jsonb qualunque', () => {
+    assert.deepEqual(lancioBotRisposte({ risposte: [' faccio il barista ', '', 'mi ha colpito lo stipendio', 3] }), ['faccio il barista', 'mi ha colpito lo stipendio'])
+    assert.deepEqual(lancioBotRisposte({ risposte: 'no' }), [])
+    assert.deepEqual(lancioBotRisposte({ altro: true }), [])
+    assert.deepEqual(lancioBotRisposte(null), [])
+    assert.deepEqual(lancioBotRisposte(undefined), [])
+    assert.deepEqual(lancioBotRisposte('testo'), [])
+    assert.deepEqual(lancioBotRisposte(['a', 'b']), [])
+})
+```
+
+- [ ] **Step 2: Aggiungi `src/lib/lancio/conferme.test.ts` alla riga `test` di `package.json`** (in coda alla stringa, separato da spazio)
+
+- [ ] **Step 3: Esegui e verifica il fallimento**
+
+Run: `node --import tsx --test src/lib/lancio/conferme.test.ts`
+Expected: FAIL — `Cannot find module './conferme'`.
+
+- [ ] **Step 4: Scrivi `src/lib/lancio/conferme.ts`**
+
+```ts
+/**
+ * Regole pure della board Conferme per i lead del lancio (spec §4.5).
+ *
+ * Chi è "lancio" per le Conferme, chi va in cima alla prima chiamata, che
+ * etichetta porta, come si leggono le risposte di riscaldamento del bot.
+ * Niente DB: getConfermeAppointments passa le righe, la riga della board, lo
+ * Storico e il drawer chiamano le stesse funzioni. Una regola, un posto.
+ *
+ * "In cima" funziona come il badge "Aveva detto sì" dei GDO
+ * (pipelineActions.recoverableFirst): sort stabile per priorità, l'ordine
+ * del DB resta identico dentro i gruppi.
+ */
+import { CALL_NOW_MAX_ATTEMPTS, LANCIO_BUCKET, type LancioBotInfo } from './config'
+
+export interface LancioConfermeFields {
+    launchBucket: string | null
+    status: string
+    lancioScelta: string | null
+    lancioCallNowAttempts: number | null
+    salespersonUserId: string | null
+    confirmationsOutcome: string | null
+}
+
+/** Lead del bucket lancio con un appuntamento: l'unico che le Conferme vedono. */
+export function isLeadLancio(lead: Pick<LancioConfermeFields, 'launchBucket' | 'status'>, bucket: string = LANCIO_BUCKET): boolean {
+    return lead.launchBucket === bucket && lead.status === 'APPOINTMENT'
+}
+
+/**
+ * Il venditore di turno ha fatto tre chiamate a vuoto e il lead è passato alle
+ * Conferme (assunzione A1, scritto da recordLancioCallNowNoAnswer): la scelta
+ * resta 'chiamata_subito' ma il venditore è stato tolto.
+ */
+export function isCallNowHandoff(lead: Pick<LancioConfermeFields, 'lancioScelta' | 'lancioCallNowAttempts' | 'salespersonUserId'>): boolean {
+    return lead.lancioScelta === 'chiamata_subito'
+        && !lead.salespersonUserId
+        && (lead.lancioCallNowAttempts ?? 0) >= CALL_NOW_MAX_ATTEMPTS
+}
+
+/**
+ * 1 = in cima alla prima chiamata: appuntamento del pomeriggio o di dopodomani
+ * scelto in chat col bot, oppure tornato dal venditore dopo tre NR, e ancora
+ * senza esito Conferme. 0 = ordine normale (compresi i mattina: sono già
+ * confermati, nessuna chiamata).
+ */
+export function lancioPriority(lead: LancioConfermeFields, bucket: string = LANCIO_BUCKET): 0 | 1 {
+    if (!isLeadLancio(lead, bucket)) return 0
+    if (lead.confirmationsOutcome) return 0
+    if (lead.lancioScelta === 'app_pomeriggio' || lead.lancioScelta === 'app_dopodomani') return 1
+    if (isCallNowHandoff(lead)) return 1
+    return 0
+}
+
+/** Copia ordinata: i lancio prima, poi tutti gli altri nell'ordine in cui erano. */
+export function lancioFirst<T extends { lead: LancioConfermeFields }>(rows: T[], bucket: string = LANCIO_BUCKET): T[] {
+    return [...rows].sort((a, b) => lancioPriority(b.lead, bucket) - lancioPriority(a.lead, bucket))
+}
+
+/** Testo del tooltip del badge e del blocco nel drawer. `handoff` vince sulla scelta. */
+export function lancioSceltaLabel(scelta: string | null, handoff = false): string {
+    if (handoff) return 'Tre chiamate a vuoto del venditore di turno: da richiamare'
+    switch (scelta) {
+        case 'chiamata_subito': return 'Ha chiesto la chiamata subito: in mano al venditore di turno'
+        case 'app_mattina': return 'Appuntamento la mattina dopo, già confermato dal bot: nessuna chiamata'
+        case 'app_pomeriggio': return 'Appuntamento il pomeriggio dopo, scelto in chat col bot'
+        case 'app_dopodomani': return 'Appuntamento dopodomani mattina, scelto in chat col bot'
+        case 'followup': return 'Ha risposto al follow-up del giorno dopo: flusso standard'
+        default: return 'Lead del lancio Web Dev AI'
+    }
+}
+
+/** Le risposte di riscaldamento in ordine, da un jsonb che può essere qualunque cosa. */
+export function lancioBotRisposte(info: unknown): string[] {
+    if (!info || typeof info !== 'object' || Array.isArray(info)) return []
+    const risposte = (info as LancioBotInfo).risposte
+    if (!Array.isArray(risposte)) return []
+    return risposte
+        .filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
+        .map(r => r.trim())
+}
+```
+
+- [ ] **Step 5: Esegui i test**
+
+Run: `node --import tsx --test src/lib/lancio/conferme.test.ts`
+Expected: PASS (6 test).
+
+- [ ] **Step 6: Ordinamento nella board — `src/app/actions/confermeActions.ts`**
+
+Import in testa al file (unire con gli import esistenti): `import { lancioFirst } from "@/lib/lancio/conferme"`.
+
+Dentro `getConfermeAppointments`, subito dopo la costruzione di `withNotes` (il `results.map(r => { ... lastBotNote ... })`, riga ~318) e PRIMA di `const grouped: Record<string, RowWithNote[]> = {};`, aggiungi:
+
+```ts
+    // Lead del lancio in cima (spec 2026-09-14 §4.5): stesso meccanismo del
+    // badge "Aveva detto sì" dei GDO (pipelineActions.recoverableFirst) — sort
+    // stabile per priorità, l'ordine del DB resta identico dentro i gruppi.
+    // Vale per la lista piatta e, di conseguenza, per ogni ora del kanban
+    // (ConfermeBoard filtra flatList per ora senza riordinare).
+    const ordered = lancioFirst(withNotes);
+```
+
+Poi sostituisci le due letture di `withNotes` che seguono:
+- `for (const item of withNotes) {` → `for (const item of ordered) {`
+- `flatList: withNotes` → `flatList: ordered`
+
+Non toccare `.orderBy(desc(leads.appointmentCreatedAt))` né il filtro `strict_kanban`.
+
+- [ ] **Step 7: Badge in riga — `src/components/ConfermeBoardRow.tsx`**
+
+1. Import lucide (riga 4): aggiungi `Rocket` alla lista.
+2. Import helper, dopo gli import di `@/app/actions/...`:
+   ```ts
+   import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
+   ```
+3. Subito DOPO il badge `{lead.botReport && (...)}` (riga ~263-265) e PRIMA della riga del telefono, aggiungi:
+
+```tsx
+                    {/* Badge LANCIO (spec 2026-09-14 §4.5): ambra, come l'accento del lancio
+                        su /lancio. `<div>` e non `<span>`: sta in un contenitore flex con
+                        pointer-events-none e non deve mai diventare padre di un bottone. */}
+                    {isLeadLancio(lead) && (
+                        <div
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 uppercase shrink-0 flex items-center gap-1"
+                            title={`Lancio Web Dev AI · ${lancioSceltaLabel(lead.lancioScelta, isCallNowHandoff(lead))}`}
+                        >
+                            <Rocket className="w-3 h-3" /> Lancio
+                        </div>
+                    )}
+```
+
+- [ ] **Step 8: Confermati con badge e venditore — `src/components/ConfermeBoard.tsx`**
+
+1. Import lucide (riga 5): aggiungi `Rocket`.
+2. Import helper, dopo `import { markConfermeAlertHandled } ...`:
+   ```ts
+   import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
+   ```
+3. Nella tabella dello **Storico** (`viewMode === 'storico'`), cella "Esito Conferma" (riga ~682-686): sostituisci il ramo `confermato`
+
+```tsx
+                                                            {item.lead.confirmationsOutcome === "confermato" ? (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
+                                                                </span>
+                                                            ) : (
+```
+
+con
+
+```tsx
+                                                            {item.lead.confirmationsOutcome === "confermato" ? (
+                                                                <div className="flex flex-col items-start gap-1">
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
+                                                                    </span>
+                                                                    {/* Lancio (spec §4.5): i prenotati della mattina nascono già confermati
+                                                                        dal bot con il venditore del round robin. Badge + venditore, così
+                                                                        le Conferme vedono che non c'è nessuna chiamata da fare. */}
+                                                                    {isLeadLancio(item.lead) && (
+                                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                                            <div
+                                                                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 uppercase flex items-center gap-1"
+                                                                                title={`Lancio Web Dev AI · ${lancioSceltaLabel(item.lead.lancioScelta, isCallNowHandoff(item.lead))}`}
+                                                                            >
+                                                                                <Rocket className="w-3 h-3" /> Lancio
+                                                                            </div>
+                                                                            {item.lead.salespersonAssigned && (
+                                                                                <div className="text-[11px] font-semibold text-ash-600">→ {item.lead.salespersonAssigned}</div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+```
+
+Il ramo `scartato` resta com'è. Lo Storico legge `confirmationsTimestamp` nell'intervallo scelto (default ultimi 7 giorni): i mattina prenotati la sera del 5/10 hanno `confirmationsTimestamp = now` (Task 7) e compaiono in "Confermati" dal 5/10 in poi.
+
+- [ ] **Step 9: Blocco "Dal bot – lancio" nel drawer — `src/components/ConfermeDrawer.tsx`**
+
+1. Import lucide (riga 4): aggiungi `Rocket`.
+2. Import helper, dopo `import type { BotReport } ...`:
+   ```ts
+   import { isCallNowHandoff, isLeadLancio, lancioBotRisposte, lancioSceltaLabel } from "@/lib/lancio/conferme"
+   ```
+3. Nel tab Note (`activeTab === "note"`), dentro `<div className="flex-1 space-y-4 mb-6">` e PRIMA di `{loadingNotes ? (` (riga ~988), aggiungi:
+
+```tsx
+                                    {/* Dal bot – lancio (spec 2026-09-14 §4.5): la scelta fatta in chat e le
+                                        risposte di riscaldamento. Sta sopra le note, sempre visibile, anche
+                                        mentre le note caricano: è la prima cosa da leggere prima di chiamare. */}
+                                    {isLeadLancio(lead) && (() => {
+                                        const risposte = lancioBotRisposte(lead.lancioBotInfo)
+                                        const handoff = isCallNowHandoff(lead)
+                                        return (
+                                            <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 shadow-sm">
+                                                <div className="flex justify-between items-start mb-2 gap-2">
+                                                    <div className="text-xs font-bold text-amber-900 bg-amber-100 px-2 py-1 rounded-md flex items-center gap-1.5">
+                                                        <Rocket className="w-3.5 h-3.5" /> Dal bot – lancio
+                                                    </div>
+                                                    {lead.lancioSceltaAt && (
+                                                        <div className="text-[11px] font-medium text-amber-600 uppercase tracking-wider shrink-0">
+                                                            {format(new Date(lead.lancioSceltaAt), "dd/MM/yy HH:mm")}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm font-semibold text-amber-950">{lancioSceltaLabel(lead.lancioScelta, handoff)}</p>
+                                                {lead.lancioScelta === 'app_mattina' && lead.salespersonAssigned && (
+                                                    <p className="text-xs text-amber-800 mt-1">Venditore: {lead.salespersonAssigned}</p>
+                                                )}
+                                                {risposte.length > 0 ? (
+                                                    <ul className="mt-3 space-y-1.5">
+                                                        {risposte.map((r, i) => (
+                                                            <li key={i} className="text-sm text-amber-950 bg-white/70 rounded-md px-2.5 py-1.5 border border-amber-100">💬 {r}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p className="mt-2 text-xs italic text-amber-700">Nessuna risposta di riscaldamento registrata dal bot.</p>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
+```
+
+- [ ] **Step 10: Routing delle notifiche — `src/components/Topbar.tsx`**
+
+In `handleNotifClick`, dopo il ramo `else if (notif.type === 'bot_note') { ... }` e PRIMA del ramo `appointment_confirmed || ...`, aggiungi:
+
+```ts
+        } else if (notif.type === 'lancio_appuntamento') {
+            // Appuntamento del lancio scelto col bot (pomeriggio/dopodomani) o
+            // tornato dal venditore dopo tre NR: le Conferme lo lavorano in board.
+            // Stesso deep-link della nota del bot, sul tab Note dove sta il
+            // blocco "Dal bot – lancio"; la board carica il lead da sola anche
+            // se non è in nessuna lista (ConfermeBoard, pendingDeepLink).
+            if (meta?.leadId) router.push(`/conferme?lead=${meta.leadId}&tab=note`)
+        } else if (notif.type === 'lancio_call_now') {
+            // Il venditore deve atterrare sulla scheda "Lancio: chiamate subito",
+            // non nel drawer di ricerca: lì stanno "Registra esito" e "Non risponde".
+            router.push('/venditore?view=lancio')
+```
+
+(la riga successiva resta `} else if (notif.type === 'appointment_confirmed' || ...`). Il toast live in fondo al file chiama la stessa `handleNotifClick`: nessun'altra modifica.
+
+- [ ] **Step 11: Atterraggio sulla tab Lancio — `src/components/VenditoreDashboardClient.tsx`**
+
+1. Import (riga 12): `import { useRouter, useSearchParams } from "next/navigation"`.
+2. Dopo il `useEffect` di mount (quello che chiama `fetchAppointments()`/`fetchFollowUps()`/`fetchLancio()` e registra `onBusEvent('leads', ...)`, ~riga 171-187), aggiungi:
+
+```tsx
+    // Notifica "Lancio: chiama subito" → /venditore?view=lancio. Il parametro si
+    // legge in modo reattivo e poi si toglie dall'URL (stesso pattern del
+    // deep-link di ConfermeBoard): il venditore è già su questa pagina e una
+    // navigazione sulla stessa rotta non rimonta il componente, quindi un
+    // effetto legato al solo mount non scatterebbe mai. Senza il parametro un
+    // refresh non riapre la tab da solo.
+    const searchParams = useSearchParams()
+    const wantLancio = searchParams.get('view') === 'lancio'
+    useEffect(() => {
+        if (!wantLancio) return
+        setView('LANCIO')
+        fetchLancio()
+        const params = new URLSearchParams(window.location.search)
+        params.delete('view')
+        const rest = params.toString()
+        window.history.replaceState({}, '', rest ? `${window.location.pathname}?${rest}` : window.location.pathname)
+    }, [wantLancio])
+```
+
+`fetchLancio` è la funzione di Task 10 (Step 3, punto 3). La vista `'LANCIO'` renderizza `LancioCallNowTab` anche a zero lead (colonne con "Nessun lead"): se la notifica arriva prima del refetch, la tab si popola da sola al `fetchLancio()`.
+
+- [ ] **Step 12: Compila, test, verifica dal vivo**
+
+Run: `npx tsc --noEmit && npm test`
+Expected: verdi (il nuovo file di test aggiunge 6 test).
+
+Dal vivo, con un lead di prova nel kanban di OGGI (via SQL: `launchBucket='LANCIO_WEBDEV_2026'`, `status='APPOINTMENT'`, `companyId='fenice'`, `appointmentDate` = oggi alle 16:00 ora italiana, `lancioScelta='app_pomeriggio'`, `lancioSceltaAt=now()`, `lancioBotInfo='{"risposte":["faccio il barista","mi ha colpito lo stipendio"]}'`, `confirmationsOutcome=NULL`, `assignedToId` = id dell'account bot; e un secondo lead normale alla stessa ora con `appointmentCreatedAt` più recente):
+- Board Conferme, tab Pomeriggio, ora 16:00: il lead lancio è **primo** nonostante l'`appointmentCreatedAt` più vecchio, con il badge ambra "Lancio" accanto al funnel; il tooltip dice "Appuntamento il pomeriggio dopo, scelto in chat col bot".
+- Aprendo la riga → tab Note: in cima il blocco ambra "Dal bot – lancio" con la scelta e le due risposte; sotto, le note normali.
+- Stesso lead con `lancioScelta='chiamata_subito'`, `lancioCallNowAttempts=3`, `salespersonUserId=NULL`: resta primo, tooltip "Tre chiamate a vuoto del venditore di turno: da richiamare".
+- Lead con `lancioScelta='app_mattina'`, `confirmationsOutcome='confermato'`, `confirmationsTimestamp=now()`, `salespersonAssigned='Mario Rossi'`: non è nel kanban; in Storico → Confermati mostra "Confermato" + badge "Lancio" + "→ Mario Rossi".
+- Inserendo a mano una `notifications` `type='lancio_appuntamento'`, `metadata={"leadId":"<id>"}` per l'account Conferme: la campanella suona, il click apre `/conferme` con il drawer del lead sul tab Note.
+- Inserendo una `notifications` `type='lancio_call_now'` per un venditore: il click porta a `/venditore` con la tab "Lancio: chiamate subito" attiva e l'URL ripulito.
+- Pulizia: cancellare i lead e le notifiche di prova.
+
+- [ ] **Step 13: Commit**
+
+```bash
+git add src/lib/lancio/conferme.ts src/lib/lancio/conferme.test.ts package.json src/app/actions/confermeActions.ts src/components/ConfermeBoardRow.tsx src/components/ConfermeBoard.tsx src/components/ConfermeDrawer.tsx src/components/Topbar.tsx src/components/VenditoreDashboardClient.tsx
+git commit -m "feat(lancio): badge LANCIO e priorita nella board Conferme, blocco dal bot nel drawer, routing notifiche"
+```
+
+---
+
+## Self-review
+
+Fatta con la spec e la nota di riconciliazione aperte accanto al piano, dopo il Task 11.
+
+### 1. Copertura della spec
+
+| Sezione | Requisito | Task | Note |
+|---|---|---|---|
+| §3.1 | Colonne `leads.lancio*` + riga `launchPools` | B1 (Task 1 di B1) | Task 0 verifica che ci siano. |
+| §3.1 | Tabella `launchShifts` + unique `(bucket, kind, salesUserId)` + round robin `coalesce(lastAssignedAt,'epoch'), salesUserId` | Task 1, Task 3 (`pickRoundRobin`), Task 5 (`ORDER BY`) | **Deviazione dichiarata**: `removedAt/removedBy` in più (soft delete). |
+| §3.1 | Eventi `LANCIO_CALL_NOW_ASSIGNED`, `LANCIO_BOOKED` | Task 8, Task 7 | — |
+| §3.1 / §4.3 | Evento `LANCIO_SHIFT_CHANGED` | Task 1 (deviazione) | **Non scritto**: `leadEvents.leadId` è NOT NULL e un cambio turno non ha lead. La storia sta su `launchShifts` (`removedAt/removedBy/createdBy`). Il tipo TS resta (B1) per un eventuale uso futuro. Da dire al PO, non è un buco silenzioso. |
+| §4.2 | `POST /api/bot/lancio/slots` (POST, forma della risposta, `mattina:'conferme'` per dopodomani, lettura come `checkBookingAllowed` senza `companyId`) | Task 6 (+ Task 3, Task 5) | `venditoriLiberi` non esce verso il bot. |
+| §4.2 | `book` mattina: lock per ora, venditore libero con `lastAssignedAt` più vecchio, campi scritti, già confermato, Calendar, webhook `appointment.outcome`+`deal.assigned`, `lastAssignedAt`, eventi, `409 ora_esaurita` con slots | Task 7 | Calendar e webhook in `after()` (`mattinaSideEffects`). |
+| §4.2 | `book` pomeriggio/dopodomani: nessun venditore, `lancioScelta`, notifica alle Conferme | Task 7 (`notifyConfermeLancio`) + Task 11 (routing del click) | — |
+| §4.2 | Guardie (bucket + `assignedToId=bot` o `pulsante_webinar`), `422 fuori_regole`, idempotenza ±60 s → `deduped:true` | Task 6 (`loadLancioLead`), Task 2 (`classifyAt`, `sameInstant`), Task 7 | — |
+| §4.2 | `call-now`: round robin SERA, campi scritti, notifica realtime al venditore, evento, `409 nessun_venditore` | Task 8 + Task 11 (routing) | Nessun canale nuovo: `notifications` + trigger 0019. |
+| §4.2 | Tutte e tre < 3 s | Task 7, Task 8 (`after()`) | — |
+| §4.3 | Turni: due liste di spunte, salvataggio su `launchShifts` | Task 9 | — |
+| §4.3 | Copertura 9-15 del 6/10 dal calendario, avviso rosso su chi non ha compilato | Task 9 | — |
+| §4.3 | Monitor lancio con tutti i contatori | Task 9 | **Parziale per scelta**: i quattro contatori che vivono nel DB del bot (benvenuto consegnato, hanno risposto, posto bloccato, link inviato) sono mostrati come "— (dato del bot)". La spec dice "Sorgenti: eventi CRM + `lead-status`": la lettura via `lead-status` NON è in questo piano. Vedi "Punti scoperti". |
+| §4.3 | Impostazioni (link video/live) nel pannello del bot | — | Nulla da fare nel CRM, per spec. |
+| §4.4 | Tab "Lancio: chiamate subito", 4 colonne, card con nome/telefono/ora/risposte/note, visibile solo se ci sono lead | Task 10 (+ Task 4 `callNowColumn`) | — |
+| §4.4 | "Non risponde" → +1, `nextAt=+30min`, callLog; 3° NR → A1 | Task 10 (`recordLancioCallNowNoAnswer`) + Task 4 (`nextCallNowState`) | Il callLog è un `CALL_LOGGED` con `metadata.source='lancio_call_now'`. |
+| §4.4 | "Registra esito" → drawer esiti esistente, `presentedAt` latchato | Task 10 (riuso di `VenditoreDrawer` + `startNegotiation`) | Il latch è nel `saveVenditoreOutcome` esistente: nessun codice nuovo. |
+| §4.4 | Niente OutcomeGate, niente multe | Task 10 (Step 5, Step 6) | — |
+| §4.5 | Badge "LANCIO" ambra e in cima alla prima chiamata per `app_pomeriggio`/`app_dopodomani`/A1 (stesso meccanismo di "Aveva detto sì") | Task 11 (Step 4, 6, 7) | Sort stabile in server action, come `recoverableFirst`. |
+| §4.5 | Info di riscaldamento nel drawer, tab Note, blocco "Dal bot – lancio" | Task 11 (Step 9) | — |
+| §4.5 | `app_mattina` in Confermati con badge e venditore, nessuna chiamata | Task 11 (Step 8) | — |
+| §4.5 | Il muro di prenotazione resta valido se una Conferma sposta l'ora | — (codice esistente) | `updateLeadDataConferme` → `checkBookingAllowed` già oggi; i mattina hanno `salespersonUserId`, quindi il muro si applica. Nessun task. |
+| §4.5 | Ricerca per numero nel pannello del bot | — | Lato bot (B4/B5). |
+| §6.2 | Codici di risposta | Global Constraints + Task 6/7/8 | — |
+
+### 2. Scan dei placeholder
+
+Cercati nel piano: `TBD`, `TODO`, `implement later`, `fill in`, `add appropriate`, `handle edge cases`, `Similar to Task`, `write tests for`. Nessuna occorrenza. Ogni step di codice ha il codice; ogni step "Modify" dice riga, cosa togliere e cosa mettere.
+
+### 3. Coerenza dei nomi (nota di riconciliazione + fra i task)
+
+- **Corretto inline in Task 2**: `config.ts` ridefiniva `bucket: 'LANCIO_WEBDEV_2026'` e `funnel: 'Lancio Web Dev AI'` con una nota condizionale ("se `intake.ts` esiste…"). Ora importa e ri-esporta `LANCIO_BUCKET`, `LANCIO_FUNNEL`, `LANCIO_SLUG`, `LANCIO_COMPANY` da `./intake` e `LANCIO_WEBDEV` li usa come valori. Task 0 verifica che `intake.ts` esporti le quattro costanti e ferma il blocco se manca.
+- **Corretto inline in Task 2 (Interfaces)**: il blocco diceva `type LancioBotInfo = Record<string, string>` mentre il codice definiva `interface LancioBotInfo { risposte?: string[]; ... }`; Task 10 e Task 11 usano `risposte: string[]`. Ora il blocco Interfaces e il codice coincidono.
+- **Corretto inline in Task 6**: `export const FENICE = 'fenice'` → `export const FENICE = LANCIO_COMPANY` (import da `./config`). Il nome `FENICE` resta perché Task 7/8/9 lo consumano già.
+- `notifyConfermeLancio(lead: { id; name }, at: Date, titolo: string)`: definita in Task 7, usata in Task 10 con la stessa firma. Tipo notifica `'lancio_appuntamento'` in Task 7 e in Task 11 (Topbar). Tipo `'lancio_call_now'` in Task 8 e in Task 11.
+- `CALL_NOW_MAX_ATTEMPTS` (Task 2) usato da Task 4 (`nextCallNowState`), Task 9 (`monitor.ts`) e Task 11 (`isCallNowHandoff`): stessa soglia 3 in tre punti, una costante.
+- Passaggio A1 (Task 10) scrive `salespersonUserId=null`, `lancioCallNowAttempts=3`, `CONFERME_DISCARD_RESET` (quindi `confirmationsOutcome=null`): esattamente ciò che `isCallNowHandoff`/`lancioPriority` (Task 11) leggono.
+- `Db` (Task 5) usato in Task 7/8 con `tx.execute`: la nota di Task 7 dice come allargare il tipo se `tsc` protesta.
+- `computeSlots` restituisce `SlotsResponse | null`; in Task 7 il 409 lo chiama con un `dateStr` già classificato, quindi mai `null`.
+- `ShiftKind` definito in Task 2, consumato da Task 5, 9. `LancioCallNowLead.column: CallNowColumn` (Task 10) ↔ `callNowColumn` (Task 4).
+- Test runner: ogni `*.test.ts` nuovo (rules, slots, callNow, conferme) ha lo step "aggiungi alla riga `test` di `package.json`", come da nota.
+- Migrazione `0037_launch_shifts.sql` come da nota (B1 = `0036`).
+
+### 4. Punti della spec che restano scoperti (da dire al PO)
+
+1. **§4.3 Monitor, contatori del bot** ("benvenuto consegnato", "hanno risposto", "posto bloccato", "link Zoom inviato"): la spec li vuole nel monitor con sorgente `lead-status`; qui si mostrano come "— (dato del bot)". Chiuderlo vuol dire o una lettura dal DB del bot (fuori dal CRM) o un'estensione di `/api/bot/lead-status` che B4/B5 non prevedono. Decisione da prendere, non un'omissione del piano.
+2. **§3.1/§4.3 evento `LANCIO_SHIFT_CHANGED`**: non scritto per il vincolo `leadEvents.leadId NOT NULL`; sostituito dal soft delete su `launchShifts`. Se il PO vuole l'evento in un log, serve una tabella senza lead (fuori scope qui).
+3. **§4.2 "Se l'ora si è riempita nel frattempo → 409 e il bot ripropone"** è coperto; il caso simmetrico "il turno GIORNO_DOPO è vuoto o nessuno ha compilato il calendario" produce `mattinaEsaurita:true` su `slots` e `409 ora_esaurita` su `book` mattina: è il comportamento voluto (tutto al pomeriggio), ma l'avviso rosso su `/lancio` (Task 9) è l'unico segnale al team. Da controllare la mattina del 5/10.
+4. **Tabella "Tabella" della board Conferme** (`viewMode === 'table'`, colonna "Stato"): non porta il badge LANCIO. La spec parla di board (kanban) e Confermati; la tabella è una vista di ricerca. Se serve, è lo stesso blocco `isLeadLancio(item.lead)` dello Step 8 nella colonna "Stato".
+5. **Notifiche `lancio_appuntamento` a MANAGER/ADMIN**: `notifyConfermeLancio` scrive solo ai `CONFERME` attivi Fenice (spec: "notifica alle Conferme"). Un manager che vuole vederle non le riceve: coerente con la spec, ma va detto.
