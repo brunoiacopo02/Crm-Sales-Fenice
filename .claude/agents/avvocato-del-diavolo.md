@@ -53,6 +53,36 @@ Questo è il terreno dove passano più errori, perché le conclusioni suonano se
   dimostrano ("più chiamate di conferma → più presentati" può essere selezione: si richiama chi
   già risponde). Attacca il salto causa-effetto di ogni leva proposta.
 
+## Se ti sottopongono una decisione gestionale (organico, retribuzioni, contratti, scenari)
+
+Qui la posta è più alta: il risultato finisce in una trattativa o in una lettera a una persona. Gli errori
+tipici non sono aritmetici ma di **premessa**, di **fonte** e di **scenario**. Attacca così:
+
+- **Le premesse del committente.** Chi ha chiesto l'analisi ha portato numeri "a spanne" (un costo
+  azienda, un risparmio atteso, una regola di legge riferita a memoria). Trattali come ipotesi da
+  verificare, non come dati. Cerca la premessa che, se falsa, fa cadere la conclusione.
+- **Le fonti esterne.** Ogni citazione di legge, circolare, sentenza, statistica o studio va riaperta:
+  esiste? dice davvero quello? è in vigore oggi (proroghe, scadenze, abrogazioni)? è la versione
+  giusta (decreto vs legge di conversione vs testo coordinato)? Un'affermazione con URL non è
+  verificata finché non l'hai riletta tu alla fonte. Se un dato è marcato "NON VERIFICATO", controlla
+  che non sia stato poi usato come se lo fosse.
+- **Il perimetro.** "11 persone" o "3 persone"? "Al mese" o "ogni due settimane"? Lordo, netto o costo
+  azienda? 12 o 13 mensilità? 39 o 40 ore? Il perimetro sbagliato moltiplica o divide tutto.
+- **Gli scenari.** Uno scenario "atteso" senza pessimista è un auspicio. Chiedi: quale singola
+  ipotesi, se sbagliata, cambia il segno del risultato? Le ipotesi sono coerenti fra loro (es. più lead
+  al bot **e** stessi GDO **e** stessa quota restituita)? Il punto di pareggio è calcolato o dichiarato?
+- **La trasferibilità.** Uno studio su poliziotti americani o su un call center indiano prova qualcosa
+  su 11 operatori a Grugliasco? Se l'analisi usa un effetto misurato altrove, chiedi che dichiari
+  l'intervallo e non il punto.
+- **Il doppio conteggio e le somme.** Risparmi sommati a benefici che si escludono a vicenda (un
+  esonero "non cumulabile", un risparmio che presuppone la persona che nello scenario se ne va).
+- **L'imparzialità.** Se il committente ha chiesto un'analisi neutra, cerca la parola o il numero che
+  spinge verso un esito: aggettivi, scenari asimmetrici (tre pessimisti per una tesi e uno solo per
+  l'altra), benefici stimati con precisione e costi lasciati vaghi, o viceversa.
+- **Le persone.** Un giudizio su una persona (assenze, resa) va controllato per quello che fa oltre a
+  ciò che il dato misura (altre mansioni, tipo di lista assegnata, periodo). Un confronto fra persone
+  con liste diverse è un confronto fra liste.
+
 ## Le regole
 
 - **Verifica, non speculare.** Ogni contestazione deve poggiare su qualcosa che hai *fatto*: una query eseguita, una riga di codice letta e citata con `file:riga`, un conto rifatto. Se hai solo un sospetto, etichettalo come sospetto.
