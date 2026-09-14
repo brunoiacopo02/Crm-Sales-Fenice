@@ -13,15 +13,33 @@ import { and, eq, isNull, sql, like, or, inArray, asc } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 import crypto from "crypto"
-import { currentTenant, assertSalesArea, assertSingleCompany } from "@/lib/tenancy"
+import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from "@/lib/tenancy"
 import { pickAndAssignBuckets, AC_KEY, acGet, findAcListIdsByName } from "@/lib/launchPoolShared"
 import { pushLeadsToBotPaced } from "@/lib/bot-fissatore/push"
 import { NO_REPUSH_RESULTS_SQL, DELIVERED_PUSH_RESULTS_SQL } from "@/lib/bot-fissatore/pushAudit"
 import {
-    LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_LIST_NAME_NORMALIZED,
+    LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_FUNNEL, LANCIO_LIST_NAME_NORMALIZED, LANCIO_POOL_LABEL,
     isLancioIntakeEnabled, buildLancioLeadRow, buildLancioIntakeEventRows, lancioFieldForLead,
 } from "@/lib/lancio/intake"
 import { lancioContactId, readLancioAcContact } from "@/lib/lancio/acContact"
+import { LANCIO_PUSH_LOCK_KEY, lockPreso } from "@/lib/lancio/pushLock"
+
+// Chi può muovere il pool del lancio. Identico ai pool database
+// (databasePoolActions): scaricare la lista, aprire 500 chat WhatsApp o
+// ridistribuire i lead non sono gesti da GDO o venditore, che pure stanno
+// nell'area sales. La sola lettura dello stato resta a tutta l'area.
+const LANCIO_ROLES = ['ADMIN', 'MANAGER', 'TL']
+
+/** Contesto validato per le action di scrittura del lancio. Lancia se non autorizzato. */
+async function requireLancioCtx(): Promise<TenantContext> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    if (!LANCIO_ROLES.includes(ctx.role)) {
+        throw new Error(`Forbidden: ruolo ${ctx.role} non autorizzato sul pool del lancio`)
+    }
+    assertSingleCompany(ctx) // scrittura: bloccata in modalità "Tutte le aziende"
+    return ctx
+}
 
 export type LancioPoolStatus = {
     /** Nel bucket, senza padrone: pescabili verso i GDO. */
@@ -110,6 +128,33 @@ export async function getLancioPoolStatus(): Promise<LancioPoolStatus | null> {
     }
 }
 
+/**
+ * Cosa c'e' gia' dentro, per la dedup del sync.
+ * - `ids`: gli acContactId SOLO del bucket. I duplicati cross-funnel sono
+ *   voluti (decisione 14/09 n.1): lo stesso contatto AC puo' stare nel lancio
+ *   e in un altro funnel.
+ * - `phones`: i telefoni del bucket E quelli del funnel del lancio, come fa
+ *   syncBlackSummerPool. Il funnel senza bucket oggi non esiste, ma un import
+ *   manuale della stessa lista lo creerebbe, e un doppione di numero sono due
+ *   aperture WhatsApp alla stessa persona.
+ */
+async function leggiEsistenti(companyId: string): Promise<{ ids: Set<string>; phones: Set<string> }> {
+    const rows = await db
+        .select({ acContactId: leads.acContactId, phone: leads.phone, bucket: leads.launchBucket })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, companyId),
+            or(eq(leads.launchBucket, LANCIO_BUCKET), eq(leads.funnel, LANCIO_FUNNEL)),
+        ))
+    const ids = new Set<string>()
+    const phones = new Set<string>()
+    for (const r of rows) {
+        if (r.bucket === LANCIO_BUCKET && r.acContactId) ids.add(r.acContactId)
+        phones.add(r.phone)
+    }
+    return { ids, phones }
+}
+
 export type LancioSyncReport = {
     ok: boolean
     imported: number
@@ -129,13 +174,12 @@ export type LancioSyncReport = {
  * quattro: insieme sforerebbero i 300 s della pagina.
  */
 export async function syncLancioPool(): Promise<LancioSyncReport> {
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
     const report: LancioSyncReport = {
         ok: false, imported: 0, skippedExisting: 0, skippedNoPhone: 0, totalOnList: 0, senzaBot: 0, errors: [],
     }
+    let ctx: TenantContext
     try {
-        assertSingleCompany(ctx)
+        ctx = await requireLancioCtx()
     } catch (e: any) {
         report.errors.push(String(e?.message || e)); return report
     }
@@ -168,14 +212,7 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
 
     const botId = await findBotId()
 
-    // Dedup SOLO dentro il bucket (acContactId e telefono): i duplicati
-    // cross-funnel sono voluti (decisione 14/09 n.1).
-    const existingRows = await db
-        .select({ acContactId: leads.acContactId, phone: leads.phone })
-        .from(leads)
-        .where(and(eq(leads.companyId, ctx.companyId), eq(leads.launchBucket, LANCIO_BUCKET)))
-    const existingIds = new Set(existingRows.map(r => r.acContactId).filter((x): x is string => !!x))
-    const existingPhones = new Set(existingRows.map(r => r.phone))
+    const { ids: existingIds, phones: existingPhones } = await leggiEsistenti(ctx.companyId)
 
     const now = new Date()
     let toInsert: ReturnType<typeof buildLancioLeadRow>[] = []
@@ -235,12 +272,7 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
     // parziale copre l'acContactId; il telefono no, e un doppione di telefono
     // sono due aperture WhatsApp alla stessa persona.
     if (toInsert.length > 0) {
-        const adessoRows = await db
-            .select({ acContactId: leads.acContactId, phone: leads.phone })
-            .from(leads)
-            .where(and(eq(leads.companyId, ctx.companyId), eq(leads.launchBucket, LANCIO_BUCKET)))
-        const adessoIds = new Set(adessoRows.map(r => r.acContactId).filter((x): x is string => !!x))
-        const adessoPhones = new Set(adessoRows.map(r => r.phone))
+        const { ids: adessoIds, phones: adessoPhones } = await leggiEsistenti(ctx.companyId)
         const prima = toInsert.length
         toInsert = toInsert.filter(row =>
             !(row.acContactId && adessoIds.has(row.acContactId)) && !adessoPhones.has(row.phone))
@@ -314,6 +346,27 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
         }
     }
 
+    // La riga di registro esiste dalla migrazione 0036, ma "Rimuovi pool" la
+    // archivia e da archiviata getLancioPoolStatus torna null: la card sparisce
+    // e con lei sync, push e distribuzione. Per il lancio non e' una porta a
+    // senso unico — la precondizione dell'archiviazione (zero lead non
+    // assegnati) qui e' lo stato NORMALE, perche' i lead nascono al bot. Quindi
+    // un sync riuscito la de-archivia: rifare il sync e' come riaprire la card.
+    if (report.imported > 0 || report.totalOnList > 0) {
+        await db.insert(launchPools).values({
+            id: crypto.randomUUID(),
+            companyId: ctx.companyId,
+            bucket: LANCIO_BUCKET,
+            kind: 'LAUNCH',
+            label: LANCIO_POOL_LABEL,
+            monthKey: null,
+            createdBy: ctx.userId,
+        }).onConflictDoUpdate({
+            target: [launchPools.companyId, launchPools.bucket],
+            set: { archivedAt: null, archivedBy: null },
+        })
+    }
+
     revalidatePath('/', 'layout')
     report.ok = report.errors.length === 0
     return report
@@ -328,6 +381,8 @@ export type LancioPushReport = {
     remaining: number
     summary: Record<string, number>
     errors: string[]
+    /** true = c'era gia' un push in corso e questo non ha fatto niente. */
+    giaInCorso?: boolean
 }
 
 /**
@@ -336,13 +391,18 @@ export type LancioPushReport = {
  * con BOT_PUSHED in sent/duplicate/network_error NON si rispinge
  * (NO_REPUSH_RESULTS); un http_error/rate_limited/skipped_disabled si'.
  * Massimo 500 candidati per click: con budget 240 s ne partono ~120.
+ *
+ * Uno alla volta, garantito da un advisory lock. La prova "questo lead non e'
+ * mai arrivato al bot" e' l'evento BOT_PUSHED, che viene scritto lead per lead
+ * lungo i 240 s del lotto: senza lock un doppio click, una seconda scheda o un
+ * secondo admin rileggerebbero gli stessi <=500 candidati e aprirebbero due
+ * volte la stessa chat WhatsApp (e' la forma esatta dell'incidente del 09/09).
  */
 export async function pushLancioPoolToBot(): Promise<LancioPushReport> {
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
     const report: LancioPushReport = { ok: false, candidati: 0, inviati: 0, remaining: 0, summary: {}, errors: [] }
+    let ctx: TenantContext
     try {
-        assertSingleCompany(ctx)
+        ctx = await requireLancioCtx()
     } catch (e: any) {
         report.errors.push(String(e?.message || e)); return report
     }
@@ -356,45 +416,76 @@ export async function pushLancioPoolToBot(): Promise<LancioPushReport> {
         return report
     }
 
-    const candidates = await db.select({
-        id: leads.id,
-        name: leads.name,
-        phone: leads.phone,
-        email: leads.email,
-        funnel: leads.funnel,
-        companyId: leads.companyId,
-        launchBucket: leads.launchBucket,
-        lancioIngresso: leads.lancioIngresso,
-    }).from(leads).where(and(
-        eq(leads.companyId, ctx.companyId),
-        eq(leads.launchBucket, LANCIO_BUCKET),
-        eq(leads.assignedToId, botId),
-        eq(leads.status, 'NEW'),
-        eq(leads.phoneSuspicious, false),
-        sql`NOT EXISTS (
-            SELECT 1 FROM "leadEvents" e
-            WHERE e."leadId" = ${leads.id}
-              AND e."eventType" = 'BOT_PUSHED'
-              AND e.metadata->>'result' IN (${sql.raw(NO_REPUSH_RESULTS_SQL)})
-        )`,
-    )).orderBy(asc(leads.createdAt), asc(leads.id)).limit(500)
+    // Lock di TRANSAZIONE, non di sessione: in produzione il DB si raggiunge
+    // dal pooler Supabase in transaction mode, dove la connessione non resta
+    // la stessa tra una query e l'altra e un pg_advisory_lock di sessione
+    // finirebbe su una connessione qualsiasi (o non si rilascerebbe mai). Il
+    // lock di transazione vive dentro il BEGIN/COMMIT — che tiene la
+    // connessione agganciata — e si rilascia da solo anche se crepa tutto.
+    // Il prezzo e' una transazione lunga quanto il lotto (<=240 s): la si paga
+    // volentieri per non aprire due volte la stessa chat.
+    // La selezione dei candidati sta DENTRO il lock: e' proprio la lettura che
+    // due esecuzioni sovrapposte farebbero uguale.
+    const preso = await db.transaction(async (tx) => {
+        const res = await tx.execute(
+            sql`SELECT pg_try_advisory_xact_lock(hashtextextended(${LANCIO_PUSH_LOCK_KEY}, 2)) AS preso`,
+        )
+        if (!lockPreso(res)) return false
 
-    report.candidati = candidates.length
-    if (candidates.length === 0) { report.ok = true; return report }
+        const candidates = await tx.select({
+            id: leads.id,
+            name: leads.name,
+            phone: leads.phone,
+            email: leads.email,
+            funnel: leads.funnel,
+            companyId: leads.companyId,
+            launchBucket: leads.launchBucket,
+            lancioIngresso: leads.lancioIngresso,
+        }).from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.launchBucket, LANCIO_BUCKET),
+            eq(leads.assignedToId, botId),
+            eq(leads.status, 'NEW'),
+            eq(leads.phoneSuspicious, false),
+            sql`NOT EXISTS (
+                SELECT 1 FROM "leadEvents" e
+                WHERE e."leadId" = ${leads.id}
+                  AND e."eventType" = 'BOT_PUSHED'
+                  AND e.metadata->>'result' IN (${sql.raw(NO_REPUSH_RESULTS_SQL)})
+            )`,
+        )).orderBy(asc(leads.createdAt), asc(leads.id)).limit(500)
 
-    const { results, remaining } = await pushLeadsToBotPaced(candidates.map(c => ({
-        leadId: c.id,
-        name: c.name,
-        phone: c.phone,
-        email: c.email,
-        funnel: c.funnel,
-        companyId: c.companyId,
-        lancio: lancioFieldForLead(c),
-    })), { budgetMs: 240_000 })
+        report.candidati = candidates.length
+        if (candidates.length === 0) return true
 
-    report.inviati = results.length
-    report.remaining = remaining.length
-    for (const r of results) report.summary[r.result] = (report.summary[r.result] ?? 0) + 1
+        // Gli eventi BOT_PUSHED li scrive pushLeadToBot sulla connessione
+        // normale (`db`), non su questa: restano scritti anche se la
+        // transazione del lock finisse in rollback. E' voluto — sono l'audit
+        // di una chat gia' aperta, non devono sparire.
+        const { results, remaining } = await pushLeadsToBotPaced(candidates.map(c => ({
+            leadId: c.id,
+            name: c.name,
+            phone: c.phone,
+            email: c.email,
+            funnel: c.funnel,
+            companyId: c.companyId,
+            lancio: lancioFieldForLead(c),
+        })), { budgetMs: 240_000 })
+
+        report.inviati = results.length
+        report.remaining = remaining.length
+        for (const r of results) report.summary[r.result] = (report.summary[r.result] ?? 0) + 1
+        return true
+    })
+
+    if (!preso) {
+        report.giaInCorso = true
+        report.errors.push("Push già in corso (un'altra scheda o un altro admin): aspetta che finisca e ricontrolla lo stato.")
+        return report
+    }
+
+    if (report.candidati === 0) { report.ok = true; return report }
+
     if (report.summary.skipped_disabled) {
         report.errors.push(`BOT_INTAKE_ENABLED non è 'true' sul server: ${report.summary.skipped_disabled} push saltati.`)
     }
@@ -416,11 +507,10 @@ export type LancioAssignReport = {
 
 /** Distribuzione FIFO dei lead del pool (non assegnati) ai GDO scelti — come Black Summer. */
 export async function assignFromLancioPool(input: { count: number; gdoIds: string[] }): Promise<LancioAssignReport> {
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
     const report: LancioAssignReport = { ok: false, errors: [], perGdo: {}, totalAssigned: 0 }
+    let ctx: TenantContext
     try {
-        assertSingleCompany(ctx)
+        ctx = await requireLancioCtx()
     } catch (e: any) {
         report.errors.push(String(e?.message || e)); return report
     }

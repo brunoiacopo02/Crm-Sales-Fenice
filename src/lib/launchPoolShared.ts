@@ -171,13 +171,3 @@ export async function findAcListIdsByName(nameNormalized: string): Promise<strin
     }
     return Array.from(ids).sort()
 }
-
-/**
- * Id di una lista AC dato il nome normalizzato (trim + lowercase), o null.
- * Con più liste omonime torna la prima in ordine: chi deve lavorarle tutte usa
- * `findAcListIdsByName`.
- */
-export async function findAcListIdByName(nameNormalized: string): Promise<string | null> {
-    const ids = await findAcListIdsByName(nameNormalized)
-    return ids[0] ?? null
-}
