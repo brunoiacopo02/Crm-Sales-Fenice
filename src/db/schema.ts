@@ -134,6 +134,16 @@ export const leads = pgTable('leads', {
     // Lancio Videoeditor (maggio 2026): marca i lead pescabili dal pool del lancio.
     // 'WEBINAR' = ha visto il webinar Zoom; 'NO_WEBINAR' = non l'ha visto; null = lead normale.
     launchBucket: text('launchBucket'),
+    // Lancio "Web Developer AI" (ottobre 2026, migr. 0036). L'appartenenza al
+    // lancio e' launchBucket='LANCIO_WEBDEV_2026' + funnel='Lancio Web Dev AI';
+    // queste dicono come e' entrato e cosa ha scelto la sera della live.
+    // Tutte NULL sui lead normali.
+    lancioIngresso: text('lancioIngresso'),               // 'lista' | 'pulsante_webinar'
+    lancioScelta: text('lancioScelta'),                   // 'chiamata_subito' | 'app_mattina' | 'app_pomeriggio' | 'app_dopodomani' | 'followup'
+    lancioSceltaAt: timestamp('lancioSceltaAt', { withTimezone: true, mode: 'date' }),
+    lancioCallNowAttempts: integer('lancioCallNowAttempts').default(0).notNull(),
+    lancioCallNowNextAt: timestamp('lancioCallNowNextAt', { withTimezone: true, mode: 'date' }),
+    lancioBotInfo: jsonb('lancioBotInfo'),
     status: text('status').default('NEW').notNull(),
     callCount: integer('callCount').default(0).notNull(),
     assignedToId: text('assignedToId').references(() => users.id),

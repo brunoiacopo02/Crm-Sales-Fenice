@@ -195,6 +195,12 @@ function humanizeReason(reason: string): { human: string; category: AcFailureRow
             category: 'blocked_list',
         };
     }
+    if (r === 'lancio_list_unresolved') {
+        return {
+            human: 'Contatto del lancio messo da parte: la lista AC del lancio non era risolvibile (ActiveCampaign non ha risposto). Clicca Riprova: ora dovrebbe entrare nel bucket del lancio.',
+            category: 'ac_api',
+        };
+    }
     if (r.startsWith('Telefono non normalizzabile') || r.startsWith('Telefono non utilizzabile')) {
         const match = r.match(/"([^"]*)"/);
         const num = match?.[1] ?? '';

@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { leads, users } from '@/db/schema';
 import { pushLeadsToBotPaced } from '@/lib/bot-fissatore/push';
 import { createClient } from '@/utils/supabase/server';
+import { lancioFieldForLead } from '@/lib/lancio/intake';
 
 /**
  * Variante ADMIN-session di /api/bot/backfill: stesso identico push (pushLeadToBot,
@@ -53,6 +54,8 @@ export async function POST(req: NextRequest) {
         email: leads.email,
         funnel: leads.funnel,
         companyId: leads.companyId,
+        launchBucket: leads.launchBucket,
+        lancioIngresso: leads.lancioIngresso,
     }).from(leads).where(and(
         eq(leads.assignedToId, bot.id),
         eq(leads.companyId, 'fenice'),
@@ -69,6 +72,9 @@ export async function POST(req: NextRequest) {
         email: c.email,
         funnel: c.funnel,
         companyId: c.companyId,
+        // Un lead del lancio spinto a mano deve arrivare al bot come lancio,
+        // altrimenti riceve l'apertura di Mario invece del benvenuto del lancio.
+        lancio: lancioFieldForLead(c),
     })));
 
     const summary = results.reduce<Record<string, number>>((acc, r) => {

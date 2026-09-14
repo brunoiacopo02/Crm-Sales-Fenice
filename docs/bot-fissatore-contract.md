@@ -1,11 +1,12 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.5 — 2026-08-26 (`CONTATTO_UMANO` porta motivo e contesto e finisce in una coda vera; `RICHIAMO` senza data certa; `APPUNTAMENTO` con data diversa = rifissaggio invece di scarto silenzioso).
+> **Versione:** 1.6 — 2026-09-14 (intake: campo opzionale `lancio` per i lead del lancio "Web Developer AI"; documentati `personKey` e `previousLeadIds`, già in produzione dal 2026-08-29).
+> Versione precedente: 1.5 — 2026-08-26 (`CONTATTO_UMANO` porta motivo e contesto e finisce in una coda vera; `RICHIAMO` senza data certa; `APPUNTAMENTO` con data diversa = rifissaggio invece di scarto silenzioso).
 >
-> **Il contratto cresce, non cambia.** Ogni payload valido nella v1.4 resta valido: le
-> novità sono due campi opzionali su `CONTATTO_UMANO`, un'alternativa a `date` per
-> `RICHIAMO` e un caso che prima rispondeva `deduped` e ora aggiorna davvero l'appuntamento.
+> **Il contratto cresce, non cambia.** Ogni payload valido nella v1.5 resta valido: la
+> novità della v1.6 è un solo campo opzionale sull'intake (`lancio`). Le rotte
+> `/api/bot/lancio/*` (slot, prenotazione, chiamata subito) arrivano con la v1.7.
 
 ---
 
@@ -56,6 +57,12 @@ AGENDA_CHANNEL=bot              # `bot` = agenda dal canale fornitore (Direzione
                                 # spegne anche la Direzione 4: è il rollback completo.
 AGENDA_BOT_URL=                 # Default: https://web-app-messaggistica.vercel.app/api/send-agenda
 APPOINTMENT_BOT_URL=            # Default: https://web-app-messaggistica.vercel.app/api/appointment-set
+
+# Lancio Web Developer AI (solo lato CRM, v1.6)
+LANCIO_WEBDEV_INTAKE=           # `on` = i lead della lista AC "Lancio Web Developer AI"
+                                # entrano nel CRM e vanno al bot con il campo `lancio`.
+                                # Qualunque altro valore o assenza = lista bloccata
+                                # (comportamento del 14/09), recupero dal sync su /import.
 ```
 
 > `BOT_INTAKE_ENABLED=false` è il valore di sicurezza predefinito: il CRM non effettuerà push
@@ -162,6 +169,23 @@ interface BotIntakePayload {
   email:     string | null; // Email del lead (può essere null)
   funnel:    string | null; // Funnel/prodotto di interesse
   companyId: string;        // Sempre "fenice" per i lead del bot
+
+  // Dal 2026-08-29 (documentati qui in v1.6)
+  personKey?:       string;            // ultime 10 cifre del numero: la stessa persona ha sempre la stessa chiave
+  previousLeadIds?: PreviousLeadRef[]; // i lead precedenti con la stessa personKey, dal più recente, max 10
+
+  // v1.6 — SOLO sui lead del lancio (assente = flusso attuale, invariato)
+  lancio?: {
+    slug:     string;                        // 'webdev-2026-10' per il lancio di ottobre 2026
+    ingresso: 'lista' | 'pulsante_webinar';  // come è entrato: lista AC 132, o pulsante WhatsApp la sera della live
+  };
+}
+
+interface PreviousLeadRef {
+  leadId:    string;
+  status:    string;         // 'NEW' | 'IN_PROGRESS' | 'APPOINTMENT' | 'REJECTED'
+  outcome:   string | null;  // discardReason del lead precedente, se scartato
+  createdAt: string;         // ISO
 }
 ```
 
@@ -169,6 +193,25 @@ interface BotIntakePayload {
 > senza normalizzazione (esempi: `"3331234567"`, `"333 123 4567"`, `"+39 333 1234567"`).
 > **Il bot è responsabile della normalizzazione al formato E.164** (es. `+393331234567`)
 > prima di inviare messaggi WhatsApp o effettuare chiamate.
+
+### Lead del lancio (nuovo in v1.6)
+
+Quando `lancio` è presente il bot NON manda l'apertura di Mario: apre con il **template
+di benvenuto del lancio** e la conversazione entra nel modo lancio (`lancio_slug`,
+`lancio_fase='attesa'`). Cosa cambia per il bot, in breve:
+
+- `funnel` vale `"Lancio Web Dev AI"` e `companyId` `"fenice"`.
+- `lancio.ingresso = 'lista'` è l'unico valore che il CRM manda dall'intake: i lead della
+  lista AC arrivano dal webhook (uno alla volta, appena si iscrivono) o dal sync di recupero
+  su `/import` (a lotti, 30/min, stesso payload). `'pulsante_webinar'` è riservato ai lead che
+  scrivono per primi dal pulsante della live: quelli NON passano dall'intake (`/api/bot/lead-entrante`).
+- Idempotenza come oggi: stesso `leadId` o stessa `personKey` con chat viva → `duplicato:true`,
+  nessun secondo benvenuto, ma `lancio_*` vanno valorizzati lo stesso.
+- Gli esiti (`/api/bot/outcome`) restano gli stessi. Per i lead lancio `NON_RISPOSTO` e
+  `INTERROTTO` NON rimandano il lead a un GDO ma lo rimettono nel pool: la semantica
+  arriva con la v1.7 (blocco B5), fino ad allora il bot NON deve mandare quei due esiti
+  sui lead lancio.
+- Timeout e regola "un `network_error` è già arrivato" (15 s, 2026-09-10): invariati.
 
 ### Risposta attesa
 

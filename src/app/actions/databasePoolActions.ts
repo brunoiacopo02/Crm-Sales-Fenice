@@ -9,6 +9,7 @@ import crypto from "crypto"
 import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from "@/lib/tenancy"
 import { pickAndAssignBuckets, acGet, AC_KEY } from "@/lib/launchPoolShared"
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize"
+import { LANCIO_BUCKET, isLancioIntakeEnabled } from "@/lib/lancio/intake"
 
 const DB_POOL_COMPANY = 'fenice'
 const DB_POOL_FUNNEL = 'Database' // valore canonico: 13.734 lead storici lo usano già
@@ -515,6 +516,17 @@ export async function archiveLaunchPool(bucket: string): Promise<{ ok: boolean; 
     }
     if (ctx.companyId !== DB_POOL_COMPANY) {
         return { ok: false, error: "Disponibile solo con azienda attiva Fenice." }
+    }
+
+    // Pool del lancio: la precondizione qui sotto (zero lead non assegnati) e'
+    // lo stato NORMALE del lancio, perche' i suoi lead nascono assegnati al
+    // bot. Senza questa riga bastava un click per far sparire la card e con lei
+    // sync, push e distribuzione mentre il lancio e' vivo. La regola piu'
+    // semplice che tiene: finche' l'interruttore dell'intake e' acceso il pool
+    // non si rimuove. Spento il lancio, la rimozione torna possibile — e resta
+    // comunque reversibile, un sync riuscito de-archivia la riga.
+    if (bucket === LANCIO_BUCKET && isLancioIntakeEnabled()) {
+        return { ok: false, error: "Il lancio è ancora acceso (LANCIO_WEBDEV_INTAKE=on): spegni l'interruttore prima di rimuovere il pool." }
     }
 
     const [pool] = await db.select().from(launchPools).where(and(

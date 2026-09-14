@@ -1,3 +1,5 @@
+import type { LancioPayloadField } from '@/lib/lancio/intake';
+
 /** Report strutturato che il bot scrive su leads.botReport (tutti i campi opzionali). */
 export interface BotReport {
     summary?: string;
@@ -35,4 +37,10 @@ export interface BotIntakePayload {
     personKey?: string;
     /** I lead precedenti con la stessa personKey, dal più recente. Max 10. */
     previousLeadIds?: PreviousLeadRef[];
+    /**
+     * Lancio (contratto v1.6, spec 2026-09-14 §6.1). Presente SOLO sui lead del
+     * lancio: il bot apre con il template di benvenuto del lancio invece
+     * dell'apertura di Mario. Assente = flusso attuale, invariato.
+     */
+    lancio?: LancioPayloadField;
 }
