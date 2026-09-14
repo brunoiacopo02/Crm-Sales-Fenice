@@ -30,33 +30,58 @@ test('l interruttore si accende SOLO con la stringa esatta "on"', () => {
 const LISTA = '132';
 
 test('spento: mai lancio, anche se la lista combacia', () => {
-    const d = decideLancioIntake({ enabled: false, lancioListId: LISTA, triggerListId: LISTA, activeListIds: new Set([LISTA]) });
+    const d = decideLancioIntake({ enabled: false, lancioListIds: new Set([LISTA]), triggerListId: LISTA, activeListIds: new Set([LISTA]) });
     assert.deepEqual(d, { lancio: false, motivo: 'spento' });
 });
 
 test('acceso ma la lista non esiste su AC: non e lancio e lo dice', () => {
-    const d = decideLancioIntake({ enabled: true, lancioListId: null, triggerListId: LISTA, activeListIds: null });
+    const d = decideLancioIntake({ enabled: true, lancioListIds: null, triggerListId: LISTA, activeListIds: null });
     assert.deepEqual(d, { lancio: false, motivo: 'lista_sconosciuta' });
 });
 
 test('fastpath: la lista del payload combacia, nessuna membership serve', () => {
-    const d = decideLancioIntake({ enabled: true, lancioListId: LISTA, triggerListId: LISTA, activeListIds: null });
+    const d = decideLancioIntake({ enabled: true, lancioListIds: new Set([LISTA]), triggerListId: LISTA, activeListIds: null });
     assert.deepEqual(d, { lancio: true, via: 'payload', listId: LISTA });
 });
 
 test('senza lista nel payload e senza membership ancora letta: non_in_lista (il chiamante deve leggere le membership)', () => {
-    const d = decideLancioIntake({ enabled: true, lancioListId: LISTA, triggerListId: null, activeListIds: null });
+    const d = decideLancioIntake({ enabled: true, lancioListIds: new Set([LISTA]), triggerListId: null, activeListIds: null });
     assert.deepEqual(d, { lancio: false, motivo: 'non_in_lista' });
 });
 
 test('membership: il contatto e iscritto alla lista lancio anche se il trigger e un altra lista', () => {
-    const d = decideLancioIntake({ enabled: true, lancioListId: LISTA, triggerListId: '7', activeListIds: new Set(['7', LISTA]) });
+    const d = decideLancioIntake({ enabled: true, lancioListIds: new Set([LISTA]), triggerListId: '7', activeListIds: new Set(['7', LISTA]) });
     assert.deepEqual(d, { lancio: true, via: 'membership', listId: LISTA });
 });
 
 test('membership letta e la lista lancio non c e: non_in_lista', () => {
-    const d = decideLancioIntake({ enabled: true, lancioListId: LISTA, triggerListId: '7', activeListIds: new Set(['7']) });
+    const d = decideLancioIntake({ enabled: true, lancioListIds: new Set([LISTA]), triggerListId: '7', activeListIds: new Set(['7']) });
     assert.deepEqual(d, { lancio: false, motivo: 'non_in_lista' });
+});
+
+test('insieme vuoto = lista non risolvibile, come null', () => {
+    const d = decideLancioIntake({ enabled: true, lancioListIds: new Set(), triggerListId: LISTA, activeListIds: new Set([LISTA]) });
+    assert.deepEqual(d, { lancio: false, motivo: 'lista_sconosciuta' });
+});
+
+test('liste omonime: vale QUALSIASI id, non solo il primo (payload)', () => {
+    const omonime = new Set([LISTA, '208']);
+    assert.deepEqual(
+        decideLancioIntake({ enabled: true, lancioListIds: omonime, triggerListId: '208', activeListIds: null }),
+        { lancio: true, via: 'payload', listId: '208' },
+    );
+    assert.deepEqual(
+        decideLancioIntake({ enabled: true, lancioListIds: omonime, triggerListId: LISTA, activeListIds: null }),
+        { lancio: true, via: 'payload', listId: LISTA },
+    );
+});
+
+test('liste omonime via membership: l id registrato non dipende dall ordine di AC', () => {
+    const attive = new Set(['7', '208']);
+    const a = decideLancioIntake({ enabled: true, lancioListIds: new Set(['208', LISTA]), triggerListId: '7', activeListIds: attive });
+    const b = decideLancioIntake({ enabled: true, lancioListIds: new Set([LISTA, '208']), triggerListId: '7', activeListIds: attive });
+    assert.deepEqual(a, { lancio: true, via: 'membership', listId: '208' });
+    assert.deepEqual(b, a);
 });
 
 // ------------------------------------------------------------ payload

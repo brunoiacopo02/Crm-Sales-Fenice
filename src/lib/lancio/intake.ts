@@ -48,21 +48,30 @@ export type LancioDecision =
  * fastpath sul campo `list` del payload, poi le membership del contatto.
  * `activeListIds` a null = membership non ancora lette: il chiamante riceve
  * 'non_in_lista' e decide se pagare la chiamata AC per leggerle.
+ *
+ * `lancioListIds` e' un insieme e non un id solo perche' su AC possono
+ * convivere due liste con lo stesso nome (succede quando una campagna viene
+ * ricreata): valgono tutte, altrimenti il contatto iscritto al "doppione"
+ * scivolerebbe nel flusso normale. null o vuoto = lista non risolvibile.
  */
 export function decideLancioIntake(args: {
     enabled: boolean;
-    lancioListId: string | null;
+    lancioListIds: ReadonlySet<string> | null;
     triggerListId: string | null;
     activeListIds: ReadonlySet<string> | null;
 }): LancioDecision {
-    const { enabled, lancioListId, triggerListId, activeListIds } = args;
+    const { enabled, lancioListIds, triggerListId, activeListIds } = args;
     if (!enabled) return { lancio: false, motivo: 'spento' };
-    if (!lancioListId) return { lancio: false, motivo: 'lista_sconosciuta' };
-    if (triggerListId && String(triggerListId) === lancioListId) {
-        return { lancio: true, via: 'payload', listId: lancioListId };
+    if (!lancioListIds || lancioListIds.size === 0) return { lancio: false, motivo: 'lista_sconosciuta' };
+    if (triggerListId && lancioListIds.has(String(triggerListId))) {
+        return { lancio: true, via: 'payload', listId: String(triggerListId) };
     }
-    if (activeListIds && activeListIds.has(lancioListId)) {
-        return { lancio: true, via: 'membership', listId: lancioListId };
+    if (activeListIds) {
+        // Ordinato: con piu' liste omonime l'id registrato nell'evento non
+        // deve dipendere dall'ordine in cui AC ha risposto.
+        for (const id of Array.from(lancioListIds).sort()) {
+            if (activeListIds.has(id)) return { lancio: true, via: 'membership', listId: id };
+        }
     }
     return { lancio: false, motivo: 'non_in_lista' };
 }
