@@ -1,6 +1,7 @@
 import { signPayload } from '@/lib/marketing-webhooks/signing';
 import type { BotIntakePayload } from './types';
 import { logLeadEvent } from '@/lib/eventLogger';
+import { withLancioAudit } from './pushAudit';
 import { db } from '@/db';
 import { leads } from '@/db/schema';
 import { and, desc, eq, ne, sql } from 'drizzle-orm';
@@ -40,7 +41,7 @@ async function auditPush(payload: BotIntakePayload, meta: PushResult): Promise<v
             leadId: payload.leadId,
             eventType: 'BOT_PUSHED',
             companyId: payload.companyId,
-            metadata: { ...meta, at: new Date().toISOString() },
+            metadata: withLancioAudit(meta, payload, new Date()),
         });
     } catch (e) {
         console.error('[bot-fissatore] audit log failed', e);
