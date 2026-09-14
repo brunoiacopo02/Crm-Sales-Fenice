@@ -73,7 +73,16 @@ export async function pickAndAssignBuckets(params: {
                     // `assignedAt` è la data con cui il lead viene contato nel
                     // mese: qui è il momento vero di ingresso nel funnel, non
                     // l'import nel pool (che può essere di mesi prima).
-                    .set({ assignedToId: gdoId, assignedAt: new Date(), updatedAt: new Date() })
+                    // COALESCE: un lead che era già stato assegnato (il bot lo ha
+                    // restituito al pool, spec lancio §4.6) era già stato contato
+                    // quando è entrato in circolo la prima volta — regola 0027.
+                    // Sui pool di oggi è un no-op: i lead non assegnati hanno
+                    // assignedAt NULL.
+                    .set({
+                        assignedToId: gdoId,
+                        assignedAt: sql`coalesce(${leads.assignedAt}, now())`,
+                        updatedAt: new Date(),
+                    })
                     .where(and(
                         eq(leads.companyId, companyId),
                         inArray(leads.id, leadIds),
@@ -137,4 +146,38 @@ export async function acGet(path: string, attempt = 0): Promise<any> {
     }
     if (!res.ok) throw new Error(`AC API ${res.status}: ${await res.text()}`)
     return res.json()
+}
+
+/**
+ * Tutti gli id delle liste AC con questo nome normalizzato (trim + lowercase),
+ * ordinati. Stessa paginazione difensiva del webhook (5 pagine da 100).
+ *
+ * Plurale e non singolare perché su AC possono convivere due liste con lo
+ * stesso nome (succede quando una campagna viene ricreata): il sync le deve
+ * scaricare tutte, altrimenti gli iscritti del "doppione" resterebbero fuori.
+ * Stessa regola del webhook (decideLancioIntake, Task 4).
+ */
+export async function findAcListIdsByName(nameNormalized: string): Promise<string[]> {
+    const ids = new Set<string>()
+    for (let offset = 0; offset < 500; offset += 100) {
+        const res = await acGet(`/lists?limit=100&offset=${offset}`)
+        const lists = Array.isArray(res.lists) ? res.lists : []
+        if (lists.length === 0) break
+        for (const l of lists) {
+            const nameNorm = String(l?.name ?? '').trim().toLowerCase()
+            if (nameNorm === nameNormalized && l?.id != null) ids.add(String(l.id))
+        }
+        if (lists.length < 100) break
+    }
+    return Array.from(ids).sort()
+}
+
+/**
+ * Id di una lista AC dato il nome normalizzato (trim + lowercase), o null.
+ * Con più liste omonime torna la prima in ordine: chi deve lavorarle tutte usa
+ * `findAcListIdsByName`.
+ */
+export async function findAcListIdByName(nameNormalized: string): Promise<string | null> {
+    const ids = await findAcListIdsByName(nameNormalized)
+    return ids[0] ?? null
 }
