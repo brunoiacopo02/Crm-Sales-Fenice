@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mattinaSlots, pickRoundRobin, type VenditoreDayFacts } from './slots'
+import { declaredHoursFor, isFreeAt, mattinaSlots, pickRoundRobin, type VenditoreDayFacts } from './slots'
 
 const D = '2026-10-06'
 const k = (h: number) => `${D}@${h}`
@@ -71,4 +71,25 @@ test('pickRoundRobin non muta l input', () => {
     const arr = [{ salesUserId: 'b', lastAssignedAt: null }, { salesUserId: 'a', lastAssignedAt: null }]
     pickRoundRobin(arr)
     assert.deepEqual(arr.map(x => x.salesUserId), ['b', 'a'])
+})
+
+test('un esente conta dichiarato su tutte le ore del turno, ma non se bloccato o occupato', () => {
+    const esente = declaredHoursFor({ calendarExempt: true }, [], { dateStr: D, hours: HOURS })
+    assert.deepEqual([...esente].sort(), HOURS.map(k).sort())
+
+    const normale = declaredHoursFor({ calendarExempt: false }, [k(9)], { dateStr: D, hours: HOURS })
+    assert.deepEqual([...normale], [k(9)])
+
+    // Le ore gia' salvate da un esente non si perdono: unione, non sostituzione.
+    const misto = declaredHoursFor({ calendarExempt: true }, [`${D}@21`], { dateStr: D, hours: HOURS })
+    assert.equal(misto.has(`${D}@21`), true)
+    assert.equal(misto.size, HOURS.length + 1)
+
+    const v: VenditoreDayFacts = {
+        salesUserId: 'e', lastAssignedAt: null,
+        declared: esente, blocked: new Set([k(10)]), busy: new Set([k(11)]),
+    }
+    assert.equal(isFreeAt(v, k(9)), true)
+    assert.equal(isFreeAt(v, k(10)), false)
+    assert.equal(isFreeAt(v, k(11)), false)
 })

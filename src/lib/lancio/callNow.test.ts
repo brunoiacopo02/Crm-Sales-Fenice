@@ -30,3 +30,18 @@ test('handoff dopo le 9 del 6: prossima ora tonda almeno un ora avanti', () => {
     assert.deepEqual(handoffAppointmentAt(new Date('2026-10-06T10:00:00+02:00')), new Date('2026-10-06T11:00:00+02:00'))
     assert.deepEqual(handoffAppointmentAt(SERA), new Date('2026-10-06T09:00:00+02:00'))
 })
+
+test('oltre le 20:00 del 6/10 il richiamo scivola alle 09:00 del 7/10', () => {
+    // 20:30: la prossima ora tonda utile sarebbe le 22:00, ora in cui non
+    // risponde nessuno.
+    assert.deepEqual(handoffAppointmentAt(new Date('2026-10-06T20:30:00+02:00')), new Date('2026-10-07T09:00:00+02:00'))
+    // 23:30: `min` cade gia' il 7/10 all'una di notte.
+    assert.deepEqual(handoffAppointmentAt(new Date('2026-10-06T23:30:00+02:00')), new Date('2026-10-07T09:00:00+02:00'))
+    // Le 19:00 restano dentro: ultima ora servita = 20:00.
+    assert.deepEqual(handoffAppointmentAt(new Date('2026-10-06T19:00:00+02:00')), new Date('2026-10-06T20:00:00+02:00'))
+})
+
+test('i tentativi non superano mai il tetto', () => {
+    assert.deepEqual(nextCallNowState(3, SERA), { kind: 'handoff', attempts: 3, appointmentAt: new Date('2026-10-06T09:00:00+02:00') })
+    assert.deepEqual(nextCallNowState(9, SERA), { kind: 'handoff', attempts: 3, appointmentAt: new Date('2026-10-06T09:00:00+02:00') })
+})

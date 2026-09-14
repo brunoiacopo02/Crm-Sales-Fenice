@@ -4,7 +4,11 @@
  *
  * "Libero in un'ora" = l'ha dichiarata nel calendario, non l'ha bloccata e non
  * ha già un appuntamento: la stessa lettura di checkBookingAllowed (Conferme).
- * Un esente (calendarExempt) non dichiara mai ore: esce da solo.
+ * Un esente (calendarExempt) NON dichiara ore nel calendario ma è comunque
+ * prenotabile — il muro delle Conferme lo lascia passare sempre — quindi
+ * `declaredHoursFor` gli dichiara d'ufficio tutte le ore del turno. Se lo si
+ * lasciasse "uscire da solo" sparirebbe dagli slot mostrati al bot pur essendo
+ * di turno e libero.
  */
 import { romeInstant } from '@/lib/venditore/calendarSlots'
 import { MIN_LEAD_TIME_MS } from './config'
@@ -24,11 +28,35 @@ export interface VenditoreDayFacts extends ShiftMember {
 export interface MattinaHour {
     hour: number
     liberi: number
+    /**
+     * Chi è libero in quell'ora, in ordine ALFABETICO di id: NON è l'ordine del
+     * round robin. Per scegliere a chi assegnare passa questa lista (rimappata
+     * sui rispettivi `VenditoreDayFacts`) a `pickRoundRobin`.
+     */
     venditoriLiberi: string[]
 }
 
 export function isFreeAt(v: VenditoreDayFacts, key: string): boolean {
     return v.declared.has(key) && !v.blocked.has(key) && !v.busy.has(key)
+}
+
+/**
+ * Le ore che valgono come DICHIARATE per un membro del turno.
+ *
+ * Normalmente sono quelle salvate sul calendario (`slotKeys`). Un esente
+ * (`calendarExempt`) non compila il calendario ma resta prenotabile: per lui
+ * contano dichiarate tutte le `hours` del turno, in unione con le eventuali ore
+ * che avesse comunque salvato. Bloccati e occupati si applicano lo stesso: un
+ * esente con un appuntamento alle 11 resta occupato alle 11.
+ */
+export function declaredHoursFor(
+    member: { calendarExempt?: boolean | null },
+    slotKeys: Iterable<string>,
+    day: { dateStr: string; hours: number[] },
+): Set<string> {
+    const out = new Set(slotKeys)
+    if (member.calendarExempt) for (const h of day.hours) out.add(hourKey(day.dateStr, h))
+    return out
 }
 
 export function mattinaSlots(input: {
