@@ -6,12 +6,18 @@
  *
  * Idempotente: la chiave primaria è l'uniqueid assegnato da Asterisk, quindi
  * ricaricare lo stesso file non duplica nulla (ON CONFLICT DO NOTHING).
+ *
+ * Alla fine rilancia la riattribuzione interno → persona dai dati
+ * (src/lib/cdr/attribuzione.ts): `pbxExtensions` serve solo come prima stima
+ * per le righe appena inserite, poi vince quello che dicono gli esiti.
+ * Senza questo passo ogni rotazione di scrivania sporcherebbe lo storico.
  */
 import { readFileSync } from 'node:fs'
 import { parse } from 'csv-parse/sync'
 import { db } from '../src/db'
 import { pbxCalls, pbxExtensions } from '../src/db/schema'
 import { parseCdrLine } from '../src/lib/cdr/parseCdr'
+import { riattribuisciChiamate, stampaRiattribuzione } from '../src/lib/cdr/attribuzione'
 
 const BATCH = 1000
 
@@ -60,6 +66,9 @@ async function main() {
         const senzaUtente = rows.filter(r => r.direction === 'out' && !r.userId).length
         console.log(`${file}: ${records.length} righe, ${rows.length} valide, ${scartate} scartate, ${inserite} nuove, ${senzaUtente} uscite senza postazione mappata`)
     }
+
+    console.log('\nRiattribuzione interno → persona dai dati:')
+    stampaRiattribuzione(await riattribuisciChiamate({ applica: true }))
     process.exit(0)
 }
 
