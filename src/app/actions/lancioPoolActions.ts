@@ -16,7 +16,7 @@ import crypto from "crypto"
 import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext } from "@/lib/tenancy"
 import { pickAndAssignBuckets, AC_KEY, acGet, findAcListIdsByName } from "@/lib/launchPoolShared"
 import { pushLeadsToBotPaced } from "@/lib/bot-fissatore/push"
-import { NO_REPUSH_RESULTS_SQL, DELIVERED_PUSH_RESULTS_SQL } from "@/lib/bot-fissatore/pushAudit"
+import { NO_REPUSH_RESULTS_SQL, DELIVERED_PUSH_RESULTS_SQL, avvisoPushFalliti } from "@/lib/bot-fissatore/pushAudit"
 import {
     LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_FUNNEL, LANCIO_LIST_NAME_NORMALIZED, LANCIO_POOL_LABEL,
     isLancioIntakeEnabled, buildLancioLeadRow, buildLancioIntakeEventRows, lancioFieldForLead,
@@ -410,6 +410,15 @@ export async function pushLancioPoolToBot(): Promise<LancioPushReport> {
         report.errors.push("Il push del lancio è disponibile solo con azienda attiva Fenice.")
         return report
     }
+    // Interruttore spento = il lancio non è in aria: nessuna chat WhatsApp deve
+    // partire. Si esce PRIMA del lock e PRIMA di leggere i candidati, così un
+    // click per sbaglio a lancio spento non prende il lucchetto e non tocca
+    // niente. Sync e distribuzione ai GDO restano disponibili: servono proprio
+    // a preparare il pool mentre l'interruttore è ancora giù.
+    if (!isLancioIntakeEnabled()) {
+        report.errors.push("Il lancio è spento (LANCIO_WEBDEV_INTAKE): accendi l'interruttore prima di spingere")
+        return report
+    }
     const botId = await findBotId()
     if (!botId) {
         report.errors.push("Account bot (GDO 201) non trovato o disattivo.")
@@ -492,6 +501,12 @@ export async function pushLancioPoolToBot(): Promise<LancioPushReport> {
     if (report.summary.rate_limited) {
         report.errors.push(`Il bot ha risposto 429 su ${report.summary.rate_limited} lead: aspetta un minuto e riclicca.`)
     }
+    // Push andati male per colpa del bot o della rete: l'errore rende ok=false,
+    // e la card si ferma al giro corrente invece di rilanciare altre nove volte
+    // contro un bot che sta rispondendo male (i network_error, per giunta, non
+    // si rispingono mai più da soli).
+    const avvisoFalliti = avvisoPushFalliti(report.summary)
+    if (avvisoFalliti) report.errors.push(avvisoFalliti)
 
     revalidatePath('/', 'layout')
     report.ok = report.errors.length === 0

@@ -99,7 +99,11 @@ export function LancioPoolCard() {
                 totale.ok = totale.ok && res.ok
                 totale.giaInCorso = res.giaInCorso
                 setPushReport({ ...totale })
-                if (!res.ok || res.remaining === 0) break
+                // Si ferma anche a giro vuoto: `remaining > 0` con zero inviati
+                // vuol dire che il giro non ha fatto un passo avanti (lock preso
+                // da un altro, bot che rifiuta tutto). Rilanciare altre nove
+                // volte non lo sbloccherebbe, brucerebbe solo candidati.
+                if (!res.ok || res.remaining === 0 || res.inviati === 0) break
             }
             await refresh()
         } catch (e) {
@@ -189,8 +193,10 @@ export function LancioPoolCard() {
                     </button>
                     <button
                         onClick={handlePush}
-                        disabled={busy || status.alBot === 0}
-                        title={status.alBot === 0 ? "Nessun lead assegnato al bot da spingere" : "Spinge al bot (30/min) i lead che non gli sono ancora arrivati"}
+                        disabled={busy || status.alBot === 0 || !status.intakeAttivo}
+                        title={!status.intakeAttivo
+                            ? "Lancio spento (LANCIO_WEBDEV_INTAKE): accendi l'interruttore prima di spingere"
+                            : status.alBot === 0 ? "Nessun lead assegnato al bot da spingere" : "Spinge al bot (30/min) i lead che non gli sono ancora arrivati"}
                         className="flex items-center gap-2 py-2 px-4 rounded-lg text-xs font-bold text-white bg-amber-600 border border-amber-700 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                         {pushing
@@ -199,6 +205,15 @@ export function LancioPoolCard() {
                     </button>
                 </div>
             </div>
+
+            {!status.intakeAttivo && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-red-200 bg-red-50 text-xs text-red-800">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                        Lancio spento: il push al bot è disabilitato. Sincronizzazione e distribuzione ai GDO restano attive.
+                    </div>
+                </div>
+            )}
 
             {syncReport && (
                 <div className={`p-3 rounded-lg border text-xs ${syncReport.ok ? 'bg-green-50 border-green-200 text-green-900' : 'bg-red-50 border-red-200 text-red-800'}`}>

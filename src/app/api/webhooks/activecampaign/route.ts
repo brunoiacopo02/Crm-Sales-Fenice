@@ -136,6 +136,14 @@ async function getListIdsByName(): Promise<Map<string, Set<string>>> {
         errore = true;
         console.error('[AC webhook] getListIdsByName error (cache tenuta 30s, non 10 min):', e);
     }
+    // 200 con zero liste non è una risposta buona: un account AC che ha liste
+    // bloccate da risolvere ne ha almeno una. Mapparlo a "nessuna lista" per 10
+    // minuti vorrebbe dire 10 minuti di liste bloccate sbloccate (e di lancio
+    // non riconosciuto). Vale come errore: TTL 30 s e si riprova.
+    if (!errore && byName.size === 0 && BLOCKED_LIST_NAMES_NORMALIZED.size > 0) {
+        errore = true;
+        console.error('[AC webhook] getListIdsByName: /lists ha risposto senza nessuna lista — cache tenuta 30s, non 10 min');
+    }
     listIdsByNameCache = { byName, expires: now + (errore ? LIST_CACHE_ERROR_TTL_MS : LIST_CACHE_TTL_MS) };
     // Log SOLO al refresh della cache (una volta ogni 10 min), non a ogni
     // webhook: e' la riga che serviva a capire quali liste risultano bloccate,
@@ -334,9 +342,10 @@ async function notifyManagersIfNeeded() {
 /**
  * Ingresso di un lead del lancio (spec §4.1). Bypassa fasce orarie, tetto del
  * bot, finestra ferie e acAutoIntake: va al bot e basta, e il bot lo riceve
- * subito con provenienza lancio. Dedup solo dentro il bucket (acContactId o
- * telefono): un contatto gia' lead di un altro funnel entra lo stesso
- * (duplicati cross-funnel voluti, decisione 14/09 n.1).
+ * subito con provenienza lancio. Dedup come il sync: acContactId dentro il
+ * bucket, telefono su bucket ∪ funnel del lancio. Un contatto gia' lead di un
+ * ALTRO funnel entra lo stesso (duplicati cross-funnel voluti, decisione
+ * 14/09 n.1); lo stesso numero gia' nel lancio no.
  */
 async function handleLancioIntake(
     contactId: string,
@@ -403,10 +412,22 @@ async function handleLancioIntake(
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${phoneFinal}, 0))`);
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${contactId}, 1))`);
 
+        // Stessa dedup del sync (leggiEsistenti): l'acContactId vale SOLO
+        // dentro il bucket — un contatto AC gia' lead di un altro funnel deve
+        // poter entrare nel lancio (duplicati cross-funnel voluti) — mentre il
+        // telefono vale sul bucket E sul funnel del lancio. Il funnel senza
+        // bucket oggi non esiste, ma un import manuale della stessa lista lo
+        // creerebbe, e un doppione di numero sono due aperture WhatsApp alla
+        // stessa persona.
         const [existing] = await tx.select({ id: leads.id }).from(leads).where(and(
             eq(leads.companyId, FENICE_COMPANY),
-            eq(leads.launchBucket, LANCIO_BUCKET),
-            or(eq(leads.acContactId, contactId), eq(leads.phone, phoneFinal)),
+            or(
+                and(eq(leads.launchBucket, LANCIO_BUCKET), eq(leads.acContactId, contactId)),
+                and(
+                    or(eq(leads.launchBucket, LANCIO_BUCKET), eq(leads.funnel, LANCIO_FUNNEL)),
+                    eq(leads.phone, phoneFinal),
+                ),
+            ),
         )).limit(1);
         if (existing) return { kind: 'duplicate' as const, existingLeadId: existing.id };
 

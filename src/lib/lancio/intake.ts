@@ -140,7 +140,10 @@ export interface LancioLeadRow {
 /**
  * Riga lead del lancio. Telefono sospetto → nel bucket senza padrone, come
  * la quarantena del flusso normale (una chat su 0000000000 non esiste).
- * Bot assente → idem, il sync lo assegnera' quando l'account c'e'.
+ * Bot assente → idem, ma senza rete di salvataggio: non esiste nessun percorso
+ * che riassegni al bot un lead gia' dentro (il sync salta i lead gia'
+ * presenti). Restano nel bucket senza padrone e l'unica strada e' distribuirli
+ * ai GDO dalla card del pool su /import.
  * `assignedAt` = adesso SOLO se assegnato: e' la data con cui il lead viene
  * contato nel mese (regola magazzino, §4.8).
  */

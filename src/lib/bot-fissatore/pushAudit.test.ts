@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     DELIVERED_PUSH_RESULTS, DELIVERED_PUSH_RESULTS_SQL, isDeliveredPushResult,
-    NO_REPUSH_RESULTS, NO_REPUSH_RESULTS_SQL, withLancioAudit,
+    NO_REPUSH_RESULTS, NO_REPUSH_RESULTS_SQL, withLancioAudit, avvisoPushFalliti,
 } from './pushAudit'
 
 test('consegnati sono sent e duplicate, e nient altro', () => {
@@ -47,4 +47,19 @@ test('withLancioAudit: sui lead lancio l audit BOT_PUSHED porta lo slug, sugli a
     const senza = withLancioAudit({ result: 'sent', status: 200 }, {}, at)
     assert.deepEqual(senza, { result: 'sent', status: 200, at: '2026-09-16T10:00:00.000Z' })
     assert.equal('lancio' in senza, false)
+})
+
+test('avvisoPushFalliti: tace quando e andato tutto a segno, parla su http/network error', () => {
+    assert.equal(avvisoPushFalliti({}), null)
+    assert.equal(avvisoPushFalliti({ sent: 120, duplicate: 3 }), null)
+    // rate_limited e skipped_disabled hanno gia' il loro avviso: qui non contano.
+    assert.equal(avvisoPushFalliti({ sent: 10, rate_limited: 5, skipped_disabled: 2 }), null)
+    assert.equal(
+        avvisoPushFalliti({ sent: 10, http_error: 4 }),
+        '4 push falliti (http_error/network_error): controlla il bot prima di rilanciare',
+    )
+    assert.equal(
+        avvisoPushFalliti({ http_error: 4, network_error: 2 }),
+        '6 push falliti (http_error/network_error): controlla il bot prima di rilanciare',
+    )
 })
