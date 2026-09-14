@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { leads, users } from '@/db/schema'
 import { verifySignature } from '@/lib/marketing-webhooks/signing'
+import { findLancioBotId } from './botAccount'
 import { LANCIO_COMPANY, LANCIO_WEBDEV, type LancioConfig } from './config'
 import { slotDateKind } from './rules'
 import { mattinaSlots } from './slots'
@@ -47,13 +48,15 @@ export interface LancioLeadRow {
     appointmentDate: Date | null; lancioScelta: string | null; lancioSceltaAt: Date | null
     lancioIngresso: string | null; salespersonUserId: string | null
     confirmationsOutcome: string | null; version: number
+    /** Valorizzato = l'appuntamento è già stato presentato: il bot non lo tocca più. */
+    presentedAt: Date | null
 }
 
 /** Il lead esiste, è del bucket lancio ed è in mano al bot (o è entrato dal pulsante). */
 export async function loadLancioLead(leadId: string, cfg: LancioConfig = LANCIO_WEBDEV): Promise<{ ok: true; lead: LancioLeadRow; botUserId: string } | { ok: false; res: NextResponse }> {
-    const [bot] = await db.select({ id: users.id }).from(users)
-        .where(and(eq(users.isBot, true), eq(users.companyId, FENICE))).limit(1)
-    if (!bot) return { ok: false, res: NextResponse.json({ ok: false, motivo: 'bot_account_not_found' }, { status: 503 }) }
+    // Stessi quattro filtri di lancioPoolActions.findBotId: unica definizione in botAccount.
+    const botId = await findLancioBotId()
+    if (!botId) return { ok: false, res: NextResponse.json({ ok: false, motivo: 'bot_account_not_found' }, { status: 503 }) }
 
     const [lead] = await db.select({
         id: leads.id, name: leads.name, phone: leads.phone, email: leads.email, funnel: leads.funnel,
@@ -61,17 +64,18 @@ export async function loadLancioLead(leadId: string, cfg: LancioConfig = LANCIO_
         appointmentDate: leads.appointmentDate, lancioScelta: leads.lancioScelta, lancioSceltaAt: leads.lancioSceltaAt,
         lancioIngresso: leads.lancioIngresso, salespersonUserId: leads.salespersonUserId,
         confirmationsOutcome: leads.confirmationsOutcome, version: leads.version,
+        presentedAt: leads.presentedAt,
         launchBucket: leads.launchBucket,
     }).from(leads).where(eq(leads.id, leadId)).limit(1)
 
     if (!lead) return { ok: false, res: NextResponse.json({ ok: false, motivo: 'lead_not_found' }, { status: 404 }) }
     const delLancio = lead.companyId === FENICE && lead.launchBucket === cfg.bucket
-    const inManoAlBot = lead.assignedToId === bot.id || lead.lancioIngresso === 'pulsante_webinar'
+    const inManoAlBot = lead.assignedToId === botId || lead.lancioIngresso === 'pulsante_webinar'
     if (!delLancio || !inManoAlBot) {
         return { ok: false, res: NextResponse.json({ ok: false, motivo: 'forbidden', detail: 'lead non del lancio o non in mano al bot' }, { status: 403 }) }
     }
     const { launchBucket: _b, ...row } = lead
-    return { ok: true, lead: row, botUserId: bot.id }
+    return { ok: true, lead: row, botUserId: botId }
 }
 
 export interface SlotsResponse {
@@ -91,7 +95,7 @@ export async function computeSlots(dateStr: string, now: Date, cfg: LancioConfig
         return { date: dateStr, mattina: 'conferme', pomeriggio: { aperto: false, ore: [] }, mattinaEsaurita: false, oreAmmesse: [...cfg.oreVenditori] }
     }
     const members = await getShiftMembers(db, 'GIORNO_DOPO', cfg)
-    const facts = await dayFactsFor(db, members, dateStr)
+    const facts = await dayFactsFor(db, members, dateStr, { cfg })
     const { mattina, mattinaEsaurita } = mattinaSlots({ dateStr, hours: cfg.oreVenditori, venditori: facts, now })
     return {
         date: dateStr,
