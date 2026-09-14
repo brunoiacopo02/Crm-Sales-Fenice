@@ -284,7 +284,10 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
     }
 
     // Il bot ha preso in carico questi lead adesso: allinea il round-robin.
-    if (botId && report.imported > 0) {
+    // Solo se gliene e' arrivato almeno uno davvero: un lotto tutto di telefoni
+    // sospetti finisce nel pool, non a lui, e non deve spostargli il turno.
+    const assegnatiAlBot = righeInserite.filter(row => !!row.assignedToId).length
+    if (botId && assegnatiAlBot > 0) {
         await db.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, botId))
     }
 
