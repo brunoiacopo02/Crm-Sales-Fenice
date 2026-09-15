@@ -21,6 +21,7 @@ import {
     Calculator,
     Scale,
     CalendarClock,
+    Rocket,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -226,6 +227,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                         ...(role === "ADMIN" ? [{ name: "Performance Venditori", href: "/performance-venditori", icon: Trophy }] : []),
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
                         { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
+                        { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
                     ],
                 },

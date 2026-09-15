@@ -86,3 +86,40 @@ export function pickRoundRobin<T extends ShiftMember>(candidati: T[]): T | null 
         return a.salesUserId < b.salesUserId ? -1 : a.salesUserId > b.salesUserId ? 1 : 0
     })[0]
 }
+
+export interface CoperturaRow {
+    salesUserId: string
+    name: string
+    calendarExempt: boolean
+    /** Calendario della settimana consegnato (o esente: non lo compila mai). */
+    compilato: boolean
+    oreDichiarate: number[]
+    oreLibere: number[]
+}
+
+/**
+ * Riga per riga la copertura del giorno dopo mostrata su /lancio: puro, riceve
+ * i fatti gia' letti. Un membro senza fatti (nessuna riga di calendario) resta
+ * in tabella a zero ore: sparire dalla griglia nasconderebbe proprio il caso
+ * che l'avviso rosso deve gridare.
+ */
+export function coperturaRows(input: {
+    dateStr: string
+    hours: number[]
+    membri: Array<{ salesUserId: string; name: string; calendarExempt: boolean }>
+    facts: VenditoreDayFacts[]
+    compilati: ReadonlySet<string>
+}): CoperturaRow[] {
+    const byId = new Map(input.facts.map(f => [f.salesUserId, f]))
+    return input.membri.map(m => {
+        const f = byId.get(m.salesUserId)
+        return {
+            salesUserId: m.salesUserId,
+            name: m.name,
+            calendarExempt: m.calendarExempt,
+            compilato: input.compilati.has(m.salesUserId) || m.calendarExempt,
+            oreDichiarate: f ? input.hours.filter(h => f.declared.has(hourKey(input.dateStr, h))) : [],
+            oreLibere: f ? input.hours.filter(h => isFreeAt(f, hourKey(input.dateStr, h))) : [],
+        }
+    })
+}

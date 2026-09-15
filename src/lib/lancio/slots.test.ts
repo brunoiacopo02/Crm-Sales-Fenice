@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { declaredHoursFor, isFreeAt, mattinaSlots, pickRoundRobin, type VenditoreDayFacts } from './slots'
+import { coperturaRows, declaredHoursFor, isFreeAt, mattinaSlots, pickRoundRobin, type VenditoreDayFacts } from './slots'
 
 const D = '2026-10-06'
 const k = (h: number) => `${D}@${h}`
@@ -92,4 +92,49 @@ test('un esente conta dichiarato su tutte le ore del turno, ma non se bloccato o
     assert.equal(isFreeAt(v, k(9)), true)
     assert.equal(isFreeAt(v, k(10)), false)
     assert.equal(isFreeAt(v, k(11)), false)
+})
+
+test('copertura: ore dichiarate e libere per ogni membro del turno', () => {
+    const rows = coperturaRows({
+        dateStr: D, hours: HOURS,
+        membri: [
+            { salesUserId: 'a', name: 'Anna', calendarExempt: false },
+            { salesUserId: 'b', name: 'Bruno', calendarExempt: false },
+        ],
+        facts: [v('a', [9, 10, 11], [10], [11]), v('b', [9], [], [])],
+        compilati: new Set(['a', 'b']),
+    })
+    assert.deepEqual(rows, [
+        { salesUserId: 'a', name: 'Anna', calendarExempt: false, compilato: true, oreDichiarate: [9, 10, 11], oreLibere: [9] },
+        { salesUserId: 'b', name: 'Bruno', calendarExempt: false, compilato: true, oreDichiarate: [9], oreLibere: [9] },
+    ])
+})
+
+test('copertura: senza calendario compilato il venditore non ha ore, con la spunta esente le ha tutte', () => {
+    const rows = coperturaRows({
+        dateStr: D, hours: HOURS,
+        membri: [
+            { salesUserId: 'a', name: 'Anna', calendarExempt: false },
+            { salesUserId: 'e', name: 'Esente', calendarExempt: true },
+        ],
+        // 'a' non ha dichiarato nulla; l'esente riceve d'ufficio tutte le ore.
+        facts: [v('a', []), { ...v('e', []), declared: declaredHoursFor({ calendarExempt: true }, [], { dateStr: D, hours: HOURS }) }],
+        compilati: new Set<string>(),
+    })
+    assert.equal(rows[0].compilato, false)
+    assert.deepEqual(rows[0].oreDichiarate, [])
+    assert.deepEqual(rows[0].oreLibere, [])
+    // L'esente non compila mai il calendario: non deve comparire nell'avviso rosso.
+    assert.equal(rows[1].compilato, true)
+    assert.deepEqual(rows[1].oreLibere, HOURS)
+})
+
+test('copertura: un membro del turno senza fatti resta in tabella, a zero', () => {
+    const rows = coperturaRows({
+        dateStr: D, hours: HOURS,
+        membri: [{ salesUserId: 'z', name: 'Zeno', calendarExempt: false }],
+        facts: [],
+        compilati: new Set(['z']),
+    })
+    assert.deepEqual(rows, [{ salesUserId: 'z', name: 'Zeno', calendarExempt: false, compilato: true, oreDichiarate: [], oreLibere: [] }])
 })
