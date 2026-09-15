@@ -27,6 +27,24 @@ export function romeOffset(at: Date): string {
     return off || '+01:00';
 }
 
+/**
+ * L'istante come ISO 8601 **con l'offset italiano**: '2026-10-06T10:00:00+02:00'.
+ *
+ * `toISOString()` darebbe lo stesso istante scritto in UTC ('T08:00:00Z'): giusto,
+ * ma chi lo rilegge (il bot, una chat con il lead) ci vede le 8 e non le 10. Qui
+ * l'ora è quella che l'italiano si aspetta, e l'offset la rende comunque esatta.
+ */
+export function romeIso(at: Date): string {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Rome',
+        hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(at);
+    const p = (type: string) => parts.find(x => x.type === type)?.value ?? '00';
+    return `${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}${romeOffset(at)}`;
+}
+
 /** Date a "YYYY-MM-DD" come la legge Europe/Rome. */
 export function toRomeDateStr(at: Date): string {
     return at.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' });
