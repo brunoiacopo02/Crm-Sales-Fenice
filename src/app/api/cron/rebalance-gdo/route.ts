@@ -11,6 +11,28 @@ import {
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+/**
+ * ATTENZIONE — NON ACCENDERE SENZA UNA NUOVA DECISIONE DEL PO.
+ *
+ * Questo cron è stato costruito il 15/09/2026 e poi messo da parte lo stesso
+ * giorno, prima di essere acceso. Il PO voleva una cosa più stretta: che i lead
+ * che il bot restituisce DA QUEL MOMENTO IN POI finiscano ai GDO del pool
+ * ridati — e quello lo fa già `reassignBotLeadToHumanPool`, che da allora
+ * guarda `botReturnIntake` invece di `acAutoIntake`. Non voleva invece che ai
+ * GDO dei freschi venissero tolti i ridati che avevano GIÀ in mano: il
+ * 15/09 erano 80 a testa, ed è il lavoro con cui campano finché i freschi non
+ * arrivano a regime.
+ *
+ * Questo cron fa proprio quest'ultima cosa: ripulisce all'indietro, ogni sera.
+ * Acceso adesso svuoterebbe 106, 112 e 119 lasciandoli con i soli freschi del
+ * giorno (max 60 a testa per via del tetto), cioè con MENO lavoro degli altri.
+ *
+ * Resta qui perché la logica è scritta e testata e può servire se un domani i
+ * pool andassero alla deriva. Ma accenderlo è una decisione, non una
+ * configurazione: l'interruttore `GDO_REBALANCE_ENABLED` è spento in produzione
+ * ed è giusto che lo resti finché qualcuno non decide diversamente.
+ */
+
 /** I pool di assegnazione vivono solo su Fenice: il bot fissatore è di Fenice. */
 const FENICE = 'fenice';
 
