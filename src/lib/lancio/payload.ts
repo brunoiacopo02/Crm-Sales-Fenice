@@ -31,6 +31,10 @@ export function parseInfo(raw: unknown): { ok: true; info?: LancioBotInfo } | { 
         .map(r => r.trim().slice(0, MAX_RISPOSTA_CHARS))
         .filter(r => r.length > 0)
         .slice(0, MAX_RISPOSTE)
+    // Un array vuoto (o di sole stringhe vuote) non è un'informazione: scriverlo
+    // cancellerebbe le risposte già raccolte in un giro precedente, perché
+    // `lancioBotInfo` si sovrascrive per intero. Vale come "nessuna info".
+    if (pulite.length === 0) return { ok: true }
     return { ok: true, info: { risposte: pulite } }
 }
 

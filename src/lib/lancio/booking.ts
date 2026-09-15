@@ -401,12 +401,15 @@ export async function assignCallNow(input: {
 }
 
 /**
- * Marketing della chiamata subito, in `after()`: è un appuntamento fissato e
- * assegnato a un venditore, gli stessi due eventi che emette `setConfermeOutcome`
- * quando confermando assegna. Nessun Google Calendar: la chiamata è adesso.
+ * Marketing della chiamata subito, in `after()`: è un appuntamento fissato,
+ * confermato e assegnato a un venditore — gli stessi tre eventi della mattina.
+ * `appointment.outcome` non è un di più: la scrittura mette
+ * `confirmationsOutcome='confermato'`, e senza l'evento Marketing Analytics
+ * conterebbe ogni chiamata subito come "fissata e mai confermata".
+ * Nessun Google Calendar: la chiamata è adesso, non domani.
  */
 export async function callNowSideEffects(input: { leadId: string; botUserId: string }): Promise<void> {
-    for (const eventType of ['appointment.set', 'deal.assigned'] as const) {
+    for (const eventType of ['appointment.set', 'appointment.outcome', 'deal.assigned'] as const) {
         await enqueueMarketingWebhook({ eventType, leadId: input.leadId, actorUserId: input.botUserId })
             .catch((e: unknown) => console.error(`[bot-lancio] webhook ${eventType} err:`, e))
     }

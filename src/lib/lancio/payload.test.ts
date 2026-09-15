@@ -12,6 +12,13 @@ test('info assente o senza risposte: niente da scrivere, nessun errore', () => {
     assert.deepEqual(parseInfo({ risposte: null, altro: 'ignorato' }), { ok: true })
 })
 
+test('risposte vuote: nessuna info, non si cancella quella gia raccolta', () => {
+    // `lancioBotInfo` si sovrascrive per intero: scrivere `{ risposte: [] }`
+    // sbianchettarebbe le risposte del giro precedente.
+    assert.deepEqual(parseInfo({ risposte: [] }), { ok: true })
+    assert.deepEqual(parseInfo({ risposte: ['', '   ', '\n'] }), { ok: true })
+})
+
 test('info non valida: 400, non si salva a meta', () => {
     assert.equal(parseInfo('ciao').ok, false)
     assert.equal(parseInfo([1, 2]).ok, false)
