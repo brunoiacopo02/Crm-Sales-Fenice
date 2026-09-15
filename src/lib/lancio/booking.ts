@@ -31,7 +31,7 @@ import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue'
 import { LANCIO_WEBDEV, type LancioBotInfo, type LancioConfig, type LancioScelta } from './config'
 import { hourKey, sameInstant, type AtKind } from './rules'
 import { isFreeAt, pickRoundRobin } from './slots'
-import { dayFactsFor, getShiftMembers, type Db } from './shiftQueries'
+import { dayFactsFor, getShiftMembers, venditoreLabel, type Db } from './shiftQueries'
 import { FENICE, type LancioLeadRow } from './botGuard'
 
 export type BookOutcome =
@@ -129,8 +129,7 @@ export async function bookLancio(input: {
     }
     if (decisione.azione === 'dedup') {
         if (input.kind === 'mattina' && lead.salespersonUserId) {
-            const [v] = await db.select({ name: users.name, displayName: users.displayName }).from(users).where(eq(users.id, lead.salespersonUserId))
-            return { ok: true, kind: 'mattina', venditore: { id: lead.salespersonUserId, nome: v?.displayName || v?.name || 'Venditore' }, deduped: true }
+            return { ok: true, kind: 'mattina', venditore: { id: lead.salespersonUserId, nome: await venditoreNome(db, lead.salespersonUserId) }, deduped: true }
         }
         if (input.kind !== 'mattina') return { ok: true, kind: input.kind, deduped: true }
         // Mattina già prenotata ma senza venditore: il giro precedente è morto a
@@ -249,4 +248,166 @@ export async function mattinaSideEffects(input: { lead: LancioLeadRow; venditore
 export async function confermeSideEffects(input: { leadId: string; botUserId: string }): Promise<void> {
     await enqueueMarketingWebhook({ eventType: 'appointment.set', leadId: input.leadId, actorUserId: input.botUserId })
         .catch((e: unknown) => console.error('[bot-lancio] webhook appointment.set err:', e))
+}
+
+export type CallNowOutcome =
+    | { ok: true; venditore: { id: string; nome: string }; deduped?: true }
+    /** Turno SERA vuoto: il bot ripiega sulla prenotazione. */
+    | { ok: false; motivo: 'nessun_venditore' }
+    /** Il lead è cambiato sotto i piedi fra la lettura e la scrittura: il bot ritenta. */
+    | { ok: false; motivo: 'conflitto' }
+    /** Ha già un appuntamento del lancio: non glielo togliamo per una chiamata. */
+    | { ok: false; motivo: 'gia_prenotato'; kind: AtKind; at: Date }
+
+export type CallNowDecision =
+    | { azione: 'assegna' }
+    | { azione: 'dedup' }
+    | { azione: 'gia_prenotato'; kind: AtKind; at: Date }
+
+/**
+ * Cosa fare della richiesta "chiamami adesso", guardando solo il lead.
+ *
+ * - `dedup`: ha già la chiamata subito E un venditore. È il re-invio della
+ *   stessa POST (il bot ritenta quando la rete gli scade sotto): un secondo
+ *   giro sposterebbe il lead a un altro venditore e suonerebbe due campanelle.
+ * - `gia_prenotato`: ha già un appuntamento del lancio. Stessa regola di
+ *   `decideBooking` (ruling R-rebook): riscrivere `salespersonUserId` qui
+ *   toglierebbe il lead al venditore che ce l'ha in agenda. Il bot lo dice al
+ *   lead, le Conferme rifissano.
+ * - `assegna`: nessuna delle due (anche `followup`, o una chiamata subito
+ *   rimasta senza venditore perché il giro precedente è morto a metà).
+ */
+export function decideCallNow(
+    lead: Pick<LancioLeadRow, 'lancioScelta' | 'appointmentDate' | 'salespersonUserId'>,
+): CallNowDecision {
+    if (lead.lancioScelta === 'chiamata_subito' && lead.salespersonUserId) return { azione: 'dedup' }
+    const scelta = lead.lancioScelta as SceltaApp | null
+    const esistente = scelta && scelta in KIND_BY_SCELTA ? KIND_BY_SCELTA[scelta] : null
+    if (esistente && lead.appointmentDate) return { azione: 'gia_prenotato', kind: esistente, at: lead.appointmentDate }
+    return { azione: 'assegna' }
+}
+
+async function venditoreNome(tx: Db, id: string): Promise<string> {
+    const [v] = await tx.select({ name: users.name, displayName: users.displayName }).from(users).where(eq(users.id, id))
+    return v ? venditoreLabel(v) : 'Venditore'
+}
+
+/**
+ * Chiamata subito (spec §4.2): round robin sul turno SERA, nessun controllo di
+ * calendario (il venditore di turno è lì apposta, e la sera del webinar non ha
+ * disponibilità dichiarate). Il lead nasce APPOINTMENT "adesso", già
+ * confermato — le Conferme non lo devono chiamare — con il contatore NR a
+ * zero: è la scheda venditore (`recordLancioCallNowNoAnswer`, Task 10) a farlo
+ * scalare. Nessun evento Google Calendar: la chiamata è adesso, non domani.
+ */
+export async function assignCallNow(input: {
+    lead: LancioLeadRow; botUserId: string; info?: LancioBotInfo; note?: string; now: Date; cfg?: LancioConfig
+}): Promise<CallNowOutcome> {
+    const cfg = input.cfg ?? LANCIO_WEBDEV
+    const { lead, now, botUserId } = input
+    // L'appuntamento è "adesso" al minuto tondo: i secondi non dicono niente a
+    // chi legge l'agenda e `slotKey` ragiona comunque per ora.
+    const at = new Date(Math.floor(now.getTime() / 60_000) * 60_000)
+
+    // Via breve: il re-invio non deve nemmeno mettersi in fila per il lock.
+    const subito = decideCallNow(lead)
+    if (subito.azione === 'gia_prenotato') return { ok: false, motivo: 'gia_prenotato', kind: subito.kind, at: subito.at }
+    if (subito.azione === 'dedup' && lead.salespersonUserId) {
+        return { ok: true, venditore: { id: lead.salespersonUserId, nome: await venditoreNome(db, lead.salespersonUserId) }, deduped: true }
+    }
+
+    return await db.transaction(async (tx: Db) => {
+        // Lock UNICO per tutta la chiamata subito (non per ora, come la
+        // mattina): il round robin del turno SERA è una risorsa sola, e due
+        // richieste in parallelo leggerebbero lo stesso `lastAssignedAt`
+        // mandando due lead allo stesso venditore. Seed 3 = lancio.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'lancio:call-now'}, 3))`)
+
+        // Il lead si rilegge QUI DENTRO: la riga arrivata dalla route è di
+        // prima del lock. Senza, il secondo di due invii concorrenti scriveva
+        // con una `version` vecchia e il bot si sentiva dire "nessun venditore"
+        // mentre il venditore stava già chiamando.
+        const [fresh] = await tx.select({
+            lancioScelta: leads.lancioScelta, appointmentDate: leads.appointmentDate,
+            salespersonUserId: leads.salespersonUserId, version: leads.version,
+        }).from(leads).where(eq(leads.id, lead.id)).limit(1)
+        if (!fresh) return { ok: false as const, motivo: 'conflitto' as const }
+
+        const decisione = decideCallNow(fresh)
+        if (decisione.azione === 'gia_prenotato') {
+            return { ok: false as const, motivo: 'gia_prenotato' as const, kind: decisione.kind, at: decisione.at }
+        }
+        if (decisione.azione === 'dedup' && fresh.salespersonUserId) {
+            return { ok: true as const, venditore: { id: fresh.salespersonUserId, nome: await venditoreNome(tx, fresh.salespersonUserId) }, deduped: true as const }
+        }
+
+        const members = await getShiftMembers(tx, 'SERA', cfg)
+        const chosen = pickRoundRobin(members)
+        if (!chosen) return { ok: false as const, motivo: 'nessun_venditore' as const }
+        const nome = members.find(m => m.salesUserId === chosen.salesUserId)?.name ?? 'Venditore'
+
+        const updated = await tx.update(leads).set({
+            status: 'APPOINTMENT',
+            appointmentDate: at,
+            appointmentCreatedAt: now,
+            appointmentNote: input.note?.trim() || null,
+            // Confermato dal bot: il lead non deve comparire sulla board
+            // Conferme (filtra `confirmationsOutcome IS NULL`), è del venditore.
+            confirmationsOutcome: 'confermato',
+            confirmationsUserId: botUserId,
+            confirmationsTimestamp: now,
+            confirmationsDiscardReason: null,
+            confNeedsReschedule: false,
+            confSnoozeAt: null,
+            salespersonUserId: chosen.salesUserId,
+            salespersonAssigned: nome,
+            salespersonAssignedAt: now,
+            lancioScelta: 'chiamata_subito',
+            lancioSceltaAt: now,
+            lancioCallNowAttempts: 0,
+            lancioCallNowNextAt: null,
+            ...(input.info ? { lancioBotInfo: input.info } : {}),
+            version: fresh.version + 1,
+            updatedAt: now,
+        }).where(and(eq(leads.id, lead.id), eq(leads.version, fresh.version))).returning({ id: leads.id })
+        if (updated.length === 0) return { ok: false as const, motivo: 'conflitto' as const }
+
+        await tx.update(launchShifts).set({ lastAssignedAt: now }).where(and(
+            eq(launchShifts.companyId, FENICE),
+            eq(launchShifts.bucket, cfg.bucket),
+            eq(launchShifts.kind, 'SERA'),
+            eq(launchShifts.salesUserId, chosen.salesUserId),
+            isNull(launchShifts.removedAt),
+        ))
+        await tx.insert(leadEvents).values([
+            { id: crypto.randomUUID(), leadId: lead.id, eventType: 'APPOINTMENT_SET', userId: botUserId, timestamp: now, metadata: { source: 'lancio', kind: 'chiamata_subito', at: at.toISOString() }, companyId: FENICE },
+            { id: crypto.randomUUID(), leadId: lead.id, eventType: 'LANCIO_CALL_NOW_ASSIGNED', userId: botUserId, timestamp: now, metadata: { salesUserId: chosen.salesUserId, info: input.info ?? null }, companyId: FENICE },
+        ])
+        // Il trigger 0019 la spinge sul topic `user:<venditore>` del bus: la
+        // campanella suona da sola, nessun canale realtime nuovo.
+        await tx.insert(notifications).values({
+            id: crypto.randomUUID(),
+            recipientUserId: chosen.salesUserId,
+            type: 'lancio_call_now',
+            title: '🚀 Lancio: chiama subito',
+            body: `${lead.name} ha chiesto di essere chiamato adesso`,
+            metadata: { leadId: lead.id },
+            status: 'unread',
+            createdAt: now,
+            companyId: FENICE,
+        })
+        return { ok: true as const, venditore: { id: chosen.salesUserId, nome } }
+    })
+}
+
+/**
+ * Marketing della chiamata subito, in `after()`: è un appuntamento fissato e
+ * assegnato a un venditore, gli stessi due eventi che emette `setConfermeOutcome`
+ * quando confermando assegna. Nessun Google Calendar: la chiamata è adesso.
+ */
+export async function callNowSideEffects(input: { leadId: string; botUserId: string }): Promise<void> {
+    for (const eventType of ['appointment.set', 'deal.assigned'] as const) {
+        await enqueueMarketingWebhook({ eventType, leadId: input.leadId, actorUserId: input.botUserId })
+            .catch((e: unknown) => console.error(`[bot-lancio] webhook ${eventType} err:`, e))
+    }
 }

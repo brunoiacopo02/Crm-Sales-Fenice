@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SCELTA_BY_KIND, decideBooking } from './booking'
+import { SCELTA_BY_KIND, decideBooking, decideCallNow } from './booking'
 import { romeIso } from '@/lib/dateUtils'
 import type { LancioLeadRow } from './botGuard'
 
@@ -63,4 +63,43 @@ test('l\'ora che torna al bot e ora italiana con offset, non UTC', () => {
     assert.equal(romeIso(new Date('2026-12-06T10:00:00+01:00')), '2026-12-06T10:00:00+01:00')
     // Mezzanotte italiana: h23, non "24".
     assert.equal(romeIso(new Date('2026-10-06T00:00:00+02:00')), '2026-10-06T00:00:00+02:00')
+})
+
+// --- Chiamata subito (Task 8) ---------------------------------------------
+// Stesse due trappole della prenotazione, guardate dal lato della chiamata: il
+// re-invio della stessa POST non deve spostare il lead a un secondo venditore,
+// e chi ha gia' un appuntamento non se lo vede togliere da una chiamata.
+
+function callNowLead(over: Partial<LancioLeadRow> = {}): Pick<LancioLeadRow, 'lancioScelta' | 'appointmentDate' | 'salespersonUserId'> {
+    return { lancioScelta: null, appointmentDate: null, salespersonUserId: null, ...over }
+}
+
+test('chiamata subito: lead fresco, si assegna', () => {
+    assert.deepEqual(decideCallNow(callNowLead()), { azione: 'assegna' })
+    // Follow-up non e' una prenotazione: dopo si puo' chiamare.
+    assert.deepEqual(decideCallNow(callNowLead({ lancioScelta: 'followup', appointmentDate: AT })), { azione: 'assegna' })
+    // Appuntamento di un altro funnel (nessuna scelta del lancio): non blocca.
+    assert.deepEqual(decideCallNow(callNowLead({ appointmentDate: AT })), { azione: 'assegna' })
+})
+
+test('chiamata subito con venditore: e il re-invio, non un secondo venditore', () => {
+    assert.deepEqual(decideCallNow(callNowLead({ lancioScelta: 'chiamata_subito', salespersonUserId: 'sales-1' })), { azione: 'dedup' })
+})
+
+test('chiamata subito senza venditore: giro morto a meta, si finisce', () => {
+    // Il lead ha la scelta ma nessuno lo chiamera mai: va assegnato, non deduplicato.
+    assert.deepEqual(decideCallNow(callNowLead({ lancioScelta: 'chiamata_subito' })), { azione: 'assegna' })
+})
+
+test('ha gia un appuntamento del lancio: la chiamata non glielo toglie', () => {
+    const gia = new Date('2026-10-06T11:00:00+02:00')
+    assert.deepEqual(decideCallNow(callNowLead({ lancioScelta: 'app_mattina', appointmentDate: gia, salespersonUserId: 'sales-1' })), {
+        azione: 'gia_prenotato', kind: 'mattina', at: gia,
+    })
+    // Anche senza venditore (pomeriggio: lo lavorano le Conferme).
+    assert.deepEqual(decideCallNow(callNowLead({ lancioScelta: 'app_pomeriggio', appointmentDate: gia })), {
+        azione: 'gia_prenotato', kind: 'pomeriggio', at: gia,
+    })
+    // Scelta del lancio senza data: prenotazione monca, non blocca la chiamata.
+    assert.deepEqual(decideCallNow(callNowLead({ lancioScelta: 'app_dopodomani' })), { azione: 'assegna' })
 })

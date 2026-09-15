@@ -3,35 +3,9 @@ import { romeIso } from '@/lib/dateUtils'
 import { authBotRequest, computeSlots, loadLancioLead } from '@/lib/lancio/botGuard'
 import { classifyAt } from '@/lib/lancio/rules'
 import { bookLancio, confermeSideEffects, mattinaSideEffects } from '@/lib/lancio/booking'
-import type { LancioBotInfo } from '@/lib/lancio/config'
+import { parseInfo, parseNote } from '@/lib/lancio/payload'
 
 export const dynamic = 'force-dynamic'
-
-/** Quanto del racconto del bot accettiamo di scrivere su `leads.lancioBotInfo`. */
-const MAX_RISPOSTE = 6
-const MAX_RISPOSTA_CHARS = 300
-const MAX_NOTE_CHARS = 1000
-
-/**
- * `info` arriva da una chat: senza confine finirebbe in `lancioBotInfo` (jsonb)
- * qualunque cosa, di qualunque dimensione, e la pagina /lancio la renderizza.
- * Si tiene SOLO `risposte: string[]`, ripulita e limitata; le chiavi in più si
- * ignorano. Un tipo sbagliato non si salva a metà: 400, il bot è nostro e il
- * suo contratto lo correggiamo noi.
- */
-function parseInfo(raw: unknown): { ok: true; info?: LancioBotInfo } | { ok: false; detail: string } {
-    if (raw === undefined || raw === null) return { ok: true }
-    if (typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, detail: 'info deve essere un oggetto' }
-    const risposte = (raw as Record<string, unknown>).risposte
-    if (risposte === undefined || risposte === null) return { ok: true }
-    if (!Array.isArray(risposte)) return { ok: false, detail: 'info.risposte deve essere un array di stringhe' }
-    if (!risposte.every(r => typeof r === 'string')) return { ok: false, detail: 'info.risposte deve contenere solo stringhe' }
-    const pulite = (risposte as string[])
-        .map(r => r.trim().slice(0, MAX_RISPOSTA_CHARS))
-        .filter(r => r.length > 0)
-        .slice(0, MAX_RISPOSTE)
-    return { ok: true, info: { risposte: pulite } }
-}
 
 /**
  * POST /api/bot/lancio/book  { leadId, at (ISO con offset), info?, note? }
@@ -42,7 +16,7 @@ function parseInfo(raw: unknown): { ok: true; info?: LancioBotInfo } | { ok: fal
 export async function POST(req: NextRequest) {
     const auth = await authBotRequest(req)
     if (!auth.ok) return auth.res
-    const body = auth.body as { leadId?: string; at?: string; info?: unknown; note?: string }
+    const body = auth.body as { leadId?: string; at?: string; info?: unknown; note?: unknown }
 
     if (!body.leadId || !body.at) {
         return NextResponse.json({ ok: false, motivo: 'bad_request', detail: 'leadId e at richiesti' }, { status: 400 })
@@ -57,11 +31,9 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) {
         return NextResponse.json({ ok: false, motivo: 'info_non_valida', detail: parsed.detail }, { status: 400 })
     }
-    if (body.note !== undefined && typeof body.note !== 'string') {
-        return NextResponse.json({ ok: false, motivo: 'info_non_valida', detail: 'note deve essere una stringa' }, { status: 400 })
-    }
-    if (typeof body.note === 'string' && body.note.length > MAX_NOTE_CHARS) {
-        return NextResponse.json({ ok: false, motivo: 'info_non_valida', detail: `note oltre ${MAX_NOTE_CHARS} caratteri` }, { status: 400 })
+    const nota = parseNote(body.note)
+    if (!nota.ok) {
+        return NextResponse.json({ ok: false, motivo: 'info_non_valida', detail: nota.detail }, { status: 400 })
     }
 
     const at = new Date(body.at)
@@ -80,7 +52,7 @@ export async function POST(req: NextRequest) {
     const out = await bookLancio({
         lead: guard.lead, botUserId: guard.botUserId, at,
         kind: decision.kind, dateStr: decision.dateStr, hour: decision.hour,
-        info: parsed.info, note: body.note, now,
+        info: parsed.info, note: nota.note, now,
     })
 
     if (!out.ok) {
