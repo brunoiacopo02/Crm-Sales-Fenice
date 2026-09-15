@@ -57,6 +57,9 @@ export async function getVenditoreAppointments(sellerId: string) {
             notClosedReason: leads.notClosedReason,
             negotiationStartedAt: leads.negotiationStartedAt,
             salesCycleStartAt: leads.salesCycleStartAt,
+            // Serve alla dashboard per tenere le "chiamate subito" del lancio
+            // fuori dalla Lista e all'OutcomeGate per non chiederne l'esito.
+            lancioScelta: leads.lancioScelta,
         })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))

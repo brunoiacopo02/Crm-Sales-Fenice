@@ -18,6 +18,14 @@ export function callNowColumn(lead: { lancioCallNowAttempts: number; salesperson
     return 'esitati'
 }
 
+/**
+ * Quanti lead restano da lavorare nella scheda: il badge della tab del
+ * venditore. Gli "esitati" non contano — sono lì solo per memoria della serata.
+ */
+export function callNowPendingCount(leads: Array<{ column: CallNowColumn }>): number {
+    return leads.filter(l => l.column !== 'esitati').length
+}
+
 /** Il giorno italiano dopo `dateStr`. Mezzogiorno: nessun cambio d'ora legale lo sposta. */
 function giornoSuccessivo(dateStr: string): string {
     return toRomeDateStr(new Date(romeInstant(dateStr, 12).getTime() + 24 * 60 * 60 * 1000))

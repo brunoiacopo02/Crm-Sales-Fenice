@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { callNowColumn, handoffAppointmentAt, nextCallNowState } from './callNow'
+import { callNowColumn, callNowPendingCount, handoffAppointmentAt, nextCallNowState } from './callNow'
 
 const SERA = new Date('2026-10-05T22:30:00+02:00')
 
@@ -53,4 +53,17 @@ test('il 7/10 il richiamo non torna mai indietro alle 09:00 gia passate', () => 
 test('i tentativi non superano mai il tetto', () => {
     assert.deepEqual(nextCallNowState(3, SERA), { kind: 'handoff', attempts: 3, appointmentAt: new Date('2026-10-06T09:00:00+02:00') })
     assert.deepEqual(nextCallNowState(9, SERA), { kind: 'handoff', attempts: 3, appointmentAt: new Date('2026-10-06T09:00:00+02:00') })
+})
+
+test('badge della tab: contano i lead non ancora esitati', () => {
+    const leads = [
+        { column: 'da_chiamare' as const },
+        { column: 'seconda' as const },
+        { column: 'terza' as const },
+        { column: 'esitati' as const },
+        { column: 'esitati' as const },
+    ]
+    assert.equal(callNowPendingCount(leads), 3)
+    assert.equal(callNowPendingCount([]), 0)
+    assert.equal(callNowPendingCount([{ column: 'esitati' as const }]), 0)
 })

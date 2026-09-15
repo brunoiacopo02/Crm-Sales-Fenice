@@ -23,6 +23,10 @@ export default async function VenditorePage() {
         const appointments = await getVenditoreAppointments(session.user.id)
         overdue = appointments
             .filter(a =>
+                // Chiamate subito del lancio (spec 2026-09-14 §4.4): il loro
+                // "appuntamento" è l'ora della richiesta, non una scadenza —
+                // due ore dopo diventerebbe un arretrato che non esiste.
+                a.lancioScelta !== 'chiamata_subito' &&
                 a.appointmentDate &&
                 !a.salespersonOutcome &&
                 (now - new Date(a.appointmentDate).getTime()) > graceMs
