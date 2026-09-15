@@ -45,8 +45,16 @@ const FENICE_COMPANY = 'fenice';
 // contattarli). Override via env ACTIVECAMPAIGN_BLOCKED_LIST_NAMES
 // (comma-separated). Match normalizzato: trim + lowercase, così
 // tolleriamo differenze di maiuscole/spazi tra UI AC e config.
+//
+// "Lista Pre lancio 2026" è qui dal 15/09/2026: è una lista di raccolta da
+// DATABASE, e un'automazione AC l'ha riversata nel CRM a ~140 lead/minuto.
+// Prima che la bloccassimo erano entrati 7.955 lead, 7.882 dei quali pushati
+// al bot: il numero WhatsApp è passato da 75-80% di messaggi letti a 54,9% e
+// da <1% di falliti a 5,5%, con la qualità Meta scesa a LOW, e il Supabase del
+// bot è andato in saturazione. Il blocco viveva solo nella env di produzione:
+// toglierla riaprirebbe il rubinetto, quindi sta anche qui.
 const BLOCKED_LIST_NAMES_NORMALIZED = new Set(
-    (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_NAMES || 'Lead Lancio Video Editor 2026,Lead Lancio Black Summer 2026,Lancio Web Developer AI')
+    (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_NAMES || 'Lead Lancio Video Editor 2026,Lead Lancio Black Summer 2026,Lancio Web Developer AI,Lista Pre lancio 2026')
         .split(',')
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean),
