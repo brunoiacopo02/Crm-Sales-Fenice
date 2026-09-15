@@ -16,7 +16,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
-import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, finestraRientro, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import {
     isLancioIntakeEnabled, decideLancioIntake, buildLancioLeadRow, buildLancioIntakeEventRows,
     lancioPayloadField, LANCIO_LIST_NAME_NORMALIZED, LANCIO_BUCKET, LANCIO_FUNNEL, type LancioDecision,
@@ -1152,7 +1152,18 @@ export async function POST(req: NextRequest) {
             ));
 
             // La finestra ferie, quando attiva, vince su tutto: nessun umano al lavoro.
-            const holidayWindow = isBotHolidayWindow(now);
+            //
+            // ECCEZIONE dal 15/09/2026: il rientro graduale del bot vince sulla
+            // finestra ferie. Sono due decisioni sullo stesso interruttore, e la
+            // piu' recente deve avere ragione: la finestra ferie di settembre e'
+            // stata aperta SENZA data di fine ("2026-09-09..") e quindi non scade
+            // da sola, mentre il rientro e' la decisione presa oggi per far
+            // risalire la qualita' del numero WhatsApp. Senza questa riga la
+            // finestra vecchia continuerebbe a mandare tutti i lead al bot e il
+            // rientro non partirebbe mai — verificato sul campo: dopo il deploy
+            // delle env, 12 lead su 12 stavano ancora andando al bot.
+            const rientro = finestraRientro(now);
+            const holidayWindow = !rientro && isBotHolidayWindow(now);
             const routing: LeadRouting = holidayWindow ? 'bot_only' : getLeadRouting(now);
 
             // Ogni ramo ha il suo ripiego: una fascia non deve mai poter lasciare
