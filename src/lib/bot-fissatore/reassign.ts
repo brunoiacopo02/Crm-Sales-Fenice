@@ -53,16 +53,21 @@ export async function reassignBotLeadToHumanPool(
             return { ok: true, assignedToId: null, note: 'already_rejected' as const };
         }
 
+        // Pool dei RIDATI, separato da quello dei freschi dal 15/09/2026: i GDO
+        // che lavorano lead freschi non devono trovarsi la pipeline piena di
+        // scarti del bot. Round-robin sul proprio contatore
+        // (`botReturnLastAssignedAt`) e non su `acLastAssignedAt`, altrimenti i
+        // due flussi si sposterebbero il turno a vicenda.
         const eligible = await tx.select({ id: users.id })
             .from(users)
             .where(and(
                 eq(users.companyId, FENICE),
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true),
-                eq(users.acAutoIntake, true),
+                eq(users.botReturnIntake, true),
                 eq(users.isBot, false),
             ))
-            .orderBy(asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id))
+            .orderBy(asc(sql`coalesce(${users.botReturnLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id))
             .limit(1);
 
         const now = new Date();
@@ -105,7 +110,7 @@ export async function reassignBotLeadToHumanPool(
             .where(eq(leads.id, leadId));
 
         await tx.update(users)
-            .set({ acLastAssignedAt: now })
+            .set({ botReturnLastAssignedAt: now })
             .where(eq(users.id, gdoId));
 
         await tx.insert(leadEvents).values({

@@ -27,6 +27,7 @@ import { eq, and, asc, sql, isNull, gte, desc, or, like } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
+import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
 
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com';
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '';
@@ -164,10 +165,27 @@ async function getListIdsByName(): Promise<Map<string, Set<string>>> {
     return byName;
 }
 
+/**
+ * Liste bloccate per ID NUMERICO, non per nome.
+ *
+ * Il blocco per nome ha un punto cieco: basta rinominare la lista su AC e non
+ * la riconosce più. Dopo il flood del 15/09/2026 il PO ha deciso di lasciare
+ * accesa l'automazione che riempie la lista 133 (serve ad altro), quindi il
+ * blocco è l'unica cosa che ci separa da quei lead: gli id sono la difesa che
+ * sopravvive a una rinomina, e non dipendono dalla chiamata /lists.
+ */
+const BLOCKED_LIST_IDS = new Set(
+    (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_IDS || '133')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+);
+
 async function getBlockedListIds(): Promise<Set<string>> {
-    if (BLOCKED_LIST_NAMES_NORMALIZED.size === 0) return new Set();
+    // Gli id espliciti valgono sempre, anche se /lists è irraggiungibile.
+    const ids = new Set<string>(BLOCKED_LIST_IDS);
+    if (BLOCKED_LIST_NAMES_NORMALIZED.size === 0) return ids;
     const byName = await getListIdsByName();
-    const ids = new Set<string>();
     for (const name of BLOCKED_LIST_NAMES_NORMALIZED) {
         for (const id of byName.get(name) ?? []) ids.add(id);
     }
@@ -191,6 +209,20 @@ async function getLancioListIds(): Promise<ReadonlySet<string> | null> {
  * contatto passa, non e' bloccato).
  */
 async function getContactActiveListIds(contactId: string): Promise<Set<string>> {
+    return (await leggiListeContatto(contactId)).ids;
+}
+
+/**
+ * Come sopra, ma dice anche SE la lettura è riuscita.
+ *
+ * La differenza conta: in errore l'insieme torna vuoto, e un insieme vuoto è
+ * indistinguibile da "il contatto non è in nessuna lista bloccata". Fino al
+ * 15/09/2026 quel caso lasciava passare il contatto — cioè, proprio quando AC
+ * non risponde, il filtro delle liste bloccate si spegne in silenzio. Con
+ * un'automazione che riempie una lista bloccata di continuo, è il momento
+ * peggiore per aprire.
+ */
+async function leggiListeContatto(contactId: string): Promise<{ ids: Set<string>; ok: boolean }> {
     const ids = new Set<string>();
     try {
         const res = await acGet(`/contacts/${contactId}/contactLists`);
@@ -200,10 +232,11 @@ async function getContactActiveListIds(contactId: string): Promise<Set<string>> 
             const status = String(m?.status ?? '');
             if (listId && status === '1') ids.add(listId);
         }
+        return { ids, ok: true };
     } catch (e) {
         console.error(`[AC webhook] getContactActiveListIds error for contact ${contactId}:`, e);
+        return { ids, ok: false };
     }
-    return ids;
 }
 
 /** La prima lista bloccata fra le membership attive del contatto, o null. */
@@ -344,6 +377,51 @@ async function notifyManagersIfNeeded() {
         }
     } catch (e) {
         console.error('notifyManagersIfNeeded error:', e);
+    }
+}
+
+/**
+ * L'interruttore di sovraccarico è scattato: lo devono sapere subito.
+ *
+ * Il 15/09/2026 il flood è andato avanti quasi dodici ore prima che qualcuno se
+ * ne accorgesse. Una difesa che ferma i lead senza dirlo a nessuno sposta il
+ * problema: i lead si accumulano in /lead-automatici e intanto una campagna
+ * vera potrebbe essere ferma. Una notifica ogni 10 minuti, non una per lead.
+ */
+async function notificaBurstAgliAdmin(conteggio: number, finestraMinuti: number) {
+    try {
+        const destinatari = await db.select({ id: users.id }).from(users)
+            .where(and(
+                eq(users.companyId, FENICE_COMPANY),
+                sql`${users.role} IN ('MANAGER', 'ADMIN')`,
+            ));
+        const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+        for (const m of destinatari) {
+            const [recent] = await db.select({ id: notifications.id }).from(notifications)
+                .where(and(
+                    eq(notifications.companyId, FENICE_COMPANY),
+                    eq(notifications.recipientUserId, m.id),
+                    eq(notifications.type, 'ac_intake_burst'),
+                    gte(notifications.createdAt, tenMinAgo),
+                )).limit(1);
+            if (recent) continue;
+
+            await db.insert(notifications).values({
+                id: crypto.randomUUID(),
+                recipientUserId: m.id,
+                type: 'ac_intake_burst',
+                title: 'Ingresso lead bloccato: troppi lead insieme',
+                body: `Sono arrivati ${conteggio} lead in ${finestraMinuti} minuti da ActiveCampaign. `
+                    + `L'ingresso è sospeso per sicurezza: i lead restano in Lead Automatici. `
+                    + `Se è un import previsto, si riapre alzando la soglia.`,
+                metadata: { link: '/lead-automatici', conteggio, finestraMinuti },
+                companyId: FENICE_COMPANY,
+            });
+        }
+    } catch (e) {
+        // Una notifica che non parte non deve far fallire il webhook: il blocco
+        // ha già funzionato, ed è quello che conta.
+        console.error('notificaBurstAgliAdmin error:', e);
     }
 }
 
@@ -618,7 +696,21 @@ export async function POST(req: NextRequest) {
         // perché il trigger potrebbe essere una lista non bloccata ma il
         // contatto potrebbe essere ANCHE in una bloccata).
         if (blocked.size > 0) {
-            if (activeListIds === null) activeListIds = await getContactActiveListIds(contactId);
+            let letturaOk = true;
+            if (activeListIds === null) {
+                const lettura = await leggiListeContatto(contactId);
+                activeListIds = lettura.ids;
+                letturaOk = lettura.ok;
+            }
+            // AC non ha risposto: non sappiamo in che liste sia questo contatto.
+            // Si chiude, non si apre — il contatto resta in /lead-automatici e lo
+            // recupera il retry, invece di entrare come lead di una lista che
+            // magari è proprio una di quelle bloccate.
+            if (!letturaOk) {
+                console.error(`[AC webhook] liste del contatto ${contactId} non leggibili: messo da parte invece che fatto passare`);
+                await recordDedupedSkip(contactId, 'liste_non_leggibili', 'liste_non_leggibili%', rawPayload);
+                return NextResponse.json({ skipped: 'liste_non_leggibili', acContactId: contactId });
+            }
             const blockedListId = blockedListOf(activeListIds, blocked);
             if (blockedListId) {
                 console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (membership) ${blockedListId}`);
@@ -629,6 +721,43 @@ export async function POST(req: NextRequest) {
                     acContactId: contactId,
                     via: 'membership',
                 });
+            }
+        }
+
+        // ===== Interruttore di sovraccarico =====
+        // Ultima difesa, e l'unica che non ha bisogno di sapere DA DOVE arrivano
+        // i lead. I filtri sopra conoscono solo le liste che qualcuno si è
+        // ricordato di configurare; questo guarda il volume, e ferma anche la
+        // lista di domani che oggi non sappiamo che esisterà.
+        //
+        // Sta DOPO le liste bloccate (un contatto bloccato non deve consumare la
+        // soglia) e PRIMA della fetch del contatto, così in piena raffica non
+        // tempestiamo AC di chiamate che poi buttiamo.
+        //
+        // Il ramo lancio è già uscito sopra con un return: le sue raffiche sono
+        // volute e non passano di qui.
+        const burst = leggiBurstConfig();
+        if (burst.attivo) {
+            // Solo i lead entrati DA QUESTO webhook: un import manuale dalla UI
+            // può benissimo caricare 500 lead in un minuto, ed è un'operazione
+            // voluta. Contarli farebbe scattare l'interruttore sui lead veri di
+            // AC per i dieci minuti successivi.
+            const [conteggio] = await db.select({ n: sql<number>`count(*)::int` })
+                .from(leads)
+                .where(and(
+                    eq(leads.companyId, FENICE_COMPANY),
+                    eq(leads.source, 'activecampaign'),
+                    gte(leads.createdAt, new Date(Date.now() - burst.finestraMinuti * 60_000)),
+                ));
+            const decisione = decidiBurst({ conteggioInFinestra: conteggio?.n ?? 0, config: burst });
+            if (decisione.blocca) {
+                console.error(
+                    `[AC webhook] INTERRUTTORE DI SOVRACCARICO: ${conteggio?.n} lead in ${burst.finestraMinuti} min ` +
+                    `(soglia ${burst.limite}). Contatto ${contactId} messo da parte.`,
+                );
+                await recordDedupedSkip(contactId, decisione.motivo!, 'burst_guard:%', rawPayload);
+                await notificaBurstAgliAdmin(conteggio?.n ?? 0, burst.finestraMinuti);
+                return NextResponse.json({ skipped: 'burst_guard', acContactId: contactId, inFinestra: conteggio?.n });
             }
         }
 
@@ -929,12 +1058,62 @@ export async function POST(req: NextRequest) {
                 sql`(${users.isBot} = false OR ${underDailyMin})`,
             ));
 
-            /** Solo i GDO umani abilitati all'intake automatico. */
+            /**
+             * Tetto giornaliero di lead FRESCHI per singolo GDO (PO 2026-09-15).
+             * `dailyFreshCap` null = nessun tetto, e il GDO resta sempre eleggibile.
+             *
+             * Si contano i lead CREATI oggi e assegnati a lui: i lead che il bot
+             * restituisce sono nati in giornate precedenti e vanno comunque a un
+             * altro pool (`botReturnIntake`), quindi qui non inquinano il conteggio.
+             */
+            const underFreshCap = sql`(
+                ${users.dailyFreshCap} IS NULL OR (
+                    SELECT count(*) FROM leads l
+                    WHERE l."assignedToId" = ${users.id}
+                      AND l."companyId" = ${FENICE_COMPANY}
+                      AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
+                ) < ${users.dailyFreshCap}
+            )`;
+
+            /** Solo i GDO umani abilitati all'intake automatico e sotto il loro tetto. */
             const selectHumanPool = () => selectPool(and(
                 gdoBase,
                 eq(users.acAutoIntake, true),
                 eq(users.isBot, false),
+                underFreshCap,
             ));
+
+            /**
+             * Le SCORTE: prendono i freschi in eccedenza quando tutti i GDO del pool
+             * hanno raggiunto il tetto. Senza nessuna scorta accesa la funzione torna
+             * vuota e il chiamante ripiega sul pool ignorando il tetto, così un tetto
+             * configurato male non può mai lasciare un lead senza padrone.
+             */
+            const selectScortaPool = () => selectPool(and(
+                gdoBase,
+                eq(users.freshOverflowScorta, true),
+                eq(users.isBot, false),
+            ));
+
+            /** Pool umano ignorando il tetto: ultima rete, mai un lead orfano. */
+            const selectHumanPoolNoCap = () => selectPool(and(
+                gdoBase,
+                eq(users.acAutoIntake, true),
+                eq(users.isBot, false),
+            ));
+
+            /**
+             * I freschi: prima chi è sotto tetto, poi le scorte, poi il pool senza
+             * tetto. Tre livelli perché l'eccedenza ha una destinazione voluta (le
+             * scorte) ma nessun errore di configurazione deve poter fermare l'intake.
+             */
+            const selectFreshWithOverflow = async () => {
+                const sotto = await selectHumanPool();
+                if (sotto.length > 0) return sotto;
+                const scorte = await selectScortaPool();
+                if (scorte.length > 0) return scorte;
+                return await selectHumanPoolNoCap();
+            };
 
             /**
              * Solo il bot. `respectMin` lo esclude quando ha già raggiunto la soglia
@@ -947,6 +1126,29 @@ export async function POST(req: NextRequest) {
                 gdoBase,
                 eq(users.isBot, true),
                 respectMin ? underDailyMin : undefined,
+            ));
+
+            /**
+             * Tappa "metà e metà" del rientro del bot: prende il lead solo se
+             * oggi ne ha meno della metà del totale. Si autocorregge da sé — se
+             * resta indietro torna eleggibile — senza tenere un contatore a parte
+             * che potrebbe sfasarsi.
+             */
+            const botUnderHalf = sql`(
+                SELECT count(*) FROM leads l
+                WHERE l."assignedToId" = ${users.id}
+                  AND l."companyId" = ${FENICE_COMPANY}
+                  AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
+            ) * 2 < GREATEST(1, (
+                SELECT count(*) FROM leads l
+                WHERE l."companyId" = ${FENICE_COMPANY}
+                  AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
+            ))`;
+
+            const selectBotPoolHalf = () => selectPool(and(
+                gdoBase,
+                eq(users.isBot, true),
+                botUnderHalf,
             ));
 
             // La finestra ferie, quando attiva, vince su tutto: nessun umano al lavoro.
@@ -964,14 +1166,22 @@ export async function POST(req: NextRequest) {
             } else if (routing === 'gdo_only') {
                 // Fascia protetta del sabato: il bot non entra nemmeno se è
                 // sotto la soglia minima. Ci finisce solo se non c'è un umano.
-                eligible = await selectHumanPool();
+                eligible = await selectFreshWithOverflow();
+                if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
+            } else if (routing === 'bot_half') {
+                // Rientro graduale: il bot entra solo finché è sotto metà del
+                // volume di oggi. Sopra metà tocca ai GDO, e se non ce n'è
+                // nessuno disponibile il lead torna al bot invece di restare
+                // orfano — il rientro non deve poter fermare l'intake.
+                eligible = await selectBotPoolHalf();
+                if (eligible.length === 0) eligible = await selectFreshWithOverflow();
                 if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
             } else if (routing === 'bot_first') {
                 eligible = await selectBotPool(true);
-                if (eligible.length === 0) eligible = await selectHumanPool();
+                if (eligible.length === 0) eligible = await selectFreshWithOverflow();
             } else {
                 eligible = await selectBotPool(false);
-                if (eligible.length === 0) { eligible = await selectHumanPool(); fallbackUsed = true; }
+                if (eligible.length === 0) { eligible = await selectFreshWithOverflow(); fallbackUsed = true; }
             }
 
             if (eligible.length === 0) {

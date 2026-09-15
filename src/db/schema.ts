@@ -79,6 +79,29 @@ export const users = pgTable('users', {
     acAutoIntake: boolean('acAutoIntake').default(false).notNull(),
     acLastAssignedAt: timestamp('acLastAssignedAt', { withTimezone: true, mode: 'date' }),
 
+    // --- DUE POOL SEPARATI (PO 2026-09-15) ---
+    // Fino al 15/09 `acAutoIntake` faceva da interruttore UNICO: chi lo aveva
+    // acceso riceveva sia i lead freschi dal webhook AC sia i lead che il bot
+    // restituisce (`reassignBotLeadToHumanPool`). Il PO vuole separarli: alcuni
+    // GDO lavorano solo lead freschi, altri solo i ridati dal bot, cosi' i primi
+    // non si trovano la pipeline piena di scarti.
+    //
+    // `acAutoIntake` resta il pool dei FRESCHI (nessuna migrazione di dati:
+    // mantiene il significato che ha oggi nel webhook AC).
+    //
+    // true = riceve i lead che il bot RESTITUISCE (mai risposto / chat interrotta).
+    botReturnIntake: boolean('botReturnIntake').default(false).notNull(),
+    botReturnLastAssignedAt: timestamp('botReturnLastAssignedAt', { withTimezone: true, mode: 'date' }),
+
+    // true = fa da SCORTA: riceve i lead freschi in eccedenza quando un GDO del
+    // pool freschi ha gia' raggiunto `dailyFreshCap` nella giornata di Roma.
+    // Senza nessuna scorta accesa l'eccedenza resta nel round-robin dei freschi.
+    freshOverflowScorta: boolean('freshOverflowScorta').default(false).notNull(),
+
+    // Tetto giornaliero di lead FRESCHI per questo GDO (giorno solare Europe/Rome).
+    // Oltre il tetto i lead vanno alle scorte. null = nessun tetto.
+    dailyFreshCap: integer('dailyFreshCap'),
+
     // Statistiche GDO: il TL/manager sceglie quali GDO contano nelle medie
     // per-GDO (App/gg, alert, scorte). Account isActive ma non operativi
     // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.
@@ -134,6 +157,12 @@ export const leads = pgTable('leads', {
     // Lancio Videoeditor (maggio 2026): marca i lead pescabili dal pool del lancio.
     // 'WEBINAR' = ha visto il webinar Zoom; 'NO_WEBINAR' = non l'ha visto; null = lead normale.
     launchBucket: text('launchBucket'),
+    // Da quale infornata di ingresso arriva questo lead. Serve a isolare a
+    // posteriori un blocco di lead entrati insieme, senza doverli ritrovare a
+    // colpi di intervallo su createdAt. Primo uso: 'DB_LISTA133_20260915', i
+    // lead della lista AC 133 finiti nel CRM per un errore di configurazione il
+    // 15/09/2026. Null sui lead normali.
+    intakeBatch: text('intakeBatch'),
     // Lancio "Web Developer AI" (ottobre 2026, migr. 0036). L'appartenenza al
     // lancio e' launchBucket='LANCIO_WEBDEV_2026' + funnel='Lancio Web Dev AI';
     // queste dicono come e' entrato e cosa ha scelto la sera della live.

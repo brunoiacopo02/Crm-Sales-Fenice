@@ -205,3 +205,75 @@ test("il sabato 09:00–16:30 è l'UNICA fascia della settimana in cui il bot no
     // 7 ore e mezza a passi di 15 minuti: la fascia c'è ed è larga quanto deve.
     assert.equal(protetti, 30);
 });
+
+// ===== Rientro graduale del bot dopo il flood della lista 133 (PO 2026-09-15) =====
+
+/** Imposta le env del rientro e le ripristina, qualunque cosa succeda. */
+function withRientro(
+    env: { sospesoFino?: string; metaFino?: string },
+    fn: () => void,
+) {
+    const prevS = process.env.BOT_FRESH_SUSPENDED_UNTIL;
+    const prevH = process.env.BOT_HALF_UNTIL;
+    const set = (k: string, v: string | undefined) => {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+    };
+    set('BOT_FRESH_SUSPENDED_UNTIL', env.sospesoFino);
+    set('BOT_HALF_UNTIL', env.metaFino);
+    try { fn(); } finally {
+        set('BOT_FRESH_SUSPENDED_UNTIL', prevS);
+        set('BOT_HALF_UNTIL', prevH);
+    }
+}
+
+test('senza env il rientro non esiste e vale il calendario di sempre', () => {
+    withRientro({}, () => {
+        // domenica: fascia del bot secondo il calendario
+        assert.equal(getLeadRouting(utc('2026-09-20T10:00:00Z')), 'bot_only');
+    });
+});
+
+test('durante la sospensione i lead freschi non vanno mai al bot', () => {
+    withRientro({ sospesoFino: '2026-09-19T11:00:00Z' }, () => {
+        // Un istante che senza rientro sarebbe 'bot_only' (notte feriale).
+        assert.equal(getLeadRouting(utc('2026-09-16T03:00:00Z')), 'gdo_only');
+        // E anche la domenica, che e' tutta del bot.
+        assert.equal(getLeadRouting(utc('2026-09-18T12:00:00Z')), 'gdo_only');
+    });
+});
+
+test('scaduta la sospensione subentra il meta e meta', () => {
+    withRientro({ sospesoFino: '2026-09-19T11:00:00Z', metaFino: '2026-09-20T22:00:00Z' }, () => {
+        assert.equal(getLeadRouting(utc('2026-09-19T10:59:00Z')), 'gdo_only');
+        assert.equal(getLeadRouting(utc('2026-09-19T11:00:00Z')), 'bot_half');
+        assert.equal(getLeadRouting(utc('2026-09-20T12:00:00Z')), 'bot_half');
+    });
+});
+
+test('scadute entrambe si torna al calendario da solo, senza togliere le env', () => {
+    withRientro({ sospesoFino: '2026-09-19T11:00:00Z', metaFino: '2026-09-20T22:00:00Z' }, () => {
+        // lunedi 21/09 alle 03:00 di Roma: fascia del bot secondo il calendario
+        assert.equal(getLeadRouting(utc('2026-09-21T01:00:00Z')), 'bot_only');
+    });
+});
+
+test('la sospensione vince sul meta e meta se si sovrappongono', () => {
+    withRientro({ sospesoFino: '2026-09-25T00:00:00Z', metaFino: '2026-09-20T00:00:00Z' }, () => {
+        assert.equal(getLeadRouting(utc('2026-09-18T12:00:00Z')), 'gdo_only');
+    });
+});
+
+test('una data illeggibile vale come finestra assente, non blocca l intake', () => {
+    withRientro({ sospesoFino: 'domani mattina' }, () => {
+        assert.equal(getLeadRouting(utc('2026-09-20T10:00:00Z')), 'bot_only');
+    });
+});
+
+test('il kill-switch BOT_ROUTING=off vince anche sul rientro', () => {
+    withRientro({ sospesoFino: '2026-09-25T00:00:00Z' }, () => {
+        withEnv('off', () => {
+            assert.equal(getLeadRouting(utc('2026-09-18T12:00:00Z')), 'legacy');
+        });
+    });
+});
