@@ -26,22 +26,39 @@ function ShiftPicker({ kind, title, subtitle, venditori, selected, canEdit, onSa
     const [baseline, setBaseline] = useState<string[]>(selected)
     const [pending, start] = useTransition()
     const [msg, setMsg] = useState<string | null>(null)
+    const [msgIsError, setMsgIsError] = useState(false)
     const dirty = chosen.size !== baseline.length || baseline.some(id => !chosen.has(id))
 
-    const toggle = (id: string) => setChosen(prev => {
-        const next = new Set(prev)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
-        return next
-    })
+    const toggle = (id: string) => {
+        // La spunta cambia: il "Turno salvato." di prima non descrive più quello
+        // che si sta guardando, e lasciarlo lì fa credere di aver già salvato.
+        setMsg(null)
+        setMsgIsError(false)
+        setChosen(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
     const save = () => start(async () => {
         setMsg(null)
+        setMsgIsError(false)
         const ids = [...chosen]
-        const res = await saveLaunchShifts(kind, ids)
-        setMsg(res.ok ? 'Turno salvato.' : res.error)
-        if (res.ok) {
-            setBaseline(ids)
-            onSaved()
+        try {
+            const res = await saveLaunchShifts(kind, ids)
+            setMsg(res.ok ? 'Turno salvato.' : res.error)
+            setMsgIsError(!res.ok)
+            if (res.ok) {
+                setBaseline(ids)
+                onSaved()
+            }
+        } catch {
+            // Guardia che lancia (ruolo/azienda) o rete caduta: senza catch la
+            // Server Action rompeva la pagina e il turno restava mezzo salvato
+            // agli occhi di chi guardava.
+            setMsg('Non è stato possibile salvare')
+            setMsgIsError(true)
         }
     })
 
@@ -84,7 +101,7 @@ function ShiftPicker({ kind, title, subtitle, venditori, selected, canEdit, onSa
                         <Lock className="h-3.5 w-3.5" /> Sola lettura
                     </div>
                 )}
-                {msg && <div className="text-xs font-semibold text-ash-600">{msg}</div>}
+                {msg && <div className={`text-xs font-semibold ${msgIsError ? 'text-red-600' : 'text-ash-600'}`}>{msg}</div>}
             </div>
         </div>
     )
