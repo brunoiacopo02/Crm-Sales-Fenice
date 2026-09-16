@@ -21,6 +21,7 @@ import {
     Calculator,
     Scale,
     CalendarClock,
+    Rocket,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -172,6 +173,10 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                 items: [
                     { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
                     { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
+                    // La pagina del lancio ammette ADMIN, MANAGER e TL: per il
+                    // TL e' sola lettura (turni e copertura li scrive l'admin),
+                    // ma senza la voce ci arrivava solo chi sapeva l'URL.
+                    { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
                 ],
             },
             {
@@ -226,6 +231,7 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                         ...(role === "ADMIN" ? [{ name: "Performance Venditori", href: "/performance-venditori", icon: Trophy }] : []),
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
                         { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
+                        { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
                     ],
                 },

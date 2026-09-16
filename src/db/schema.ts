@@ -1051,6 +1051,27 @@ export const launchPools = pgTable('launchPools', {
     };
 });
 
+// Turni venditori dei lanci (spec 2026-09-14 §3.1, migrazione 0037).
+// kind: 'SERA' | 'GIORNO_DOPO'. Soft delete con removedAt: la storia dei turni
+// sta qui perché leadEvents esige un leadId. Round robin: vedi lib/lancio/slots.ts.
+export const launchShifts = pgTable('launchShifts', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    bucket: text('bucket').notNull(),
+    kind: text('kind').notNull(),
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    lastAssignedAt: timestamp('lastAssignedAt', { withTimezone: true, mode: 'date' }),
+    removedAt: timestamp('removedAt', { withTimezone: true, mode: 'date' }),
+    removedBy: text('removedBy').references(() => users.id),
+    createdBy: text('createdBy').references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => {
+    return {
+        shiftUnique: uniqueIndex('launch_shifts_uq').on(table.bucket, table.kind, table.salesUserId),
+        bucketKindIdx: index('launch_shifts_bucket_kind_idx').on(table.companyId, table.bucket, table.kind),
+    };
+});
+
 // Per-funnel monthly baseline table shown in "Panoramica Generale".
 // - leadCount / fatturatoEur / spesaEur are ABSOLUTE values (edited directly).
 // - appDelta / confermeDelta / trattativeDelta / closeDelta are DELTAS summed

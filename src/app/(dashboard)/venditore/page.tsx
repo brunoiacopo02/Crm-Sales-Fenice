@@ -4,6 +4,7 @@ import { VenditoreDashboardClient } from "@/components/VenditoreDashboardClient"
 import { getVenditoreAppointments } from "@/app/actions/venditoreActions"
 import { OVERDUE_GRACE_HOURS } from "@/lib/venditore/constants"
 import { OutcomeGate } from "@/components/venditore/OutcomeGate"
+import { isInCallNowCycle } from "@/lib/lancio/callNow"
 
 export default async function VenditorePage() {
     const supabase = await createClient();
@@ -23,6 +24,11 @@ export default async function VenditorePage() {
         const appointments = await getVenditoreAppointments(session.user.id)
         overdue = appointments
             .filter(a =>
+                // Chiamate subito del lancio ancora aperte (spec 2026-09-14
+                // §4.4): il loro "appuntamento" è l'ora della richiesta, non una
+                // scadenza — due ore dopo diventerebbe un arretrato che non
+                // esiste. Chiuso il ciclo il lead rientra nel gate come gli altri.
+                !isInCallNowCycle(a) &&
                 a.appointmentDate &&
                 !a.salespersonOutcome &&
                 (now - new Date(a.appointmentDate).getTime()) > graceMs

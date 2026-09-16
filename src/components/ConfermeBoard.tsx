@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useSearchParams } from "next/navigation"
-import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, Inbox, Sun, Sunrise, Archive } from "lucide-react"
+import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, Inbox, Sun, Sunrise, Archive, Rocket } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
 import { markConfermeAlertHandled } from "@/app/actions/confermeAlertActions"
+import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
 
 import dynamic from "next/dynamic"
 
@@ -681,9 +682,27 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             {item.lead.confirmationsOutcome === "confermato" ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                                                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
-                                                                </span>
+                                                                <div className="flex flex-col items-start gap-1">
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Confermato
+                                                                    </span>
+                                                                    {/* Lancio (spec §4.5): i prenotati della mattina nascono già confermati
+                                                                        dal bot con il venditore del round robin. Badge + venditore, così
+                                                                        le Conferme vedono che non c'è nessuna chiamata da fare. */}
+                                                                    {isLeadLancio(item.lead) && (
+                                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                                            <div
+                                                                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 uppercase flex items-center gap-1"
+                                                                                title={`Lancio Web Dev AI · ${lancioSceltaLabel(item.lead.lancioScelta, isCallNowHandoff(item.lead))}`}
+                                                                            >
+                                                                                <Rocket className="w-3 h-3" /> Lancio
+                                                                            </div>
+                                                                            {item.lead.salespersonAssigned && (
+                                                                                <div className="text-[11px] font-semibold text-ash-600">→ {item.lead.salespersonAssigned}</div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             ) : (
                                                                 <div>
                                                                     <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-ember-50 text-ember-600 border border-ember-200/60">

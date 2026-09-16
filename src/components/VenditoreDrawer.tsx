@@ -394,9 +394,14 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                                         <Clock className="w-4 h-4" />
                                         {format(apptDate, "dd MMM yyyy - HH:mm", { locale: it })}
                                     </div>
-                                    <div className="text-xs text-blue-500 mt-1">
-                                        Generato da GDO {lead?.gdoCode}
-                                    </div>
+                                    {/* Nessun GDO fissatore sui lead del lancio
+                                        (li prende il bot): senza la guardia
+                                        usciva "Generato da GDO" e basta. */}
+                                    {lead?.gdoCode && (
+                                        <div className="text-xs text-blue-500 mt-1">
+                                            Generato da GDO {lead.gdoCode}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

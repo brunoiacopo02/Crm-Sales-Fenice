@@ -4,12 +4,15 @@ import { useState, useEffect, useTransition } from "react"
 import { getVenditoreAppointments, getVenditoreFollowUps, saveVenditoreOutcome, startNegotiation, getLeadBriefing, rescheduleFollowUp, parkLead } from "@/app/actions/venditoreActions"
 import { getVenditorePerformance } from "@/app/actions/venditorePerformanceActions"
 import { getMyLatePenalties } from "@/app/actions/venditoriMonitorActions"
-import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History, Timer } from "lucide-react"
+import { getVenditoreLancioLeads, type LancioCallNowLead } from "@/app/actions/lancioActions"
+import { LancioCallNowTab } from "@/components/venditore/LancioCallNowTab"
+import { callNowPendingCount, isInCallNowCycle } from "@/lib/lancio/callNow"
+import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History, Timer, Rocket } from "lucide-react"
 import { toRomeDatetimeLocal, parseRomeDatetimeLocal } from "@/lib/dateUtils"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
 import dynamic from "next/dynamic"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import type { LeadBriefing } from "@/lib/briefing/normalize"
 import { LeadBriefingCard } from "@/components/venditore/LeadBriefingCard"
 import { VenditorePerformanceView } from "@/components/venditore-performance/VenditorePerformanceView"
@@ -26,9 +29,10 @@ import { getGoogleAuthUrl, checkGoogleCalendarConnection, disconnectGoogleCalend
 import { onBusEvent } from "@/lib/realtimeBus"
 
 export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
-    const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA' | 'PERFORMANCE' | 'STORICO'>('LISTA')
+    const [view, setView] = useState<'LISTA' | 'FOLLOWUP' | 'AGENDA' | 'CLASSIFICA' | 'PERFORMANCE' | 'STORICO' | 'LANCIO'>('LISTA')
     const [appointments, setAppointments] = useState<any[]>([])
     const [followUps, setFollowUps] = useState<any[]>([])
+    const [lancioLeads, setLancioLeads] = useState<LancioCallNowLead[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
     const [perfMonth, setPerfMonth] = useState<string>(() => currentYearMonthRome())
@@ -53,6 +57,26 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const [isPending, startTransitionNeg] = useTransition()
     const [pendingLeadId, setPendingLeadId] = useState<string | null>(null)
     const router = useRouter()
+
+    // Deep-link dalla notifica `lancio_call_now`: /venditore?view=lancio.
+    // Stesso schema della board Conferme per `?lead=`: si legge in modo
+    // reattivo (una navigazione sulla stessa rotta non rimonta il sottoalbero
+    // client) e subito dopo l'URL si ripulisce, così un refresh non riporta
+    // sempre sulla tab Lancio. Senza questo la notifica atterrava sulla Lista,
+    // dove questi lead non compaiono nemmeno.
+    const searchParams = useSearchParams()
+    const deepLinkView = searchParams.get('view')
+    useEffect(() => {
+        if (deepLinkView !== 'lancio') return
+        setView('LANCIO')
+        // Se la notifica arriva prima del ping `leads` del bus, la tab si
+        // popola comunque: qui si rifetcha e basta.
+        fetchLancio()
+        const params = new URLSearchParams(window.location.search)
+        params.delete('view')
+        const rest = params.toString()
+        window.history.replaceState({}, '', rest ? `${window.location.pathname}?${rest}` : window.location.pathname)
+    }, [deepLinkView])
 
     const handleStartNegotiation = (app: any) => {
         setPendingLeadId(app.id)
@@ -152,6 +176,16 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         }
     }
 
+    // Lead "chiamata subito" del lancio. Caricati sempre, non solo a tab
+    // aperta: sono loro a decidere se la tab esiste.
+    const fetchLancio = async () => {
+        try {
+            setLancioLeads(await getVenditoreLancioLeads(sellerId))
+        } catch (error) {
+            console.error(error)
+        }
+    }
+
     const handleConnectCalendar = async () => {
         try {
             const url = await getGoogleAuthUrl(sellerId)
@@ -171,14 +205,18 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     useEffect(() => {
         fetchAppointments()
         fetchFollowUps()
+        fetchLancio()
         getMyLatePenalties()
             .then(setLatePenalties)
             .catch(() => setLatePenalties(null))
 
         // Bus Broadcast (migrazione 0019): ping ad ogni cambio sulla tabella
         // leads della company; la refetch è già scoped al venditore.
+        // La notifica `lancio_call_now` viaggia insieme al ping `leads`: la tab
+        // Lancio si popola da sola mentre il venditore sta su un'altra vista.
         const offLeads = onBusEvent('leads', () => {
             fetchAppointments()
+            fetchLancio()
         })
 
         return () => {
@@ -207,7 +245,18 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     const overdueCount = followUps.filter(f => f.bucket === 'overdue').length
 
+    // Badge della tab: i lead ancora da chiamare o da esitare.
+    const lancioDaFare = callNowPendingCount(lancioLeads)
+
     const filteredAppointments = appointments.filter(app => {
+        // Chiamate subito del lancio ANCORA APERTE: vivono solo nella tab
+        // Lancio, in Lista sarebbero un appuntamento "delle 21:07" senza senso
+        // per chi legge. Dopo i tre NR (o con un esito) il lead torna un
+        // appuntamento normale e qui ci deve rientrare — se le Conferme lo
+        // ri-confermano e lo riassegnano, altrimenti sparirebbe da ogni vista.
+        // Vale anche per l'Agenda, che filtra sulla stessa lista.
+        if (isInCallNowCycle(app)) return false
+
         // Search
         const searchLower = search.toLowerCase()
         if (search && !((app.name?.toLowerCase().includes(searchLower)) ||
@@ -262,8 +311,9 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
             {/* Toolbar */}
             <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-soft border border-ash-200/60 flex flex-col md:flex-row gap-4 items-center justify-between">
 
-                {/* View Toggle */}
-                <div className="flex bg-ash-100/80 p-1 rounded-lg">
+                {/* View Toggle — flex-wrap: a 400 px sette tab su una riga sola
+                    spingevano la barra fuori dallo schermo. */}
+                <div className="flex flex-wrap bg-ash-100/80 p-1 rounded-lg">
                     <button
                         onClick={() => setView('LISTA')}
                         className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${view === 'LISTA' ? 'bg-white shadow-soft text-brand-charcoal' : 'text-ash-500 hover:text-ash-700'}`}
@@ -281,6 +331,20 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                             <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold">{overdueCount}</span>
                         )}
                     </button>
+                    {/* Serata di lancio: la tab esiste solo per chi ha lead
+                        "chiamami adesso" assegnati. */}
+                    {lancioLeads.length > 0 && (
+                        <button
+                            onClick={() => setView('LANCIO')}
+                            className={`relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${view === 'LANCIO' ? 'bg-white shadow-soft text-brand-charcoal' : 'text-ash-500 hover:text-ash-700'}`}
+                        >
+                            <Rocket className="h-4 w-4" />
+                            Lancio: chiamate subito
+                            {lancioDaFare > 0 && (
+                                <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-amber-500 text-white text-xs font-bold">{lancioDaFare}</span>
+                            )}
+                        </button>
+                    )}
                     <button
                         onClick={() => setView('STORICO')}
                         className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${view === 'STORICO' ? 'bg-white shadow-soft text-brand-charcoal' : 'text-ash-500 hover:text-ash-700'}`}
@@ -636,6 +700,17 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                             )}
                         </div>
                     </div>
+                ) : view === 'LANCIO' ? (
+                    <LancioCallNowTab
+                        leads={lancioLeads}
+                        onChanged={() => { fetchLancio(); fetchAppointments() }}
+                        onOpen={(lead) => {
+                            // Il telefono è già in chiaro sulla card: il check-in
+                            // qui serve solo a sbloccare il form dell'esito.
+                            if (lead.negotiationStartedAt) openLead(lead, false)
+                            else handleStartNegotiation(lead)
+                        }}
+                    />
                 ) : view === 'AGENDA' ? (
                     <div className="p-6 bg-gradient-to-b from-ash-50/50 to-white">
                         {/* Agenda View */}
@@ -742,6 +817,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                     closeDrawer()
                                     fetchAppointments()
                                     fetchFollowUps()
+                                    fetchLancio()
                                 }}
                             />
                         </div>

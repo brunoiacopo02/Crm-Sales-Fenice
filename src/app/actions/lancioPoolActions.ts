@@ -21,6 +21,7 @@ import {
     LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_FUNNEL, LANCIO_LIST_NAME_NORMALIZED, LANCIO_POOL_LABEL,
     isLancioIntakeEnabled, buildLancioLeadRow, buildLancioIntakeEventRows, lancioFieldForLead,
 } from "@/lib/lancio/intake"
+import { findLancioBotId } from "@/lib/lancio/botAccount"
 import { lancioContactId, readLancioAcContact } from "@/lib/lancio/acContact"
 import { LANCIO_PUSH_LOCK_KEY, lockPreso } from "@/lib/lancio/pushLock"
 
@@ -59,13 +60,8 @@ export type LancioPoolStatus = {
 
 /** L'account del bot fissatore (GDO 201). null = non c'e' o e' disattivo. */
 async function findBotId(): Promise<string | null> {
-    const [bot] = await db.select({ id: users.id }).from(users).where(and(
-        eq(users.companyId, LANCIO_COMPANY),
-        eq(users.role, 'GDO'),
-        eq(users.isBot, true),
-        eq(users.isActive, true),
-    )).limit(1)
-    return bot?.id ?? null
+    // Definizione unica in botAccount: la stessa che usano le API /api/bot/lancio/*.
+    return await findLancioBotId()
 }
 
 export async function getLancioPoolStatus(): Promise<LancioPoolStatus | null> {
