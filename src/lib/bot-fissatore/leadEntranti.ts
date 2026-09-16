@@ -20,6 +20,7 @@
 
 import { signPayload } from '@/lib/marketing-webhooks/signing';
 import { normalizePhoneStrict } from '@/lib/phoneNormalize';
+import { LANCIO_BUCKET, LANCIO_FUNNEL, LANCIO_SLUG, type LancioIngresso } from '@/lib/lancio/intake';
 import { personKeyOf } from './personKey';
 
 /** Default sovrascrivibile via env, come per BOT_INTAKE_URL / AGENDA_BOT_URL. */
@@ -257,6 +258,20 @@ export function normalizzaLeadEntrante(raw: LeadEntranteRaw): NormalizeResult {
     };
 }
 
+/**
+ * `provenienza` del pulsante WhatsApp del webinar (spec lancio §5.4, §6.3). Il bot
+ * la manda com'è ("Lancio Web Dev AI"); `normalizzaLeadEntrante` la porta in
+ * maiuscolo come ogni funnel, quindi il confronto è case-insensitive e tollera
+ * gli spazi doppi.
+ *
+ * Il nome della LISTA ActiveCampaign ("Lancio Web Developer AI") NON è il funnel e
+ * non deve passare di qui: un lead della lista entra dal webhook AC, con il suo
+ * `lancioIngresso='lista'`.
+ */
+export function isProvenienzaLancioWebDev(provenienza: string | null | undefined): boolean {
+    return (provenienza ?? '').trim().replace(/\s+/g, ' ').toLowerCase() === LANCIO_FUNNEL.toLowerCase();
+}
+
 /** Un lead del CRM già esistente sullo stesso numero. */
 export interface LeadEsistente {
     id: string;
@@ -265,6 +280,184 @@ export interface LeadEsistente {
     createdAt: Date;
     assignedToId: string | null;
     companyId: string;
+    /** Bucket di lancio (null per i lead normali). Serve alla dedup del lancio. */
+    launchBucket?: string | null;
+    /** `'lista' | 'pulsante_webinar'` sui lead del bucket, null altrove. */
+    lancioIngresso?: string | null;
+}
+
+/**
+ * Su quali lead Fenice già esistenti ci si può "collegare" invece di creare.
+ *
+ * Fuori dal lancio: tutti (poi il chiamante prende il più recente). Nel lancio:
+ * SOLO chi è già nel bucket del lancio — un lead di un altro funnel sullo stesso
+ * numero non blocca la creazione, perché i duplicati cross-funnel del lancio sono
+ * voluti (decisione 1 del 14/09: stessa regola del webhook AC per la lista 132).
+ */
+export function candidatiPerAdozione<T extends LeadEsistente>(fenice: T[], lancio: boolean): T[] {
+    if (!lancio) return fenice;
+    return fenice.filter((c) => c.launchBucket === LANCIO_BUCKET);
+}
+
+/** Riga da inserire in `leads` per un lead entrante nuovo. Pura: la scrive `adottaLead`. */
+export interface NuovoLeadValori {
+    id: string;
+    name: string;
+    phone: string;
+    email: null;
+    funnel: string;
+    source: string;
+    status: 'NEW';
+    callCount: 0;
+    assignedToId: string;
+    createdAt: Date;
+    assignedAt: Date;
+    updatedAt: Date;
+    companyId: 'fenice';
+    launchBucket: string | null;
+    lancioIngresso: LancioIngresso | null;
+}
+
+/**
+ * I valori della riga `leads` di un lead entrante nuovo. Per TELEGRAM, INBOUND e
+ * SCONOSCIUTO sono esattamente quelli di sempre: il lancio aggiunge un ramo, non
+ * cambia il flusso esistente ("i lead di Telegram che scrivono sono roba molto
+ * diversa", PO 14/09).
+ */
+export function valoriNuovoLead(
+    lead: LeadEntranteNormalizzato,
+    botId: string,
+    adesso: Date,
+    id: string,
+): NuovoLeadValori {
+    const lancio = isProvenienzaLancioWebDev(lead.funnel);
+    return {
+        id,
+        name: lead.name,
+        phone: lead.phone,
+        email: null,
+        // Nel lancio il funnel è quello canonico (con le maiuscole giuste): è il
+        // valore su cui filtrano KPI e /import, non la stringa maiuscola del
+        // contratto del bot.
+        funnel: lancio ? LANCIO_FUNNEL : lead.funnel,
+        source: SOURCE_INBOUND,
+        status: 'NEW',
+        callCount: 0,
+        // La chat è già del bot: darla a un GDO umano gli toglierebbe una
+        // conversazione che sta conducendo lui, e romperebbe la prova di
+        // appartenenza che /api/bot/outcome pretende per un appuntamento.
+        assignedToId: botId,
+        // `createdAt` = quando ha scritto: è lì che questa persona è entrata, ed è
+        // lì che le analisi di funnel devono vederla. `assignedAt` = adesso,
+        // perché è adesso che entra in circolo (migr. 0027).
+        createdAt: lead.scrittoIl ?? adesso,
+        assignedAt: adesso,
+        updatedAt: adesso,
+        companyId: 'fenice',
+        launchBucket: lancio ? LANCIO_BUCKET : null,
+        lancioIngresso: lancio ? 'pulsante_webinar' : null,
+    };
+}
+
+export type EventoNuovoLead = {
+    eventType: 'IMPORTED' | 'ASSIGNED' | 'LANCIO_INTAKE';
+    toSection?: 'Prima Chiamata';
+    metadata: Record<string, unknown>;
+};
+
+/**
+ * Gli eventi da scrivere sulla timeline di un lead entrante appena creato, in
+ * ordine. Fuori dal lancio sono i due di sempre, identici campo per campo.
+ */
+export function eventiNuovoLead(lead: LeadEntranteNormalizzato, valori: NuovoLeadValori): EventoNuovoLead[] {
+    const lancio = valori.launchBucket === LANCIO_BUCKET;
+    const eventi: EventoNuovoLead[] = [
+        {
+            eventType: 'IMPORTED',
+            toSection: 'Prima Chiamata',
+            metadata: {
+                source: SOURCE_INBOUND,
+                provenienza: lead.funnel,
+                conversationId: lead.conversationId,
+                statoBot: lead.statoBot,
+                scrittoIl: lead.scrittoIl?.toISOString() ?? null,
+            },
+        },
+        {
+            eventType: 'ASSIGNED',
+            metadata: {
+                assignedToUser: valori.assignedToId,
+                source: SOURCE_INBOUND,
+                adozioneChatEntrante: true,
+                // `routing` esiste solo nel lancio: è la chiave con cui il
+                // webhook AC marca le assegnazioni del bucket.
+                ...(lancio ? { routing: 'lancio' } : {}),
+            },
+        },
+    ];
+    if (lancio) {
+        eventi.push({
+            eventType: 'LANCIO_INTAKE',
+            // Stesse chiavi di `buildLancioIntakeEventRows` (slug/ingresso/via),
+            // così una query sola legge i due ingressi del bucket. `via` dice da
+            // quale porta è entrato: qui la chat, lì la lista AC.
+            metadata: {
+                slug: LANCIO_SLUG,
+                ingresso: valori.lancioIngresso,
+                via: 'lead_entrante',
+                bucket: valori.launchBucket,
+                funnel: valori.funnel,
+                conversationId: lead.conversationId,
+            },
+        });
+    }
+    return eventi;
+}
+
+/**
+ * Se su un lead del bucket a cui ci si sta COLLEGANDO va scritto
+ * `lancioIngresso='pulsante_webinar'`.
+ *
+ * Perché serve: chi era già in lista può essere stato distribuito a un GDO umano
+ * dalla card del pool, e da quel momento `assignedToId` non è più il bot. Se poi
+ * preme il pulsante del webinar, `loadLancioLead` (botGuard) lo accetterebbe solo
+ * per `lancioIngresso === 'pulsante_webinar'`: senza questo aggiornamento le API
+ * del bot (`/slots`, `/book`, `/call-now`) risponderebbero 403 su una chat che il
+ * bot sta conducendo davvero.
+ *
+ * NON si tocca l'assegnatario: il lead resta di chi ce l'ha (decisione del PO sui
+ * lead ridati), qui cambia solo da quale porta è entrato.
+ *
+ * Falso quando il campo è già a posto: il push si ripete, e un aggiornamento a
+ * vuoto significherebbe un secondo `LANCIO_INTAKE` identico sulla timeline.
+ */
+export function serveIngressoPulsante(
+    esistente: Pick<LeadEsistente, 'launchBucket' | 'lancioIngresso'>,
+    lancio: boolean,
+): boolean {
+    if (!lancio) return false;
+    if (esistente.launchBucket !== LANCIO_BUCKET) return false;
+    return esistente.lancioIngresso !== 'pulsante_webinar';
+}
+
+/**
+ * Il `LANCIO_INTAKE` di un lead del bucket a cui ci si è collegati (non creato):
+ * `collegato: true` distingue sulla timeline "è entrato adesso" da "c'era già, ed
+ * è arrivato dal pulsante".
+ */
+export function eventoIngressoCollegato(lead: LeadEntranteNormalizzato): EventoNuovoLead {
+    return {
+        eventType: 'LANCIO_INTAKE',
+        metadata: {
+            slug: LANCIO_SLUG,
+            ingresso: 'pulsante_webinar',
+            via: 'lead_entrante',
+            collegato: true,
+            bucket: LANCIO_BUCKET,
+            funnel: LANCIO_FUNNEL,
+            conversationId: lead.conversationId,
+        },
+    };
 }
 
 export type Azione =

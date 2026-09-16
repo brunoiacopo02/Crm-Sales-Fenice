@@ -15,7 +15,8 @@ import {
     type LeadEntranteNormalizzato,
     type LeadEsistente,
 } from '@/lib/bot-fissatore/leadEntranti';
-import { adottaLead, FENICE } from '@/lib/bot-fissatore/adozione';
+import { adottaLead, FENICE, type RigaAdottata } from '@/lib/bot-fissatore/adozione';
+import { lancioFieldForLead } from '@/lib/lancio/intake';
 
 export const dynamic = 'force-dynamic';
 
@@ -268,7 +269,11 @@ export async function POST(req: NextRequest) {
      * senza leadId, due righe sullo stesso lead) invece di doverla escludere
      * caso per caso.
      */
-    const adottati: Array<{ leadId: string; lead: LeadEntranteNormalizzato; bloccato: boolean; esito: Esito }> = [];
+    const adottati: Array<{
+        leadId: string; lead: LeadEntranteNormalizzato; bloccato: boolean; esito: Esito;
+        /** Com'è la riga a DB: è da lì che l'intake prende funnel e campo `lancio`. */
+        riga: RigaAdottata;
+    }> = [];
 
     // ---------- 1. Creazione / collegamento ----------
     // La logica sta in `adottaLead`, condivisa con /api/bot/lead-entrante: due
@@ -288,7 +293,7 @@ export async function POST(req: NextRequest) {
                 collegato: res.esito === 'esistente',
             };
             esiti.push(esito);
-            adottati.push({ leadId: res.leadId, lead: a.lead, bloccato: res.bloccato, esito });
+            adottati.push({ leadId: res.leadId, lead: a.lead, bloccato: res.bloccato, esito, riga: res.riga });
         } catch (e) {
             esiti.push({ telefono: a.lead.phone, errore: String(e) });
         }
@@ -318,8 +323,17 @@ export async function POST(req: NextRequest) {
                 name: x.lead.name,
                 phone: x.lead.phone,
                 email: null,
-                funnel: x.lead.funnel,
+                // Il funnel della RIGA, non la provenienza grezza del contratto:
+                // nel lancio a DB c'è il funnel canonico, ed è quello che il bot
+                // deve vedere.
+                funnel: x.riga.funnel,
                 companyId: FENICE,
+                // Un lead del lancio deve arrivare al bot come lancio, o riceve
+                // l'apertura di Mario invece del benvenuto del lancio (stesso
+                // campo di /api/admin/bot-push-leads e lancioPoolActions).
+                // `undefined` fuori dal bucket: la chiave non finisce nel JSON e
+                // il payload dei lead normali resta identico a prima.
+                lancio: lancioFieldForLead(x.riga),
             });
             e.intake = 'status' in r ? `${r.result} (${r.status})` : r.result;
         }
