@@ -23,6 +23,7 @@ import { users, leads, leadEvents } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
+import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { revalidatePath } from "next/cache";
 
 /** Solo ADMIN: questa scheda sposta i lead di tutti, non è una pagina di reparto. */
@@ -62,11 +63,20 @@ export async function listGdoPools(): Promise<GdoPoolRow[]> {
 
     // Un giro solo di query: i conteggi arrivano come sottoquery correlate,
     // così la pagina non fa una richiesta per GDO.
+    // Due accortezze sulla forma, entrambe obbligate:
+    //  - niente alias sulla tabella: `contaNeiKpiSql()` cita le colonne come
+    //    "leads"."…", e con `FROM leads l` Postgres non le troverebbe più;
+    //  - il WHERE passa da `and(...)`, cioè da un SQL annidato. In una select a
+    //    tabella singola Drizzle toglie il nome tabella alle colonne di PRIMO
+    //    livello del template, e `${users.id}` diventava un nudo `"id"` che
+    //    dentro la sottoquery Postgres risolveva su leads.id: conteggi a zero.
     const contaLead = (cond: ReturnType<typeof sql>) => sql<number>`(
-        SELECT count(*)::int FROM leads l
-        WHERE l."assignedToId" = ${users.id}
-          AND l."companyId" = ${ctx.companyId}
-          AND ${cond}
+        SELECT count(*)::int FROM ${leads}
+        WHERE ${and(
+            eq(leads.assignedToId, users.id),
+            eq(leads.companyId, ctx.companyId),
+            cond,
+        )}
     )`;
 
     const rows = await db.select({
@@ -80,10 +90,13 @@ export async function listGdoPools(): Promise<GdoPoolRow[]> {
         ridati: users.botReturnIntake,
         scorta: users.freshOverflowScorta,
         dailyFreshCap: users.dailyFreshCap,
-        maiChiamati: contaLead(sql`l.status = 'NEW' AND l."callCount" = 0`),
-        inLavorazione: contaLead(sql`l.status = 'IN_PROGRESS'`),
+        // Gli scarti mai chiamati di un'infornata anomala non sono coda di
+        // prima chiamata: per decisione PO non li lavora nessun umano, e con
+        // loro dentro la "mole vera" del bot diceva ~7.000.
+        maiChiamati: contaLead(sql`${leads.status} = 'NEW' AND ${leads.callCount} = 0 AND ${contaNeiKpiSql()}`),
+        inLavorazione: contaLead(sql`${leads.status} = 'IN_PROGRESS'`),
         freschiOggi: contaLead(
-            sql`l."createdAt" >= (to_char(now() AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'`,
+            sql`${leads.createdAt} >= (to_char(now() AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'`,
         ),
     }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, "GDO")));
 
@@ -170,6 +183,10 @@ export async function setGdoActive(
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.assignedToId, gdoUserId),
                 sql`${leads.status} IN ('NEW', 'IN_PROGRESS')`,
+                // Gli scarti di un'infornata anomala non bloccano lo
+                // spegnimento: nessun umano deve lavorarli, quindi lasciarli
+                // su un account spento non fa perdere niente a nessuno.
+                contaNeiKpiSql(),
             ));
             const aperti = conteggio?.n ?? 0;
             if (aperti > 0) {
@@ -226,6 +243,10 @@ export async function spostaLeadAperti(
             eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, daGdoId),
             sql`${leads.status} IN ('NEW', 'IN_PROGRESS')`,
+            // Gli scarti di un'infornata anomala restano dove sono: spostarli
+            // vorrebbe dire scaricare migliaia di numeri mai chiamati su un
+            // collega, e per decisione PO non tornano ai GDO umani.
+            contaNeiKpiSql(),
         ));
         if (daSpostare.length === 0) return { success: true, spostati: 0 };
 

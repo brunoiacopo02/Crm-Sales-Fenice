@@ -6,6 +6,7 @@ import { and, eq, gte, lt, lte, or, isNull, isNotNull, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isRealGdo, isAnsweredLog } from "@/lib/kpi/canon"
+import { contaNeiKpi } from "@/lib/intakeBatch"
 import { operativaPeriodBounds } from "@/lib/kpi/periodBounds"
 
 export type OperativaDataRow = {
@@ -198,6 +199,8 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         db.select({
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
+            // Serve a contaNeiKpi() nel ciclo di conteggio qui sotto.
+            intakeBatch: leads.intakeBatch,
         }).from(leads)
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
@@ -328,6 +331,9 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
     // del calcolo CPL nel Costo per Appuntamento / Contratto.
     for (const lead of assignedLeadsRaw) {
         if (!lead.assignedToId || !gdoDataMap.has(lead.assignedToId)) continue
+        // Gli scarti mai chiamati di un'infornata anomala non sono lead
+        // assegnati: gonfierebbero la base del costo per appuntamento.
+        if (!contaNeiKpi(lead)) continue
         const row = gdoDataMap.get(lead.assignedToId)!
         row.leadAssegnati++
         const fnl = lead.funnel?.toUpperCase() || ''

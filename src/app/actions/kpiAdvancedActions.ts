@@ -7,6 +7,7 @@ import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isRealGdo, apptSetAt, isNeverAnsweredLog, isAnsweredLog } from '@/lib/kpi/canon'
+import { contaNeiKpiSql } from '@/lib/intakeBatch'
 
 import { cache } from "react"
 
@@ -66,6 +67,12 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     // Apply lead-level filters
     const leadConditions: any[] = [companyScope(ctx, leads.companyId)]
+    // Gli scarti mai chiamati di un'infornata anomala non sono lead acquisiti:
+    // gonfiavano "Lead Importati" e portavano nel dropdown Funnel due voci
+    // fantasma (JOBSIMULATOR, LEAD BF 2024) che nessuno ha mai lavorato.
+    // Sicuro nel WHERE: gli appuntamenti veri di quell'infornata stanno tutti
+    // sull'account bot, che questa pagina esclude già a valle.
+    leadConditions.push(contaNeiKpiSql())
     if (filters.funnel) leadConditions.push(eq(leads.funnel, filters.funnel))
     if (filters.gdoId) leadConditions.push(eq(leads.assignedToId, filters.gdoId))
 
@@ -543,6 +550,8 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             gte(leads.appointmentCreatedAt, startBound),
             lt(leads.appointmentCreatedAt, end),
             eq(leads.isSelfBooked, false),
+            // Per robustezza: un'infornata anomala non entra nel throughput.
+            contaNeiKpiSql(),
         ))
 
     const rejectedLeads = await db.select({
@@ -558,6 +567,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             gte(leads.updatedAt, startBound),
             lt(leads.updatedAt, end),
             eq(leads.isSelfBooked, false),
+            contaNeiKpiSql(),
         ))
 
     const closedByLead = new Map<string, { assignedToId: string; callCount: number }>()

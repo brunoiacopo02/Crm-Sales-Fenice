@@ -6,6 +6,7 @@ import { eq, and, sql, gte, lt, lte, or, inArray, isNotNull, asc } from 'drizzle
 import crypto from 'crypto';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { isStatsGdo, apptSetAt as canonApptSetAt } from '@/lib/kpi/canon';
+import { contaNeiKpi } from '@/lib/intakeBatch';
 import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils';
 import { countWorkingDaysInMonth, countWorkingDaysElapsed } from '@/lib/workingDaysUtils';
 
@@ -340,7 +341,12 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     // /import è il momento in cui l'admin li distribuisce, che è quando
     // entrano davvero nel lavoro del mese.
     const entrataNelFunnel = (l: { assignedAt: Date | null; createdAt: Date }) => l.assignedAt ?? l.createdAt;
-    const totaleLeadDelMese = monthLeads.filter(l => inMonth(entrataNelFunnel(l))).length;
+    // Il filtro sull'infornata anomala sta QUI, sul contatore, e non nel WHERE:
+    // monthLeads pesca con un OR su tutte le date evento, e nel WHERE avrebbe
+    // cancellato anche gli appuntamenti veri nati da quell'infornata. Senza,
+    // settembre 2026 mostrava 14.346 lead invece di 7.451 e la % fissati
+    // usciva schiacciata (5,46% invece di 10,50%).
+    const totaleLeadDelMese = monthLeads.filter(l => inMonth(entrataNelFunnel(l)) && contaNeiKpi(l)).length;
 
     // ACT Counters
     let actAppsFissati = 0;
@@ -368,7 +374,9 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         const bucket = isDatabase ? breakdownDatabase : breakdownNuovi;
 
         // Totale categoria = lead della categoria preso in carico nel mese
-        if (inMonth(entrataNelFunnel(lead))) {
+        // (stessa regola di totaleLeadDelMese: gli scarti dell'infornata
+        // anomala non contano, altrimenti nuovi+database ≠ totale)
+        if (inMonth(entrataNelFunnel(lead)) && contaNeiKpi(lead)) {
             bucket.totale++;
         }
 

@@ -16,6 +16,7 @@ import { and, eq, gte, lt, lte, isNull, isNotNull, inArray, or, sql } from "driz
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { workingDaysBetween, currentYearMonthRome } from "@/lib/workingDaysUtils";
 import { MANAGER_TARGET_APP_PER_GDO_DAY as TARGET_APP_PER_GDO_DAY } from "@/lib/kpi/canon";
+import { contaNeiKpiSql } from "@/lib/intakeBatch";
 
 // Target espliciti richiesti dal management (Correzioni CRM 2026-06-11).
 // TARGET_APP_PER_GDO_DAY (soglia giudizio manager = 10) ora importata da canon.
@@ -185,6 +186,10 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
                 isNull(leads.recallDate),
                 lt(leads.callCount, 3),
                 isNotNull(leads.assignedToId),
+                // Gli scarti di un'infornata anomala non sono scorta da
+                // lavorare: per decisione PO non tornano ai GDO umani, e
+                // contarli farebbe sembrare pieno un GDO che è a secco.
+                contaNeiKpiSql(),
             ))
             .groupBy(leads.assignedToId);
         const stockByGdo = new Map(stockRows.map(r => [r.gdoId as string, r.c]));
@@ -213,6 +218,10 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${todayStart}`,
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) <= ${todayEnd}`,
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+                // Un'infornata anomala non sono "lead nuovi": contano solo
+                // quelli davvero lavorati (funnel Database), gli altri sono
+                // scarti mai chiamati.
+                contaNeiKpiSql(),
             ));
         const byFunnelMap = new Map<string, number>();
         for (const r of newRows) {

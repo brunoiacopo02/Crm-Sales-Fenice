@@ -46,3 +46,39 @@ export const BATCH_FREDDI: readonly string[] = ['DB_LISTA133_20260915'];
  * ribilanciamento senza però toglierla dai KPI, o viceversa. Fonderle adesso
  * vorrebbe dire scoprire troppo tardi che erano due cose diverse.
  */
+
+// ---------------------------------------------------------------------------
+// Come si applica la regola, nelle due forme che servono.
+// ---------------------------------------------------------------------------
+
+import { sql, inArray, isNull, or, not } from 'drizzle-orm';
+import { leads } from '@/db/schema';
+
+/**
+ * Predicato SQL: questo lead conta nei KPI di acquisizione?
+ *
+ * Da usare nel WHERE delle query che CONTANO lead acquisiti. Attenzione: NON va
+ * messo nel WHERE delle query che pescano i lead per contarne poi appuntamenti
+ * e presenze in memoria — lì taglierebbe via anche le conversioni vere. Per
+ * quelle c'è `contaNeiKpi()`, da applicare al solo contatore.
+ */
+export const contaNeiKpiSql = () => or(
+    isNull(leads.intakeBatch),
+    // `inArray` e non un `= ANY(...)` scritto a mano: passare un array JS come
+    // singolo parametro dentro un template `sql` lo serializza in un modo che
+    // Postgres rifiuta, e la query esplode a runtime invece che in compilazione.
+    // E' costato la dashboard Sales Manager in produzione il 16/09/2026.
+    not(inArray(leads.intakeBatch, [...BATCH_ESCLUSI_DAI_KPI])),
+    sql`LOWER(COALESCE(${leads.funnel}, '')) = 'database'`,
+)!;
+
+/**
+ * Stessa regola, in JavaScript, per le funzioni che pescano i lead con un OR su
+ * più date e poi contano in memoria: lì il filtro va sul contatore, non sulla
+ * query, altrimenti spariscono anche gli appuntamenti veri nati da
+ * quell'infornata.
+ */
+export const contaNeiKpi = (l: { intakeBatch: string | null; funnel: string | null }): boolean =>
+    !l.intakeBatch
+    || !BATCH_ESCLUSI_DAI_KPI.includes(l.intakeBatch)
+    || (l.funnel ?? '').trim().toLowerCase() === 'database';

@@ -5,6 +5,7 @@ import { leads, marketingBudgets } from "@/db/schema";
 import { and, eq, ne, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { leadIntakeAt } from '@/lib/kpi/canon';
+import { contaNeiKpi } from '@/lib/intakeBatch';
 
 const OFFICIAL_FUNNELS = [
     "TELEGRAM",
@@ -129,7 +130,10 @@ export async function getMarketingStats(monthString: string) {
         const g = grouped[rawFunnel];
         if (!g) continue;
 
-        const leadAcquisitoNelMese = inMonth(leadIntakeAt(l));
+        // Il filtro sull'infornata anomala sta sul contatore, non nel WHERE:
+        // la query pesca con un OR su tutte le date evento, e nel WHERE
+        // avrebbe cancellato anche gli appuntamenti veri di quell'infornata.
+        const leadAcquisitoNelMese = inMonth(leadIntakeAt(l)) && contaNeiKpi(l);
         if (leadAcquisitoNelMese) {
             g.leads++;
             if (l.assignedToId) g.leadAssegnati++;
@@ -306,7 +310,9 @@ export async function getMarketingStatsByGdo(monthString: string) {
         // Lead assegnati: entrato in circolazione nel mese (leadIntakeAt) e
         // assegnato. Sul createdAt puro i lead dei pool distribuiti dal TL
         // finivano tutti nel mese in cui il pool era stato sincronizzato da AC.
-        if (inMonth(leadIntakeAt(l)) && l.assignedToId) {
+        // Filtro infornata anomala sul contatore, non nel WHERE (vedi
+        // getMarketingStats): qui sotto si contano anche gli appuntamenti.
+        if (inMonth(leadIntakeAt(l)) && l.assignedToId && contaNeiKpi(l)) {
             gdoStat.leadAssegnati++;
         }
 
