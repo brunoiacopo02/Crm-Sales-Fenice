@@ -6,7 +6,7 @@ import { getVenditorePerformance } from "@/app/actions/venditorePerformanceActio
 import { getMyLatePenalties } from "@/app/actions/venditoriMonitorActions"
 import { getVenditoreLancioLeads, type LancioCallNowLead } from "@/app/actions/lancioActions"
 import { LancioCallNowTab } from "@/components/venditore/LancioCallNowTab"
-import { callNowPendingCount } from "@/lib/lancio/callNow"
+import { callNowPendingCount, isInCallNowCycle } from "@/lib/lancio/callNow"
 import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History, Timer, Rocket } from "lucide-react"
 import { toRomeDatetimeLocal, parseRomeDatetimeLocal } from "@/lib/dateUtils"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
@@ -246,9 +246,13 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const lancioDaFare = callNowPendingCount(lancioLeads)
 
     const filteredAppointments = appointments.filter(app => {
-        // Chiamate subito del lancio: vivono solo nella tab Lancio. In Lista
-        // sarebbero un appuntamento "delle 21:07" senza senso per chi legge.
-        if (app.lancioScelta === 'chiamata_subito') return false
+        // Chiamate subito del lancio ANCORA APERTE: vivono solo nella tab
+        // Lancio, in Lista sarebbero un appuntamento "delle 21:07" senza senso
+        // per chi legge. Dopo i tre NR (o con un esito) il lead torna un
+        // appuntamento normale e qui ci deve rientrare — se le Conferme lo
+        // ri-confermano e lo riassegnano, altrimenti sparirebbe da ogni vista.
+        // Vale anche per l'Agenda, che filtra sulla stessa lista.
+        if (isInCallNowCycle(app)) return false
 
         // Search
         const searchLower = search.toLowerCase()
@@ -304,8 +308,9 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
             {/* Toolbar */}
             <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-soft border border-ash-200/60 flex flex-col md:flex-row gap-4 items-center justify-between">
 
-                {/* View Toggle */}
-                <div className="flex bg-ash-100/80 p-1 rounded-lg">
+                {/* View Toggle — flex-wrap: a 400 px sette tab su una riga sola
+                    spingevano la barra fuori dallo schermo. */}
+                <div className="flex flex-wrap bg-ash-100/80 p-1 rounded-lg">
                     <button
                         onClick={() => setView('LISTA')}
                         className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${view === 'LISTA' ? 'bg-white shadow-soft text-brand-charcoal' : 'text-ash-500 hover:text-ash-700'}`}

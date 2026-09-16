@@ -37,7 +37,7 @@ export function LancioCallNowTab({ leads, onOpen, onChanged }: {
                 else if (res.handoff) alert('Terzo tentativo a vuoto: il lead passa alle Conferme.')
                 onChanged()
             } catch {
-                alert('Errore di rete: il tentativo non è stato registrato. Riprova.')
+                alert('Errore di rete: il tentativo non è stato registrato. Riprova.')
             } finally {
                 setBusyId(null)
             }

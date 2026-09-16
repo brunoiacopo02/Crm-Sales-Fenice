@@ -8,7 +8,8 @@
 
 import { db } from '@/db'
 import { leads, salesAttempts, salesLatePenalties } from '@/db/schema'
-import { and, eq, ne, or, isNotNull, isNull, gte, lt, inArray } from 'drizzle-orm'
+import { and, eq, isNotNull, isNull, gte, lt, inArray } from 'drizzle-orm'
+import { NOT_IN_CALL_NOW_CYCLE } from '@/lib/lancio/callNowSql'
 import {
     selectLatePenalties,
     penaltyKey,
@@ -35,11 +36,10 @@ export function activationDate(): Date | null {
     return state.active ? state.from : null
 }
 
-/**
- * Chiamate subito del lancio (spec 2026-09-14 §4.4): nessuna multa,
- * l'"appuntamento" è l'ora della richiesta, non una scadenza.
- */
-const NON_CHIAMATA_SUBITO = or(isNull(leads.lancioScelta), ne(leads.lancioScelta, 'chiamata_subito'))
+// Chiamate subito del lancio (spec 2026-09-14 §4.4): finché il ciclo è aperto
+// nessuna multa, l'"appuntamento" è l'ora della richiesta e non una scadenza.
+// Chiuso il ciclo — tre NR o un esito — il lead torna un appuntamento come
+// tutti gli altri e le multe ricominciano a valere.
 
 /** Appuntamenti passati e mai esitati. */
 async function appointmentCandidates(notBefore: Date, now: Date): Promise<DueCandidate[]> {
@@ -52,7 +52,7 @@ async function appointmentCandidates(notBefore: Date, now: Date): Promise<DueCan
         isNotNull(leads.salespersonUserId),
         isNotNull(leads.appointmentDate),
         isNull(leads.salespersonOutcome),
-        NON_CHIAMATA_SUBITO,
+        NOT_IN_CALL_NOW_CYCLE,
         gte(leads.appointmentDate, notBefore),
         lt(leads.appointmentDate, now),
     ))
@@ -85,7 +85,7 @@ async function followUpCandidates(notBefore: Date, now: Date): Promise<DueCandid
           isNotNull(leads.salespersonUserId),
           eq(leads.salespersonOutcome, 'Non chiuso'),
           isNull(leads.inLavorazioneAt),
-          NON_CHIAMATA_SUBITO,
+          NOT_IN_CALL_NOW_CYCLE,
       ))
 
     const latestByLead = new Map<string, typeof rows[number]>()

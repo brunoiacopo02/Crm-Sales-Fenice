@@ -1,7 +1,7 @@
 "use server"
 
 import crypto from "crypto"
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db"
 import { launchShifts, leads, salesAttempts, salesWeekPlans, users } from "@/db/schema"
@@ -14,7 +14,8 @@ import { dayFactsFor, getShiftMembers, venditoreLabel } from "@/lib/lancio/shift
 import { findLancioBotId } from "@/lib/lancio/botAccount"
 import { getLancioMonitor, type LancioMonitor } from "@/lib/lancio/monitor"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
-import { callNowColumn, nextCallNowState, type CallNowColumn } from "@/lib/lancio/callNow"
+import { callNowColumn, isInCallNowCycle, nextCallNowState, CALL_NOW_TAB_WINDOW_MS, type CallNowColumn } from "@/lib/lancio/callNow"
+import { IN_CALL_NOW_CYCLE } from "@/lib/lancio/callNowSql"
 import { notifyConfermeLancio } from "@/lib/lancio/booking"
 import { countCycleNonClosed } from "@/lib/venditorePerformance/guard"
 import { logLeadEvent } from "@/lib/eventLogger"
@@ -168,9 +169,21 @@ async function requireVenditoreOrStaff(sellerId: string): Promise<{ userId: stri
     return { userId: user.id, isStaff, companyId: ctx.companyId }
 }
 
-/** I lead "chiamata subito" del venditore, con la colonna della scheda già calcolata. */
+/**
+ * I lead "chiamata subito" del venditore, con la colonna della scheda già
+ * calcolata.
+ *
+ * Tre limiti, oltre alla proprietà del lead:
+ *  - il bucket del lancio: la scheda non pesca da altre iniziative;
+ *  - le ultime 72 ore (`CALL_NOW_TAB_WINDOW_MS`): il lancio è una sera, e la
+ *    tab deve sparire da sola quando è finita;
+ *  - o ciclo aperto, o un esito: un lead con tre NR alle spalle che le Conferme
+ *    hanno ri-confermato e riassegnato è un appuntamento normale, e nella
+ *    scheda non ci torna.
+ */
 export async function getVenditoreLancioLeads(sellerId: string): Promise<LancioCallNowLead[]> {
     const { companyId } = await requireVenditoreOrStaff(sellerId)
+    const finestra = new Date(Date.now() - CALL_NOW_TAB_WINDOW_MS)
     const rows = await db.select({
         id: leads.id, name: leads.name, phone: leads.phone, email: leads.email, funnel: leads.funnel,
         lancioSceltaAt: leads.lancioSceltaAt, lancioCallNowAttempts: leads.lancioCallNowAttempts, lancioCallNowNextAt: leads.lancioCallNowNextAt,
@@ -181,6 +194,10 @@ export async function getVenditoreLancioLeads(sellerId: string): Promise<LancioC
         eq(leads.companyId, companyId),
         eq(leads.salespersonUserId, sellerId),
         eq(leads.lancioScelta, 'chiamata_subito'),
+        eq(leads.launchBucket, LANCIO_WEBDEV.bucket),
+        gte(leads.lancioSceltaAt, finestra),
+        // Colonne da chiamare + colonna Esitati, niente altro.
+        or(IN_CALL_NOW_CYCLE, isNotNull(leads.salespersonOutcome)),
     )).orderBy(desc(leads.lancioSceltaAt))
 
     const ids = rows.map(r => r.id)
@@ -222,10 +239,14 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
 
     const [lead] = await db.select().from(leads).where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId))).limit(1)
     if (!lead) return { ok: false, error: 'Lead non trovato' }
-    if (lead.lancioScelta !== 'chiamata_subito') return { ok: false, error: 'Non è una chiamata subito del lancio' }
+    if (lead.lancioScelta !== 'chiamata_subito') return { ok: false, error: 'Non è una chiamata subito del lancio' }
     if (!isStaff && lead.salespersonUserId !== user.id) return { ok: false, error: 'Lead di un altro venditore' }
-    if (lead.salespersonOutcome) return { ok: false, error: 'Il lead ha già un esito' }
-    if (!lead.salespersonUserId) return { ok: false, error: 'Lead già passato alle Conferme' }
+    if (lead.salespersonOutcome) return { ok: false, error: 'Il lead ha già un esito' }
+    if (!lead.salespersonUserId) return { ok: false, error: 'Lead già passato alle Conferme' }
+    // Ciclo già chiuso (tre NR spesi) su un lead che le Conferme hanno
+    // ri-confermato e riassegnato: è tornato un appuntamento normale, il "Non
+    // risponde" della serata non lo riguarda e non deve rispedirlo alle Conferme.
+    if (!isInCallNowCycle(lead)) return { ok: false, error: 'Il ciclo delle chiamate subito è chiuso per questo lead' }
 
     const now = new Date()
     const next = nextCallNowState(lead.lancioCallNowAttempts ?? 0, now)
@@ -242,7 +263,7 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
         // Doppio click o due schede aperte: la versione è già cambiata sotto i
         // piedi e il tentativo è già stato contato. Non si scrive l'evento due
         // volte, e al venditore non si dice che è andato tutto bene.
-        if (updated.length === 0) return { ok: false, error: 'Tentativo già registrato: ricarica la scheda' }
+        if (updated.length === 0) return { ok: false, error: 'Tentativo già registrato: ricarica la scheda' }
     } else {
         // Terzo NR: il lead esce dal venditore e rientra nella board Conferme,
         // che filtra `confirmationsOutcome IS NULL` + `status='APPOINTMENT'`.
@@ -261,14 +282,24 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
             version: lead.version + 1,
             updatedAt: now,
         }).where(and(eq(leads.id, leadId), eq(leads.version, lead.version))).returning({ id: leads.id })
-        if (updated.length === 0) return { ok: false, error: 'Tentativo già registrato: ricarica la scheda' }
-        await notifyConfermeLancio({ id: lead.id, name: lead.name }, next.appointmentAt, '🚀 Lancio: 3 NR dal venditore, da richiamare')
+        if (updated.length === 0) return { ok: false, error: 'Tentativo già registrato: ricarica la scheda' }
     }
 
-    await logLeadEvent({
-        leadId, eventType: 'CALL_LOGGED', userId: user.id, companyId: ctx.companyId,
-        metadata: { source: 'lancio_call_now', outcome: 'NON_RISPOSTO', attempts: next.attempts, handoff: next.kind === 'handoff', previousSeller },
-    })
+    // Prima il registro della chiamata, poi la notifica alle Conferme: il
+    // tentativo è già scritto sul lead, e un log che fallisce non deve far
+    // credere al venditore che il "Non risponde" non sia passato. Nessuno dei
+    // due è abbastanza importante da far fallire l'azione.
+    try {
+        await logLeadEvent({
+            leadId, eventType: 'CALL_LOGGED', userId: user.id, companyId: ctx.companyId,
+            metadata: { source: 'lancio_call_now', outcome: 'NON_RISPOSTO', attempts: next.attempts, handoff: next.kind === 'handoff', previousSeller },
+        })
+    } catch (e) {
+        console.error('[lancio] log CALL_LOGGED fallito', e)
+    }
+    if (next.kind === 'handoff') {
+        await notifyConfermeLancio({ id: lead.id, name: lead.name }, next.appointmentAt, '🚀 Lancio: 3 NR dal venditore, da richiamare')
+    }
     revalidatePath('/venditore')
     return { ok: true, handoff: next.kind === 'handoff' }
 }

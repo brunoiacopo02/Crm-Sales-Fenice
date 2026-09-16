@@ -19,6 +19,45 @@ export function callNowColumn(lead: { lancioCallNowAttempts: number; salesperson
 }
 
 /**
+ * Il lead sta ANCORA dentro il ciclo delle chiamate subito?
+ *
+ * È l'unico criterio con cui il CRM decide che questo lead non è un
+ * appuntamento normale: sta nella scheda del venditore, non in Lista né in
+ * Agenda, non fa scattare l'OutcomeGate e non matura multe.
+ *
+ * Il ciclo si CHIUDE in due modi, e in entrambi il lead torna un appuntamento
+ * come tutti gli altri:
+ *  - tre NR: il lead è passato alle Conferme (`attempts >= 3`). Se poi le
+ *    Conferme lo ri-confermano e lo riassegnano a un venditore, quello è un
+ *    appuntamento vero, con la sua scadenza e le sue multe.
+ *  - c'è un esito: la serata per quel lead è finita.
+ *
+ * Senza questa distinzione — cioè guardando il solo `lancioScelta`, come
+ * faceva la prima versione — un lead ri-confermato restava invisibile per
+ * sempre: fuori dalla Lista, fuori dall'Agenda, fuori dal gate e fuori dalle
+ * multe, e nella scheda compariva al più in "Esitati", senza bottoni.
+ *
+ * Il gemello SQL sta in `callNowSql.ts`: cambiando questa regola vanno
+ * cambiati tutti e due.
+ */
+export function isInCallNowCycle(lead: {
+    lancioScelta: string | null | undefined
+    lancioCallNowAttempts: number | null | undefined
+    salespersonOutcome: string | null | undefined
+}): boolean {
+    return lead.lancioScelta === 'chiamata_subito'
+        && (lead.lancioCallNowAttempts ?? 0) < CALL_NOW_MAX_ATTEMPTS
+        && (lead.salespersonOutcome ?? null) === null
+}
+
+/**
+ * Finestra della scheda venditore: la tab guarda solo le scelte delle ultime
+ * 72 ore. Il lancio dura una sera; senza questo limite la tab (e il suo badge)
+ * resterebbero attaccati al venditore per sempre, anche a novembre.
+ */
+export const CALL_NOW_TAB_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
+
+/**
  * Quanti lead restano da lavorare nella scheda: il badge della tab del
  * venditore. Gli "esitati" non contano — sono lì solo per memoria della serata.
  */

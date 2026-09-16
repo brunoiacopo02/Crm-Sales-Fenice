@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { callNowColumn, callNowPendingCount, handoffAppointmentAt, nextCallNowState } from './callNow'
+import { callNowColumn, callNowPendingCount, handoffAppointmentAt, isInCallNowCycle, nextCallNowState } from './callNow'
 
 const SERA = new Date('2026-10-05T22:30:00+02:00')
 
@@ -66,4 +66,28 @@ test('badge della tab: contano i lead non ancora esitati', () => {
     assert.equal(callNowPendingCount(leads), 3)
     assert.equal(callNowPendingCount([]), 0)
     assert.equal(callNowPendingCount([{ column: 'esitati' as const }]), 0)
+})
+
+test('nel ciclo: chiamata subito, tentativi sotto il tetto, nessun esito', () => {
+    assert.equal(isInCallNowCycle({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 0, salespersonOutcome: null }), true)
+    assert.equal(isInCallNowCycle({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 2, salespersonOutcome: null }), true)
+})
+
+test('passato alle Conferme: al terzo tentativo il ciclo e chiuso', () => {
+    // Ri-confermato dalle Conferme e riassegnato a un venditore: e un
+    // appuntamento normale, torna in Lista, nel gate e nelle multe.
+    assert.equal(isInCallNowCycle({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 3, salespersonOutcome: null }), false)
+    assert.equal(isInCallNowCycle({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 4, salespersonOutcome: null }), false)
+})
+
+test('esitato: il ciclo e chiuso comunque', () => {
+    assert.equal(isInCallNowCycle({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 1, salespersonOutcome: 'Chiuso' }), false)
+    assert.equal(isInCallNowCycle({ lancioScelta: 'chiamata_subito', lancioCallNowAttempts: 0, salespersonOutcome: 'Non chiuso' }), false)
+})
+
+test('un lead normale non e mai nel ciclo', () => {
+    assert.equal(isInCallNowCycle({ lancioScelta: null, lancioCallNowAttempts: 0, salespersonOutcome: null }), false)
+    assert.equal(isInCallNowCycle({ lancioScelta: 'app_mattina', lancioCallNowAttempts: 0, salespersonOutcome: null }), false)
+    // Campi assenti (riga letta senza le colonne del lancio): niente ciclo.
+    assert.equal(isInCallNowCycle({ lancioScelta: undefined, lancioCallNowAttempts: undefined, salespersonOutcome: undefined }), false)
 })
