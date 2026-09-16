@@ -69,6 +69,9 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     useEffect(() => {
         if (deepLinkView !== 'lancio') return
         setView('LANCIO')
+        // Se la notifica arriva prima del ping `leads` del bus, la tab si
+        // popola comunque: qui si rifetcha e basta.
+        fetchLancio()
         const params = new URLSearchParams(window.location.search)
         params.delete('view')
         const rest = params.toString()

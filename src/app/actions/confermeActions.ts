@@ -24,6 +24,7 @@ import { toRomeDateStr } from "@/lib/dateUtils"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
+import { lancioFirst } from "@/lib/lancio/conferme"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -312,10 +313,17 @@ export async function getConfermeAppointments(filters: {
         };
     });
 
+    // Lead del lancio in cima (spec 2026-09-14 §4.5): stesso meccanismo del
+    // badge "Aveva detto sì" dei GDO (pipelineActions.recoverableFirst) — sort
+    // stabile per priorità, l'ordine del DB resta identico dentro i gruppi.
+    // Vale per la lista piatta e, di conseguenza, per ogni ora del kanban
+    // (ConfermeBoard filtra flatList per ora senza riordinare).
+    const ordered = lancioFirst(withNotes);
+
     const grouped: Record<string, RowWithNote[]> = {};
     const daDefinire: RowWithNote[] = [];
 
-    for (const item of withNotes) {
+    for (const item of ordered) {
         if (item.lead.confNeedsReschedule) {
             daDefinire.push(item);
             continue;
@@ -340,7 +348,7 @@ export async function getConfermeAppointments(filters: {
     return {
         groupedByHour: grouped,
         daDefinire: daDefinire,
-        flatList: withNotes
+        flatList: ordered
     };
 }
 

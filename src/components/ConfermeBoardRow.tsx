@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw } from "lucide-react"
+import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw, Rocket } from "lucide-react"
 import { format } from "date-fns"
 import { CompanyBadge } from "./CompanyBadge"
 import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall, cancelConfermeRecall } from "@/app/actions/confermeActions"
@@ -9,6 +9,7 @@ import { getAnimationsEnabled } from "@/lib/animationUtils"
 import { ConfermeCallTimer } from "@/components/ConfermeCallTimer"
 import { consumeTimerForLead } from "@/lib/confermeCallTimer"
 import { logConfermeCallDuration } from "@/app/actions/confermeAnalyticsActions"
+import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
 
 export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, onRefresh, onRowClick, layoutMode = 'default' }: any) {
     const lead = item.lead
@@ -262,6 +263,17 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                     })()}
                     {lead.botReport && (
                         <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800" title="Lead con report del fissatore">📋</span>
+                    )}
+                    {/* Badge LANCIO (spec 2026-09-14 §4.5): ambra, come l'accento del lancio
+                        su /lancio. `<div>` e non `<span>`: sta in un contenitore flex con
+                        pointer-events-none e non deve mai diventare padre di un bottone. */}
+                    {isLeadLancio(lead) && (
+                        <div
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 uppercase shrink-0 flex items-center gap-1"
+                            title={`Lancio Web Dev AI · ${lancioSceltaLabel(lead.lancioScelta, isCallNowHandoff(lead))}`}
+                        >
+                            <Rocket className="w-3 h-3" /> Lancio
+                        </div>
                     )}
                     <div className={`text-ash-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-ash-400" />{lead.phone}</div>
 

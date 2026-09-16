@@ -124,9 +124,12 @@ export function Topbar() {
             // della ricerca: è lì che l'operatore lavora il lead.
             if (meta?.leadId) router.push(`/conferme?lead=${meta.leadId}&tab=note`)
         } else if (notif.type === 'lancio_appuntamento') {
-            // Appuntamento del lancio preso dal bot: chi la riceve è una
-            // Conferma e il lead si lavora sulla board, come per le note.
-            if (meta?.leadId) router.push(`/conferme?lead=${meta.leadId}`)
+            // Appuntamento del lancio scelto col bot (pomeriggio/dopodomani) o
+            // tornato dal venditore dopo tre NR: le Conferme lo lavorano in board.
+            // Stesso deep-link della nota del bot, sul tab Note dove sta il
+            // blocco "Dal bot – lancio"; la board carica il lead da sola anche
+            // se non è in nessuna lista (ConfermeBoard, pendingDeepLink).
+            if (meta?.leadId) router.push(`/conferme?lead=${meta.leadId}&tab=note`)
         } else if (notif.type === 'lancio_call_now') {
             // "Chiamami adesso": chi la riceve è il venditore di turno e il
             // lead si lavora nella sua tab Lancio, non nel drawer della ricerca.
