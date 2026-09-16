@@ -61,6 +61,18 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
         setShowModal(false)
     }
 
+    const toggleOffertaDelMese = () => {
+        if (loading) return
+        setOffertaDelMese((on) => {
+            const next = !on
+            if (next) {
+                setLavora(null)
+                setHaFamiglia(null)
+            }
+            return next
+        })
+    }
+
     const handleDirectSend = async (e: React.MouseEvent) => {
         e.stopPropagation()
         e.preventDefault()
@@ -210,34 +222,34 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
 
                             {!successMsg && (
                                 <>
-                                    {/* Offerta del Mese checkbox */}
-                                    <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${offertaDelMese
-                                        ? 'border-purple-500 bg-purple-50 shadow-sm'
-                                        : 'border-ash-200 bg-white hover:border-ash-300'
-                                        } ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
-                                        <input
-                                            type="checkbox"
-                                            checked={offertaDelMese}
-                                            onChange={(e) => {
-                                                setOffertaDelMese(e.target.checked)
-                                                if (e.target.checked) {
-                                                    setLavora(null)
-                                                    setHaFamiglia(null)
-                                                }
-                                            }}
-                                            disabled={loading}
-                                            className="w-4 h-4 accent-purple-600 cursor-pointer"
-                                        />
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-1.5 text-sm font-bold text-purple-700">
-                                                <Sparkles className="w-3.5 h-3.5" />
-                                                È offerta del mese
-                                            </div>
-                                            <div className="text-[11px] text-ash-500 mt-0.5">
-                                                Invia il video con l'offerta speciale del mese (ignora i tag Lavora/Famiglia)
+                                    {/* Offerta del mese: pulsante evidente in cima (spec lancio §4.7).
+                                        Acceso ⇒ il bot manda il video dell'offerta e ignora lavora/famiglia.
+                                        Il payload non cambia: viaggia sempre variant.offertaDelMese. */}
+                                    <button
+                                        type="button"
+                                        onClick={toggleOffertaDelMese}
+                                        disabled={loading}
+                                        aria-pressed={offertaDelMese}
+                                        className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all disabled:opacity-50 ${offertaDelMese
+                                            ? 'border-purple-600 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-md'
+                                            : 'border-purple-300 bg-purple-50 text-purple-800 hover:border-purple-500 hover:bg-purple-100'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Sparkles className="w-4 h-4 shrink-0" />
+                                            <div>
+                                                <div className="text-sm font-bold">Offerta del mese</div>
+                                                <div className={`text-[11px] ${offertaDelMese ? 'text-purple-100' : 'text-purple-700/80'}`}>
+                                                    {offertaDelMese
+                                                        ? 'Attiva: il lead riceve il video dell\'offerta, le domande sotto non servono'
+                                                        : 'Tocca per mandare il video dell\'offerta al posto di quello lavora/famiglia'}
+                                                </div>
                                             </div>
                                         </div>
-                                    </label>
+                                        <div className={`shrink-0 text-[11px] font-bold uppercase tracking-wider px-2 py-1 rounded-md ${offertaDelMese ? 'bg-white/20' : 'bg-purple-200/70'}`}>
+                                            {offertaDelMese ? 'ON' : 'OFF'}
+                                        </div>
+                                    </button>
 
                                     {/* Question 1: Lavora */}
                                     <div className={offertaDelMese ? 'opacity-40' : ''}>
