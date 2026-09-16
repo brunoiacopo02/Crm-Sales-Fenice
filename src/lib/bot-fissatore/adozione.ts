@@ -15,7 +15,15 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { leads, leadEvents } from '@/db/schema';
 import { logLeadEvent } from '@/lib/eventLogger';
-import { NOME_FALLBACK, SOURCE_INBOUND, type LeadEntranteNormalizzato } from './leadEntranti';
+import {
+    NOME_FALLBACK,
+    SOURCE_INBOUND,
+    isProvenienzaLancioWebDev,
+    candidatiPerAdozione,
+    valoriNuovoLead,
+    eventiNuovoLead,
+    type LeadEntranteNormalizzato,
+} from './leadEntranti';
 
 export const FENICE = 'fenice';
 
@@ -36,6 +44,11 @@ export type EsitoAdozione =
  *
  * `bloccato` = ha già un appuntamento o una presenza latchata. Chi chiama lo usa
  * per NON scriverci sopra l'appuntamento che il bot aveva già fissato.
+ *
+ * Provenienza `Lancio Web Dev AI` (pulsante del webinar, spec lancio §5.6): il
+ * lead nasce nel bucket `LANCIO_WEBDEV_2026` con `lancioIngresso='pulsante_webinar'`,
+ * assegnato al bot, con evento `LANCIO_INTAKE`; sullo stesso numero si collega solo
+ * a un lead già nel bucket. Nessun intake parte da qui (regola della rotta).
  */
 export async function adottaLead(
     lead: LeadEntranteNormalizzato,
@@ -43,6 +56,8 @@ export async function adottaLead(
 ): Promise<EsitoAdozione> {
     const adesso = new Date();
     const nuovoId = crypto.randomUUID();
+    const lancio = isProvenienzaLancioWebDev(lead.funnel);
+    const valori = valoriNuovoLead(lead, botId, adesso, nuovoId);
 
     const risultato = await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lead.phone}, 0))`);
@@ -56,7 +71,9 @@ export async function adottaLead(
             status: leads.status,
             presentedAt: leads.presentedAt,
             createdAt: leads.createdAt,
+            assignedToId: leads.assignedToId,
             companyId: leads.companyId,
+            launchBucket: leads.launchBucket,
         }).from(leads)
             .where(sql`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10) = ${lead.personKey}`);
 
@@ -66,9 +83,15 @@ export async function adottaLead(
             return { esito: 'altra_azienda' as const, companyId: esistenti[0].companyId };
         }
 
-        if (fenice.length > 0) {
+        // Nel lancio ci si "collega" solo a un lead già nel bucket (chi era in
+        // lista e ha premuto il pulsante): un lead di un altro funnel sullo stesso
+        // numero non ferma la creazione, perché i duplicati cross-funnel del
+        // lancio sono voluti (decisione 1 del 14/09).
+        const candidati = candidatiPerAdozione(fenice, lancio);
+
+        if (candidati.length > 0) {
             // Il più recente: è quello su cui la persona sta lavorando adesso.
-            const piuRecente = fenice.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+            const piuRecente = candidati.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
 
             // Il nome arriva dopo, e quasi sempre non arriva mai al primo giro:
             // il messaggio precompilato del canale Telegram non lo contiene, e
@@ -95,50 +118,23 @@ export async function adottaLead(
             };
         }
 
-        await tx.insert(leads).values({
-            id: nuovoId,
-            name: lead.name,
-            phone: lead.phone,
-            email: null,
-            funnel: lead.funnel,
-            source: SOURCE_INBOUND,
-            status: 'NEW',
-            callCount: 0,
-            // La chat è già del bot: darla a un GDO umano gli toglierebbe una
-            // conversazione che sta conducendo lui, e romperebbe la prova di
-            // appartenenza che /api/bot/outcome pretende per un appuntamento.
-            assignedToId: botId,
-            // `createdAt` = quando ha scritto: è lì che questa persona è entrata,
-            // ed è lì che le analisi di funnel devono vederla. `assignedAt` =
-            // adesso, perché è adesso che entra in circolo (migr. 0027).
-            createdAt: lead.scrittoIl ?? adesso,
-            assignedAt: adesso,
-            updatedAt: adesso,
-            companyId: FENICE,
-        });
+        // I valori (funnel canonico, bucket e ingresso del lancio compresi) sono
+        // decisi da `valoriNuovoLead`: qui si scrive e basta.
+        await tx.insert(leads).values(valori);
         return { esito: 'creato' as const, leadId: nuovoId, bloccato: false as const };
     });
 
     if (risultato.esito === 'creato') {
-        await logLeadEvent({
-            leadId: risultato.leadId,
-            eventType: 'IMPORTED',
-            toSection: 'Prima Chiamata',
-            metadata: {
-                source: SOURCE_INBOUND,
-                provenienza: lead.funnel,
-                conversationId: lead.conversationId,
-                statoBot: lead.statoBot,
-                scrittoIl: lead.scrittoIl?.toISOString() ?? null,
-            },
-            companyId: FENICE,
-        });
-        await logLeadEvent({
-            leadId: risultato.leadId,
-            eventType: 'ASSIGNED',
-            metadata: { assignedToUser: botId, source: SOURCE_INBOUND, adozioneChatEntrante: true },
-            companyId: FENICE,
-        });
+        // In ordine: IMPORTED, ASSIGNED e — solo nel lancio — LANCIO_INTAKE.
+        for (const ev of eventiNuovoLead(lead, valori)) {
+            await logLeadEvent({
+                leadId: risultato.leadId,
+                eventType: ev.eventType,
+                ...(ev.toSection ? { toSection: ev.toSection } : {}),
+                metadata: ev.metadata,
+                companyId: FENICE,
+            });
+        }
     }
 
     if (risultato.esito === 'esistente' && risultato.nomeAggiornato) {

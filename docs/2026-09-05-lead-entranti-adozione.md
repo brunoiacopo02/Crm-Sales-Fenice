@@ -127,9 +127,16 @@ gli toglierebbe una chat che sta conducendo lui, e romperebbe la prova di appart
 ha scritto e le analisi di funnel devono vederla lì; entra in circolo oggi, ed è da `assignedAt`
 che il CRM conta i lead assegnati dalla migrazione 0027.
 
-**`provenienza` resta grezza** (uppercase e basta): `TELEGRAM`, `INBOUND` o un funnel del CRM per
-chi era già stato arruolato in passato. Tradurla appiattirebbe una distinzione che sulle
-statistiche di funnel deve restare vera.
+**`provenienza` resta grezza** (uppercase e basta) per `TELEGRAM`, `INBOUND` o un funnel del CRM di
+chi era già stato arruolato in passato: tradurla appiattirebbe una distinzione che sulle statistiche
+di funnel deve restare vera. Dal 14/09 (lancio Web Dev AI, spec `2026-09-14-lancio-webdev-ottobre-design.md`
+§5.6) esiste un terzo valore, **`Lancio Web Dev AI`**, che il bot manda quando il primo contatto è il
+pulsante WhatsApp del webinar: il lead nasce con `funnel='Lancio Web Dev AI'` (canonico, non maiuscolo),
+`launchBucket='LANCIO_WEBDEV_2026'`, `lancioIngresso='pulsante_webinar'`, assegnato al bot, con evento
+`LANCIO_INTAKE`; sullo stesso numero si collega solo a un lead **già nel bucket** — un lead di un altro
+funnel non ferma la creazione (duplicati cross-funnel voluti, decisione 1 del 14/09). Anche da qui
+nessun intake: il bot ha già la chat. I lead di Telegram che scrivono per primi sono "roba molto
+diversa" (PO, 14/09) e restano `TELEGRAM` con il flusso standard.
 
 **L'appuntamento si accetta solo con `esito === 'APPUNTAMENTO'` e fuso orario esplicito.** Il
 contratto lo garantisce già, ma un ISO senza offset arriverebbe alle Conferme sfalsato di due ore

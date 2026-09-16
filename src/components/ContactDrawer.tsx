@@ -225,6 +225,7 @@ export function ContactDrawer({
             case 'REASSIGNED_TO_BOT': return <User className="h-4 w-4 text-indigo-500" />
             case 'BOT_CONTACT_REQUEST': return <Phone className="h-4 w-4 text-sky-500" />
             case 'INBOUND_MESSAGE': return <MessageSquare className="h-4 w-4 text-emerald-500" />
+            case 'LANCIO_INTAKE': return <CalendarCheck className="h-4 w-4 text-amber-500" />
             case 'appointment_forced': return <ShieldAlert className="h-4 w-4 text-amber-500" />
             default: return <CheckCircle2 className="h-4 w-4 text-ash-400" />
         }
@@ -248,6 +249,7 @@ export function ContactDrawer({
             case 'REASSIGNED_TO_BOT': return '🤖 Lead ripreso dal Fissatore'
             case 'BOT_CONTACT_REQUEST': return '☎️ Richiesta di contatto umano'
             case 'INBOUND_MESSAGE': return '💬 Ha scritto lui su WhatsApp'
+            case 'LANCIO_INTAKE': return '🚀 Ingresso nel lancio Web Dev AI'
             case 'appointment_forced': return 'Appuntamento forzato'
             default: return 'Evento Sconosciuto'
         }
