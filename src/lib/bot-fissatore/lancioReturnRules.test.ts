@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {
     LANCIO_WEBDEV_BUCKET,
     checkLancioReturnToPool,
+    isAlreadyReturned,
     motivoRestituzioneDaNota,
+    needsReturnEventCheck,
+    type LancioAlreadyReturnedLead,
     type LancioReturnLead,
 } from './lancioReturnRules';
 
@@ -85,4 +88,69 @@ test('guardie del lancio: appuntamento in agenda o scelta fatta', () => {
     assert.deepEqual(checkLancioReturnToPool(base({ lancioScelta: 'chiamata_subito' })), { ok: false, reason: 'scelta_fatta' });
     assert.deepEqual(checkLancioReturnToPool(base({ lancioScelta: 'app_pomeriggio' })), { ok: false, reason: 'scelta_fatta' });
     assert.deepEqual(checkLancioReturnToPool(base({ lancioScelta: undefined })), { ok: true });
+});
+
+// --- Doppioni: lo stesso esito che riarriva su un lead gia' restituito --------
+
+const restituito = (over: Partial<LancioAlreadyReturnedLead & { hasReturnEvent: boolean }> = {}) => ({
+    launchBucket: LANCIO_WEBDEV_BUCKET,
+    assignedToId: null,
+    status: 'NEW',
+    hasReturnEvent: true,
+    ...over,
+});
+
+test('lead gia\' restituito: il doppione si riconosce dallo stato + evento', () => {
+    assert.equal(isAlreadyReturned(restituito(), 'NON_RISPOSTO'), true);
+    assert.equal(isAlreadyReturned(restituito(), 'INTERROTTO'), true);
+});
+
+test('lead gia\' restituito: senza l\'evento non e\' un doppione', () => {
+    // Un lead del lancio non assegnato e NEW che non e' mai tornato dal bot e'
+    // semplicemente un lead nel pool: non deve passare per doppione, o si
+    // coprirebbe un 403 legittimo.
+    assert.equal(isAlreadyReturned(restituito({ hasReturnEvent: false }), 'NON_RISPOSTO'), false);
+});
+
+test('lead gia\' restituito: ogni altra combinazione non e\' un doppione', () => {
+    assert.equal(isAlreadyReturned(restituito({ launchBucket: null }), 'NON_RISPOSTO'), false);
+    assert.equal(isAlreadyReturned(restituito({ launchBucket: 'BLACK_SUMMER' }), 'NON_RISPOSTO'), false);
+    // Gia' ridistribuito a un GDO: non e' piu' nel pool, il 403 e' corretto.
+    assert.equal(isAlreadyReturned(restituito({ assignedToId: 'gdo-110' }), 'NON_RISPOSTO'), false);
+    // Qualcuno ci ha lavorato dopo il ritorno: lo stato non e' piu' NEW.
+    assert.equal(isAlreadyReturned(restituito({ status: 'IN_PROGRESS' }), 'NON_RISPOSTO'), false);
+    assert.equal(isAlreadyReturned(restituito({ status: 'APPOINTMENT' }), 'NON_RISPOSTO'), false);
+    assert.equal(isAlreadyReturned(restituito({ status: 'REJECTED' }), 'NON_RISPOSTO'), false);
+    // Altri esiti non c'entrano: APPUNTAMENTO e NOTA hanno i loro rami.
+    for (const o of ['APPUNTAMENTO', 'NOTA', 'CONTATTO_UMANO', 'RICHIAMO', 'DA_SCARTARE']) {
+        assert.equal(isAlreadyReturned(restituito(), o), false, `${o} non deve passare di qui`);
+    }
+});
+
+test('la query sull\'evento si paga solo quando tutto il resto combacia', () => {
+    assert.equal(needsReturnEventCheck({ launchBucket: LANCIO_WEBDEV_BUCKET, assignedToId: null, status: 'NEW' }, 'NON_RISPOSTO'), true);
+    assert.equal(needsReturnEventCheck({ launchBucket: null, assignedToId: null, status: 'NEW' }, 'NON_RISPOSTO'), false);
+    assert.equal(needsReturnEventCheck({ launchBucket: LANCIO_WEBDEV_BUCKET, assignedToId: 'gdo-110', status: 'NEW' }, 'NON_RISPOSTO'), false);
+    assert.equal(needsReturnEventCheck({ launchBucket: LANCIO_WEBDEV_BUCKET, assignedToId: null, status: 'NEW' }, 'NOTA'), false);
+});
+
+test('scenario del route: il bot ritenta lo stesso esito e non prende un 403', () => {
+    // Sequenza vera (cron `lancio-restituzioni`, che segna `restituito` solo dopo
+    // una risposta positiva del CRM: se la risposta si perde, ritenta ogni ora).
+    //
+    // 1) Primo POST NON_RISPOSTO: il lead e' del lancio e ancora al bot.
+    const primo = base();
+    assert.deepEqual(checkLancioReturnToPool(primo), { ok: true });
+    assert.equal(motivoRestituzioneDaNota('Lancio: mai risposto', 'NON_RISPOSTO'), 'mai_risposto');
+
+    // 2) Il ritorno al pool toglie l'assegnatario e riporta il lead a NEW,
+    //    scrivendo l'evento LANCIO_RETURNED_TO_POOL.
+    const dopo = restituito();
+
+    // 3) La risposta si perde, il bot ritenta. Senza questa regola il lead
+    //    (assignedToId nullo => assigneeIsBot falso) si prende il 403 «lead non
+    //    assegnato a un account bot». Con la regola: 200, skipped 'already_returned',
+    //    nessuna scrittura, e il cron segna `restituito` e smette di ritentare.
+    assert.equal(needsReturnEventCheck(dopo, 'NON_RISPOSTO'), true);
+    assert.equal(isAlreadyReturned(dopo, 'NON_RISPOSTO'), true);
 });

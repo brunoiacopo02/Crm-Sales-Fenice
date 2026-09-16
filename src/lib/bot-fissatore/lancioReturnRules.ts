@@ -70,6 +70,51 @@ export function checkLancioReturnToPool(l: LancioReturnLead): LancioReturnCheck 
     if (isLeadLocked(l.status, l.presentedAt) || l.appointmentDate !== null) {
         return { ok: false, reason: 'locked_appointment' };
     }
+    // Vicolo cieco VOLUTO: un lead che ha scelto e' di un venditore o delle Conferme,
+    // e non torna nel pool nemmeno se il bot ci riprova all'infinito — `scelta_fatta`
+    // e' una risposta stabile, non uno stato transitorio da ritentare.
     if (l.lancioScelta) return { ok: false, reason: 'scelta_fatta' };
     return { ok: true };
+}
+
+export type LancioAlreadyReturnedLead = {
+    launchBucket: string | null;
+    assignedToId: string | null;
+    status: string;
+};
+
+/**
+ * Vale la pena pagare la query sull'evento `LANCIO_RETURNED_TO_POOL`?
+ *
+ * Separata da `isAlreadyReturned` solo per questo: la firma del lead che si
+ * legge gratis dal route sta qui, l'evento costa un SELECT e si legge soltanto
+ * quando tutto il resto combacia gia'. Cosi' la condizione non e' scritta due
+ * volte — nel route e nel modulo puro — con il rischio che una delle due cambi.
+ */
+export function needsReturnEventCheck(
+    l: LancioAlreadyReturnedLead,
+    outcome: string,
+): boolean {
+    if (outcome !== 'NON_RISPOSTO' && outcome !== 'INTERROTTO') return false;
+    if (l.launchBucket !== LANCIO_WEBDEV_BUCKET) return false;
+    if (l.assignedToId !== null) return false;
+    return l.status === 'NEW';
+}
+
+/**
+ * Il lead del lancio e' GIA' tornato nel pool: questo esito e' un doppione.
+ *
+ * Serve perche' il ritorno al pool toglie l'assegnatario, e un lead senza
+ * assegnatario non supera piu' il controllo di appartenenza del route: il
+ * secondo tentativo del bot si prenderebbe un 403 «lead non assegnato a un
+ * account bot», che e' falso e per giunta fuorviante — il lead al bot c'e'
+ * stato, e il lavoro e' stato fatto. Il cron `lancio-restituzioni` segna
+ * `restituito` solo dopo una risposta positiva del CRM: con il 403 ritenterebbe
+ * ogni ora per sempre. Qui la risposta e' 200 e non si scrive niente.
+ */
+export function isAlreadyReturned(
+    l: LancioAlreadyReturnedLead & { hasReturnEvent: boolean },
+    outcome: string,
+): boolean {
+    return needsReturnEventCheck(l, outcome) && l.hasReturnEvent;
 }
