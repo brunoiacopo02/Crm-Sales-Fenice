@@ -9,6 +9,8 @@ import { reassignBotLeadToHumanPool } from '@/lib/bot-fissatore/reassign';
 import type { BotReport } from '@/lib/bot-fissatore/types';
 import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissatore/noteDedup';
 import { normalizeContactCategory } from '@/lib/bot-fissatore/contactRequests';
+import { LANCIO_WEBDEV_BUCKET, motivoRestituzioneDaNota } from '@/lib/bot-fissatore/lancioReturnRules';
+import { returnLancioLeadToPool } from '@/lib/bot-fissatore/lancioReturn';
 import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset';
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 
@@ -104,6 +106,9 @@ export async function POST(req: NextRequest) {
         appointmentDate: leads.appointmentDate,
         agendaStatus: leads.agendaStatus,
         presentedAt: leads.presentedAt,
+        // Lancio Web Developer AI: decide se un NON_RISPOSTO/INTERROTTO torna nel
+        // pool di /import invece di finire al round robin dei GDO (spec §4.6).
+        launchBucket: leads.launchBucket,
         // Serve al ramo di rifissaggio: un lead scartato dalle Conferme resta
         // `status = 'APPOINTMENT'`, quindi senza questo campo il rifissaggio
         // non saprebbe di dover riaprire lo scarto.
@@ -514,6 +519,19 @@ export async function POST(req: NextRequest) {
     // Il lead riparte come nuovo (status=NEW, callCount=0). updateLeadOutcome NON è
     // coinvolto: i flussi dei GDO umani restano intatti.
     if (typedOutcome === 'NON_RISPOSTO' || typedOutcome === 'INTERROTTO') {
+        // Lead del lancio Web Developer AI ancora al bot (spec §4.6): niente round
+        // robin, torna nel pool di /import e da lì gli admin lo distribuiscono ai GDO.
+        // Un lead del lancio già passato a un GDO umano non arriva qui: il blocco di
+        // autorizzazione sopra risponde 403 a questi due esiti sui lead non del bot.
+        if (lead.launchBucket === LANCIO_WEBDEV_BUCKET && assigneeIsBot) {
+            const motivo = motivoRestituzioneDaNota(note, typedOutcome);
+            const r = await returnLancioLeadToPool({
+                leadId, motivo, outcome: typedOutcome, botUserId: actorUserId, botNote: note ?? null, assigneeIsBot,
+            });
+            if (!r.returned) return NextResponse.json({ ok: true, returnedToPool: false, skipped: r.note });
+            return NextResponse.json({ ok: true, returnedToPool: true, motivo });
+        }
+
         const reason = typedOutcome === 'NON_RISPOSTO' ? 'mai_risposto' : 'chat_interrotta';
         const r = await reassignBotLeadToHumanPool(leadId, reason, actorUserId, note);
         // Un 2xx che dice "reassigned: null" e basta è indistinguibile da un
