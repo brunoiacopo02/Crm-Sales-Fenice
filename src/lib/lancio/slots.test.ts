@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { coperturaRows, declaredHoursFor, isFreeAt, mattinaSlots, pickRoundRobin, type VenditoreDayFacts } from './slots'
+import { coperturaRows, declaredHoursFor, isFreeAt, mattinaSlots, orePrenotabili, pickRoundRobin, type VenditoreDayFacts } from './slots'
 
 const D = '2026-10-06'
 const k = (h: number) => `${D}@${h}`
@@ -47,6 +47,29 @@ test('le ore che cominciano entro un ora da now non si offrono', () => {
     const tardi = mattinaSlots({ dateStr: D, hours: HOURS, now: new Date('2026-10-06T13:30:00+02:00'), venditori: [v('a', HOURS)] })
     assert.deepEqual(tardi.mattina.map(m => m.hour), [])
     assert.equal(tardi.mattinaEsaurita, true)
+})
+
+// La stessa soglia vale per il POMERIGGIO, che non passa da mattinaSlots: e'
+// la regressione che offriva le 20:00 alle 19:30 e poi rispondeva
+// `fuori_regole` a un lead a cui l'ora era gia' stata detta.
+const POMERIGGIO = [15, 16, 17, 18, 19, 20]
+
+test('orePrenotabili: stessa soglia di un ora della mattina, pomeriggio compreso', () => {
+    assert.deepEqual(orePrenotabili(D, POMERIGGIO, SERA), POMERIGGIO)
+    // 18:30 -> le 19:00 sono entro l'ora, restano 20.
+    assert.deepEqual(orePrenotabili(D, POMERIGGIO, new Date('2026-10-06T18:30:00+02:00')), [20])
+    // Esattamente un'ora prima: ammessa (la soglia e' >=, come classifyAt).
+    assert.deepEqual(orePrenotabili(D, POMERIGGIO, new Date('2026-10-06T19:00:00+02:00')), [20])
+    // 19:30: non resta niente, il pomeriggio e' chiuso.
+    assert.deepEqual(orePrenotabili(D, POMERIGGIO, new Date('2026-10-06T19:30:00+02:00')), [])
+})
+
+test('orePrenotabili e la stessa regola che filtra la mattina', () => {
+    const now = new Date('2026-10-06T08:30:00+02:00')
+    assert.deepEqual(
+        orePrenotabili(D, HOURS, now),
+        mattinaSlots({ dateStr: D, hours: HOURS, now, venditori: [v('a', HOURS)] }).mattina.map(m => m.hour),
+    )
 })
 
 test('round robin: lastAssignedAt piu vecchio, null prima di tutti, tiebreak id', () => {

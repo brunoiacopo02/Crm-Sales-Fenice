@@ -89,23 +89,34 @@ function whenLabel(at: Date): string {
     return at.toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })
 }
 
+/**
+ * Notifica alle Conferme: NON rilancia mai, nemmeno se il DB cade sulla SELECT
+ * dei destinatari. Gira sempre DOPO la scrittura dell'appuntamento (fuori dalla
+ * transazione), e una campanella mancata non deve far tornare al bot un errore
+ * su un appuntamento che è già a posto sul lead: il chiamante può quindi darla
+ * per acquisita senza avvolgerla in un try/catch suo.
+ */
 export async function notifyConfermeLancio(lead: { id: string; name: string }, at: Date, titolo: string): Promise<void> {
-    const conferme = await db.select({ id: users.id }).from(users).where(and(
-        eq(users.companyId, FENICE), eq(users.role, 'CONFERME'), eq(users.isActive, true),
-    ))
-    if (conferme.length === 0) return
-    const now = new Date()
-    await db.insert(notifications).values(conferme.map(u => ({
-        id: crypto.randomUUID(),
-        recipientUserId: u.id,
-        type: 'lancio_appuntamento',
-        title: titolo,
-        body: `${lead.name}: ${whenLabel(at)}`,
-        metadata: { leadId: lead.id },
-        status: 'unread',
-        createdAt: now,
-        companyId: FENICE,
-    }))).catch(e => console.error('[bot-lancio] notifica Conferme fallita', e))
+    try {
+        const conferme = await db.select({ id: users.id }).from(users).where(and(
+            eq(users.companyId, FENICE), eq(users.role, 'CONFERME'), eq(users.isActive, true),
+        ))
+        if (conferme.length === 0) return
+        const now = new Date()
+        await db.insert(notifications).values(conferme.map(u => ({
+            id: crypto.randomUUID(),
+            recipientUserId: u.id,
+            type: 'lancio_appuntamento',
+            title: titolo,
+            body: `${lead.name}: ${whenLabel(at)}`,
+            metadata: { leadId: lead.id },
+            status: 'unread',
+            createdAt: now,
+            companyId: FENICE,
+        })))
+    } catch (e) {
+        console.error('[bot-lancio] notifica Conferme fallita', e)
+    }
 }
 
 function eventRows(lead: LancioLeadRow, botUserId: string, now: Date, at: Date, kind: string, extra: Record<string, unknown>) {
@@ -157,23 +168,38 @@ export async function bookLancio(input: {
         // conferma o di venditore da un giro precedente lo terrebbe fuori dalla
         // board (o peggio: appuntamento pomeridiano intestato a un venditore che
         // non è di turno) e nessuno lo chiamerebbe.
-        const updated = await db.update(leads)
-            .set({
-                ...CONFERME_DISCARD_RESET,
-                salespersonUserId: null,
-                salespersonAssigned: null,
-                salespersonAssignedAt: null,
-                ...comune,
-            })
-            .where(and(eq(leads.id, lead.id), eq(leads.version, lead.version)))
-            .returning({ id: leads.id })
-        // Versione cambiata sotto i piedi (doppio invio concorrente): non è
-        // "ora esaurita" — il pomeriggio non si esaurisce — ed è il bot a dover
-        // ritentare una volta.
-        if (updated.length === 0) return { ok: false, motivo: 'conflitto' }
-        await db.insert(leadEvents).values(eventRows(lead, botUserId, now, at, input.kind, { info: input.info ?? null }))
+        // Appuntamento ed eventi in UNA transazione: niente advisory lock (il
+        // pomeriggio non ha venditore da spartire, il controllo di `version`
+        // basta a serializzare i doppi invii), ma se l'insert degli eventi
+        // fallisce deve saltare anche la scrittura sul lead. Altrimenti resta
+        // un appuntamento senza APPOINTMENT_SET: la Timeline non lo racconta e
+        // i webhook marketing di `appointment.set` non hanno l'evento dietro.
+        const kind = input.kind
+        const esito = await db.transaction(async (tx: Db) => {
+            const updated = await tx.update(leads)
+                .set({
+                    ...CONFERME_DISCARD_RESET,
+                    salespersonUserId: null,
+                    salespersonAssigned: null,
+                    salespersonAssignedAt: null,
+                    ...comune,
+                })
+                .where(and(eq(leads.id, lead.id), eq(leads.version, lead.version)))
+                .returning({ id: leads.id })
+            // Versione cambiata sotto i piedi (doppio invio concorrente): non è
+            // "ora esaurita" — il pomeriggio non si esaurisce — ed è il bot a
+            // dover ritentare una volta.
+            if (updated.length === 0) return { ok: false as const, motivo: 'conflitto' as const }
+            await tx.insert(leadEvents).values(eventRows(lead, botUserId, now, at, kind, { info: input.info ?? null }))
+            return { ok: true as const, kind }
+        })
+        if (!esito.ok) return esito
+        // La campanella sta FUORI dalla transazione: è un effetto collaterale,
+        // e tenerla dentro allungherebbe la transazione con una scrittura che
+        // non deve poter far rollback dell'appuntamento (`notifyConfermeLancio`
+        // non rilancia).
         await notifyConfermeLancio(lead, at, '🚀 Lancio: appuntamento dal bot')
-        return { ok: true, kind: input.kind }
+        return esito
     }
 
     const key = hourKey(input.dateStr, input.hour)

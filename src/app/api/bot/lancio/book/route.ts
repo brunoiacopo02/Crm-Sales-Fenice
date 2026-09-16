@@ -1,5 +1,5 @@
 import { NextResponse, after, type NextRequest } from 'next/server'
-import { romeIso } from '@/lib/dateUtils'
+import { toRomeIso } from '@/lib/dateUtils'
 import { authBotRequest, computeSlots, loadLancioLead } from '@/lib/lancio/botGuard'
 import { classifyAt } from '@/lib/lancio/rules'
 import { bookLancio, confermeSideEffects, mattinaSideEffects } from '@/lib/lancio/booking'
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         if (out.motivo === 'gia_prenotato') {
             // L'ora che ha già, scritta con l'offset italiano: il bot la rilegge
             // al lead così com'è, senza doverla riconvertire da UTC.
-            return NextResponse.json({ ok: false, motivo: 'gia_prenotato', appointmentAt: romeIso(out.at), kind: out.kind }, { status: 409 })
+            return NextResponse.json({ ok: false, motivo: 'gia_prenotato', appointmentAt: toRomeIso(out.at), kind: out.kind }, { status: 409 })
         }
         if (out.motivo === 'conflitto') {
             return NextResponse.json({ ok: false, motivo: 'conflitto' }, { status: 409 })

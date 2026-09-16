@@ -173,6 +173,10 @@ export function Sidebar({ companyId }: { companyId?: string }) {
                 items: [
                     { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
                     { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
+                    // La pagina del lancio ammette ADMIN, MANAGER e TL: per il
+                    // TL e' sola lettura (turni e copertura li scrive l'admin),
+                    // ma senza la voce ci arrivava solo chi sapeva l'URL.
+                    { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
                 ],
             },
             {

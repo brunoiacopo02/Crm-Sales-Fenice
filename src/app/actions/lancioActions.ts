@@ -288,7 +288,8 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
     // Prima il registro della chiamata, poi la notifica alle Conferme: il
     // tentativo è già scritto sul lead, e un log che fallisce non deve far
     // credere al venditore che il "Non risponde" non sia passato. Nessuno dei
-    // due è abbastanza importante da far fallire l'azione.
+    // due fa fallire l'azione: il log è avvolto qui sotto, e
+    // `notifyConfermeLancio` si mangia da sé i propri errori (non rilancia).
     try {
         await logLeadEvent({
             leadId, eventType: 'CALL_LOGGED', userId: user.id, companyId: ctx.companyId,

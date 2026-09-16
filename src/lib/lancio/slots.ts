@@ -59,16 +59,26 @@ export function declaredHoursFor(
     return out
 }
 
+/**
+ * Le ore tonde ancora prenotabili in quella data: stessa soglia che `classifyAt`
+ * applica su `book` (MIN_LEAD_TIME_MS). È l'unico posto che la calcola, così
+ * mattina e pomeriggio non possono divergere: offrire al bot un'ora che `book`
+ * rifiuterebbe con `fuori_regole` gli farebbe promettere al lead un orario che
+ * poi non esiste.
+ */
+export function orePrenotabili(dateStr: string, hours: readonly number[], now: Date): number[] {
+    const cutoff = now.getTime() + MIN_LEAD_TIME_MS
+    return hours.filter(h => romeInstant(dateStr, h).getTime() >= cutoff)
+}
+
 export function mattinaSlots(input: {
     dateStr: string
     hours: number[]
     venditori: VenditoreDayFacts[]
     now: Date
 }): { mattina: MattinaHour[]; mattinaEsaurita: boolean } {
-    const cutoff = input.now.getTime() + MIN_LEAD_TIME_MS
     const mattina: MattinaHour[] = []
-    for (const hour of input.hours) {
-        if (romeInstant(input.dateStr, hour).getTime() < cutoff) continue
+    for (const hour of orePrenotabili(input.dateStr, input.hours, input.now)) {
         const key = hourKey(input.dateStr, hour)
         const liberi = input.venditori.filter(v => isFreeAt(v, key)).map(v => v.salesUserId).sort()
         mattina.push({ hour, liberi: liberi.length, venditoriLiberi: liberi })

@@ -26,6 +26,15 @@ test('una data qualsiasi esce null: il chiamante risponde 422', async () => {
     assert.equal(await computeSlots('non-una-data', SERA), null)
 })
 
+test('anche il 7/10 non offre ore gia passate o entro l ora', async () => {
+    // Mezzogiorno del 7/10: 9-12 sono passate o troppo vicine, restano 13 e 14.
+    const r = await computeSlots('2026-10-07', new Date('2026-10-07T12:00:00+02:00'))
+    assert.deepEqual(r?.oreAmmesse, [13, 14])
+    // A giornata finita non resta niente da proporre.
+    const tardi = await computeSlots('2026-10-07', new Date('2026-10-07T18:00:00+02:00'))
+    assert.deepEqual(tardi?.oreAmmesse, [])
+})
+
 test('oreAmmesse del 7/10 e una copia: modificarla non tocca la config', async () => {
     const r = await computeSlots('2026-10-07', SERA)
     assert.ok(r)

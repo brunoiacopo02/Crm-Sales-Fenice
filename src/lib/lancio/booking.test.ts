@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { SCELTA_BY_KIND, decideBooking, decideCallNow } from './booking'
-import { romeIso } from '@/lib/dateUtils'
+import { toRomeIso } from '@/lib/dateUtils'
 import type { LancioLeadRow } from './botGuard'
 
 // Le scritture di booking.ts sono DB: qui si copre la parte che decide da
@@ -58,11 +58,11 @@ test('chiamata_subito e followup non sono prenotazioni: dopo si prenota', () => 
 
 test('l\'ora che torna al bot e ora italiana con offset, non UTC', () => {
     // Ora legale: +02:00, e le 10 restano le 10 (toISOString direbbe 08:00Z).
-    assert.equal(romeIso(AT), '2026-10-06T10:00:00+02:00')
+    assert.equal(toRomeIso(AT), '2026-10-06T10:00:00+02:00')
     // Ora solare: +01:00.
-    assert.equal(romeIso(new Date('2026-12-06T10:00:00+01:00')), '2026-12-06T10:00:00+01:00')
+    assert.equal(toRomeIso(new Date('2026-12-06T10:00:00+01:00')), '2026-12-06T10:00:00+01:00')
     // Mezzanotte italiana: h23, non "24".
-    assert.equal(romeIso(new Date('2026-10-06T00:00:00+02:00')), '2026-10-06T00:00:00+02:00')
+    assert.equal(toRomeIso(new Date('2026-10-06T00:00:00+02:00')), '2026-10-06T00:00:00+02:00')
 })
 
 // --- Chiamata subito (Task 8) ---------------------------------------------

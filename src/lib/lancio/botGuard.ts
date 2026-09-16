@@ -11,7 +11,7 @@ import { verifySignature } from '@/lib/marketing-webhooks/signing'
 import { findLancioBotId } from './botAccount'
 import { LANCIO_COMPANY, LANCIO_WEBDEV, type LancioConfig } from './config'
 import { slotDateKind } from './rules'
-import { mattinaSlots } from './slots'
+import { mattinaSlots, orePrenotabili } from './slots'
 import { dayFactsFor, getShiftMembers } from './shiftQueries'
 
 /** Alias locale della company del lancio (intake.ts via config.ts): il lancio è solo Fenice. */
@@ -87,22 +87,38 @@ export interface SlotsResponse {
     oreAmmesse: number[]
 }
 
-/** null = data fuori dal lancio (il chiamante risponde 422). */
+/**
+ * null = data fuori dal lancio (il chiamante risponde 422).
+ *
+ * Ogni ora che esce di qui passa da `orePrenotabili`, cioè dalla STESSA soglia
+ * di preavviso che `classifyAt` applica su `book` — pomeriggio compreso. Prima
+ * il pomeriggio usciva intero: alle 19:30 il bot proponeva ancora le 20:00 e
+ * `book` rispondeva `fuori_regole` a un lead a cui l'orario era già stato
+ * detto. Quando non resta nessuna ora, il pomeriggio si chiude (`aperto:false`)
+ * e il bot ripiega sul giorno dopo.
+ */
 export async function computeSlots(dateStr: string, now: Date, cfg: LancioConfig = LANCIO_WEBDEV): Promise<SlotsResponse | null> {
     const day = slotDateKind(dateStr, cfg)
     if (day === null) return null
     if (day === 'dopodomani') {
-        return { date: dateStr, mattina: 'conferme', pomeriggio: { aperto: false, ore: [] }, mattinaEsaurita: false, oreAmmesse: [...cfg.oreVenditori] }
+        return {
+            date: dateStr, mattina: 'conferme', pomeriggio: { aperto: false, ore: [] }, mattinaEsaurita: false,
+            oreAmmesse: orePrenotabili(dateStr, cfg.oreVenditori, now),
+        }
     }
     const members = await getShiftMembers(db, 'GIORNO_DOPO', cfg)
     const facts = await dayFactsFor(db, members, dateStr, { cfg })
     const { mattina, mattinaEsaurita } = mattinaSlots({ dateStr, hours: cfg.oreVenditori, venditori: facts, now })
+    const orePomeriggio = orePrenotabili(dateStr, cfg.orePomeriggio, now)
     return {
         date: dateStr,
         // `venditoriLiberi` resta dentro: sono id interni, al bot non escono mai.
         mattina: mattina.map(m => ({ hour: m.hour, liberi: m.liberi })),
-        pomeriggio: { aperto: true, ore: [...cfg.orePomeriggio] },
+        pomeriggio: { aperto: orePomeriggio.length > 0, ore: orePomeriggio },
         mattinaEsaurita,
-        oreAmmesse: [...cfg.oreVenditori, ...cfg.orePomeriggio],
+        // Le ore della mattina sono già filtrate da `mattinaSlots`: qui si
+        // riusano quelle, non la config, altrimenti `oreAmmesse` prometterebbe
+        // ore che `mattina` non elenca più.
+        oreAmmesse: [...mattina.map(m => m.hour), ...orePomeriggio],
     }
 }
