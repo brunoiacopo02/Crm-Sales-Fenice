@@ -22,14 +22,32 @@ import {
     candidatiPerAdozione,
     valoriNuovoLead,
     eventiNuovoLead,
+    serveIngressoPulsante,
+    eventoIngressoCollegato,
     type LeadEntranteNormalizzato,
 } from './leadEntranti';
 
 export const FENICE = 'fenice';
 
+/**
+ * Com'è fatta la riga `leads` dopo l'adozione. Serve a chi manda l'intake: il
+ * funnel è quello CANONICO scritto a DB (nel lancio non è la provenienza
+ * maiuscola del contratto), e bucket + ingresso sono quello che `lancioFieldForLead`
+ * chiede per decidere se il bot deve aprire col benvenuto del lancio.
+ */
+export interface RigaAdottata {
+    funnel: string | null;
+    launchBucket: string | null;
+    lancioIngresso: string | null;
+}
+
 export type EsitoAdozione =
-    | { esito: 'creato'; leadId: string; bloccato: false; nomeAggiornato?: false }
-    | { esito: 'esistente'; leadId: string; bloccato: boolean; nomeAggiornato: boolean }
+    | { esito: 'creato'; leadId: string; bloccato: false; nomeAggiornato?: false; riga: RigaAdottata }
+    | {
+        esito: 'esistente'; leadId: string; bloccato: boolean; nomeAggiornato: boolean;
+        /** Il lead era già nel bucket ed è stato marcato come entrato dal pulsante. */
+        ingressoAggiornato: boolean; riga: RigaAdottata;
+    }
     | { esito: 'altra_azienda'; companyId: string };
 
 /**
@@ -73,7 +91,9 @@ export async function adottaLead(
             createdAt: leads.createdAt,
             assignedToId: leads.assignedToId,
             companyId: leads.companyId,
+            funnel: leads.funnel,
             launchBucket: leads.launchBucket,
+            lancioIngresso: leads.lancioIngresso,
         }).from(leads)
             .where(sql`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10) = ${lead.personKey}`);
 
@@ -104,9 +124,21 @@ export async function adottaLead(
             const nomeAttuale = (piuRecente.name ?? '').trim();
             const daRiempire = nomeAttuale === '' || nomeAttuale === NOME_FALLBACK;
             const nomeAggiornato = daRiempire && lead.name !== NOME_FALLBACK;
-            if (nomeAggiornato) {
+
+            // Chi era in lista può essere stato distribuito a un GDO umano: da
+            // quel momento `assignedToId` non è più il bot, e senza questo campo
+            // `loadLancioLead` (botGuard) risponderebbe 403 alle API del bot su
+            // una chat che il bot sta conducendo davvero. Si scrive SOLO la
+            // porta d'ingresso: l'assegnatario non si tocca.
+            const ingressoDaScrivere = serveIngressoPulsante(piuRecente, lancio);
+
+            if (nomeAggiornato || ingressoDaScrivere) {
                 await tx.update(leads)
-                    .set({ name: lead.name, updatedAt: new Date() })
+                    .set({
+                        ...(nomeAggiornato ? { name: lead.name } : {}),
+                        ...(ingressoDaScrivere ? { lancioIngresso: 'pulsante_webinar' as const } : {}),
+                        updatedAt: new Date(),
+                    })
                     .where(eq(leads.id, piuRecente.id));
             }
 
@@ -115,13 +147,28 @@ export async function adottaLead(
                 leadId: piuRecente.id,
                 bloccato: piuRecente.status === 'APPOINTMENT' || piuRecente.presentedAt !== null,
                 nomeAggiornato,
+                ingressoAggiornato: ingressoDaScrivere,
+                riga: {
+                    funnel: piuRecente.funnel,
+                    launchBucket: piuRecente.launchBucket,
+                    lancioIngresso: ingressoDaScrivere ? 'pulsante_webinar' : piuRecente.lancioIngresso,
+                },
             };
         }
 
         // I valori (funnel canonico, bucket e ingresso del lancio compresi) sono
         // decisi da `valoriNuovoLead`: qui si scrive e basta.
         await tx.insert(leads).values(valori);
-        return { esito: 'creato' as const, leadId: nuovoId, bloccato: false as const };
+        return {
+            esito: 'creato' as const,
+            leadId: nuovoId,
+            bloccato: false as const,
+            riga: {
+                funnel: valori.funnel,
+                launchBucket: valori.launchBucket,
+                lancioIngresso: valori.lancioIngresso,
+            },
+        };
     });
 
     if (risultato.esito === 'creato') {
@@ -135,6 +182,19 @@ export async function adottaLead(
                 companyId: FENICE,
             });
         }
+    }
+
+    if (risultato.esito === 'esistente' && risultato.ingressoAggiornato) {
+        // Tracciabilità: sulla timeline del lead deve restare scritto che da qui
+        // in poi quella chat è del pulsante del webinar, ed è il motivo per cui
+        // le API del bot lo accettano.
+        const ev = eventoIngressoCollegato(lead);
+        await logLeadEvent({
+            leadId: risultato.leadId,
+            eventType: ev.eventType,
+            metadata: ev.metadata,
+            companyId: FENICE,
+        });
     }
 
     if (risultato.esito === 'esistente' && risultato.nomeAggiornato) {

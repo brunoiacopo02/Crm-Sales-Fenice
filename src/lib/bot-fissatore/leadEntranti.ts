@@ -282,6 +282,8 @@ export interface LeadEsistente {
     companyId: string;
     /** Bucket di lancio (null per i lead normali). Serve alla dedup del lancio. */
     launchBucket?: string | null;
+    /** `'lista' | 'pulsante_webinar'` sui lead del bucket, null altrove. */
+    lancioIngresso?: string | null;
 }
 
 /**
@@ -410,6 +412,52 @@ export function eventiNuovoLead(lead: LeadEntranteNormalizzato, valori: NuovoLea
         });
     }
     return eventi;
+}
+
+/**
+ * Se su un lead del bucket a cui ci si sta COLLEGANDO va scritto
+ * `lancioIngresso='pulsante_webinar'`.
+ *
+ * Perché serve: chi era già in lista può essere stato distribuito a un GDO umano
+ * dalla card del pool, e da quel momento `assignedToId` non è più il bot. Se poi
+ * preme il pulsante del webinar, `loadLancioLead` (botGuard) lo accetterebbe solo
+ * per `lancioIngresso === 'pulsante_webinar'`: senza questo aggiornamento le API
+ * del bot (`/slots`, `/book`, `/call-now`) risponderebbero 403 su una chat che il
+ * bot sta conducendo davvero.
+ *
+ * NON si tocca l'assegnatario: il lead resta di chi ce l'ha (decisione del PO sui
+ * lead ridati), qui cambia solo da quale porta è entrato.
+ *
+ * Falso quando il campo è già a posto: il push si ripete, e un aggiornamento a
+ * vuoto significherebbe un secondo `LANCIO_INTAKE` identico sulla timeline.
+ */
+export function serveIngressoPulsante(
+    esistente: Pick<LeadEsistente, 'launchBucket' | 'lancioIngresso'>,
+    lancio: boolean,
+): boolean {
+    if (!lancio) return false;
+    if (esistente.launchBucket !== LANCIO_BUCKET) return false;
+    return esistente.lancioIngresso !== 'pulsante_webinar';
+}
+
+/**
+ * Il `LANCIO_INTAKE` di un lead del bucket a cui ci si è collegati (non creato):
+ * `collegato: true` distingue sulla timeline "è entrato adesso" da "c'era già, ed
+ * è arrivato dal pulsante".
+ */
+export function eventoIngressoCollegato(lead: LeadEntranteNormalizzato): EventoNuovoLead {
+    return {
+        eventType: 'LANCIO_INTAKE',
+        metadata: {
+            slug: LANCIO_SLUG,
+            ingresso: 'pulsante_webinar',
+            via: 'lead_entrante',
+            collegato: true,
+            bucket: LANCIO_BUCKET,
+            funnel: LANCIO_FUNNEL,
+            conversationId: lead.conversationId,
+        },
+    };
 }
 
 export type Azione =

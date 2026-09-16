@@ -134,9 +134,18 @@ di funnel deve restare vera. Dal 14/09 (lancio Web Dev AI, spec `2026-09-14-lanc
 pulsante WhatsApp del webinar: il lead nasce con `funnel='Lancio Web Dev AI'` (canonico, non maiuscolo),
 `launchBucket='LANCIO_WEBDEV_2026'`, `lancioIngresso='pulsante_webinar'`, assegnato al bot, con evento
 `LANCIO_INTAKE`; sullo stesso numero si collega solo a un lead **già nel bucket** — un lead di un altro
-funnel non ferma la creazione (duplicati cross-funnel voluti, decisione 1 del 14/09). Anche da qui
-nessun intake: il bot ha già la chat. I lead di Telegram che scrivono per primi sono "roba molto
-diversa" (PO, 14/09) e restano `TELEGRAM` con il flusso standard.
+funnel non ferma la creazione (duplicati cross-funnel voluti, decisione 1 del 14/09). Se il lead del
+bucket c'era già (era in lista) e ha premuto il pulsante, non se ne crea un altro: gli si scrive
+`lancioIngresso='pulsante_webinar'` — l'assegnatario NON si tocca — così le API del bot lo accettano
+anche se nel frattempo era stato distribuito a un GDO umano (`loadLancioLead` in `botGuard.ts`), e sulla
+timeline resta un `LANCIO_INTAKE` con `collegato: true`. I lead di Telegram che scrivono per primi sono
+"roba molto diversa" (PO, 14/09) e restano `TELEGRAM` con il flusso standard.
+
+**L'intake, invece, dipende dal canale.** Dal push `POST /api/bot/lead-entrante` non parte MAI (il bot ha
+già la chat: vedi sopra). Dal canale lista (`POST /api/admin/lead-entranti` con `spingiIntake`) parte,
+sotto il gate `intakeSicuro`, e per un lead del lancio porta il campo `lancio`
+(`lancioFieldForLead`, cioè `{ slug: 'webdev-2026-10', ingresso }`) e il funnel **canonico** letto dalla
+riga: senza quel campo il bot aprirebbe con il template di Mario invece del benvenuto del lancio.
 
 **L'appuntamento si accetta solo con `esito === 'APPUNTAMENTO'` e fuso orario esplicito.** Il
 contratto lo garantisce già, ma un ISO senza offset arriverebbe alle Conferme sfalsato di due ore

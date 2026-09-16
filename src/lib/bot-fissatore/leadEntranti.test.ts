@@ -10,6 +10,8 @@ import {
     candidatiPerAdozione,
     valoriNuovoLead,
     eventiNuovoLead,
+    serveIngressoPulsante,
+    eventoIngressoCollegato,
     NOME_FALLBACK,
     FUNNEL_FALLBACK,
     SOURCE_INBOUND,
@@ -409,4 +411,36 @@ test('candidatiPerAdozione: fuori dal lancio vale il piu recente di qualunque fu
     assert.deepEqual(candidatiPerAdozione([esistente({ id: 'altro', launchBucket: 'ALTRO_2027' })], true), []);
     // `launchBucket` assente (lead letto da una query vecchia) non e' nel bucket.
     assert.deepEqual(candidatiPerAdozione([esistente({ id: 'senza' })], true), []);
+});
+
+test('serveIngressoPulsante: solo nel lancio, solo sui lead del bucket, e mai due volte', () => {
+    const nelBucket = { launchBucket: LANCIO_BUCKET, lancioIngresso: 'lista' };
+    // Chi era in lista ed e' stato distribuito a un GDO umano: il pulsante lo
+    // rimette in mano al bot senza togliere il lead al GDO.
+    assert.equal(serveIngressoPulsante(nelBucket, true), true);
+    // Gia' a posto: il push si ripete, e un secondo giro non deve riscrivere
+    // niente ne' duplicare l'evento.
+    assert.equal(serveIngressoPulsante({ launchBucket: LANCIO_BUCKET, lancioIngresso: 'pulsante_webinar' }, true), false);
+    // Provenienza non del lancio: non si tocca niente.
+    assert.equal(serveIngressoPulsante(nelBucket, false), false);
+    // Fuori dal bucket non esiste ingresso di lancio da scrivere.
+    assert.equal(serveIngressoPulsante({ launchBucket: null, lancioIngresso: null }, true), false);
+    assert.equal(serveIngressoPulsante({ launchBucket: 'ALTRO_2027', lancioIngresso: null }, true), false);
+    // Lead del bucket senza ingresso (riga vecchia): si riempie.
+    assert.equal(serveIngressoPulsante({ launchBucket: LANCIO_BUCKET, lancioIngresso: null }, true), true);
+});
+
+test('eventoIngressoCollegato: LANCIO_INTAKE tracciabile, con collegato=true', () => {
+    const ev = eventoIngressoCollegato(normalizzato('Lancio Web Dev AI'));
+    assert.equal(ev.eventType, 'LANCIO_INTAKE');
+    assert.equal(ev.toSection, undefined);   // non e' un ingresso in pipeline: il lead c'era gia'
+    assert.deepEqual(ev.metadata, {
+        slug: LANCIO_SLUG,
+        ingresso: 'pulsante_webinar',
+        via: 'lead_entrante',
+        collegato: true,
+        bucket: LANCIO_BUCKET,
+        funnel: LANCIO_FUNNEL,
+        conversationId: 7246,
+    });
 });
