@@ -3,23 +3,11 @@ import { leads, users, leadEvents } from '@/db/schema';
 import { and, eq, asc, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { isLeadLocked } from './contactRequests';
+import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
 
 const FENICE = 'fenice';
 
-/**
- * Infornate di lead a SENSO UNICO: il bot le lavora, ma i lead che non
- * convertono NON tornano ai GDO umani.
- *
- * `DB_LISTA133_20260915` sono i lead database entrati per errore il 15/09/2026.
- * Il bot ha scritto a ~1.150 di loro; chi non ha risposto a un messaggio
- * WhatsApp non vale una chiamata a mano, e restituirli riempirebbe la pipeline
- * dei GDO di gente gia' dimostratasi fredda (decisione del PO, 16/09/2026).
- *
- * Aggiungere un batch qui e' una decisione che si prende per quella specifica
- * infornata: NON vale per `intakeBatch` in generale, che marca le infornate di
- * ingresso e un domani potrebbe marcare lead buoni.
- */
-const BATCH_SENSO_UNICO = new Set(['DB_LISTA133_20260915']);
+
 
 export type ReassignReason = 'mai_risposto' | 'chat_interrotta';
 
@@ -68,7 +56,7 @@ export async function reassignBotLeadToHumanPool(
         //
         // Il lead non sparisce: resta scartato e riconoscibile da `intakeBatch`,
         // quindi si può ripescare in blocco se un domani si decide altrimenti.
-        if (cur.intakeBatch && BATCH_SENSO_UNICO.has(cur.intakeBatch)) {
+        if (cur.intakeBatch && BATCH_SENSO_UNICO.includes(cur.intakeBatch)) {
             await tx.update(leads)
                 .set({ status: 'REJECTED', assignedToId: null, updatedAt: new Date() })
                 .where(eq(leads.id, leadId));

@@ -13,6 +13,7 @@ import {
     parseYearMonth,
 } from "@/lib/workingDaysUtils";
 import { stageHits } from "@/lib/kpi/funnelStages";
+import { BATCH_ESCLUSI_DAI_KPI } from "@/lib/intakeBatch";
 import crypto from "crypto";
 
 async function requireAdmin() {
@@ -143,6 +144,16 @@ async function leadOverviewForCompany(ctx: TenantContext, ym: string): Promise<L
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${monthStart}`,
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${monthEnd}`,
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+                // Infornate anomale: contano SOLO i lead davvero lavorati, cioè
+                // quelli passati a funnel 'Database'. Gli altri sono scarti mai
+                // chiamati, e non sono lead che abbiamo acquisito.
+                //
+                // Senza questa riga, il 16/09/2026 la dashboard mostrava 10.968
+                // lead nuovi di settembre contro i 4.073 veri: 6.895 erano gli
+                // scarti del flood della lista 133.
+                sql`(${leads.intakeBatch} IS NULL
+                     OR NOT (${leads.intakeBatch} = ANY(${BATCH_ESCLUSI_DAI_KPI}))
+                     OR LOWER(COALESCE(${leads.funnel}, '')) = 'database')`,
             ))
             .groupBy(sql`LOWER(COALESCE(${leads.funnel}, '')) = 'database'`);
 

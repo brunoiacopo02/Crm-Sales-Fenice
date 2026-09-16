@@ -7,6 +7,7 @@ import {
     pianificaRibilanciamento, idSorgenti, eOraDelGiro,
     type GdoPoolState, type LeadRibilanciabile,
 } from '@/lib/gdoPools/rebalance';
+import { BATCH_FREDDI } from '@/lib/intakeBatch';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -48,16 +49,7 @@ const LOTTO = 200;
 
 const ON_VALUES = new Set(['1', 'on']);
 
-/**
- * Le infornate di ingresso che valgono come CODA FREDDA, cioè come lead da
- * trattare alla stregua di un ritorno del bot.
- *
- * Lista chiusa apposta: `intakeBatch` marca le infornate di ingresso in
- * generale, non i ritorni del bot, e un domani potrebbe marcare un blocco di
- * lead freschi. Vederlo qui dentro deve essere una decisione presa da qualcuno,
- * non la conseguenza automatica di aver marcato un'infornata.
- */
-const BATCH_FREDDI = ['DB_LISTA133_20260915'];
+
 
 /**
  * Ribilanciamento serale dei pool GDO: i lead RIDATI dal bot finiti in mano al
