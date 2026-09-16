@@ -6,11 +6,17 @@ import {
     chatApertaAlBot,
     intakeSicuro,
     nomePlausibile,
+    isProvenienzaLancioWebDev,
+    candidatiPerAdozione,
+    valoriNuovoLead,
+    eventiNuovoLead,
     NOME_FALLBACK,
     FUNNEL_FALLBACK,
+    SOURCE_INBOUND,
     type LeadEsistente,
     type LeadEntranteRaw,
 } from './leadEntranti';
+import { LANCIO_BUCKET, LANCIO_FUNNEL, LANCIO_SLUG } from '@/lib/lancio/intake';
 
 /** La riga tipo della lista: link wa.me del canale Telegram, nome assente. */
 const RIGA_BASE: LeadEntranteRaw = {
@@ -257,4 +263,150 @@ test('un nome implausibile ricade sul fallback e NON scarta il lead', () => {
     if (!res.ok) return;
     assert.equal(res.lead.name, NOME_FALLBACK);
     assert.equal(res.lead.phone, '+393200431888');
+});
+
+// ---------------------------------------------------------------------------
+// Lancio Web Dev AI: la terza provenienza (pulsante WhatsApp del webinar).
+// I lead di Telegram che scrivono per primi sono "roba molto diversa" (PO,
+// 14/09) e devono restare identici a oggi: i test qui sotto lo mettono per
+// iscritto riga per riga, non solo campo per campo.
+// ---------------------------------------------------------------------------
+
+const ADESSO = new Date('2026-10-05T21:40:00+02:00');
+
+function normalizzato(provenienza: string, over: Partial<LeadEntranteRaw> = {}) {
+    const res = normalizzaLeadEntrante({ ...RIGA_BASE, provenienza, ...over });
+    assert.equal(res.ok, true);
+    if (!res.ok) throw new Error('unreachable');
+    return res.lead;
+}
+
+test('isProvenienzaLancioWebDev: riconosce il valore del pulsante in ogni caso/spaziatura, e solo quello', () => {
+    assert.equal(isProvenienzaLancioWebDev('Lancio Web Dev AI'), true);
+    assert.equal(isProvenienzaLancioWebDev('LANCIO WEB DEV AI'), true);   // come esce da normalizzaLeadEntrante
+    assert.equal(isProvenienzaLancioWebDev('  lancio   web dev ai '), true);
+    assert.equal(isProvenienzaLancioWebDev('TELEGRAM'), false);
+    assert.equal(isProvenienzaLancioWebDev('INBOUND'), false);
+    assert.equal(isProvenienzaLancioWebDev('SCONOSCIUTO'), false);
+    assert.equal(isProvenienzaLancioWebDev('Lancio Web Developer AI'), false); // il nome della lista AC non e' il funnel
+    assert.equal(isProvenienzaLancioWebDev(''), false);
+    assert.equal(isProvenienzaLancioWebDev(null), false);
+    assert.equal(isProvenienzaLancioWebDev(undefined), false);
+});
+
+test('valoriNuovoLead: TELEGRAM resta il lead entrante di oggi (funnel grezzo, nessun bucket)', () => {
+    const v = valoriNuovoLead(normalizzato('TELEGRAM'), 'bot-1', ADESSO, 'id-1');
+    assert.equal(v.funnel, 'TELEGRAM');
+    assert.equal(v.launchBucket, null);
+    assert.equal(v.lancioIngresso, null);
+    assert.equal(v.assignedToId, 'bot-1');
+    assert.equal(v.source, SOURCE_INBOUND);
+    assert.equal(v.status, 'NEW');
+    assert.equal(v.createdAt.toISOString(), '2026-08-26T19:51:52.000Z'); // scrittoIl
+    assert.equal(v.assignedAt, ADESSO);
+});
+
+test('valoriNuovoLead: la riga TELEGRAM e byte per byte quella che si scriveva prima del lancio', () => {
+    // Prova esplicita della richiesta del PO: nessun campo nuovo che cambia il
+    // significato, nessun campo cambiato sul percorso che esisteva gia'.
+    const v = valoriNuovoLead(normalizzato('TELEGRAM'), 'bot-1', ADESSO, 'id-1');
+    assert.deepEqual(v, {
+        id: 'id-1',
+        name: NOME_FALLBACK,
+        phone: '+393200431888',
+        email: null,
+        funnel: 'TELEGRAM',
+        source: SOURCE_INBOUND,
+        status: 'NEW',
+        callCount: 0,
+        assignedToId: 'bot-1',
+        createdAt: new Date('2026-08-26T21:51:52+02:00'),
+        assignedAt: ADESSO,
+        updatedAt: ADESSO,
+        companyId: 'fenice',
+        launchBucket: null,
+        lancioIngresso: null,
+    });
+});
+
+test('valoriNuovoLead: senza scrittoIl createdAt ricade su adesso, come prima', () => {
+    const v = valoriNuovoLead(normalizzato('TELEGRAM', { scrittoIl: null }), 'bot-1', ADESSO, 'id-1');
+    assert.equal(v.createdAt, ADESSO);
+});
+
+test('valoriNuovoLead: INBOUND identico a TELEGRAM salvo il funnel', () => {
+    const v = valoriNuovoLead(normalizzato('INBOUND'), 'bot-1', ADESSO, 'id-2');
+    assert.equal(v.funnel, 'INBOUND');
+    assert.equal(v.launchBucket, null);
+    assert.equal(v.lancioIngresso, null);
+});
+
+test('valoriNuovoLead: provenienza vuota resta SCONOSCIUTO e fuori dal lancio', () => {
+    const v = valoriNuovoLead(normalizzato(''), 'bot-1', ADESSO, 'id-4');
+    assert.equal(v.funnel, FUNNEL_FALLBACK);
+    assert.equal(v.launchBucket, null);
+});
+
+test('valoriNuovoLead: Lancio Web Dev AI -> funnel canonico, bucket, ingresso pulsante, assegnato al bot', () => {
+    const v = valoriNuovoLead(normalizzato('Lancio Web Dev AI'), 'bot-1', ADESSO, 'id-3');
+    assert.equal(v.funnel, LANCIO_FUNNEL);          // NON 'LANCIO WEB DEV AI'
+    assert.equal(v.launchBucket, LANCIO_BUCKET);
+    assert.equal(v.lancioIngresso, 'pulsante_webinar');
+    assert.equal(v.assignedToId, 'bot-1');
+    assert.equal(v.source, SOURCE_INBOUND);
+    assert.equal(v.status, 'NEW');
+    assert.equal(v.assignedAt, ADESSO);
+    assert.equal(v.companyId, 'fenice');
+});
+
+test('eventiNuovoLead: i lead entranti normali hanno IMPORTED + ASSIGNED, il lancio ha in piu LANCIO_INTAKE', () => {
+    const t = normalizzato('TELEGRAM');
+    const eventiT = eventiNuovoLead(t, valoriNuovoLead(t, 'bot-1', ADESSO, 'id-1'));
+    assert.deepEqual(eventiT.map((e) => e.eventType), ['IMPORTED', 'ASSIGNED']);
+    assert.equal(eventiT[0].metadata.provenienza, 'TELEGRAM');
+    assert.equal(eventiT[1].metadata.routing, undefined);
+
+    const l = normalizzato('Lancio Web Dev AI');
+    const eventiL = eventiNuovoLead(l, valoriNuovoLead(l, 'bot-1', ADESSO, 'id-3'));
+    assert.deepEqual(eventiL.map((e) => e.eventType), ['IMPORTED', 'ASSIGNED', 'LANCIO_INTAKE']);
+    assert.equal(eventiL[1].metadata.routing, 'lancio');
+    assert.equal(eventiL[2].metadata.ingresso, 'pulsante_webinar');
+    assert.equal(eventiL[2].metadata.bucket, LANCIO_BUCKET);
+    assert.equal(eventiL[2].metadata.slug, LANCIO_SLUG);
+    assert.equal(eventiL[2].metadata.via, 'lead_entrante');
+});
+
+test('eventiNuovoLead: gli eventi di un TELEGRAM sono quelli di oggi, metadata compreso', () => {
+    const t = normalizzato('TELEGRAM');
+    const eventi = eventiNuovoLead(t, valoriNuovoLead(t, 'bot-1', ADESSO, 'id-1'));
+    assert.deepEqual(eventi, [
+        {
+            eventType: 'IMPORTED',
+            toSection: 'Prima Chiamata',
+            metadata: {
+                source: SOURCE_INBOUND,
+                provenienza: 'TELEGRAM',
+                conversationId: 7246,
+                statoBot: 'active',
+                scrittoIl: '2026-08-26T19:51:52.000Z',
+            },
+        },
+        {
+            eventType: 'ASSIGNED',
+            metadata: { assignedToUser: 'bot-1', source: SOURCE_INBOUND, adozioneChatEntrante: true },
+        },
+    ]);
+});
+
+test('candidatiPerAdozione: fuori dal lancio vale il piu recente di qualunque funnel; nel lancio solo chi e gia nel bucket', () => {
+    const vecchioGdo = esistente({ id: 'gdo', createdAt: new Date('2026-05-01T00:00:00Z'), launchBucket: null });
+    const nelBucket = esistente({ id: 'lancio', createdAt: new Date('2026-09-20T00:00:00Z'), launchBucket: LANCIO_BUCKET });
+    assert.deepEqual(candidatiPerAdozione([vecchioGdo], false).map((c) => c.id), ['gdo']);
+    assert.deepEqual(candidatiPerAdozione([vecchioGdo], true), []);            // duplicato cross-funnel voluto
+    assert.deepEqual(candidatiPerAdozione([vecchioGdo, nelBucket], true).map((c) => c.id), ['lancio']);
+    assert.deepEqual(candidatiPerAdozione([vecchioGdo, nelBucket], false).length, 2);
+    // Un bucket di un altro lancio non e' questo lancio.
+    assert.deepEqual(candidatiPerAdozione([esistente({ id: 'altro', launchBucket: 'ALTRO_2027' })], true), []);
+    // `launchBucket` assente (lead letto da una query vecchia) non e' nel bucket.
+    assert.deepEqual(candidatiPerAdozione([esistente({ id: 'senza' })], true), []);
 });
