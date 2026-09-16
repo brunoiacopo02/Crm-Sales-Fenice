@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
 import { eq, and, desc, isNull, gte, count, notLike, sql } from "drizzle-orm";
 import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 import { logLeadEvent } from "@/lib/eventLogger";
@@ -405,6 +406,9 @@ export async function getAcIntakeStats(): Promise<AcIntakeStats> {
         eq(leads.companyId, ctx.companyId),
         eq(leads.source, 'activecampaign'),
         gte(leads.createdAt, since),
+        // Un'infornata anomala (flood lista 133 del 15/09/2026) non è intake
+        // AC: 7.891 lead in un giorno facevano sembrare il webhook impazzito.
+        contaNeiKpiSql(),
     ));
 
     // Formatta una Date in YYYY-MM-DD nel fuso Europe/Rome.
@@ -486,6 +490,9 @@ export async function getBotRoutingStatus(): Promise<BotRoutingStatus> {
         eq(leads.companyId, ctx.companyId),
         eq(leads.source, 'activecampaign'),
         gte(leads.createdAt, dayStart),
+        // Stessa regola di getAcIntakeStats: i due numeri stanno sulla stessa
+        // pagina e devono contare gli stessi lead.
+        contaNeiKpiSql(),
     ));
 
     const [backlog] = await db.select({
@@ -495,6 +502,10 @@ export async function getBotRoutingStatus(): Promise<BotRoutingStatus> {
         eq(leads.companyId, ctx.companyId),
         eq(users.isBot, true),
         eq(leads.status, 'NEW'),
+        // Gli scarti mai chiamati di un'infornata anomala non sono arretrato
+        // che il bot deve smaltire: con loro dentro il backlog diceva ~7.000
+        // e la domanda "il bot regge?" non aveva più risposta.
+        contaNeiKpiSql(),
     ));
 
     return {

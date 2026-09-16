@@ -5,6 +5,7 @@ import { leads, leadEvents, users, notifications } from "@/db/schema"
 import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { contaNeiKpiSql } from "@/lib/intakeBatch"
 import crypto from "crypto"
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -65,6 +66,10 @@ function buildSectionConditions(section: RedistributionSection) {
     const base = [
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
+        // Gli scarti mai chiamati di un'infornata anomala non si
+        // ridistribuiscono: per decisione PO non tornano ai GDO umani, e
+        // senza questo filtro la sezione 1 del bot ne offriva ~7.000.
+        contaNeiKpiSql(),
     ]
     if (section === 'recall') {
         return [...base, isNotNull(leads.recallDate)]

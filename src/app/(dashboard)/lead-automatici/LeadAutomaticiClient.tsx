@@ -53,6 +53,11 @@ const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spieg
         spiega: 'sabato 09:00–16:30: i lead vanno solo ai GDO umani, il bot resta fuori anche se è sotto il minimo giornaliero.',
         tono: 'border-emerald-200 bg-emerald-50 text-emerald-900',
     },
+    bot_half: {
+        titolo: 'Rientro del bot: metà e metà',
+        spiega: 'il bot prende un lead solo finché oggi ne ha meno della metà; il resto ai GDO. Finestra a scadenza, si spegne da sola.',
+        tono: 'border-amber-200 bg-amber-50 text-amber-900',
+    },
     legacy: {
         titolo: 'Regola oraria spenta',
         spiega: "l'env BOT_ROUTING è su off: vale il round-robin storico, bot e GDO nello stesso giro.",

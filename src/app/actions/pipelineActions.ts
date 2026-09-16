@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server"
 import { db } from "@/db"
 import { leads, callLogs, pipelineSnapshots, users, leadEvents, botContactRequests } from "@/db/schema"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
+import { contaNeiKpiSql } from "@/lib/intakeBatch"
 import { contactCategoryLabel, isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
 import { eq, and, ne, isNull, isNotNull, inArray, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
@@ -272,7 +273,16 @@ export async function getPipelineLeads() {
         const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10)`
         const dupRows = await db.select({ key: phoneKeyExpr })
             .from(leads)
-            .where(eq(leads.companyId, ctx.companyId))
+            .where(and(
+                eq(leads.companyId, ctx.companyId),
+                // Gli scarti di un'infornata anomala non fanno duplicato: sono
+                // copie tecniche dello stesso numero, non due persone che ci
+                // hanno lasciato i dati due volte. Il flood del 15/09/2026 ha
+                // acceso il badge su 6.811 lead legittimi — 1.645 ancora aperti
+                // e 902 con un appuntamento — e un GDO che vede "duplicato" su
+                // una card buona ci perde tempo, o peggio la scarta.
+                contaNeiKpiSql(),
+            ))
             .groupBy(phoneKeyExpr)
             .having(sql`count(*) > 1`)
         dupPhoneKeys = new Set(dupRows.map(r => r.key).filter(k => !!k && k.length >= 6))
@@ -361,6 +371,10 @@ export async function getLeadsWithSamePhone(leadId: string) {
             eq(leads.companyId, ctx.companyId),
             ne(leads.id, leadId),
             sql`${phoneKeyExpr} = ${key}`,
+            // Coerente con il badge "duplicato" di getPipelineLeads: le copie
+            // tecniche di un'infornata anomala non sono un collega che ha già
+            // in mano quel numero, e non vanno mostrate come tali.
+            contaNeiKpiSql(),
         ))
         .orderBy(desc(leads.updatedAt))
         .limit(10)

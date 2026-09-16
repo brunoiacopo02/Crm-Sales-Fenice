@@ -50,7 +50,12 @@ export type RoutingWindow =
     /** Finestra mista: prima il bot finché è sotto la soglia minima, poi i GDO. */
     | 'bot_first'
     /** Fascia protetta: solo GDO umani, il bot è escluso anche se sotto soglia. */
-    | 'gdo_only';
+    | 'gdo_only'
+    /**
+     * Metà e metà: il bot prende un lead solo se oggi ne ha meno della metà.
+     * Tappa intermedia del rientro dopo il flood, non una fascia del calendario.
+     */
+    | 'bot_half';
 
 /** 'legacy' = interruttore spento, vale il round-robin storico a pool unico. */
 export type LeadRouting = RoutingWindow | 'legacy';
@@ -109,6 +114,49 @@ export function resolveRoutingWindow(now: Date): RoutingWindow {
 }
 
 /**
+ * Legge un istante ISO da una env. Un valore illeggibile vale come env assente:
+ * una finestra scritta male non deve poter cambiare il routing di nascosto.
+ */
+function istanteDaEnv(nome: string): number | null {
+    const raw = process.env[nome]?.trim();
+    if (!raw) return null;
+    const t = Date.parse(raw);
+    if (Number.isNaN(t)) {
+        console.error(`[leadRouting] ${nome}="${raw}" non e' una data ISO: finestra ignorata`);
+        return null;
+    }
+    return t;
+}
+
+/**
+ * Rientro graduale del bot dopo il flood della lista 133 (PO 2026-09-15).
+ *
+ * Il numero WhatsApp era sceso a qualita' LOW per un blocco di aperture a
+ * freddo su lead database. Si riporta il bot a regime in due tappe, ognuna con
+ * la sua scadenza: passata la data la finestra si spegne DA SOLA, senza che
+ * nessuno debba ricordarsi di togliere una env.
+ *
+ *   BOT_FRESH_SUSPENDED_UNTIL  finche' non e' passata: nessun lead fresco al
+ *                              bot, vanno tutti ai GDO ('gdo_only')
+ *   BOT_HALF_UNTIL             finche' non e' passata: meta' e meta' ('bot_half')
+ *
+ * La sospensione vince sulla meta': se per errore si sovrappongono, il
+ * comportamento e' quello piu' prudente per il numero.
+ *
+ * ATTENZIONE: queste finestre riguardano solo i lead NUOVI. Il bot continua a
+ * rispondere, a gestire gli appuntamenti e a recapitare agende e video: quelli
+ * sono messaggi attesi, che al rating fanno bene, non male.
+ */
+export function finestraRientro(now: Date): 'gdo_only' | 'bot_half' | null {
+    const t = now.getTime();
+    const sospesoFino = istanteDaEnv('BOT_FRESH_SUSPENDED_UNTIL');
+    if (sospesoFino !== null && t < sospesoFino) return 'gdo_only';
+    const metaFino = istanteDaEnv('BOT_HALF_UNTIL');
+    if (metaFino !== null && t < metaFino) return 'bot_half';
+    return null;
+}
+
+/**
  * La regola in vigore adesso.
  *
  * Rollback senza deploy con l'env BOT_ROUTING:
@@ -117,9 +165,15 @@ export function resolveRoutingWindow(now: Date): RoutingWindow {
  *
  * Come per la finestra ferie, un valore scritto male non deve mai poter
  * spegnere l'intake: nel dubbio la regola resta attiva.
+ *
+ * Il rientro graduale sta DOPO il kill-switch (così BOT_ROUTING=off resta la
+ * leva che riporta tutto al comportamento storico) e PRIMA del calendario,
+ * perché per i giorni che copre deve vincere sulle fasce orarie.
  */
 export function getLeadRouting(now: Date): LeadRouting {
     const raw = process.env.BOT_ROUTING?.trim().toLowerCase();
     if (raw && OFF_VALUES.has(raw)) return 'legacy';
+    const rientro = finestraRientro(now);
+    if (rientro) return rientro;
     return resolveRoutingWindow(now);
 }

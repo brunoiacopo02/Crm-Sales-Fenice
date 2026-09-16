@@ -13,6 +13,7 @@ import {
     parseYearMonth,
 } from "@/lib/workingDaysUtils";
 import { stageHits } from "@/lib/kpi/funnelStages";
+import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import crypto from "crypto";
 
 async function requireAdmin() {
@@ -143,6 +144,14 @@ async function leadOverviewForCompany(ctx: TenantContext, ym: string): Promise<L
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${monthStart}`,
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${monthEnd}`,
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+                // Infornate anomale: contano SOLO i lead davvero lavorati, cioè
+                // quelli passati a funnel 'Database'. Gli altri sono scarti mai
+                // chiamati, e non sono lead che abbiamo acquisito.
+                //
+                // Senza questa riga, il 16/09/2026 la dashboard mostrava 10.968
+                // lead nuovi di settembre contro i 4.073 veri: 6.895 erano gli
+                // scarti del flood della lista 133.
+                contaNeiKpiSql(),
             ))
             .groupBy(sql`LOWER(COALESCE(${leads.funnel}, '')) = 'database'`);
 
@@ -967,6 +976,11 @@ async function getLeadSplitByFunnel(
             sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${monthStart}`,
             sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${monthEnd}`,
             or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+            // Stessa regola della riga Totale (leadOverviewForCompany): gli
+            // scarti mai chiamati di un'infornata anomala non sono lead
+            // acquisiti. Senza, le colonne split della stessa tabella
+            // sommavano 6.895 lead più del Totale, e non quadravano.
+            contaNeiKpiSql(),
         ))
         .groupBy(sql`UPPER(COALESCE(${leads.funnel}, ''))`, leads.launchBucket);
 

@@ -8,6 +8,7 @@ import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
+import { contaNeiKpi } from "@/lib/intakeBatch";
 import { monthBoundsRome, dayBoundsRome, weekBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 import { getMinCallsPerDay } from "@/app/actions/managerAdvancedActions";
 
@@ -121,6 +122,8 @@ export async function getManagerGdoTables(monthString: string) {
         db.select({
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
+            // Serve a contaNeiKpi() nel ciclo di conteggio più sotto.
+            intakeBatch: leads.intakeBatch,
         }).from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
@@ -269,6 +272,9 @@ export async function getManagerGdoTables(monthString: string) {
     // Count leads assigned to each GDO in the month (totali + per-funnel)
     for (const lead of assignedLeadsRaw) {
         if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId]) continue;
+        // Gli scarti mai chiamati di un'infornata anomala non sono lead
+        // assegnati: schiaccerebbero la % fissaggio del GDO che li ha addosso.
+        if (!contaNeiKpi(lead)) continue;
         const g = gdoStatsMap[lead.assignedToId];
         g.leadAssegnati++;
         const f = lead.funnel || 'ALTRO';
