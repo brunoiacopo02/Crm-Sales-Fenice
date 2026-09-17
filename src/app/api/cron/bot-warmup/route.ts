@@ -7,7 +7,7 @@ import {
     leggiConfigRiscaldamento, pianificaRiscaldamento, type LeadCandidato,
 } from '@/lib/bot-fissatore/riscaldamento';
 import { pushLeadToBot } from '@/lib/bot-fissatore/push';
-import { BATCH_ESCLUSI_DAI_KPI } from '@/lib/intakeBatch';
+
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -80,10 +80,20 @@ export async function GET(req: Request) {
         intakeBatch: leads.intakeBatch,
         appointmentDate: leads.appointmentDate,
         presentedAt: leads.presentedAt,
+        // Il confronto e' sul TELEFONO, non sull'id del lead: la stessa persona
+        // puo' avere piu' schede (rientra da un'altra campagna, o il numero e'
+        // stato importato due volte), e se il bot ha scritto a una scheda
+        // vecchia quella nuova sembrerebbe immacolata. Sarebbe una SECONDA
+        // apertura WhatsApp alla stessa persona: il comportamento che fa
+        // scendere la qualita' di un numero, cioe' l'opposto di quello che
+        // questo giro serve a fare. Misurato il 17/09: su 142 candidati, 2
+        // erano in questa condizione e col solo controllo per id sarebbero
+        // passati.
         toccatoDalBot: sql<boolean>`EXISTS (
-            SELECT 1 FROM "leadEvents" e
-            WHERE e."leadId" = ${leads.id}
-              AND e."eventType" IN ('BOT_PUSHED','REASSIGNED_FROM_BOT','BOT_CALL_ATTEMPT','BOT_NOTE','BOT_REPORT')
+            SELECT 1 FROM leads al
+            JOIN "leadEvents" ae ON ae."leadId" = al.id
+            WHERE al.phone = ${leads.phone}
+              AND ae."eventType" IN ('BOT_PUSHED','REASSIGNED_FROM_BOT','BOT_CALL_ATTEMPT','BOT_NOTE','BOT_REPORT')
         )`,
     }).from(leads).where(and(
         eq(leads.companyId, FENICE),

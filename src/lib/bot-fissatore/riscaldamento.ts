@@ -73,7 +73,11 @@ export function leggiConfigRiscaldamento(): ConfigRiscaldamento {
 
 export interface LeadCandidato {
     id: string;
-    /** Il bot ha gia' avuto a che fare con questo lead? */
+    /**
+     * Il bot ha gia' scritto a QUESTA PERSONA? Si guarda il telefono, non l'id
+     * del lead: la stessa persona puo' avere piu' schede, e una scheda nuova di
+     * un numero gia' contattato non e' un lead nuovo — e' una seconda apertura.
+     */
     toccatoDalBot: boolean;
     /** Appartiene a un'infornata anomala (es. il flood della lista 133)? */
     infornata: string | null;
@@ -87,7 +91,8 @@ export interface LeadCandidato {
  * Un lead e' spostabile al bot?
  *
  * Tutte e cinque le condizioni servono, e nessuna e' ridondante:
- * - mai toccato dal bot: altrimenti e' una seconda apertura alla stessa persona;
+ * - il bot non ha mai scritto a quel NUMERO (non a quell'id): la stessa persona
+ *   puo' avere piu' schede, e la seconda apertura la fa il telefono, non l'id;
  * - fuori dalle infornate anomale: quelli sono lead database gia' decisi;
  * - mai chiamato: se un GDO ci ha gia' parlato, il bot ripartirebbe da zero
  *   dicendo cose che il lead ha gia' sentito;
