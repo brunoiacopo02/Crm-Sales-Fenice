@@ -43,4 +43,14 @@ export interface BotIntakePayload {
      * dell'apertura di Mario. Assente = flusso attuale, invariato.
      */
     lancio?: LancioPayloadField;
+    /**
+     * Lead del riscaldamento: il bot deve far nascere la chat SUL numero nuovo,
+     * non su quello che gli assegnerebbe la sua quota.
+     *
+     * La quota del bot e' globale: alzarla manderebbe al numero nuovo anche i
+     * lead ordinari, abbassarla terrebbe fuori anche questi. L'unico modo di
+     * mandare al numero in riscaldamento *solo* i lead del riscaldamento e'
+     * dirglielo qui.
+     */
+    riscaldamento?: boolean;
 }

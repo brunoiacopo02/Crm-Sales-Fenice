@@ -220,6 +220,8 @@ export async function eseguiRiscaldamento(opzioni: {
                 email: r.email,
                 funnel: r.funnel,
                 companyId: FENICE,
+                // Questi e solo questi vanno sul numero che stiamo scaldando.
+                riscaldamento: true,
             });
             if (esito.result === 'sent' || esito.result === 'duplicate') inviati++;
             else falliti.push(`${id}:${esito.result}`);
