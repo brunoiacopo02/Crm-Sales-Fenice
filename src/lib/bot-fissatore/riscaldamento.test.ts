@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     eImmacolato, pianificaRiscaldamento, leggiConfigRiscaldamento,
-    SCAGLIONE_DEFAULT, type LeadCandidato, type ConfigRiscaldamento,
+    SCAGLIONE_DEFAULT, TETTO_GIORNALIERO_DEFAULT,
+    type LeadCandidato, type ConfigRiscaldamento,
 } from './riscaldamento';
 
-const CHIAVI = ['BOT_WARMUP', 'BOT_WARMUP_BATCH', 'BOT_WARMUP_SOURCE'] as const;
+const CHIAVI = ['BOT_WARMUP', 'BOT_WARMUP_BATCH', 'BOT_WARMUP_SOURCE', 'BOT_WARMUP_DAILY'] as const;
 
 function withEnv(env: Partial<Record<(typeof CHIAVI)[number], string>>, fn: () => void) {
     const prima = Object.fromEntries(CHIAVI.map((k) => [k, process.env[k]]));
@@ -24,7 +25,7 @@ const lead = (over: Partial<LeadCandidato> = {}): LeadCandidato => ({
 });
 
 const cfg = (over: Partial<ConfigRiscaldamento> = {}): ConfigRiscaldamento => ({
-    attivo: true, scaglione: 50, sorgente: 'GDO 114', ...over,
+    attivo: true, scaglione: 50, sorgente: 'GDO 114', tettoGiornaliero: 1000, ...over,
 });
 
 // ---------------------------------------------------------------- immacolato
@@ -132,5 +133,63 @@ test('la sorgente si configura e ha un default', () => {
     withEnv({ BOT_WARMUP: 'on' }, () => assert.equal(leggiConfigRiscaldamento().sorgente, 'GDO 114'));
     withEnv({ BOT_WARMUP: 'on', BOT_WARMUP_SOURCE: 'GDO 118' }, () => {
         assert.equal(leggiConfigRiscaldamento().sorgente, 'GDO 118');
+    });
+});
+
+// ---------------------------------------------------------------- tetto giornaliero
+
+test('il tetto giornaliero limita il giro anche se lo scaglione e piu grande', () => {
+    const candidati = Array.from({ length: 80 }, (_, i) => lead({ id: `L${i}` }));
+    const p = pianificaRiscaldamento({
+        candidati, config: cfg({ scaglione: 50, tettoGiornaliero: 35 }), giaSpostatiOggi: 20,
+    });
+    assert.equal(p.daSpostare.length, 15);
+    assert.equal(p.motivo, 'ok');
+});
+
+test('tetto gia raggiunto: non sposta niente e lo dice', () => {
+    const candidati = Array.from({ length: 80 }, (_, i) => lead({ id: `L${i}` }));
+    const p = pianificaRiscaldamento({
+        candidati, config: cfg({ scaglione: 50, tettoGiornaliero: 35 }), giaSpostatiOggi: 35,
+    });
+    assert.deepEqual(p.daSpostare, []);
+    assert.equal(p.motivo, 'tetto_raggiunto');
+    assert.equal(p.residui, 80, 'i candidati restano disponibili per domani');
+});
+
+test('aver gia superato il tetto non fa diventare negativo il giro', () => {
+    const candidati = Array.from({ length: 80 }, (_, i) => lead({ id: `L${i}` }));
+    const p = pianificaRiscaldamento({
+        candidati, config: cfg({ scaglione: 50, tettoGiornaliero: 35 }), giaSpostatiOggi: 90,
+    });
+    assert.deepEqual(p.daSpostare, []);
+    assert.equal(p.motivo, 'tetto_raggiunto');
+});
+
+test('forza scavalca il tetto ma NON lo scaglione', () => {
+    const candidati = Array.from({ length: 80 }, (_, i) => lead({ id: `L${i}` }));
+    const p = pianificaRiscaldamento({
+        candidati, config: cfg({ scaglione: 25, tettoGiornaliero: 35 }),
+        giaSpostatiOggi: 50, forza: true,
+    });
+    assert.equal(p.daSpostare.length, 25);
+    assert.equal(p.motivo, 'ok');
+});
+
+test('senza giaSpostatiOggi il tetto vale per intero', () => {
+    const candidati = Array.from({ length: 80 }, (_, i) => lead({ id: `L${i}` }));
+    const p = pianificaRiscaldamento({ candidati, config: cfg({ scaglione: 50, tettoGiornaliero: 35 }) });
+    assert.equal(p.daSpostare.length, 35);
+});
+
+test('il tetto si configura da env e ha un default', () => {
+    withEnv({ BOT_WARMUP: 'on' }, () => {
+        assert.equal(leggiConfigRiscaldamento().tettoGiornaliero, TETTO_GIORNALIERO_DEFAULT);
+    });
+    withEnv({ BOT_WARMUP: 'on', BOT_WARMUP_DAILY: '60' }, () => {
+        assert.equal(leggiConfigRiscaldamento().tettoGiornaliero, 60);
+    });
+    withEnv({ BOT_WARMUP: 'on', BOT_WARMUP_DAILY: 'boh' }, () => {
+        assert.equal(leggiConfigRiscaldamento().tettoGiornaliero, TETTO_GIORNALIERO_DEFAULT);
     });
 });

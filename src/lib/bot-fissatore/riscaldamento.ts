@@ -28,6 +28,17 @@
 /** Quanti lead spostare a ogni giro. */
 export const SCAGLIONE_DEFAULT = 50;
 
+/**
+ * Quanti lead al giorno, al massimo, puo' assorbire il numero in riscaldamento.
+ *
+ * Lo scaglione da solo non basta: il giro e' orario, e uno scaglione da 25
+ * ripetuto dodici volte sono trecento aperture in un pomeriggio — cioe'
+ * esattamente il picco che il riscaldamento serve a evitare. Il tetto e' la
+ * grandezza che il PO decide davvero ("piano piano, tra domani e dopodomani");
+ * lo scaglione dice solo quanto si spezzetta dentro la giornata.
+ */
+export const TETTO_GIORNALIERO_DEFAULT = 35;
+
 const OFF_VALUES = new Set(['off', 'none', 'disabled', 'false', '0']);
 
 export interface ConfigRiscaldamento {
@@ -37,6 +48,8 @@ export interface ConfigRiscaldamento {
     scaglione: number;
     /** Nome del GDO da cui prendere i lead. */
     sorgente: string;
+    /** Quanti lead al massimo in tutta la giornata, sommando i giri. */
+    tettoGiornaliero: number;
 }
 
 /**
@@ -68,6 +81,7 @@ export function leggiConfigRiscaldamento(): ConfigRiscaldamento {
         attivo,
         scaglione: interoDaEnv('BOT_WARMUP_BATCH', SCAGLIONE_DEFAULT),
         sorgente: process.env.BOT_WARMUP_SOURCE?.trim() || 'GDO 114',
+        tettoGiornaliero: interoDaEnv('BOT_WARMUP_DAILY', TETTO_GIORNALIERO_DEFAULT),
     };
 }
 
@@ -113,7 +127,7 @@ export interface PianoRiscaldamento {
     daSpostare: string[];
     /** Quanti candidati restano fuori, per il giro dopo. */
     residui: number;
-    motivo: 'ok' | 'spento' | 'nessun_candidato';
+    motivo: 'ok' | 'spento' | 'nessun_candidato' | 'tetto_raggiunto';
 }
 
 /**
@@ -126,14 +140,33 @@ export interface PianoRiscaldamento {
 export function pianificaRiscaldamento(args: {
     candidati: LeadCandidato[];
     config: ConfigRiscaldamento;
+    /**
+     * Quanti ne ha gia' presi oggi questo stesso giro. Lo conta il chiamante
+     * sugli eventi, non un contatore a parte: un contatore si sfasa al primo
+     * riavvio, gli eventi no.
+     */
+    giaSpostatiOggi?: number;
+    /**
+     * Scavalca il tetto giornaliero. Lo usa solo il pulsante admin, quando la
+     * decisione di dare altri lead al bot oggi l'ha presa una persona: il tetto
+     * protegge dai giri automatici, non deve impedire una scelta esplicita.
+     */
+    forza?: boolean;
 }): PianoRiscaldamento {
-    const { candidati, config } = args;
+    const { candidati, config, giaSpostatiOggi = 0, forza = false } = args;
     if (!config.attivo) return { daSpostare: [], residui: 0, motivo: 'spento' };
 
     const buoni = candidati.filter(eImmacolato);
     if (buoni.length === 0) return { daSpostare: [], residui: 0, motivo: 'nessun_candidato' };
 
-    const daSpostare = buoni.slice(0, config.scaglione).map((l) => l.id);
+    // Quanti se ne possono ancora prendere oggi: il piu' stretto fra lo
+    // scaglione del giro e quello che resta del tetto giornaliero.
+    const restaOggi = forza
+        ? config.scaglione
+        : Math.min(config.scaglione, Math.max(0, config.tettoGiornaliero - giaSpostatiOggi));
+    if (restaOggi === 0) return { daSpostare: [], residui: buoni.length, motivo: 'tetto_raggiunto' };
+
+    const daSpostare = buoni.slice(0, restaOggi).map((l) => l.id);
     return {
         daSpostare,
         residui: Math.max(0, buoni.length - daSpostare.length),

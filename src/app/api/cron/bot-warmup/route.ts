@@ -37,8 +37,16 @@ const FENICE = 'fenice';
  * dell'ora per provare una modifica non ha senso, e duplicare questa logica in
  * due posti e' il modo sicuro per farle divergere.
  */
-export async function eseguiRiscaldamento() {
-    const config = leggiConfigRiscaldamento();
+export async function eseguiRiscaldamento(opzioni: {
+    /** Scavalca il tetto giornaliero (solo dal pulsante admin). */
+    forza?: boolean;
+    /** Sovrascrive la dimensione dello scaglione, per un giro solo. */
+    scaglione?: number;
+} = {}) {
+    const base = leggiConfigRiscaldamento();
+    const config = opzioni.scaglione && opzioni.scaglione > 0
+        ? { ...base, scaglione: opzioni.scaglione }
+        : base;
     if (!config.attivo) return { ok: true, skipped: 'disabled' as const };
 
     const [sorgente] = await db.select({ id: users.id, name: users.name })
@@ -122,17 +130,37 @@ export async function eseguiRiscaldamento() {
         presentedAt: r.presentedAt,
     }));
 
-    const piano = pianificaRiscaldamento({ candidati, config });
+    // Quanti ne ha gia' presi oggi questo stesso giro. Si contano gli EVENTI,
+    // non i lead assegnati al bot: al bot i lead arrivano anche dall'intake
+    // ordinario, e contarli tutti farebbe chiudere il riscaldamento prima di
+    // aver scaldato niente. L'evento porta scritto `via=riscaldamento_numero`,
+    // quindi conta solo cio' che ha spostato questo giro.
+    const [{ n: giaSpostatiOggi }] = await db.select({
+        n: sql<number>`COUNT(*)::int`,
+    }).from(leadEvents).where(and(
+        eq(leadEvents.companyId, FENICE),
+        eq(leadEvents.eventType, 'ASSIGNED'),
+        sql`${leadEvents.metadata}->>'via' = 'riscaldamento_numero'`,
+        sql`${leadEvents.timestamp} >= date_trunc('day', now() AT TIME ZONE 'Europe/Rome')`,
+    ));
+
+    const piano = pianificaRiscaldamento({
+        candidati, config, giaSpostatiOggi, forza: opzioni.forza,
+    });
     // Un giro che non sposta niente deve dirlo: la prima volta e' uscito 200
     // senza una riga di log, e capire perche' ha richiesto di rifare la query a
     // mano contro il database.
     console.log(
         `[riscaldamento] sorgente=${sorgente.name} pescati=${righe.length} ` +
         `immacolati=${candidati.filter((c) => !c.toccatoDalBot).length} ` +
+        `giaOggi=${giaSpostatiOggi}/${config.tettoGiornaliero}${opzioni.forza ? ' (forzato)' : ''} ` +
         `daSpostare=${piano.daSpostare.length} motivo=${piano.motivo}`,
     );
     if (piano.daSpostare.length === 0) {
-        return { ok: true as const, spostati: 0, residui: piano.residui, motivo: piano.motivo };
+        return {
+            ok: true as const, spostati: 0, residui: piano.residui, motivo: piano.motivo,
+            giaSpostatiOggi, tettoGiornaliero: config.tettoGiornaliero,
+        };
     }
 
     const perId = new Map(righe.map((r) => [r.id, r]));
@@ -197,6 +225,9 @@ export async function eseguiRiscaldamento() {
         dettaglioFalliti: falliti.slice(0, 10),
         residui: piano.residui,
         sorgente: sorgente.name,
+        giaSpostatiOggi: giaSpostatiOggi + piano.daSpostare.length,
+        tettoGiornaliero: config.tettoGiornaliero,
+        forzato: Boolean(opzioni.forza),
     };
 }
 

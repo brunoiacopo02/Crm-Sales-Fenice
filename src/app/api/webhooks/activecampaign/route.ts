@@ -1103,15 +1103,30 @@ export async function POST(req: NextRequest) {
             ));
 
             /**
-             * I freschi: prima chi è sotto tetto, poi le scorte, poi il pool senza
-             * tetto. Tre livelli perché l'eccedenza ha una destinazione voluta (le
-             * scorte) ma nessun errore di configurazione deve poter fermare l'intake.
+             * I freschi: prima chi è sotto tetto, poi le scorte, poi il BOT, poi il
+             * pool senza tetto. Quattro livelli perché l'eccedenza ha una
+             * destinazione voluta ma nessun errore di configurazione deve poter
+             * fermare l'intake.
+             *
+             * Il bot in terza posizione dal 17/09/2026. Prima l'eccedenza, finite le
+             * scorte umane, tornava ai GDO ignorando il tetto — e un tetto che si
+             * scavalca da solo non è un tetto: i 60 al giorno servono proprio a non
+             * far bloccare 106/112/119 sui lead migliori. Da quando GDO 114 chiama
+             * solo ridati non c'è più nessuna scorta umana, quindi senza questo
+             * livello il tetto sarebbe rimasto scritto e mai applicato.
+             *
+             * `selectBotPool(true)` e non `false`: il bot prende l'eccedenza solo
+             * finché è sotto la sua soglia giornaliera. Sopra quella soglia si
+             * ricade sul pool senza tetto, perché un lead orfano è peggio di un
+             * tetto sforato.
              */
             const selectFreshWithOverflow = async () => {
                 const sotto = await selectHumanPool();
                 if (sotto.length > 0) return sotto;
                 const scorte = await selectScortaPool();
                 if (scorte.length > 0) return scorte;
+                const botSottoSoglia = await selectBotPool(true);
+                if (botSottoSoglia.length > 0) return botSottoSoglia;
                 return await selectHumanPoolNoCap();
             };
 

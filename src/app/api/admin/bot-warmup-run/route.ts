@@ -19,13 +19,28 @@ export const maxDuration = 300;
  * niente, e le guardie sui lead sono le stesse (mai scritto a quel numero,
  * fuori dalle infornate anomale, mai chiamato, senza appuntamento).
  */
-export async function POST() {
+export async function POST(req: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || user.user_metadata?.role !== 'ADMIN') {
         return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
     }
 
-    const esito = await eseguiRiscaldamento();
+    // `forza` scavalca il tetto giornaliero, `scaglione` cambia la dimensione
+    // del giro per questa volta sola. Il tetto serve a impedire che i giri
+    // automatici svuotino la scorta in un pomeriggio; qui la decisione la sta
+    // prendendo una persona, e deve poter passare. Corpo assente = giro normale.
+    let forza = false;
+    let scaglione: number | undefined;
+    try {
+        const b = await req.json() as { forza?: unknown; scaglione?: unknown };
+        forza = b?.forza === true;
+        const n = Number(b?.scaglione);
+        if (Number.isInteger(n) && n > 0 && n <= 500) scaglione = n;
+    } catch {
+        // Nessun corpo JSON: e' il caso normale del pulsante senza opzioni.
+    }
+
+    const esito = await eseguiRiscaldamento({ forza, scaglione });
     return NextResponse.json(esito);
 }
