@@ -8,6 +8,7 @@ import { calendarRuleState, type CalendarPenaltyKind } from "@/lib/venditore/cal
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { isConfermeTl } from "@/lib/confermeTl"
+import { revalidatePath } from "next/cache"
 
 async function requireAdminOrManager(): Promise<{ id: string; role: string; ctx: TenantContext }> {
     const supabase = await createClient()
@@ -127,6 +128,15 @@ export interface VenditoriMonitorData {
      * da 50 € che intanto continuavano a essere scritte.
      */
     calendarRule: PenaltyRuleState
+    /**
+     * Chi sta guardando puo' annullare una riga del registro (cestino in
+     * tabella). Solo ADMIN: MANAGER e TL Conferme leggono e basta, esattamente
+     * come su /calendari-venditori (spec ~7). Viaggia col payload invece di
+     * essere ricalcolato nel client perche' il ruolo vive nella sessione
+     * server, e una `useAuth()` lato client qui direbbe la sua un attimo dopo
+     * il primo render — cestino che appare e sparisce.
+     */
+    canVoidPenalties: boolean
 }
 
 export async function listVenditori(): Promise<VenditoreLite[]> {
@@ -161,7 +171,8 @@ export async function getVenditoriMonitor(filters: {
     /** Mese dei ritardi da mostrare ('YYYY-MM'); default = mese corrente Rome. */
     penaltyMonthKey?: string
 }): Promise<VenditoriMonitorData> {
-    const { ctx } = await requireAdminOrManager()
+    const { role, ctx } = await requireAdminOrManager()
+    const canVoidPenalties = role === 'ADMIN'
 
     const venditori = await listVenditori()
     const targetIds = filters.venditoreIds.length > 0
@@ -180,6 +191,7 @@ export async function getVenditoriMonitor(filters: {
             penaltyMonthKey,
             penaltyRule,
             calendarRule,
+            canVoidPenalties,
         }
     }
 
@@ -456,6 +468,7 @@ export async function getVenditoriMonitor(filters: {
         penaltyMonthKey,
         penaltyRule,
         calendarRule,
+        canVoidPenalties,
     }
 }
 
@@ -511,4 +524,74 @@ export async function getMyLatePenalties(monthKey?: string): Promise<{
             !r.resolvedAt && (r.kind === 'APPOINTMENT' || r.kind === 'FOLLOWUP')).length,
         totalEur: rows.reduce((s, r) => s + (r.amountEur || 0), 0),
     }
+}
+
+/**
+ * Annulla UNA riga del registro dal Monitor Vendite, qualunque sia il tipo:
+ * i 10 € dei ritardi (APPOINTMENT/FOLLOWUP) e i 50 € del calendario
+ * (CALENDAR_MISSING/ABSENT_SLOT).
+ *
+ * Esisteva già `voidCalendarPenalty` (salesCalendarAdminActions.ts), ma è
+ * competente SOLO sui due kind calendario — di proposito, perché nasce dentro
+ * la pagina del calendario. Il registro del Monitor invece mostra tutte e
+ * quattro le famiglie in una tabella sola, e una multa da 10 € sbagliata non
+ * aveva nessun posto da cui essere tolta: restava a registro e veniva
+ * trattenuta. Questa funzione copre quella tabella, e per questo NON filtra
+ * per kind.
+ *
+ * Stesse regole dell'altra (nessuna eccezione al ribasso):
+ *  - solo ADMIN, non MANAGER e non il TL Conferme che qui legge;
+ *  - motivo obbligatorio: la riga resta a registro, barrata, col perché;
+ *  - definitivo: non c'è un ripristino. Se serve, si rifà la multa a mano.
+ *
+ * Quello che l'annullamento NON fa: la scadenza resta "già passata al
+ * conteggio" (`penalisedKeys`), quindi il lead non ricompare nelle liste
+ * operative e il cron non riscrive la multa il giro dopo — `existingKeys` nel
+ * runner guarda le righe a registro, annullate comprese. È voluto: annullare è
+ * una decisione su quei soldi, non un reset della scadenza.
+ */
+export async function voidSalesPenalty(
+    penaltyId: string,
+    reason: string,
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { id: userId, role, ctx } = await requireAdminOrManager()
+        if (role !== 'ADMIN') return { success: false, error: 'Non autorizzato.' }
+
+        const trimmed = reason?.trim()
+        if (!trimmed) return { success: false, error: 'Serve un motivo.' }
+
+        const [existing] = await db.select({
+            id: salesLatePenalties.id,
+            kind: salesLatePenalties.kind,
+            voidedAt: salesLatePenalties.voidedAt,
+        }).from(salesLatePenalties).where(and(
+            eq(salesLatePenalties.id, penaltyId),
+            eq(salesLatePenalties.companyId, ctx.companyId),
+        )).limit(1)
+
+        if (!existing) return { success: false, error: 'Multa non trovata.' }
+        if (existing.voidedAt) return { success: false, error: 'Multa già annullata.' }
+
+        await db.update(salesLatePenalties).set({
+            voidedAt: new Date(),
+            voidedBy: userId,
+            voidReason: trimmed,
+        }).where(and(
+            eq(salesLatePenalties.id, penaltyId),
+            eq(salesLatePenalties.companyId, ctx.companyId),
+        ))
+    } catch (e) {
+        if (e instanceof Error && e.message === 'Unauthorized') {
+            return { success: false, error: 'Sessione scaduta: ricarica la pagina.' }
+        }
+        console.error('voidSalesPenalty:', e)
+        return { success: false, error: 'Annullamento non riuscito: riprova fra un momento.' }
+    }
+
+    // La riga annullata smette di contare sul badge del venditore e sui totali
+    // delle due pagine che leggono lo stesso registro.
+    revalidatePath('/monitor-vendite')
+    revalidatePath('/calendari-venditori')
+    return { success: true }
 }

@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useTransition, useMemo } from "react"
-import { Calendar as CalendarIcon, AlertTriangle, Users, RefreshCw, Loader2, Phone, ClipboardList, Clock, Timer } from "lucide-react"
+import { Calendar as CalendarIcon, AlertTriangle, Users, RefreshCw, Loader2, Phone, ClipboardList, Clock, Timer, Trash2 } from "lucide-react"
 import {
     getVenditoriMonitor,
+    voidSalesPenalty,
     type VenditoriMonitorData,
     type AppointmentRow,
     type FollowUpRow,
@@ -150,6 +151,32 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     endDate: e,
                     venditoreIds: selectedVenditori,
                     penaltyMonthKey: mk,
+                })
+                setData(fresh)
+            } catch (err: any) {
+                setError(err?.message || 'Errore caricamento')
+            }
+        })
+    }
+
+    /**
+     * Ricarica il payload con i filtri correnti, senza toccarli. La usa il
+     * cestino dopo un annullamento: totale, pastiglie e "Carico per venditore"
+     * sono calcolati dal server (le annullate escono dalle somme), quindi
+     * ritoccare la riga in memoria lascerebbe i numeri in testa alla sezione
+     * fermi a prima.
+     */
+    const refreshData = () => {
+        setError(null)
+        startTransition(async () => {
+            try {
+                const s = new Date(startDate + 'T00:00:00')
+                const e = new Date(endDate + 'T23:59:59')
+                const fresh = await getVenditoriMonitor({
+                    startDate: s,
+                    endDate: e,
+                    venditoreIds: selectedVenditori,
+                    penaltyMonthKey: penaltyMonth,
                 })
                 setData(fresh)
             } catch (err: any) {
@@ -409,6 +436,9 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                     <th className="px-4 py-2 text-left font-semibold">Segnalata da</th>
                                     <th className="px-4 py-2 text-left font-semibold">Nota</th>
                                     <th className="px-4 py-2 text-right font-semibold">Malus</th>
+                                    {data.canVoidPenalties && (
+                                        <th className="px-4 py-2 text-right font-semibold">Azioni</th>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody>
@@ -456,6 +486,22 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                             <td className="px-4 py-2 text-right font-semibold text-rose-700">
                                                 -{p.amountEur.toFixed(0)} &euro;
                                             </td>
+                                            {/* Su una riga annullata non c'è piu' niente da annullare:
+                                                al posto del cestino resta l'etichetta. `inline-block`
+                                                perche' il `line-through` della riga NON si spegne da un
+                                                figlio (si propaga e basta), ma non entra in una scatola
+                                                inline-block: senza, l'etichetta usciva barrata. */}
+                                            {data.canVoidPenalties && (
+                                                <td className="px-4 py-2 text-right">
+                                                    {voided ? (
+                                                        <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-ash-400">
+                                                            Annullata
+                                                        </span>
+                                                    ) : (
+                                                        <VoidPenaltyButton penaltyId={p.id} onVoided={refreshData} />
+                                                    )}
+                                                </td>
+                                            )}
                                         </tr>
                                     )
                                 })}
@@ -531,6 +577,83 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     <FollowUpList items={data.upcomingFollowUps} />
                 )}
             </section>
+        </div>
+    )
+}
+
+/**
+ * Cestino di riga del registro: toglie UNA multa, qualunque sia il tipo.
+ *
+ * Il motivo è obbligatorio e chiesto in linea, non con un `confirm()`: la riga
+ * resta a registro barrata col perché scritto accanto, e fra un mese quel
+ * testo è l'unica cosa che spiega perché quei 10 € non sono stati trattenuti.
+ * Un dialogo del browser, oltre a non poter chiedere un testo motivato, blocca
+ * la pagina finché non viene chiuso.
+ */
+function VoidPenaltyButton({ penaltyId, onVoided }: { penaltyId: string; onVoided: () => void }) {
+    const [open, setOpen] = useState(false)
+    const [reason, setReason] = useState('')
+    const [pending, startTransition] = useTransition()
+    const [error, setError] = useState<string | null>(null)
+
+    if (!open) {
+        return (
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                title="Annulla questa multa"
+                aria-label="Annulla questa multa"
+                className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 transition-colors hover:bg-rose-50"
+            >
+                <Trash2 className="h-4 w-4" />
+            </button>
+        )
+    }
+
+    return (
+        <div className="flex min-w-[11rem] flex-col items-stretch gap-1 text-left">
+            <input
+                type="text"
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+                placeholder="Motivo (obbligatorio)"
+                disabled={pending}
+                autoFocus
+                className="rounded border border-ash-300 px-2 py-1 text-xs"
+            />
+            <div className="flex gap-1">
+                {/* Spento finché il motivo è vuoto: il server lo rifiuta comunque,
+                    ma così non si spende un giro di rete per farselo dire. */}
+                <button
+                    type="button"
+                    disabled={pending || !reason.trim()}
+                    onClick={() => {
+                        setError(null)
+                        startTransition(async () => {
+                            const res = await voidSalesPenalty(penaltyId, reason)
+                            if (!res.success) {
+                                setError(res.error ?? 'Annullamento non riuscito.')
+                            } else {
+                                setOpen(false)
+                                setReason('')
+                                onVoided()
+                            }
+                        })
+                    }}
+                    className="rounded bg-rose-600 px-2 py-1 text-xs font-bold text-white hover:brightness-95 disabled:opacity-50"
+                >
+                    {pending ? 'Invio…' : 'Annulla multa'}
+                </button>
+                <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => { setOpen(false); setReason(''); setError(null) }}
+                    className="rounded border border-ash-300 px-2 py-1 text-xs font-semibold text-ash-600 hover:bg-ash-50"
+                >
+                    Chiudi
+                </button>
+            </div>
+            {error && <div className="text-[10px] font-semibold text-rose-600">{error}</div>}
         </div>
     )
 }
