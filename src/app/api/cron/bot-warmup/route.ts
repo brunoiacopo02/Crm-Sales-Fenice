@@ -89,10 +89,17 @@ export async function GET(req: Request) {
         // questo giro serve a fare. Misurato il 17/09: su 142 candidati, 2
         // erano in questa condizione e col solo controllo per id sarebbero
         // passati.
+        // `"leads"."phone"` scritto per esteso e NON `${leads.phone}`: in una
+        // select a tabella singola Drizzle toglie la qualificazione alle colonne
+        // di primo livello del template, e dentro la sottoquery quel `"phone"`
+        // nudo si risolverebbe su `al.phone` — cioe' "il telefono uguale a se
+        // stesso", sempre vero. Ogni lead risultava gia' toccato dal bot e il
+        // giro spostava zero lead, in silenzio e con HTTP 200.
+        // Stessa trappola gia' vista in gestionePoolActions il 16/09.
         toccatoDalBot: sql<boolean>`EXISTS (
             SELECT 1 FROM leads al
             JOIN "leadEvents" ae ON ae."leadId" = al.id
-            WHERE al.phone = ${leads.phone}
+            WHERE al.phone = "leads"."phone"
               AND ae."eventType" IN ('BOT_PUSHED','REASSIGNED_FROM_BOT','BOT_CALL_ATTEMPT','BOT_NOTE','BOT_REPORT')
         )`,
     }).from(leads).where(and(
@@ -120,6 +127,14 @@ export async function GET(req: Request) {
     }));
 
     const piano = pianificaRiscaldamento({ candidati, config });
+    // Un giro che non sposta niente deve dirlo: la prima volta e' uscito 200
+    // senza una riga di log, e capire perche' ha richiesto di rifare la query a
+    // mano contro il database.
+    console.log(
+        `[riscaldamento] sorgente=${sorgente.name} pescati=${righe.length} ` +
+        `immacolati=${candidati.filter((c) => !c.toccatoDalBot).length} ` +
+        `daSpostare=${piano.daSpostare.length} motivo=${piano.motivo}`,
+    );
     if (piano.daSpostare.length === 0) {
         return NextResponse.json({
             ok: true, spostati: 0, residui: piano.residui, motivo: piano.motivo,
