@@ -1,12 +1,35 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.6 — 2026-09-14 (intake: campo opzionale `lancio` per i lead del lancio "Web Developer AI"; documentati `personKey` e `previousLeadIds`, già in produzione dal 2026-08-29).
-> Versione precedente: 1.5 — 2026-08-26 (`CONTATTO_UMANO` porta motivo e contesto e finisce in una coda vera; `RICHIAMO` senza data certa; `APPUNTAMENTO` con data diversa = rifissaggio invece di scarto silenzioso).
+> **Versione:** 1.7 — 2026-09-17. Cosa cambia rispetto alla 1.6:
+> - **Ritorno al pool confermato dal CRM.** `NON_RISPOSTO`/`INTERROTTO` su un lead del
+>   lancio ancora in mano al bot non fanno più round robin verso un GDO: tornano nel
+>   pool di `/import` (bucket lancio). La frase "arriva con la v1.7" della 1.6 è
+>   sostituita dal comportamento reale: risposta `{ ok: true, returnedToPool: true,
+>   motivo }` oppure `{ ok: true, returnedToPool: false, skipped: '<motivo>' }` —
+>   vedi [§4.6.1](#lead-del-lancio-nuovo-in-v16) e i [codici di risposta](#codici-di-risposta-apibotoutcome).
+> - **Documentate per la prima volta le tre rotte `/api/bot/lancio/*`** (slot,
+>   prenotazione, chiamata subito): erano già in produzione ma assenti da questo
+>   contratto. Vedi [Direzione 6](#direzione-6--bot--crm-prenotazione-lancio-slot-prenotazione-chiamata-subito--nuovo-in-v17).
+> - **Pulsante webinar**: interruttore lato bot `app_settings.lancio_pulsante_attivo`
+>   e provenienza `"Lancio Web Dev AI"` su `/api/bot/lead-entrante` solo quando la
+>   chat viene adottata in quel momento (non sul canale a lista `/api/admin/lead-entranti`).
+> - **"Offerta del mese"**: nel CRM la checkbox è diventata un pulsante in cima alla
+>   modale Agenda, ma il payload di `/api/send-agenda` **non cambia**
+>   (`variant.offertaDelMese` invariato). Il bot manda il video di una sua
+>   impostazione: se vuota, l'agenda parte senza video e il bot logga un warning
+>   suo — il CRM non lo sa e non ha nulla da fare qui.
+> - **Intake**: la risposta del bot a `/api/bot/intake` può portare
+>   `apertura: "saltata_chat_in_corso"` quando il lead ha già una chat viva. Il CRM
+>   **non legge** questo campo (guarda solo `duplicato`): è documentato qui per
+>   chiarezza, non richiede né richiederà una modifica lato CRM.
 >
-> **Il contratto cresce, non cambia.** Ogni payload valido nella v1.5 resta valido: la
-> novità della v1.6 è un solo campo opzionale sull'intake (`lancio`). Le rotte
-> `/api/bot/lancio/*` (slot, prenotazione, chiamata subito) arrivano con la v1.7.
+> Versione precedente: 1.6 — 2026-09-14 (intake: campo opzionale `lancio` per i lead del lancio "Web Developer AI"; documentati `personKey` e `previousLeadIds`, già in produzione dal 2026-08-29).
+> Versione precedente ancora: 1.5 — 2026-08-26 (`CONTATTO_UMANO` porta motivo e contesto e finisce in una coda vera; `RICHIAMO` senza data certa; `APPUNTAMENTO` con data diversa = rifissaggio invece di scarto silenzioso).
+>
+> **Il contratto cresce, non cambia.** Ogni payload valido nella v1.6 resta valido:
+> la v1.7 aggiunge la semantica di ritorno del §4.6, documenta tre rotte già live e
+> annota due comportamenti lato bot che non toccano il CRM.
 
 ---
 
@@ -19,8 +42,10 @@
 5. [Direzione 2 — Bot → CRM (callback outcome)](#direzione-2--bot--crm-callback-outcome)
 6. [Direzione 3 — CRM → Bot (invio agenda)](#direzione-3--crm--bot-invio-agenda)
 7. [Direzione 4 — CRM → Bot (data dell'appuntamento)](#direzione-4--crm--bot-data-dellappuntamento)
-8. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
-9. [Limitazioni note](#limitazioni-note)
+8. [Direzione 5 — Bot → CRM (cosa succede dopo l'appuntamento)](#direzione-5--bot--crm-cosa-succede-dopo-lappuntamento--nuovo-in-v15)
+9. [Direzione 6 — Bot → CRM (prenotazione lancio: slot, prenotazione, chiamata subito)](#direzione-6--bot--crm-prenotazione-lancio-slot-prenotazione-chiamata-subito--nuovo-in-v17)
+10. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
+11. [Limitazioni note](#limitazioni-note)
 
 ---
 
@@ -204,19 +229,78 @@ di benvenuto del lancio** e la conversazione entra nel modo lancio (`lancio_slug
 - `lancio.ingresso = 'lista'` è l'unico valore che il CRM manda dall'intake: i lead della
   lista AC arrivano dal webhook (uno alla volta, appena si iscrivono) o dal sync di recupero
   su `/import` (a lotti, 30/min, stesso payload). `'pulsante_webinar'` è riservato ai lead che
-  scrivono per primi dal pulsante della live: quelli NON passano dall'intake (`/api/bot/lead-entrante`).
+  scrivono per primi dal pulsante della live: quelli NON passano dall'intake, ma da
+  `POST /api/bot/lead-entrante` (nuovo in v1.7, stessa auth HMAC delle altre rotte).
+  Il bot manda `provenienza: "Lancio Web Dev AI"` — testo esatto, il CRM lo confronta
+  case-insensitive — **solo quando adotta la chat in quel momento** (il lead scrive,
+  il bot lo riconosce e chiama subito questa rotta): sul canale a lista
+  `/api/admin/lead-entranti` (il polling di recupero) la stessa provenienza non fa
+  entrare nel bucket del lancio, perché quel canale non distingue "adesso" da "prima".
+  Un interruttore lato bot (`app_settings.lancio_pulsante_attivo`) decide se il
+  pulsante della live è attivo: a interruttore spento il bot non lo propone e questa
+  provenienza non arriva mai. Il lead nasce assegnato **direttamente** all'account
+  bot (`lancioIngresso='pulsante_webinar'`), senza passare dall'intake.
 - Idempotenza come oggi: stesso `leadId` o stessa `personKey` con chat viva → `duplicato:true`,
   nessun secondo benvenuto, ma `lancio_*` vanno valorizzati lo stesso.
-- Gli esiti (`/api/bot/outcome`) restano gli stessi. Per i lead lancio `NON_RISPOSTO` e
-  `INTERROTTO` NON rimandano il lead a un GDO ma lo rimettono nel pool: la semantica
-  arriva con la v1.7 (blocco B5), fino ad allora il bot NON deve mandare quei due esiti
-  sui lead lancio.
 - Timeout e regola "un `network_error` è già arrivato" (15 s, 2026-09-10): invariati.
+
+#### `NON_RISPOSTO` / `INTERROTTO` sui lead del lancio (nuovo in v1.7)
+
+Gli esiti restano gli stessi sette valori di `/api/bot/outcome`, ma su un lead del
+lancio **ancora in mano al bot** (`launchBucket = LANCIO_WEBDEV_2026`, assegnatario =
+account bot) `NON_RISPOSTO` e `INTERROTTO` **non** fanno il round robin verso un GDO
+umano: rimettono il lead nel pool di `/import` (`assignedToId = null`, `status = 'NEW'`,
+`callCount = 0`, richiami azzerati), da dove gli admin lo ridistribuiscono ai GDO come
+per Black Summer. `assignedAt` **non** si tocca: il lead conta dal giorno in cui è
+entrato al bot.
+
+Il **motivo** del ritorno lo legge dal testo di `note` (case-insensitive, trattino
+opzionale), in quest'ordine:
+
+| Pattern in `note` | `motivo` restituito |
+|---|---|
+| `follow-up non inviato` / `followup non inviato` | `followup_non_inviato` — non è freddezza del lead, è un nostro follow-up mai partito |
+| `silenzio dopo il follow-up` | `silenzio_dopo_followup` |
+| `mai risposto` | `mai_risposto` |
+| nessuno dei precedenti | `INTERROTTO` → `silenzio_dopo_followup`; `NON_RISPOSTO` → `mai_risposto` |
+
+Risposta:
+
+- Ritorno effettuato: `{ ok: true, returnedToPool: true, motivo: '<uno dei tre sopra>' }`.
+- Ritorno **non** effettuato: `{ ok: true, returnedToPool: false, skipped: '<motivo>' }`,
+  sempre `200`, mai una scrittura. `skipped` può valere:
+  - `already_returned` — il lead è **già** tornato nel pool (un secondo invio dello
+    stesso esito, o il cron di restituzione che ritenta): non è un abuso, è un
+    doppione riconosciuto. Prima di questa deroga il secondo tentativo prendeva un
+    403 fuorviante e il cron ritentava ogni ora all'infinito.
+  - `already_rejected` — il lead è `REJECTED`: una decisione presa non si annulla.
+  - `locked_appointment` — il lead ha già una call in agenda o una presenza
+    registrata: non torna mai nel pool.
+  - `scelta_fatta` — il lead ha scelto la sera del lancio (`lancioScelta` valorizzato):
+    è di un venditore o delle Conferme, vicolo cieco voluto anche se il bot ritenta.
+  - `lead_not_found` — il lead non esiste più al momento della scrittura.
+- Su un lead del lancio **già passato a un GDO umano** questi due esiti non arrivano
+  nemmeno a questo ramo: il blocco di autorizzazione (sopra, invariato) risponde
+  `403 forbidden` — `NON_RISPOSTO`/`INTERROTTO` non sono fra gli esiti ammessi
+  (`NOTA`/`APPUNTAMENTO`/`CONTATTO_UMANO`) su un lead assegnato a un umano.
+  Un lead **che non è del bucket lancio** (un lead ordinario del bot) segue invece
+  la strada di sempre — round robin verso un GDO umano via
+  `reassignBotLeadToHumanPool` — perché la guardia `launchBucket === bucket lancio`
+  non lo fa entrare in questo ramo.
 
 ### Risposta attesa
 
-Il CRM ignora il body di risposta ma si aspetta HTTP `2xx`. In caso di errore lato bot
-il push viene comunque considerato completato (no retry automatico).
+Il CRM legge dal corpo di risposta solo `duplicato: true` (il fornitore riconosce il
+lead come già entrato — risposta a un nostro ritento, non un lead nuovo né uno scarto)
+e si aspetta comunque HTTP `2xx`. In caso di errore lato bot il push viene considerato
+completato (no retry automatico).
+
+> **Campo `apertura` (nuovo in v1.7, informativo).** Il bot può rispondere anche con
+> `apertura: "saltata_chat_in_corso"` quando il lead che gli abbiamo appena pushato ha
+> già una conversazione viva (es. ci ha scritto lui per primo ed è stato adottato da
+> `/api/bot/lead-entrante` un attimo prima). **Il CRM non legge questo campo**: non
+> cambia `result` nell'audit `BOT_PUSHED` né alcun altro comportamento. È documentato
+> qui solo perché il fornitore lo manda — non perché il CRM debba reagirci.
 
 ---
 
@@ -515,6 +599,15 @@ il **video** che partirà alla risposta del lead, e lo comunica con due campi:
 Il secondo caso non è recuperabile via software ed è giusto che il CRM lo dica invece
 di aggiornare una colonna facendo finta di aver risolto.
 
+> **"Offerta del mese" (v1.7, solo UI CRM).** Nel modale Agenda del GDO la checkbox
+> `offertaDelMese` è diventata un pulsante a tutta larghezza in cima al modale
+> (toggle evidente invece di una checkbox tra le altre): cambia solo la UI, il
+> payload resta **esattamente** questo, `variant.offertaDelMese: boolean` come già
+> documentato — nessun campo nuovo. Il video che parte per questa variante è
+> un'impostazione **del bot**, non del CRM: se quell'impostazione è vuota il bot
+> manda comunque l'agenda ma senza video, e logga un avviso dalla sua parte. Il CRM
+> non lo sa e non ha alcuna azione da fare — lo documentiamo qui solo per chiarezza.
+
 ### Sequenza lato bot
 
 1. Template `fenice_agenda_gdo_v3` (UTILITY) col link di prenotazione, che chiede
@@ -699,6 +792,121 @@ Escono **solo** i lead che il bot ha davvero lavorato: quelli che gli abbiamo pu
 
 ---
 
+## Direzione 6 — Bot → CRM (prenotazione lancio: slot, prenotazione, chiamata subito) — nuovo in v1.7
+
+Tre rotte, tutte già in produzione dal blocco lancio di metà settembre 2026 ma mai
+descritte in questo contratto fino ad ora. Servono **solo** i lead del bucket del
+lancio "Web Developer AI" (`launchBucket = 'LANCIO_WEBDEV_2026'`), la sera del
+webinar (5/10/2026) e il giorno dopo. Fuori da quella finestra e da quel bucket
+queste rotte non si usano.
+
+### Auth e guardia comune
+
+Stessa firma HMAC delle altre rotte bot (`x-bot-signature`, stesso
+`BOT_WEBHOOK_SECRET`), verificata sul corpo grezzo. Errori comuni alle tre rotte:
+
+| HTTP | `motivo` | Quando |
+|---|---|---|
+| `401` | `invalid_signature` | Firma assente o non corrispondente |
+| `400` | `invalid_json` | Corpo non JSON valido |
+| `503` | `not_configured` | `BOT_WEBHOOK_SECRET` non impostato |
+| `503` | `bot_account_not_found` | Account bot Fenice non trovato |
+| `404` | `lead_not_found` | `leadId` inesistente (solo `/book` e `/call-now`) |
+| `403` | `forbidden` — `lead non del lancio o non in mano al bot` | Il lead non è del bucket lancio, oppure non è assegnato all'account bot **e** non è entrato dal pulsante webinar (`lancioIngresso !== 'pulsante_webinar'`) |
+| `403` | `forbidden` — `lead già presentato` | (solo `/book` e `/call-now`) `presentedAt` è valorizzato: la trattativa è già cominciata, il bot non tocca più questo lead |
+
+### `POST /api/bot/lancio/slots`
+
+Body: `{ "date": "2026-10-06" }` (formato `YYYY-MM-DD`; solo le due date del lancio
+sono valide — il giorno dopo il webinar e il giorno successivo — altrimenti
+`422 { ok:false, motivo:'fuori_regole' }`; un formato data sbagliato è
+`400 bad_request`).
+
+Risposta `200`:
+
+```jsonc
+{
+  "ok": true,
+  "date": "2026-10-06",
+  "mattina": [ { "hour": 9, "liberi": 2 }, { "hour": 10, "liberi": 0 }, "…" ],
+  "pomeriggio": { "aperto": true, "ore": [15, 16, 17, 18, 19, 20] },
+  "mattinaEsaurita": false,
+  "oreAmmesse": [9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+}
+```
+
+- **Giorno dopo (6/10):** `mattina` è la copertura reale dei venditori di turno
+  (9-14, round robin): `liberi` conta chi ha dichiarato quell'ora libera nel proprio
+  calendario, non bloccata e non già occupata da un altro appuntamento (gli esenti
+  dal calendario contano libere tutte le ore del turno). `mattinaEsaurita: true`
+  quando **ogni** ora ha zero liberi. `pomeriggio` (15-20) va invece alle Conferme,
+  senza venditore assegnato.
+- **Dopodomani (7/10):** `mattina` vale la stringa letterale `"conferme"` (non c'è
+  più copertura venditori il secondo giorno) e `pomeriggio.aperto` è sempre `false`.
+- **Soglia di preavviso identica a `/book`.** Ogni ora che esce da qui — mattina e
+  pomeriggio — è già filtrata dalla stessa soglia di un'ora di anticipo che `/book`
+  applica (`classifyAt`): un'ora mostrata da `/slots` non verrà mai rifiutata da
+  `/book` con `fuori_regole`. `oreAmmesse` è l'unione delle ore ammesse per quella
+  data, comoda per validare lato bot prima di chiamare `/book`.
+
+### `POST /api/bot/lancio/book`
+
+Body: `{ "leadId": "…", "at": "2026-10-06T10:00:00+02:00", "info"?: {...}, "note"?: "…" }`.
+
+- `at` **deve** avere l'offset di fuso esplicito (altrimenti `400 bad_request`,
+  stessa regola di `/api/bot/outcome`), essere un'ora tonda italiana con almeno
+  un'ora di anticipo, e cadere in una delle fasce ammesse per quella data — altrimenti
+  `422 { ok:false, motivo:'fuori_regole' }`.
+- `info.risposte` (se presente) deve essere un array di sole stringhe, ripulito e
+  troncato a 6 elementi × 300 caratteri; `note` è una stringa fino a 1000 caratteri.
+  Un tipo sbagliato è `400 { ok:false, motivo:'info_non_valida', detail }` — niente
+  salvataggio parziale.
+- **Una prenotazione per lead (ruling R-rebook).** Se il lead ha già una
+  prenotazione del lancio (`lancioScelta` ∈ `app_mattina`/`app_pomeriggio`/
+  `app_dopodomani` con `appointmentDate` valorizzato):
+  - stesso istante (±60s, cioè un ritento) → `200`, deduplicato: per la mattina
+    `{ ok:true, kind:'mattina', venditore:{id,nome}, deduped:true }`, per
+    pomeriggio/dopodomani `{ ok:true, kind, deduped:true }` (nessun venditore);
+  - istante diverso → **non si sposta nulla**: `409 { ok:false, motivo:'gia_prenotato',
+    appointmentAt: '<ISO con offset italiano>', kind }`. Il bot lo dice al lead; lo
+    spostamento lo fanno le Conferme, non questa rotta.
+- **Mattina (9-14, 6/10):** lock per ora (nessuna doppia assegnazione sulla stessa
+  ora), disponibilità riletta dentro il lock, round robin fra i venditori liberi.
+  Nessun venditore libero → `409 { ok:false, motivo:'ora_esaurita', slots: <stessa
+  forma di /slots> }`. Riuscita: appuntamento **già confermato** (le Conferme non
+  chiamano), evento `APPOINTMENT_SET` + `LANCIO_BOOKED`, evento Google Calendar e
+  webhook marketing (`appointment.set`, `appointment.outcome`, `deal.assigned`) in
+  background. Risposta `{ ok:true, kind:'mattina', venditore:{id,nome} }`.
+- **Pomeriggio (15-20, 6/10) e dopodomani (9-14, 7/10):** nessun venditore —
+  l'appuntamento va alle Conferme come un `APPUNTAMENTO` qualunque del bot (reset
+  incondizionato di un eventuale scarto/venditore residuo), notifica
+  `lancio_appuntamento` alle Conferme attive, webhook `appointment.set`. Risposta
+  `{ ok:true, kind:'pomeriggio'|'dopodomani' }`.
+- Scrittura concorrente sullo stesso lead (versione cambiata sotto i piedi) →
+  `409 { ok:false, motivo:'conflitto' }`: il bot ritenta una volta.
+
+### `POST /api/bot/lancio/call-now`
+
+Body: `{ "leadId": "…", "info"?: {...}, "note"?: "…" }` — nessun `at`: è "adesso",
+arrotondato al minuto. Stessa validazione di `info`/`note` di `/book`.
+
+- Ha già scelto "chiamami adesso" **e** ha un venditore assegnato → `200` deduplicato,
+  `{ ok:true, venditore:{id,nome}, deduped:true }`.
+- Ha già un'ALTRA prenotazione del lancio (mattina/pomeriggio/dopodomani) →
+  stessa regola di `/book`: `409 { ok:false, motivo:'gia_prenotato', appointmentAt, kind }`
+  — la chiamata subito non toglie il lead al venditore che ha già l'appuntamento.
+- Altrimenti: lock unico sul turno SERA (round robin, senza controllo di calendario —
+  chi è di turno è lì apposta), nessun venditore di turno → `409 { ok:false,
+  motivo:'nessun_venditore' }` — **il bot ripiega su `/book`**. Riuscita: appuntamento
+  "adesso" già confermato, contatore NR a zero (lo scala la scheda venditore),
+  eventi `APPOINTMENT_SET` + `LANCIO_CALL_NOW_ASSIGNED`, notifica realtime al
+  venditore, webhook marketing (`appointment.set`, `appointment.outcome`,
+  `deal.assigned`). **Nessun evento Google Calendar** (è adesso, non domani).
+  Risposta `{ ok:true, venditore:{id,nome} }`.
+- Scrittura concorrente → `409 { ok:false, motivo:'conflitto' }`.
+
+---
+
 ## Codici di risposta `/api/bot/outcome`
 
 | HTTP | `error` nel body | Significato |
@@ -706,6 +914,11 @@ Escono **solo** i lead che il bot ha davvero lavorato: quelli che gli abbiamo pu
 | `200` | — (`{ ok: true }`) | Outcome registrato correttamente |
 | `400` | `invalid_json` | Body non è JSON valido (parsing fallito) |
 | `200` | — (`{ ok: true, noted: true }`) | `NOTA` / `CONTATTO_UMANO` registrata. Può contenere `deduped: true` (nota riconosciuta come re-invio) o `notifySuppressed: true` (notifica già mandata nelle 24h) |
+| `200` | — (`{ ok: true, returnedToPool: true, motivo }`) | **v1.7** — `NON_RISPOSTO`/`INTERROTTO` su un lead del lancio ancora al bot: torna nel pool di `/import`. `motivo` ∈ `mai_risposto` \| `silenzio_dopo_followup` \| `followup_non_inviato` (vedi [§4.6.1](#lead-del-lancio-nuovo-in-v16)) |
+| `200` | — (`{ ok: true, returnedToPool: false, skipped }`) | **v1.7** — Il lead del lancio non è tornato nel pool. `skipped` ∈ `already_returned` \| `already_rejected` \| `locked_appointment` \| `scelta_fatta` \| `lead_not_found` |
+| `200` | — (`{ ok: true, reassigned: <userId | null> }`) | `NON_RISPOSTO`/`INTERROTTO` su un lead **non** del lancio: riassegnato via round robin AC. `reassigned: null` con `skipped: '<motivo>'` se non c'era un GDO eleggibile |
+| `200` | — (`{ ok: true, deduped: true }`) | `APPUNTAMENTO` ripetuto sullo stesso lead con la stessa data: no-op |
+| `200` | — (`{ ok: true, rescheduled: true }`) | `APPUNTAMENTO` con data diversa su un lead già `APPOINTMENT`: rifissaggio, Conferme notificate |
 | `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO; `note` vuota per NOTA o CONTATTO_UMANO |
 | `401` | `invalid_signature` | Firma HMAC assente o non corrispondente |
 | `403` | `forbidden` | Lead non appartiene all'azienda `fenice` (`lead non Fenice`) |
