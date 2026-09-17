@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["dub1"],
+  "regions": [
+    "dub1"
+  ],
   "crons": [
     {
       "path": "/api/cron/marketing-webhooks-drain",
@@ -25,6 +27,10 @@
     {
       "path": "/api/marketing/cron/refresh-meta",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/cron/bot-warmup",
+      "schedule": "20 8-20 * * *"
     }
   ]
 }
