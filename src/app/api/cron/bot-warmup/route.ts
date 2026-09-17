@@ -31,26 +31,22 @@ const FENICE = 'fenice';
  * Dimensione dello scaglione: BOT_WARMUP_BATCH (default 50).
  * Sorgente: BOT_WARMUP_SOURCE (default 'GDO 114', che e' la scorta).
  */
-export async function GET(req: Request) {
-    // PRIMA il Bearer, POI la diagnosi sulla env: con l'ordine opposto un
-    // anonimo che chiama l'URL senza header scopre quale env manca.
-    const secret = process.env.CRON_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${secret}`) {
-        return new NextResponse('Unauthorized', { status: 401 });
-    }
-    if (!secret) {
-        return NextResponse.json({ error: 'CRON_SECRET non impostata' }, { status: 500 });
-    }
-
+/**
+ * Il giro vero e proprio. Sta qui e non dentro la rotta perche' lo chiama anche
+ * il pulsante admin (`/api/admin/bot-warmup-run`): aspettare lo scoccare
+ * dell'ora per provare una modifica non ha senso, e duplicare questa logica in
+ * due posti e' il modo sicuro per farle divergere.
+ */
+export async function eseguiRiscaldamento() {
     const config = leggiConfigRiscaldamento();
-    if (!config.attivo) return NextResponse.json({ ok: true, skipped: 'disabled' });
+    if (!config.attivo) return { ok: true, skipped: 'disabled' as const };
 
     const [sorgente] = await db.select({ id: users.id, name: users.name })
         .from(users)
         .where(and(eq(users.companyId, FENICE), eq(users.name, config.sorgente)))
         .limit(1);
     if (!sorgente) {
-        return NextResponse.json({ ok: false, error: `sorgente "${config.sorgente}" non trovata` }, { status: 404 });
+        return { ok: false as const, error: `sorgente "${config.sorgente}" non trovata` };
     }
 
     const [bot] = await db.select({ id: users.id })
@@ -61,7 +57,7 @@ export async function GET(req: Request) {
         ))
         .limit(1);
     if (!bot) {
-        return NextResponse.json({ ok: false, error: 'account bot non trovato' }, { status: 404 });
+        return { ok: false as const, error: 'account bot non trovato' };
     }
 
     // Si pesca largo e si filtra nel modulo puro: le condizioni di
@@ -136,9 +132,7 @@ export async function GET(req: Request) {
         `daSpostare=${piano.daSpostare.length} motivo=${piano.motivo}`,
     );
     if (piano.daSpostare.length === 0) {
-        return NextResponse.json({
-            ok: true, spostati: 0, residui: piano.residui, motivo: piano.motivo,
-        });
+        return { ok: true as const, spostati: 0, residui: piano.residui, motivo: piano.motivo };
     }
 
     const perId = new Map(righe.map((r) => [r.id, r]));
@@ -195,13 +189,27 @@ export async function GET(req: Request) {
         }
     }
 
-    return NextResponse.json({
-        ok: true,
+    return {
+        ok: true as const,
         spostati: piano.daSpostare.length,
         inviatiAlBot: inviati,
         falliti: falliti.length,
         dettaglioFalliti: falliti.slice(0, 10),
         residui: piano.residui,
         sorgente: sorgente.name,
-    });
+    };
+}
+
+export async function GET(req: Request) {
+    // PRIMA il Bearer, POI la diagnosi sulla env: con l'ordine opposto un
+    // anonimo che chiama l'URL senza header scopre quale env manca.
+    const secret = process.env.CRON_SECRET;
+    if (req.headers.get('authorization') !== `Bearer ${secret}`) {
+        return new NextResponse('Unauthorized', { status: 401 });
+    }
+    if (!secret) {
+        return NextResponse.json({ error: 'CRON_SECRET non impostata' }, { status: 500 });
+    }
+    const esito = await eseguiRiscaldamento();
+    return NextResponse.json(esito, { status: esito.ok ? 200 : 404 });
 }
