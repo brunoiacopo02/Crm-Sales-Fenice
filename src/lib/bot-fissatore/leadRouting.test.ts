@@ -21,7 +21,8 @@ function withEnv(value: string | undefined, fn: () => void) {
  * Questo modulo è puro e guarda solo l'orologio. Dice in quale delle tre
  * finestre cade l'istante: 'bot_only' (tutto al bot, nessun limite),
  * 'bot_first' (ai GDO, ma il bot passa avanti finché è sotto BOT_DAILY_MIN),
- * 'gdo_only' (fascia protetta del sabato, bot escluso a prescindere).
+ * 'gdo_only' (nessuna fascia del calendario la produce piu' dal 17/09/2026: la
+ * usa solo la finestra di rientro, quando il bot va tenuto fuori del tutto).
  *
  * Il conteggio dei lead già presi dal bot nel giorno civile di Roma vive nella
  * query del webhook AC (src/app/api/webhooks/activecampaign/route.ts, predicato
@@ -80,14 +81,14 @@ test('sabato: prima delle 09:00 è finestra del bot', () => {
 
 test("sabato: la fascia protetta si apre alle 09:00, un'ora prima del turno", () => {
     // Voluto dal PO: l'ora di scarto accumula lead per i GDO che attaccano alle 10:00.
-    assert.equal(resolveRoutingWindow(utc('2026-08-22T07:00:00Z')), 'gdo_only'); // 09:00 Roma
-    assert.equal(resolveRoutingWindow(utc('2026-08-22T07:30:00Z')), 'gdo_only'); // 09:30 Roma
-    assert.equal(resolveRoutingWindow(utc('2026-08-22T08:00:00Z')), 'gdo_only'); // 10:00 Roma, inizio turno
+    assert.equal(resolveRoutingWindow(utc('2026-08-22T07:00:00Z')), 'bot_first'); // 09:00 Roma
+    assert.equal(resolveRoutingWindow(utc('2026-08-22T07:30:00Z')), 'bot_first'); // 09:30 Roma
+    assert.equal(resolveRoutingWindow(utc('2026-08-22T08:00:00Z')), 'bot_first'); // 10:00 Roma, inizio turno
 });
 
 test('sabato: dalle 09:00 alle 16:30 il bot è escluso a prescindere dalla soglia', () => {
-    assert.equal(resolveRoutingWindow(utc('2026-08-22T12:00:00Z')), 'gdo_only'); // 14:00 Roma
-    assert.equal(resolveRoutingWindow(utc('2026-08-22T14:29:00Z')), 'gdo_only'); // 16:29 Roma
+    assert.equal(resolveRoutingWindow(utc('2026-08-22T12:00:00Z')), 'bot_first'); // 14:00 Roma
+    assert.equal(resolveRoutingWindow(utc('2026-08-22T14:29:00Z')), 'bot_first'); // 16:29 Roma
 });
 
 test('sabato: a fine turno (16:30) torna la finestra del bot, senza limite', () => {
@@ -96,15 +97,22 @@ test('sabato: a fine turno (16:30) torna la finestra del bot, senza limite', () 
     assert.equal(resolveRoutingWindow(utc('2026-08-22T21:59:00Z')), 'bot_only'); // 23:59 Roma
 });
 
-test('sabato: la fascia mista dei feriali non esiste, il bot non ha mai la precedenza', () => {
-    // A nessuna ora del sabato la finestra è 'bot_first': o è del bot, o è protetta.
+test('sabato: il bot non e mai escluso a prescindere, la soglia decide sempre', () => {
+    // Dal 17/09/2026 nessuna ora del sabato produce 'gdo_only': o e' finestra del
+    // bot, o e' mista (il bot passa avanti finche' e' sotto quota). Prima le ore
+    // 09:00-16:30 lo escludevano anche sotto soglia.
     // 2026-08-21T22:00Z = sabato 22 agosto 00:00 a Roma (CEST, +2).
     const mezzanotteRoma = Date.UTC(2026, 7, 21, 22, 0, 0);
+    let miste = 0;
     for (let h = 0; h < 24; h++) {
         const at = new Date(mezzanotteRoma + h * 3600 * 1000);
         assert.equal(romeParts(at).weekday, 'Sat', `ora ${h}: dovrebbe essere sabato`);
-        assert.notEqual(resolveRoutingWindow(at), 'bot_first', `ora ${h} Roma`);
+        const w = resolveRoutingWindow(at);
+        assert.notEqual(w, 'gdo_only', `ora ${h} Roma: il bot non va escluso a prescindere`);
+        if (w === 'bot_first') miste++;
     }
+    // 09:00-16:29 sono otto ore piene in cui l'ora tonda cade nella fascia mista.
+    assert.equal(miste, 8);
 });
 
 // ---------------------------------------------------------------- domenica
@@ -131,8 +139,8 @@ test("la finestra segue l'ora di Roma, non quella UTC (ora solare)", () => {
 test("sabato d'inverno: i confini della fascia protetta restano 09:00 e 16:30 di Roma", () => {
     // 17 gennaio 2026 è un sabato, CET (+1).
     assert.equal(resolveRoutingWindow(utc('2026-01-17T07:59:00Z')), 'bot_only'); // 08:59 Roma
-    assert.equal(resolveRoutingWindow(utc('2026-01-17T08:00:00Z')), 'gdo_only'); // 09:00 Roma
-    assert.equal(resolveRoutingWindow(utc('2026-01-17T15:29:00Z')), 'gdo_only'); // 16:29 Roma
+    assert.equal(resolveRoutingWindow(utc('2026-01-17T08:00:00Z')), 'bot_first'); // 09:00 Roma
+    assert.equal(resolveRoutingWindow(utc('2026-01-17T15:29:00Z')), 'bot_first'); // 16:29 Roma
     assert.equal(resolveRoutingWindow(utc('2026-01-17T15:30:00Z')), 'bot_only'); // 16:30 Roma
 });
 
@@ -142,7 +150,7 @@ test('il giorno della settimana è quello di Roma, non quello UTC', () => {
     // 2026-08-22T22:30:00Z = domenica 23 agosto 00:30 a Roma.
     assert.equal(resolveRoutingWindow(utc('2026-08-22T22:30:00Z')), 'bot_only');
     // Sabato 12:00 Roma = fascia protetta; venerdì 12:00 Roma = ancora bot (prima delle 13).
-    assert.equal(resolveRoutingWindow(utc('2026-08-22T10:00:00Z')), 'gdo_only'); // sabato 12:00 Roma
+    assert.equal(resolveRoutingWindow(utc('2026-08-22T10:00:00Z')), 'bot_first'); // sabato 12:00 Roma
     assert.equal(resolveRoutingWindow(utc('2026-08-21T10:00:00Z')), 'bot_only'); // venerdì 12:00 Roma
 });
 
@@ -173,11 +181,13 @@ test('un valore non riconosciuto non spegne la regola', () => {
 
 // ---------------------------------------------------------------- soglia minima
 
-test('la soglia minima giornaliera del bot è 150', () => {
-    assert.equal(BOT_DAILY_MIN, 150);
+test('la soglia minima giornaliera del bot e 100', () => {
+    // Abbassata da 150 il 17/09/2026: e' il volume con cui il PO vuole scaldare
+    // il numero WhatsApp nuovo, non una stima di capacita' del bot.
+    assert.equal(BOT_DAILY_MIN, 100);
 });
 
-test("il sabato 09:00–16:30 è l'UNICA fascia della settimana in cui il bot non compare", () => {
+test("il bot puo' ricevere lead in ogni fascia della settimana", () => {
     // Setaccio di una settimana intera a passi di 15 minuti. Fuori dalla fascia
     // protetta il bot deve sempre poter ricevere lead, altrimenti non arriva mai
     // a BOT_DAILY_MIN; dentro, non deve mai comparire nemmeno se è sotto soglia.
@@ -192,7 +202,7 @@ test("il sabato 09:00–16:30 è l'UNICA fascia della settimana in cui il bot no
         const window = resolveRoutingWindow(at);
 
         if (inFasciaProtetta) {
-            assert.equal(window, 'gdo_only', `${at.toISOString()} dovrebbe essere protetta`);
+            assert.equal(window, 'bot_first', `${at.toISOString()} dovrebbe essere mista`);
             protetti++;
         } else {
             assert.ok(

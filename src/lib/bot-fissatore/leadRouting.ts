@@ -21,12 +21,16 @@
  *     lun–ven  13:00 → 20:00  raggiunto BOT_DAILY_MIN lead nel giorno civile di
  *                             Roma: fino a quel punto la precedenza è sua
  *
- *   fascia protetta GDO       solo umani, il bot è escluso a prescindere —
- *     sabato   09:00 → 16:30  anche se è ancora sotto BOT_DAILY_MIN. È l'unica
- *                             fascia della settimana in cui il bot non compare.
+ *   fascia mista del sabato   dal 17/09/2026 anche il sabato 09:00–16:30 segue
+ *     sabato   09:00 → 16:30  la regola mista: il bot passa avanti finché è
+ *                             sotto quota, sopra quota resta fuori. Prima era
+ *                             l'unica fascia che lo escludeva a prescindere; il
+ *                             PO ha chiesto che la precedenza valga SEMPRE fino
+ *                             a quota, perché il bot deve scaldare il numero
+ *                             nuovo e senza volume non lo scalda.
  *
- * Perché la fascia protetta parte alle 09:00 mentre il turno del sabato comincia
- * alle 10:00: è voluto dal PO. L'ora di scarto serve a far trovare ai GDO una
+ * Perché la fascia parte alle 09:00 mentre il turno del sabato comincia alle
+ * 10:00: è voluto dal PO. L'ora di scarto serve a far trovare ai GDO una
  * pipeline già piena all'inizio del turno, invece di partire da zero.
  *
  * Il conteggio giornaliero non sta qui: è un predicato SQL per-account nel
@@ -42,7 +46,7 @@
  * Europe/Rome. Sotto questa quota il bot ha la precedenza anche negli orari
  * dei GDO; sopra, i lead degli orari umani passano ai GDO.
  */
-export const BOT_DAILY_MIN = 150;
+export const BOT_DAILY_MIN = 100;
 
 export type RoutingWindow =
     /** Finestra del bot: tutto al bot, la soglia non si applica. */
@@ -107,7 +111,11 @@ export function resolveRoutingWindow(now: Date): RoutingWindow {
     if (weekday === 0) return 'bot_only'; // domenica
 
     if (weekday === 6) {
-        return minutes >= SAT_PROTECTED_START && minutes < SAT_PROTECTED_END ? 'gdo_only' : 'bot_only';
+        // Anche la fascia protetta del sabato ora fa passare il bot finche' e'
+        // sotto la soglia: la precedenza vale SEMPRE fino a quota (PO
+        // 2026-09-17). Sopra quota il bot resta fuori, che e' il motivo per cui
+        // la fascia esiste.
+        return minutes >= SAT_PROTECTED_START && minutes < SAT_PROTECTED_END ? 'bot_first' : 'bot_only';
     }
 
     return minutes >= WEEKDAY_GDO_START && minutes < WEEKDAY_GDO_END ? 'bot_first' : 'bot_only';
