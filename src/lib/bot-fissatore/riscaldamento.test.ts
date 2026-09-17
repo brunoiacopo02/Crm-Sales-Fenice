@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     eImmacolato, pianificaRiscaldamento, leggiConfigRiscaldamento,
-    SCAGLIONE_DEFAULT, TETTO_GIORNALIERO_DEFAULT,
+    SCAGLIONE_DEFAULT, TETTO_GIORNALIERO_DEFAULT, puoPartireAOra,
     type LeadCandidato, type ConfigRiscaldamento,
 } from './riscaldamento';
 
-const CHIAVI = ['BOT_WARMUP', 'BOT_WARMUP_BATCH', 'BOT_WARMUP_SOURCE', 'BOT_WARMUP_DAILY'] as const;
+const CHIAVI = ['BOT_WARMUP', 'BOT_WARMUP_BATCH', 'BOT_WARMUP_SOURCE', 'BOT_WARMUP_DAILY', 'BOT_WARMUP_FROM'] as const;
 
 function withEnv(env: Partial<Record<(typeof CHIAVI)[number], string>>, fn: () => void) {
     const prima = Object.fromEntries(CHIAVI.map((k) => [k, process.env[k]]));
@@ -25,7 +25,7 @@ const lead = (over: Partial<LeadCandidato> = {}): LeadCandidato => ({
 });
 
 const cfg = (over: Partial<ConfigRiscaldamento> = {}): ConfigRiscaldamento => ({
-    attivo: true, scaglione: 50, sorgente: 'GDO 114', tettoGiornaliero: 1000, ...over,
+    attivo: true, scaglione: 50, sorgente: 'GDO 114', tettoGiornaliero: 1000, oraMinima: null, ...over,
 });
 
 // ---------------------------------------------------------------- immacolato
@@ -192,4 +192,32 @@ test('il tetto si configura da env e ha un default', () => {
     withEnv({ BOT_WARMUP: 'on', BOT_WARMUP_DAILY: 'boh' }, () => {
         assert.equal(leggiConfigRiscaldamento().tettoGiornaliero, TETTO_GIORNALIERO_DEFAULT);
     });
+});
+
+
+// ---------------------------------------------------------------- ora di partenza
+
+test('senza ora minima il giro parte a qualunque ora', () => {
+    const c = cfg({ oraMinima: null });
+    assert.equal(puoPartireAOra(8, c), true);
+    assert.equal(puoPartireAOra(23, c), true);
+});
+
+test('con ora minima 17 il giro non parte prima delle 17', () => {
+    const c = cfg({ oraMinima: 17 });
+    assert.equal(puoPartireAOra(16, c), false);
+    assert.equal(puoPartireAOra(17, c), true);
+    assert.equal(puoPartireAOra(20, c), true);
+});
+
+test("l'ora di partenza si legge da env e un valore assurdo non vincola", () => {
+    withEnv({ BOT_WARMUP: 'on', BOT_WARMUP_FROM: '17' }, () => {
+        assert.equal(leggiConfigRiscaldamento().oraMinima, 17);
+    });
+    for (const v of ['24', '-1', 'sera', '8.5']) {
+        withEnv({ BOT_WARMUP: 'on', BOT_WARMUP_FROM: v }, () => {
+            assert.equal(leggiConfigRiscaldamento().oraMinima, null, `valore "${v}"`);
+        });
+    }
+    withEnv({ BOT_WARMUP: 'on' }, () => assert.equal(leggiConfigRiscaldamento().oraMinima, null));
 });

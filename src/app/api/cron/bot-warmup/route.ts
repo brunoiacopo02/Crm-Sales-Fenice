@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { db } from '@/db';
 import { leads, users, leadEvents } from '@/db/schema';
 import {
-    leggiConfigRiscaldamento, pianificaRiscaldamento, type LeadCandidato,
+    leggiConfigRiscaldamento, pianificaRiscaldamento, puoPartireAOra, type LeadCandidato,
 } from '@/lib/bot-fissatore/riscaldamento';
 import { pushLeadToBot } from '@/lib/bot-fissatore/push';
 
@@ -48,6 +48,18 @@ export async function eseguiRiscaldamento(opzioni: {
         ? { ...base, scaglione: opzioni.scaglione }
         : base;
     if (!config.attivo) return { ok: true, skipped: 'disabled' as const };
+
+    // L'ora di partenza vale solo per i giri automatici: se una persona preme
+    // il pulsante, ha deciso lei che e' il momento.
+    const oraRoma = Number(new Intl.DateTimeFormat('it-IT', {
+        timeZone: 'Europe/Rome', hour: '2-digit', hour12: false,
+    }).format(new Date()));
+    if (!opzioni.forza && !puoPartireAOra(oraRoma, config)) {
+        return {
+            ok: true as const, spostati: 0, motivo: 'troppo_presto' as const,
+            oraRoma, oraMinima: config.oraMinima,
+        };
+    }
 
     const [sorgente] = await db.select({ id: users.id, name: users.name })
         .from(users)

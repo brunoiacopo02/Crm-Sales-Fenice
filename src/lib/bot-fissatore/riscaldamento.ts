@@ -50,6 +50,15 @@ export interface ConfigRiscaldamento {
     sorgente: string;
     /** Quanti lead al massimo in tutta la giornata, sommando i giri. */
     tettoGiornaliero: number;
+    /**
+     * Ora di Roma prima della quale il giro non parte (null = nessun vincolo).
+     *
+     * Serve a far cominciare uno scaglionamento a un'ora decisa, senza dover
+     * accendere l'interruttore a mano nel momento giusto: acceso adesso, parte
+     * stasera. Senza questo, accendere alle 15 significa che il primo giro
+     * utile e' quello delle 15:20, non quello voluto.
+     */
+    oraMinima: number | null;
 }
 
 /**
@@ -82,7 +91,32 @@ export function leggiConfigRiscaldamento(): ConfigRiscaldamento {
         scaglione: interoDaEnv('BOT_WARMUP_BATCH', SCAGLIONE_DEFAULT),
         sorgente: process.env.BOT_WARMUP_SOURCE?.trim() || 'GDO 114',
         tettoGiornaliero: interoDaEnv('BOT_WARMUP_DAILY', TETTO_GIORNALIERO_DEFAULT),
+        oraMinima: oraDaEnv('BOT_WARMUP_FROM'),
     };
+}
+
+/**
+ * Un'ora del giorno (0-23) da env, oppure null.
+ *
+ * Fail-open al contrario delle quantita': un valore illeggibile vale "nessun
+ * vincolo d'ora", perche' il vincolo vero sulle quantita' resta il tetto
+ * giornaliero. Sbagliare qui puo' al massimo far partire il giro prima, non
+ * farlo partire piu' del dovuto.
+ */
+function oraDaEnv(nome: string): number | null {
+    const raw = process.env[nome]?.trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 23) {
+        console.error(`[riscaldamento] ${nome}="${raw}" non e' un'ora fra 0 e 23: nessun vincolo`);
+        return null;
+    }
+    return n;
+}
+
+/** Il giro puo' partire a quest'ora di Roma? */
+export function puoPartireAOra(ora: number, config: ConfigRiscaldamento): boolean {
+    return config.oraMinima === null || ora >= config.oraMinima;
 }
 
 export interface LeadCandidato {
