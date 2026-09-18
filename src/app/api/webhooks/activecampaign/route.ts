@@ -1231,6 +1231,11 @@ export async function POST(req: NextRequest) {
             } else if (routing === 'bot_first') {
                 eligible = await selectBotPool(true);
                 if (eligible.length === 0) eligible = await selectFreshWithOverflow();
+                // Rete finale: il bot anche sopra soglia. Era l'unico ramo senza,
+                // e dal 18/09/2026 si puo' arrivare qui davvero — da quando i GDO
+                // ricevono solo ridati, `selectFreshWithOverflow` torna vuota
+                // appena il bot supera la soglia, e il lead restava orfano.
+                if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
             } else {
                 eligible = await selectBotPool(false);
                 if (eligible.length === 0) { eligible = await selectFreshWithOverflow(); fallbackUsed = true; }
