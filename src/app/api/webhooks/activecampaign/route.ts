@@ -17,6 +17,32 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { getLeadRouting, finestraRientro, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
+
+/**
+ * Quanti lead sono gia' andati a bot 2 oggi (giorno civile di Roma).
+ *
+ * Si contano gli EVENTI di push, non un contatore a parte: un contatore si
+ * sfasa al primo riavvio e mente proprio nel momento in cui serve. Se la query
+ * non riesce torna -1, che `numeroBotPerNuovoLead` legge come "non lo so" e
+ * fa ricadere il lead sul numero storico.
+ */
+async function contaBot2Oggi(): Promise<number> {
+    try {
+        const [riga] = await db.select({ n: sql<number>`COUNT(*)::int` })
+            .from(leadEvents)
+            .where(and(
+                eq(leadEvents.companyId, FENICE_COMPANY),
+                eq(leadEvents.eventType, 'BOT_PUSHED'),
+                sql`${leadEvents.metadata}->>'numeroBot' = '2'`,
+                sql`${leadEvents.timestamp} >= date_trunc('day', now() AT TIME ZONE 'Europe/Rome')`,
+            ));
+        return riga?.n ?? -1;
+    } catch (e) {
+        console.error('[numeroBot] conteggio di bot 2 non riuscito: il lead va al numero storico', e);
+        return -1;
+    }
+}
 import {
     isLancioIntakeEnabled, decideLancioIntake, buildLancioLeadRow, buildLancioIntakeEventRows,
     lancioPayloadField, LANCIO_LIST_NAME_NORMALIZED, LANCIO_BUCKET, LANCIO_FUNNEL, type LancioDecision,
@@ -1306,6 +1332,10 @@ export async function POST(req: NextRequest) {
         const assignedGdoId = txResult.assignedGdoId;
 
         if (txResult.kind === 'created' && txResult.assignedGdoIsBot) {
+            // Quale dei due numeri del bot apre questa chat. Si contano i lead
+            // che oggi sono gia' andati a bot 2: se il conteggio non riesce si
+            // passa -1, che vale "non lo so" e manda al numero storico.
+            const numeroBot = numeroBotPerNuovoLead(await contaBot2Oggi());
             after(() => pushLeadToBot({
                 leadId: newLeadId,
                 name: fullName,
@@ -1313,6 +1343,7 @@ export async function POST(req: NextRequest) {
                 email,
                 funnel,
                 companyId: FENICE_COMPANY,
+                numeroBot,
             }));
         }
 

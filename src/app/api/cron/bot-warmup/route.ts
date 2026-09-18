@@ -222,6 +222,7 @@ export async function eseguiRiscaldamento(opzioni: {
                 companyId: FENICE,
                 // Questi e solo questi vanno sul numero che stiamo scaldando.
                 riscaldamento: true,
+                numeroBot: 2,
             });
             if (esito.result === 'sent' || esito.result === 'duplicate') inviati++;
             else falliti.push(`${id}:${esito.result}`);

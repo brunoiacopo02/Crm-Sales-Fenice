@@ -53,4 +53,12 @@ export interface BotIntakePayload {
      * dirglielo qui.
      */
     riscaldamento?: boolean;
+    /**
+     * Quale numero del bot apre la chat: 1 = storico, 2 = nuovo.
+     *
+     * Bot 2 ha un tetto giornaliero (vedi numeroBot.ts) perche' un numero si
+     * brucia col volume. Il bot ha comunque un controllo suo: qui si decide,
+     * li' si verifica.
+     */
+    numeroBot?: 1 | 2;
 }
