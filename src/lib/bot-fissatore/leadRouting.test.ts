@@ -184,7 +184,7 @@ test('un valore non riconosciuto non spegne la regola', () => {
 test('la soglia minima giornaliera del bot e 100', () => {
     // Abbassata da 150 il 17/09/2026: e' il volume con cui il PO vuole scaldare
     // il numero WhatsApp nuovo, non una stima di capacita' del bot.
-    assert.equal(BOT_DAILY_MIN, 100);
+    assert.equal(BOT_DAILY_MIN, Number(process.env.BOT_DAILY_LEADS) || 100);
 });
 
 test("il bot puo' ricevere lead in ogni fascia della settimana", () => {

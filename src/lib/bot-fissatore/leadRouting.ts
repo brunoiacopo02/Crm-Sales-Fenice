@@ -46,7 +46,31 @@
  * Europe/Rome. Sotto questa quota il bot ha la precedenza anche negli orari
  * dei GDO; sopra, i lead degli orari umani passano ai GDO.
  */
-export const BOT_DAILY_MIN = 100;
+const BOT_DAILY_MIN_DEFAULT = 100;
+
+/**
+ * La soglia si legge da `BOT_DAILY_LEADS`, con ripiego sul valore storico.
+ *
+ * Era una costante: cambiarla voleva dire un deploy, e questa e' una manopola
+ * che il PO gira spesso (100 a settembre, 60 dal 18/09). Un valore illeggibile
+ * vale il ripiego e si logga: meglio la soglia di ieri che una soglia inventata.
+ *
+ * ATTENZIONE a cosa significa: e' una soglia di PRECEDENZA, non un tetto. Nelle
+ * finestre del bot (notte e mattina) il bot prende tutto comunque; questo numero
+ * decide solo fino a quando passa avanti ai GDO nelle fasce miste.
+ */
+function leggiSoglia(): number {
+    const raw = process.env.BOT_DAILY_LEADS?.trim();
+    if (!raw) return BOT_DAILY_MIN_DEFAULT;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 1000) {
+        console.error(`[routing] BOT_DAILY_LEADS="${raw}" non e' un intero fra 0 e 1000: uso ${BOT_DAILY_MIN_DEFAULT}`);
+        return BOT_DAILY_MIN_DEFAULT;
+    }
+    return n;
+}
+
+export const BOT_DAILY_MIN = leggiSoglia();
 
 export type RoutingWindow =
     /** Finestra del bot: tutto al bot, la soglia non si applica. */
