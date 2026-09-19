@@ -74,7 +74,7 @@ export function LancioPoolCard() {
             setSyncReport(res)
             await refresh()
         } catch (e) {
-            setSyncReport({ ok: false, imported: 0, skippedExisting: 0, skippedNoPhone: 0, totalOnList: 0, senzaBot: 0, errors: ['Errore imprevisto durante il sync: ' + String(e)] })
+            setSyncReport({ ok: false, imported: 0, skippedExisting: 0, skippedNoPhone: 0, totalOnList: 0, senzaBot: 0, senzaUtm: 0, errors: ['Errore imprevisto durante il sync: ' + String(e)] })
         } finally {
             setSyncing(false)
         }
@@ -221,6 +221,9 @@ export function LancioPoolCard() {
                         {syncReport.ok ? 'Sync completato' : 'Sync con avvisi'}
                         {' — '}{syncReport.imported} importati (al bot), {syncReport.skippedExisting} già presenti, {syncReport.skippedNoPhone} senza telefono (lista AC: {syncReport.totalOnList})
                     </div>
+                    {syncReport.imported > 0 && syncReport.senzaUtm > 0 && (
+                        <div className="mt-1">{syncReport.senzaUtm} importati senza UTM: su ActiveCampaign quei contatti non hanno la provenienza pubblicitaria.</div>
+                    )}
                     {syncReport.errors.map((e, i) => <div key={i}>{e}</div>)}
                     {syncReport.imported > 0 && <div className="mt-1">Ora premi &quot;Spingi al bot i mancanti&quot; per consegnarli.</div>}
                 </div>

@@ -54,6 +54,9 @@ import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
 import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
+// UTM: id dei custom field e lettura, condivisi col sync di recupero del lancio
+// (src/lib/acIntake/utmFields.ts). Prima vivevano qui e il sync non poteva riusarli.
+import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
 
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com';
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '';
@@ -101,15 +104,6 @@ const QUARANTINED_FUNNELS = new Set(
         .map((s) => s.trim().toUpperCase())
         .filter(Boolean),
 );
-
-// Custom field id su AC per gli UTM (visti via /api/3/fields).
-const UTM_FIELD_IDS = {
-    utmSource: '31',
-    utmMedium: '32',
-    utmCampaign: '33',
-    utmContent: '34',
-    utmTerm: '35',
-} as const;
 
 // Retry con backoff esponenziale + jitter sui 429 (rate limit AC, ~5 req/s
 // per account) e sui 5xx transitori. Senza questo, un burst di webhook AC
@@ -269,11 +263,6 @@ async function leggiListeContatto(contactId: string): Promise<{ ids: Set<string>
 function blockedListOf(activeListIds: Set<string>, blocked: Set<string>): string | null {
     for (const id of activeListIds) if (blocked.has(id)) return id;
     return null;
-}
-
-function readFieldLocal(fieldValues: Array<{ field: string; value: string | null }>, fieldId: string): string | null {
-    const v = fieldValues.find((f) => String(f.field) === fieldId)?.value;
-    return v && String(v).trim() ? String(v).trim() : null;
 }
 
 /**
@@ -507,13 +496,7 @@ async function handleLancioIntake(
     }
     const phoneSuspicious = !isPlausiblePhone(phoneStrict);
 
-    const utm = {
-        utmSource: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmSource),
-        utmMedium: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmMedium),
-        utmCampaign: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign),
-        utmContent: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent),
-        utmTerm: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm),
-    };
+    const utm = readUtmFields(fieldValues);
 
     const now = new Date();
     const newLeadId = crypto.randomUUID();

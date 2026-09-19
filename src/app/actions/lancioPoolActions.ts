@@ -24,6 +24,7 @@ import {
 import { findLancioBotId } from "@/lib/lancio/botAccount"
 import { lancioContactId, readLancioAcContact } from "@/lib/lancio/acContact"
 import { LANCIO_PUSH_LOCK_KEY, lockPreso } from "@/lib/lancio/pushLock"
+import { indexFieldValuesByContact, readUtmFields, hasAnyUtm } from "@/lib/acIntake/utmFields"
 
 // Chi può muovere il pool del lancio. Identico ai pool database
 // (databasePoolActions): scaricare la lista, aprire 500 chat WhatsApp o
@@ -159,6 +160,8 @@ export type LancioSyncReport = {
     totalOnList: number
     /** Importati senza account bot: sono nel pool, non al bot. */
     senzaBot: number
+    /** Importati senza nemmeno un UTM: su AC quel contatto non li ha. */
+    senzaUtm: number
     errors: string[]
 }
 
@@ -171,7 +174,7 @@ export type LancioSyncReport = {
  */
 export async function syncLancioPool(): Promise<LancioSyncReport> {
     const report: LancioSyncReport = {
-        ok: false, imported: 0, skippedExisting: 0, skippedNoPhone: 0, totalOnList: 0, senzaBot: 0, errors: [],
+        ok: false, imported: 0, skippedExisting: 0, skippedNoPhone: 0, totalOnList: 0, senzaBot: 0, senzaUtm: 0, errors: [],
     }
     let ctx: TenantContext
     try {
@@ -214,6 +217,8 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
     let toInsert: ReturnType<typeof buildLancioLeadRow>[] = []
     /** leadId → id della lista AC da cui e' arrivato (per l'evento LANCIO_INTAKE). */
     const listIdByLead = new Map<string, string>()
+    /** true = almeno una pagina con contatti e' tornata senza il sideload `fieldValues`. */
+    let sideloadMancante = false
 
     try {
         // status=-1 = qualunque stato di iscrizione, unsubscribed inclusi (come
@@ -221,10 +226,24 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
         for (const listId of listIds) {
             let hitPaginationCap = true
             for (let offset = 0; offset < 20000; offset += 100) {
-                const page = await acGet(`/contacts?listid=${listId}&status=-1&limit=100&offset=${offset}`)
+                // `include=fieldValues` e' l'unico modo per avere gli UTM senza una
+                // chiamata per contatto (5 req/s: su 5.000 lead sarebbero 17 minuti).
+                // AC NON annida i custom field dentro il contatto: li mette in un
+                // array `fieldValues` di primo livello, e ogni riga dice a quale
+                // contatto appartiene. Il resto della risposta non cambia —
+                // verificato sulla lista 132 il 19/09/2026: stessi `meta.total`,
+                // stessa paginazione, 447 fieldValues per 56 contatti, nessun
+                // contatto scoperto. Quindi la guardia dei 20.000 resta valida.
+                const page = await acGet(`/contacts?listid=${listId}&status=-1&limit=100&offset=${offset}&include=fieldValues`)
                 const contacts = Array.isArray(page.contacts) ? page.contacts : []
                 if (offset === 0) report.totalOnList += Number(page?.meta?.total ?? contacts.length) || contacts.length
                 if (contacts.length === 0) { hitPaginationCap = false; break }
+                // Mappa contactId → fieldValues della pagina. Se il sideload non c'e'
+                // proprio (AC ha ignorato `include`) i lead entrano lo stesso, come
+                // prima del fix, ma il report lo dice invece di tacere: e' esattamente
+                // il modo in cui gli UTM si sono persi in silenzio finora.
+                if (!Array.isArray(page.fieldValues)) sideloadMancante = true
+                const fieldValuesByContact = indexFieldValuesByContact(page.fieldValues)
 
                 for (const c of contacts) {
                     const contactId = lancioContactId(c)
@@ -239,6 +258,10 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
                     // liste omonime, e nel lotto ci deve entrare una volta sola.
                     existingIds.add(contactId)
                     existingPhones.add(letto.phone)
+                    // Stessi cinque custom field del webhook (readUtmFields): un lead
+                    // del sync e uno del webhook devono essere indistinguibili nelle
+                    // statistiche marketing.
+                    const utm = readUtmFields(fieldValuesByContact.get(contactId))
                     const row = buildLancioLeadRow({
                         id: crypto.randomUUID(),
                         name: letto.name,
@@ -248,6 +271,7 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
                         phoneSuspicious: letto.phoneSuspicious,
                         botId,
                         now,
+                        utm,
                     })
                     listIdByLead.set(row.id, listId)
                     toInsert.push(row)
@@ -304,6 +328,13 @@ export async function syncLancioPool(): Promise<LancioSyncReport> {
     }))
     for (let i = 0; i < eventRows.length; i += 500) {
         await db.insert(leadEvents).values(eventRows.slice(i, i + 500))
+    }
+
+    // Contato sulle righe DAVVERO inserite, non sui candidati: un lotto scartato
+    // dalla dedup gonfierebbe il numero.
+    report.senzaUtm = righeInserite.filter(row => !hasAnyUtm(row)).length
+    if (sideloadMancante && report.imported > 0) {
+        report.errors.push("ActiveCampaign non ha restituito i campi personalizzati (include=fieldValues): i lead sono entrati SENZA UTM. Riclicca piu' tardi e poi lancia la bonifica scripts/backfill-lancio-utm.ts.")
     }
 
     report.senzaBot = righeInserite.filter(row => !row.assignedToId && !row.phoneSuspicious).length
