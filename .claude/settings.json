@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude-in-chrome__navigate",
+      "mcp__claude-in-chrome__find",
+      "mcp__claude-in-chrome__get_page_text",
+      "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__tabs_create_mcp",
+      "mcp__claude-in-chrome__tabs_close_mcp",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__read_network_requests",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__get_project",
+      "mcp__supabase__get_project_url",
+      "mcp__supabase__get_advisors",
+      "mcp__supabase__search_docs",
+      "mcp__vercel__get_runtime_logs",
+      "mcp__vercel__get_runtime_errors",
+      "mcp__vercel__get_deployment",
+      "mcp__vercel__get_deployment_build_logs",
+      "mcp__vercel__list_deployments",
+      "mcp__vercel__list_projects",
+      "mcp__vercel__get_project",
+      "mcp__plugin_claude-mem_mcp-search__search",
+      "mcp__plugin_claude-mem_mcp-search__get_observations",
+      "mcp__plugin_claude-mem_mcp-search__timeline",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__get_file_metadata",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "mcp__claude_ai_Google_Drive__list_recent_files"
+    ]
+  }
+}

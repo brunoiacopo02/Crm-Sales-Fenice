@@ -543,13 +543,13 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-emerald-700">Nuovi</span>
-                    <span>lead evergreen (nessun pool)</span>
+                    <span>lead evergreen (nessun pool) e lead del lancio in corso</span>
                     <span className="text-ash-300">•</span>
                     <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-violet-700">DB</span>
                     <span>lead dei pool Database mensili ricaricati da AC.</span>
                 </div>
                 <div>
-                    Le colonne <span className="font-semibold text-ash-600">Nuovi / DB</span> sono <span className="font-semibold text-ash-600">solo CRM live</span>, ciascuna sui lead della propria origine entrati nel mese: i delta manuali e il Lead assoluto della baseline restano sul <span className="font-semibold text-ash-600">totale</span> e non sono ripartiti, quindi Nuovi + DB può non fare il totale di riga. I lead dei <span className="font-semibold text-ash-600">lanci passati</span> (Black Summer, Webinar…) restano nel totale ma sono fuori da entrambi gli split — il dettaglio è nel tooltip della colonna Lead.
+                    Le colonne <span className="font-semibold text-ash-600">Nuovi / DB</span> sono <span className="font-semibold text-ash-600">solo CRM live</span>, ciascuna sui lead della propria origine entrati nel mese: i delta manuali e il Lead assoluto della baseline restano sul <span className="font-semibold text-ash-600">totale</span> e non sono ripartiti, quindi Nuovi + DB può non fare il totale di riga. I lead del <span className="font-semibold text-ash-600">lancio in corso</span> (Web Dev AI) contano come <span className="font-semibold text-ash-600">Nuovi</span>: vengono dalle ads come gli altri lead freschi. I lead dei <span className="font-semibold text-ash-600">lanci passati</span> (Black Summer, Webinar…) restano nel totale ma sono fuori da entrambi gli split — il dettaglio è nel tooltip della colonna Lead.
                 </div>
             </div>
 

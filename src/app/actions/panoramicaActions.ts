@@ -14,6 +14,7 @@ import {
 } from "@/lib/workingDaysUtils";
 import { stageHits } from "@/lib/kpi/funnelStages";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
+import { LANCIO_BUCKET } from "@/lib/lancio/intake";
 import crypto from "crypto";
 
 async function requireAdmin() {
@@ -756,11 +757,18 @@ export type FunnelStato = 'OK' | 'PRE_RISK' | 'ALLERT';
  * Split per origine del lead (spec 2026-08-28). Le due popolazioni hanno rese
  * strutturalmente diverse e la loro media non è interpretabile:
  *  - NUOVI    → `leads.launchBucket IS NULL` (evergreen, arrivano live da AC)
+ *               PIÙ il bucket del LANCIO IN CORSO (`LANCIO_BUCKET`, oggi
+ *               `LANCIO_WEBDEV_2026`) — decisione PO 2026-09-19: sono persone
+ *               fresche arrivate dalle ads e iscritte alla lista del webinar,
+ *               non un database rilavorato, e hanno un bucket solo perché il
+ *               lancio ha un suo pool. Vedi `originOf()`.
  *  - DATABASE → `leads.launchBucket` in uno dei bucket `launchPools.kind =
  *               'DATABASE_MONTH'` (pool di contatti vecchi ricaricati da AC).
  *               L'elenco è letto dal DB, così i pool mensili futuri entrano da soli.
- *  - ALTRO    → gli altri bucket (lanci passati: BLACK_SUMMER, WEBINAR, ...).
- *               Restano nei TOTALI di riga ma sono FUORI da entrambi gli split.
+ *  - ALTRO    → gli altri bucket (lanci PASSATI: BLACK_SUMMER, WEBINAR,
+ *               LANCIO DATA ANALYST, ...). Restano nei TOTALI di riga ma sono
+ *               FUORI da entrambi gli split. Questi NON si spostano: la
+ *               decisione del 19/09/2026 riguarda solo il lancio corrente.
  *
  * ATTENZIONE — questi contatori sono 100% CRM live: i delta manuali degli admin
  * (`monthlyFunnelBaselines.appDelta/...`) e il `leadCount` assoluto di baseline
@@ -798,11 +806,11 @@ export type FunnelOverviewRow = {
     roas: number | null;
     dataPrimoSottoSoglia: string | null;
     statoSegnalazione: FunnelStato;
-    /** Solo lead nuovi (launchBucket IS NULL). Vedi FunnelSplitCounts. */
+    /** Lead nuovi: nessun bucket, più il bucket del lancio in corso. Vedi FunnelSplitCounts. */
     nuovi: FunnelSplitCounts;
     /** Solo lead dei pool DATABASE_MONTH. Vedi FunnelSplitCounts. */
     database: FunnelSplitCounts;
-    /** Lead di lanci passati: nel totale, fuori dai due split. */
+    /** Lead di lanci PASSATI: nel totale, fuori dai due split. */
     altroLeadCount: number;
 };
 
@@ -861,6 +869,17 @@ async function getDatabaseBuckets(companyId: string): Promise<Set<string>> {
 
 function originOf(launchBucket: string | null | undefined, dbBuckets: Set<string>): LeadOrigin {
     if (!launchBucket) return 'nuovi';
+    // Il LANCIO IN CORSO conta come lead NUOVO (decisione PO 2026-09-19).
+    // I suoi lead sono persone fresche arrivate dalle ads e iscritte alla lista
+    // del webinar: è esattamente ciò che significa "lead nuovo" in questa
+    // tabella. Hanno un `launchBucket` solo perché il lancio ha un suo pool,
+    // non perché siano un database rilavorato.
+    // ATTENZIONE: vale SOLO per il bucket del lancio corrente. I lanci passati
+    // (BLACK_SUMMER, WEBINAR, LANCIO DATA ANALYST…) restano in 'altro' come
+    // dichiarato sopra — non spostarli. Il controllo sta prima di `dbBuckets`
+    // di proposito: se un domani qualcuno registrasse per sbaglio il bucket del
+    // lancio fra i pool Database, resterebbe comunque un lead nuovo.
+    if (launchBucket === LANCIO_BUCKET) return 'nuovi';
     return dbBuckets.has(launchBucket) ? 'db' : 'altro';
 }
 

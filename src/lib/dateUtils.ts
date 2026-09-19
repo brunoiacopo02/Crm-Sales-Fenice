@@ -63,14 +63,43 @@ export function formatRomeAppointmentLabel(at: Date): string {
     return `${d} alle ${h}`;
 }
 
-/** Bounds del giorno (Europe/Rome) contenente `at`. */
+/**
+ * Mezzanotte Europe/Rome del giorno (y, m, d), con `d` che può sforare il mese
+ * (Date.UTC normalizza: 2026-10-32 → 2026-11-01).
+ *
+ * Due passaggi, e servono entrambi. Il primo usa l'offset di MEZZOGIORNO del
+ * giorno di destinazione (come `monthBoundsRome`): mezzogiorno non cade mai
+ * dentro un salto d'ora, quindi dà sempre un istante nel giorno giusto. Ma nei
+ * giorni di cambio ora mezzanotte e mezzogiorno hanno offset DIVERSI — il
+ * 25/10/2026 mezzanotte è +02:00 e mezzogiorno è già +01:00 — quindi il
+ * secondo passaggio rilegge l'offset all'istante trovato e ricalcola. Da lì in
+ * poi è stabile: il risultato è la mezzanotte vera di quel giorno.
+ */
+function romeMidnight(y: number, m: number, d: number): Date {
+    const noon = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    const dateStr = noon.toISOString().slice(0, 10);
+    const primoTentativo = new Date(`${dateStr}T00:00:00${romeOffset(noon)}`);
+    return new Date(`${dateStr}T00:00:00${romeOffset(primoTentativo)}`);
+}
+
+/**
+ * Bounds del giorno (Europe/Rome) contenente `at`.
+ *
+ * Fix 2026-09-19 (cambi d'ora): prima l'offset veniva preso dall'ISTANTE `at` e
+ * applicato alla mezzanotte del giorno di destinazione, e la fine era
+ * `start + 24h`. Nei due weekend di cambio ora sbagliava di un'ora:
+ *  - 29/03/2026 (giorno da 23h): la mezzanotte è ancora +01:00, ma un `at`
+ *    pomeridiano è già +02:00 → lo start partiva un'ora prima;
+ *  - 25/10/2026 (giorno da 25h): la mezzanotte è +02:00 e un `at` pomeridiano
+ *    è +01:00 → lo start partiva un'ora dopo, e con `at` prima delle 03:00 era
+ *    la fine a cadere un'ora prima.
+ * Ora entrambi gli estremi sono mezzanotti vere di Roma, ciascuna col proprio
+ * offset: il giorno dura 23h o 25h quando deve.
+ */
 export function dayBoundsRome(at: Date): { start: Date; end: Date } {
-    const dateStr = toRomeDateStr(at);
-    const offset = romeOffset(at);
-    const start = new Date(`${dateStr}T00:00:00${offset}`);
-    // end = start del giorno successivo (exclusive)
-    const next = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    return { start, end: next };
+    const [y, m, d] = toRomeDateStr(at).split('-').map(Number);
+    // end = mezzanotte del giorno successivo (exclusive)
+    return { start: romeMidnight(y, m, d), end: romeMidnight(y, m, d + 1) };
 }
 
 /** Bounds del mese "YYYY-MM" Europe/Rome. */
@@ -99,16 +128,17 @@ export function monthBoundsRome(yearMonth: string): { start: Date; end: Date } {
  */
 export function weekBoundsRome(at: Date): { start: Date; end: Date } {
     const dateStr = toRomeDateStr(at);
-    const offset = romeOffset(at);
-    // Mezzogiorno locale del giorno per derivare il weekday Rome
-    const noon = new Date(`${dateStr}T12:00:00${offset}`);
+    // Mezzogiorno locale del giorno per derivare il weekday Rome. Qui l'offset
+    // di `at` va benissimo: un'ora di scarto non sposta mezzogiorno di giorno.
+    const noon = new Date(`${dateStr}T12:00:00${romeOffset(at)}`);
     // getUTCDay sull'istante UTC del mezzogiorno Rome ≈ getDay() di Rome
     const dow = (noon.getUTCDay() + 6) % 7; // lun=0, mar=1, ..., dom=6
-    const monday = new Date(noon.getTime() - dow * 24 * 60 * 60 * 1000);
-    const mondayStr = toRomeDateStr(monday);
-    const start = new Date(`${mondayStr}T00:00:00${offset}`);
-    const nextMonday = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
-    return { start, end: nextMonday };
+    const mondayStr = toRomeDateStr(new Date(noon.getTime() - dow * 24 * 60 * 60 * 1000));
+    const [y, m, d] = mondayStr.split('-').map(Number);
+    // Stesso fix di dayBoundsRome (2026-09-19): gli estremi sono mezzanotti
+    // vere di Roma, non "lunedì + 7 giorni esatti". Nella settimana del cambio
+    // ora il vecchio calcolo chiudeva la settimana un'ora prima o un'ora dopo.
+    return { start: romeMidnight(y, m, d), end: romeMidnight(y, m, d + 7) };
 }
 
 /** "YYYY-MM" del mese precedente rispetto al given. */

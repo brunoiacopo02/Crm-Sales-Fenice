@@ -2,21 +2,21 @@
 
 import { db } from "@/db";
 import { leads, marketingBudgets } from "@/db/schema";
-import { and, eq, ne, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { leadIntakeAt } from '@/lib/kpi/canon';
 import { contaNeiKpi } from '@/lib/intakeBatch';
+import { PINNED_FUNNELS, byVolumeThenName, funnelKey, orderFunnels } from '@/lib/kpi/marketingFunnels';
 
-const OFFICIAL_FUNNELS = [
-    "TELEGRAM",
-    "JOB SIMULATOR",
-    "CORSO 10 ORE",
-    "ORG",
-    "DATABASE",
-    "TELEGRAM-TK",
-    "GOOGLE",
-    "SOCIAL"
-];
+/**
+ * Filtro dei funnel: ESCLUSIONE, non più whitelist (PO 2026-09-19).
+ * Si escludono solo TEST / BLT / vuoto; l'elenco dei funnel mostrati è
+ * derivato dai dati — vedi `@/lib/kpi/marketingFunnels` per il perché.
+ * Case-insensitive: a DB convivono 'test', 'Database' e 'DATABASE'.
+ */
+function funnelNonDiServizio() {
+    return sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', 'BLT', '')`;
+}
 
 /** Convert "YYYY-MM-DD" to UTC Date at start of that day in Europe/Rome */
 function toRomeStartOfDay(dateStr: string): Date {
@@ -80,9 +80,7 @@ export async function getMarketingStats(monthString: string) {
     const allLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
-            isNotNull(leads.funnel),
-            ne(leads.funnel, 'BLT'),
-            ne(leads.funnel, ''),
+            funnelNonDiServizio(),
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
             or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
@@ -109,26 +107,44 @@ export async function getMarketingStats(monthString: string) {
     );
 
     // Grouping
-    const grouped: Record<string, any> = {};
+    type FunnelRow = {
+        funnel: string;
+        leads: number;
+        leadAssegnati: number;
+        apps: number;
+        conferme: number;
+        trattative: number;
+        close: number;
+        fatturato: number;
+    };
+    const grouped: Record<string, FunnelRow> = {};
+    const rigaVuota = (f: string): FunnelRow => ({
+        funnel: f,
+        leads: 0,
+        leadAssegnati: 0,
+        apps: 0,
+        conferme: 0,
+        trattative: 0,
+        close: 0,
+        fatturato: 0,
+    });
 
-    // Inizializza TUTTI i funnel ufficiali a zero
-    for (const f of OFFICIAL_FUNNELS) {
-        grouped[f] = {
-            funnel: f,
-            leads: 0,
-            leadAssegnati: 0,
-            apps: 0,
-            conferme: 0,
-            trattative: 0,
-            close: 0,
-            fatturato: 0,
-        };
+    // I funnel storici ci sono sempre, anche a zero (righe stabili fra i mesi).
+    for (const f of PINNED_FUNNELS) {
+        grouped[f] = rigaVuota(f);
+    }
+    // Un funnel con una spesa registrata compare anche se nel mese non ha
+    // prodotto nulla: altrimenti il budget resterebbe invisibile.
+    for (const b of budgets) {
+        const key = funnelKey(b.funnel);
+        if (key && !grouped[key]) grouped[key] = rigaVuota(key);
     }
 
     for (const l of allLeads) {
-        const rawFunnel = (l.funnel as string).toUpperCase();
-        const g = grouped[rawFunnel];
-        if (!g) continue;
+        // Elenco derivato dai dati: un funnel mai visto prima crea la sua riga
+        // invece di far sparire i lead (vecchia whitelist OFFICIAL_FUNNELS).
+        const rawFunnel = funnelKey(l.funnel);
+        const g = grouped[rawFunnel] ?? (grouped[rawFunnel] = rigaVuota(rawFunnel));
 
         // Il filtro sull'infornata anomala sta sul contatore, non nel WHERE:
         // la query pesca con un OR su tutte le date evento, e nel WHERE
@@ -164,10 +180,30 @@ export async function getMarketingStats(monthString: string) {
         }
     }
 
-    // Now convert to array exactly following OFFICIAL_FUNNELS order
-    const statsArray = OFFICIAL_FUNNELS.map(funnelName => {
-        const stat = grouped[funnelName];
-        const budgetRow = budgets.find(b => b.funnel === funnelName);
+    // Un funnel non storico entra in tabella solo se nel mese ha prodotto
+    // qualcosa (o ha una spesa): la query pesca in OR su tutte le date evento
+    // e può tirare su funnel che nel mese non contano nulla. I funnel storici
+    // restano sempre, anche a zero.
+    const conSegnale = Object.keys(grouped).filter(f => {
+        const s = grouped[f];
+        return s.leads > 0 || s.apps > 0 || s.conferme > 0 || s.trattative > 0
+            || s.close > 0 || s.fatturato > 0
+            || budgets.some(b => funnelKey(b.funnel) === f);
+    });
+
+    // Ordine delle righe: i funnel storici in testa (ordine invariato), poi
+    // tutti gli altri per volume decrescente — lead, appuntamenti, alfabetico.
+    const rowOrder = orderFunnels(
+        conSegnale,
+        byVolumeThenName(f => grouped[f]?.leads ?? 0, f => grouped[f]?.apps ?? 0),
+    );
+
+    const statsArray = rowOrder.map(funnelName => {
+        const stat = grouped[funnelName] ?? rigaVuota(funnelName);
+        // Abbinamento budget case-insensitive: le righe storiche sono salvate
+        // MAIUSCOLE (il menu a tendina serve i nomi già normalizzati), ma una
+        // grafia diversa non deve far perdere la spesa.
+        const budgetRow = budgets.find(b => funnelKey(b.funnel) === funnelName);
         const spentAmountEur = budgetRow?.spentAmountEur || 0;
 
         const appsPercLead = stat.leads > 0 ? (stat.apps / stat.leads) * 100 : 0;
@@ -243,9 +279,7 @@ export async function getMarketingStatsByGdo(monthString: string) {
     const allLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
-            isNotNull(leads.funnel),
-            ne(leads.funnel, 'BLT'),
-            ne(leads.funnel, ''),
+            funnelNonDiServizio(),
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
             or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
@@ -278,14 +312,15 @@ export async function getMarketingStatsByGdo(monthString: string) {
         fatturato: number;
     }>> = {};
 
-    // Inizializza TUTTI i funnel ufficiali a vuoto
-    for (const f of OFFICIAL_FUNNELS) {
+    // I funnel storici hanno sempre la loro card, anche vuota.
+    for (const f of PINNED_FUNNELS) {
         result[f] = {};
     }
 
     for (const l of allLeads) {
-        const rawFunnel = (l.funnel as string).toUpperCase();
-        if (!result[rawFunnel]) continue;
+        // Elenco derivato dai dati, non da una whitelist (vedi getMarketingStats).
+        const rawFunnel = funnelKey(l.funnel);
+        if (!result[rawFunnel]) result[rawFunnel] = {};
 
         const assignedId = l.assignedToId || 'UNASSIGNED';
         let gdoName = 'Non Assegnato';
@@ -358,8 +393,22 @@ export async function getMarketingStatsByGdo(monthString: string) {
         }[]
     }[] = [];
 
-    for (const f of OFFICIAL_FUNNELS) {
-        const gdoKeys = Object.keys(result[f]);
+    // Stesso ordine della tabella globale: storici in testa, poi gli altri per
+    // volume (lead presi in carico, poi appuntamenti fissati).
+    const sommaSu = (f: string, campo: 'leadAssegnati' | 'appsFissati') =>
+        Object.values(result[f] ?? {}).reduce((n, s) => n + s[campo], 0);
+    // Come nella tabella globale: una card nuova compare solo se ha numeri.
+    const conSegnale = Object.keys(result).filter(f =>
+        Object.values(result[f] ?? {}).some(s =>
+            s.leadAssegnati > 0 || s.appsFissati > 0 || s.appsConfermati > 0
+            || s.appsPresenziati > 0 || s.closed > 0 || s.fatturato > 0));
+    const cardOrder = orderFunnels(
+        conSegnale,
+        byVolumeThenName(f => sommaSu(f, 'leadAssegnati'), f => sommaSu(f, 'appsFissati')),
+    );
+
+    for (const f of cardOrder) {
+        const gdoKeys = Object.keys(result[f] ?? {});
         const gdoStatsArr = gdoKeys.map(key => {
             const stat = result[f][key];
 

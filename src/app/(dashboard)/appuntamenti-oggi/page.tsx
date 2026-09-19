@@ -2,9 +2,13 @@ import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { db } from "@/db"
 import { leads, users } from "@/db/schema"
-import { eq, gte, lte, and, isNotNull, asc } from "drizzle-orm"
+import { eq, gte, lt, and, isNotNull, asc } from "drizzle-orm"
+import { dayBoundsRome } from "@/lib/dateUtils"
 import { CalendarCheck, Phone, Mail, User as UserIcon, Clock } from "lucide-react"
 import { AdminCancelApptButton } from "@/components/AdminCancelApptButton"
+import { getLaunchPipelineStats } from "@/lib/launchPipelineStats"
+import { LaunchPipelinePanel } from "@/components/LaunchPipelinePanel"
+import { LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_FUNNEL } from "@/lib/lancio/intake"
 
 export const dynamic = 'force-dynamic'
 
@@ -19,12 +23,15 @@ export default async function AppuntamentiOggiPage() {
         redirect("/")
     }
 
-    // Calcolo inizio/fine giornata oggi in Europe/Rome
-    const now = new Date()
-    const romeDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })
-    const [year, month, day] = romeDateStr.split('-').map(Number)
-    const todayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
-    const todayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
+    // Inizio/fine della giornata di oggi a Roma. `todayEnd` è ESCLUSIVO
+    // (mezzanotte del giorno dopo), quindi si confronta con `lt`.
+    //
+    // Prima il giorno si costruiva con `new Date(year, month-1, day)`, cioè
+    // nell'ora LOCALE DEL SERVER: su Vercel il server è UTC e la finestra
+    // partiva alle 02:00 di Roma invece che a mezzanotte. Un appuntamento
+    // fissato dal bot all'una di notte finiva nel giorno sbagliato — e il bot
+    // prenota anche di notte (fix 2026-09-19, in vista del lancio del 5/10).
+    const { start: todayStart, end: todayEnd } = dayBoundsRome(new Date())
 
     // Lead con appuntamento creato oggi
     const todayAppointments = await db
@@ -47,10 +54,20 @@ export default async function AppuntamentiOggiPage() {
             and(
                 isNotNull(leads.appointmentCreatedAt),
                 gte(leads.appointmentCreatedAt, todayStart),
-                lte(leads.appointmentCreatedAt, todayEnd)
+                lt(leads.appointmentCreatedAt, todayEnd)
             )
         )
         .orderBy(asc(leads.appointmentDate))
+
+    // Monitor del lancio "Web Developer AI" (webinar 5/10/2026): l'imbuto del
+    // lancio separato dal resto della giornata. Stesso pannello del monitor
+    // Black Summer, ora parametrico sul perimetro del lancio. Il pannello si
+    // nasconde da solo finché non c'è nemmeno un lead nel perimetro.
+    const lancioStats = await getLaunchPipelineStats(
+        { companyId: LANCIO_COMPANY, funnel: LANCIO_FUNNEL, bucket: LANCIO_BUCKET },
+        todayStart,
+        todayEnd,
+    )
 
     // Raggruppa per GDO
     const groupedByGdo = todayAppointments.reduce<Record<string, typeof todayAppointments>>((acc, appt) => {
@@ -87,6 +104,12 @@ export default async function AppuntamentiOggiPage() {
                     </div>
                 </div>
             </div>
+
+            <LaunchPipelinePanel
+                title="Monitor Lancio Web Dev AI"
+                subtitle={`Funnel "${LANCIO_FUNNEL}" — dal pool del lancio e caricati a mano.`}
+                stats={lancioStats}
+            />
 
             {/* Lista appuntamenti */}
             {totalCount === 0 ? (
