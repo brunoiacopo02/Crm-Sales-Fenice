@@ -7,7 +7,7 @@ import { and, desc, eq, gte, isNotNull, isNull, lt, ne, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { calendarEvents, callLogs, leadEvents, leads, salesSlotBlocks, users } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
-import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { currentTenant, assertSalesArea, assertSingleCompany } from "@/lib/tenancy"
 import { createGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { romeInstant, slotKey, slotStartFor } from "@/lib/venditore/calendarSlots"
@@ -401,6 +401,11 @@ export async function assignBotReturnsToSalesPipeline(
 ): Promise<{ success: boolean; error?: string; moved?: number }> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    // Azione di SCRITTURA: in "Tutte le aziende" non si lavora (tenancy.ts:147).
+    // Qui conta il doppio, perche' `appSettings` non ha companyId e quindi
+    // `cfg.salesUserId` e' globale: senza questa guardia un admin che crede di
+    // lavorare sull'aggregato sposterebbe i lead di una sola azienda.
+    assertSingleCompany(ctx)
     if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER') {
         return { success: false, error: 'Solo ADMIN e MANAGER possono assegnare lead alla pipeline.' }
     }
@@ -410,7 +415,22 @@ export async function assignBotReturnsToSalesPipeline(
         return { success: false, error: 'Quantita non valida (1-50).' }
     }
 
-    const target = cfg.salesUserId
+    // Il venditore della config deve essere un venditore VERO di QUESTA azienda.
+    // `salesUserId` e' una stringa qualunque per il parser, e `appSettings` non
+    // ha companyId: senza questa verifica un admin in contesto Serenamente
+    // sposterebbe lead Serenamente a un venditore Fenice, e un id inesistente
+    // farebbe violazione di FK su `leads.assignedToId`.
+    const [venditore] = await db.select({ id: users.id }).from(users).where(and(
+        eq(users.id, cfg.salesUserId),
+        eq(users.companyId, ctx.companyId),
+        eq(users.role, 'VENDITORE'),
+        eq(users.isActive, true),
+    )).limit(1)
+    if (!venditore) {
+        return { success: false, error: 'Il venditore della pipeline non e\' un venditore attivo di questa azienda.' }
+    }
+
+    const target = venditore.id
     const now = new Date()
 
     // Carico per GDO: lead nuovi ancora da chiamare.
@@ -440,6 +460,19 @@ export async function assignBotReturnsToSalesPipeline(
             eq(leads.assignedToId, gdoId),
             ne(leads.status, 'REJECTED'),
             ne(leads.status, 'APPOINTMENT'),
+            // Doppia guardia, la stessa del ribilanciamento dei pool
+            // (gdoPools/rebalance.ts:82 e il cron rebalance-gdo): lo stato
+            // aperto NON basta a credere libero un lead. Un IN_PROGRESS con
+            // `appointmentDate` valorizzato e' uno stato reale (esito venditore
+            // rimosso, rifissaggio, follow-up), e spostarlo riscriverebbe a
+            // posteriori a chi sono attribuiti appuntamento, KPI e bonus.
+            isNull(leads.appointmentDate),
+            isNull(leads.presentedAt),
+            // Stessa soglia della board del venditore (`getSalesPipelineLeads`
+            // mostra solo `callCount < 3`): un ridato gia' chiamato tre volte
+            // sparirebbe dalla board del GDO senza comparire in quella del
+            // venditore, e non lo vedrebbe piu' nessuno.
+            lt(leads.callCount, 3),
             sql`exists (select 1 from "leadEvents" e where e."leadId" = ${leads.id} and e."eventType" = 'REASSIGNED_FROM_BOT')`,
         )).orderBy(leads.createdAt, leads.id).limit(count - moved)
 
@@ -449,6 +482,14 @@ export async function assignBotReturnsToSalesPipeline(
                     assignedToId: target,
                     // assignedAt e' il latch della PRIMA presa in carico: non si riscrive.
                     updatedAt: now,
+                    // `version` e' il lock ottimistico di tutto il CRM, e ogni
+                    // altra riassegnazione del repo lo incrementa
+                    // (gestionePoolActions.ts:257, redistributeLeadsActions.ts:317,
+                    // bot-fissatore/reassign.ts:118, il cron di rebalance). Senza,
+                    // il GDO che ha il lead aperto nella board tiene in mano la
+                    // version vecchia e il suo "registra esito" scrive lo stesso
+                    // su un lead che non e' piu' suo.
+                    version: sql`${leads.version} + 1`,
                 }).where(eq(leads.id, c.id))
                 await tx.insert(leadEvents).values({
                     id: crypto.randomUUID(), leadId: c.id,

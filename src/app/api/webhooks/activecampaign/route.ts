@@ -969,10 +969,14 @@ export async function POST(req: NextRequest) {
         // non esiste un solo punto in cui `db` viene usato dentro una
         // transazione, e l'intake AC non e' il posto dove inaugurare la cosa.
         //
-        // Letta fuori non cambia niente di osservabile: non e' il tetto (quello
-        // si conta sotto il lock, dentro `tx`), e questa funzione non lancia mai
-        // — se il DB non risponde torna "pipeline spenta" e il routing di sempre
-        // prosegue.
+        // Letta fuori NON e' del tutto senza conseguenze, e vale scriverlo com'e':
+        // fra questa riga e il commit della transazione passa tutta la sezione
+        // critica, e in quella finestra una richiesta gia' in volo dirotta anche
+        // se il PO ha appena spento l'interruttore. Il tetto pero' regge lo
+        // stesso — quello si conta sotto lock dentro `tx` — quindi il danno
+        // massimo e' qualche lead dirottato dopo lo spegnimento, mai uno di
+        // troppo oltre il tetto. E questa funzione non lancia mai: se il DB non
+        // risponde torna "pipeline spenta" e il routing di sempre prosegue.
         const salesPipelineCfg = await readSalesPipelineConfig();
 
         // ===== SEZIONE CRITICA (transazione + advisory lock) =====
@@ -1212,32 +1216,95 @@ export async function POST(req: NextRequest) {
             const routing: LeadRouting = holidayWindow ? 'bot_only' : getLeadRouting(now);
 
             // Pipeline autonoma venditore: i primi N lead freschi vanno a lui, poi
-            // tutto torna esattamente come prima. A tetto raggiunto questo blocco
-            // e' due letture e un return: il percorso normale non paga quasi nulla.
-            // Il lock e' sul contatore, non sul lead: senza, due webhook nello
-            // stesso istante leggono entrambi "4 dirottati" e ne dirottano un sesto.
+            // tutto torna esattamente come prima.
+            //
+            // `funnel !== LANCIO_FUNNEL` e' ridondante — i lead del lancio non
+            // passano di qui, escono molto prima in `handleLancioIntake` — ma la
+            // guardia su `launchBucket` dentro `shouldDivertFreshLead` qui e'
+            // codice morto (si passa `null` in duro), mentre il funnel in questo
+            // punto e' un dato vero. Costa un confronto fra stringhe e chiude
+            // l'unica strada per cui un iscritto al webinar del 5/10 potrebbe
+            // finire al venditore.
             let divertedTo: string | null = null;
-            if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId) {
-                await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('sales-pipeline:fresh', 4))`);
-                // Il conteggio va fatto su `tx`, non su `db`: il lock vive nella
-                // transazione, e contare da un'altra connessione mentre si tiene
-                // il lock qui e' proprio il modo di leggere un numero vecchio.
-                const divertedRows = await tx.select({ n: sql<number>`count(*)::int` })
-                    .from(leadEvents).where(and(
-                        eq(leadEvents.companyId, FENICE_COMPANY),
-                        eq(leadEvents.eventType, 'SALES_PIPELINE_ASSIGNED'),
-                        sql`${leadEvents.metadata}->>'source' = 'fresh'`,
-                    ));
-                const diverted = divertedRows[0]?.n ?? 0;
-                // `launchBucket` e' null per costruzione: questo flusso non ne
-                // scrive mai uno (i pool e il lancio passano da altrove), e la
-                // guardia lo rifiuterebbe comunque. `phoneSuspicious` qui e'
-                // sempre false — la quarantena e' gia' uscita sopra — ma resta
-                // nella chiamata perche' la regola sta tutta in un posto solo.
-                if (shouldDivertFreshLead({
-                    cfg: salesPipelineCfg, diverted, launchBucket: null, phoneSuspicious,
-                })) {
-                    divertedTo = salesPipelineCfg.salesUserId;
+            if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId && funnel !== LANCIO_FUNNEL) {
+                /**
+                 * Il conteggio dei dirottati. Su `tx` e non su `db`: quando lo si
+                 * rilegge sotto lock, il lock vive nella transazione, e contare da
+                 * un'altra connessione mentre lo si tiene e' proprio il modo di
+                 * leggersi un numero vecchio.
+                 */
+                const contaDirottati = async () => {
+                    const righe = await tx.select({ n: sql<number>`count(*)::int` })
+                        .from(leadEvents).where(and(
+                            eq(leadEvents.companyId, FENICE_COMPANY),
+                            eq(leadEvents.eventType, 'SALES_PIPELINE_ASSIGNED'),
+                            sql`${leadEvents.metadata}->>'source' = 'fresh'`,
+                        ));
+                    return righe[0]?.n ?? 0;
+                };
+
+                // Double-checked locking. `pg_advisory_xact_lock` si rilascia al
+                // COMMIT, non a fine blocco: prenderlo qui significa tenere un
+                // lock GLOBALE esclusivo per tutta la sezione critica e
+                // serializzare l'intake AC. A tetto pieno — cioe' da sempre, dal
+                // sesto lead in poi — non deve succedere. Quindi prima si conta
+                // senza lock: se il tetto e' gia' pieno si esce, e il costo torna
+                // a essere una lettura e un return.
+                //
+                // La lettura senza lock puo' mentire solo per difetto (qualcuno
+                // sta dirottando adesso), e in quel caso si va al ramo prudente:
+                // si prende il lock e si ricontano sul serio.
+                if (await contaDirottati() < salesPipelineCfg.freshCap) {
+                    // Chi e' `salesUserId`, davvero. `parseSalesPipelineConfig`
+                    // accetta qualunque stringa non vuota e nessuno garantisce che
+                    // sia un utente vero: un id inesistente violerebbe la FK di
+                    // `leads.assignedToId`, farebbe rollback dell'INTERA
+                    // transazione e restituirebbe 500 su OGNI lead AC in arrivo
+                    // finche' qualcuno non se ne accorge. Le varianti silenziose
+                    // sono peggio: un utente di un'altra azienda (lead invisibile
+                    // in entrambe le board) o un venditore disattivato (lead
+                    // pagati fermi).
+                    //
+                    // Si verifica PRIMA di prendere il lock: se la config e'
+                    // sbagliata il tetto non si riempie mai, e prendendo il lock
+                    // qui si serializzerebbe l'intake per sempre.
+                    const [venditore] = await tx.select({ id: users.id }).from(users).where(and(
+                        eq(users.id, salesPipelineCfg.salesUserId),
+                        eq(users.companyId, FENICE_COMPANY),
+                        eq(users.role, 'VENDITORE'),
+                        eq(users.isActive, true),
+                    )).limit(1);
+
+                    if (!venditore) {
+                        // Fallire chiuso, come fa tutto il resto di questa config:
+                        // il lead segue il routing di sempre e nessuno si accorge
+                        // di niente tranne i log.
+                        console.error(`[sales-pipeline] salesUserId '${salesPipelineCfg.salesUserId}' non e' un VENDITORE attivo di ${FENICE_COMPANY}: nessun dirottamento, routing normale`);
+                    } else {
+                        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('sales-pipeline:fresh', 4))`);
+                        // Il conteggio che DECIDE: sotto lock, e quindi vede tutto
+                        // cio' che e' stato committato prima di noi. Senza, due
+                        // webhook nello stesso istante leggono entrambi "4
+                        // dirottati" e ne dirottano un sesto.
+                        //
+                        // Dipende dall'isolamento READ COMMITTED (il default): con
+                        // REPEATABLE READ lo snapshot sarebbe stato preso all'inizio
+                        // della transazione, prima del lock, e questa rilettura non
+                        // vedrebbe i commit altrui — la garanzia del tetto salterebbe
+                        // in silenzio. Se un domani a questa `db.transaction` viene
+                        // aggiunto un `isolationLevel`, va rivisto questo punto.
+                        const diverted = await contaDirottati();
+                        // `launchBucket: null` e' corretto per costruzione: questo
+                        // flusso non ne scrive mai uno (pool e lancio passano da
+                        // altrove). `phoneSuspicious` qui e' sempre false — la
+                        // quarantena e' gia' uscita sopra — ma resta nella chiamata
+                        // perche' la regola sta tutta in un posto solo.
+                        if (shouldDivertFreshLead({
+                            cfg: salesPipelineCfg, diverted, launchBucket: null, phoneSuspicious,
+                        })) {
+                            divertedTo = venditore.id;
+                        }
+                    }
                 }
             }
 
