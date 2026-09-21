@@ -25,6 +25,7 @@ import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
 import { lancioFirst } from "@/lib/lancio/conferme"
+import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -82,7 +83,13 @@ export async function getConfermeAppointments(filters: {
         } else if (filters.confermeStatus === "scartati") {
             conditions.push(eq(leads.confirmationsOutcome, "scartato"))
         } else if (filters.confermeStatus === "storico") {
-            conditions.push(isNotNull(leads.confirmationsOutcome))
+            // Gli autofissati del venditore non sono roba delle Conferme: non entrano
+            // nella loro board (filtrano IS NULL, e la sentinella non e' NULL) e non
+            // devono comparire nemmeno nel loro storico.
+            conditions.push(and(
+                isNotNull(leads.confirmationsOutcome),
+                ne(leads.confirmationsOutcome, SELF_BOOKED_OUTCOME),
+            )!)
         }
     } else {
         // default "da_lavorare" se non passano status
