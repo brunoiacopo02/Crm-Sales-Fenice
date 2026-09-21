@@ -190,7 +190,7 @@ export default function PipelineVenditoreClient({ initialOverview, venditori }: 
                         </select>
                     </div>
                     <div>
-                        <label className="mb-1 block text-xs font-semibold text-ash-600">Tetto freschi</label>
+                        <label className="mb-1 block text-xs font-semibold text-ash-600">Tetto freschi al giorno</label>
                         <input
                             type="number"
                             min={0}
@@ -215,13 +215,13 @@ export default function PipelineVenditoreClient({ initialOverview, venditori }: 
             {/* Contatori */}
             <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-ash-200 bg-white p-4 shadow-sm">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-ash-500">Freschi dirottati</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-ash-500">Freschi dirottati oggi</div>
                     <div className="mt-1 text-2xl font-black text-ash-900">
-                        {overview.divertedFresh} <span className="text-sm font-bold text-ash-400">/ {cfg.freshCap}</span>
+                        {overview.divertedFresh} <span className="text-sm font-bold text-ash-400">/ {cfg.freshCap} al giorno</span>
                     </div>
                 </div>
                 <div className="rounded-2xl border border-ash-200 bg-white p-4 shadow-sm">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-ash-500">Ridati assegnati</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-ash-500">Ridati assegnati (in tutto)</div>
                     <div className="mt-1 text-2xl font-black text-ash-900">{overview.botReturns}</div>
                 </div>
             </section>

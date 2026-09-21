@@ -49,7 +49,7 @@ import {
 } from "@/lib/lancio/intake";
 import { db } from "@/db";
 import { leads, leadEvents, users, acIntakeFailures, notifications } from "@/db/schema";
-import { eq, and, asc, sql, isNull, gte, desc, or, like } from "drizzle-orm";
+import { eq, and, asc, sql, isNull, gte, lt, desc, or, like } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
@@ -61,6 +61,7 @@ import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utm
 // l'intake normale qui sotto, mai il ramo del lancio (handleLancioIntake).
 import { decideDiversion } from "@/lib/salesPipeline/feeding";
 import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions";
+import { dayBoundsRome } from "@/lib/dateUtils";
 
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com';
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '';
@@ -1227,11 +1228,21 @@ export async function POST(req: NextRequest) {
             // finire al venditore.
             let divertedTo: string | null = null;
             if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId && funnel !== LANCIO_FUNNEL) {
+                // Il tetto e' GIORNALIERO (chiarito dal PO 2026-09-21: "5 lead
+                // nuovi oggi... il limite giornaliero e' quello"), non un totale
+                // da sempre — con un tetto totale, dopo i primi N non sarebbe
+                // arrivato piu' niente finche' qualcuno non alzava il numero a
+                // mano ogni giorno. `dayBoundsRome` e' lo stesso helper gia'
+                // usato altrove in questo file (dateUtils.ts) per i confini del
+                // giorno italiano: gestisce da solo i cambi d'ora, quindi il tetto
+                // si azzera davvero a mezzanotte di Roma e non a mezzanotte UTC.
+                const oggi = dayBoundsRome(now);
+
                 /**
-                 * Il conteggio dei dirottati. Su `tx` e non su `db`: quando lo si
-                 * rilegge sotto lock, il lock vive nella transazione, e contare da
-                 * un'altra connessione mentre lo si tiene e' proprio il modo di
-                 * leggersi un numero vecchio.
+                 * Il conteggio dei dirottati DI OGGI. Su `tx` e non su `db`: quando
+                 * lo si rilegge sotto lock, il lock vive nella transazione, e
+                 * contare da un'altra connessione mentre lo si tiene e' proprio il
+                 * modo di leggersi un numero vecchio.
                  */
                 const contaDirottati = async () => {
                     const righe = await tx.select({ n: sql<number>`count(*)::int` })
@@ -1239,6 +1250,8 @@ export async function POST(req: NextRequest) {
                             eq(leadEvents.companyId, FENICE_COMPANY),
                             eq(leadEvents.eventType, 'SALES_PIPELINE_ASSIGNED'),
                             sql`${leadEvents.metadata}->>'source' = 'fresh'`,
+                            gte(leadEvents.timestamp, oggi.start),
+                            lt(leadEvents.timestamp, oggi.end),
                         ));
                     return righe[0]?.n ?? 0;
                 };
@@ -1246,10 +1259,10 @@ export async function POST(req: NextRequest) {
                 // Double-checked locking. `pg_advisory_xact_lock` si rilascia al
                 // COMMIT, non a fine blocco: prenderlo qui significa tenere un
                 // lock GLOBALE esclusivo per tutta la sezione critica e
-                // serializzare l'intake AC. A tetto pieno — cioe' da sempre, dal
-                // sesto lead in poi — non deve succedere. Quindi prima si conta
-                // senza lock: se il tetto e' gia' pieno si esce, e il costo torna
-                // a essere una lettura e un return.
+                // serializzare l'intake AC. A tetto pieno per oggi — cioe' dal
+                // sesto lead odierno in poi — non deve succedere. Quindi prima si
+                // conta senza lock: se il tetto di oggi e' gia' pieno si esce, e
+                // il costo torna a essere una lettura e un return.
                 //
                 // La lettura senza lock puo' mentire solo per difetto (qualcuno
                 // sta dirottando adesso), e in quel caso si va al ramo prudente:
@@ -1285,7 +1298,7 @@ export async function POST(req: NextRequest) {
                         // Il conteggio che DECIDE: sotto lock, e quindi vede tutto
                         // cio' che e' stato committato prima di noi. Senza, due
                         // webhook nello stesso istante leggono entrambi "4
-                        // dirottati" e ne dirottano un sesto.
+                        // dirottati oggi" e ne dirottano un sesto.
                         //
                         // Dipende dall'isolamento READ COMMITTED (il default): con
                         // REPEATABLE READ lo snapshot sarebbe stato preso all'inizio

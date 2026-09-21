@@ -33,6 +33,10 @@ export function pickMostLoadedGdo(rows: { gdoId: string; nuovi: number }[]): str
  * di sempre. In particolare qualunque `launchBucket` esclude: i pool (lancio,
  * database mensili, Black Summer) hanno un giro loro, e un lead pescato via da
  * li' sparirebbe da conteggi che qualcun altro sta guardando.
+ *
+ * `diverted` e' "quanti gia' dirottati OGGI" (giorno Europe/Rome), non da
+ * sempre: il tetto e' giornaliero. Questa funzione e' pura e non conosce le
+ * date — riceve gia' il numero, scoped al giorno da chi la chiama.
  */
 export function shouldDivertFreshLead(input: {
     cfg: SalesPipelineConfig

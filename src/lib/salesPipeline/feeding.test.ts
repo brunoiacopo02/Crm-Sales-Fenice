@@ -27,6 +27,11 @@ test('nessun GDO: lista vuota, non un errore', () => {
 
 const cfgOn = { enabled: true, salesUserId: 'marco', freshCap: 5 }
 
+// `diverted` qui e' sempre "quanti gia' dirottati OGGI" (il tetto e'
+// giornaliero, Europe/Rome, chiarito dal PO 2026-09-21): queste funzioni sono
+// pure e non conoscono le date, ricevono gia' il numero scoped al giorno da
+// chi le chiama (il webhook AC, sotto lock).
+
 test('lead fresco sotto tetto: si dirotta', () => {
     assert.equal(shouldDivertFreshLead({
         cfg: cfgOn, diverted: 0, launchBucket: null, phoneSuspicious: false,
@@ -55,6 +60,21 @@ test('tetto raggiunto: torna tutto al routing di sempre', () => {
     assert.equal(shouldDivertFreshLead({
         cfg: cfgOn, diverted: 5, launchBucket: null, phoneSuspicious: false,
     }), false)
+})
+
+// Il cambio di giorno azzera `diverted`, non `cfg`: e' la stessa identica
+// chiamata di "tetto raggiunto" qui sopra, ma con diverted=0 perche' e'
+// mezzanotte (Europe/Rome) e i 5 di ieri non contano piu'. La prova che il
+// conteggio si azzeri DAVVERO a mezzanotte di Roma (e non UTC) vive dove si
+// calcola il confine del giorno: src/lib/dateUtils.test.ts e
+// src/lib/salesPipeline/config.test.ts (canDivertFresh + dayBoundsRome).
+test('cambio di giorno: stesso tetto, ma ieri non conta piu e si riparte da zero', () => {
+    assert.equal(shouldDivertFreshLead({
+        cfg: cfgOn, diverted: 5, launchBucket: null, phoneSuspicious: false,
+    }), false, 'ieri sera, tetto pieno')
+    assert.equal(shouldDivertFreshLead({
+        cfg: cfgOn, diverted: 0, launchBucket: null, phoneSuspicious: false,
+    }), true, 'oggi mattina, il conteggio e ripartito da zero')
 })
 
 test('pipeline spenta: non si dirotta niente', () => {

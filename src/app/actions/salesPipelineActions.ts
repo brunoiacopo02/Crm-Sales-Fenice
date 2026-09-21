@@ -11,7 +11,7 @@ import { currentTenant, assertSalesArea, assertSingleCompany } from "@/lib/tenan
 import { createGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { romeInstant, slotKey, slotStartFor } from "@/lib/venditore/calendarSlots"
-import { toRomeDateStr } from "@/lib/dateUtils"
+import { toRomeDateStr, dayBoundsRome } from "@/lib/dateUtils"
 import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
 import { pickMostLoadedGdo } from "@/lib/salesPipeline/feeding"
 import { selfBookingCheck } from "@/lib/salesPipeline/selfBooking"
@@ -595,13 +595,22 @@ export async function assignBotReturnsToSalesPipeline(
     return { success: true, moved }
 }
 
-/** Quanti lead freschi sono gia' stati dirottati alla pipeline, in tutto. */
+/**
+ * Quanti lead freschi sono gia' stati dirottati alla pipeline OGGI (giorno
+ * Europe/Rome). Il tetto e' giornaliero (chiarito dal PO 2026-09-21), non un
+ * totale da sempre: deve contare esattamente lo stesso insieme che conta
+ * `contaDirottati` nel webhook AC (`route.ts`), altrimenti questa pagina
+ * mostra un numero e il webhook ne usa un altro.
+ */
 export async function countDivertedFresh(companyId: string): Promise<number> {
+    const { start, end } = dayBoundsRome(new Date())
     const rows = await db.select({ n: sql<number>`count(*)::int` })
         .from(leadEvents).where(and(
             eq(leadEvents.companyId, companyId),
             eq(leadEvents.eventType, 'SALES_PIPELINE_ASSIGNED'),
             sql`${leadEvents.metadata}->>'source' = 'fresh'`,
+            gte(leadEvents.timestamp, start),
+            lt(leadEvents.timestamp, end),
         ))
     return rows[0]?.n ?? 0
 }
@@ -629,7 +638,13 @@ export interface SalesPipelineOverviewLead {
 
 /**
  * Riepilogo per la pagina di regolazione: config attuale, i due contatori
- * (freschi dirottati e ridati assegnati) e i lead oggi in pipeline.
+ * (freschi dirottati OGGI e ridati assegnati in tutto) e i lead oggi in
+ * pipeline.
+ *
+ * `divertedFresh` e' scoped al giorno italiano corrente — e' il numero da
+ * confrontare con `config.freshCap`, che e' anch'esso un tetto giornaliero.
+ * `botReturns` resta invece un totale da sempre: quel tetto non e' mai stato
+ * giornaliero, e non e' oggetto di questo cambiamento.
  *
  * I lead restano visibili anche dopo che sono diventati appuntamenti: si
  * prendono sia quelli ancora assegnati al venditore (`assignedToId`) sia

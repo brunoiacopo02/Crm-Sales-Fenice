@@ -14,7 +14,15 @@ export interface SalesPipelineConfig {
     enabled: boolean
     /** Il venditore a cui e' accesa la pipeline. Uno solo, per ora. */
     salesUserId: string | null
-    /** Quanti lead freschi in arrivo da AC dirottargli, in tutto. */
+    /**
+     * Quanti lead freschi in arrivo da AC dirottargli AL GIORNO (Europe/Rome).
+     *
+     * Non e' un totale da sempre: chiarito dal PO 2026-09-21 ("5 lead nuovi
+     * oggi... il limite giornaliero e' quello"). Un tetto totale avrebbe
+     * smesso di dirottare per sempre dopo i primi N lead, finche' qualcuno non
+     * alzava il numero a mano ogni giorno — il conteggio di chi chiama questa
+     * funzione (`canDivertFresh`) va scoped al giorno italiano corrente.
+     */
     freshCap: number
 }
 
@@ -56,7 +64,13 @@ export function parseSalesPipelineConfig(raw: string | null | undefined): SalesP
     return { enabled, salesUserId, freshCap }
 }
 
-/** Si dirotta solo se la pipeline e' accesa e il tetto non e' ancora pieno. */
+/**
+ * Si dirotta solo se la pipeline e' accesa e il tetto di OGGI non e' ancora
+ * pieno. `diverted` e' quindi "quanti gia' dirottati oggi", non da sempre: chi
+ * chiama questa funzione deve gia' aver scoped il conteggio al giorno italiano
+ * corrente (vedi `dayBoundsRome` in `src/lib/dateUtils.ts`) — la funzione
+ * stessa non conosce le date, riceve gia' il numero.
+ */
 export function canDivertFresh(cfg: SalesPipelineConfig, diverted: number): boolean {
     return cfg.enabled && cfg.salesUserId !== null && diverted < cfg.freshCap
 }
