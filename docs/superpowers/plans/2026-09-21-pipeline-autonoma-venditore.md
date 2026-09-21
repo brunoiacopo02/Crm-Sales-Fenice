@@ -445,7 +445,10 @@ test('fuori dalla griglia (domenica o notte): blocco secco', () => {
     assert.equal(d.ok === false && d.reason, 'fuori_griglia')
 })
 
-test('occupato vince su bloccato: si legge la causa piu grave per il cliente', () => {
+test('bloccata E occupata: vince "bloccato", la causa piu a monte', () => {
+    // L'ordine dei controlli e' quello di bookingCheck e va conservato: chi
+    // legge deve vedere il problema vero (ha bloccato l'ora) e non il suo
+    // effetto collaterale.
     const d = selfBookingCheck({ slot, blocked: true, occupied: true, at })
     assert.equal(d.ok === false && d.reason, 'bloccato')
 })
@@ -1455,8 +1458,10 @@ Create `src/lib/salesPipeline/feeding.ts`:
 
 import { canDivertFresh, type SalesPipelineConfig } from './config'
 
-/** Il bucket del lancio in corso: i suoi lead non si dirottano MAI. */
-export const LANCIO_BUCKET = 'LANCIO_WEBDEV_2026'
+// Nota: NON ridefinire qui il bucket del lancio. Esiste gia' in
+// `src/lib/lancio/intake.ts:17` e una seconda copia prima o poi diverge da
+// quella vera. Qui non serve affatto: la guardia sotto rifiuta QUALUNQUE
+// launchBucket, e il lancio e' compreso.
 
 /**
  * I GDO dal piu' carico al meno carico, per andare a prendere i ridati da chi
