@@ -33,6 +33,10 @@ pezzo deve potersi spegnere senza deploy.
    momento.
 6. I 5 freschi si ottengono **dirottando i primi lead in arrivo da AC** a Marco,
    con tetto 5; superato il tetto, tutto torna a scorrere come oggi.
+   **Rettifica del PO (21/09, dopo la prima stesura): il tetto e' GIORNALIERO, non
+   complessivo.** "5 lead nuovi oggi... il limite giornaliero e' quello". Il conteggio
+   si azzera a mezzanotte italiana, senza che nessuno debba rialzare il numero a mano
+   ogni giorno.
 7. Serve una **pagina per regolare** accensione, venditore e tetto.
 8. Da `/lead-automatici` vanno tolte **tutte e tre** le sezioni di recupero
    import ("Lead non importati", "Bloccati da lista", "Telefoni da verificare").
