@@ -99,16 +99,21 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const botIds = new Set(allUsers.filter(u => u.isBot).map(u => u.id))
     const isBotLog = (log: { userId: string | null }): boolean =>
         !!log.userId && botIds.has(log.userId)
-    // I GDO veri: ruolo 'GDO' e non il bot. Include i GDO disattivati — la
-    // storia di chi se n'e' andato a meta' mese resta contata, come prima.
-    // Serve da quando esiste la pipeline autonoma del venditore
-    // (`SELF_BOOKED_OUTCOME`): il venditore registra esiti e si fissa
-    // appuntamenti come un GDO, e senza questo insieme la sua produzione
-    // entrerebbe negli aggregati e nel ranking di /kpi-gdo, che e' la gara
-    // dei GDO. MANAGER/ADMIN e i log legacy senza userId restano inclusi
-    // come da comportamento storico: qui sotto si esclude solo il ruolo
-    // VENDITORE, che in `callLogs` prima di questa pipeline non compariva.
-    const gdoIds = new Set(allUsers.filter(u => u.role === 'GDO' && !u.isBot).map(u => u.id))
+    // Gli utenti in perimetro che NON sono GDO. Serve da quando esiste la
+    // pipeline autonoma del venditore (`SELF_BOOKED_OUTCOME`): il venditore
+    // registra esiti e si fissa appuntamenti come un GDO, e senza escluderlo
+    // la sua produzione entrerebbe negli aggregati e nel ranking di /kpi-gdo,
+    // che e' la gara dei GDO.
+    //
+    // Si esclude per APPARTENENZA a questo insieme, non per "non e' un GDO
+    // noto": ci sono 123 lead Serenamente assegnati a GDO Fenice (giugno
+    // 2026) che questa pagina conta da sempre, e ribaltare il predicato li
+    // farebbe sparire da un mese gia' chiuso. I GDO disattivati restano
+    // dentro, i log legacy senza userId pure.
+    const nonGdoIds = new Set(allUsers.filter(u => u.role !== 'GDO').map(u => u.id))
+    // MANAGER/ADMIN restano nelle chiamate come da comportamento storico
+    // pre-B2: qui sotto dai `callLogs` esce solo il ruolo VENDITORE, che
+    // prima di questa pipeline non ne scriveva nessuno.
     const venditoreIds = new Set(allUsers.filter(u => u.role === 'VENDITORE').map(u => u.id))
     const isVenditoreLog = (log: { userId: string | null }): boolean =>
         !!log.userId && venditoreIds.has(log.userId)
@@ -121,11 +126,11 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // fissatore (fix F1): la sua produzione non deve entrare in testata,
     // ranking o trend di questa pagina.
     const apptLeadsInRange = allLeads.filter(l => {
-        // Assegnatario non-GDO fuori (il bot era gia' fuori, ed e' un GDO
-        // mascherato: `gdoIds` lo esclude per `isBot`). Gli appuntamenti che il
-        // venditore si fissa da solo non sono produzione GDO. I lead senza
-        // assegnatario restano dentro, come prima.
-        if (l.assignedToId && !gdoIds.has(l.assignedToId)) return false
+        // Fuori il bot (come prima) e fuori chi, in perimetro, non e' un GDO:
+        // gli appuntamenti che il venditore si fissa da solo non sono
+        // produzione GDO. I lead senza assegnatario, e quelli assegnati a un
+        // utente fuori perimetro, restano dentro esattamente come prima.
+        if (l.assignedToId && (botIds.has(l.assignedToId) || nonGdoIds.has(l.assignedToId))) return false
         const d = apptSetAt(l)
         return d !== null && d >= safeStartDate && d <= safeEndDate
     })

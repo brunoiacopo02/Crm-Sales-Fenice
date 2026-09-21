@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
-import { gte, lt, eq, and, isNotNull, sql } from "drizzle-orm"
+import { gte, lt, eq, ne, and, isNotNull, sql } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
@@ -85,20 +85,26 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     const allUsers = allUsersRaw.filter(isRealGdo)
     const userMap = new Map(allUsers.map(u => [u.id, u]))
     const realGdoIds = new Set(allUsers.map(u => u.id))
-    // Gli assegnatari la cui produzione di appuntamenti entra negli aggregati:
-    // ruolo 'GDO' (`allUsersRaw` e' gia' filtrato) e non il bot fissatore, a
-    // differenza di realGdoIds che esclude anche i GDO disattivati. La storia
-    // di un GDO dimesso a metà mese resta contata, solo la produzione del bot
-    // va fuori (fix F5) — altrimenti kpi-gdo e kpi-team divergerebbero sui
-    // totali.
-    //
-    // Prima bastava l'insieme complementare (i soli `isBot`) perche' un
+    // Solo bot fissatore (isBot=true), a differenza di realGdoIds che esclude
+    // anche i GDO disattivati. Usato per l'attribuzione degli appuntamenti da
+    // lead (fix F5): la storia di un GDO dimesso a metà mese resta contata,
+    // solo la produzione del bot va fuori — altrimenti kpi-gdo (che dopo il
+    // fix F1 esclude solo il bot) e kpi-team divergerebbero sui totali.
+    const botIds = new Set(allUsersRaw.filter(u => u.isBot).map(u => u.id))
+    // Gli utenti dell'azienda che NON sono GDO. Finora non servivano: un
     // appuntamento non poteva nascere che su un lead di un GDO. Dalla pipeline
-    // autonoma il venditore se li fissa da solo: senza il predicato sul ruolo,
+    // autonoma il venditore se li fissa da solo, e senza escluderlo
     // `totalAppointments`, `teamConversionRate` e la serie del grafico lo
-    // conterebbero mentre il ranking sotto (costruito sui soli GDO) no, e il
+    // conterebbero mentre il ranking sotto (costruito sui soli GDO) no: il
     // totale smetterebbe di essere la somma delle righe.
-    const apptAssigneeIds = new Set(allUsersRaw.filter(u => !u.isBot).map(u => u.id))
+    //
+    // Si esclude per appartenenza a un insieme, non per "non e' un GDO noto":
+    // esistono 123 lead Serenamente assegnati a GDO Fenice (giugno 2026), che
+    // questa pagina conta da sempre pur non avendo una riga nel ranking.
+    // Ribaltare il predicato li farebbe sparire, e non e' questo il fix.
+    const nonGdoRows = await db.select({ id: users.id }).from(users)
+        .where(and(eq(users.companyId, ctx.companyId), ne(users.role, 'GDO')))
+    const nonGdoIds = new Set(nonGdoRows.map(r => r.id))
     // Le chiamate del bot fissatore non entrano negli aggregati/ranking team
     // (decisione PO 2026-07-05); i log senza userId restano (tracciato legacy).
     logs = logs.filter(l => !l.userId || realGdoIds.has(l.userId))
@@ -124,9 +130,12 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startDate}`,
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endDate}`,
         ))
-    // Come per le chiamate qui sopra: fuori chi non e' un GDO. I lead senza
-    // assegnatario restano dentro, esattamente come prima.
-    let apptLeadsFiltered = apptLeadsRaw.filter(l => !l.assignedToId || apptAssigneeIds.has(l.assignedToId))
+    // Fuori il bot (come prima) e fuori chi, in questa azienda, non e' un GDO
+    // (il venditore della pipeline autonoma). I lead senza assegnatario e
+    // quelli assegnati a un utente fuori da questa azienda restano dentro,
+    // esattamente come prima.
+    let apptLeadsFiltered = apptLeadsRaw.filter(l => !l.assignedToId
+        || (!botIds.has(l.assignedToId) && !nonGdoIds.has(l.assignedToId)))
     if (funnelFilter && funnelFilter !== 'ALL') {
         apptLeadsFiltered = apptLeadsFiltered.filter(l => l.funnel === funnelFilter)
     }
