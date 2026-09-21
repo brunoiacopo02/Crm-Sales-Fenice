@@ -352,8 +352,10 @@ export async function moveSalesSelfAppointment(input: {
 
 /**
  * I lead nella pipeline del venditore. Stesse esclusioni della board GDO
- * (pipelineActions.ts:107) — e stesso tiebreaker su `id`, senza il quale i
- * lead importati in blocco ballano fra un caricamento e l'altro.
+ * (pipelineActions.ts:107) — e stesso tiebreaker su `id` su ENTRAMBE le query
+ * (pipeline e richiami, come pipelineActions.ts:123 e :162), senza il quale i
+ * lead importati in blocco ballano fra un caricamento e l'altro: le date
+ * identiche arrivano a blocchi dagli import, non sono l'eccezione.
  */
 export async function getSalesPipelineLeads(): Promise<{
     firstCall: any[]; secondCall: any[]; thirdCall: any[]; recalls: any[]
@@ -374,7 +376,7 @@ export async function getSalesPipelineLeads(): Promise<{
             .orderBy(desc(leads.createdAt), leads.id),
         db.select().from(leads)
             .where(and(...base, isNotNull(leads.recallDate)))
-            .orderBy(leads.recallDate),
+            .orderBy(leads.recallDate, leads.id),
     ])
 
     return {

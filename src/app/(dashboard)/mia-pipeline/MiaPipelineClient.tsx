@@ -6,7 +6,19 @@ import { setSalesSelfAppointment } from "@/app/actions/salesPipelineActions"
 import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
 
-type Lead = any
+// Solo i campi che questo componente usa davvero: la riga vera arriva dal
+// server come `leads` completo (select() intero), qui basta la fetta che
+// viene letta o passata alle azioni.
+type Lead = {
+    id: string
+    name: string
+    phone: string
+    email?: string | null
+    funnel?: string | null
+    callCount: number
+    version: number
+    lastCallNote?: string | null
+}
 type Tab = 'first' | 'second' | 'third' | 'recalls'
 
 export default function MiaPipelineClient({ firstCall, secondCall, thirdCall, recalls }: {
