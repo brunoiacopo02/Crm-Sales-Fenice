@@ -246,6 +246,12 @@ export async function getPhoneProductivity(
             // Fuori chi ha mansioni che non passano dal centralino: per loro
             // i tabulati non misurano il turno (vedi commento in testa).
             eq(users.phoneTimeTracked, true),
+            // La scheda misura il turno dei GDO, e il campo che esce si chiama
+            // `gdo`. `phoneTimeTracked` da solo non basta: e' `true` di default
+            // per tutti, e da quando il venditore della pipeline autonoma
+            // chiama a freddo (con un interno, se gliene danno uno) comparirebbe
+            // come una riga "gdo" su /monitor-pause, dentro le medie di squadra.
+            eq(users.role, 'GDO'),
             gte(pbxCalls.dateLocal, fromDateLocal),
             lte(pbxCalls.dateLocal, toDateLocal),
         ))

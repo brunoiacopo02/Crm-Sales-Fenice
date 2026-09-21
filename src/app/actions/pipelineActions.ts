@@ -425,11 +425,16 @@ export async function updateLeadOutcome(
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
         const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
         effectiveUserId = userId || session?.user?.id
-        actorRole = session?.user?.role
 
         const tenant = await currentTenant()
         assertSalesArea(tenant)
         ctx = { companyId: tenant.companyId }
+        // Il ruolo si legge da `currentTenant`, non da `user_metadata` in
+        // diretta: currentTenant applica `meta.role ?? 'GDO'`, che e' la
+        // convenzione di tutto il CRM. Letto crudo, un GDO con i metadata
+        // incompleti risulterebbe senza ruolo e smetterebbe in silenzio di
+        // guadagnare forzieri, boss, duelli e creature.
+        actorRole = tenant.role
     }
 
     const lead = (await db.select().from(leads).where(and(
@@ -604,7 +609,11 @@ export async function updateLeadOutcome(
         }
 
         // Gamification: award XP for appointment set (tenant attribution)
-        if (effectiveUserId && !isBotActor) {
+        // Stesso gate del blocco "ogni chiamata" qui sopra: l'economia e' dei
+        // GDO. Un venditore che si fissa un appuntamento dalla sua pipeline
+        // registra lo stesso esito, ma non entra in XP, coins, forzieri, boss,
+        // duelli, obiettivi di squadra e loot: sono classifiche di un'altra gara.
+        if (effectiveUserId && !isBotActor && actorRole === 'GDO') {
             rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
 
             // Fenice Universe: chest progress for fissaggi + boss attack
@@ -613,13 +622,13 @@ export async function updateLeadOutcome(
             checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check fissaggio err:", e));
             incrementDuelScore(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Duel score fissaggi err:", e));
         }
-        if (!isBotActor) {
+        if (!isBotActor && actorRole === 'GDO') {
             await evaluateTeamGoals(leadId).catch((e: any) => {
                 console.error("Team goal evaluation failed:", e)
             })
         }
         // Loot drop milestone check (every 10 appointments)
-        if (effectiveUserId && !isBotActor) {
+        if (effectiveUserId && !isBotActor && actorRole === 'GDO') {
             await triggerLootDrop(effectiveUserId).catch((e: any) => {
                 console.error("Loot drop trigger failed:", e)
             })

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, eq, gte, lte, gt, isNotNull, asc, type SQL } from 'drizzle-orm';
+import { and, eq, ne, gte, lte, gt, isNotNull, asc, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '@/db';
 import { leads, users } from '@/db/schema';
@@ -11,6 +11,7 @@ import {
     buildDealClosedLost,
 } from '@/lib/marketing-webhooks/payload-builders';
 import type { MarketingEventType, MarketingWebhookEnvelope } from '@/lib/marketing-webhooks/types';
+import { SELF_BOOKED_OUTCOME } from '@/lib/salesPipeline/sentinel';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -63,6 +64,13 @@ export async function GET(req: Request) {
     } else if (eventType === 'appointment.outcome') {
         dateField = leads.confirmationsTimestamp;
         conditions.push(isNotNull(leads.confirmationsOutcome));
+        // La sentinella degli autofissati vive in `confirmationsOutcome` ma non
+        // e' un esito delle Conferme: nessuno le ha lavorate. `mapConfirmationsOutcome`
+        // manda tutto cio' che non e' confermato/scartato su 'DA_RIFISSARE', e a
+        // valle diventerebbe una conferma mai avvenuta. Il percorso push non li
+        // emette (setSalesSelfAppointment manda solo appointment.set e
+        // deal.assigned): il pull deve dire la stessa cosa.
+        conditions.push(ne(leads.confirmationsOutcome, SELF_BOOKED_OUTCOME));
     } else if (eventType === 'deal.assigned') {
         dateField = leads.salespersonAssignedAt;
         conditions.push(isNotNull(leads.salespersonUserId));

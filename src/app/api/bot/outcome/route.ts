@@ -14,6 +14,7 @@ import { returnLancioLeadToPool } from '@/lib/bot-fissatore/lancioReturn';
 import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset';
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
+import { readSalesPipelineConfig } from '@/app/actions/salesPipelineConfigActions';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -622,7 +623,22 @@ export async function POST(req: NextRequest) {
     // "nessuna riassegnazione avvenuta" da "riassegnazione avvenuta da un lead
     // senza owner". Il rollback deve pilotarsi su questo flag, non su quel valore.
     let didReassign = false;
+    // ECCEZIONE pipeline autonoma venditore: sui lead della sua pipeline il bot
+    // resta postino, come già fa su quelli dei GDO. Un "ridato dal bot" appena
+    // spostato al venditore soddisfa tutte e quattro le condizioni qui sopra
+    // finché non se lo fissa lui: senza questa guardia il primo APPUNTAMENTO
+    // del bot se lo riprenderebbe, sparendo dalla board del venditore senza una
+    // notifica e assottigliando in silenzio il campione del test.
+    // La config si legge solo dentro questo ramo, che è già raro: l'esito
+    // normale del bot non paga nessuna query in più.
+    let leadIsInSalesPipeline = false;
     if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot && leadWasWorkedByBot && !leadHasHistory) {
+        const salesCfg = await readSalesPipelineConfig();
+        leadIsInSalesPipeline = salesCfg.enabled
+            && !!salesCfg.salesUserId
+            && lead.assignedToId === salesCfg.salesUserId;
+    }
+    if (typedOutcome === 'APPUNTAMENTO' && !assigneeIsBot && leadWasWorkedByBot && !leadHasHistory && !leadIsInSalesPipeline) {
         const previousOwnerId = lead.assignedToId;
 
         await db.update(leads)

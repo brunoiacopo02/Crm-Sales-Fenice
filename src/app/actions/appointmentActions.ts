@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
-import { leads, leadEvents } from "@/db/schema"
+import { calendarEvents, leads, leadEvents } from "@/db/schema"
 import { eq, asc, desc, and } from "drizzle-orm"
 import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
@@ -11,6 +11,8 @@ import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
+import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
+import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -249,6 +251,43 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
         // Slot occupato per sempre, fuori copertura, non più segnalabile.
         if (lead.salespersonUserId) {
             await releaseFollowUpBlock(db, { leadId, salesUserId: lead.salespersonUserId });
+        }
+
+        // Appuntamento autofissato dal venditore (pipeline autonoma): l'invito
+        // su Google Calendar e' gia' arrivato al cliente, con il suo Meet.
+        // Annullarlo qui senza cancellarlo lascerebbe il cliente convinto che
+        // l'appuntamento c'e' ancora, e il venditore non lo aprirebbe.
+        // Limitato alla sentinella: per tutti gli altri appuntamenti il
+        // comportamento resta quello di sempre (l'invito, se c'e', nasce dopo
+        // il giro Conferme e lo gestisce quel percorso).
+        if (isSelfBooked(lead.confirmationsOutcome) && lead.salespersonUserId) {
+            const calEvents = await db.select().from(calendarEvents).where(and(
+                eq(calendarEvents.companyId, ctx.companyId),
+                eq(calendarEvents.leadId, leadId),
+                eq(calendarEvents.eventType, 'appointment'),
+            ));
+            for (const evt of calEvents) {
+                if (!evt.googleEventId) {
+                    // Riga senza id Google: su Google non c'e' niente da
+                    // cancellare, la riga locale e' solo stale.
+                    await db.delete(calendarEvents).where(eq(calendarEvents.id, evt.id));
+                    continue;
+                }
+                // Stesso trattamento dell'errore di moveSalesSelfAppointment: la
+                // riga si cancella SOLO se Google conferma. Se falliamo e la
+                // cancelliamo comunque, l'invito resta vivo sul calendario del
+                // cliente E si perde il legame per ritrovarlo.
+                const deleted = await deleteGoogleCalendarEvent(lead.salespersonUserId, evt.googleEventId)
+                    .catch((err: any) => {
+                        console.error('[appointment-cancel] delete GCal fallita:', err?.message ?? err);
+                        return false;
+                    });
+                if (deleted) {
+                    await db.delete(calendarEvents).where(eq(calendarEvents.id, evt.id));
+                } else {
+                    console.error(`[appointment-cancel] evento Google orfano dopo annullamento: leadId=${leadId} googleEventId=${evt.googleEventId}`);
+                }
+            }
         }
 
         // Cancellare un appuntamento resetta esiti conferme/vendita: impatta
