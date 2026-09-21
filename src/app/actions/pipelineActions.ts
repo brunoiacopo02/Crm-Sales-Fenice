@@ -437,20 +437,26 @@ export async function updateLeadOutcome(
         actorRole = tenant.role
     }
 
-    // Chi puo' fissare un appuntamento da qui. Finora la garanzia era di
-    // superficie: la ricerca in Topbar (l'unico punto da cui un non-GDO
-    // arriverebbe a questa funzione) si renderizza solo ai GDO. Da quando
-    // esiste la pipeline autonoma del venditore la cosa conta davvero: un
-    // appuntamento del venditore DEVE nascere da `setSalesSelfAppointment`,
-    // che scrive la sentinella `autofissato` ed e' quella che lo tiene fuori
-    // dal giro Conferme, dai KPI dei GDO e dai webhook di conferma. Passando
-    // di qui nascerebbe un appuntamento senza sentinella, indistinguibile da
-    // uno dei GDO. Gli altri esiti (richiamo, non risposto, scarto) restano
-    // liberi: il venditore li registra dalla sua board.
-    if (!serviceCtx && outcome === 'APPUNTAMENTO' && actorRole !== 'GDO') {
+    // Un appuntamento del venditore DEVE nascere da `setSalesSelfAppointment`:
+    // e' l'unico punto che scrive la sentinella `autofissato`, ed e' quella a
+    // tenerlo fuori dal giro Conferme, dai KPI dei GDO e dai webhook di
+    // conferma. Passando di qui nascerebbe un appuntamento senza sentinella,
+    // indistinguibile da uno dei GDO.
+    //
+    // La guardia e' "rifiuta il VENDITORE", non "consenti solo il GDO", ed e'
+    // deliberato: questa funzione e' raggiungibile da piu' ruoli di quanti
+    // sembri. In `Topbar.tsx` il gate sul ruolo copre solo la casella di
+    // ricerca (`:201`), mentre la `<ContactDrawer>` e' montata fuori (`:393`) e
+    // si apre anche dal click su una notifica, che arriva anche alle Conferme;
+    // e `/richiami` e' aperta a GDO, ADMIN, MANAGER e TL, con la `OutcomeModal`
+    // che offre "Appuntamento". Un gate GDO-only toglierebbe la capacita' di
+    // fissare a quattro ruoli che ce l'hanno, e la toglierebbe in silenzio.
+    // Gli altri esiti (richiamo, non risposto, scarto) restano liberi anche al
+    // venditore: li registra dalla sua board.
+    if (!serviceCtx && outcome === 'APPUNTAMENTO' && actorRole === 'VENDITORE') {
         return {
             success: false,
-            error: `Solo i GDO possono fissare un appuntamento da qui (ruolo attuale: ${actorRole ?? 'sconosciuto'}). Il venditore della pipeline autonoma lo fissa dalla sua board, che e' l'unico punto che marca l'appuntamento come autofissato.`,
+            error: "Un venditore non fissa l'appuntamento da qui: si fissa dalla tua pipeline (/mia-pipeline), che e' l'unico punto che lo marca come autofissato e lo tiene fuori dal giro delle Conferme.",
         }
     }
 

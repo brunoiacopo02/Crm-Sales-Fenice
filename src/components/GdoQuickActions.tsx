@@ -135,6 +135,16 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                 router.refresh()
                 return
             }
+            // Qualunque ALTRO rifiuto del server. Senza questo ramo l'esito non
+            // riuscito proseguiva dritto fino ai coriandoli e all'animazione di
+            // uscita: l'utente vedeva la festa, la card spariva, e
+            // l'appuntamento non esisteva. Vale per ogni rifiuto futuro di
+            // `updateLeadOutcome`, non solo per quello sul ruolo.
+            if (result && !result.success) {
+                alert(result.error || "Esito non registrato.")
+                router.refresh()
+                return
+            }
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);

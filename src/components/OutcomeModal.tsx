@@ -69,6 +69,17 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                 onClose()
                 return
             }
+            // Stesso buco di GdoQuickActions: qualunque rifiuto che non sia
+            // CONCURRENCY_ERROR chiudeva la modale e faceva `router.refresh()`
+            // senza dire niente, e l'utente restava convinto di aver
+            // registrato l'esito. `/richiami` e' aperta a GDO, ADMIN, MANAGER e
+            // TL, quindi e' proprio il posto dove un rifiuto muto fa danno.
+            if (result && !result.success) {
+                alert(result.error || "Esito non registrato.")
+                router.refresh()
+                onClose()
+                return
+            }
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
