@@ -15,6 +15,7 @@ import {
 import { stageHits } from "@/lib/kpi/funnelStages";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { LANCIO_BUCKET } from "@/lib/lancio/intake";
+import { isSelfBooked } from "@/lib/salesPipeline/sentinel";
 import crypto from "crypto";
 
 async function requireAdmin() {
@@ -812,6 +813,16 @@ export type FunnelOverviewRow = {
     database: FunnelSplitCounts;
     /** Lead di lanci PASSATI: nel totale, fuori dai due split. */
     altroLeadCount: number;
+    /**
+     * "Di cui" autofissati dal venditore (pipeline autonoma, sentinella
+     * `confirmationsOutcome = 'autofissato'`). NON è una terza origine come
+     * nuovi/db: quelle dicono da dove viene il lead, questa dice chi ha
+     * fissato l'appuntamento. Un autofissato conta sia nella sua origine sia
+     * qui — somma parallela, mai un dirottamento dei totali di riga.
+     * `conferme` resta sempre 0 per costruzione (stageHits la calcola su
+     * `confermato`, che un autofissato non ha mai): non mostrarla in UI.
+     */
+    self: StageCounts;
 };
 
 export type FunnelOverviewResult =
@@ -831,6 +842,8 @@ export type FunnelOverviewResult =
               nuovi: FunnelSplitCounts;
               database: FunnelSplitCounts;
               altroLeadCount: number;
+              /** Somma di riga del "di cui" autofissati. Vedi FunnelOverviewRow.self. */
+              self: StageCounts;
           };
       }
     | { success: false; error: string };
@@ -838,8 +851,14 @@ export type FunnelOverviewResult =
 /** Contatori di stage grezzi (senza percentuali) per una popolazione di lead. */
 type StageCounts = { app: number; conferme: number; trattative: number; close: number; fatturato: number };
 
-/** Totale di funnel + gli stessi contatori divisi per origine del lead. */
-type CrmCounts = StageCounts & { nuovi: StageCounts; db: StageCounts };
+/**
+ * Totale di funnel + gli stessi contatori divisi per origine del lead, più il
+ * "di cui" autofissati (`self`). `self` NON e' una terza origine come
+ * nuovi/db: quelle dicono da dove viene il lead, questa dice chi ha fissato.
+ * Un autofissato conta sia nella sua origine sia qui, e per questo si somma a
+ * parte e non dentro lo split.
+ */
+type CrmCounts = StageCounts & { nuovi: StageCounts; db: StageCounts; self: StageCounts };
 
 /** Origine del lead, derivata da `launchBucket` + registro `launchPools`. */
 type LeadOrigin = 'nuovi' | 'db' | 'altro';
@@ -849,7 +868,7 @@ function emptyStage(): StageCounts {
 }
 
 function emptyCrmCounts(): CrmCounts {
-    return { ...emptyStage(), nuovi: emptyStage(), db: emptyStage() };
+    return { ...emptyStage(), nuovi: emptyStage(), db: emptyStage(), self: emptyStage() };
 }
 
 /**
@@ -930,6 +949,12 @@ async function getCrmFunnelCounts(
         const origin = originOf(l.launchBucket, dbBuckets);
         const split: StageCounts | null = origin === 'altro' ? null : bucket[origin];
 
+        // Il di-cui autofissati: stessa regola di conteggio del totale, applicata
+        // ai soli lead con la sentinella. `conferme` non si incrementa mai perché
+        // stageHits lo calcola su 'confermato', che un autofissato non ha: la
+        // colonna resta vuota per costruzione, ed è la decisione del PO.
+        const self: StageCounts | null = isSelfBooked(l.confirmationsOutcome) ? bucket.self : null;
+
         // Attribuzione al mese: regola unica condivisa con Marketing Analytics
         // (src/lib/kpi/funnelStages.ts). Le trattative girano sul latch
         // `presentedAt`, non su `salespersonOutcomeAt`: quest'ultimo si sposta a
@@ -938,14 +963,17 @@ async function getCrmFunnelCounts(
         if (hits.app) {
             bucket.app++;
             if (split) split.app++;
+            if (self) self.app++;
         }
         if (hits.conferme) {
             bucket.conferme++;
             if (split) split.conferme++;
+            if (self) self.conferme++;
         }
         if (hits.trattative) {
             bucket.trattative++;
             if (split) split.trattative++;
+            if (self) self.trattative++;
         }
         if (hits.close) {
             bucket.close++;
@@ -953,6 +981,10 @@ async function getCrmFunnelCounts(
             if (split) {
                 split.close++;
                 split.fatturato += hits.fatturato;
+            }
+            if (self) {
+                self.close++;
+                self.fatturato += hits.fatturato;
             }
         }
     }
@@ -1202,6 +1234,7 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
         // Accumulatori dello split (solo CRM live, nessun delta manuale).
         const totNuoviStage = emptyStage();
         const totDbStage = emptyStage();
+        const totSelfStage = emptyStage();
         let totNuoviLead = 0, totDbLead = 0, totAltroLead = 0;
 
         for (const funnelName of ordered) {
@@ -1257,6 +1290,7 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
                 nuovi: buildSplitCounts(leadSplit.nuovi, crm.nuovi),
                 database: buildSplitCounts(leadSplit.db, crm.db),
                 altroLeadCount: leadSplit.altro,
+                self: crm.self,
             });
 
             totalLead += leadCount;
@@ -1273,6 +1307,7 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
             for (const k of ['app', 'conferme', 'trattative', 'close', 'fatturato'] as const) {
                 totNuoviStage[k] += crm.nuovi[k];
                 totDbStage[k] += crm.db[k];
+                totSelfStage[k] += crm.self[k];
             }
         }
 
@@ -1292,6 +1327,7 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
                 nuovi: buildSplitCounts(totNuoviLead, totNuoviStage),
                 database: buildSplitCounts(totDbLead, totDbStage),
                 altroLeadCount: totAltroLead,
+                self: totSelfStage,
             },
         };
     } catch (error: any) {
@@ -1496,11 +1532,20 @@ function splitAccToCounts(a: SplitAcc): FunnelSplitCounts {
     return buildSplitCounts(a.leadCount, { app: a.app, conferme: a.conferme, trattative: a.trattative, close: a.close, fatturato: a.fatturato });
 }
 
+/** Somma in place un secondo StageCounts nel primo. Usato per il "di cui" autofissati, che non ha un proprio denominatore lead (niente pct/leadCount) e quindi non passa da SplitAcc. */
+function addStage(dst: StageCounts, src: StageCounts): void {
+    dst.app += src.app;
+    dst.conferme += src.conferme;
+    dst.trattative += src.trattative;
+    dst.close += src.close;
+    dst.fatturato += src.fatturato;
+}
+
 function mergeFunnelOverviews(parts: FunnelOverviewResult[], ym: string): FunnelOverviewResult {
     const ok = parts.filter((p): p is OkFunnel => p.success);
     if (ok.length === 0) return parts[0] ?? { success: false, error: 'NO_DATA' };
 
-    type Acc = { leadCount: number; appCount: number; confermeCount: number; trattativeCount: number; closeCount: number; fatturatoEur: number; spesaEur: number; dataPrimoSottoSoglia: string | null; statoSegnalazione: FunnelStato; nuovi: SplitAcc; database: SplitAcc; altroLeadCount: number };
+    type Acc = { leadCount: number; appCount: number; confermeCount: number; trattativeCount: number; closeCount: number; fatturatoEur: number; spesaEur: number; dataPrimoSottoSoglia: string | null; statoSegnalazione: FunnelStato; nuovi: SplitAcc; database: SplitAcc; altroLeadCount: number; self: StageCounts };
     const byFunnel = new Map<string, Acc>();
     const order: string[] = [];
     const sev = (s: FunnelStato): number => s === 'ALLERT' ? 2 : s === 'PRE_RISK' ? 1 : 0;
@@ -1509,12 +1554,13 @@ function mergeFunnelOverviews(parts: FunnelOverviewResult[], ym: string): Funnel
         for (const r of p.rows) {
             let acc = byFunnel.get(r.funnelName);
             if (!acc) {
-                acc = { leadCount: 0, appCount: 0, confermeCount: 0, trattativeCount: 0, closeCount: 0, fatturatoEur: 0, spesaEur: 0, dataPrimoSottoSoglia: null, statoSegnalazione: 'OK', nuovi: emptySplitAcc(), database: emptySplitAcc(), altroLeadCount: 0 };
+                acc = { leadCount: 0, appCount: 0, confermeCount: 0, trattativeCount: 0, closeCount: 0, fatturatoEur: 0, spesaEur: 0, dataPrimoSottoSoglia: null, statoSegnalazione: 'OK', nuovi: emptySplitAcc(), database: emptySplitAcc(), altroLeadCount: 0, self: emptyStage() };
                 byFunnel.set(r.funnelName, acc);
                 order.push(r.funnelName);
             }
             addSplitAcc(acc.nuovi, r.nuovi);
             addSplitAcc(acc.database, r.database);
+            addStage(acc.self, r.self);
             acc.altroLeadCount += r.altroLeadCount;
             acc.leadCount += r.leadCount;
             acc.appCount += r.appCount;
@@ -1552,22 +1598,25 @@ function mergeFunnelOverviews(parts: FunnelOverviewResult[], ym: string): Funnel
             nuovi: splitAccToCounts(a.nuovi),
             database: splitAccToCounts(a.database),
             altroLeadCount: a.altroLeadCount,
+            self: a.self,
         };
     });
 
     let tLead = 0, tApp = 0, tConf = 0, tTratt = 0, tClose = 0, tFat = 0, tSpesa = 0, tAltro = 0;
     const tNuovi = emptySplitAcc();
     const tDb = emptySplitAcc();
+    const tSelf = emptyStage();
     for (const r of rows) {
         tLead += r.leadCount; tApp += r.appCount; tConf += r.confermeCount; tTratt += r.trattativeCount; tClose += r.closeCount; tFat += r.fatturatoEur; tSpesa += r.spesaEur;
         addSplitAcc(tNuovi, r.nuovi); addSplitAcc(tDb, r.database); tAltro += r.altroLeadCount;
+        addStage(tSelf, r.self);
     }
 
     return {
         success: true,
         yearMonth: ym,
         rows,
-        totals: { leadCount: tLead, appCount: tApp, confermeCount: tConf, trattativeCount: tTratt, closeCount: tClose, fatturatoEur: tFat, spesaEur: tSpesa, roas: tSpesa > 0 ? tFat / tSpesa : null, nuovi: splitAccToCounts(tNuovi), database: splitAccToCounts(tDb), altroLeadCount: tAltro },
+        totals: { leadCount: tLead, appCount: tApp, confermeCount: tConf, trattativeCount: tTratt, closeCount: tClose, fatturatoEur: tFat, spesaEur: tSpesa, roas: tSpesa > 0 ? tFat / tSpesa : null, nuovi: splitAccToCounts(tNuovi), database: splitAccToCounts(tDb), altroLeadCount: tAltro, self: tSelf },
     };
 }
 

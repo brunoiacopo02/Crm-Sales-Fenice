@@ -430,7 +430,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                 >
                                     {fmtInt(row.leadCount)}
                                 </td>
-                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.appCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {fmtInt(row.appCount)}
+                                    {row.self.app > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {row.self.app} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.appPct)}</td>
                                 <SplitPctCell
                                     stage="APP"
@@ -445,7 +450,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                     nuoviPct={row.nuovi.confermePct} nuoviCount={row.nuovi.confermeCount} nuoviLead={row.nuovi.leadCount}
                                     dbPct={row.database.confermePct} dbCount={row.database.confermeCount} dbLead={row.database.leadCount}
                                 />
-                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.trattativeCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {fmtInt(row.trattativeCount)}
+                                    {row.self.trattative > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {row.self.trattative} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.trattativePct)}</td>
                                 <SplitPctCell
                                     stage="Trattative" prevLabel="Conferme"
@@ -453,7 +463,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                     nuoviPct={row.nuovi.trattativePct} nuoviCount={row.nuovi.trattativeCount} nuoviLead={row.nuovi.leadCount}
                                     dbPct={row.database.trattativePct} dbCount={row.database.trattativeCount} dbLead={row.database.leadCount}
                                 />
-                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(row.closeCount)}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {fmtInt(row.closeCount)}
+                                    {row.self.close > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {row.self.close} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2 text-right text-ash-500 tabular-nums">{fmtPct(row.closePct)}</td>
                                 <SplitPctCell
                                     stage="Close" prevLabel="Trattative"
@@ -461,7 +476,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                     nuoviPct={row.nuovi.closePct} nuoviCount={row.nuovi.closeCount} nuoviLead={row.nuovi.leadCount}
                                     dbPct={row.database.closePct} dbCount={row.database.closeCount} dbLead={row.database.leadCount}
                                 />
-                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{row.fatturatoEur > 0 ? fmtEur(row.fatturatoEur) : '—'}</td>
+                                <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {row.fatturatoEur > 0 ? fmtEur(row.fatturatoEur) : '—'}
+                                    {row.self.fatturato > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {fmtEur(row.self.fatturato)} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100">{row.spesaEur > 0 ? fmtEur(row.spesaEur) : '—'}</td>
                                 <td className="px-3 py-2 text-right text-ash-800 tabular-nums border-l border-ash-100 font-semibold">{fmtRoas(row.roas)}</td>
                                 <td className="px-3 py-2 text-center text-ash-600 tabular-nums border-l border-ash-100">{fmtDateShort(row.dataPrimoSottoSoglia)}</td>
@@ -495,7 +515,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                 >
                                     {fmtInt(totals.leadCount)}
                                 </td>
-                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.appCount)}</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {fmtInt(totals.appCount)}
+                                    {totals.self.app > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {totals.self.app} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2.5"></td>
                                 <SplitPctCell
                                     stage="APP"
@@ -510,7 +535,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                     nuoviPct={totals.nuovi.confermePct} nuoviCount={totals.nuovi.confermeCount} nuoviLead={totals.nuovi.leadCount}
                                     dbPct={totals.database.confermePct} dbCount={totals.database.confermeCount} dbLead={totals.database.leadCount}
                                 />
-                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.trattativeCount)}</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {fmtInt(totals.trattativeCount)}
+                                    {totals.self.trattative > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {totals.self.trattative} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2.5"></td>
                                 <SplitPctCell
                                     stage="Trattative" prevLabel="Conferme"
@@ -518,7 +548,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                     nuoviPct={totals.nuovi.trattativePct} nuoviCount={totals.nuovi.trattativeCount} nuoviLead={totals.nuovi.leadCount}
                                     dbPct={totals.database.trattativePct} dbCount={totals.database.trattativeCount} dbLead={totals.database.leadCount}
                                 />
-                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtInt(totals.closeCount)}</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {fmtInt(totals.closeCount)}
+                                    {totals.self.close > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {totals.self.close} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2.5"></td>
                                 <SplitPctCell
                                     stage="Close" prevLabel="Trattative"
@@ -526,7 +561,12 @@ function FunnelSection({ data, onRefresh }: { data: FunnelOverviewResult; onRefr
                                     nuoviPct={totals.nuovi.closePct} nuoviCount={totals.nuovi.closeCount} nuoviLead={totals.nuovi.leadCount}
                                     dbPct={totals.database.closePct} dbCount={totals.database.closeCount} dbLead={totals.database.leadCount}
                                 />
-                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{totals.fatturatoEur > 0 ? fmtEur(totals.fatturatoEur) : '—'}</td>
+                                <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">
+                                    {totals.fatturatoEur > 0 ? fmtEur(totals.fatturatoEur) : '—'}
+                                    {totals.self.fatturato > 0 && (
+                                        <div className="text-[11px] font-medium text-violet-600">di cui {fmtEur(totals.self.fatturato)} autofissati</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{totals.spesaEur > 0 ? fmtEur(totals.spesaEur) : '—'}</td>
                                 <td className="px-3 py-2.5 text-right text-ash-800 tabular-nums border-l border-ash-100">{fmtRoas(totals.roas)}</td>
                                 <td className="px-3 py-2.5 border-l border-ash-100"></td>
