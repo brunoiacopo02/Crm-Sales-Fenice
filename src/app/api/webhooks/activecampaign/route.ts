@@ -57,6 +57,10 @@ import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
 // UTM: id dei custom field e lettura, condivisi col sync di recupero del lancio
 // (src/lib/acIntake/utmFields.ts). Prima vivevano qui e il sync non poteva riusarli.
 import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
+// Pipeline autonoma del venditore: dirotta i primi N lead freschi. Tocca SOLO
+// l'intake normale qui sotto, mai il ramo del lancio (handleLancioIntake).
+import { shouldDivertFreshLead } from "@/lib/salesPipeline/feeding";
+import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions";
 
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com';
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || '';
@@ -954,6 +958,23 @@ export async function POST(req: NextRequest) {
             timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit',
         }).format(now); // 'YYYY-MM-DD'
 
+        // Config della pipeline del venditore: letta QUI, FUORI dalla
+        // transazione, e non dentro dove la si usa.
+        //
+        // `readSalesPipelineConfig()` gira su `db`, e `db` dentro una
+        // `db.transaction` chiede un SECONDO client allo stesso pool mentre il
+        // primo e' occupato: su Vercel il pool ha max 5: cinque webhook
+        // simultanei si bloccherebbero a vicenda per 15 secondi
+        // (connectionTimeoutMillis) e poi fallirebbero tutti. In tutto il CRM
+        // non esiste un solo punto in cui `db` viene usato dentro una
+        // transazione, e l'intake AC non e' il posto dove inaugurare la cosa.
+        //
+        // Letta fuori non cambia niente di osservabile: non e' il tetto (quello
+        // si conta sotto il lock, dentro `tx`), e questa funzione non lancia mai
+        // — se il DB non risponde torna "pipeline spenta" e il routing di sempre
+        // prosegue.
+        const salesPipelineCfg = await readSalesPipelineConfig();
+
         // ===== SEZIONE CRITICA (transazione + advisory lock) =====
         // Dedup + round-robin + insert + update acLastAssignedAt devono
         // essere atomici rispetto ad altri webhook AC che riguardino lo
@@ -1190,44 +1211,82 @@ export async function POST(req: NextRequest) {
             const holidayWindow = !rientro && isBotHolidayWindow(now);
             const routing: LeadRouting = holidayWindow ? 'bot_only' : getLeadRouting(now);
 
+            // Pipeline autonoma venditore: i primi N lead freschi vanno a lui, poi
+            // tutto torna esattamente come prima. A tetto raggiunto questo blocco
+            // e' due letture e un return: il percorso normale non paga quasi nulla.
+            // Il lock e' sul contatore, non sul lead: senza, due webhook nello
+            // stesso istante leggono entrambi "4 dirottati" e ne dirottano un sesto.
+            let divertedTo: string | null = null;
+            if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId) {
+                await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('sales-pipeline:fresh', 4))`);
+                // Il conteggio va fatto su `tx`, non su `db`: il lock vive nella
+                // transazione, e contare da un'altra connessione mentre si tiene
+                // il lock qui e' proprio il modo di leggere un numero vecchio.
+                const divertedRows = await tx.select({ n: sql<number>`count(*)::int` })
+                    .from(leadEvents).where(and(
+                        eq(leadEvents.companyId, FENICE_COMPANY),
+                        eq(leadEvents.eventType, 'SALES_PIPELINE_ASSIGNED'),
+                        sql`${leadEvents.metadata}->>'source' = 'fresh'`,
+                    ));
+                const diverted = divertedRows[0]?.n ?? 0;
+                // `launchBucket` e' null per costruzione: questo flusso non ne
+                // scrive mai uno (i pool e il lancio passano da altrove), e la
+                // guardia lo rifiuterebbe comunque. `phoneSuspicious` qui e'
+                // sempre false — la quarantena e' gia' uscita sopra — ma resta
+                // nella chiamata perche' la regola sta tutta in un posto solo.
+                if (shouldDivertFreshLead({
+                    cfg: salesPipelineCfg, diverted, launchBucket: null, phoneSuspicious,
+                })) {
+                    divertedTo = salesPipelineCfg.salesUserId;
+                }
+            }
+
             // Ogni ramo ha il suo ripiego: una fascia non deve mai poter lasciare
             // un lead senza padrone (bot spento, o tutti i GDO disattivati).
             // `fallbackUsed` marca SOLO i ripieghi anomali: in 'bot_first' passare
             // agli umani a soglia raggiunta è il funzionamento previsto, non un guasto.
-            let eligible: { id: string; isBot: boolean }[];
+            //
+            // Con `divertedTo` valorizzato il giro dei pool non si fa nemmeno:
+            // il lead ha gia' un padrone e non deve consumare il turno di nessuno.
+            // `routing` e `holidayWindow` restano calcolati sopra in ENTRAMBI i
+            // casi, cosi' il `return` finale ha la stessa forma per tutti e due i
+            // percorsi (li legge l'evento ASSIGNED a valle).
+            let eligible: { id: string; isBot: boolean }[] = [];
             let fallbackUsed = false;
-            if (routing === 'legacy') {
-                eligible = await selectLegacyPool();
-            } else if (routing === 'gdo_only') {
-                // Fascia protetta del sabato: il bot non entra nemmeno se è
-                // sotto la soglia minima. Ci finisce solo se non c'è un umano.
-                eligible = await selectFreshWithOverflow();
-                if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
-            } else if (routing === 'bot_half') {
-                // Rientro graduale: il bot entra solo finché è sotto metà del
-                // volume di oggi. Sopra metà tocca ai GDO, e se non ce n'è
-                // nessuno disponibile il lead torna al bot invece di restare
-                // orfano — il rientro non deve poter fermare l'intake.
-                eligible = await selectBotPoolHalf();
-                if (eligible.length === 0) eligible = await selectFreshWithOverflow();
-                if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
-            } else if (routing === 'bot_first') {
-                eligible = await selectBotPool(true);
-                if (eligible.length === 0) eligible = await selectFreshWithOverflow();
-                // Rete finale: il bot anche sopra soglia. Era l'unico ramo senza,
-                // e dal 18/09/2026 si puo' arrivare qui davvero — da quando i GDO
-                // ricevono solo ridati, `selectFreshWithOverflow` torna vuota
-                // appena il bot supera la soglia, e il lead restava orfano.
-                if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
-            } else {
-                eligible = await selectBotPool(false);
-                if (eligible.length === 0) { eligible = await selectFreshWithOverflow(); fallbackUsed = true; }
-            }
+            if (!divertedTo) {
+                if (routing === 'legacy') {
+                    eligible = await selectLegacyPool();
+                } else if (routing === 'gdo_only') {
+                    // Fascia protetta del sabato: il bot non entra nemmeno se è
+                    // sotto la soglia minima. Ci finisce solo se non c'è un umano.
+                    eligible = await selectFreshWithOverflow();
+                    if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
+                } else if (routing === 'bot_half') {
+                    // Rientro graduale: il bot entra solo finché è sotto metà del
+                    // volume di oggi. Sopra metà tocca ai GDO, e se non ce n'è
+                    // nessuno disponibile il lead torna al bot invece di restare
+                    // orfano — il rientro non deve poter fermare l'intake.
+                    eligible = await selectBotPoolHalf();
+                    if (eligible.length === 0) eligible = await selectFreshWithOverflow();
+                    if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
+                } else if (routing === 'bot_first') {
+                    eligible = await selectBotPool(true);
+                    if (eligible.length === 0) eligible = await selectFreshWithOverflow();
+                    // Rete finale: il bot anche sopra soglia. Era l'unico ramo senza,
+                    // e dal 18/09/2026 si puo' arrivare qui davvero — da quando i GDO
+                    // ricevono solo ridati, `selectFreshWithOverflow` torna vuota
+                    // appena il bot supera la soglia, e il lead restava orfano.
+                    if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
+                } else {
+                    eligible = await selectBotPool(false);
+                    if (eligible.length === 0) { eligible = await selectFreshWithOverflow(); fallbackUsed = true; }
+                }
 
-            if (eligible.length === 0) {
-                return { kind: 'no_gdo' as const };
+                if (eligible.length === 0) {
+                    return { kind: 'no_gdo' as const };
+                }
             }
-            const assignedGdoId = eligible[0].id;
+            const assignedGdoId = divertedTo ?? eligible[0].id;
 
             await tx.insert(leads).values({
                 id: newLeadId,
@@ -1252,6 +1311,21 @@ export async function POST(req: NextRequest) {
                 updatedAt: now,
                 companyId: FENICE_COMPANY,
             });
+
+            if (divertedTo) {
+                // Il round robin dei GDO non si muove: questo lead non e' passato di li'.
+                await tx.insert(leadEvents).values({
+                    id: crypto.randomUUID(), leadId: newLeadId,
+                    eventType: 'SALES_PIPELINE_ASSIGNED',
+                    userId: divertedTo, timestamp: now,
+                    metadata: { source: 'fresh' },
+                    companyId: FENICE_COMPANY,
+                });
+                // `assignedGdoIsBot: false` e' cio' che impedisce al
+                // `after(() => pushLeadToBot(...))` a valle di partire: il lead
+                // e' di una persona, non del bot.
+                return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: false, routing, holidayWindow, fallbackUsed: false };
+            }
 
             await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 

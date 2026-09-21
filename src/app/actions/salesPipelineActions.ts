@@ -13,6 +13,7 @@ import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { romeInstant, slotKey, slotStartFor } from "@/lib/venditore/calendarSlots"
 import { toRomeDateStr } from "@/lib/dateUtils"
 import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
+import { pickMostLoadedGdo } from "@/lib/salesPipeline/feeding"
 import { selfBookingCheck } from "@/lib/salesPipeline/selfBooking"
 import { readSalesPipelineConfig } from "./salesPipelineConfigActions"
 
@@ -385,4 +386,92 @@ export async function getSalesPipelineLeads(): Promise<{
         thirdCall: pipeline.filter(l => l.callCount === 2),
         recalls,
     }
+}
+
+/**
+ * Sposta `count` lead ridati dal bot nella pipeline del venditore, prendendoli
+ * dal GDO piu' carico. Si toglie lavoro a chi e' ingolfato, non a chi sta
+ * girando bene.
+ *
+ * "Ridato dal bot" e' l'evento REASSIGNED_FROM_BOT, non `callCount = 0`: un
+ * rimbalzo del bot azzera il contatore e sembrerebbe un lead mai chiamato.
+ */
+export async function assignBotReturnsToSalesPipeline(
+    count: number,
+): Promise<{ success: boolean; error?: string; moved?: number }> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER') {
+        return { success: false, error: 'Solo ADMIN e MANAGER possono assegnare lead alla pipeline.' }
+    }
+    const cfg = await readSalesPipelineConfig()
+    if (!cfg.enabled || !cfg.salesUserId) return { success: false, error: 'Pipeline spenta.' }
+    if (!Number.isInteger(count) || count < 1 || count > 50) {
+        return { success: false, error: 'Quantita non valida (1-50).' }
+    }
+
+    const target = cfg.salesUserId
+    const now = new Date()
+
+    // Carico per GDO: lead nuovi ancora da chiamare.
+    const carico = await db.select({
+        gdoId: leads.assignedToId,
+        nuovi: sql<number>`count(*)::int`,
+    }).from(leads).innerJoin(users, eq(users.id, leads.assignedToId))
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(users.role, 'GDO'),
+            eq(users.isActive, true),
+            eq(users.isBot, false),
+            eq(leads.callCount, 0),
+            ne(leads.status, 'REJECTED'),
+            ne(leads.status, 'APPOINTMENT'),
+        )).groupBy(leads.assignedToId)
+
+    const ordered = pickMostLoadedGdo(
+        carico.filter(r => r.gdoId).map(r => ({ gdoId: r.gdoId as string, nuovi: r.nuovi })),
+    )
+
+    let moved = 0
+    for (const gdoId of ordered) {
+        if (moved >= count) break
+        const candidates = await db.select({ id: leads.id }).from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.assignedToId, gdoId),
+            ne(leads.status, 'REJECTED'),
+            ne(leads.status, 'APPOINTMENT'),
+            sql`exists (select 1 from "leadEvents" e where e."leadId" = ${leads.id} and e."eventType" = 'REASSIGNED_FROM_BOT')`,
+        )).orderBy(leads.createdAt, leads.id).limit(count - moved)
+
+        for (const c of candidates) {
+            await db.transaction(async (tx) => {
+                await tx.update(leads).set({
+                    assignedToId: target,
+                    // assignedAt e' il latch della PRIMA presa in carico: non si riscrive.
+                    updatedAt: now,
+                }).where(eq(leads.id, c.id))
+                await tx.insert(leadEvents).values({
+                    id: crypto.randomUUID(), leadId: c.id,
+                    eventType: 'SALES_PIPELINE_ASSIGNED',
+                    userId: target, timestamp: now,
+                    metadata: { source: 'bot_return', fromGdoId: gdoId },
+                    companyId: ctx.companyId,
+                })
+            })
+            moved++
+        }
+    }
+
+    return { success: true, moved }
+}
+
+/** Quanti lead freschi sono gia' stati dirottati alla pipeline, in tutto. */
+export async function countDivertedFresh(companyId: string): Promise<number> {
+    const rows = await db.select({ n: sql<number>`count(*)::int` })
+        .from(leadEvents).where(and(
+            eq(leadEvents.companyId, companyId),
+            eq(leadEvents.eventType, 'SALES_PIPELINE_ASSIGNED'),
+            sql`${leadEvents.metadata}->>'source' = 'fresh'`,
+        ))
+    return rows[0]?.n ?? 0
 }
