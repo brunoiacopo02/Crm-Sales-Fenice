@@ -59,7 +59,7 @@ import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
 import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
 // Pipeline autonoma del venditore: dirotta i primi N lead freschi. Tocca SOLO
 // l'intake normale qui sotto, mai il ramo del lancio (handleLancioIntake).
-import { shouldDivertFreshLead } from "@/lib/salesPipeline/feeding";
+import { decideDiversion } from "@/lib/salesPipeline/feeding";
 import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions";
 
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com';
@@ -1299,8 +1299,15 @@ export async function POST(req: NextRequest) {
                         // altrove). `phoneSuspicious` qui e' sempre false — la
                         // quarantena e' gia' uscita sopra — ma resta nella chiamata
                         // perche' la regola sta tutta in un posto solo.
-                        if (shouldDivertFreshLead({
-                            cfg: salesPipelineCfg, diverted, launchBucket: null, phoneSuspicious,
+                        //
+                        // `decideDiversion` e' la regola INTERA, funzione pura e
+                        // testata (feeding.test.ts): pipeline spenta, funnel del
+                        // lancio, qualunque launchBucket, quarantena e tetto pieno
+                        // tornano tutti `null`, cioe' "routing di sempre". La
+                        // guardia larga qui sopra resta solo per non pagare i due
+                        // conteggi quando la pipeline e' spenta.
+                        if (decideDiversion({
+                            cfg: salesPipelineCfg, diverted, funnel, launchBucket: null, phoneSuspicious,
                         })) {
                             divertedTo = venditore.id;
                         }
@@ -1391,12 +1398,12 @@ export async function POST(req: NextRequest) {
                 // `assignedGdoIsBot: false` e' cio' che impedisce al
                 // `after(() => pushLeadToBot(...))` a valle di partire: il lead
                 // e' di una persona, non del bot.
-                return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: false, routing, holidayWindow, fallbackUsed: false };
+                return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: false, routing, holidayWindow, fallbackUsed: false, divertedToSales: true };
             }
 
             await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 
-            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routing, holidayWindow, fallbackUsed };
+            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routing, holidayWindow, fallbackUsed, divertedToSales: false };
         });
 
         if (txResult.kind === 'duplicate') {
@@ -1498,7 +1505,10 @@ export async function POST(req: NextRequest) {
                 source: 'activecampaign',
                 // Traccia della regola applicata: fra due mesi, guardando i volumi,
                 // la spiegazione sta nel DB e non nella memoria di qualcuno.
-                routing: txResult.routing,
+                // Su un lead dirottato la fascia era stata calcolata ma non
+                // seguita (il giro dei pool non si fa nemmeno): scriverla
+                // racconterebbe una regola che non ha deciso niente.
+                routing: txResult.divertedToSales ? 'sales_pipeline' : txResult.routing,
                 ...(txResult.fallbackUsed ? { routingFallback: true } : {}),
                 ...(txResult.holidayWindow ? { botHolidayWindow: true } : {}),
             },

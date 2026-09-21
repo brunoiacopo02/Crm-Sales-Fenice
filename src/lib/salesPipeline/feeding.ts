@@ -5,6 +5,9 @@
  */
 
 import { canDivertFresh, type SalesPipelineConfig } from './config'
+// Il nome del funnel del lancio si IMPORTA, non si ricopia: una seconda copia
+// prima o poi diverge da quella vera (stessa regola del bucket, sotto).
+import { LANCIO_FUNNEL } from '../lancio/intake'
 
 // Nota: NON ridefinire qui il bucket del lancio. Esiste gia' in
 // `src/lib/lancio/intake.ts:17` e una seconda copia prima o poi diverge da
@@ -40,4 +43,34 @@ export function shouldDivertFreshLead(input: {
     if (input.launchBucket) return false
     if (input.phoneSuspicious) return false
     return canDivertFresh(input.cfg, input.diverted)
+}
+
+/**
+ * La decisione completa, in una funzione sola: a chi va questo lead fresco, o
+ * `null` per "segui il routing di sempre".
+ *
+ * Esiste perche' la proprieta' che protegge la produzione — *a pipeline spenta
+ * il GDO scelto e' esattamente lo stesso di prima* — era difesa solo dalla
+ * prosa di un commento. Qui e' una funzione pura con un test sopra.
+ *
+ * Il confronto sul funnel e' insensibile a maiuscole e spazi: e' un testo che
+ * arriva da ActiveCampaign, e un'iscritta al webinar del 5/10 non deve poter
+ * finire nella pipeline del venditore per una lettera maiuscola.
+ */
+export function decideDiversion(input: {
+    cfg: SalesPipelineConfig
+    diverted: number
+    funnel: string | null
+    launchBucket: string | null
+    phoneSuspicious: boolean
+}): string | null {
+    const funnel = (input.funnel ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+    if (funnel === LANCIO_FUNNEL.trim().replace(/\s+/g, ' ').toLowerCase()) return null
+    if (!shouldDivertFreshLead({
+        cfg: input.cfg,
+        diverted: input.diverted,
+        launchBucket: input.launchBucket,
+        phoneSuspicious: input.phoneSuspicious,
+    })) return null
+    return input.cfg.salesUserId
 }

@@ -47,6 +47,8 @@ export default function PipelineVenditoreClient({ initialOverview, venditori }: 
     const [isPending, startTransition] = useTransition();
 
     const cfg = overview.config;
+    /** La bozza dice una cosa diversa da quello che c'e' salvato. */
+    const bozzaNonSalvata = draftUserId !== (cfg.salesUserId || "") || draftCap !== cfg.freshCap;
 
     const refresh = async () => {
         const fresh = await getSalesPipelineOverview();
@@ -58,10 +60,14 @@ export default function PipelineVenditoreClient({ initialOverview, venditori }: 
     const handleToggle = async () => {
         setConfigMsg(null);
         setSavingToggle(true);
+        // L'interruttore accende e spegne QUELLO CHE E' SALVATO, non la bozza.
+        // Con i valori di bozza bastava cambiare venditore nel selettore senza
+        // salvare, spegnere e riaccendere, e la pipeline ripartiva su un
+        // venditore che nessuno aveva mai confermato.
         const next: SalesPipelineConfig = {
             enabled: !cfg.enabled,
-            salesUserId: draftUserId || null,
-            freshCap: draftCap,
+            salesUserId: cfg.salesUserId,
+            freshCap: cfg.freshCap,
         };
         const res = await setSalesPipelineConfig(next);
         setSavingToggle(false);
@@ -141,6 +147,11 @@ export default function PipelineVenditoreClient({ initialOverview, venditori }: 
                         <p className="mt-0.5 text-xs text-ash-500">
                             Spegnere qui è il modo più veloce per fermare tutto: nessun deploy, nessuna env.
                         </p>
+                        {bozzaNonSalvata && (
+                            <p className="mt-0.5 text-xs font-semibold text-amber-700">
+                                Hai modifiche non salvate qui sotto: l&apos;interruttore usa le impostazioni salvate.
+                            </p>
+                        )}
                     </div>
                     <div>
                         <button
