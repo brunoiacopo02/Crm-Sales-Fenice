@@ -3,7 +3,7 @@
 import crypto from "crypto"
 import { after } from "next/server"
 import { addHours } from "date-fns"
-import { and, desc, eq, gte, isNotNull, isNull, lt, ne, sql } from "drizzle-orm"
+import { and, desc, eq, gte, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { calendarEvents, callLogs, leadEvents, leads, salesSlotBlocks, users } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
@@ -15,6 +15,7 @@ import { toRomeDateStr } from "@/lib/dateUtils"
 import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
 import { pickMostLoadedGdo } from "@/lib/salesPipeline/feeding"
 import { selfBookingCheck } from "@/lib/salesPipeline/selfBooking"
+import { DEFAULT_SALES_PIPELINE_CONFIG, type SalesPipelineConfig } from "@/lib/salesPipeline/config"
 import { readSalesPipelineConfig } from "./salesPipelineConfigActions"
 
 /**
@@ -515,4 +516,79 @@ export async function countDivertedFresh(companyId: string): Promise<number> {
             sql`${leadEvents.metadata}->>'source' = 'fresh'`,
         ))
     return rows[0]?.n ?? 0
+}
+
+/** Quanti lead ridati dal bot sono gia' stati assegnati alla pipeline, in tutto. */
+async function countBotReturnsAssigned(companyId: string): Promise<number> {
+    const rows = await db.select({ n: sql<number>`count(*)::int` })
+        .from(leadEvents).where(and(
+            eq(leadEvents.companyId, companyId),
+            eq(leadEvents.eventType, 'SALES_PIPELINE_ASSIGNED'),
+            sql`${leadEvents.metadata}->>'source' = 'bot_return'`,
+        ))
+    return rows[0]?.n ?? 0
+}
+
+export interface SalesPipelineOverviewLead {
+    id: string
+    name: string
+    phone: string
+    status: string
+    callCount: number
+    appointmentDate: Date | null
+    confirmationsOutcome: string | null
+}
+
+/**
+ * Riepilogo per la pagina di regolazione: config attuale, i due contatori
+ * (freschi dirottati e ridati assegnati) e i lead oggi in pipeline.
+ *
+ * I lead restano visibili anche dopo che sono diventati appuntamenti: si
+ * prendono sia quelli ancora assegnati al venditore (`assignedToId`) sia
+ * quelli gia' autofissati (`salespersonUserId` + sentinella 'autofissato'),
+ * altrimenti un appuntamento fissato sparirebbe dalla tabella nello stesso
+ * istante in cui viene creato.
+ */
+export async function getSalesPipelineOverview(): Promise<{
+    config: SalesPipelineConfig
+    divertedFresh: number
+    botReturns: number
+    leads: SalesPipelineOverviewLead[]
+}> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    if (!['ADMIN', 'MANAGER'].includes(ctx.role)) {
+        return { config: DEFAULT_SALES_PIPELINE_CONFIG, divertedFresh: 0, botReturns: 0, leads: [] }
+    }
+
+    const config = await readSalesPipelineConfig()
+
+    const [divertedFresh, botReturns] = await Promise.all([
+        countDivertedFresh(ctx.companyId),
+        countBotReturnsAssigned(ctx.companyId),
+    ])
+
+    let leadRows: SalesPipelineOverviewLead[] = []
+    if (config.salesUserId) {
+        leadRows = await db.select({
+            id: leads.id,
+            name: leads.name,
+            phone: leads.phone,
+            status: leads.status,
+            callCount: leads.callCount,
+            appointmentDate: leads.appointmentDate,
+            confirmationsOutcome: leads.confirmationsOutcome,
+        }).from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            or(
+                eq(leads.assignedToId, config.salesUserId),
+                and(
+                    eq(leads.salespersonUserId, config.salesUserId),
+                    eq(leads.confirmationsOutcome, SELF_BOOKED_OUTCOME),
+                ),
+            ),
+        )).orderBy(desc(leads.createdAt), leads.id)
+    }
+
+    return { config, divertedFresh, botReturns, leads: leadRows }
 }

@@ -238,6 +238,7 @@ export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: strin
                         { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
                         { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
+                        { name: "Pipeline venditore", href: "/pipeline-venditore", icon: PhoneCall },
                     ],
                 },
                 {
