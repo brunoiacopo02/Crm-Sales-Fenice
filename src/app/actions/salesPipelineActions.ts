@@ -302,20 +302,36 @@ export async function moveSalesSelfAppointment(input: {
 
     after(async () => {
         // Cancella il vecchio evento, poi ricrea. `calendarEvents` tiene il
-        // legame lead -> googleEventId.
+        // legame lead -> googleEventId. Solo 'appointment': un domani con un
+        // promemoria separato, questo giro non deve toccarlo (confermeActions.ts:1601).
         const old = await db.select().from(calendarEvents).where(and(
             eq(calendarEvents.leadId, input.leadId),
             eq(calendarEvents.userId, me.userId),
+            eq(calendarEvents.eventType, 'appointment'),
         ))
         for (const e of old) {
             // googleEventId e' nullable a schema (evento creato ma Google non ha
             // mai risposto con un id): senza guardia, deleteGoogleCalendarEvent
-            // non compila (si aspetta string, non string | null).
-            if (e.googleEventId) {
-                await deleteGoogleCalendarEvent(me.userId, e.googleEventId)
-                    .catch((err: any) => console.error('[sales-pipeline] delete GCal fallita:', err?.message ?? err))
+            // non compila (si aspetta string, non string | null). Se manca, non
+            // c'e' niente da cancellare su Google: la riga locale e' solo stale.
+            if (!e.googleEventId) {
+                await db.delete(calendarEvents).where(eq(calendarEvents.id, e.id))
+                continue
             }
-            await db.delete(calendarEvents).where(eq(calendarEvents.id, e.id))
+            // La riga si cancella SOLO se Google conferma la cancellazione.
+            // Se falliamo qui (Google giu', token scaduto) e cancelliamo comunque
+            // la riga, il vecchio invito resta vivo sul calendario del cliente E
+            // perdiamo il legame per ritrovarlo: due inviti, un orfano invisibile.
+            const deleted = await deleteGoogleCalendarEvent(me.userId, e.googleEventId)
+                .catch((err: any) => {
+                    console.error('[sales-pipeline] delete GCal fallita:', err?.message ?? err)
+                    return false
+                })
+            if (deleted) {
+                await db.delete(calendarEvents).where(eq(calendarEvents.id, e.id))
+            } else {
+                console.error(`[sales-pipeline] evento Google orfano dopo spostamento: leadId=${input.leadId} googleEventId=${e.googleEventId}`)
+            }
         }
         await createGoogleCalendarEvent(
             me.userId,
