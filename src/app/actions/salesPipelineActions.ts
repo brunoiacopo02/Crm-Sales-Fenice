@@ -239,17 +239,34 @@ export async function moveSalesSelfAppointment(input: {
     const me = await requireSalesPipelineUser()
     if (!me) return { success: false, error: 'Pipeline non attiva per questo utente.' }
 
+    const at = new Date(input.at)
+    // Stessa validazione di `setSalesSelfAppointment`: una data non valida
+    // arriverebbe fino alla UPDATE e ci scriverebbe un `Invalid Date`.
+    if (Number.isNaN(at.getTime())) return { success: false, error: 'Data non valida.' }
+
     const lead = (await db.select().from(leads).where(and(
         eq(leads.companyId, me.companyId),
         eq(leads.id, input.leadId),
     )))[0]
     if (!lead) return { success: false, error: 'Lead non trovato.' }
-    if (lead.salespersonUserId !== me.userId || lead.confirmationsOutcome !== SELF_BOOKED_OUTCOME) {
-        return { success: false, error: 'Questo appuntamento non e\' tuo da spostare.' }
+    // Due rifiuti distinti, perche' sono due errori diversi da capire: uno e'
+    // "e' di un altro venditore", l'altro e' "questo appuntamento non l'hai
+    // fissato tu, l'ha lavorato il giro Conferme" — e in quel secondo caso
+    // spostarlo da qui salterebbe le Conferme senza che nessuno lo sappia.
+    if (lead.salespersonUserId !== me.userId) {
+        return { success: false, error: 'Questo appuntamento non e\' tuo.' }
+    }
+    if (lead.confirmationsOutcome !== SELF_BOOKED_OUTCOME) {
+        return { success: false, error: 'Questo appuntamento non l\'hai fissato tu dalla tua pipeline: si sposta dal giro di sempre.' }
+    }
+    // Guardia difensiva: senza un appuntamento vivo non c'e' niente da
+    // spostare, e la UPDATE qui sotto rimetterebbe una data su un lead che
+    // qualcuno ha appena annullato.
+    if (lead.status !== 'APPOINTMENT' || !lead.appointmentDate) {
+        return { success: false, error: 'Questo lead non ha piu\' un appuntamento da spostare.' }
     }
     if (lead.version !== input.currentVersion) return { success: false, error: 'CONCURRENCY_ERROR' }
 
-    const at = new Date(input.at)
     const slot = slotStartFor(at)
     const dayStart = romeInstant(toRomeDateStr(at), 0)
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
@@ -387,6 +404,50 @@ export async function getSalesPipelineLeads(): Promise<{
         thirdCall: pipeline.filter(l => l.callCount === 2),
         recalls,
     }
+}
+
+export interface SalesSelfAppointment {
+    id: string
+    name: string
+    phone: string
+    appointmentDate: Date
+    appointmentNote: string | null
+    version: number
+}
+
+/**
+ * Gli appuntamenti che il venditore si e' fissato da solo e che deve ancora
+ * fare. Accanto a `getSalesPipelineLeads`, che questi li esclude apposta
+ * (`status != 'APPOINTMENT'`): senza una lettura dedicata un autofissato non
+ * lo potrebbe spostare nessuno — `updateGdoAppointment` vuole un GDO, le
+ * Conferme il lead non lo vedono, e `scheduleConfermeRecall` e' gated su
+ * 'confermato'.
+ *
+ * Solo dal futuro in poi: un appuntamento gia' passato non si sposta, si
+ * esita. La finestra parte dall'istante della lettura, non da mezzanotte,
+ * perche' quello che conta e' se c'e' ancora tempo per avvisare il cliente.
+ */
+export async function getSalesSelfAppointments(): Promise<SalesSelfAppointment[]> {
+    const me = await requireSalesPipelineUser()
+    if (!me) return []
+
+    const rows = await db.select({
+        id: leads.id,
+        name: leads.name,
+        phone: leads.phone,
+        appointmentDate: leads.appointmentDate,
+        appointmentNote: leads.appointmentNote,
+        version: leads.version,
+    }).from(leads).where(and(
+        eq(leads.companyId, me.companyId),
+        eq(leads.salespersonUserId, me.userId),
+        eq(leads.confirmationsOutcome, SELF_BOOKED_OUTCOME),
+        eq(leads.status, 'APPOINTMENT'),
+        isNotNull(leads.appointmentDate),
+        gte(leads.appointmentDate, new Date()),
+    )).orderBy(leads.appointmentDate, leads.id)
+
+    return rows.map(r => ({ ...r, appointmentDate: r.appointmentDate! }))
 }
 
 /**

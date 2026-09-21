@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { setSalesSelfAppointment } from "@/app/actions/salesPipelineActions"
+import { moveSalesSelfAppointment, setSalesSelfAppointment } from "@/app/actions/salesPipelineActions"
 import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
 
@@ -21,8 +21,30 @@ type Lead = {
 }
 type Tab = 'first' | 'second' | 'third' | 'recalls'
 
-export default function MiaPipelineClient({ firstCall, secondCall, thirdCall, recalls }: {
+/** Un appuntamento che il venditore si e' fissato da solo, ancora da fare. */
+type SelfAppointment = {
+    id: string
+    name: string
+    phone: string
+    /** ISO: dal server i Date arrivano serializzati. */
+    appointmentDate: string
+    appointmentNote: string | null
+    version: number
+}
+
+/** ISO -> valore per un `<input type="datetime-local">`, in ora italiana. */
+function toLocalInput(iso: string): string {
+    const parts = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Rome',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date(iso))
+    return parts.replace(' ', 'T')
+}
+
+export default function MiaPipelineClient({ firstCall, secondCall, thirdCall, recalls, appointments }: {
     firstCall: Lead[]; secondCall: Lead[]; thirdCall: Lead[]; recalls: Lead[]
+    appointments: SelfAppointment[]
 }) {
     const router = useRouter()
     const [tab, setTab] = useState<Tab>('first')
@@ -71,6 +93,14 @@ export default function MiaPipelineClient({ firstCall, secondCall, thirdCall, re
     const scarta = (lead: Lead, motivo: string, note: string) =>
         run(lead.id, () => updateLeadOutcome(lead.id, 'DA_SCARTARE', note, undefined, undefined, motivo, lead.version))
 
+    const sposta = (app: SelfAppointment, whenLocal: string, note: string) =>
+        run(app.id, () => moveSalesSelfAppointment({
+            leadId: app.id,
+            currentVersion: app.version,
+            at: new Date(whenLocal),
+            note,
+        }))
+
     return (
         <div className="max-w-7xl mx-auto space-y-4">
             <div>
@@ -112,6 +142,79 @@ export default function MiaPipelineClient({ firstCall, secondCall, thirdCall, re
                             onScarta={scarta}
                         />
                     ))}
+                </div>
+            )}
+
+            {appointments.length > 0 && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
+                    <div className="text-sm font-bold text-ash-800">
+                        Appuntamenti che hai fissato ({appointments.length})
+                    </div>
+                    <div className="mt-0.5 text-xs text-ash-500">
+                        Se il cliente chiede un altro orario lo sposti da qui: l&apos;invito su
+                        Google viene rifatto, con il Meet nuovo.
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {appointments.map(app => (
+                            <SelfAppointmentCard
+                                key={app.id}
+                                app={app}
+                                busy={busyId === app.id}
+                                onSposta={sposta}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function SelfAppointmentCard({ app, busy, onSposta }: {
+    app: SelfAppointment; busy: boolean
+    onSposta: (a: SelfAppointment, when: string, note: string) => void
+}) {
+    const [aperto, setAperto] = useState(false)
+    const [when, setWhen] = useState(() => toLocalInput(app.appointmentDate))
+    const [note, setNote] = useState('')
+
+    return (
+        <div className="rounded-xl border border-ash-200 bg-white p-3">
+            <div className="text-sm font-bold text-ash-900">{app.name}</div>
+            <a href={`tel:${app.phone}`} className="text-sm font-bold text-brand-orange">{app.phone}</a>
+            <div className="mt-1 text-xs font-medium text-emerald-700">
+                {new Date(app.appointmentDate).toLocaleString('it-IT', {
+                    dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome',
+                })}
+            </div>
+            {app.appointmentNote && (
+                <div className="mt-1 text-xs text-ash-500">{app.appointmentNote}</div>
+            )}
+
+            {/* Contenitore <div>, mai <span>/<p>: bottoni dentro tag testuali
+                mandano l'app in schermata bianca su Vercel. */}
+            <div className="mt-2 flex flex-wrap gap-2">
+                <button disabled={busy} onClick={() => setAperto(a => !a)}
+                    className="rounded-lg border border-ash-200 px-3 py-1.5 text-xs font-bold text-ash-700 disabled:opacity-50">
+                    {aperto ? 'Chiudi' : 'Sposta'}
+                </button>
+            </div>
+
+            {aperto && (
+                <div className="mt-2 space-y-2 border-t border-ash-100 pt-2">
+                    <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)}
+                        className="w-full rounded-lg border border-ash-200 px-2 py-1.5 text-sm" />
+                    <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Nota (facoltativa)"
+                        className="w-full rounded-lg border border-ash-200 px-2 py-1.5 text-sm" />
+                    <div className="flex gap-2">
+                        <button disabled={busy || !when}
+                            onClick={() => { onSposta(app, when, note); setAperto(false) }}
+                            className="rounded-lg bg-ash-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">
+                            {busy ? 'Sposto…' : 'Conferma spostamento'}
+                        </button>
+                        <button disabled={busy} onClick={() => setAperto(false)}
+                            className="rounded-lg border border-ash-200 px-3 py-1.5 text-xs font-medium text-ash-600">Annulla</button>
+                    </div>
                 </div>
             )}
         </div>
