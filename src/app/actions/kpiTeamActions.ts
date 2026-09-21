@@ -85,12 +85,20 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
     const allUsers = allUsersRaw.filter(isRealGdo)
     const userMap = new Map(allUsers.map(u => [u.id, u]))
     const realGdoIds = new Set(allUsers.map(u => u.id))
-    // Solo bot fissatore (isBot=true), a differenza di realGdoIds che esclude
-    // anche i GDO disattivati. Usato per l'attribuzione degli appuntamenti da
-    // lead (fix F5): la storia di un GDO dimesso a metà mese resta contata,
-    // solo la produzione del bot va fuori — altrimenti kpi-gdo (che dopo il
-    // fix F1 esclude solo il bot) e kpi-team divergerebbero sui totali.
-    const botIds = new Set(allUsersRaw.filter(u => u.isBot).map(u => u.id))
+    // Gli assegnatari la cui produzione di appuntamenti entra negli aggregati:
+    // ruolo 'GDO' (`allUsersRaw` e' gia' filtrato) e non il bot fissatore, a
+    // differenza di realGdoIds che esclude anche i GDO disattivati. La storia
+    // di un GDO dimesso a metà mese resta contata, solo la produzione del bot
+    // va fuori (fix F5) — altrimenti kpi-gdo e kpi-team divergerebbero sui
+    // totali.
+    //
+    // Prima bastava l'insieme complementare (i soli `isBot`) perche' un
+    // appuntamento non poteva nascere che su un lead di un GDO. Dalla pipeline
+    // autonoma il venditore se li fissa da solo: senza il predicato sul ruolo,
+    // `totalAppointments`, `teamConversionRate` e la serie del grafico lo
+    // conterebbero mentre il ranking sotto (costruito sui soli GDO) no, e il
+    // totale smetterebbe di essere la somma delle righe.
+    const apptAssigneeIds = new Set(allUsersRaw.filter(u => !u.isBot).map(u => u.id))
     // Le chiamate del bot fissatore non entrano negli aggregati/ranking team
     // (decisione PO 2026-07-05); i log senza userId restano (tracciato legacy).
     logs = logs.filter(l => !l.userId || realGdoIds.has(l.userId))
@@ -116,7 +124,9 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startDate}`,
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endDate}`,
         ))
-    let apptLeadsFiltered = apptLeadsRaw.filter(l => !l.assignedToId || !botIds.has(l.assignedToId))
+    // Come per le chiamate qui sopra: fuori chi non e' un GDO. I lead senza
+    // assegnatario restano dentro, esattamente come prima.
+    let apptLeadsFiltered = apptLeadsRaw.filter(l => !l.assignedToId || apptAssigneeIds.has(l.assignedToId))
     if (funnelFilter && funnelFilter !== 'ALL') {
         apptLeadsFiltered = apptLeadsFiltered.filter(l => l.funnel === funnelFilter)
     }

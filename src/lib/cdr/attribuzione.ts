@@ -42,7 +42,14 @@ export async function ancoreAttribuzione(): Promise<Map<ChiaveGiorno, string>> {
             JOIN leads l ON right(regexp_replace(l.phone,'\\D','','g'),10) = p."dstKey"
             JOIN "callLogs" c ON c."leadId" = l.id
                  AND c."createdAt" BETWEEN p.calldate - interval '10 min' AND p.calldate + interval '10 min'
-            JOIN users u ON u.id = c."userId" AND NOT u."isBot"
+            -- Solo i GDO possono essere proprietari di una postazione del
+            -- centralino: gli interni sono loro. Senza il predicato sul ruolo un
+            -- esito scritto da chiunque altro (un venditore che lavora una sua
+            -- pipeline, un admin che sistema una riga) entro 10 minuti da una
+            -- chiamata uscente lo rende candidato proprietario di quell interno,
+            -- e riattribuisciChiamate con applica SCRIVE: riscriverebbe a
+            -- posteriori lo storico telefonico di un GDO a ogni import.
+            JOIN users u ON u.id = c."userId" AND NOT u."isBot" AND u.role = 'GDO'
             WHERE p.direction = 'out' AND p."dstKey" IS NOT NULL
             GROUP BY 1,2,3),
         tot AS (SELECT src, d, SUM(n) tot FROM m GROUP BY 1,2)

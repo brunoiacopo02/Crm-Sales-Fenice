@@ -13,6 +13,7 @@ import { LANCIO_WEBDEV_BUCKET, isAlreadyReturned, motivoRestituzioneDaNota, need
 import { returnLancioLeadToPool } from '@/lib/bot-fissatore/lancioReturn';
 import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset';
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
+import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -229,6 +230,22 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'not_configured', detail: 'account bot assente' }, { status: 503 });
         }
         actorUserId = botAccount.id;
+    }
+
+    // Appuntamento autofissato dal venditore (pipeline autonoma): terminale per
+    // il bot, esattamente come lo è già un APPUNTAMENTO suo. Il ramo di
+    // rifissaggio qui sotto riscriverebbe `appointmentDate` senza toccare
+    // Google Calendar (quel ramo non conosce `calendarEvents`): l'evento e il
+    // Meet resterebbero all'ora vecchia, e il cliente si presenterebbe su una
+    // stanza che il venditore non apre. In più notificherebbe tutte le
+    // Conferme per un lead che la loro board non può mostrare (la sentinella
+    // non è NULL). Uno spostamento su un autofissato passa da
+    // `moveSalesSelfAppointment`, che cancella e ricrea l'evento Google.
+    // Raggiungibile davvero: i "ridati dal bot" della pipeline hanno tutti un
+    // BOT_PUSHED consegnato, quindi superano il gate di appartenenza.
+    if (typedOutcome === 'APPUNTAMENTO' && isSelfBooked(lead.confirmationsOutcome)) {
+        console.warn(`[bot-fissatore] APPUNTAMENTO ignorato su lead autofissato dal venditore: leadId=${leadId}`);
+        return NextResponse.json({ ok: true, skipped: 'self_booked' });
     }
 
     // Idempotenza anti ri-fissaggio. Il bot esterno ri-notifica lo stesso

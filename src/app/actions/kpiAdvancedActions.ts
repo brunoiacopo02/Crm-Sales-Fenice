@@ -99,6 +99,19 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const botIds = new Set(allUsers.filter(u => u.isBot).map(u => u.id))
     const isBotLog = (log: { userId: string | null }): boolean =>
         !!log.userId && botIds.has(log.userId)
+    // I GDO veri: ruolo 'GDO' e non il bot. Include i GDO disattivati — la
+    // storia di chi se n'e' andato a meta' mese resta contata, come prima.
+    // Serve da quando esiste la pipeline autonoma del venditore
+    // (`SELF_BOOKED_OUTCOME`): il venditore registra esiti e si fissa
+    // appuntamenti come un GDO, e senza questo insieme la sua produzione
+    // entrerebbe negli aggregati e nel ranking di /kpi-gdo, che e' la gara
+    // dei GDO. MANAGER/ADMIN e i log legacy senza userId restano inclusi
+    // come da comportamento storico: qui sotto si esclude solo il ruolo
+    // VENDITORE, che in `callLogs` prima di questa pipeline non compariva.
+    const gdoIds = new Set(allUsers.filter(u => u.role === 'GDO' && !u.isBot).map(u => u.id))
+    const venditoreIds = new Set(allUsers.filter(u => u.role === 'VENDITORE').map(u => u.id))
+    const isVenditoreLog = (log: { userId: string | null }): boolean =>
+        !!log.userId && venditoreIds.has(log.userId)
 
     // App Fissati: base canonica decisione PO 2026-07-05 — data di fissaggio
     // (apptSetAt = appointmentCreatedAt ?? appointmentDate, gate appointmentDate
@@ -108,7 +121,11 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // fissatore (fix F1): la sua produzione non deve entrare in testata,
     // ranking o trend di questa pagina.
     const apptLeadsInRange = allLeads.filter(l => {
-        if (l.assignedToId && botIds.has(l.assignedToId)) return false
+        // Assegnatario non-GDO fuori (il bot era gia' fuori, ed e' un GDO
+        // mascherato: `gdoIds` lo esclude per `isBot`). Gli appuntamenti che il
+        // venditore si fissa da solo non sono produzione GDO. I lead senza
+        // assegnatario restano dentro, come prima.
+        if (l.assignedToId && !gdoIds.has(l.assignedToId)) return false
         const d = apptSetAt(l)
         return d !== null && d >= safeStartDate && d <= safeEndDate
     })
@@ -135,7 +152,12 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     // Filter logs to match only leads in `allLeads` (in case funnel filter was applied)
     // + esclusione bot fissatore (vedi sopra)
     const validLeadIds = new Set(allLeads.map(l => l.id))
-    const allValidLogs = rawLogs.filter(log => validLeadIds.has(log.leadId) && !isBotLog(log))
+    // + esclusione dei venditori: dalla pipeline autonoma un venditore scrive
+    // righe `callLogs` identiche a quelle di un GDO, e senza questo filtro
+    // aprirebbe una riga "Performance GDO" col suo nome e gonfierebbe
+    // chiamate/risposte/motivi di scarto della squadra.
+    const allValidLogs = rawLogs.filter(log =>
+        validLeadIds.has(log.leadId) && !isBotLog(log) && !isVenditoreLog(log))
 
     // Working-hours filter: se ON, le chiamate sono SOLO quelle 13:30-20:00.
     // Gli APPUNTAMENTI restano comunque tutti conteggiati (matchando la
