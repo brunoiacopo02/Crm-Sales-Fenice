@@ -5,7 +5,7 @@ import { after } from "next/server"
 import { addHours } from "date-fns"
 import { and, desc, eq, gte, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm"
 import { db } from "@/db"
-import { calendarEvents, callLogs, leadEvents, leads, salesSlotBlocks, users } from "@/db/schema"
+import { calendarEvents, callLogs, leadEvents, leads, notifications, salesSlotBlocks, users } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, assertSingleCompany } from "@/lib/tenancy"
 import { createGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
@@ -515,6 +515,8 @@ export async function assignBotReturnsToSalesPipeline(
     )
 
     let moved = 0
+    /** Quanti lead sono stati tolti a ciascun GDO: serve per avvisarlo. */
+    const movedByGdo = new Map<string, number>()
     for (const gdoId of ordered) {
         if (moved >= count) break
         const candidates = await db.select({ id: leads.id }).from(leads).where(and(
@@ -562,7 +564,32 @@ export async function assignBotReturnsToSalesPipeline(
                 })
             })
             moved++
+            movedByGdo.set(gdoId, (movedByGdo.get(gdoId) ?? 0) + 1)
         }
+    }
+
+    // Il GDO a cui i lead sono stati tolti deve saperlo, e sapere perche'.
+    // In questo CRM "lead spariti" e' una frase con una storia (14/05): un
+    // GDO che si accorge da solo che la board si e' accorciata apre un caso,
+    // e la risposta e' in una tabella che lui non vede. Best-effort: se la
+    // campanella fallisce, i lead sono comunque spostati.
+    if (movedByGdo.size > 0) {
+        const notifiedAt = new Date()
+        await db.insert(notifications).values(
+            [...movedByGdo.entries()].map(([gdoId, n]) => ({
+                id: crypto.randomUUID(),
+                recipientUserId: gdoId,
+                type: 'sales_pipeline_leads_moved',
+                title: '📤 Lead spostati dalla tua pipeline',
+                body: n === 1
+                    ? '1 lead ridato dal fissatore e\' passato alla pipeline autonoma del venditore (test in corso). Non l\'hai perso: lo sta lavorando lui.'
+                    : `${n} lead ridati dal fissatore sono passati alla pipeline autonoma del venditore (test in corso). Non li hai persi: li sta lavorando lui.`,
+                metadata: { movedCount: n, salesUserId: target },
+                status: 'unread',
+                createdAt: notifiedAt,
+                companyId: ctx.companyId,
+            })),
+        ).catch(e => console.error('[sales-pipeline] notifica al GDO di origine fallita', e))
     }
 
     return { success: true, moved }

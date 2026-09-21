@@ -10,6 +10,7 @@ import {
     type FollowUpRow,
     type LatePenaltyRowKind,
 } from "@/app/actions/venditoriMonitorActions"
+import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 
 interface Props {
     initialData: VenditoriMonitorData
@@ -79,6 +80,10 @@ function apptStatusBadge(a: AppointmentRow) {
     if (a.salespersonOutcome === 'Sparito') return { label: 'Sparito', cls: 'bg-ash-200 text-ash-700 border-ash-300' }
     if (a.confirmationsOutcome === 'confermato') return { label: 'Confermato', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
     if (a.confirmationsOutcome === 'scartato') return { label: 'Scartato', cls: 'bg-rose-50 text-rose-700 border-rose-200' }
+    // Autofissato dal venditore: non e' "in attesa delle Conferme", perche' le
+    // Conferme non lo vedranno mai. Senza questa riga un manager leggeva "In
+    // attesa" e aspettava una telefonata che nessuno deve fare.
+    if (isSelfBooked(a.confirmationsOutcome)) return { label: 'Fissato dal venditore', cls: 'bg-sky-50 text-sky-700 border-sky-200' }
     return { label: 'In attesa', cls: 'bg-amber-50 text-amber-700 border-amber-200' }
 }
 

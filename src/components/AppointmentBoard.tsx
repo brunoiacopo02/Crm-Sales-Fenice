@@ -9,6 +9,7 @@ const EditAppointmentModal = dynamic(
   { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
 )
 import { updateGdoAppointment } from "@/app/actions/appointmentActions"
+import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 import { useRouter } from "next/navigation"
 
 type LeadList = any[]
@@ -108,7 +109,9 @@ export function AppointmentBoard({
             </div>
 
             {/* 5. GDO Feedback Loop (Conferme & Vendita) */}
-            {(lead.confirmationsOutcome || lead.salespersonOutcome || isRifissaggio || lead.confSnoozeAt) && (
+            {/* La sentinella degli autofissati e' truthy ma nessun ramo qui dentro
+                la riconosce: senza escluderla usciva un riquadro vuoto. */}
+            {((lead.confirmationsOutcome && !isSelfBooked(lead.confirmationsOutcome)) || lead.salespersonOutcome || isRifissaggio || lead.confSnoozeAt) && (
                 <div className="w-full mt-3 pt-3 border-t border-dashed border-ash-200 flex flex-wrap items-start gap-3 col-span-full">
 
                     {/* Parcheggiato dalle Conferme: il GDO deve rifissare la data */}

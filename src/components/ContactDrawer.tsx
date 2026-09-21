@@ -251,6 +251,11 @@ export function ContactDrawer({
             case 'INBOUND_MESSAGE': return '💬 Ha scritto lui su WhatsApp'
             case 'LANCIO_INTAKE': return '🚀 Ingresso nel lancio Web Dev AI'
             case 'appointment_forced': return 'Appuntamento forzato'
+            // Pipeline autonoma venditore. Senza queste due righe la timeline
+            // li mostrava come "Evento Sconosciuto" — proprio dove si va a
+            // cercare l'audit di questi lead.
+            case 'SALES_SELF_BOOKED': return '🎯 Appuntamento fissato dal venditore'
+            case 'SALES_PIPELINE_ASSIGNED': return '➡️ Passato alla pipeline del venditore'
             default: return 'Evento Sconosciuto'
         }
     }

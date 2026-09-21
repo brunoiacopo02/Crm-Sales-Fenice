@@ -437,6 +437,23 @@ export async function updateLeadOutcome(
         actorRole = tenant.role
     }
 
+    // Chi puo' fissare un appuntamento da qui. Finora la garanzia era di
+    // superficie: la ricerca in Topbar (l'unico punto da cui un non-GDO
+    // arriverebbe a questa funzione) si renderizza solo ai GDO. Da quando
+    // esiste la pipeline autonoma del venditore la cosa conta davvero: un
+    // appuntamento del venditore DEVE nascere da `setSalesSelfAppointment`,
+    // che scrive la sentinella `autofissato` ed e' quella che lo tiene fuori
+    // dal giro Conferme, dai KPI dei GDO e dai webhook di conferma. Passando
+    // di qui nascerebbe un appuntamento senza sentinella, indistinguibile da
+    // uno dei GDO. Gli altri esiti (richiamo, non risposto, scarto) restano
+    // liberi: il venditore li registra dalla sua board.
+    if (!serviceCtx && outcome === 'APPUNTAMENTO' && actorRole !== 'GDO') {
+        return {
+            success: false,
+            error: `Solo i GDO possono fissare un appuntamento da qui (ruolo attuale: ${actorRole ?? 'sconosciuto'}). Il venditore della pipeline autonoma lo fissa dalla sua board, che e' l'unico punto che marca l'appuntamento come autofissato.`,
+        }
+    }
+
     const lead = (await db.select().from(leads).where(and(
         eq(leads.companyId, ctx.companyId),
         eq(leads.id, leadId),
