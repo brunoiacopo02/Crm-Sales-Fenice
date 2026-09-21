@@ -1,23 +1,15 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, ExternalLink, RotateCcw, Check, TrendingUp, Ban } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Users, Zap, CheckCircle2, AlertCircle, Loader2, Power, RefreshCw, Trash2, AlertTriangle, TrendingUp } from "lucide-react";
 import {
     setGdoAcIntake,
     disableAllAcIntake,
     setupAcWebhook,
     deleteAcWebhookByUrl,
     listGdosForAcIntake,
-    listAcFailures,
-    retryAcFailure,
-    retryAllAcFailures,
-    resolveAcFailure,
     getAcIntakeStats,
-    assignQuarantinedLead,
-    type QuarantinedLeadRow,
     type GdoAcIntakeRow,
-    type AcFailureRow,
     type AcIntakeStats,
     type AcIntakeDayStat,
     type BotRoutingStatus,
@@ -26,14 +18,11 @@ import {
 interface Props {
     initialRows: GdoAcIntakeRow[];
     initialWebhooks: Array<{ id: string; url: string; events: string[]; name: string }>;
-    initialFailures: AcFailureRow[];
     initialStats: AcIntakeStats;
     /** Finestra ferie GDO attiva ADESSO (valutata dal server), o null fuori finestra. */
     holidayWindow: { from: string; until: string | null; lastDay: string | null } | null;
     /** Fascia di distribuzione in vigore + ripartizione di oggi. */
     routingStatus: BotRoutingStatus;
-    /** Lead entrati con un telefono che non sembra un numero, senza assegnatario. */
-    initialQuarantined: QuarantinedLeadRow[];
 }
 
 /** Come si chiama, in italiano, la finestra in vigore adesso. */
@@ -71,28 +60,15 @@ function giornoIt(day: string): string {
         .format(new Date(`${day}T00:00:00Z`));
 }
 
-export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialFailures, initialStats, holidayWindow, routingStatus, initialQuarantined }: Props) {
-    const router = useRouter();
+export default function LeadAutomaticiClient({ initialRows, initialWebhooks, initialStats, holidayWindow, routingStatus }: Props) {
     const [rows, setRows] = useState(initialRows);
     const [webhooks, setWebhooks] = useState(initialWebhooks);
-    const [failures, setFailures] = useState(initialFailures);
     const [stats, setStats] = useState(initialStats);
-    const [busyFailureId, setBusyFailureId] = useState<string | null>(null);
-    const [retryAll, setRetryAll] = useState<{ running: boolean; succeeded: number; failed: number; remaining: number }>(
-        { running: false, succeeded: 0, failed: 0, remaining: 0 },
-    );
     const [saving, setSaving] = useState<string | null>(null);
     const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
     const [isPending, startTransition] = useTransition();
 
     const activeCount = rows.filter(r => r.acAutoIntake).length;
-
-    // I contatti "bloccati da lista" (lanci futuri, vedi BLOCKED_LIST_NAMES_NORMALIZED
-    // nel webhook) sono failure a tutti gli effetti ma NON vanno mescolati con i
-    // failure veri: non contano nel badge, e sono esclusi da "Riprova tutti" perché
-    // il retry li ri-skipperebbe in loop finché la lista resta bloccata.
-    const realFailures = useMemo(() => failures.filter(f => f.reasonCategory !== 'blocked_list'), [failures]);
-    const blockedFailures = useMemo(() => failures.filter(f => f.reasonCategory === 'blocked_list'), [failures]);
 
     const handleToggle = async (r: GdoAcIntakeRow) => {
         setSaving(r.id);
@@ -143,65 +119,9 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
         setRows(fresh);
     };
 
-    const refreshFailures = async () => {
-        const fresh = await listAcFailures(true);
-        setFailures(fresh);
-    };
-
     const refreshStats = async () => {
         const fresh = await getAcIntakeStats();
         setStats(fresh);
-    };
-
-    const handleRetry = async (id: string) => {
-        setBusyFailureId(id);
-        const res = await retryAcFailure(id);
-        setBusyFailureId(null);
-        if (!res.success) {
-            // Il webhook risponde skipped='blocked_list' se il contatto è ancora
-            // in una lista bloccata: messaggio leggibile invece del codice grezzo.
-            const text = res.error === 'blocked_list'
-                ? 'Il contatto è ancora in una lista AC bloccata: sblocca la lista (o rimuovilo dalla lista su AC) prima di riprovare.'
-                : `Retry fallito: ${res.error}`;
-            setMsg({ type: 'err', text });
-            return;
-        }
-        setMsg({ type: 'ok', text: `Lead importato (id: ${res.leadId?.slice(0, 8)}…)` });
-        setFailures((f) => f.filter((x) => x.id !== id));
-    };
-
-    const handleRetryAll = async () => {
-        if (retryAll.running) return;
-        if (!confirm(`Riprovare l'import di tutti i ${realFailures.length} lead non importati? Verranno reimportati e assegnati in round-robin ai GDO abilitati.`)) return;
-        setMsg(null);
-        let totSucc = 0;
-        let totFail = 0;
-        // Cicla a batch finché restano failure e c'è progresso (evita loop infiniti
-        // su failure non recuperabili automaticamente, es. telefono assente).
-        for (let i = 0; i < 60; i++) {
-            const res = await retryAllAcFailures(15);
-            totSucc += res.succeeded;
-            totFail += res.failed;
-            setRetryAll({ running: true, succeeded: totSucc, failed: totFail, remaining: res.remaining });
-            if (res.remaining === 0 || res.succeeded === 0) break;
-        }
-        setRetryAll((s) => ({ ...s, running: false }));
-        const fresh = await listAcFailures(true);
-        setFailures(fresh);
-        const freshStats = await getAcIntakeStats();
-        setStats(freshStats);
-        setMsg({
-            type: totSucc > 0 ? 'ok' : 'err',
-            text: `Reimport completato: ${totSucc} recuperati${totFail > 0 ? `, ${totFail} ancora da gestire a mano` : ''}.`,
-        });
-    };
-
-    const handleResolve = async (id: string) => {
-        setBusyFailureId(id);
-        const res = await resolveAcFailure(id);
-        setBusyFailureId(null);
-        if (!res.success) { setMsg({ type: 'err', text: res.error || 'Errore' }); return; }
-        setFailures((f) => f.filter((x) => x.id !== id));
     };
 
     const crmWebhook = webhooks.find(w => w.url.includes('/api/webhooks/activecampaign'));
@@ -336,286 +256,6 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                 </div>
             </section>
 
-            {/* Lead non importati */}
-            <section className="rounded-2xl border border-ash-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-ash-100 px-4 py-3">
-                    <div>
-                        <h2 className="flex items-center gap-2 text-sm font-bold text-ash-900">
-                            <AlertTriangle className="h-4 w-4 text-amber-600" /> Lead non importati
-                            {realFailures.length > 0 && (
-                                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">{realFailures.length}</span>
-                            )}
-                        </h2>
-                        <p className="text-xs text-ash-500">
-                            Contatti AC che non sono entrati nel CRM. Clicca "Riprova" per reimportare, oppure "Risolto" per nasconderli dopo averli gestiti manualmente su AC.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {realFailures.length > 0 && (
-                            <button
-                                onClick={handleRetryAll}
-                                disabled={retryAll.running}
-                                className="flex items-center gap-1.5 rounded-lg border border-brand-orange/30 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:bg-orange-100 disabled:opacity-50"
-                                title="Riprova a importare tutti i lead falliti, in modo throttlato"
-                            >
-                                {retryAll.running
-                                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recupero… {retryAll.succeeded} ok · {retryAll.remaining} rimasti</>
-                                    : <><RotateCcw className="h-3.5 w-3.5" /> Riprova tutti</>}
-                            </button>
-                        )}
-                        <button onClick={refreshFailures} className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-xs font-medium text-ash-600 hover:bg-ash-50" title="Ricarica">
-                            <RefreshCw className="h-3 w-3" />
-                        </button>
-                    </div>
-                </div>
-                {realFailures.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-ash-400">
-                        <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
-                        Nessun errore in sospeso
-                    </div>
-                ) : (
-                    <div className="divide-y divide-ash-100">
-                        {realFailures.map(f => {
-                            const fullName = [f.firstName, f.lastName].filter(Boolean).join(' ').trim();
-                            return (
-                                <div key={f.id} className="p-4 space-y-2">
-                                    {/* Motivo in linguaggio naturale */}
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="flex items-start gap-2 min-w-0 flex-1">
-                                            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                                            <div className="text-sm font-semibold text-ash-900">{f.reasonHuman}</div>
-                                        </div>
-                                        <span className="text-[10px] text-ash-400 shrink-0 font-mono">{new Date(f.createdAt).toLocaleString('it-IT')}</span>
-                                    </div>
-
-                                    {/* Griglia dati lead */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg bg-ash-50 p-3">
-                                        <InfoCell label="Nome" value={fullName || '—'} />
-                                        <InfoCell label="Email" value={f.email || '—'} mono />
-                                        <InfoCell label="Telefono" value={f.phoneRaw || '—'} mono highlight={f.reasonCategory === 'phone'} />
-                                        <InfoCell label="Provenienza" value={f.provenienza || '—'} />
-                                    </div>
-
-                                    {/* Azioni */}
-                                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                                        <div className="text-[11px] text-ash-500">
-                                            {f.acContactId ? <>ID AC: <code className="font-mono">{f.acContactId}</code></> : 'Nessun ID AC'}
-                                        </div>
-                                        <div className="flex gap-1.5">
-                                            {f.acContactLink && (
-                                                <a
-                                                    href={f.acContactLink}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
-                                                >
-                                                    <ExternalLink className="h-3 w-3" /> Apri su AC
-                                                </a>
-                                            )}
-                                            {f.acContactId && (
-                                                <button
-                                                    onClick={() => handleRetry(f.id)}
-                                                    disabled={busyFailureId === f.id}
-                                                    className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                                                >
-                                                    {busyFailureId === f.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-                                                    Riprova
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => handleResolve(f.id)}
-                                                disabled={busyFailureId === f.id}
-                                                className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-ash-700 hover:bg-ash-50 disabled:opacity-50"
-                                            >
-                                                <Check className="h-3 w-3" /> Risolto
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Dettagli tecnici collassati */}
-                                    <details className="group">
-                                        <summary className="cursor-pointer text-[10px] text-ash-400 hover:text-ash-600">Dettagli tecnici</summary>
-                                        <div className="mt-1 space-y-1">
-                                            <div className="text-[10px] text-ash-500">Messaggio grezzo: <code className="font-mono">{f.reason}</code></div>
-                                            <pre className="overflow-x-auto rounded-md bg-ash-100 p-2 text-[10px] leading-snug text-ash-700 max-h-40">
-                                                {JSON.stringify(f.payload, null, 2)}
-                                            </pre>
-                                        </div>
-                                    </details>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </section>
-
-            {/* Bloccati da lista AC (lanci futuri, es. BLOCKED_LIST_NAMES_NORMALIZED).
-                Sezione separata dai failure veri: non contano nel badge sopra e non
-                entrano in "Riprova tutti" (rifinirebbero bloccati in loop). Recuperabili
-                solo col retry singolo, per quando la lista viene sbloccata. */}
-            <section className="rounded-2xl border border-indigo-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-indigo-100 px-4 py-3">
-                    <div>
-                        <h2 className="flex items-center gap-2 text-sm font-bold text-ash-900">
-                            <Ban className="h-4 w-4 text-indigo-600" /> Bloccati da lista
-                            {blockedFailures.length > 0 && (
-                                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-700">{blockedFailures.length}</span>
-                            )}
-                        </h2>
-                        <p className="text-xs text-ash-500">
-                            Contatti AC iscritti a una lista bloccata (es. campagna di lancio futuro): restano volutamente fuori dal CRM.
-                            Non inclusi in "Riprova tutti" — usa il retry singolo quando sblocchi la lista, oppure "Risolto" per archiviarli.
-                        </p>
-                    </div>
-                    <button onClick={refreshFailures} className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2 py-1 text-xs font-medium text-ash-600 hover:bg-ash-50" title="Ricarica">
-                        <RefreshCw className="h-3 w-3" />
-                    </button>
-                </div>
-                {blockedFailures.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-ash-400">
-                        <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
-                        Nessun contatto bloccato in sospeso
-                    </div>
-                ) : (
-                    <div className="divide-y divide-ash-100">
-                        {blockedFailures.map(f => {
-                            const fullName = [f.firstName, f.lastName].filter(Boolean).join(' ').trim();
-                            return (
-                                <div key={f.id} className="p-4 space-y-2">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="flex items-start gap-2 min-w-0 flex-1">
-                                            <Ban className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
-                                            <div className="text-sm font-semibold text-ash-900">{f.reasonHuman}</div>
-                                        </div>
-                                        <span className="text-[10px] text-ash-400 shrink-0 font-mono">{new Date(f.createdAt).toLocaleString('it-IT')}</span>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg bg-ash-50 p-3">
-                                        <InfoCell label="Nome" value={fullName || '—'} />
-                                        <InfoCell label="Email" value={f.email || '—'} mono />
-                                        <InfoCell label="Telefono" value={f.phoneRaw || '—'} mono />
-                                        <InfoCell label="Provenienza" value={f.provenienza || '—'} />
-                                    </div>
-
-                                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                                        <div className="text-[11px] text-ash-500">
-                                            {f.acContactId ? <>ID AC: <code className="font-mono">{f.acContactId}</code></> : 'Nessun ID AC'}
-                                        </div>
-                                        <div className="flex gap-1.5">
-                                            {f.acContactLink && (
-                                                <a
-                                                    href={f.acContactLink}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
-                                                >
-                                                    <ExternalLink className="h-3 w-3" /> Apri su AC
-                                                </a>
-                                            )}
-                                            {f.acContactId && (
-                                                <button
-                                                    onClick={() => handleRetry(f.id)}
-                                                    disabled={busyFailureId === f.id}
-                                                    className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                                                    title="Riprova a importare questo singolo contatto (utile se la lista è stata sbloccata)"
-                                                >
-                                                    {busyFailureId === f.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-                                                    Riprova
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => handleResolve(f.id)}
-                                                disabled={busyFailureId === f.id}
-                                                className="flex items-center gap-1 rounded-lg border border-ash-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-ash-700 hover:bg-ash-50 disabled:opacity-50"
-                                            >
-                                                <Check className="h-3 w-3" /> Risolto
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <details className="group">
-                                        <summary className="cursor-pointer text-[10px] text-ash-400 hover:text-ash-600">Dettagli tecnici</summary>
-                                        <div className="mt-1 space-y-1">
-                                            <div className="text-[10px] text-ash-500">Messaggio grezzo: <code className="font-mono">{f.reason}</code></div>
-                                            <pre className="overflow-x-auto rounded-md bg-ash-100 p-2 text-[10px] leading-snug text-ash-700 max-h-40">
-                                                {JSON.stringify(f.payload, null, 2)}
-                                            </pre>
-                                        </div>
-                                    </details>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </section>
-
-            {/* Quarantena telefoni: lead entrati con un numero implausibile e
-                lasciati senza assegnatario dal webhook AC. Vanno guardati da
-                qualcuno, altrimenti la quarantena è solo un modo elegante di
-                perderli. */}
-            {initialQuarantined.length > 0 && (
-                <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 sm:p-5">
-                    <div className="mb-1 text-sm font-bold text-amber-900">
-                        ⚠️ Telefoni da verificare ({initialQuarantined.length})
-                    </div>
-                    <p className="mb-3 text-xs text-amber-800">
-                        Lead entrati con un numero che non sembra un telefono. Non sono assegnati
-                        a nessuno: correggi il numero dalla scheda del lead e poi mandalo a un GDO.
-                    </p>
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[640px] text-left text-xs">
-                            <thead className="text-amber-900/70">
-                                <tr>
-                                    <th className="pb-2 font-semibold">Nome</th>
-                                    <th className="pb-2 font-semibold">Numero</th>
-                                    <th className="pb-2 font-semibold">Funnel</th>
-                                    <th className="pb-2 font-semibold">Arrivato</th>
-                                    <th className="pb-2 font-semibold">Assegna a</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {initialQuarantined.map(q => (
-                                    <tr key={q.id} className="border-t border-amber-200/70">
-                                        <td className="py-2 pr-3 font-medium text-ash-900">{q.name}</td>
-                                        <td className="py-2 pr-3 font-mono text-amber-900">{q.phone}</td>
-                                        <td className="py-2 pr-3 text-ash-600">{q.funnel ?? '—'}</td>
-                                        <td className="py-2 pr-3 text-ash-500">
-                                            {new Date(q.createdAt).toLocaleDateString('it-IT')}
-                                        </td>
-                                        <td className="py-2">
-                                            <select
-                                                defaultValue=""
-                                                disabled={isPending}
-                                                onChange={(e) => {
-                                                    const gdoId = e.target.value;
-                                                    if (!gdoId) return;
-                                                    startTransition(async () => {
-                                                        const res = await assignQuarantinedLead(q.id, gdoId);
-                                                        if (!res.success) {
-                                                            setMsg({ type: 'err', text: res.error || 'Errore' });
-                                                            return;
-                                                        }
-                                                        router.refresh();
-                                                    });
-                                                }}
-                                                className="rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs disabled:opacity-50"
-                                            >
-                                                <option value="">Scegli GDO…</option>
-                                                {rows.filter(g => g.isActive).map(g => (
-                                                    <option key={g.id} value={g.id}>
-                                                        {g.gdoCode ? `GDO ${g.gdoCode}` : (g.displayName || g.name || g.id)}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            )}
-
             {/* GDO round robin */}
             <section className="rounded-2xl border border-ash-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-ash-100 px-4 py-3">
@@ -686,20 +326,6 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                     Sistema attivo: {activeCount} GDO in round-robin.
                 </div>
             )}
-        </div>
-    );
-}
-
-function InfoCell({ label, value, mono, highlight }: { label: string; value: string; mono?: boolean; highlight?: boolean }) {
-    return (
-        <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-ash-500">{label}</div>
-            <div
-                className={`truncate text-xs ${mono ? 'font-mono' : 'font-medium'} ${highlight ? 'text-rose-700 font-bold' : 'text-ash-800'}`}
-                title={value}
-            >
-                {value}
-            </div>
         </div>
     );
 }

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
-import { listGdosForAcIntake, listAcWebhooks, listAcFailures, getAcIntakeStats, getBotRoutingStatus, listQuarantinedLeads } from "@/app/actions/acIntakeActions";
+import { listGdosForAcIntake, listAcWebhooks, getAcIntakeStats, getBotRoutingStatus } from "@/app/actions/acIntakeActions";
 import { getActiveHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import LeadAutomaticiClient from "./LeadAutomaticiClient";
 
@@ -12,13 +12,11 @@ export default async function LeadAutomaticiPage() {
         redirect("/");
     }
 
-    const [rows, webhooksRes, failures, stats, routingStatus, quarantined] = await Promise.all([
+    const [rows, webhooksRes, stats, routingStatus] = await Promise.all([
         listGdosForAcIntake(),
         listAcWebhooks(),
-        listAcFailures(true),
         getAcIntakeStats(),
         getBotRoutingStatus(),
-        listQuarantinedLeads(),
     ]);
 
     return (
@@ -26,11 +24,9 @@ export default async function LeadAutomaticiPage() {
             <LeadAutomaticiClient
                 initialRows={rows}
                 initialWebhooks={webhooksRes.webhooks || []}
-                initialFailures={failures}
                 initialStats={stats}
                 holidayWindow={getActiveHolidayWindow()}
                 routingStatus={routingStatus}
-                initialQuarantined={quarantined}
             />
         </div>
     );
