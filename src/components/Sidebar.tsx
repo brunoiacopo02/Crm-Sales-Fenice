@@ -22,6 +22,7 @@ import {
     Scale,
     CalendarClock,
     Rocket,
+    PhoneCall,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -45,7 +46,7 @@ type NavGroup = {
     items: NavItem[]
 }
 
-export function Sidebar({ companyId }: { companyId?: string }) {
+export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: string; salesPipelineEnabled?: boolean }) {
     const pathname = usePathname()
     const { isOpen, close } = useSidebar()
     const { user: authUser, isLoading } = useAuth();
@@ -149,6 +150,10 @@ export function Sidebar({ companyId }: { companyId?: string }) {
     } else if (role === "VENDITORE") {
         navItems = [
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
+            // Solo per il venditore su cui la pipeline autonoma e' accesa oggi:
+            // per chiunque altro la pagina rediriga alla home, ma la voce non
+            // deve nemmeno comparire (sarebbe un difetto visibile).
+            ...(salesPipelineEnabled ? [{ name: "La mia pipeline", href: "/mia-pipeline", icon: PhoneCall }] : []),
             { name: "Il mio Calendario", href: "/mio-calendario", icon: CalendarClock },
             { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
         ]

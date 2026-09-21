@@ -3,7 +3,7 @@
 import crypto from "crypto"
 import { after } from "next/server"
 import { addHours } from "date-fns"
-import { and, eq, gte, isNotNull, lt, ne, sql } from "drizzle-orm"
+import { and, desc, eq, gte, isNotNull, isNull, lt, ne, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { calendarEvents, callLogs, leadEvents, leads, salesSlotBlocks, users } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
@@ -348,4 +348,39 @@ export async function moveSalesSelfAppointment(input: {
     })
 
     return { success: true }
+}
+
+/**
+ * I lead nella pipeline del venditore. Stesse esclusioni della board GDO
+ * (pipelineActions.ts:107) — e stesso tiebreaker su `id`, senza il quale i
+ * lead importati in blocco ballano fra un caricamento e l'altro.
+ */
+export async function getSalesPipelineLeads(): Promise<{
+    firstCall: any[]; secondCall: any[]; thirdCall: any[]; recalls: any[]
+}> {
+    const me = await requireSalesPipelineUser()
+    if (!me) return { firstCall: [], secondCall: [], thirdCall: [], recalls: [] }
+
+    const base = [
+        eq(leads.companyId, me.companyId),
+        eq(leads.assignedToId, me.userId),
+        ne(leads.status, 'REJECTED'),
+        ne(leads.status, 'APPOINTMENT'),
+    ]
+
+    const [pipeline, recalls] = await Promise.all([
+        db.select().from(leads)
+            .where(and(...base, isNull(leads.recallDate), lt(leads.callCount, 3)))
+            .orderBy(desc(leads.createdAt), leads.id),
+        db.select().from(leads)
+            .where(and(...base, isNotNull(leads.recallDate)))
+            .orderBy(leads.recallDate),
+    ])
+
+    return {
+        firstCall: pipeline.filter(l => l.callCount === 0),
+        secondCall: pipeline.filter(l => l.callCount === 1),
+        thirdCall: pipeline.filter(l => l.callCount === 2),
+        recalls,
+    }
 }

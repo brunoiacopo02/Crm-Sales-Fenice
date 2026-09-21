@@ -15,6 +15,7 @@ const ConfermeRecallBanner = dynamic(() => import("@/components/ConfermeRecallBa
 const ConfermeRecallBlockingAlert = dynamic(() => import("@/components/ConfermeRecallBlockingAlert").then(mod => ({ default: mod.ConfermeRecallBlockingAlert })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
+import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions"
 import { getUserTheme } from "@/lib/userTheme"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
@@ -65,12 +66,21 @@ export default async function DashboardLayout({
     const showSprintBanner = ['GDO', 'MANAGER', 'ADMIN'].includes(session.user.role)
     const showGamificationOverlays = session.user.role !== 'VENDITORE'
 
+    // Voce di menu "La mia pipeline": solo per il venditore su cui e' accesa
+    // oggi. Una voce che rimanda alla home per chiunque altro sarebbe un
+    // difetto visibile, non una guardia in più (decisione brief 2026-09-21).
+    let salesPipelineEnabled = false
+    if (session.user.role === 'VENDITORE') {
+        const salesPipelineConfig = await readSalesPipelineConfig()
+        salesPipelineEnabled = salesPipelineConfig.enabled && salesPipelineConfig.salesUserId === session.user.id
+    }
+
     return (
         <RealtimeProvider userId={session.user.id} companies={tctx.allowedCompanies}>
             <SidebarProvider>
                 <SalesCompanyProvider company={dataCompany}>
                     <div data-company={dataCompany} data-theme={userTheme} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                        <Sidebar companyId={dataCompany} />
+                        <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
                             <Topbar />

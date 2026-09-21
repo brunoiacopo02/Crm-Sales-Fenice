@@ -412,17 +412,20 @@ export async function updateLeadOutcome(
     let ctx: { companyId: string }
     let effectiveUserId: string | undefined
     let isBotActor = false
+    let actorRole: string | undefined
 
     if (serviceCtx) {
         // Service account (bot fissatore): nessuna sessione Supabase, tenant esplicito.
         ctx = { companyId: serviceCtx.companyId }
         effectiveUserId = serviceCtx.actorUserId
         isBotActor = serviceCtx.isBot
+        actorRole = 'GDO'   // il bot e' un account GDO mascherato: il ramo e' gia' gestito da isBotActor
     } else {
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
         const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
         effectiveUserId = userId || session?.user?.id
+        actorRole = session?.user?.role
 
         const tenant = await currentTenant()
         assertSalesArea(tenant)
@@ -550,7 +553,10 @@ export async function updateLeadOutcome(
     let rewardData = null;
 
     // Fenice Universe: chest progress for every call (chiamate) + boss attack
-    if (effectiveUserId && !isBotActor) {
+    // La gamification e' l'economia dei GDO. Un venditore che lavora la sua
+    // pipeline registra gli stessi esiti, ma non entra in forzieri, boss e duelli:
+    // falserebbe classifiche costruite su un'altra gara.
+    if (effectiveUserId && !isBotActor && actorRole === 'GDO') {
         incrementChestProgress(effectiveUserId, 'chiamate', 1).catch(e => console.error("Chest chiamate err:", e));
         attackBoss(effectiveUserId, 'chiamata').catch(e => console.error("Adventure chiamata err:", e));
         checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check err:", e));
