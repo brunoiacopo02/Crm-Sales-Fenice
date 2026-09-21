@@ -258,6 +258,27 @@ export async function checkAchievements(userId: string): Promise<{
         const ctx = await currentTenant();
         assertSalesArea(ctx);
 
+        // La tabella `achievements` non ha una colonna `role` (a differenza di
+        // `quests`), e `measureAchievementMetric` conta `total_calls`,
+        // `total_appointments`, `total_leads_contacted` e
+        // `total_scripts_completed` per qualunque `userId`. Il venditore della
+        // pipeline autonoma produce tutte e quattro quelle metriche e arriva
+        // qui dal flusso sondaggi: sbloccherebbe badge pensati per i GDO e
+        // incasserebbe `walletCoins` di una gara che non e' la sua.
+        //
+        // Si esce sul ruolo VENDITORE, non su "diverso da GDO": le Conferme
+        // sbloccano achievement davvero e in questo momento (Alberto, Andrea,
+        // Christel — l'ultimo sblocco e' dell'08/09/2026, dal loro ramo dei
+        // sondaggi), e spegnerglieli qui sarebbe una regressione silenziosa su
+        // un ruolo che con questa pipeline non c'entra. Dare alle Conferme
+        // achievement propri e' un altro lavoro, non questo.
+        const [attore] = await db.select({ role: users.role }).from(users)
+            .where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)))
+            .limit(1);
+        if (attore?.role === 'VENDITORE') {
+            return { success: true, newlyUnlocked: [] };
+        }
+
         // Fetch all achievement definitions
         const allAchievements = await db.select().from(achievements)
             .where(eq(achievements.companyId, ctx.companyId));

@@ -409,7 +409,17 @@ export async function POST(req: NextRequest) {
         });
 
         // Una notifica per intenzione, non una per re-invio.
-        if (!isDuplicate && lead.status === 'APPOINTMENT') {
+        //
+        // E nessuna notifica se l'appuntamento è autofissato dal venditore: la
+        // sentinella non è NULL, quindi la board Conferme (che filtra
+        // `confirmationsOutcome IS NULL`) quel lead non lo può mostrare, e il
+        // deep-link `/conferme?lead=...&tab=note` porterebbe due persone su una
+        // pagina dove non c'è niente da fare. È lo stesso difetto di C1 su un
+        // esito diverso, ed è raggiungibile davvero: metà dei lead del test
+        // sono ridati dal bot, che con loro continua a chattare.
+        // La nota resta scritta in timeline (l'insert qui sopra è già andato):
+        // si perde la campanella, non l'informazione.
+        if (!isDuplicate && lead.status === 'APPOINTMENT' && !isSelfBooked(lead.confirmationsOutcome)) {
             const confermeUsers = await db.select({ id: users.id }).from(users).where(and(
                 eq(users.companyId, 'fenice'),
                 eq(users.role, 'CONFERME'),
