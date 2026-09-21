@@ -278,7 +278,7 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
                 // cancelliamo comunque, l'invito resta vivo sul calendario del
                 // cliente E si perde il legame per ritrovarlo.
                 const deleted = await deleteGoogleCalendarEvent(lead.salespersonUserId, evt.googleEventId)
-                    .catch((err: any) => {
+                    .catch((err) => {
                         console.error('[appointment-cancel] delete GCal fallita:', err?.message ?? err);
                         return false;
                     });
