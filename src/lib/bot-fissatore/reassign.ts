@@ -58,7 +58,18 @@ export async function reassignBotLeadToHumanPool(
         // quindi si può ripescare in blocco se un domani si decide altrimenti.
         if (cur.intakeBatch && BATCH_SENSO_UNICO.includes(cur.intakeBatch)) {
             await tx.update(leads)
-                .set({ status: 'REJECTED', assignedToId: null, updatedAt: new Date() })
+                .set({
+                    status: 'REJECTED',
+                    assignedToId: null,
+                    // Come in `resetFields`: un lead che esce dal bot non porta con sé
+                    // il richiamo del bot. Senza questo, un lead di questo ramo ripescato
+                    // dalla coda /richieste-contatto arriva al GDO con la data addosso
+                    // (Adelmo Anselmo, 22/09/2026).
+                    recallDate: null,
+                    recallNote: null,
+                    recallMissedAt: null,
+                    updatedAt: new Date(),
+                })
                 .where(eq(leads.id, leadId));
             await tx.insert(leadEvents).values({
                 id: crypto.randomUUID(),

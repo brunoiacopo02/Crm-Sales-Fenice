@@ -252,6 +252,13 @@ export async function assignContactRequest(requestId: string, gdoId: string): Pr
                 assignedToId: gdoId,
                 assignedAt: now,
                 updatedAt: now,
+                // Il lead cambia mano: il richiamo che aveva addosso era del bot, e il
+                // bot non telefona. Lasciarlo significa mettere nei "Richiami" del GDO
+                // una persona che non ha mai sentito, a un'ora che nessuno ha scelto
+                // (Tania Maia, 22/09/2026: richiamo al 25/09 alle 09:02:49).
+                recallDate: null,
+                recallNote: null,
+                recallMissedAt: null,
                 // Un lead scartato che chiede di essere richiamato torna in pipeline.
                 ...(row.leadStatus === 'REJECTED' ? { status: 'NEW', discardReason: null } : {}),
             })
