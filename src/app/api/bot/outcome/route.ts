@@ -11,6 +11,7 @@ import { BOT_NOTE_DEDUP_WINDOW_MS, isSameBotNoteIntent } from '@/lib/bot-fissato
 import { normalizeContactCategory } from '@/lib/bot-fissatore/contactRequests';
 import { LANCIO_WEBDEV_BUCKET, isAlreadyReturned, motivoRestituzioneDaNota, needsReturnEventCheck } from '@/lib/bot-fissatore/lancioReturnRules';
 import { returnLancioLeadToPool } from '@/lib/bot-fissatore/lancioReturn';
+import { richiamoDalBotDiventaNota, buildRichiamoDegradatoNote } from '@/lib/bot-fissatore/richiamoGuard';
 import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset';
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
@@ -63,11 +64,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
     }
 
-    const { leadId, outcome, note, discardReason, report } = body;
+    const { leadId, outcome, discardReason, report } = body;
+    let note = body.note;
     if (!leadId || !outcome || !VALID_OUTCOMES.includes(outcome as BotOutcome)) {
         return NextResponse.json({ error: 'bad_request', detail: 'leadId e outcome validi richiesti' }, { status: 400 });
     }
-    const typedOutcome = outcome as BotOutcome;
+    let typedOutcome = outcome as BotOutcome;
 
     // Data richiesta per APPUNTAMENTO sempre; per RICHIAMO solo se il bot non
     // dichiara un `periodo` indicativo. Pretendere un ISO su ogni richiamo
@@ -370,6 +372,17 @@ export async function POST(req: NextRequest) {
     // appuntato (disdetta/spostamento comunicati in chat → qualcuno deve saperlo
     // PRIMA della chiamata di conferma). Su lead non appuntati niente notifica:
     // l'evento in timeline basta e non spamma la campanella.
+    // Un RICHIAMO dal bot non scrive mai una recallDate: diventa una nota in timeline.
+    // Vedi `richiamoGuard.ts` per il perché. Si riscrive `typedOutcome` e si lascia
+    // proseguire nel ramo NOTA, così la nota passa dalla stessa deduplica e dalle stesse
+    // notifiche di tutte le altre — nessun percorso parallelo da tenere allineato.
+    if (richiamoDalBotDiventaNota(typedOutcome)) {
+        console.warn(`[bot-fissatore] RICHIAMO degradato a nota su lead ${leadId}`);
+        note = buildRichiamoDegradatoNote({ date: body.date, periodo: recallPeriod || undefined, note });
+        typedOutcome = 'NOTA';
+        date = undefined;
+    }
+
     if (typedOutcome === 'NOTA') {
         const text = (note ?? '').trim();
         if (!text) {
