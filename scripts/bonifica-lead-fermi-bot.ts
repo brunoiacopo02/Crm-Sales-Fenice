@@ -25,6 +25,13 @@
  * successivi non partono più). Ogni lead toccato riceve un `leadEvents`, così
  * la bonifica resta ricostruibile. Mai un DELETE.
  *
+ * ATTENZIONE se un giorno si lancia con `--esegui`: farlo FUORI dall'orario
+ * operativo. Ogni riga viene bloccata con `SELECT ... FOR UPDATE` e il lock
+ * resta per tutta la durata della transazione del SUO gruppo (non solo per
+ * quella riga): un gruppo con centinaia di righe (es. A, ~350) tiene quei
+ * lock fino al commit finale del gruppo, e in quella finestra un GDO/bot che
+ * tenta di scrivere sullo stesso lead resterebbe in attesa.
+ *
  *   node --import tsx --env-file=.env scripts/bonifica-lead-fermi-bot.ts [--esegui]
  *
  * --- Fix round 1 (review 2026-09-24) ---
@@ -51,6 +58,41 @@
  *   (`RETURNING`), non più i candidati selezionati: i due numeri sono
  *   stampati separati (candidati / scritti / saltati). In dry-run resta il
  *   conteggio dei candidati (non c'è nulla da "scrivere davvero").
+ *
+ * --- Fix round 2 (review 2026-09-24) ---
+ * - CRITICO: il gruppo C leggeva lo stato dei "gemelli" in modo incoerente
+ *   tra dry-run e `--esegui`. In `--esegui` i gruppi girano in ordine e
+ *   ciascuno COMMITTA prima che parta il successivo: quando C parte, B ha
+ *   già rigettato i suoi lead (assignedToId=NULL, status='REJECTED'). Il
+ *   check "il gemello non è lui stesso fermo sul bot" era
+ *   `NOT (assignedToId IN bot AND status IN (...) AND assignedAt<7d)`: per
+ *   un lead appena rigettato da B questo diventa `NOT(false)` = vero, quindi
+ *   quel lead torna a contare come "gemello valido" — ma è esattamente il
+ *   lead che la bonifica ha appena scartato, non uno "lavorato sotto un
+ *   altro lead". In dry-run invece quel lead non è mai stato toccato e resta
+ *   "fermo sul bot", quindi il check lo escludeva correttamente: i due modi
+ *   di girare lo script darebbero numeri (e scarti) diversi. Fix: la stessa
+ *   sub-condizione ora esclude anche i gemelli che questa bonifica ha già
+ *   marcato (`NOT EXISTS (... leadEvents.eventType='BONIFICA_LEAD_FERMO'
+ *   ...)`), che in dry-run non trova mai nulla (non si scrive mai) e in
+ *   `--esegui` trova esattamente i lead già rigettati dai gruppi precedenti
+ *   — stessa cosa che il dry-run stava già simulando. Come bonus, questo
+ *   rende coerenti anche i ri-lanci su un DB già parzialmente bonificato.
+ *   I gruppi D ed E NON hanno questo problema: nessuno dei due referenzia lo
+ *   stato di ALTRI lead (D guarda solo il telefono del candidato; E guarda
+ *   solo i propri campi e l'isBot del proprio assegnatario) — l'unica
+ *   dipendenza incrociata fra gruppi di tutto il file è il "gemello" di C.
+ * - MINOR (NULL): la stessa sub-condizione andava in NULL, non in false,
+ *   quando il gemello ha `assignedToId IS NULL` (es. un lead di POOL non
+ *   ancora assegnato a nessuno): `NULL IN (...)` è NULL in SQL, non false,
+ *   quindi l'intero AND propagava NULL e quel gemello spariva in silenzio
+ *   dall'EXISTS (né contato né escluso esplicitamente) invece di contare
+ *   come gemello valido — un lead di pool non assegnato non è "fermo sul
+ *   bot", verrà lavorato dal pool, quindi il duplicato è reale. Fix:
+ *   `NOT COALESCE(assignedToId IN (...) AND status IN (...) AND assignedAt
+ *   < ..., false)` — il COALESCE sull'intera congiunzione la rende un
+ *   booleano certo (false quando un pezzo è NULL), eliminando anche il caso
+ *   limite gemellare (assignedToId=bot ma assignedAt NULL).
  *
  * --- Deviazioni dal brief decise da PO/controller (2026-09-24) ---
  * - Gruppo C (gemelli): un "gemello" ora NON conta se (a) è lui stesso un
@@ -195,16 +237,47 @@ async function main() {
                 // Decisione PO/controller: il gemello NON conta se è lui stesso un
                 // lead lista133 (mai lavorato, solo rumore della flood) né se è lui
                 // stesso un altro lead fermo sul bot con gli stessi criteri B/D.
+                //
+                // Fix round 2 (review): il check "e' fermo sul bot" è avvolto in
+                // COALESCE(..., false) — se o."assignedToId" è NULL (lead di un
+                // pool, non assegnato a nessuno) `NULL IN (...)` darebbe NULL, non
+                // false, e propagherebbe NULL su tutto l'AND: quel gemello
+                // sparirebbe in silenzio dall'EXISTS invece di contare come valido
+                // (un lead di pool non assegnato NON è "fermo sul bot": verrà
+                // lavorato dal pool, quindi il gemello resta reale). Il COALESCE
+                // sull'INTERA congiunzione blinda anche il caso limite in cui
+                // assignedAt fosse NULL pur con assignedToId=bot.
+                //
+                // In più: `AND NOT EXISTS (... leadEvents eventType =
+                // 'BONIFICA_LEAD_FERMO' ...)` esclude un gemello che QUESTA
+                // bonifica ha già rigettato. Senza questo, in --esegui (mai
+                // gruppo B ha già committato prima che C parta) un lead X
+                // rigettato da B ha assignedToId=NULL e status='REJECTED': il
+                // check "e' fermo sul bot" sopra diventa falso (non è più NEW/
+                // IN_PROGRESS sul bot), quindi NOT(falso)=vero e X tornerebbe a
+                // contare come gemello valido — esattamente il caso di gemelli
+                // reciproci che questa regola vuole escludere, e diverso dal
+                // dry-run (dove X non è mai stato toccato e resta "fermo sul
+                // bot", quindi già escluso dal check sopra). In dry-run questa
+                // riga non trova mai righe (non si scrive mai in leadEvents),
+                // quindi non altera i conteggi del dry-run: serve solo a rendere
+                // --esegui coerente col dry-run, e a rendere coerenti anche i
+                // ri-lanci dello script su un DB già parzialmente bonificato.
                 sql`EXISTS (
                     SELECT 1 FROM leads o
                     WHERE o.phone = ${leads.phone}
                       AND o.id <> ${leads.id}
                       AND o."companyId" = ${COMPANY}
                       AND o."intakeBatch" IS DISTINCT FROM 'DB_LISTA133_20260915'
-                      AND NOT (
+                      AND NOT COALESCE(
                         o."assignedToId" IN (${botIdList})
                         AND o.status IN ('NEW', 'IN_PROGRESS')
-                        AND o."assignedAt" < now() - interval '7 days'
+                        AND o."assignedAt" < now() - interval '7 days',
+                        false
+                      )
+                      AND NOT EXISTS (
+                        SELECT 1 FROM "leadEvents" e
+                        WHERE e."leadId" = o.id AND e."eventType" = 'BONIFICA_LEAD_FERMO'
                       )
                 )`,
             ],
