@@ -33,15 +33,21 @@ export function buildRichiamoDegradatoNote(input: {
     periodo?: string;
     note?: string;
 }): string {
+    // Il "quando" deve stare DENTRO la prima frase, non dopo. `botNoteIntentKey`
+    // (noteDedup.ts) taglia la chiave al primo punto seguito da spazio/fine
+    // stringa: se il quando cade dopo quel punto, due RICHIAMO degradati con
+    // date/periodi diversi avrebbero la stessa chiave e il secondo verrebbe
+    // marcato come duplicato del primo, silenziando la notifica alle Conferme
+    // su una richiesta di rifissaggio diversa dalla precedente.
     const quando = input.date ? formattaData(input.date) : null;
     const testa = quando
-        ? `Voleva essere risentito il ${quando}.`
+        ? `voleva essere risentito il ${quando}`
         : input.periodo?.trim()
-            ? `Voleva essere risentito ${input.periodo.trim()}.`
-            : 'Voleva essere risentito più avanti ma non ha detto quando.';
+            ? `voleva essere risentito ${input.periodo.trim()}`
+            : 'voleva essere risentito più avanti ma non ha detto quando';
     const coda = input.note?.trim() ? ` ${input.note.trim()}` : '';
     return (
-        `VOLEVA ESSERE RISENTITO — il bot ha registrato questa richiesta. ${testa}` +
+        `VOLEVA ESSERE RISENTITO: ${testa}.` +
         ' Non è un richiamo in pipeline: decidi tu se e quando chiamarlo.' + coda
     );
 }
