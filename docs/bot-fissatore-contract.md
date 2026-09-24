@@ -1,7 +1,18 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.7 — 2026-09-17. Cosa cambia rispetto alla 1.6:
+> **Versione:** 1.8 — 2026-09-24. Cosa cambia rispetto alla 1.7:
+> - **`RICHIAMO` diventa una nota, non più un richiamo.** Il payload non cambia: il CRM
+>   lo accetta ancora (`200`) e lo valida come prima (`date` ISO con offset oppure
+>   `periodo`, altrimenti `400`). Ma dal 2026-09-24 lo registra come nota in timeline
+>   (`BOT_NOTE` "VOLEVA ESSERE RISENTITO: …", stessa deduplica e stesse notifiche di una
+>   `NOTA`) e **non scrive mai `recallDate`**: il bot non telefona, e un richiamo sul suo
+>   account non lo onorava nessuno. Lato bot, su una trattativa aperta `RICHIAMO` non
+>   parte più: il bot decide per tre fasce (≤ 3 giorni chat tenuta aperta senza esito,
+>   ≤ 7 giorni restituzione a un GDO con la nota del "quando", oltre scarto). Vedi la
+>   tabella [Valori `outcome`](#valori-outcome).
+>
+> Versione precedente: 1.7 — 2026-09-17. Cosa cambiava rispetto alla 1.6:
 > - **Ritorno al pool confermato dal CRM.** `NON_RISPOSTO`/`INTERROTTO` su un lead del
 >   lancio ancora in mano al bot non fanno più round robin verso un GDO: tornano nel
 >   pool di `/import` (bucket lancio). La frase "arriva con la v1.7" della 1.6 è
@@ -339,7 +350,7 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 | Valore | Significato | `date` richiesta | Effetto nel CRM |
 |---|---|---|---|
 | `APPUNTAMENTO` | Lead ha fissato un appuntamento | SI | Passa alle Conferme |
-| `RICHIAMO` | Lead vuole essere ricontattato | SI, oppure `periodo` | Richiamo programmato sul bot |
+| `RICHIAMO` | Lead vuole essere ricontattato | SI, oppure `periodo` | **v1.8:** nota in timeline (`BOT_NOTE` "VOLEVA ESSERE RISENTITO: …"), come una `NOTA`. Nessuna `recallDate`, stato e assegnazione invariati. Fino alla v1.7: richiamo programmato sul bot |
 | `DA_SCARTARE` | **Obiezione ferrea reale** (es. "non ho soldi", "non mi interessa") | No | **Scarto definitivo** |
 | `NON_RISPOSTO` | Non ha **mai risposto** dopo il ciclo di solleciti | No | **Riassegnato a un operatore umano** (round-robin) |
 | `INTERROTTO` | Chat **avviata ma interrotta senza obiezione ferrea** | No | **Riassegnato a un operatore umano** (round-robin) |
@@ -433,7 +444,9 @@ mai detto. Ora `periodo` è un'alternativa a `date`:
 ```
 
 Il lead va `IN_PROGRESS` senza data di richiamo e il periodo finisce nella nota che il GDO
-legge in pipeline. Se mandi `date` valgono le regole di sempre (ISO con offset). Se non
+legge in pipeline. **Superato dalla v1.8:** oggi ogni `RICHIAMO` (con `date` o con
+`periodo`) diventa una nota in timeline e non tocca stato né `recallDate`; la validazione
+qui sotto resta quella di sempre. Se mandi `date` valgono le regole di sempre (ISO con offset). Se non
 mandi né `date` né `periodo`: `400`.
 
 ### `APPUNTAMENTO` con data diversa = rifissaggio (nuovo in v1.5)
