@@ -12,6 +12,7 @@
  *   C — gemelli: intakeBatch NULL, assignedAt < now()-7d, altro lead Fenice stesso phone
  *   D — telefoni non chiamabili: intakeBatch NULL, assignedAt < now()-7d, phone non mobile IT
  *   E — richiami ereditati dai vivi: lead di un umano con recallNote 'Sequenza WhatsApp estesa'
+ *       e recallDate con i secondi diversi da zero (data scritta dalla macchina)
  *
  * A-D toccano solo lead del bot, `status IN ('NEW','IN_PROGRESS')` e
  * `presentedAt IS NULL` (l'invariante di `isLeadLocked`): li REJECTAno e
@@ -19,7 +20,8 @@
  * di un GDO, si toglie solo il richiamo fasullo.
  *
  * Dry-run di default: nessuna scrittura, stampa conteggio + 5 righe di
- * esempio per gruppo. Con `--esegui` ogni gruppo gira nella sua transazione:
+ * esempio per gruppo (con `--tutti`, solo in dry-run, TUTTE le righe di ogni
+ * gruppo, con assegnatario, recallDate e recallNote troncata a 80 caratteri). Con `--esegui` ogni gruppo gira nella sua transazione:
  * un errore in un gruppo INTERROMPE l'esecuzione (i gruppi già commitati
  * PRIMA di lui restano commitati — sono transazioni chiuse — ma i gruppi
  * successivi non partono più). Ogni lead toccato riceve un `leadEvents`, così
@@ -32,7 +34,7 @@
  * lock fino al commit finale del gruppo, e in quella finestra un GDO/bot che
  * tenta di scrivere sullo stesso lead resterebbe in attesa.
  *
- *   node --import tsx --env-file=.env scripts/bonifica-lead-fermi-bot.ts [--esegui]
+ *   node --import tsx --env-file=.env scripts/bonifica-lead-fermi-bot.ts [--esegui | --tutti]
  *
  * --- Fix round 1 (review 2026-09-24) ---
  * - Il predicato di ogni gruppo (guardia + clausola specifica) è costruito
@@ -93,6 +95,21 @@
  *   < ..., false)` — il COALESCE sull'intera congiunzione la rende un
  *   booleano certo (false quando un pezzo è NULL), eliminando anche il caso
  *   limite gemellare (assignedToId=bot ma assignedAt NULL).
+ *
+ * --- Fix round 3 (revisione finale 2026-09-24) ---
+ * - Gruppo E: la sola recallNote non basta a dire che il richiamo è del bot.
+ *   Il popover "Richiamo" del GDO precompila la nota con la recallNote
+ *   CORRENTE (GdoQuickActions.tsx:207, LeadCard.tsx:148): un GDO che fissa un
+ *   richiamo vero su un lead ereditato dal bot si porta dietro "Sequenza
+ *   WhatsApp estesa" nel testo, e E gli avrebbe cancellato un richiamo umano.
+ *   Quello che distingue le due date è la loro origine: il bot le calcolava a
+ *   macchina e portano i secondi (es. 09:02:49), il selettore del GDO
+ *   (`datetime-local`) produce sempre :00. Per questo E richiede anche
+ *   `date_part('second', "recallDate") <> 0`, nella stessa lista di
+ *   condizioni condivisa da SELECT, ri-lettura FOR UPDATE e UPDATE. Il caso
+ *   limite (una data del bot caduta per caso esattamente su :00) resta
+ *   fuori: un richiamo fasullo lasciato in piedi costa meno di un richiamo
+ *   vero cancellato.
  *
  * --- Deviazioni dal brief decise da PO/controller (2026-09-24) ---
  * - Gruppo C (gemelli): un "gemello" ora NON conta se (a) è lui stesso un
@@ -159,6 +176,12 @@ async function main() {
     // che contiene le uniche db.transaction/update/insert del file) non viene
     // mai chiamato. Il dry-run usa solo le SELECT qui sotto.
     const esegui = process.argv.includes('--esegui');
+    // Solo lettura: stampa TUTTE le righe di ogni gruppo invece delle prime 5.
+    const tutti = process.argv.includes('--tutti');
+    if (esegui && tutti) {
+        console.error('--tutti vale solo in dry-run: non si combina con --esegui. Fermo.');
+        process.exit(1);
+    }
 
     console.log(`Bonifica lead fermi sul bot — ${esegui ? 'ESECUZIONE (scrive su produzione)' : 'DRY-RUN (nessuna scrittura)'}\n`);
 
@@ -177,6 +200,13 @@ async function main() {
         console.log(`Account bot: ${bots[0]!.id} (${bots[0]!.displayName ?? bots[0]!.name ?? '?'})\n`);
     }
     const botIds = bots.map(b => b.id);
+
+    // Solo per la stampa: id -> nome dell'assegnatario (display name se c'e').
+    const nomiUtenti = new Map<string, string>();
+    for (const u of await db.select({ id: users.id, name: users.name, displayName: users.displayName }).from(users)) {
+        nomiUtenti.set(u.id, u.displayName ?? u.name ?? u.id);
+    }
+    const tronca = (t: string | null, n: number) => (t == null ? '-' : t.length > n ? `${t.slice(0, n)}…` : t).replace(/\s+/g, ' ');
     const botIdList = sqlIdList(botIds);
 
     // Guardia comune ai gruppi A-D — l'invariante di isLeadLocked: non si
@@ -200,6 +230,10 @@ async function main() {
         isNull(leads.presentedAt),
         sql`${leads.recallNote} ILIKE '%Sequenza WhatsApp estesa%'`,
         isNotNull(leads.recallDate),
+        // Fix round 3: data con i secondi = data della macchina (bot). Il selettore
+        // umano produce :00, e la nota precompilata da sola non lo distingue: vedi
+        // l'intestazione del file.
+        sql`date_part('second', ${leads.recallDate}) <> 0`,
     ];
 
     const gruppi: Gruppo[] = [
@@ -316,10 +350,12 @@ async function main() {
         totaliCandidati[gruppo.id] = candidati.length;
 
         console.log(`--- Gruppo ${gruppo.id} (${gruppo.label}): ${candidati.length} candidati ---`);
-        for (const row of candidati.slice(0, 5)) {
-            console.log(`  ${row.id}  ${row.name}  tel=${row.phone}  status=${row.status}  recallDate=${row.recallDate?.toISOString() ?? '-'}`);
+        const daStampare = tutti ? candidati : candidati.slice(0, 5);
+        for (const row of daStampare) {
+            const assegnatario = row.assignedToId ? (nomiUtenti.get(row.assignedToId) ?? row.assignedToId) : '-';
+            console.log(`  ${row.id}  ${row.name}  tel=${row.phone}  status=${row.status}  assegnatario=${assegnatario}  recallDate=${row.recallDate?.toISOString() ?? '-'}  recallNote=${tronca(row.recallNote, 80)}`);
         }
-        if (candidati.length > 5) console.log(`  ... e altri ${candidati.length - 5}`);
+        if (candidati.length > daStampare.length) console.log(`  ... e altri ${candidati.length - daStampare.length} (--tutti per vederli)`);
 
         if (esegui) {
             const { scritti, saltati } = await eseguiGruppo(esegui, gruppo, candidati.map(r => r.id));
