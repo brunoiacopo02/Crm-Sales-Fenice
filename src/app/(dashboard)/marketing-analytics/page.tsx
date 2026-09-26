@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server"
 import { requireRole } from "@/lib/authz"
-import { getMarketingStats, getMarketingStatsByGdo } from "@/app/actions/marketingActions";
+import { getMarketingStats, getMarketingStatsByGdo, getInboundSpontaneiStats } from "@/app/actions/marketingActions";
 import MarketingAnalyticsClient from "./MarketingAnalyticsClient";
 
 export default async function MarketingAnalyticsPage() {
@@ -19,12 +19,14 @@ export default async function MarketingAnalyticsPage() {
 
     const initialStats = await getMarketingStats(currentMonthStr);
     const initialStatsByGdo = await getMarketingStatsByGdo(currentMonthStr);
+    const initialInbound = await getInboundSpontaneiStats(currentMonthStr);
 
     return (
         <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden bg-gray-50/50">
             <MarketingAnalyticsClient
                 initialStats={initialStats}
                 initialStatsByGdo={initialStatsByGdo}
+                initialInbound={initialInbound}
                 initialMonth={currentMonthStr}
             />
         </div>

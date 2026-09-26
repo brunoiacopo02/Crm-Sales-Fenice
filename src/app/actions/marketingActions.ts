@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { leads, marketingBudgets } from "@/db/schema";
+import { leadEvents, leads, marketingBudgets } from "@/db/schema";
 import { and, eq, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { leadIntakeAt } from '@/lib/kpi/canon';
@@ -440,4 +440,91 @@ export async function getMarketingStatsByGdo(monthString: string) {
     }
 
     return finalArray;
+}
+
+/**
+ * Quante persone ci scrivono di loro iniziativa dal canale Telegram, e che fine fanno.
+ *
+ * La sorgente è l'evento `INBOUND_MESSAGE` che `annotaPrimoMessaggio()` mette sulla
+ * timeline quando il bot adotta una chat aperta dal lead (vedi
+ * `src/lib/bot-fissatore/adozione.ts`). È idempotente: una riga per lead.
+ *
+ * ATTENZIONE AL MESE. Si data con `metadata.scrittoIl`, cioè quando la persona ha
+ * scritto, NON con `leadEvents.timestamp`, che è quando il CRM ha adottato la chat:
+ * gli arretrati sono stati adottati tutti insieme nella settimana del 14/09 e
+ * datarli così li ammasserebbe tutti su settembre.
+ *
+ * COSA NON CONTA: chi era già un nostro lead (tipicamente da un'inserzione Telegram)
+ * e poi ha scritto dentro una conversazione già aperta. Quelli il bot non li segnala
+ * al CRM, quindi qui non si vedono — sono circa la metà del totale reale. Il limite
+ * è dichiarato nel pannello, altrimenti il numero si legge per quello che non è.
+ */
+export async function getInboundSpontaneiStats(monthString: string) {
+    const ctx = await currentTenant();
+    assertSalesArea(ctx);
+
+    const { startDateStr, endDateStr } = getMonthBounds(monthString);
+    const startDate = toRomeStartOfDay(startDateStr);
+    const endDate = toRomeEndOfDay(endDateStr);
+
+    const scrittoIl = sql<Date>`(${leadEvents.metadata}->>'scrittoIl')::timestamptz`;
+
+    // Telegram: la provenienza registrata oppure il testo precompilato del link
+    // wa.me del canale. Oggi i due segnali coincidono (66 = 66, zero discordanze);
+    // li tengo entrambi perché regga se cambia il testo o l'etichetta del funnel.
+    const daTelegram = sql<boolean>`(
+        ${leadEvents.metadata}->>'provenienza' ILIKE '%telegram%'
+        OR ${leadEvents.metadata}->>'primoMessaggio' ILIKE '%canale telegram%'
+    )`;
+
+    const righe = await db
+        .select({
+            telegram: daTelegram,
+            // `appointmentCreatedAt` e non `appointmentDate`: è il marcatore
+            // canonico di "appuntamento fissato" usato da `getMarketingStats`, e
+            // non sparisce quando la data dell'appuntamento resta nulla.
+            appuntamento: leads.appointmentCreatedAt,
+            conferma: leads.confirmationsOutcome,
+            incasso: leads.closeAmountEur,
+        })
+        .from(leadEvents)
+        .innerJoin(leads, eq(leads.id, leadEvents.leadId))
+        .where(
+            and(
+                eq(leadEvents.eventType, 'INBOUND_MESSAGE'),
+                eq(leads.companyId, ctx.companyId),
+                isNotNull(sql`${leadEvents.metadata}->>'scrittoIl'`),
+                gte(scrittoIl, startDate),
+                lte(scrittoIl, endDate),
+            )
+        );
+
+    // Il driver può restituire il booleano come `true` o come la stringa 't' di
+    // Postgres, e `Boolean('f')` è `true`: senza questa normalizzazione un giorno
+    // finirebbe tutto nella colonna Telegram senza che nessuno se ne accorga.
+    const eVero = (v: unknown) => v === true || v === 't' || v === 'true';
+
+    const conta = (soloTelegram: boolean) => {
+        const g = righe.filter(r => eVero(r.telegram) === soloTelegram);
+        const scrivono = g.length;
+        const fissati = g.filter(r => r.appuntamento !== null).length;
+        const confermati = g.filter(r => r.conferma === 'confermato').length;
+        const chiusi = g.filter(r => (r.incasso ?? 0) > 0).length;
+        const fatturato = g.reduce((somma, r) => somma + (r.incasso ?? 0), 0);
+        // Percentuali sempre sul totale di chi ha scritto, mai a cascata: così le
+        // quattro cifre si leggono in colonna senza doverle moltiplicare fra loro.
+        const perc = (n: number) => (scrivono > 0 ? (n / scrivono) * 100 : null);
+        return {
+            scrivono,
+            fissati,
+            confermati,
+            chiusi,
+            fatturato,
+            fissatiPerc: perc(fissati),
+            confermatiPerc: perc(confermati),
+            chiusiPerc: perc(chiusi),
+        };
+    };
+
+    return { telegram: conta(true), altriCanali: conta(false) };
 }

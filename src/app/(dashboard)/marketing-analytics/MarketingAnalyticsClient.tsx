@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { getMarketingStats, saveMarketingBudget, getMarketingStatsByGdo } from "@/app/actions/marketingActions";
-import { Loader2, TrendingUp, Save, Filter, Users } from "lucide-react";
+import { getMarketingStats, saveMarketingBudget, getMarketingStatsByGdo, getInboundSpontaneiStats } from "@/app/actions/marketingActions";
+import { Loader2, TrendingUp, Save, Filter, Users, Send } from "lucide-react";
 
 type Stat = {
     funnel: string;
@@ -41,18 +41,35 @@ type FunnelGdoStats = {
     gdoStats: GdoStatTableRow[]
 };
 
+/** Chi apre lui la chat: quanti scrivono e dove arrivano. */
+type InboundRow = {
+    scrivono: number;
+    fissati: number;
+    confermati: number;
+    chiusi: number;
+    fatturato: number;
+    fissatiPerc: number | null;
+    confermatiPerc: number | null;
+    chiusiPerc: number | null;
+};
+
+type InboundStats = { telegram: InboundRow; altriCanali: InboundRow };
+
 export default function MarketingAnalyticsClient({
     initialStats,
     initialStatsByGdo,
+    initialInbound,
     initialMonth
 }: {
     initialStats: Stat[],
     initialStatsByGdo: FunnelGdoStats[],
+    initialInbound: InboundStats,
     initialMonth: string
 }) {
     const [month, setMonth] = useState(initialMonth);
     const [stats, setStats] = useState<Stat[]>(initialStats);
     const [statsByGdo, setStatsByGdo] = useState<FunnelGdoStats[]>(initialStatsByGdo);
+    const [inbound, setInbound] = useState<InboundStats>(initialInbound);
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -63,12 +80,14 @@ export default function MarketingAnalyticsClient({
     const fetchStats = async (m: string) => {
         setIsLoading(true);
         try {
-            const [data, gdoData] = await Promise.all([
+            const [data, gdoData, inboundData] = await Promise.all([
                 getMarketingStats(m),
-                getMarketingStatsByGdo(m)
+                getMarketingStatsByGdo(m),
+                getInboundSpontaneiStats(m)
             ]);
             setStats(data);
             setStatsByGdo(gdoData);
+            setInbound(inboundData);
         } catch (e) {
             console.error(e);
         } finally {
@@ -134,6 +153,77 @@ export default function MarketingAnalyticsClient({
                             className="bg-transparent border-none focus:ring-0 text-ash-700 font-medium cursor-pointer"
                         />
                     </div>
+                </div>
+
+                {/* Chi ci scrive per primo dal canale Telegram */}
+                <div className="bg-white rounded-xl border border-ash-200 shadow-sm p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                        <h2 className="text-lg font-semibold text-ash-900 flex items-center gap-2">
+                            <Send className="w-5 h-5 text-brand-orange" />
+                            Scrivono da Telegram
+                        </h2>
+                        <p
+                            className="text-xs text-ash-500 sm:text-right max-w-md"
+                            title="Conta solo chi apre lui la conversazione su WhatsApp dopo aver cliccato il link del canale Telegram. Chi era già un nostro lead da un'inserzione e poi scrive dentro una chat già aperta non compare qui: il bot non lo segnala al CRM. Il lead conta nel mese in cui ha scritto."
+                        >
+                            Solo chi apre lui la chat dal link del canale. Conteggiati nel mese in cui hanno scritto.
+                        </p>
+                    </div>
+
+                    {isLoading ? (
+                        <div className="flex justify-center items-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin text-brand-orange" />
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                {[
+                                    { etichetta: "Scrivono", valore: inbound.telegram.scrivono, perc: null, accento: true },
+                                    { etichetta: "Fissati", valore: inbound.telegram.fissati, perc: inbound.telegram.fissatiPerc, accento: false },
+                                    { etichetta: "Confermati", valore: inbound.telegram.confermati, perc: inbound.telegram.confermatiPerc, accento: false },
+                                    { etichetta: "Chiusi", valore: inbound.telegram.chiusi, perc: inbound.telegram.chiusiPerc, accento: false },
+                                ].map(c => (
+                                    <div
+                                        key={c.etichetta}
+                                        className={`rounded-lg border p-4 ${c.accento ? "border-brand-orange/30 bg-orange-50/50" : "border-ash-200 bg-ash-50/50"}`}
+                                    >
+                                        <div className="text-xs font-medium text-ash-500 uppercase tracking-wide">{c.etichetta}</div>
+                                        <div className="mt-1 flex items-baseline gap-2">
+                                            <span className={`text-3xl font-bold tabular-nums ${c.accento ? "text-brand-orange" : "text-ash-900"}`}>
+                                                {c.valore}
+                                            </span>
+                                            {c.perc !== null && (
+                                                <span className="text-sm font-medium text-ash-500 tabular-nums">
+                                                    {formatPercent(c.perc)}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-ash-500">
+                                <span>
+                                    Altri canali, sempre di chi scrive per primo:{" "}
+                                    <span className="font-medium text-ash-700 tabular-nums">{inbound.altriCanali.scrivono}</span> scrivono,{" "}
+                                    <span className="font-medium text-ash-700 tabular-nums">{inbound.altriCanali.fissati}</span> fissati,{" "}
+                                    <span className="font-medium text-ash-700 tabular-nums">{inbound.altriCanali.confermati}</span> confermati,{" "}
+                                    <span className="font-medium text-ash-700 tabular-nums">{inbound.altriCanali.chiusi}</span> chiusi
+                                </span>
+                                {inbound.telegram.fatturato > 0 && (
+                                    <span className="font-semibold text-ash-900">
+                                        Fatturato da Telegram: {formatCurrency(inbound.telegram.fatturato)}
+                                    </span>
+                                )}
+                            </div>
+
+                            {inbound.telegram.scrivono === 0 && inbound.altriCanali.scrivono === 0 && (
+                                <p className="mt-4 text-sm text-ash-500">
+                                    Nessuno ha aperto una chat di sua iniziativa in questo mese.
+                                </p>
+                            )}
+                        </>
+                    )}
                 </div>
 
                 {/* Budget Form */}
