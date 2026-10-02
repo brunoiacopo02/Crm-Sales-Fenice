@@ -156,6 +156,7 @@ export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: strin
             ...(salesPipelineEnabled ? [{ name: "La mia pipeline", href: "/mia-pipeline", icon: PhoneCall }] : []),
             { name: "Il mio Calendario", href: "/mio-calendario", icon: CalendarClock },
             { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
+            { name: "I miei incassi", href: "/miei-incassi", icon: Briefcase },
         ]
     } else if (role === "TL") {
         // TL GDO: sezioni legate ai GDO + dashboard Sales Manager e tutte le
