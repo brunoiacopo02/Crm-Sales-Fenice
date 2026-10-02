@@ -35,7 +35,16 @@ export const LANCIO_WEBDEV: LancioConfig = {
     orePomeriggio: [15, 16, 17, 18, 19, 20],
 }
 
-export type LancioScelta = 'chiamata_subito' | 'app_mattina' | 'app_pomeriggio' | 'app_dopodomani' | 'followup'
+export type LancioScelta = 'chiamata_subito' | 'app_mattina' | 'app_pomeriggio' | 'app_dopodomani' | 'app_conferme' | 'followup'
+
+/** Tetto degli appuntamenti che il bot del lancio fissa alle Conferme in UNA ora (PO 02/10). */
+export const LANCIO_CONFERME_CAP_ORA = 25
+/** Ore tonde prenotabili alle Conferme nei giorni dopo il 6 (lun-sab). */
+export const ORE_CONFERME = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+/** Orizzonte della ricerca del primo giorno con posto: oltre, il bot lascia nota. */
+export const ORIZZONTE_GIORNI = 30
+/** `app_dopodomani` non si scrive più ma i lead già prenotati restano dentro il tetto. */
+export const SCELTE_CONFERME: LancioScelta[] = ['app_pomeriggio', 'app_dopodomani', 'app_conferme']
 
 /**
  * Le risposte di riscaldamento raccolte dal bot (contratto B4, `lib/lancio-crm.ts`

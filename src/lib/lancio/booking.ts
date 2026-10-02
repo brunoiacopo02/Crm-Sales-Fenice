@@ -36,7 +36,7 @@ import { FENICE, type LancioLeadRow } from './botGuard'
 
 export type BookOutcome =
     | { ok: true; kind: 'mattina'; venditore: { id: string; nome: string }; deduped?: true }
-    | { ok: true; kind: 'pomeriggio' | 'dopodomani'; deduped?: true }
+    | { ok: true; kind: 'pomeriggio' | 'dopodomani' | 'conferme'; deduped?: true }
     /** Nessun venditore libero in quell'ora (solo mattina). */
     | { ok: false; motivo: 'ora_esaurita' }
     /** Il lead è cambiato sotto i piedi fra la lettura e la scrittura: il bot ritenta. */
@@ -44,15 +44,15 @@ export type BookOutcome =
     /** Ha già prenotato un'altra ora: lo spostamento lo fanno le Conferme. */
     | { ok: false; motivo: 'gia_prenotato'; kind: AtKind; at: Date }
 
-type SceltaApp = Extract<LancioScelta, 'app_mattina' | 'app_pomeriggio' | 'app_dopodomani'>
+type SceltaApp = Extract<LancioScelta, 'app_mattina' | 'app_pomeriggio' | 'app_dopodomani' | 'app_conferme'>
 
 /** L'unica traduzione fra la fascia decisa da `classifyAt` e il campo `leads.lancioScelta`. */
 export const SCELTA_BY_KIND: Record<AtKind, SceltaApp> = {
-    mattina: 'app_mattina', pomeriggio: 'app_pomeriggio', dopodomani: 'app_dopodomani',
+    mattina: 'app_mattina', pomeriggio: 'app_pomeriggio', dopodomani: 'app_dopodomani', conferme: 'app_conferme',
 }
 
 const KIND_BY_SCELTA: Record<SceltaApp, AtKind> = {
-    app_mattina: 'mattina', app_pomeriggio: 'pomeriggio', app_dopodomani: 'dopodomani',
+    app_mattina: 'mattina', app_pomeriggio: 'pomeriggio', app_dopodomani: 'dopodomani', app_conferme: 'conferme',
 }
 
 export type BookDecision =

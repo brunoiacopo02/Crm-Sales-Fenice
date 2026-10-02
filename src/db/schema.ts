@@ -168,7 +168,7 @@ export const leads = pgTable('leads', {
     // queste dicono come e' entrato e cosa ha scelto la sera della live.
     // Tutte NULL sui lead normali.
     lancioIngresso: text('lancioIngresso'),               // 'lista' | 'pulsante_webinar'
-    lancioScelta: text('lancioScelta'),                   // 'chiamata_subito' | 'app_mattina' | 'app_pomeriggio' | 'app_dopodomani' | 'followup'
+    lancioScelta: text('lancioScelta'),                   // 'chiamata_subito' | 'app_mattina' | 'app_pomeriggio' | 'app_dopodomani' | 'app_conferme' | 'followup'
     lancioSceltaAt: timestamp('lancioSceltaAt', { withTimezone: true, mode: 'date' }),
     lancioCallNowAttempts: integer('lancioCallNowAttempts').default(0).notNull(),
     lancioCallNowNextAt: timestamp('lancioCallNowNextAt', { withTimezone: true, mode: 'date' }),
