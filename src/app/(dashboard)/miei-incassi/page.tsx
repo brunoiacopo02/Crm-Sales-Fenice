@@ -9,11 +9,12 @@ import { formatEur, formatDate } from "@/components/gestionale/format"
 
 export const dynamic = "force-dynamic"
 
-function Tile({ label, value, tone = "text-ash-800" }: { label: string; value: string; tone?: string }) {
+function Tile({ label, value, tone = "text-ash-800", note }: { label: string; value: string; tone?: string; note?: string }) {
     return (
         <div className="rounded-xl border border-ash-200 bg-white p-4">
             <div className="text-xs uppercase text-ash-500">{label}</div>
             <div className={`mt-1 text-xl font-bold ${tone}`}>{value}</div>
+            {note && <div className="mt-1 text-xs text-ash-500">{note}</div>}
         </div>
     )
 }
@@ -49,9 +50,17 @@ export default async function MieiIncassiPage({ searchParams }: { searchParams: 
                 <>
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <Tile label="Incassato" value={formatEur(s.incassatoCents)} />
-                        <Tile label="Commissione" value={formatEur(s.imponibileCents)} />
+                        {s.hasCommissionRow ? (
+                            <Tile label="Commissione" value={formatEur(s.imponibileCents)} />
+                        ) : (
+                            <Tile label="Commissione" value="In attesa dell'amministrazione" tone="text-ash-500" />
+                        )}
                         <Tile label="Multe del mese" value={formatEur(s.multeCents)} tone="text-red-700" />
-                        <Tile label="Netto" value={formatEur(s.nettoCents)} tone="text-emerald-700" />
+                        {s.hasCommissionRow ? (
+                            <Tile label="Netto" value={formatEur(s.nettoCents)} tone={s.nettoCents < 0 ? "text-red-700" : "text-emerald-700"} />
+                        ) : (
+                            <Tile label="Netto" value="—" tone="text-ash-500" note="Si calcola quando l'amministrazione registra la commissione." />
+                        )}
                     </div>
                     <div className="text-xs text-ash-500">
                         Commissione = 10% dell&apos;incassato senza IVA, calcolata dall&apos;amministrazione. Le multe sono quelle registrate nel CRM per questo mese.
@@ -81,10 +90,12 @@ export default async function MieiIncassiPage({ searchParams }: { searchParams: 
                 </>
             )}
 
-            <div className="rounded-xl border border-ash-200 bg-white p-4">
-                <h2 className="mb-3 font-semibold text-ash-800">I miei contratti a rischio</h2>
-                <AtRiskTable rows={view.atRisk} showSeller={false} />
-            </div>
+            {lastOk && (
+                <div className="rounded-xl border border-ash-200 bg-white p-4">
+                    <h2 className="mb-3 font-semibold text-ash-800">I miei contratti a rischio</h2>
+                    <AtRiskTable rows={view.atRisk} showSeller={false} />
+                </div>
+            )}
         </div>
     )
 }

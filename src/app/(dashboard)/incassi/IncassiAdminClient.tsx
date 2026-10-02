@@ -12,16 +12,17 @@ type RunInfo = { status: string; startedAt: string; finishedAt: string | null; e
 
 const RUN_LABEL: Record<string, string> = { ok: "riuscito", running: "in corso", error: "fallito", skipped: "saltato" }
 
-function Tile({ label, value, tone = "text-ash-800" }: { label: string; value: string; tone?: string }) {
+function Tile({ label, sub, value, tone = "text-ash-800" }: { label: string; sub?: string; value: string; tone?: string }) {
     return (
         <div className="rounded-xl border border-ash-200 bg-white p-4">
             <div className="text-xs uppercase text-ash-500">{label}</div>
+            {sub && <div className="text-xs text-ash-400">{sub}</div>}
             <div className={`mt-1 text-xl font-bold ${tone}`}>{value}</div>
         </div>
     )
 }
 
-export default function IncassiAdminClient({ mese, months, data, lastRun }: { mese: string; months: string[]; data: AdminMonth; lastRun: RunInfo }) {
+export default function IncassiAdminClient({ mese, months, data, lastRun, hasSynced }: { mese: string; months: string[]; data: AdminMonth; lastRun: RunInfo; hasSynced: boolean }) {
     const router = useRouter()
     const [pending, startTransition] = useTransition()
     const [msg, setMsg] = useState<string | null>(null)
@@ -41,7 +42,7 @@ export default function IncassiAdminClient({ mese, months, data, lastRun }: { me
     })
 
     const totImponibile = data.sellers.reduce((s, r) => s + r.summary.imponibileCents, 0)
-    const totMulte = data.sellers.reduce((s, r) => s + r.summary.multeCents, 0)
+    const totMulte = data.multeCents
     const scaduto = data.atRisk.reduce((s, r) => s + r.scadutoCents, 0)
     const riskRows = riskSeller ? data.atRisk.filter(r => (r.venditoreCode ?? "") === riskSeller) : data.atRisk
     const riskSellers = Array.from(new Set(data.atRisk.map(r => r.venditoreCode ?? ""))).sort()
@@ -87,7 +88,7 @@ export default function IncassiAdminClient({ mese, months, data, lastRun }: { me
             ) : (
                 <>
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <Tile label="Incassato del mese" value={formatEur(data.cashCents)} />
+                        <Tile label="Incassato del mese" sub="per data incasso" value={formatEur(data.cashCents)} />
                         <Tile label="Commissioni (imponibile)" value={formatEur(totImponibile)} />
                         <Tile label="Multe venditori" value={formatEur(totMulte)} tone="text-red-700" />
                         <Tile label={`A rischio (${data.atRisk.length})`} value={formatEur(scaduto)} tone="text-red-700" />
@@ -100,7 +101,7 @@ export default function IncassiAdminClient({ mese, months, data, lastRun }: { me
                                 <thead>
                                     <tr className="border-b border-ash-200 text-left text-xs uppercase text-ash-500">
                                         <th className="py-2 pr-4">Venditore</th>
-                                        <th className="py-2 pr-4 text-right">Incassato</th>
+                                        <th className="py-2 pr-4 text-right">Incassato (prospetto compensi)</th>
                                         <th className="py-2 pr-4 text-right">Comm. lorda</th>
                                         <th className="py-2 pr-4 text-right">Imponibile</th>
                                         <th className="py-2 pr-4 text-right">Multe</th>
@@ -116,10 +117,16 @@ export default function IncassiAdminClient({ mese, months, data, lastRun }: { me
                                                 </button>
                                             </td>
                                             <td className="py-2 pr-4 text-right">{formatEur(s.summary.incassatoCents)}</td>
-                                            <td className="py-2 pr-4 text-right">{formatEur(s.summary.lordaCents)}</td>
-                                            <td className="py-2 pr-4 text-right">{formatEur(s.summary.imponibileCents)}</td>
+                                            {s.missingCommission ? (
+                                                <td className="py-2 pr-4 text-right italic text-ash-500" colSpan={2}>non calcolata</td>
+                                            ) : (
+                                                <>
+                                                    <td className="py-2 pr-4 text-right">{formatEur(s.summary.lordaCents)}</td>
+                                                    <td className="py-2 pr-4 text-right">{formatEur(s.summary.imponibileCents)}</td>
+                                                </>
+                                            )}
                                             <td className="py-2 pr-4 text-right text-red-700">{formatEur(s.summary.multeCents)}</td>
-                                            <td className="py-2 text-right font-semibold">{formatEur(s.summary.nettoCents)}</td>
+                                            <td className="py-2 text-right font-semibold">{s.missingCommission ? "—" : formatEur(s.summary.nettoCents)}</td>
                                         </tr>
                                     ))}
                                     <tr className="text-ash-600">
@@ -129,6 +136,9 @@ export default function IncassiAdminClient({ mese, months, data, lastRun }: { me
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                        <div className="mt-2 text-xs text-ash-500">
+                            La somma delle righe può differire dalla tessera: il prospetto compensi include rate di contratti firmati prima di settembre.
                         </div>
                         {seller && (
                             <div className="mt-4">
@@ -149,16 +159,18 @@ export default function IncassiAdminClient({ mese, months, data, lastRun }: { me
                 </>
             )}
 
-            <div className="rounded-xl border border-ash-200 bg-white p-4">
-                <div className="mb-3 flex items-center justify-between">
-                    <h2 className="font-semibold text-ash-800">Contratti a rischio</h2>
-                    <select value={riskSeller} onChange={e => setRiskSeller(e.target.value)} className="rounded-md border border-ash-200 px-2 py-1 text-sm">
-                        <option value="">Tutti i venditori</option>
-                        {riskSellers.map(s => <option key={s} value={s}>{s || "—"}</option>)}
-                    </select>
+            {hasSynced && (
+                <div className="rounded-xl border border-ash-200 bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                        <h2 className="font-semibold text-ash-800">Contratti a rischio</h2>
+                        <select value={riskSeller} onChange={e => setRiskSeller(e.target.value)} className="rounded-md border border-ash-200 px-2 py-1 text-sm">
+                            <option value="">Tutti i venditori</option>
+                            {riskSellers.map(s => <option key={s} value={s}>{s || "—"}</option>)}
+                        </select>
+                    </div>
+                    <AtRiskTable rows={riskRows} showSeller />
                 </div>
-                <AtRiskTable rows={riskRows} showSeller />
-            </div>
+            )}
         </div>
     )
 }

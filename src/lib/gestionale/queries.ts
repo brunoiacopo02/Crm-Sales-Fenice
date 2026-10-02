@@ -1,7 +1,7 @@
 import { db } from '@/db'
-import { gestionaleContratti, gestionaleRate, gestionaleIncassi, gestionaleCommissioni, gestionaleSyncRuns, salesLatePenalties } from '@/db/schema'
+import { users, gestionaleContratti, gestionaleRate, gestionaleIncassi, gestionaleCommissioni, gestionaleSyncRuns, salesLatePenalties } from '@/db/schema'
 import { and, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
-import { sellerMonthSummary, effectiveRunStatus, cashTotalCents, commissionableSumCents, classifyAtRisk, type SellerMonth, type AtRiskRow } from './metrics'
+import { sellerMonthSummary, effectiveRunStatus, cashTotalCents, commissionableSumCents, classifyAtRisk, sellersWithoutCommission, multeTotalCents, type SellerMonth, type AtRiskRow } from './metrics'
 import { DIREZIONE } from './types'
 
 export type LastRun = { status: string; startedAt: Date; finishedAt: Date | null; error: string | null; warnings: string[] } | null
@@ -20,8 +20,9 @@ export async function loadLastOkAt(): Promise<Date | null> {
 }
 
 export type IncassoView = { id: string; data: string | null; importoCents: number; voce: string | null; stato: string | null; contaCommissione: boolean; cliente: string; venditoreCode: string | null; salesUserId: string | null }
-export type SellerRow = { venditoreCode: string; salesUserId: string | null; summary: SellerMonth }
-export type AdminMonth = { cashCents: number; direzioneCashCents: number; sellers: SellerRow[]; incassi: IncassoView[]; atRisk: AtRiskRow[]; hasData: boolean }
+/** `missingCommission`: venditore con incassi o multe nel mese ma senza riga commissioni dal gestionale. */
+export type SellerRow = { venditoreCode: string; salesUserId: string | null; summary: SellerMonth; missingCommission: boolean }
+export type AdminMonth = { cashCents: number; direzioneCashCents: number; sellers: SellerRow[]; multeCents: number; incassi: IncassoView[]; atRisk: AtRiskRow[]; hasData: boolean }
 export type SellerMonthView = { summary: SellerMonth; incassi: IncassoView[]; commissionableCents: number; atRisk: AtRiskRow[]; hasData: boolean }
 
 function monthBounds(mese: string): { from: string; to: string } {
@@ -88,13 +89,23 @@ export async function loadAdminMonth(mese: string, today: string): Promise<Admin
         atRiskFor(undefined, today),
     ])
     const incassi = incassiRaw.map(toView)
-    const sellers: SellerRow[] = commRows
+    const withComm: SellerRow[] = commRows
         .filter(c => c.venditoreCode !== DIREZIONE)
-        .map(c => ({ venditoreCode: c.venditoreCode, salesUserId: c.salesUserId, summary: sellerMonthSummary(c, c.salesUserId ? multe.get(c.salesUserId) ?? 0 : 0) }))
-        .sort((a, b) => a.venditoreCode.localeCompare(b.venditoreCode))
+        .map(c => ({ venditoreCode: c.venditoreCode, salesUserId: c.salesUserId, summary: sellerMonthSummary(c, c.salesUserId ? multe.get(c.salesUserId) ?? 0 : 0), missingCommission: false }))
+    const missing = sellersWithoutCommission(incassi, mese, multe, new Set(commRows.flatMap(c => (c.salesUserId ? [c.salesUserId] : []))))
+    const names = missing.length === 0 ? [] : await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, missing.map(m => m.salesUserId)))
+    const nameById = new Map(names.map(n => [n.id, n.name]))
+    const withoutComm: SellerRow[] = missing.map(m => ({
+        venditoreCode: nameById.get(m.salesUserId)?.trim() || m.salesUserId,
+        salesUserId: m.salesUserId,
+        summary: { ...sellerMonthSummary(undefined, multe.get(m.salesUserId) ?? 0), incassatoCents: m.incassatoCents },
+        missingCommission: true,
+    }))
+    const sellers = [...withComm, ...withoutComm].sort((a, b) => a.venditoreCode.localeCompare(b.venditoreCode))
     return {
         cashCents: cashTotalCents(incassi, mese),
         direzioneCashCents: cashTotalCents(incassi.filter(i => i.venditoreCode === DIREZIONE || !i.venditoreCode), mese),
+        multeCents: multeTotalCents(multe),
         sellers, incassi, atRisk,
         hasData: commRows.length > 0 || incassi.length > 0,
     }

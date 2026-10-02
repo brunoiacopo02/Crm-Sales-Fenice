@@ -1,3 +1,5 @@
+import { DIREZIONE } from './types'
+
 export const FIRST_MONTH = '2026-09'
 const MONTH_RE = /^\d{4}-\d{2}$/
 
@@ -34,6 +36,34 @@ export function sellerMonthSummary(
         nettoCents: imponibileCents - multeCents,
         hasCommissionRow: comm !== undefined,
     }
+}
+
+/**
+ * Venditori con incassi (non DIREZIONE) datati nel mese o multe del mese ma senza riga
+ * commissioni: senza questa lista sparirebbero dalla tabella admin e dal totale multe.
+ * `incassatoCents` = somma dei loro incassi datati nel mese, storni compresi.
+ */
+export function sellersWithoutCommission(
+    incassi: { data: string | null; importoCents: number; venditoreCode: string | null; salesUserId: string | null }[],
+    mese: string,
+    multeByUser: Map<string, number>,
+    withCommission: Set<string>,
+): { salesUserId: string; incassatoCents: number }[] {
+    const out = new Map<string, number>()
+    for (const i of incassi) {
+        if (!i.salesUserId || i.venditoreCode === DIREZIONE || withCommission.has(i.salesUserId)) continue
+        if (!i.data || i.data.slice(0, 7) !== mese) continue
+        out.set(i.salesUserId, (out.get(i.salesUserId) ?? 0) + i.importoCents)
+    }
+    for (const u of multeByUser.keys()) if (!withCommission.has(u) && !out.has(u)) out.set(u, 0)
+    return [...out].map(([salesUserId, incassatoCents]) => ({ salesUserId, incassatoCents }))
+}
+
+/** Totale multe del mese in centesimi, arrotondato per venditore come in sellerMonthSummary. */
+export function multeTotalCents(multeByUser: Map<string, number>): number {
+    let s = 0
+    for (const eur of multeByUser.values()) s += Math.round(eur * 100)
+    return s
 }
 
 /** Flusso di cassa del mese: ogni riga conta col suo segno, quindi originale + storno negativo = 0. */

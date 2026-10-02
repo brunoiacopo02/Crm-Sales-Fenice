@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { monthsFrom, pickMonth, sellerMonthSummary, cashTotalCents, commissionableSumCents, classifyAtRisk, effectiveRunStatus, type AtRiskContract } from './metrics'
+import { monthsFrom, pickMonth, sellerMonthSummary, cashTotalCents, commissionableSumCents, classifyAtRisk, effectiveRunStatus, sellersWithoutCommission, multeTotalCents, type AtRiskContract } from './metrics'
 
 test('monthsFrom: dal corrente al primo, scavalla l anno', () => {
     assert.deepEqual(monthsFrom('2026-09', '2027-01'), ['2027-01', '2026-12', '2026-11', '2026-10', '2026-09'])
@@ -71,4 +71,26 @@ test('effectiveRunStatus: running oltre 10 minuti diventa errore', () => {
     assert.deepEqual(effectiveRunStatus({ status: 'running', startedAt: new Date('2026-10-02T09:49:00Z'), error: null }, now), { status: 'error', error: 'aggiornamento interrotto' })
     assert.deepEqual(effectiveRunStatus({ status: 'running', startedAt: new Date('2026-10-02T09:55:00Z'), error: null }, now), { status: 'running', error: null })
     assert.deepEqual(effectiveRunStatus({ status: 'ok', startedAt: new Date('2026-10-02T08:00:00Z'), error: null }, now), { status: 'ok', error: null })
+})
+
+test('sellersWithoutCommission: incassi del mese o multe senza riga commissioni', () => {
+    const inc = [
+        { data: '2026-09-05', importoCents: 100000, venditoreCode: 'Sales 007', salesUserId: 'u7' },
+        { data: '2026-09-20', importoCents: -20000, venditoreCode: 'Sales 007', salesUserId: 'u7' },
+        { data: '2026-10-01', importoCents: 99900, venditoreCode: 'Sales 007', salesUserId: 'u7' },  // fuori mese
+        { data: '2026-09-06', importoCents: 50000, venditoreCode: 'Sales 002', salesUserId: 'u2' },  // ha la riga
+        { data: '2026-09-07', importoCents: 70000, venditoreCode: 'DIREZIONE', salesUserId: null },
+        { data: '2026-09-08', importoCents: 30000, venditoreCode: 'Sales 099', salesUserId: null },  // codice sconosciuto
+    ]
+    const multe = new Map([['u7', 10], ['u2', 20], ['u5', 30]])
+    const rows = sellersWithoutCommission(inc, '2026-09', multe, new Set(['u2']))
+    assert.deepEqual(rows.sort((a, b) => a.salesUserId.localeCompare(b.salesUserId)), [
+        { salesUserId: 'u5', incassatoCents: 0 },
+        { salesUserId: 'u7', incassatoCents: 80000 },
+    ])
+})
+
+test('multeTotalCents: somma tutte le multe del mese', () => {
+    assert.equal(multeTotalCents(new Map([['u7', 10], ['u2', 20.5]])), 3050)
+    assert.equal(multeTotalCents(new Map()), 0)
 })
