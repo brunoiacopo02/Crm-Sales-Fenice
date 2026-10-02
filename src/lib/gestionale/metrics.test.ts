@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { monthsFrom, pickMonth, sellerMonthSummary, cashTotalCents, commissionableSumCents, classifyAtRisk, type AtRiskContract } from './metrics'
+import { monthsFrom, pickMonth, sellerMonthSummary, cashTotalCents, commissionableSumCents, classifyAtRisk, effectiveRunStatus, type AtRiskContract } from './metrics'
 
 test('monthsFrom: dal corrente al primo, scavalla l anno', () => {
     assert.deepEqual(monthsFrom('2026-09', '2027-01'), ['2027-01', '2026-12', '2026-11', '2026-10', '2026-09'])
@@ -64,4 +64,11 @@ test('classifyAtRisk: stati a rischio o rate scadute, ordinati per gravità poi 
     assert.equal(sr.residuoCents, 2000)
     assert.equal(sr.giorniDallaPiuVecchia, 22)
     assert.equal(rows.find(r => r.id === 'avv')!.giorniDallaPiuVecchia, null)
+})
+
+test('effectiveRunStatus: running oltre 10 minuti diventa errore', () => {
+    const now = new Date('2026-10-02T10:00:00Z')
+    assert.deepEqual(effectiveRunStatus({ status: 'running', startedAt: new Date('2026-10-02T09:49:00Z'), error: null }, now), { status: 'error', error: 'aggiornamento interrotto' })
+    assert.deepEqual(effectiveRunStatus({ status: 'running', startedAt: new Date('2026-10-02T09:55:00Z'), error: null }, now), { status: 'running', error: null })
+    assert.deepEqual(effectiveRunStatus({ status: 'ok', startedAt: new Date('2026-10-02T08:00:00Z'), error: null }, now), { status: 'ok', error: null })
 })

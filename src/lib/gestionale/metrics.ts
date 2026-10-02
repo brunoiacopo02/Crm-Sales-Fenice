@@ -83,3 +83,14 @@ export function classifyAtRisk(contratti: AtRiskContract[], rate: AtRiskRata[], 
     }
     return rows.sort((a, b) => rank(a.statoPagamento) - rank(b.statoPagamento) || b.scadutoCents - a.scadutoCents)
 }
+
+/** Un sync 'running' da oltre 10 minuti e' stato ucciso dalla piattaforma: lo mostriamo come errore. */
+export function effectiveRunStatus(
+    r: { status: string; startedAt: Date; error: string | null },
+    now: Date,
+): { status: string; error: string | null } {
+    if (r.status === 'running' && now.getTime() - r.startedAt.getTime() > 10 * 60 * 1000) {
+        return { status: 'error', error: 'aggiornamento interrotto' }
+    }
+    return { status: r.status, error: r.error }
+}

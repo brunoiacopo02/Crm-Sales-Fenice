@@ -213,6 +213,7 @@ export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: strin
                     label: "Direzione",
                     items: [
                         ...(role === "ADMIN" ? [{ name: "Sales Manager", href: "/panoramica-generale", icon: Compass }] : []),
+                        ...(role === "ADMIN" ? [{ name: "Incassi", href: "/incassi", icon: Briefcase }] : []),
                         { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
                     ],
                 },
