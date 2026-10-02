@@ -150,6 +150,9 @@ export type LancioCallNowLead = {
     lancioBotInfo: { risposte?: string[] } | null; appointmentNote: string | null
     negotiationStartedAt: string | null; salespersonOutcome: string | null; appointmentDate: string | null
     version: number; priorNonClosedCount: number; attemptCount: number; column: CallNowColumn
+    // Per la card "Dal bot - lancio" del VenditoreDrawer (isLeadLancio, etichetta).
+    launchBucket: string | null; status: string; lancioScelta: string | null
+    salespersonUserId: string | null; salespersonAssigned: string | null; confirmationsOutcome: string | null
 }
 
 /**
@@ -190,6 +193,8 @@ export async function getVenditoreLancioLeads(sellerId: string): Promise<LancioC
         lancioBotInfo: leads.lancioBotInfo, appointmentNote: leads.appointmentNote,
         negotiationStartedAt: leads.negotiationStartedAt, salespersonOutcome: leads.salespersonOutcome, appointmentDate: leads.appointmentDate,
         version: leads.version, salesCycleStartAt: leads.salesCycleStartAt,
+        launchBucket: leads.launchBucket, status: leads.status, lancioScelta: leads.lancioScelta,
+        salespersonUserId: leads.salespersonUserId, salespersonAssigned: leads.salespersonAssigned, confirmationsOutcome: leads.confirmationsOutcome,
     }).from(leads).where(and(
         eq(leads.companyId, companyId),
         eq(leads.salespersonUserId, sellerId),
@@ -217,6 +222,8 @@ export async function getVenditoreLancioLeads(sellerId: string): Promise<LancioC
             lancioBotInfo: (r.lancioBotInfo as { risposte?: string[] } | null) ?? null, appointmentNote: r.appointmentNote,
             negotiationStartedAt: iso(r.negotiationStartedAt), salespersonOutcome: r.salespersonOutcome, appointmentDate: iso(r.appointmentDate),
             version: r.version, attemptCount: arr.length,
+            launchBucket: r.launchBucket, status: r.status, lancioScelta: r.lancioScelta,
+            salespersonUserId: r.salespersonUserId, salespersonAssigned: r.salespersonAssigned, confirmationsOutcome: r.confirmationsOutcome,
             priorNonClosedCount: countCycleNonClosed(arr, r.salesCycleStartAt ?? null),
             column: callNowColumn({ lancioCallNowAttempts: r.lancioCallNowAttempts ?? 0, salespersonOutcome: r.salespersonOutcome }),
         }
