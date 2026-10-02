@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { VenditoreDashboardClient } from "@/components/VenditoreDashboardClient"
 import { getVenditoreAppointments } from "@/app/actions/venditoreActions"
 import { OVERDUE_GRACE_HOURS } from "@/lib/venditore/constants"
-import { OutcomeGate } from "@/components/venditore/OutcomeGate"
+import { OutcomeGate, type OverdueLead } from "@/components/venditore/OutcomeGate"
 import { isInCallNowCycle } from "@/lib/lancio/callNow"
 
 export default async function VenditorePage() {
@@ -19,7 +19,7 @@ export default async function VenditorePage() {
     const graceMs = OVERDUE_GRACE_HOURS * 3600 * 1000
     const now = Date.now()
 
-    let overdue: { id: string; name: string | null; phone: string | null; appointmentDate: string | null; negotiationStartedAt: string | null; funnel: string | null; version: number }[] = []
+    let overdue: OverdueLead[] = []
     try {
         const appointments = await getVenditoreAppointments(session.user.id)
         overdue = appointments
@@ -41,6 +41,15 @@ export default async function VenditorePage() {
                 negotiationStartedAt: a.negotiationStartedAt ? new Date(a.negotiationStartedAt).toISOString() : null,
                 funnel: a.funnel ?? null,
                 version: a.version ?? 0,
+                launchBucket: a.launchBucket,
+                status: a.status,
+                lancioScelta: a.lancioScelta,
+                lancioSceltaAt: a.lancioSceltaAt,
+                lancioBotInfo: a.lancioBotInfo,
+                lancioCallNowAttempts: a.lancioCallNowAttempts,
+                salespersonUserId: a.salespersonUserId,
+                salespersonAssigned: a.salespersonAssigned,
+                confirmationsOutcome: a.confirmationsOutcome,
             }))
     } catch {
         // Non-fatal: if the fetch fails, the gate stays empty and the user can proceed

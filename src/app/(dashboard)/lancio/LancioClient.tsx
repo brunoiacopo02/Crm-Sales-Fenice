@@ -203,6 +203,7 @@ export function LancioClient({ initial }: { initial: LancioAdminView }) {
                     <Tile label="Prenotati mattina" value={monitor.prenotati.mattina} />
                     <Tile label="Prenotati pomeriggio" value={monitor.prenotati.pomeriggio} />
                     <Tile label="Prenotati dopodomani" value={monitor.prenotati.dopodomani} />
+                    <Tile label="Prenotati Conferme (altri giorni)" value={monitor.prenotati.conferme} />
                     <Tile label="Follow-up → flusso standard" value={monitor.followupRisposti} hint="lancioScelta = followup (dal B5)" />
                     <Tile label="Restituiti al pool" value={monitor.restituitiAlPool} hint="Eventi LANCIO_RETURNED_TO_POOL (dal B5)" />
                     <Tile label="Distribuiti ai GDO" value={monitor.distribuitiAiGdo} />

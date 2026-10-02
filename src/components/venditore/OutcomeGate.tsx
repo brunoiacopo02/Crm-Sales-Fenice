@@ -28,6 +28,16 @@ export type OverdueLead = {
     negotiationStartedAt: string | null
     funnel: string | null
     version: number
+    // Per la card "Dal bot - lancio" nel drawer.
+    launchBucket?: string | null
+    status?: string
+    lancioScelta?: string | null
+    lancioSceltaAt?: Date | null
+    lancioBotInfo?: unknown
+    lancioCallNowAttempts?: number | null
+    salespersonUserId?: string | null
+    salespersonAssigned?: string | null
+    confirmationsOutcome?: string | null
 }
 
 interface OutcomeGateProps {

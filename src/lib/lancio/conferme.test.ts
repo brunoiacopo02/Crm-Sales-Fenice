@@ -76,3 +76,8 @@ test('lancioBotRisposte: solo stringhe non vuote, in ordine, da un jsonb qualunq
     assert.deepEqual(lancioBotRisposte('testo'), [])
     assert.deepEqual(lancioBotRisposte(['a', 'b']), [])
 })
+
+test('app_conferme va in cima e ha la sua etichetta', () => {
+    assert.equal(lancioPriority(lead({ lancioScelta: 'app_conferme' })), 1)
+    assert.match(lancioSceltaLabel('app_conferme'), /scelto in chat col bot/i)
+})

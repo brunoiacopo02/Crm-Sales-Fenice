@@ -1,7 +1,20 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.8 — 2026-09-24. Cosa cambia rispetto alla 1.7:
+> **Versione:** 1.9 — 2026-10-02 (solo Direzione 6, rotte `/api/bot/lancio/*`). Cosa cambia rispetto alla 1.8:
+> - **Slot alle Conferme anche dopo il 7/10.** `POST /api/bot/lancio/slots` accetta
+>   `{ "from": "YYYY-MM-DD" }` e risponde `{ ok, mattina, conferme, saltati }`
+>   (`ProssimiResponse`): il primo giorno >= `from` con posto alle Conferme, più la
+>   mattina del 6/10 coi venditori se `from` non la supera.
+> - **Nuova scelta `app_conferme`.** Un appuntamento alle Conferme in un giorno
+>   diverso dal pomeriggio del 6/10 (kind `conferme` in risposta) scrive
+>   `lancioScelta = 'app_conferme'`; è una scelta fatta: il lead non torna nel pool.
+> - **`ora_esaurita` anche su pomeriggio e Conferme** (tetto 25 appuntamenti/ora),
+>   sempre `409 { ok:false, motivo:'ora_esaurita', slots, prossimi }` con `prossimi`
+>   nella forma di `/slots {from}`.
+> - **`info.risposte` fino a 12 elementi** (erano 6): si tengono le ultime 12.
+>
+> Versione precedente: 1.8 — 2026-09-24. Cosa cambiava rispetto alla 1.7:
 > - **`RICHIAMO` diventa una nota, non più un richiamo.** Il payload non cambia: il CRM
 >   lo accetta ancora (`200`) e lo valida come prima (`date` ISO con offset oppure
 >   `periodo`, altrimenti `400`). Ma dal 2026-09-24 lo registra come nota in timeline
@@ -830,7 +843,8 @@ Stessa firma HMAC delle altre rotte bot (`x-bot-signature`, stesso
 
 ### `POST /api/bot/lancio/slots`
 
-Body: `{ "date": "2026-10-06" }` (formato `YYYY-MM-DD`; solo le due date del lancio
+Due formati di body (il secondo è nuovo in v1.9, vedi sotto "Il primo giorno con
+posto alle Conferme"). Body: `{ "date": "2026-10-06" }` (formato `YYYY-MM-DD`; solo le due date del lancio
 sono valide — il giorno dopo il webinar e il giorno successivo — altrimenti
 `422 { ok:false, motivo:'fuori_regole' }`; un formato data sbagliato è
 `400 bad_request`).
@@ -862,6 +876,20 @@ Risposta `200`:
   `/book` con `fuori_regole`. `oreAmmesse` è l'unione delle ore ammesse per quella
   data, comoda per validare lato bot prima di chiamare `/book`.
 
+#### Il primo giorno con posto alle Conferme (nuovo in v1.9)
+
+Body: `{ "from": "2026-10-08" }` (`YYYY-MM-DD`, formato errato `400 bad_request`).
+Risposta `200`:
+
+```jsonc
+{
+  "ok": true,
+  "mattina": { "date": "2026-10-06", "ore": [ { "hour": 9, "liberi": 2 } ] },   // null se from > 6/10 o nessuna ora libera
+  "conferme": { "date": "2026-10-08", "ore": [ { "hour": 9, "liberi": 25 } ] }, // null se non c'e' posto
+  "saltati": ["2026-10-07"]                                                      // giorni lun-sab pieni: "siamo pieni"
+}
+```
+
 ### `POST /api/bot/lancio/book`
 
 Body: `{ "leadId": "…", "at": "2026-10-06T10:00:00+02:00", "info"?: {...}, "note"?: "…" }`.
@@ -871,12 +899,12 @@ Body: `{ "leadId": "…", "at": "2026-10-06T10:00:00+02:00", "info"?: {...}, "no
   un'ora di anticipo, e cadere in una delle fasce ammesse per quella data — altrimenti
   `422 { ok:false, motivo:'fuori_regole' }`.
 - `info.risposte` (se presente) deve essere un array di sole stringhe, ripulito e
-  troncato a 6 elementi × 300 caratteri; `note` è una stringa fino a 1000 caratteri.
+  troncato a 12 elementi × 300 caratteri (si tengono le **ultime** 12, v1.9); `note` è una stringa fino a 1000 caratteri.
   Un tipo sbagliato è `400 { ok:false, motivo:'info_non_valida', detail }` — niente
   salvataggio parziale.
 - **Una prenotazione per lead (ruling R-rebook).** Se il lead ha già una
   prenotazione del lancio (`lancioScelta` ∈ `app_mattina`/`app_pomeriggio`/
-  `app_dopodomani` con `appointmentDate` valorizzato):
+  `app_dopodomani`/`app_conferme` con `appointmentDate` valorizzato):
   - stesso istante (±60s, cioè un ritento) → `200`, deduplicato: per la mattina
     `{ ok:true, kind:'mattina', venditore:{id,nome}, deduped:true }`, per
     pomeriggio/dopodomani `{ ok:true, kind, deduped:true }` (nessun venditore);
@@ -895,6 +923,12 @@ Body: `{ "leadId": "…", "at": "2026-10-06T10:00:00+02:00", "info"?: {...}, "no
   incondizionato di un eventuale scarto/venditore residuo), notifica
   `lancio_appuntamento` alle Conferme attive, webhook `appointment.set`. Risposta
   `{ ok:true, kind:'pomeriggio'|'dopodomani' }`.
+- **Conferme in un altro giorno (v1.9):** un `at` alle Conferme in un giorno diverso
+  dal pomeriggio del 6/10 scrive `lancioScelta = 'app_conferme'` e risponde
+  `{ ok:true, kind:'conferme' }`. Pomeriggio e Conferme hanno un tetto di 25
+  appuntamenti/ora, deciso sotto lock: ora piena → `409 { ok:false,
+  motivo:'ora_esaurita', slots, prossimi }`, dove `prossimi` ha la forma di
+  `/slots {from}` (primo giorno con posto) e il bot propone quello.
 - Scrittura concorrente sullo stesso lead (versione cambiata sotto i piedi) →
   `409 { ok:false, motivo:'conflitto' }`: il bot ritenta una volta.
 

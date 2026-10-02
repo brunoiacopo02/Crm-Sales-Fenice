@@ -51,6 +51,7 @@ test('torna al pool: lead del lancio, al bot, NEW/IN_PROGRESS, senza storico', (
 });
 
 test('non torna: non è del lancio, o non è al bot', () => {
+    assert.deepEqual(checkLancioReturnToPool(base({ lancioScelta: 'app_conferme' })), { ok: false, reason: 'scelta_fatta' });
     assert.deepEqual(checkLancioReturnToPool(base({ launchBucket: 'BLACK_SUMMER' })), { ok: false, reason: 'not_lancio' });
     assert.deepEqual(checkLancioReturnToPool(base({ launchBucket: null })), { ok: false, reason: 'not_lancio' });
     assert.deepEqual(checkLancioReturnToPool(base({ assigneeIsBot: false })), { ok: false, reason: 'not_bot' });

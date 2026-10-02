@@ -44,7 +44,7 @@ export type LancioReturnLead = {
     status: string;
     presentedAt: Date | null;
     appointmentDate: Date | null;
-    /** `chiamata_subito | app_mattina | app_pomeriggio | app_dopodomani | followup` (spec §3.1). */
+    /** `chiamata_subito | app_mattina | app_pomeriggio | app_dopodomani | app_conferme | followup` (spec §3.1). */
     lancioScelta?: string | null;
 };
 

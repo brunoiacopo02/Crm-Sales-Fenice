@@ -18,7 +18,7 @@ export interface LancioMonitor {
     spintiAlBot: number
     pulsantePremuto: number
     chiamateSubito: { assegnate: number; esitate: number; chiuse: number; euro: number; passateAlleConferme: number }
-    prenotati: { mattina: number; pomeriggio: number; dopodomani: number }
+    prenotati: { mattina: number; pomeriggio: number; dopodomani: number; conferme: number }
     followupRisposti: number
     restituitiAlPool: number
     distribuitiAiGdo: number
@@ -44,6 +44,7 @@ export async function getLancioMonitor(
         mattina: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'app_mattina')::int`,
         pomeriggio: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'app_pomeriggio')::int`,
         dopodomani: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'app_dopodomani')::int`,
+        conferme: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'app_conferme')::int`,
         followup: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'followup')::int`,
         aiGdo: botUserId
             ? sql<number>`count(*) filter (where ${leads.assignedToId} is not null and ${leads.assignedToId} <> ${botUserId})::int`
@@ -70,7 +71,7 @@ export async function getLancioMonitor(
             euro: c?.csEuro ?? 0,
             passateAlleConferme: c?.csConferme ?? 0,
         },
-        prenotati: { mattina: c?.mattina ?? 0, pomeriggio: c?.pomeriggio ?? 0, dopodomani: c?.dopodomani ?? 0 },
+        prenotati: { mattina: c?.mattina ?? 0, pomeriggio: c?.pomeriggio ?? 0, dopodomani: c?.dopodomani ?? 0, conferme: c?.conferme ?? 0 },
         followupRisposti: c?.followup ?? 0,
         restituitiAlPool: ev?.restituiti ?? 0,
         distribuitiAiGdo: c?.aiGdo ?? 0,

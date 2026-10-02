@@ -200,8 +200,8 @@ export async function bookLancio(input: {
                 .where(and(eq(leads.id, lead.id), eq(leads.version, lead.version)))
                 .returning({ id: leads.id })
             // Versione cambiata sotto i piedi (doppio invio concorrente): non è
-            // "ora esaurita" — il pomeriggio non si esaurisce — ed è il bot a
-            // dover ritentare una volta.
+            // "ora esaurita" (quella, col tetto di 25/ora, si decide sotto lock
+            // più su) ed è il bot a dover ritentare una volta.
             if (updated.length === 0) return { ok: false as const, motivo: 'conflitto' as const }
             await tx.insert(leadEvents).values(eventRows(lead, botUserId, now, at, kind, { info: input.info ?? null }))
             return { ok: true as const, kind }

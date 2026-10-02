@@ -62,6 +62,14 @@ export async function getVenditoreAppointments(sellerId: string) {
             // ne chiede l'esito. Chiuso il ciclo tornano appuntamenti normali.
             lancioScelta: leads.lancioScelta,
             lancioCallNowAttempts: leads.lancioCallNowAttempts,
+            // Per la card "Dal bot - lancio" del VenditoreDrawer (spec 2026-10-02).
+            launchBucket: leads.launchBucket,
+            status: leads.status,
+            lancioSceltaAt: leads.lancioSceltaAt,
+            lancioBotInfo: leads.lancioBotInfo,
+            salespersonUserId: leads.salespersonUserId,
+            salespersonAssigned: leads.salespersonAssigned,
+            confirmationsOutcome: leads.confirmationsOutcome,
         })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
@@ -147,6 +155,16 @@ export async function getVenditoreFollowUps(sellerId: string) {
         negotiationStartedAt: leads.negotiationStartedAt,
         inLavorazioneAt: leads.inLavorazioneAt,
         salesCycleStartAt: leads.salesCycleStartAt,
+        // Per la card "Dal bot - lancio" del VenditoreDrawer (spec 2026-10-02).
+        lancioScelta: leads.lancioScelta,
+        lancioCallNowAttempts: leads.lancioCallNowAttempts,
+        launchBucket: leads.launchBucket,
+        status: leads.status,
+        lancioSceltaAt: leads.lancioSceltaAt,
+        lancioBotInfo: leads.lancioBotInfo,
+        salespersonUserId: leads.salespersonUserId,
+        salespersonAssigned: leads.salespersonAssigned,
+        confirmationsOutcome: leads.confirmationsOutcome,
     })
         .from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))

@@ -38,15 +38,15 @@ export function isCallNowHandoff(lead: Pick<LancioConfermeFields, 'lancioScelta'
 }
 
 /**
- * 1 = in cima alla prima chiamata: appuntamento del pomeriggio o di dopodomani
- * scelto in chat col bot, oppure tornato dal venditore dopo tre NR, e ancora
+ * 1 = in cima alla prima chiamata: appuntamento del pomeriggio, di dopodomani
+ * o alle Conferme in un altro giorno, scelto in chat col bot, oppure tornato dal venditore dopo tre NR, e ancora
  * senza esito Conferme. 0 = ordine normale (compresi i mattina: sono già
  * confermati, nessuna chiamata).
  */
 export function lancioPriority(lead: LancioConfermeFields, bucket: string = LANCIO_BUCKET): 0 | 1 {
     if (!isLeadLancio(lead, bucket)) return 0
     if (lead.confirmationsOutcome) return 0
-    if (lead.lancioScelta === 'app_pomeriggio' || lead.lancioScelta === 'app_dopodomani') return 1
+    if (['app_pomeriggio', 'app_dopodomani', 'app_conferme'].includes(lead.lancioScelta ?? '')) return 1
     if (isCallNowHandoff(lead)) return 1
     return 0
 }
@@ -64,6 +64,7 @@ export function lancioSceltaLabel(scelta: string | null, handoff = false): strin
         case 'app_mattina': return 'Appuntamento la mattina dopo, già confermato dal bot: nessuna chiamata'
         case 'app_pomeriggio': return 'Appuntamento il pomeriggio dopo, scelto in chat col bot'
         case 'app_dopodomani': return 'Appuntamento dopodomani mattina, scelto in chat col bot'
+        case 'app_conferme': return 'Appuntamento alle Conferme, scelto in chat col bot'
         case 'followup': return 'Ha risposto al follow-up del giorno dopo: flusso standard'
         default: return 'Lead del lancio Web Dev AI'
     }

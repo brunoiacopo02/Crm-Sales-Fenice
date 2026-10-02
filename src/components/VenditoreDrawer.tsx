@@ -9,6 +9,7 @@ import { it } from "date-fns/locale"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
 import { VenditoreSurveyInline, type VenditoreSurveyState } from "./surveys/VenditoreSurveyInline"
 import { EXCLUDED_FUNNEL, NOT_CLOSED_REASONS } from "@/lib/surveys/questions"
+import { LancioBotInfoCard } from "@/components/lancio/LancioBotInfoCard"
 import { MAX_FOLLOW_UPS } from "@/lib/venditorePerformance/guard"
 
 interface VenditoreDrawerProps {
@@ -406,6 +407,12 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                             )}
                         </div>
                     </div>
+
+                    {lead && (
+                        <div className="mt-4">
+                            <LancioBotInfoCard lead={lead} />
+                        </div>
+                    )}
 
                     {(lead?.appointmentNote) && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
