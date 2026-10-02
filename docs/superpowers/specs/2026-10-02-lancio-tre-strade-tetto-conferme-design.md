@@ -80,7 +80,7 @@ Si attiva quando l'ora scelta dal lead è una delle ore mattina del 6 restituite
 
 ### 3.2 Endpoint `slots` (`/api/bot/lancio/slots`)
 - Input attuale `{date}` resta valido (risposta invariata nei campi esistenti, così il bot di oggi non si rompe).
-- Nuovo input `{ from: 'YYYY-MM-DD' }`: il CRM cerca **il primo giorno ≥ from** (lun-sab) con almeno un'ora Conferme sotto il tetto, entro un orizzonte di sicurezza di 30 giorni. Risponde (contratto v1.8):
+- Nuovo input `{ from: 'YYYY-MM-DD' }`: il CRM cerca **il primo giorno ≥ from** (lun-sab) con almeno un'ora Conferme sotto il tetto, entro un orizzonte di sicurezza di 30 giorni. Risponde (contratto v1.9):
   `{ ok, mattina: { date, ore: [{hour, liberi}] } | null, conferme: { date, ore: [{hour, liberi}] } | null, saltati: string[] /* giorni lun-sab saltati perché pieni */ }`
   dove `conferme.ore[].liberi = 25 - occupati` (solo ore con `liberi>0` e prenotabili per anticipo); `mattina` è valorizzata solo se `from` non supera il 6/10 (la mattina dei venditori); `conferme` è `null` se nell'orizzonte non c'è posto.
 - Il `pomeriggio` del formato vecchio diventa una vista di `conferme` per il 6/10.
@@ -103,7 +103,7 @@ Si attiva quando l'ora scelta dal lead è una delle ore mattina del 6 restituite
 - I turni su `/lancio` li compila Bruno (tutti e 7 in SERA; i venditori della mattina in GIORNO_DOPO).
 
 ## 4. Contratto bot ↔ CRM
-Aggiornare `docs/bot-fissatore-contract.md` (Direzione 6) a **v1.8**: nuovo input `from` di `slots`, campo `conferme`, kind `conferme`, `lancioScelta='app_conferme'`, `ora_esaurita` anche su pomeriggio/conferme.
+Aggiornare `docs/bot-fissatore-contract.md` (Direzione 6) a **v1.9**: nuovo input `from` di `slots`, campo `conferme`, kind `conferme`, `lancioScelta='app_conferme'`, `ora_esaurita` anche su pomeriggio/conferme.
 
 ## 5. Rilascio
 1. CRM per primo (retrocompatibile: il bot di oggi continua a funzionare col formato vecchio). Push su main = deploy.
