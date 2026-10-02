@@ -94,7 +94,9 @@ Modulo `src/lib/gestionale/`:
 Guardie:
 - **Snapshot vuoto con dati locali presenti → abort** (status error, nessuna eliminazione):
   protegge da una risposta sbagliata che cancellerebbe tutto.
-- Più del 30% di righe da eliminare in un colpo → abort con lo stesso criterio.
+- Più del 30% di righe da eliminare in un colpo (su tabelle con almeno 10 righe vive) →
+  abort con lo stesso criterio.
+- Cron e pulsante in contemporanea → lock advisory: il secondo esce `skipped`.
 - Codice venditore sconosciuto (né "Sales 00X" esistente né DIREZIONE) → la riga si salva
   con `salesUserId` null e il codice grezzo; il run lo elenca negli avvisi. Non blocca.
 - Env mancanti → status `skipped`, nessun errore rumoroso: la feature va in produzione
