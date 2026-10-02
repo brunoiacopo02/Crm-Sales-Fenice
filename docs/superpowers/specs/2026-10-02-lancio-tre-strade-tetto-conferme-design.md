@@ -44,7 +44,10 @@ Si attiva quando l'ora scelta dal lead è una delle ore mattina del 6 restituite
 4. `409 ora_esaurita` sulla mattina → il bot propone la prima ora venditore ancora libera; se non ce ne sono → passa alla strada 3 **senza rifare le domande** (le risposte già raccolte vanno comunque al CRM).
 5. Obiezione sull'impegno: il bot risponde in breve ("ne parli direttamente col tutor") e prenota comunque (stessa logica della chiamata subito); la risposta va nel campo risposte così il venditore la vede.
 
+> **Nota (02/10, a implementazione) — le domande vengono DOPO la scelta dell'ora.** Il percorso (venditore o Conferme) si conosce solo quando il lead sceglie l'ora, quindi il bot mostra prima le ore e fa le domande dopo. L'ora scelta resta tenuta mentre le domande girano; se nel frattempo si riempie (`409 ora_esaurita`) il bot propone le ore rimaste **senza rifare le domande**. Le `domande` raccolte passano da un percorso all'altro solo tra mattina e Conferme (non dalla chiamata subito). Il testo di `nessun_venditore` (§2.1) ora e': `In questo momento i consulenti sono tutti al telefono: fissiamo una videocall.`
+
 ### 2.3 Strada 3 — Conferme
+> Vale la nota sopra: le domande leggere si fanno dopo che il lead ha scelto l'ora Conferme.
 1. Qualche domanda leggera, una alla volta, al massimo tre: situazione attuale, pain point, budget (formulato come disponibilità a investire su sé stesso, senza cifre del bot).
 2. Il bot chiede al CRM il **primo giorno con posto** (§3.2) e chiede al lead: *"[Giorno] a che ora ci saresti?"*
 3. Ora proposta dal lead:
