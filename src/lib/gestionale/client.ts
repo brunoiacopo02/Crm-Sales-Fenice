@@ -33,7 +33,9 @@ export async function fetchSnapshot(): Promise<unknown> {
             lastErr = err
         } catch (e) {
             if (e instanceof GestionaleHttpError && e.status < 500) throw e
-            lastErr = e
+            const cause = (e as { cause?: { code?: string; message?: string } } | null)?.cause
+            const detail = cause?.code ?? cause?.message
+            lastErr = detail && e instanceof Error ? new Error(`${e.message} (${detail})`) : e
         }
         if (attempt < ATTEMPTS) await new Promise(r => setTimeout(r, 2000))
     }

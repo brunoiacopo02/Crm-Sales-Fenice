@@ -47,9 +47,10 @@ export async function runGestionaleSync(trigger: SyncTrigger): Promise<SyncResul
         return finish({ status: 'error', ...empty, error: e instanceof Error ? e.message : String(e) })
     }
 
+    const warnings = new Set<string>()
+    try {
     const sellerRows = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.role, 'VENDITORE'))
     const sellers: SellerMap = new Map(sellerRows.filter(u => u.name).map(u => [u.name!.trim(), u.id]))
-    const warnings = new Set<string>()
     const now = new Date()
 
     const contratti = snapshot.contratti.map(c => ({ ...c, salesUserId: resolveSeller(c.venditoreCode, sellers, warnings), deletedAt: null, syncedAt: now }))
@@ -57,7 +58,6 @@ export async function runGestionaleSync(trigger: SyncTrigger): Promise<SyncResul
     const incassi = snapshot.incassi.map(i => ({ ...i, salesUserId: resolveSeller(i.venditoreCode, sellers, warnings), deletedAt: null, syncedAt: now }))
     const commissioni = snapshot.commissioni.map(c => ({ ...c, salesUserId: resolveSeller(c.venditoreCode, sellers, warnings), syncedAt: now }))
 
-    try {
         const counts = await db.transaction(async (tx) => {
             // Cron e pulsante insieme: il secondo esce senza toccare nulla.
             const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) as ok`)
