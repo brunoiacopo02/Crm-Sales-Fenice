@@ -1,6 +1,8 @@
 import { NextResponse, after, type NextRequest } from 'next/server'
 import { toRomeIso } from '@/lib/dateUtils'
-import { authBotRequest, computeSlots, loadLancioLead } from '@/lib/lancio/botGuard'
+import { db } from '@/db'
+import { authBotRequest, cercaProssimi, computeSlots, loadLancioLead } from '@/lib/lancio/botGuard'
+import { confermeOccupati } from '@/lib/lancio/shiftQueries'
 import { classifyAt } from '@/lib/lancio/rules'
 import { bookLancio, confermeSideEffects, mattinaSideEffects } from '@/lib/lancio/booking'
 import { parseInfo, parseNote } from '@/lib/lancio/payload'
@@ -10,7 +12,7 @@ export const dynamic = 'force-dynamic'
 /**
  * POST /api/bot/lancio/book  { leadId, at (ISO con offset), info?, note? }
  * 200 { ok, kind, venditore?, deduped? }
- * 409 ora_esaurita (+slots) · 409 gia_prenotato (+appointmentAt, kind) · 409 conflitto
+ * 409 ora_esaurita (+slots, +prossimi) · 409 gia_prenotato (+appointmentAt, kind) · 409 conflitto
  * 422 fuori_regole · 403 forbidden · 400 bad_request | info_non_valida.
  */
 export async function POST(req: NextRequest) {
@@ -64,8 +66,14 @@ export async function POST(req: NextRequest) {
         if (out.motivo === 'conflitto') {
             return NextResponse.json({ ok: false, motivo: 'conflitto' }, { status: 409 })
         }
-        const slots = await computeSlots(decision.dateStr, now)
-        return NextResponse.json({ ok: false, motivo: 'ora_esaurita', slots }, { status: 409 })
+        // Le ore mostrate devono concordare con quelle che `book` accetta: il
+        // conteggio esclude il lead stesso, come il controllo sotto lock.
+        const occupatiDel = (d: string) => confermeOccupati(db, d, { excludeLeadId: guard.lead.id })
+        const [slots, prossimi] = await Promise.all([
+            computeSlots(decision.dateStr, now, undefined, { occupatiDel }),
+            cercaProssimi(decision.dateStr, now, undefined, { occupatiDel }),
+        ])
+        return NextResponse.json({ ok: false, motivo: 'ora_esaurita', slots, prossimi }, { status: 409 })
     }
 
     if (!out.deduped) {

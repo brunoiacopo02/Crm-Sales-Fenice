@@ -9,7 +9,8 @@
 import type { LancioBotInfo } from './config'
 
 /** Quanto del racconto del bot accettiamo di scrivere su `leads.lancioBotInfo`. */
-export const MAX_RISPOSTE = 6
+/** Prequalifica: scelta + ora + 3 domande, con margine. Si tengono le ULTIME: le domande arrivano in fondo. */
+export const MAX_RISPOSTE = 12
 export const MAX_RISPOSTA_CHARS = 300
 export const MAX_NOTE_CHARS = 1000
 
@@ -30,7 +31,7 @@ export function parseInfo(raw: unknown): { ok: true; info?: LancioBotInfo } | { 
     const pulite = (risposte as string[])
         .map(r => r.trim().slice(0, MAX_RISPOSTA_CHARS))
         .filter(r => r.length > 0)
-        .slice(0, MAX_RISPOSTE)
+        .slice(-MAX_RISPOSTE)
     // Un array vuoto (o di sole stringhe vuote) non è un'informazione: scriverlo
     // cancellerebbe le risposte già raccolte in un giro precedente, perché
     // `lancioBotInfo` si sovrascrive per intero. Vale come "nessuna info".

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SCELTA_BY_KIND, decideBooking, decideCallNow } from './booking'
+import { SCELTA_BY_KIND, decideBooking, decideCallNow, postoConferme } from './booking'
 import { toRomeIso } from '@/lib/dateUtils'
 import type { LancioLeadRow } from './botGuard'
 
@@ -102,4 +102,19 @@ test('ha gia un appuntamento del lancio: la chiamata non glielo toglie', () => {
     })
     // Scelta del lancio senza data: prenotazione monca, non blocca la chiamata.
     assert.deepEqual(decideCallNow(callNowLead({ lancioScelta: 'app_dopodomani' })), { azione: 'assegna' })
+})
+
+test('SCELTA_BY_KIND: le Conferme dopo il 6 sono app_conferme', () => {
+    assert.equal(SCELTA_BY_KIND.conferme, 'app_conferme')
+})
+
+test('postoConferme: 24 occupati lascia passare, 25 no', () => {
+    assert.equal(postoConferme(24, 25), true)
+    assert.equal(postoConferme(25, 25), false)
+    assert.equal(postoConferme(30, 25), false)
+})
+
+test('decideBooking: chi ha gia app_conferme riceve gia_prenotato col kind conferme', () => {
+    const d = decideBooking({ lancioScelta: 'app_conferme', appointmentDate: new Date('2026-10-08T10:00:00+02:00') }, 'conferme', new Date('2026-10-08T11:00:00+02:00'))
+    assert.equal(d.azione === 'gia_prenotato' && d.kind, 'conferme')
 })

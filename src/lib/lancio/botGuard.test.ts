@@ -10,9 +10,9 @@ const computeSlots = (d: string, now: Date, occ: (date: string) => Promise<Map<n
 
 const SERA = new Date('2026-10-05T21:30:00+02:00')
 
-// Il ramo `dopodomani` e quello della data fuori regole non leggono il DB:
-// sono decisioni pure sulla data, e la loro forma e' il contratto che il bot
-// legge (B4). La mattina del 6/10 passa dal DB ed e' coperta dai test di
+// Il ramo `dopodomani` legge il DB solo per il conteggio per ora (qui iniettato
+// con `occupatiDel`); la data fuori regole non lo legge: sono decisioni sulla
+// data, e la loro forma e' il contratto che il bot legge (B4). La mattina del 6/10 passa dal DB ed e' coperta dai test di
 // mattinaSlots (slots.test.ts).
 
 test('il 7/10 e la mattina delle Conferme: nessuna ora, nessun pomeriggio', async () => {

@@ -28,16 +28,16 @@ import { launchShifts, leadEvents, leads, notifications, users } from '@/db/sche
 import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset'
 import { createGoogleCalendarEvent } from '@/lib/googleCalendar'
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue'
-import { LANCIO_WEBDEV, type LancioBotInfo, type LancioConfig, type LancioScelta } from './config'
+import { LANCIO_CONFERME_CAP_ORA, LANCIO_WEBDEV, type LancioBotInfo, type LancioConfig, type LancioScelta } from './config'
 import { hourKey, sameInstant, type AtKind } from './rules'
 import { isFreeAt, pickRoundRobin } from './slots'
-import { dayFactsFor, getShiftMembers, venditoreLabel, type Db } from './shiftQueries'
+import { confermeOccupati, dayFactsFor, getShiftMembers, venditoreLabel, type Db } from './shiftQueries'
 import { FENICE, type LancioLeadRow } from './botGuard'
 
 export type BookOutcome =
     | { ok: true; kind: 'mattina'; venditore: { id: string; nome: string }; deduped?: true }
     | { ok: true; kind: 'pomeriggio' | 'dopodomani' | 'conferme'; deduped?: true }
-    /** Nessun venditore libero in quell'ora (solo mattina). */
+    /** Mattina: nessun venditore libero. Conferme: tetto per ora raggiunto. */
     | { ok: false; motivo: 'ora_esaurita' }
     /** Il lead è cambiato sotto i piedi fra la lettura e la scrittura: il bot ritenta. */
     | { ok: false; motivo: 'conflitto' }
@@ -83,6 +83,11 @@ export function decideBooking(
     if (!esistente || !lead.appointmentDate) return { azione: 'prenota' }
     if (sameInstant(lead.appointmentDate, at)) return { azione: 'dedup' }
     return { azione: 'gia_prenotato', kind: esistente, at: lead.appointmentDate }
+}
+
+/** C'è ancora posto in quell'ora alle Conferme? */
+export function postoConferme(occupati: number, cap: number): boolean {
+    return occupati < cap
 }
 
 function whenLabel(at: Date): string {
@@ -168,14 +173,22 @@ export async function bookLancio(input: {
         // conferma o di venditore da un giro precedente lo terrebbe fuori dalla
         // board (o peggio: appuntamento pomeridiano intestato a un venditore che
         // non è di turno) e nessuno lo chiamerebbe.
-        // Appuntamento ed eventi in UNA transazione: niente advisory lock (il
-        // pomeriggio non ha venditore da spartire, il controllo di `version`
-        // basta a serializzare i doppi invii), ma se l'insert degli eventi
-        // fallisce deve saltare anche la scrittura sul lead. Altrimenti resta
+        // Appuntamento ed eventi in UNA transazione, sotto un advisory lock per
+        // ORA (tetto 25/ora, PO 02/10): se l'insert degli eventi fallisce deve
+        // saltare anche la scrittura sul lead. Altrimenti resta
         // un appuntamento senza APPOINTMENT_SET: la Timeline non lo racconta e
         // i webhook marketing di `appointment.set` non hanno l'evento dietro.
         const kind = input.kind
         const esito = await db.transaction(async (tx: Db) => {
+            // Lock per ORA come la mattina, seed 3, chiave distinta
+            // (`lancio:conferme:`) così mattina e Conferme della stessa ora non si
+            // bloccano a vicenda. Il conteggio si rilegge QUI DENTRO, dopo il lock:
+            // /slots un minuto fa non è una promessa. `excludeLeadId` evita che una
+            // prenotazione monca dello stesso lead si scontri con sé stessa.
+            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'lancio:conferme:' + hourKey(input.dateStr, input.hour)}, 3))`)
+            const occupati = (await confermeOccupati(tx, input.dateStr, { excludeLeadId: lead.id, cfg })).get(input.hour) ?? 0
+            if (!postoConferme(occupati, LANCIO_CONFERME_CAP_ORA)) return { ok: false as const, motivo: 'ora_esaurita' as const }
+
             const updated = await tx.update(leads)
                 .set({
                     ...CONFERME_DISCARD_RESET,
