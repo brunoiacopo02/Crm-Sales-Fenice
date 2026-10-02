@@ -48,6 +48,7 @@ async function multeByUser(mese: string, salesUserId?: string): Promise<Map<stri
         .from(salesLatePenalties)
         .where(and(
             eq(salesLatePenalties.monthKey, mese),
+            eq(salesLatePenalties.companyId, 'fenice'),
             isNull(salesLatePenalties.voidedAt),
             salesUserId ? eq(salesLatePenalties.salesUserId, salesUserId) : undefined,
         ))

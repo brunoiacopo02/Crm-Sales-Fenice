@@ -10,6 +10,8 @@ import { formatEur, formatDate } from "@/components/gestionale/format"
 
 type RunInfo = { status: string; startedAt: string; finishedAt: string | null; error: string | null; warnings: string[] } | null
 
+const RUN_LABEL: Record<string, string> = { ok: "riuscito", running: "in corso", error: "fallito", skipped: "saltato" }
+
 function Tile({ label, value, tone = "text-ash-800" }: { label: string; value: string; tone?: string }) {
     return (
         <div className="rounded-xl border border-ash-200 bg-white p-4">
@@ -52,7 +54,7 @@ export default function IncassiAdminClient({ mese, months, data, lastRun }: { me
                     <h1 className="text-2xl font-bold tracking-tight text-ash-800">Incassi</h1>
                     <div className="mt-1 text-sm text-ash-500">
                         Dati dal gestionale amministrazione.{" "}
-                        {lastRun ? `Ultimo aggiornamento: ${new Date(lastRun.finishedAt ?? lastRun.startedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" })} (${lastRun.status})` : "Mai aggiornato."}
+                        {lastRun ? `Ultimo aggiornamento: ${new Date(lastRun.finishedAt ?? lastRun.startedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" })} (${RUN_LABEL[lastRun.status] ?? lastRun.status})` : "Mai aggiornato."}
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
