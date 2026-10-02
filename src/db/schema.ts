@@ -1681,3 +1681,91 @@ export const salesWeekTemplateSlots = pgTable('salesWeekTemplateSlots', {
         templateUnique: uniqueIndex('sales_week_template_uq').on(table.salesUserId, table.dow, table.hour),
     };
 });
+
+// Incassi dal gestionale (spec 2026-10-02): copia in sola lettura dello snapshot
+// GET /api/v1/contratti. Importi in CENTESIMI. Vedi migration 0039.
+export const gestionaleContratti = pgTable('gestionaleContratti', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    dataFirma: date('dataFirma'),
+    pacchetto: text('pacchetto'),
+    importoTotaleCents: integer('importoTotaleCents').default(0).notNull(),
+    statoPagamento: text('statoPagamento'),
+    venditoreCode: text('venditoreCode'),
+    salesUserId: text('salesUserId').references(() => users.id, { onDelete: 'set null' }),
+    note: text('note'),
+    clienteNome: text('clienteNome'),
+    clienteCognome: text('clienteCognome'),
+    clienteTelefono: text('clienteTelefono'),
+    clienteEmail: text('clienteEmail'),
+    deletedAt: timestamp('deletedAt', { withTimezone: true, mode: 'date' }),
+    syncedAt: timestamp('syncedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => ({
+    salesIdx: index('gestionale_contratti_sales_idx').on(table.salesUserId),
+}));
+
+export const gestionaleRate = pgTable('gestionaleRate', {
+    id: text('id').primaryKey(),
+    contrattoId: text('contrattoId').notNull(),
+    numero: integer('numero'),
+    tipo: text('tipo'),
+    scadenza: date('scadenza'),
+    importoCents: integer('importoCents').default(0).notNull(),
+    stato: text('stato'),
+    incassoId: text('incassoId'),
+    deletedAt: timestamp('deletedAt', { withTimezone: true, mode: 'date' }),
+    syncedAt: timestamp('syncedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => ({
+    contrattoIdx: index('gestionale_rate_contratto_idx').on(table.contrattoId),
+}));
+
+export const gestionaleIncassi = pgTable('gestionaleIncassi', {
+    id: text('id').primaryKey(),
+    contrattoId: text('contrattoId').notNull(),
+    data: date('data'),
+    importoCents: integer('importoCents').default(0).notNull(),
+    metodo: text('metodo'),
+    voce: text('voce'),
+    stato: text('stato'),
+    stornoDi: text('stornoDi'),
+    rataId: text('rataId'),
+    venditoreCode: text('venditoreCode'),
+    salesUserId: text('salesUserId').references(() => users.id, { onDelete: 'set null' }),
+    contaCommissione: boolean('contaCommissione').default(false).notNull(),
+    meseCommissione: text('meseCommissione'),
+    deletedAt: timestamp('deletedAt', { withTimezone: true, mode: 'date' }),
+    syncedAt: timestamp('syncedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => ({
+    salesMeseIdx: index('gestionale_incassi_sales_mese_idx').on(table.salesUserId, table.meseCommissione),
+    dataIdx: index('gestionale_incassi_data_idx').on(table.data),
+    contrattoIdx: index('gestionale_incassi_contratto_idx').on(table.contrattoId),
+}));
+
+export const gestionaleCommissioni = pgTable('gestionaleCommissioni', {
+    venditoreCode: text('venditoreCode').notNull(),
+    mese: text('mese').notNull(),
+    salesUserId: text('salesUserId').references(() => users.id, { onDelete: 'set null' }),
+    totaleIncassatoCents: integer('totaleIncassatoCents').default(0).notNull(),
+    commissioneLordaCents: integer('commissioneLordaCents').default(0).notNull(),
+    commissioneImponibileCents: integer('commissioneImponibileCents').default(0).notNull(),
+    syncedAt: timestamp('syncedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.venditoreCode, table.mese] }),
+}));
+
+export const gestionaleSyncRuns = pgTable('gestionaleSyncRuns', {
+    id: text('id').primaryKey(),
+    trigger: text('trigger').notNull(),          // 'cron' | 'manuale'
+    status: text('status').notNull(),            // 'running' | 'ok' | 'error' | 'skipped'
+    startedAt: timestamp('startedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    finishedAt: timestamp('finishedAt', { withTimezone: true, mode: 'date' }),
+    generatoIl: text('generatoIl'),
+    inserted: integer('inserted').default(0).notNull(),
+    updated: integer('updated').default(0).notNull(),
+    deleted: integer('deleted').default(0).notNull(),
+    restored: integer('restored').default(0).notNull(),
+    warnings: jsonb('warnings').$type<string[]>().default([]).notNull(),
+    error: text('error'),
+}, (table) => ({
+    startedIdx: index('gestionale_sync_runs_started_idx').on(table.startedAt),
+}));
