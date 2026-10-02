@@ -39,7 +39,7 @@ export function LancioBotInfoCard({ lead }: { lead: LancioCardLead }) {
                     ))}
                 </ul>
             ) : (
-                <p className="mt-2 text-xs italic text-amber-700">Nessuna risposta di riscaldamento registrata dal bot.</p>
+                <p className="mt-2 text-xs italic text-amber-700">Nessuna risposta registrata dal bot.</p>
             )}
         </div>
     )

@@ -28,6 +28,8 @@ Fuori perimetro (Pezzo 2, spec separata, acceso dal 6/10 quando c'è il link del
 
 La scelta iniziale non cambia: di notte (fino alle 03:00 del 6) pulsanti "Chiamami subito" / "Fissiamo domani"; di giorno "Oggi pomeriggio" / "Domani mattina".
 
+> **Dalle 03:00 del 6 (fix review finale).** Una chat rimasta a metà delle domande passa a Mario standard come prima, **tranne** quando il percorso è mattina o Conferme, l'ora scelta (`oraScelta`) c'è ed è ancora valida per `validaAtLancio`: allora il bot prenota subito quell'ora col percorso normale di `book` (con le risposte raccolte fin lì), manda la conferma solita e chiude in `scelta_fatta`. Rispetta la finestra 08:30-23:00 (fuori, silenzio temporaneo e la prenotazione parte dal re-drive delle 08:30). Se il book non va (`ora_esaurita`, `fuori_regole`, errore CRM) → passaggio a Mario come oggi.
+
 ### 2.1 Strada 1 — Chiamata subito
 - Sostituisce il riscaldamento attuale (2 domande generiche, saltate se il lead chiede la chiamata) con le **due domande della decisione 2**, anche quando il lead ha premuto "Chiamami subito".
 - Dopo la seconda risposta (o a un'obiezione / un rifiuto / una risposta che non risponde) → `[LANCIO:CHIAMA_ORA]` → `call-now` → testo della decisione 2 col nome del venditore restituito dal CRM.
@@ -50,6 +52,7 @@ Si attiva quando l'ora scelta dal lead è una delle ore mattina del 6 restituite
 > Vale la nota sopra: le domande leggere si fanno dopo che il lead ha scelto l'ora Conferme.
 1. Qualche domanda leggera, una alla volta, al massimo tre: situazione attuale, pain point, budget (formulato come disponibilità a investire su sé stesso, senza cifre del bot).
 2. Il bot chiede al CRM il **primo giorno con posto** (§3.2) e chiede al lead: *"[Giorno] a che ora ci saresti?"*
+   - Il prompt del modello conosce anche il **giorno Conferme successivo** (una seconda lettura `slots {from: giorno dopo il primo}`), etichettato "solo se il lead non può il giorno prima": il testo al lead propone sempre e solo il primo giorno (ordine di riempimento del PO), ma se il lead dice che quel giorno non può il modello prenota sul secondo.
 3. Ora proposta dal lead:
    - libera → prenota;
    - piena o fuori fascia → propone l'ora libera più vicina dello stesso giorno;
@@ -77,9 +80,9 @@ Si attiva quando l'ora scelta dal lead è una delle ore mattina del 6 restituite
 
 ### 3.2 Endpoint `slots` (`/api/bot/lancio/slots`)
 - Input attuale `{date}` resta valido (risposta invariata nei campi esistenti, così il bot di oggi non si rompe).
-- Nuovo input `{ from: 'YYYY-MM-DD' }` (oppure `{date}` con `cerca:true`): il CRM cerca **il primo giorno ≥ from** (lun-sab) con almeno un'ora Conferme sotto il tetto, entro un orizzonte di sicurezza di 30 giorni. Risponde:
-  `{ ok, date, mattina: [{hour, liberi}] | null, conferme: [{hour, liberi}], pieno: string[] /* giorni saltati */ }`
-  dove `conferme[].liberi = 25 - occupati` (solo ore con `liberi>0` e prenotabili per anticipo); `mattina` è valorizzata solo se `date` = 6/10.
+- Nuovo input `{ from: 'YYYY-MM-DD' }`: il CRM cerca **il primo giorno ≥ from** (lun-sab) con almeno un'ora Conferme sotto il tetto, entro un orizzonte di sicurezza di 30 giorni. Risponde (contratto v1.8):
+  `{ ok, mattina: { date, ore: [{hour, liberi}] } | null, conferme: { date, ore: [{hour, liberi}] } | null, saltati: string[] /* giorni lun-sab saltati perché pieni */ }`
+  dove `conferme.ore[].liberi = 25 - occupati` (solo ore con `liberi>0` e prenotabili per anticipo); `mattina` è valorizzata solo se `from` non supera il 6/10 (la mattina dei venditori); `conferme` è `null` se nell'orizzonte non c'è posto.
 - Il `pomeriggio` del formato vecchio diventa una vista di `conferme` per il 6/10.
 
 ### 3.3 Tetto in `book` (`bookLancio`, `src/lib/lancio/booking.ts`)
