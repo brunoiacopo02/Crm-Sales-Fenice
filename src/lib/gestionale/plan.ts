@@ -37,6 +37,11 @@ export function assertSafeToApply(table: string, liveCount: number, incomingCoun
     }
 }
 
+/** Chiave della riga commissioni (PK composta): `codice|mese`. */
+export function commissionKeys(rows: { venditoreCode: string; mese: string }[]): string[] {
+    return rows.map(r => `${r.venditoreCode}|${r.mese}`)
+}
+
 export type SellerMap = Map<string, string>
 
 export function resolveSeller(code: string | null, sellers: SellerMap, warnings: Set<string>): string | null {

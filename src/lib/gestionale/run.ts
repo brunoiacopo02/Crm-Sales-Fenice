@@ -4,7 +4,7 @@ import { users, gestionaleContratti, gestionaleRate, gestionaleIncassi, gestiona
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { fetchSnapshot, gestionaleConfigured } from './client'
 import { parseSnapshot } from './parse'
-import { diffIds, assertSafeToApply, resolveSeller, type ExistingId, type SellerMap } from './plan'
+import { diffIds, assertSafeToApply, resolveSeller, commissionKeys, type ExistingId, type SellerMap } from './plan'
 
 export type SyncTrigger = 'cron' | 'manuale'
 export type SyncResult = { runId: string | null; status: 'ok' | 'error' | 'skipped'; reason?: string; inserted: number; updated: number; deleted: number; restored: number; warnings: string[]; error?: string }
@@ -94,6 +94,10 @@ export async function runGestionaleSync(trigger: SyncTrigger): Promise<SyncResul
             }
 
             // Commissioni: blocco sostituito per intero (una riga per codice e mese, anche a zero).
+            // Stessa guardia delle altre tabelle: un blocco vuoto o troncato non azzera le commissioni.
+            const existingComm = await tx.select({ venditoreCode: gestionaleCommissioni.venditoreCode, mese: gestionaleCommissioni.mese }).from(gestionaleCommissioni)
+            const commDiff = diffIds(commissionKeys(existingComm).map(id => ({ id, deleted: false })), commissionKeys(commissioni))
+            assertSafeToApply('commissioni', existingComm.length, commissioni.length, commDiff.deleteIds.length)
             await tx.delete(gestionaleCommissioni)
             for (const part of chunks(commissioni)) await tx.insert(gestionaleCommissioni).values(part)
             return total

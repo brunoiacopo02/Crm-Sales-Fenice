@@ -70,3 +70,8 @@ test('parseSnapshot: conta_commissione mancante vale false, venditore viene trim
     assert.equal(s.incassi[0].contaCommissione, false)
     assert.equal(s.contratti[0].venditoreCode, 'Sales 002')
 })
+
+test('parseSnapshot: blocco commissioni mancante è un errore', () => {
+    const j = sample(); delete j.commissioni
+    assert.throws(() => parseSnapshot(j), (e: unknown) => e instanceof SnapshotParseError && e.path === 'commissioni')
+})

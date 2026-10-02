@@ -134,7 +134,7 @@ export function parseSnapshot(json: unknown): SnapshotRows {
         })
     })
 
-    const commissioni: CommissioneRow[] = arr(root.commissioni ?? [], 'commissioni').map((raw, k) => {
+    const commissioni: CommissioneRow[] = arr(root.commissioni, 'commissioni').map((raw, k) => {
         const p = `commissioni[${k}]`
         const c = obj(raw, p)
         const venditoreCode = optStr(c.venditore, `${p}.venditore`)

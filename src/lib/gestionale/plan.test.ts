@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { diffIds, assertSafeToApply, SyncGuardError, resolveSeller } from './plan'
+import { diffIds, assertSafeToApply, SyncGuardError, resolveSeller, commissionKeys } from './plan'
 
 test('diffIds: nuovi, aggiornati, ripristinati, eliminati', () => {
     const d = diffIds(
@@ -35,4 +35,17 @@ test('resolveSeller: codice noto, DIREZIONE, sconosciuto, null', () => {
     assert.equal(resolveSeller(null, sellers, w), null)
     assert.equal(resolveSeller('Sales 099', sellers, w), null)
     assert.deepEqual([...w], ['Codice venditore sconosciuto: Sales 099'])
+})
+
+test('commissionKeys + guardia: blocco commissioni troncato blocca, completo passa', () => {
+    assert.deepEqual(commissionKeys([{ venditoreCode: 'Sales 002', mese: '2026-09' }]), ['Sales 002|2026-09'])
+    const existing = Array.from({ length: 10 }, (_, k) => ({ venditoreCode: `Sales 0${10 + k}`, mese: '2026-09' }))
+    const live = commissionKeys(existing).map(id => ({ id, deleted: false }))
+    const partial = diffIds(live, commissionKeys(existing.slice(0, 5)))
+    assert.deepEqual(partial.deleteIds.length, 5)
+    assert.throws(() => assertSafeToApply('commissioni', 10, 5, partial.deleteIds.length), SyncGuardError)
+    assert.throws(() => assertSafeToApply('commissioni', 10, 0, 10), SyncGuardError)
+    const full = diffIds(live, commissionKeys([...existing, { venditoreCode: 'Sales 002', mese: '2026-10' }]))
+    assert.equal(full.deleteIds.length, 0)
+    assert.doesNotThrow(() => assertSafeToApply('commissioni', 10, 11, full.deleteIds.length))
 })
