@@ -9,10 +9,10 @@ import { db } from '@/db'
 import { leads, users } from '@/db/schema'
 import { verifySignature } from '@/lib/marketing-webhooks/signing'
 import { findLancioBotId } from './botAccount'
-import { LANCIO_COMPANY, LANCIO_WEBDEV, type LancioConfig } from './config'
+import { LANCIO_COMPANY, LANCIO_CONFERME_CAP_ORA, LANCIO_WEBDEV, type LancioConfig } from './config'
 import { slotDateKind } from './rules'
-import { mattinaSlots, orePrenotabili } from './slots'
-import { dayFactsFor, getShiftMembers } from './shiftQueries'
+import { confermeOre, mattinaSlots, primoGiornoConferme } from './slots'
+import { confermeOccupati, dayFactsFor, getShiftMembers, type Db } from './shiftQueries'
 
 /** Alias locale della company del lancio (intake.ts via config.ts): il lancio è solo Fenice. */
 export const FENICE = LANCIO_COMPANY
@@ -97,19 +97,26 @@ export interface SlotsResponse {
  * detto. Quando non resta nessuna ora, il pomeriggio si chiude (`aperto:false`)
  * e il bot ripiega sul giorno dopo.
  */
-export async function computeSlots(dateStr: string, now: Date, cfg: LancioConfig = LANCIO_WEBDEV): Promise<SlotsResponse | null> {
+export async function computeSlots(
+    dateStr: string,
+    now: Date,
+    cfg: LancioConfig = LANCIO_WEBDEV,
+    deps: { occupatiDel?: (date: string) => Promise<Map<number, number>> } = {},
+): Promise<SlotsResponse | null> {
     const day = slotDateKind(dateStr, cfg)
     if (day === null) return null
+    const occupatiDel = deps.occupatiDel ?? ((d: string) => confermeOccupati(db, d, { cfg }))
     if (day === 'dopodomani') {
         return {
             date: dateStr, mattina: 'conferme', pomeriggio: { aperto: false, ore: [] }, mattinaEsaurita: false,
-            oreAmmesse: orePrenotabili(dateStr, cfg.oreVenditori, now),
+            oreAmmesse: confermeOre({ dateStr, hours: cfg.oreVenditori, occupati: await occupatiDel(dateStr), cap: LANCIO_CONFERME_CAP_ORA, now }).map(o => o.hour),
         }
     }
     const members = await getShiftMembers(db, 'GIORNO_DOPO', cfg)
     const facts = await dayFactsFor(db, members, dateStr, { cfg })
     const { mattina, mattinaEsaurita } = mattinaSlots({ dateStr, hours: cfg.oreVenditori, venditori: facts, now })
-    const orePomeriggio = orePrenotabili(dateStr, cfg.orePomeriggio, now)
+    // Il pomeriggio del giorno dopo passa dal tetto per ora, come ogni giorno delle Conferme.
+    const orePomeriggio = confermeOre({ dateStr, hours: cfg.orePomeriggio, occupati: await occupatiDel(dateStr), cap: LANCIO_CONFERME_CAP_ORA, now }).map(o => o.hour)
     return {
         date: dateStr,
         // `venditoriLiberi` resta dentro: sono id interni, al bot non escono mai.
@@ -121,4 +128,44 @@ export async function computeSlots(dateStr: string, now: Date, cfg: LancioConfig
         // ore che `mattina` non elenca più.
         oreAmmesse: [...mattina.map(m => m.hour), ...orePomeriggio],
     }
+}
+
+export interface ProssimiResponse {
+    mattina: { date: string; ore: Array<{ hour: number; liberi: number }> } | null
+    conferme: { date: string; ore: Array<{ hour: number; liberi: number }> } | null
+    /** Giorni lun-sab saltati perché pieni: il bot dice "siamo pieni". */
+    saltati: string[]
+}
+
+/**
+ * Il primo giorno >= from con posto alle Conferme, più la mattina del 6 coi venditori se
+ * `from` non la supera. La camminata dei giorni e' `primoGiornoConferme` (pura, testata);
+ * le letture sono iniettabili per provarla senza DB.
+ */
+export async function cercaProssimi(
+    from: string,
+    now: Date,
+    cfg: LancioConfig = LANCIO_WEBDEV,
+    deps: {
+        tx?: Db
+        occupatiDel?: (date: string) => Promise<Map<number, number>>
+        mattinaDel?: () => Promise<ProssimiResponse['mattina']>
+    } = {},
+): Promise<ProssimiResponse> {
+    const tx = deps.tx ?? db
+    let mattina: ProssimiResponse['mattina'] = null
+    if (from <= cfg.giornoDopo) {
+        mattina = await (deps.mattinaDel ?? (async () => {
+            const members = await getShiftMembers(tx, 'GIORNO_DOPO', cfg)
+            const facts = await dayFactsFor(tx, members, cfg.giornoDopo, { cfg })
+            const m = mattinaSlots({ dateStr: cfg.giornoDopo, hours: cfg.oreVenditori, venditori: facts, now })
+            const ore = m.mattina.filter(o => o.liberi > 0).map(o => ({ hour: o.hour, liberi: o.liberi }))
+            return ore.length > 0 ? { date: cfg.giornoDopo, ore } : null
+        }))()
+    }
+    const { conferme, saltati } = await primoGiornoConferme({
+        from, now, cfg,
+        occupatiDel: deps.occupatiDel ?? ((d: string) => confermeOccupati(tx, d, { cfg })),
+    })
+    return { mattina, conferme, saltati }
 }

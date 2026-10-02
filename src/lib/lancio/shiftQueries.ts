@@ -12,8 +12,9 @@
 import { db } from '@/db'
 import { launchShifts, leads, salesAvailabilitySlots, salesSlotBlocks, users } from '@/db/schema'
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, ne, sql } from 'drizzle-orm'
-import { romeInstant, slotKey } from '@/lib/venditore/calendarSlots'
-import { LANCIO_COMPANY, LANCIO_WEBDEV, type LancioConfig, type ShiftKind } from './config'
+import { romeHour, romeInstant, slotKey } from '@/lib/venditore/calendarSlots'
+import { LANCIO_COMPANY, LANCIO_WEBDEV, SCELTE_CONFERME, type LancioConfig, type ShiftKind } from './config'
+import { giornoDopo } from './rules'
 import { declaredHoursFor, type ShiftMember, type VenditoreDayFacts } from './slots'
 
 export type Db = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -129,4 +130,24 @@ export async function dayFactsFor(
     for (const r of blocked) facts.get(r.salesUserId)?.blocked.add(slotKey(r.slotStart))
     for (const r of busy) if (r.salesUserId && r.appointmentDate) facts.get(r.salesUserId)?.busy.add(slotKey(r.appointmentDate))
     return [...facts.values()]
+}
+
+/**
+ * Appuntamenti del bot del lancio alle Conferme in quel giorno di Roma, per ora di Roma.
+ * Conta le scelte in SCELTE_CONFERME (anche `app_dopodomani`, che non si scrive piu'):
+ * i lead gia' prenotati restano dentro il tetto. `excludeLeadId` esclude il lead che
+ * si sta prenotando, cosi' uno spostamento non si scontra con se' stesso.
+ */
+export async function confermeOccupati(tx: Db, dateStr: string, opts: { excludeLeadId?: string; cfg?: LancioConfig } = {}): Promise<Map<number, number>> {
+    const cfg = opts.cfg ?? LANCIO_WEBDEV
+    const rows = await tx.select({ at: leads.appointmentDate }).from(leads).where(and(
+        eq(leads.companyId, LANCIO_COMPANY), eq(leads.launchBucket, cfg.bucket), eq(leads.status, 'APPOINTMENT'),
+        inArray(leads.lancioScelta, SCELTE_CONFERME),
+        gte(leads.appointmentDate, romeInstant(dateStr, 0)),
+        lt(leads.appointmentDate, romeInstant(giornoDopo(dateStr), 0)),
+        ...(opts.excludeLeadId ? [ne(leads.id, opts.excludeLeadId)] : []),
+    ))
+    const out = new Map<number, number>()
+    for (const r of rows) if (r.at) out.set(romeHour(r.at), (out.get(romeHour(r.at)) ?? 0) + 1)
+    return out
 }

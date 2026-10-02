@@ -11,8 +11,8 @@
  * di turno e libero.
  */
 import { romeInstant } from '@/lib/venditore/calendarSlots'
-import { MIN_LEAD_TIME_MS } from './config'
-import { hourKey } from './rules'
+import { LANCIO_CONFERME_CAP_ORA, LANCIO_WEBDEV, MIN_LEAD_TIME_MS, ORIZZONTE_GIORNI, type LancioConfig } from './config'
+import { giornoDopo, hourKey, oreConfermeDel } from './rules'
 
 export interface ShiftMember {
     salesUserId: string
@@ -69,6 +69,49 @@ export function declaredHoursFor(
 export function orePrenotabili(dateStr: string, hours: readonly number[], now: Date): number[] {
     const cutoff = now.getTime() + MIN_LEAD_TIME_MS
     return hours.filter(h => romeInstant(dateStr, h).getTime() >= cutoff)
+}
+
+/**
+ * Ore Conferme ancora prenotabili: preavviso (`orePrenotabili`, la stessa soglia di
+ * `classifyAt`) e tetto per ora. Pura: gli occupati li legge `confermeOccupati`.
+ */
+export function confermeOre(input: {
+    dateStr: string; hours: number[]; occupati: Map<number, number>; cap: number; now: Date
+}): Array<{ hour: number; liberi: number }> {
+    return orePrenotabili(input.dateStr, input.hours, input.now)
+        .map(hour => ({ hour, liberi: Math.max(0, input.cap - (input.occupati.get(hour) ?? 0)) }))
+        .filter(o => o.liberi > 0)
+}
+
+export interface PrimoGiornoConferme {
+    conferme: { date: string; ore: Array<{ hour: number; liberi: number }> } | null
+    /** Giorni lun-sab saltati perché pieni: il bot dice "siamo pieni". */
+    saltati: string[]
+}
+
+/**
+ * Il primo giorno >= `from` (e >= del giorno dopo del lancio) con posto alle Conferme.
+ * La domenica si salta senza contarla fra i pieni; un giorno passato per anticipo
+ * (oggi alle 20:30) non e' "pieno" e non va in `saltati`. `occupatiDel` e' iniettato:
+ * in produzione legge il DB, nei test una Map.
+ */
+export async function primoGiornoConferme(input: {
+    from: string
+    now: Date
+    cfg?: LancioConfig
+    occupatiDel: (date: string) => Promise<Map<number, number>>
+}): Promise<PrimoGiornoConferme> {
+    const cfg = input.cfg ?? LANCIO_WEBDEV
+    const saltati: string[] = []
+    let d = input.from < cfg.giornoDopo ? cfg.giornoDopo : input.from
+    for (let i = 0; i < ORIZZONTE_GIORNI; i++, d = giornoDopo(d)) {
+        const hours = oreConfermeDel(d, cfg)
+        if (hours.length === 0) continue
+        const ore = confermeOre({ dateStr: d, hours, occupati: await input.occupatiDel(d), cap: LANCIO_CONFERME_CAP_ORA, now: input.now })
+        if (ore.length > 0) return { conferme: { date: d, ore }, saltati }
+        if (orePrenotabili(d, hours, input.now).length > 0) saltati.push(d)
+    }
+    return { conferme: null, saltati }
 }
 
 export function mattinaSlots(input: {

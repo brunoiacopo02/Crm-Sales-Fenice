@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { coperturaRows, declaredHoursFor, isFreeAt, mattinaSlots, orePrenotabili, pickRoundRobin, type VenditoreDayFacts } from './slots'
+import { confermeOre, coperturaRows, declaredHoursFor, isFreeAt, mattinaSlots, orePrenotabili, pickRoundRobin, type VenditoreDayFacts } from './slots'
 
 const D = '2026-10-06'
 const k = (h: number) => `${D}@${h}`
@@ -160,4 +160,16 @@ test('copertura: un membro del turno senza fatti resta in tabella, a zero', () =
         compilati: new Set(['z']),
     })
     assert.deepEqual(rows, [{ salesUserId: 'z', name: 'Zeno', calendarExempt: false, compilato: true, oreDichiarate: [], oreLibere: [] }])
+})
+
+test('confermeOre: 25 meno gli occupati, ore piene e passate escluse', () => {
+    const now = new Date('2026-10-06T14:10:00+02:00')
+    const occupati = new Map([[15, 25], [16, 24], [17, 3]])
+    const ore = confermeOre({ dateStr: '2026-10-06', hours: [15, 16, 17, 18], occupati, cap: 25, now })
+    assert.deepEqual(ore, [{ hour: 16, liberi: 1 }, { hour: 17, liberi: 22 }, { hour: 18, liberi: 25 }])
+})
+
+test('confermeOre: oltre il tetto (dati vecchi) non va mai sotto zero', () => {
+    const ore = confermeOre({ dateStr: '2026-10-08', hours: [9], occupati: new Map([[9, 30]]), cap: 25, now: new Date('2026-10-05T22:00:00+02:00') })
+    assert.deepEqual(ore, [])
 })
