@@ -1,0 +1,36 @@
+{
+  "generato_il": "2026-10-02T18:00:00+02:00",
+  "contratti": [
+    {
+      "id": "c1", "data_firma": "2026-09-03", "pacchetto": "Advance", "importo_totale": "3180.00",
+      "stato_pagamento": "Pagamento programmato", "venditore": "Sales 002", "note": null,
+      "cliente": { "nome": "Mario", "cognome": "Rossi", "telefono": "3331234567", "email": "mario@example.com" },
+      "rate": [
+        { "id": "r1", "numero": 1, "tipo": "rata", "scadenza": "2026-09-05", "importo": "1590.00", "stato": "pagata", "incasso_id": "i1" },
+        { "id": "r2", "numero": 2, "tipo": "saldo", "scadenza": "2026-10-05", "importo": "1590.00", "stato": "da_pagare", "incasso_id": null }
+      ],
+      "incassi": [
+        { "id": "i1", "data": "2026-09-05", "importo": "1590.00", "metodo": "bonifico", "voce": "RATA", "stato": "incassato",
+          "storno_di": null, "rata_id": "r1", "venditore": "Sales 002", "conta_commissione": true, "mese_commissione": "2026-09" }
+      ]
+    },
+    {
+      "id": "c2", "data_firma": "2026-09-10", "pacchetto": "Gold", "importo_totale": "2000.00",
+      "stato_pagamento": "Sollecito", "venditore": "DIREZIONE", "note": "cliente amministrazione",
+      "cliente": { "nome": "Anna", "cognome": "Verdi", "telefono": null, "email": null },
+      "rate": [
+        { "id": "r3", "numero": 1, "tipo": "rata", "scadenza": "2026-09-15", "importo": "1000.00", "stato": "scaduta", "incasso_id": null }
+      ],
+      "incassi": [
+        { "id": "i2", "data": "2026-09-12", "importo": "500.00", "metodo": "carta", "voce": "ACCONTO", "stato": "stornato",
+          "storno_di": null, "rata_id": null, "venditore": "DIREZIONE", "conta_commissione": false, "mese_commissione": "2026-09" },
+        { "id": "i3", "data": "2026-09-20", "importo": "-500.00", "metodo": "carta", "voce": "STORNO", "stato": "incassato",
+          "storno_di": "i2", "rata_id": null, "venditore": "DIREZIONE", "conta_commissione": false, "mese_commissione": "2026-09" }
+      ]
+    }
+  ],
+  "commissioni": [
+    { "venditore": "Sales 002", "mese": "2026-09", "totale_incassato": "1590.00", "commissione_lorda": "159.00", "commissione_imponibile": "130.33" },
+    { "venditore": "Sales 003", "mese": "2026-09", "totale_incassato": "0.00", "commissione_lorda": "0.00", "commissione_imponibile": "0.00" }
+  ]
+}
