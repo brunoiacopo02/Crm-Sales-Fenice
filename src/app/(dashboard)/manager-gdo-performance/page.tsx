@@ -2,6 +2,7 @@ import { getManagerGdoTables, getAllGdoScriptRates } from '@/app/actions/gdoPerf
 import ManagerGdoClient from './ManagerGdoClient';
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
+import { toRomeDateStr } from '@/lib/dateUtils';
 
 export default async function ManagerGdoPerformancePage({
     searchParams
@@ -17,7 +18,8 @@ export default async function ManagerGdoPerformancePage({
     }
 
     const sp = await searchParams;
-    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    // Mese Europe/Rome: toISOString() (UTC) fra 00:00 e 02:00 del 1° darebbe il mese prima.
+    const currentMonthStr = toRomeDateStr(new Date()).slice(0, 7);
     const selectedMonth = sp.month || currentMonthStr;
 
     const [data, scriptRates] = await Promise.all([

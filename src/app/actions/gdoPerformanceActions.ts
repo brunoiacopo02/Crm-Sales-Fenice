@@ -8,7 +8,6 @@ import { getBiweeklyCycle } from "@/lib/biweeklyCycle";
 import { countPresences } from "@/lib/presenceCounting";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
-import { contaNeiKpi } from "@/lib/intakeBatch";
 import { monthBoundsRome, dayBoundsRome, weekBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 import { getMinCallsPerDay } from "@/app/actions/managerAdvancedActions";
 
@@ -110,7 +109,7 @@ export async function getManagerGdoTables(monthString: string) {
     // Bounds Europe/Rome (end esclusivo): prima usava componenti Date locali (UTC su Vercel).
     const { start: startObj, end: endObj } = monthBoundsRome(monthString);
 
-    const [monthLeads, assignedLeadsRaw, presenceLeads, confirmedLeads, closedLeads] = await Promise.all([
+    const [monthLeads, calledLeads, presenceLeads, confirmedLeads, closedLeads] = await Promise.all([
         db.select().from(leads).where(
             and(
                 eq(leads.companyId, ctx.companyId),
@@ -119,21 +118,28 @@ export async function getManagerGdoTables(monthString: string) {
                 sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endObj}`,
             )
         ),
-        db.select({
-            assignedToId: leads.assignedToId,
+        // Denominatore della % fissaggio = lead CHIAMATI dal GDO nel mese
+        // (distinti), stessa base di /kpi-gdo (apptRate). Prima erano i lead
+        // con assignedToId attuale = GDO e assignedAt nel mese, ma assignedAt
+        // è la PRIMA presa in carico (latch, migr. 0027): con il ribilanciamento
+        // dei pool e le restituzioni del bot i lead cambiano GDO e restano
+        // datati alla prima assegnazione di un altro. Risultato a ottobre 2026:
+        // GDO 114 con 191 lead in pipeline ne mostrava 3, GDO 119 aveva 280
+        // lead chiamati e 37 "assegnati" (29,7% di fissaggio), funnel al 150%.
+        // Ogni fissato del mese ha una chiamata dello stesso GDO nel mese
+        // (verificato set-ott 2026: zero eccezioni), quindi la % resta ≤ 100%.
+        db.selectDistinct({
+            leadId: callLogs.leadId,
+            userId: callLogs.userId,
             funnel: leads.funnel,
-            // Serve a contaNeiKpi() nel ciclo di conteggio più sotto.
-            intakeBatch: leads.intakeBatch,
-        }).from(leads)
+        }).from(callLogs)
+            .innerJoin(leads, eq(leads.id, callLogs.leadId))
             .where(and(
+                eq(callLogs.companyId, ctx.companyId),
                 eq(leads.companyId, ctx.companyId),
-                isNotNull(leads.assignedToId),
-                // Base = presa in carico, non import (migr. 0027). I lead dei
-                // pool /import nascono mesi prima di arrivare a un GDO: contati
-                // su createdAt finivano nel mese del caricamento, dove nessuno
-                // li guarda. COALESCE per i lead storici senza assignedAt.
-                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${startObj}`,
-                sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${endObj}`,
+                isNotNull(callLogs.userId),
+                gte(callLogs.createdAt, startObj),
+                lt(callLogs.createdAt, endObj),
             )),
         // Presenze del mese (PO 2026-07-17): base `presentedAt` (giorno dell'appuntamento
         // in cui il lead ha presenziato, latch immutabile) — NON il cohort dei fissati.
@@ -193,8 +199,8 @@ export async function getManagerGdoTables(monthString: string) {
             gdoId: gdo.id,
             gdoName: gdo.displayName || `GDO ${gdo.gdoCode || gdo.id.slice(0, 4)}`,
             funnelStats: {} as Record<string, any>,
-            // Lead assegnati al GDO per ciascun funnel (denominatore per % fissaggio per-funnel)
-            leadAssegnatiFunnel: {} as Record<string, number>,
+            // Lead chiamati dal GDO per ciascun funnel (denominatore per % fissaggio per-funnel)
+            leadChiamatiFunnel: {} as Record<string, number>,
             calendarStats: {
                 confermati: Array(weeks.length).fill(0),
                 presenziati: Array(weeks.length).fill(0),
@@ -203,7 +209,7 @@ export async function getManagerGdoTables(monthString: string) {
             totalStats: {
                 fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0
             },
-            leadAssegnati: 0
+            leadChiamati: 0
         };
     }
 
@@ -269,40 +275,38 @@ export async function getManagerGdoTables(monthString: string) {
         gdoStats.totalStats.chiusiConPresenza++;
     }
 
-    // Count leads assigned to each GDO in the month (totali + per-funnel)
-    for (const lead of assignedLeadsRaw) {
-        if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId]) continue;
-        // Gli scarti mai chiamati di un'infornata anomala non sono lead
-        // assegnati: schiaccerebbero la % fissaggio del GDO che li ha addosso.
-        if (!contaNeiKpi(lead)) continue;
-        const g = gdoStatsMap[lead.assignedToId];
-        g.leadAssegnati++;
+    // Lead chiamati da ciascun GDO nel mese (totali + per-funnel). Già
+    // distinti per (lead, GDO): un lead chiamato da due GDO conta per entrambi.
+    for (const lead of calledLeads) {
+        if (!lead.userId || !gdoStatsMap[lead.userId]) continue;
+        const g = gdoStatsMap[lead.userId];
+        g.leadChiamati++;
         const f = lead.funnel || 'ALTRO';
-        g.leadAssegnatiFunnel[f] = (g.leadAssegnatiFunnel[f] || 0) + 1;
+        g.leadChiamatiFunnel[f] = (g.leadChiamatiFunnel[f] || 0) + 1;
     }
 
     // Formatting for Frontend. Include any funnel that has either fissati > 0
-    // OR lead assegnati > 0 (so the admin sees under-performing funnels with 0% fissaggio too).
+    // OR lead chiamati > 0 (so the admin sees under-performing funnels with 0% fissaggio too).
     const result = Object.values(gdoStatsMap).map(gdo => {
         const allFunnelNames = new Set<string>([
             ...Object.keys(gdo.funnelStats),
-            ...Object.keys(gdo.leadAssegnatiFunnel),
+            ...Object.keys(gdo.leadChiamatiFunnel),
         ]);
         const funnelRows = [...allFunnelNames].sort((a, b) => {
-            const la = gdo.leadAssegnatiFunnel[a] || 0;
-            const lb = gdo.leadAssegnatiFunnel[b] || 0;
+            const la = gdo.leadChiamatiFunnel[a] || 0;
+            const lb = gdo.leadChiamatiFunnel[b] || 0;
             return lb - la;
         }).map(k => {
             const row = gdo.funnelStats[k] || { fissati: 0, confermati: 0, presenziati: 0, chiusi: 0, chiusiConPresenza: 0 };
-            const leadAssegnatiFunnel = gdo.leadAssegnatiFunnel[k] || 0;
+            const leadChiamatiFunnel = gdo.leadChiamatiFunnel[k] || 0;
             return {
                 funnel: k,
-                leadAssegnatiFunnel,
+                leadChiamatiFunnel,
                 fissati: row.fissati,
                 confermati: row.confermati,
                 presenziati: row.presenziati,
                 chiusi: row.chiusi,
-                percFiss: leadAssegnatiFunnel > 0 ? (row.fissati / leadAssegnatiFunnel * 100).toFixed(1) + '%' : '-',
+                percFiss: leadChiamatiFunnel > 0 ? (row.fissati / leadChiamatiFunnel * 100).toFixed(1) + '%' : '-',
                 percConf: row.fissati ? (row.confermati / row.fissati * 100).toFixed(0) + '%' : '-',
                 percPres: row.confermati ? (row.presenziati / row.confermati * 100).toFixed(0) + '%' : '-',
                 // Numeratore = solo chiusure con presenza vera (row.chiusi resta il
@@ -314,14 +318,14 @@ export async function getManagerGdoTables(monthString: string) {
         const weeklyRows = [
             { label: 'App Confermati', data: gdo.calendarStats.confermati },
             { label: 'App Presenziati', data: gdo.calendarStats.presenziati },
-            { label: 'Chiusure (V', data: gdo.calendarStats.chiusi },
+            { label: 'Chiusure (Venditori)', data: gdo.calendarStats.chiusi },
         ];
 
         return {
             gdoId: gdo.gdoId,
             gdoName: gdo.gdoName,
-            leadAssegnati: gdo.leadAssegnati,
-            percFissaggio: gdo.leadAssegnati > 0 ? (gdo.totalStats.fissati / gdo.leadAssegnati * 100).toFixed(1) + '%' : '-',
+            leadChiamati: gdo.leadChiamati,
+            percFissaggio: gdo.leadChiamati > 0 ? (gdo.totalStats.fissati / gdo.leadChiamati * 100).toFixed(1) + '%' : '-',
             funnelRows,
             totalRows: {
                 fissati: gdo.totalStats.fissati,
