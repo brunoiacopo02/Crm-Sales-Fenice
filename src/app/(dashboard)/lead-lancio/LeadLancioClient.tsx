@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState, useTransition } from "react"
-import { CalendarClock, CheckCircle2, Clock, Mail, MessageSquare, Phone, PhoneMissed, Rocket, XCircle } from "lucide-react"
+import { CalendarClock, Check, CheckCircle2, Clock, Copy, Mail, MessageSquare, Phone, PhoneMissed, Rocket, XCircle } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import {
@@ -180,6 +180,13 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
     const [errore, setErrore] = useState<string | null>(null)
     const [pending, start] = useTransition()
 
+    const [copiato, setCopiato] = useState(false)
+    const copiaNumero = () => {
+        navigator.clipboard?.writeText(lead.phone)
+            .then(() => { setCopiato(true); setTimeout(() => setCopiato(false), 1500) })
+            .catch(() => undefined)
+    }
+
     const richiamaTra = richiamo ? Math.max(0, Math.round((new Date(richiamo).getTime() - adesso) / 60_000)) : null
     const risposte = lead.lancioBotInfo?.risposte ?? []
 
@@ -221,9 +228,19 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
     return (
         <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
             <div className="font-bold text-ash-900">{lead.name}</div>
-            <a href={`tel:${lead.phone}`} className="mt-1 flex items-center gap-1.5 text-base font-semibold text-brand-orange hover:underline">
-                <Phone className="h-4 w-4 shrink-0" /> {lead.phone}
-            </a>
+            <div className="mt-1 flex items-center gap-1.5">
+                <Phone className="h-4 w-4 shrink-0 text-ash-400" />
+                <span className="select-all text-base font-semibold text-ash-900">{lead.phone}</span>
+                <button
+                    type="button"
+                    onClick={copiaNumero}
+                    title="Copia il numero"
+                    className="inline-flex items-center gap-1 rounded-md border border-ash-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-ash-600 transition-colors hover:border-brand-orange hover:text-brand-orange"
+                >
+                    {copiato ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copiato ? "Copiato" : "Copia"}
+                </button>
+            </div>
             {lead.email && (
                 <div className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-ash-600">
                     <Mail className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{lead.email}</span>
