@@ -16,6 +16,7 @@ import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { isConfermeTl } from "@/lib/confermeTl"
 import { resolveLatePenalties } from "@/lib/venditore/latePenaltiesRunner";
 import { syncFollowUpBlock, releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks";
+import { isLancioLiberoLead } from "@/lib/lancio/liberi";
 // Gamification disabled for VENDITORE role — import removed
 
 async function resolveIsStaff() {
@@ -259,8 +260,13 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     // MANAGER/ADMIN sono esentati da ogni blocco (operano senza limiti).
     const isStaff = session.user.role === 'MANAGER' || session.user.role === 'ADMIN';
 
+    // Lead "liberi" del lancio (PO 05/10/2026): chiamata subito della sera e
+    // mattina dopo col venditore. Niente check-in, sondaggio o follow-up
+    // obbligatori; il motivo del Non chiuso resta (GUARDIA 4).
+    const lancioLibero = isLancioLiberoLead(oldLead);
+
     // GUARDIA 1: niente esito senza check-in "Inizia trattativa".
-    if (!isStaff && !oldLead.negotiationStartedAt) {
+    if (!isStaff && !lancioLibero && !oldLead.negotiationStartedAt) {
         return { success: false, error: "Avvia la trattativa (Inizia trattativa) prima di registrare l'esito." };
     }
 
@@ -268,6 +274,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     // Normalize to lowercase to match AC webhooks that may store funnel uppercased
     // (e.g. 'DATABASE' vs 'database') — mirrors the client-side check in VenditoreDrawer.
     const needsSurvey = !isStaff
+        && !lancioLibero
         && (payload.outcome === 'Chiuso' || payload.outcome === 'Non chiuso')
         && (oldLead.funnel || '').trim().toLowerCase() !== EXCLUDED_FUNNEL;
     if (needsSurvey) {
@@ -304,7 +311,7 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     const priorNonClosedCount = countCycleNonClosed(countableAttempts, oldLead.salesCycleStartAt ?? null);
 
     // GUARDIA 3: follow-up obbligatorio dopo "Non chiuso" + tetto a 3 (solo VENDITORE).
-    if (!isStaff) {
+    if (!isStaff && !lancioLibero) {
         const check = validateOutcomeTransition({
             outcome: payload.outcome,
             nextFollowUpDate: payload.nextFollowUpDate ?? null,
@@ -341,6 +348,8 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
                 // Qualunque esito toglie il lead da "In lavorazione".
                 inLavorazioneAt: null,
                 salespersonOutcomeAt: effectiveOutcomeAt,
+                // Il lancio salta il check-in: la trattativa si data all'esito.
+                ...(lancioLibero && !oldLead.negotiationStartedAt ? { negotiationStartedAt: new Date() } : {}),
                 // Latch presenza (PO 2026-07-17): prima presenza → giorno dell'appuntamento;
                 // mai sovrascritto. "Sparito" a un follow-up NON toglie la presenza.
                 presentedAt: oldLead.presentedAt ?? (

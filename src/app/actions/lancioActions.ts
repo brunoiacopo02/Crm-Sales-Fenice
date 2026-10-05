@@ -19,6 +19,9 @@ import { IN_CALL_NOW_CYCLE } from "@/lib/lancio/callNowSql"
 import { notifyConfermeLancio } from "@/lib/lancio/booking"
 import { countCycleNonClosed } from "@/lib/venditorePerformance/guard"
 import { logLeadEvent } from "@/lib/eventLogger"
+import { isLancioLiberoLead } from "@/lib/lancio/liberi"
+import { NOT_CLOSED_REASONS } from "@/lib/surveys/questions"
+import { saveVenditoreOutcome } from "@/app/actions/venditoreActions"
 
 export type LancioAdminView = {
     config: { bucket: string; funnel: string; webinarAt: string; giornoDopo: string; dopodomani: string; oreVenditori: number[] }
@@ -302,5 +305,94 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
         await notifyConfermeLancio({ id: lead.id, name: lead.name }, next.appointmentAt, '🚀 Lancio: 3 NR dal venditore, da richiamare')
     }
     revalidatePath('/venditore')
+    revalidatePath('/lead-lancio')
     return { ok: true, handoff: next.kind === 'handoff' }
+}
+
+// ── Sezione venditore "Lead del lancio" (PO 05/10/2026) ──────────────────────
+
+export type LancioAppuntamento = {
+    id: string; name: string; phone: string; email: string | null
+    appointmentDate: string | null; lancioSceltaAt: string | null
+    lancioBotInfo: { risposte?: string[] } | null; appointmentNote: string | null
+    salespersonOutcome: string | null; closeProduct: string | null; closeAmountEur: number | null
+    notClosedReason: string | null; version: number
+}
+
+/**
+ * Gli appuntamenti del mattino dopo che il bot ha messo in agenda al
+ * venditore (`app_mattina`), con telefono e racconto del bot in chiaro: per
+ * questi lead non c'è il check-in. Stessa finestra di 72 ore della scheda
+ * delle chiamate subito, così la sezione si svuota da sola a lancio finito.
+ */
+export async function getVenditoreLancioAppuntamenti(sellerId: string): Promise<LancioAppuntamento[]> {
+    const { companyId } = await requireVenditoreOrStaff(sellerId)
+    const finestra = new Date(Date.now() - CALL_NOW_TAB_WINDOW_MS)
+    const rows = await db.select({
+        id: leads.id, name: leads.name, phone: leads.phone, email: leads.email,
+        appointmentDate: leads.appointmentDate, lancioSceltaAt: leads.lancioSceltaAt,
+        lancioBotInfo: leads.lancioBotInfo, appointmentNote: leads.appointmentNote,
+        salespersonOutcome: leads.salespersonOutcome, closeProduct: leads.closeProduct, closeAmountEur: leads.closeAmountEur,
+        notClosedReason: leads.notClosedReason, version: leads.version,
+    }).from(leads).where(and(
+        eq(leads.companyId, companyId),
+        eq(leads.salespersonUserId, sellerId),
+        eq(leads.lancioScelta, 'app_mattina'),
+        eq(leads.launchBucket, LANCIO_WEBDEV.bucket),
+        gte(leads.appointmentDate, finestra),
+    )).orderBy(leads.appointmentDate)
+
+    const iso = (d: Date | null) => (d ? d.toISOString() : null)
+    return rows.map(r => ({
+        id: r.id, name: r.name, phone: r.phone, email: r.email,
+        appointmentDate: iso(r.appointmentDate), lancioSceltaAt: iso(r.lancioSceltaAt),
+        lancioBotInfo: (r.lancioBotInfo as { risposte?: string[] } | null) ?? null, appointmentNote: r.appointmentNote,
+        salespersonOutcome: r.salespersonOutcome, closeProduct: r.closeProduct,
+        closeAmountEur: r.closeAmountEur === null ? null : Number(r.closeAmountEur),
+        notClosedReason: r.notClosedReason, version: r.version,
+    }))
+}
+
+export type LancioEsitoInput =
+    | { outcome: 'Chiuso'; closeAmountEur: number; closeProduct?: 'advance' | 'gold' | 'exclusive' | null; notes?: string }
+    | { outcome: 'Non chiuso'; notClosedReason: string; notes?: string }
+
+/**
+ * Esito dalla sezione "Lead del lancio": Chiuso con importo, oppure Non chiuso
+ * con motivo. Passa da `saveVenditoreOutcome` (stessa scrittura, stessi KPI e
+ * webhook), che per questi lead salta check-in, sondaggio e follow-up.
+ */
+export async function saveLancioOutcome(leadId: string, input: LancioEsitoInput, version: number): Promise<{ ok: true } | { ok: false; error: string }> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const role = user?.user_metadata?.role as string | undefined
+    if (!user || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(role ?? '')) return { ok: false, error: 'Unauthorized' }
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const isStaff = role === 'MANAGER' || role === 'ADMIN'
+
+    const [lead] = await db.select({
+        salespersonUserId: leads.salespersonUserId, launchBucket: leads.launchBucket, lancioScelta: leads.lancioScelta,
+    }).from(leads).where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId))).limit(1)
+    if (!lead) return { ok: false, error: 'Lead non trovato' }
+    if (!isLancioLiberoLead(lead)) return { ok: false, error: 'Non è un lead della serata di lancio' }
+    if (!isStaff && lead.salespersonUserId !== user.id) return { ok: false, error: 'Lead di un altro venditore' }
+
+    if (input.outcome === 'Chiuso') {
+        if (!Number.isFinite(input.closeAmountEur) || input.closeAmountEur <= 0) return { ok: false, error: "Inserisci l'importo della chiusura" }
+    } else if (input.outcome === 'Non chiuso') {
+        if (!(NOT_CLOSED_REASONS as ReadonlyArray<string>).includes(input.notClosedReason)) return { ok: false, error: 'Scegli il motivo del Non chiuso' }
+    } else {
+        return { ok: false, error: 'Esito non valido' }
+    }
+
+    const res = await saveVenditoreOutcome(leadId, input.outcome === 'Chiuso'
+        ? { outcome: 'Chiuso', closeAmountEur: input.closeAmountEur, closeProduct: input.closeProduct ?? undefined, notes: input.notes }
+        : { outcome: 'Non chiuso', notClosedReason: input.notClosedReason, notes: input.notes, nextFollowUpDate: null },
+        version)
+    if (!res.success) {
+        return { ok: false, error: res.error === 'CONCURRENCY_ERROR' ? 'Il lead è cambiato nel frattempo: ricarica e riprova' : (res.error ?? 'Errore') }
+    }
+    revalidatePath('/lead-lancio')
+    return { ok: true }
 }

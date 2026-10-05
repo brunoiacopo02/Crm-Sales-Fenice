@@ -150,6 +150,8 @@ export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: strin
     } else if (role === "VENDITORE") {
         navItems = [
             { name: "Dashboard Vendite", href: "/venditore", icon: LayoutDashboard },
+            // Serata di lancio (PO 05/10/2026): chiamate subito + appuntamenti del mattino.
+            { name: "Lead del lancio", href: "/lead-lancio", icon: Rocket },
             // Solo per il venditore su cui la pipeline autonoma e' accesa oggi:
             // per chiunque altro la pagina rediriga alla home, ma la voce non
             // deve nemmeno comparire (sarebbe un difetto visibile).
