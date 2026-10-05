@@ -178,6 +178,8 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
     const [motivo, setMotivo] = useState("")
     const [note, setNote] = useState("")
     const [errore, setErrore] = useState<string | null>(null)
+    // Esito già dato: si può correggere (PO 05/10).
+    const [modifica, setModifica] = useState(false)
     const [pending, start] = useTransition()
 
     const [copiato, setCopiato] = useState(false)
@@ -204,6 +206,7 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                     : await saveLancioOutcome(lead.id, { outcome: "Non chiuso", notClosedReason: motivo, notes: note || undefined }, lead.version)
                 if (!res.ok) { setErrore(res.error); return }
                 setModo(null)
+                setModifica(false)
                 onChanged()
             } catch {
                 setErrore("Errore di rete: l'esito non è stato salvato. Riprova.")
@@ -267,9 +270,17 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                 </div>
             )}
 
-            {lead.salespersonOutcome ? (
-                <div className={`mt-2 text-sm font-bold ${lead.salespersonOutcome === "Chiuso" ? "text-emerald-700" : "text-red-700"}`}>
-                    {lead.salespersonOutcome}{esitoDettaglio ? ` · ${esitoDettaglio}` : ""}
+            {lead.salespersonOutcome && !modifica ? (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className={`text-sm font-bold ${lead.salespersonOutcome === "Chiuso" ? "text-emerald-700" : "text-red-700"}`}>
+                        {lead.salespersonOutcome}{esitoDettaglio ? ` · ${esitoDettaglio}` : ""}
+                    </div>
+                    <button
+                        onClick={() => { setModifica(true); setErrore(null) }}
+                        className="rounded-lg border border-ash-200 bg-white px-2.5 py-1 text-xs font-semibold text-ash-700 transition-colors hover:border-brand-orange hover:text-brand-orange"
+                    >
+                        Modifica esito
+                    </button>
                 </div>
             ) : modo === null ? (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -287,13 +298,18 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                     >
                         <XCircle className="h-3.5 w-3.5" /> Non chiuso
                     </button>
-                    {conNonRisponde && (
+                    {conNonRisponde && !lead.salespersonOutcome && (
                         <button
                             onClick={nonRisponde}
                             disabled={pending}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-ash-200 bg-white px-3 py-1.5 text-xs font-semibold text-ash-700 transition-colors hover:border-red-300 hover:text-red-700 disabled:opacity-50"
                         >
                             <PhoneMissed className="h-3.5 w-3.5" /> Non risponde
+                        </button>
+                    )}
+                    {modifica && (
+                        <button onClick={() => setModifica(false)} className="rounded-lg border border-ash-200 px-3 py-1.5 text-xs font-semibold text-ash-700">
+                            Annulla
                         </button>
                     )}
                 </div>

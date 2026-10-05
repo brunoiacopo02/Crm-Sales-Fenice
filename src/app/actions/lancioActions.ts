@@ -359,7 +359,7 @@ export type LancioEsitoInput =
 
 /**
  * Esito dalla sezione "Lead del lancio": Chiuso con importo, oppure Non chiuso
- * con motivo. Passa da `saveVenditoreOutcome` (stessa scrittura, stessi KPI e
+ * con motivo, e la correzione di un esito già dato. Passa da `saveVenditoreOutcome` (stessa scrittura, stessi KPI e
  * webhook), che per questi lead salta check-in, sondaggio e follow-up.
  */
 export async function saveLancioOutcome(leadId: string, input: LancioEsitoInput, version: number): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -373,6 +373,7 @@ export async function saveLancioOutcome(leadId: string, input: LancioEsitoInput,
 
     const [lead] = await db.select({
         salespersonUserId: leads.salespersonUserId, launchBucket: leads.launchBucket, lancioScelta: leads.lancioScelta,
+        salespersonOutcome: leads.salespersonOutcome,
     }).from(leads).where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId))).limit(1)
     if (!lead) return { ok: false, error: 'Lead non trovato' }
     if (!isLancioLiberoLead(lead)) return { ok: false, error: 'Non è un lead della serata di lancio' }
@@ -386,9 +387,12 @@ export async function saveLancioOutcome(leadId: string, input: LancioEsitoInput,
         return { ok: false, error: 'Esito non valido' }
     }
 
+    // Esito già presente = il venditore lo sta correggendo (PO 05/10): si
+    // riscrive lo stesso tentativo, niente secondo salesAttempt né fatturato doppio.
+    const occasion = lead.salespersonOutcome ? 'current' as const : 'new' as const
     const res = await saveVenditoreOutcome(leadId, input.outcome === 'Chiuso'
-        ? { outcome: 'Chiuso', closeAmountEur: input.closeAmountEur, closeProduct: input.closeProduct ?? undefined, notes: input.notes }
-        : { outcome: 'Non chiuso', notClosedReason: input.notClosedReason, notes: input.notes, nextFollowUpDate: null },
+        ? { outcome: 'Chiuso', closeAmountEur: input.closeAmountEur, closeProduct: input.closeProduct ?? undefined, notes: input.notes, occasion }
+        : { outcome: 'Non chiuso', notClosedReason: input.notClosedReason, notes: input.notes, nextFollowUpDate: null, occasion },
         version)
     if (!res.success) {
         return { ok: false, error: res.error === 'CONCURRENCY_ERROR' ? 'Il lead è cambiato nel frattempo: ricarica e riprova' : (res.error ?? 'Errore') }
