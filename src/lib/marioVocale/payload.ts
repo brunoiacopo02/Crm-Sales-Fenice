@@ -65,7 +65,11 @@ export function parseAgendaMario(
 
     const telefono = testo(o.telefono)
     const chiaveTelefono = personKeyOf(telefono)
-    if (!telefono || !chiaveTelefono) return { ok: false, reason: 'telefono_non_valido' }
+    // Numeri segnaposto (0000000001, 3333333333): nel CRM esistono lead con questi
+    // numeri, e un test col numero finto li ha agganciati (06/10/2026).
+    if (!telefono || !chiaveTelefono || /(\d)\1{7,}/.test(chiaveTelefono)) {
+        return { ok: false, reason: 'telefono_non_valido' }
+    }
 
     const app = o.appuntamento
     const inizioRaw = app && typeof app === 'object' ? testo((app as Record<string, unknown>).inizio) : null

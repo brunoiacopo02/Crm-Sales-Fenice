@@ -56,6 +56,9 @@ test('campi obbligatori mancanti', () => {
     assert.deepEqual(parseAgendaMario(corpo({ id_invio: '' }), ADESSO), { ok: false, reason: 'id_invio_mancante' })
     assert.deepEqual(parseAgendaMario(corpo({ telefono: '12' }), ADESSO), { ok: false, reason: 'telefono_non_valido' })
     assert.deepEqual(parseAgendaMario(corpo({ appuntamento: null }), ADESSO), { ok: false, reason: 'data_mancante' })
+    // Numeri segnaposto: non devono agganciare i lead finti che il CRM contiene.
+    assert.deepEqual(parseAgendaMario(corpo({ telefono: '+390000000001' }), ADESSO), { ok: false, reason: 'telefono_non_valido' })
+    assert.deepEqual(parseAgendaMario(corpo({ telefono: '3333333333' }), ADESSO), { ok: false, reason: 'telefono_non_valido' })
 })
 
 test("data senza scarto di fuso: rifiutata, un'ora sbagliata in silenzio vale meno di un errore", () => {
