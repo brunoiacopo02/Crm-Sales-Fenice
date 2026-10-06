@@ -1,7 +1,7 @@
 "use server"
 
 import crypto from "crypto"
-import { and, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db"
 import { launchShifts, leads, salesAttempts, salesWeekPlans, users } from "@/db/schema"
@@ -150,7 +150,7 @@ export async function saveLaunchShifts(kind: ShiftKind, salesUserIds: string[]):
 export type LancioCallNowLead = {
     id: string; name: string; phone: string; email: string | null; funnel: string | null
     lancioSceltaAt: string | null; lancioCallNowAttempts: number; lancioCallNowNextAt: string | null
-    lancioBotInfo: { risposte?: string[] } | null; appointmentNote: string | null
+    lancioBotInfo: { risposte?: string[]; richiamo?: { at: string; nota?: string | null } } | null; appointmentNote: string | null
     negotiationStartedAt: string | null; salespersonOutcome: string | null; appointmentDate: string | null
     version: number; priorNonClosedCount: number; attemptCount: number; column: CallNowColumn
 }
@@ -198,7 +198,8 @@ export async function getVenditoreLancioLeads(sellerId: string): Promise<LancioC
         eq(leads.salespersonUserId, sellerId),
         eq(leads.lancioScelta, 'chiamata_subito'),
         eq(leads.launchBucket, LANCIO_WEBDEV.bucket),
-        gte(leads.lancioSceltaAt, finestra),
+        // Oltre le 72 ore resta visibile chi ha un richiamo ancora da fare (PO 06/10).
+        or(gte(leads.lancioSceltaAt, finestra), sql`${leads.lancioBotInfo}->'richiamo' is not null and ${leads.salespersonOutcome} is null`),
         // Colonne da chiamare + colonna Esitati, niente altro.
         or(IN_CALL_NOW_CYCLE, isNotNull(leads.salespersonOutcome)),
     )).orderBy(desc(leads.lancioSceltaAt))
@@ -217,7 +218,7 @@ export async function getVenditoreLancioLeads(sellerId: string): Promise<LancioC
         return {
             id: r.id, name: r.name, phone: r.phone, email: r.email, funnel: r.funnel,
             lancioSceltaAt: iso(r.lancioSceltaAt), lancioCallNowAttempts: r.lancioCallNowAttempts ?? 0, lancioCallNowNextAt: iso(r.lancioCallNowNextAt),
-            lancioBotInfo: (r.lancioBotInfo as { risposte?: string[] } | null) ?? null, appointmentNote: r.appointmentNote,
+            lancioBotInfo: (r.lancioBotInfo as LancioCallNowLead['lancioBotInfo']) ?? null, appointmentNote: r.appointmentNote,
             negotiationStartedAt: iso(r.negotiationStartedAt), salespersonOutcome: r.salespersonOutcome, appointmentDate: iso(r.appointmentDate),
             version: r.version, attemptCount: arr.length,
             priorNonClosedCount: countCycleNonClosed(arr, r.salesCycleStartAt ?? null),
@@ -256,7 +257,11 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
     const previousSeller = lead.salespersonUserId
 
     if (next.kind === 'retry') {
+        // Un "Non risponde" chiude anche l'eventuale richiamo: vale il nuovo +30 minuti.
+        const info = { ...((lead.lancioBotInfo as Record<string, unknown> | null) ?? {}) }
+        delete info.richiamo
         const updated = await db.update(leads).set({
+            lancioBotInfo: info,
             lancioCallNowAttempts: next.attempts,
             lancioCallNowNextAt: next.nextAt,
             lastCallDate: now,
@@ -426,6 +431,60 @@ export async function saveLancioOutcome(leadId: string, input: LancioEsitoInput,
         version)
     if (!res.success) {
         return { ok: false, error: res.error === 'CONCURRENCY_ERROR' ? 'Il lead è cambiato nel frattempo: ricarica e riprova' : (res.error ?? 'Errore') }
+    }
+    revalidatePath('/lead-lancio')
+    return { ok: true }
+}
+
+/**
+ * Richiamo su un lead della sezione "Lead del lancio" (PO 06/10/2026): il venditore
+ * fissa giorno, ora e una nota, come un GDO coi suoi lead. Vive in
+ * `lancioBotInfo.richiamo` e in `lancioCallNowNextAt` (l'ora a cui richiamare), NON in
+ * `recallDate`: quello e' dei GDO e accenderebbe i loro richiami e i loro avvisi.
+ * `at` null toglie il richiamo.
+ */
+export async function setLancioRecall(leadId: string, at: string | null, nota?: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const role = user?.user_metadata?.role as string | undefined
+    if (!user || !['VENDITORE', 'MANAGER', 'ADMIN'].includes(role ?? '')) return { ok: false, error: 'Unauthorized' }
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const isStaff = role === 'MANAGER' || role === 'ADMIN'
+
+    const [lead] = await db.select({
+        id: leads.id, version: leads.version, salespersonUserId: leads.salespersonUserId, lancioScelta: leads.lancioScelta,
+        launchBucket: leads.launchBucket, salespersonOutcome: leads.salespersonOutcome, lancioBotInfo: leads.lancioBotInfo,
+    }).from(leads).where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId))).limit(1)
+    if (!lead) return { ok: false, error: 'Lead non trovato' }
+    if (lead.launchBucket !== LANCIO_WEBDEV.bucket || lead.lancioScelta !== 'chiamata_subito') return { ok: false, error: 'Non è un lead da chiamare del lancio' }
+    if (!isStaff && lead.salespersonUserId !== user.id) return { ok: false, error: 'Lead di un altro venditore' }
+    if (lead.salespersonOutcome) return { ok: false, error: 'Il lead ha già un esito' }
+
+    let quando: Date | null = null
+    if (at !== null) {
+        quando = new Date(at)
+        if (Number.isNaN(quando.getTime())) return { ok: false, error: 'Data del richiamo non valida' }
+        if (quando.getTime() < Date.now() - 60_000) return { ok: false, error: 'Il richiamo deve essere nel futuro' }
+    }
+    const info = { ...((lead.lancioBotInfo as Record<string, unknown> | null) ?? {}) }
+    if (quando) info.richiamo = { at: quando.toISOString(), nota: nota?.trim() || null }
+    else delete info.richiamo
+
+    const updated = await db.update(leads).set({
+        lancioBotInfo: info,
+        lancioCallNowNextAt: quando,
+        version: lead.version + 1,
+        updatedAt: new Date(),
+    }).where(and(eq(leads.id, leadId), eq(leads.version, lead.version))).returning({ id: leads.id })
+    if (updated.length === 0) return { ok: false, error: 'Il lead è cambiato nel frattempo: ricarica e riprova' }
+    try {
+        await logLeadEvent({
+            leadId, eventType: 'RECALL_SET', userId: user.id, companyId: ctx.companyId,
+            metadata: { source: 'lancio_venditore', at: quando?.toISOString() ?? null, nota: nota?.trim() || null },
+        })
+    } catch (e) {
+        console.error('[lancio] log RECALL_SET fallito', e)
     }
     revalidatePath('/lead-lancio')
     return { ok: true }

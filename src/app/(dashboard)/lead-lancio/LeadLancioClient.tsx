@@ -9,6 +9,7 @@ import {
     getVenditoreLancioLeads,
     recordLancioCallNowNoAnswer,
     saveLancioOutcome,
+    setLancioRecall,
     type LancioAppuntamento,
     type LancioCallNowLead,
 } from "@/app/actions/lancioActions"
@@ -20,7 +21,7 @@ type Vista = "stasera" | "domani"
 /** Campi comuni alle due liste: bastano alla scheda del lead. */
 type LeadScheda = {
     id: string; name: string; phone: string; email: string | null
-    lancioBotInfo: { risposte?: string[] } | null; appointmentNote: string | null
+    lancioBotInfo: { risposte?: string[]; richiamo?: { at: string; nota?: string | null } } | null; appointmentNote: string | null
     salespersonOutcome: string | null; version: number
 }
 
@@ -31,11 +32,16 @@ const PACCHETTI = [
 ] as const
 
 const COLONNE_SERA = [
+    { key: "richiami", title: "Richiami" },
     { key: "da_chiamare", title: "Da chiamare" },
     { key: "seconda", title: "Seconda chiamata" },
     { key: "terza", title: "Terza chiamata" },
     { key: "esitati", title: "Esitati" },
 ] as const
+
+/** Richiamo fissato dal venditore e lead non ancora esitato: sta nella colonna Richiami. */
+const haRichiamo = (l: { lancioBotInfo: LeadScheda["lancioBotInfo"]; salespersonOutcome: string | null }) =>
+    !!l.lancioBotInfo?.richiamo?.at && !l.salespersonOutcome
 
 const ora = (iso: string | null) => (iso ? format(new Date(iso), "HH:mm", { locale: it }) : null)
 
@@ -93,9 +99,11 @@ export function LeadLancioClient({ sellerId }: { sellerId: string }) {
             {loading ? (
                 <div className="py-16 text-center text-sm text-ash-500">Caricamento…</div>
             ) : vista === "stasera" ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                     {COLONNE_SERA.map(col => {
-                        const items = sera.filter(l => l.column === col.key)
+                        const items = col.key === "richiami"
+                            ? sera.filter(haRichiamo).sort((a, b) => (a.lancioBotInfo?.richiamo?.at ?? "").localeCompare(b.lancioBotInfo?.richiamo?.at ?? ""))
+                            : sera.filter(l => !haRichiamo(l) && l.column === col.key)
                         return (
                             <div key={col.key} className="rounded-xl border border-ash-200/60 bg-white p-3 shadow-soft">
                                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -180,6 +188,28 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
     const [errore, setErrore] = useState<string | null>(null)
     // Esito già dato: si può correggere (PO 05/10).
     const [modifica, setModifica] = useState(false)
+    // Richiamo (PO 06/10): giorno, ora e nota, come un GDO coi suoi lead.
+    const [richiamoAperto, setRichiamoAperto] = useState(false)
+    const [richiamoAt, setRichiamoAt] = useState("")
+    const [richiamoNota, setRichiamoNota] = useState("")
+    const fissato = lead.lancioBotInfo?.richiamo ?? null
+
+    const salvaRichiamo = (togli = false) => {
+        setErrore(null)
+        start(async () => {
+            try {
+                // datetime-local e' l'ora di chi lo compila (Italia): new Date lo legge cosi'.
+                const res = await setLancioRecall(lead.id, togli ? null : new Date(richiamoAt).toISOString(), richiamoNota || undefined)
+                if (!res.ok) { setErrore(res.error); return }
+                setRichiamoAperto(false)
+                setRichiamoAt("")
+                setRichiamoNota("")
+                onChanged()
+            } catch {
+                setErrore("Errore di rete: il richiamo non è stato salvato. Riprova.")
+            }
+        })
+    }
     const [pending, start] = useTransition()
 
     const [copiato, setCopiato] = useState(false)
@@ -263,7 +293,18 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                 </div>
             )}
 
-            {richiamaTra !== null && (
+            {fissato && !lead.salespersonOutcome && (
+                <div className={`mt-2 rounded-md px-2 py-1 text-xs font-semibold ${new Date(fissato.at).getTime() <= adesso ? "bg-red-50 text-red-700" : "bg-sky-50 text-sky-800"}`}>
+                    <div className="flex items-center gap-1">
+                        <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                        Richiamo {format(new Date(fissato.at), "EEE d MMM 'alle' HH:mm", { locale: it })}
+                        {new Date(fissato.at).getTime() <= adesso ? " · da fare ora" : ""}
+                    </div>
+                    {fissato.nota && <div className="mt-0.5 font-normal italic">{fissato.nota}</div>}
+                </div>
+            )}
+
+            {richiamaTra !== null && !fissato && (
                 <div className="mt-2 flex items-center gap-1 text-xs font-semibold text-amber-700">
                     <Clock className="h-3.5 w-3.5 shrink-0" />
                     {richiamaTra > 0 ? `richiama fra ${richiamaTra} min` : "da richiamare ora"}
@@ -305,6 +346,15 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                             className="inline-flex items-center gap-1.5 rounded-lg border border-ash-200 bg-white px-3 py-1.5 text-xs font-semibold text-ash-700 transition-colors hover:border-red-300 hover:text-red-700 disabled:opacity-50"
                         >
                             <PhoneMissed className="h-3.5 w-3.5" /> Non risponde
+                        </button>
+                    )}
+                    {conNonRisponde && !lead.salespersonOutcome && (
+                        <button
+                            onClick={() => { setRichiamoAperto(v => !v); setErrore(null) }}
+                            disabled={pending}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 transition-colors hover:border-sky-400 disabled:opacity-50"
+                        >
+                            <CalendarClock className="h-3.5 w-3.5" /> {fissato ? "Sposta richiamo" : "Richiamo"}
                         </button>
                     )}
                     {modifica && (
@@ -360,6 +410,38 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                             {pending ? "Salvo…" : "Salva esito"}
                         </button>
                         <button onClick={() => { setModo(null); setErrore(null) }} disabled={pending} className="rounded-lg border border-ash-200 px-3 py-1.5 text-xs font-semibold text-ash-700">
+                            Annulla
+                        </button>
+                    </div>
+                </div>
+            )}
+            {richiamoAperto && !lead.salespersonOutcome && (
+                <div className="mt-3 space-y-2 rounded-md border border-sky-200 bg-white p-2">
+                    <label className="block text-xs font-semibold text-ash-700">
+                        Quando richiamare
+                        <input
+                            type="datetime-local" value={richiamoAt} onChange={e => setRichiamoAt(e.target.value)}
+                            className="mt-1 w-full rounded-md border border-ash-200 px-2 py-1.5 text-sm"
+                        />
+                    </label>
+                    <input
+                        value={richiamoNota} onChange={e => setRichiamoNota(e.target.value)} placeholder="Nota (es. richiamare dopo il lavoro)"
+                        className="w-full rounded-md border border-ash-200 px-2 py-1.5 text-sm"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            onClick={() => salvaRichiamo()}
+                            disabled={pending || !richiamoAt}
+                            className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50"
+                        >
+                            {pending ? "Salvo…" : "Salva richiamo"}
+                        </button>
+                        {fissato && (
+                            <button onClick={() => salvaRichiamo(true)} disabled={pending} className="rounded-lg border border-ash-200 px-3 py-1.5 text-xs font-semibold text-ash-700">
+                                Togli richiamo
+                            </button>
+                        )}
+                        <button onClick={() => setRichiamoAperto(false)} disabled={pending} className="rounded-lg border border-ash-200 px-3 py-1.5 text-xs font-semibold text-ash-700">
                             Annulla
                         </button>
                     </div>
