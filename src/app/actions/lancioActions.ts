@@ -391,6 +391,8 @@ export async function getVenditoreLancioAppuntamenti(sellerId: string): Promise<
 export type LancioEsitoInput =
     | { outcome: 'Chiuso'; closeAmountEur: number; closeProduct?: 'advance' | 'gold' | 'exclusive' | null; notes?: string }
     | { outcome: 'Non chiuso'; notClosedReason: string; notes?: string }
+    /** Videocall del mattino a cui il lead non si e' presentato (PO 06/10/2026). */
+    | { outcome: 'Sparito'; notes?: string }
 
 /**
  * Esito dalla sezione "Lead del lancio": Chiuso con importo, oppure Non chiuso
@@ -418,6 +420,9 @@ export async function saveLancioOutcome(leadId: string, input: LancioEsitoInput,
         if (!Number.isFinite(input.closeAmountEur) || input.closeAmountEur <= 0) return { ok: false, error: "Inserisci l'importo della chiusura" }
     } else if (input.outcome === 'Non chiuso') {
         if (!(NOT_CLOSED_REASONS as ReadonlyArray<string>).includes(input.notClosedReason)) return { ok: false, error: 'Scegli il motivo del Non chiuso' }
+    } else if (input.outcome === 'Sparito') {
+        // Solo sugli appuntamenti veri del mattino: una chiamata subito senza risposta e' "Non risponde".
+        if (lead.lancioScelta !== 'app_mattina') return { ok: false, error: 'Sparito vale solo per le videocall del mattino' }
     } else {
         return { ok: false, error: 'Esito non valido' }
     }
@@ -427,7 +432,9 @@ export async function saveLancioOutcome(leadId: string, input: LancioEsitoInput,
     const occasion = lead.salespersonOutcome ? 'current' as const : 'new' as const
     const res = await saveVenditoreOutcome(leadId, input.outcome === 'Chiuso'
         ? { outcome: 'Chiuso', closeAmountEur: input.closeAmountEur, closeProduct: input.closeProduct ?? undefined, notes: input.notes, occasion }
-        : { outcome: 'Non chiuso', notClosedReason: input.notClosedReason, notes: input.notes, nextFollowUpDate: null, occasion },
+        : input.outcome === 'Non chiuso'
+            ? { outcome: 'Non chiuso', notClosedReason: input.notClosedReason, notes: input.notes, nextFollowUpDate: null, occasion }
+            : { outcome: 'Sparito', notes: input.notes, occasion },
         version)
     if (!res.success) {
         return { ok: false, error: res.error === 'CONCURRENCY_ERROR' ? 'Il lead è cambiato nel frattempo: ricarica e riprova' : (res.error ?? 'Errore') }

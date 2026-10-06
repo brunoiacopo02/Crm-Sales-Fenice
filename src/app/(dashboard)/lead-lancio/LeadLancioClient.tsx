@@ -148,6 +148,7 @@ export function LeadLancioClient({ sellerId }: { sellerId: string }) {
                             richiamo={null}
                             adesso={adesso}
                             conNonRisponde={false}
+                            conSparito
                             onChanged={carica}
                         />
                     ))}
@@ -171,12 +172,14 @@ function TabButton({ active, onClick, label, count }: { active: boolean; onClick
     )
 }
 
-function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDettaglio, onChanged }: {
+function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, conSparito = false, esitoDettaglio, onChanged }: {
     lead: LeadScheda
     orario: string
     richiamo: string | null
     adesso: number
     conNonRisponde: boolean
+    /** Videocall del mattino: il lead puo' non presentarsi (esito Sparito, PO 06/10). */
+    conSparito?: boolean
     esitoDettaglio?: string | null
     onChanged: () => void
 }) {
@@ -234,6 +237,21 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                         notes: note || undefined,
                     }, lead.version)
                     : await saveLancioOutcome(lead.id, { outcome: "Non chiuso", notClosedReason: motivo, notes: note || undefined }, lead.version)
+                if (!res.ok) { setErrore(res.error); return }
+                setModo(null)
+                setModifica(false)
+                onChanged()
+            } catch {
+                setErrore("Errore di rete: l'esito non è stato salvato. Riprova.")
+            }
+        })
+    }
+
+    const sparito = () => {
+        setErrore(null)
+        start(async () => {
+            try {
+                const res = await saveLancioOutcome(lead.id, { outcome: "Sparito", notes: note || undefined }, lead.version)
                 if (!res.ok) { setErrore(res.error); return }
                 setModo(null)
                 setModifica(false)
@@ -313,7 +331,7 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
 
             {lead.salespersonOutcome && !modifica ? (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className={`text-sm font-bold ${lead.salespersonOutcome === "Chiuso" ? "text-emerald-700" : "text-red-700"}`}>
+                    <div className={`text-sm font-bold ${lead.salespersonOutcome === "Chiuso" ? "text-emerald-700" : lead.salespersonOutcome === "Sparito" ? "text-ash-600" : "text-red-700"}`}>
                         {lead.salespersonOutcome}{esitoDettaglio ? ` · ${esitoDettaglio}` : ""}
                     </div>
                     <button
@@ -339,6 +357,15 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
                     >
                         <XCircle className="h-3.5 w-3.5" /> Non chiuso
                     </button>
+                    {conSparito && (
+                        <button
+                            onClick={sparito}
+                            disabled={pending}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-ash-200 bg-white px-3 py-1.5 text-xs font-semibold text-ash-700 transition-colors hover:border-red-300 hover:text-red-700 disabled:opacity-50"
+                        >
+                            <PhoneMissed className="h-3.5 w-3.5" /> Sparito
+                        </button>
+                    )}
                     {conNonRisponde && !lead.salespersonOutcome && (
                         <button
                             onClick={nonRisponde}
