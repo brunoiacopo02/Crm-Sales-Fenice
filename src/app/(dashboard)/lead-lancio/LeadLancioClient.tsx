@@ -220,7 +220,7 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, esitoDetta
             try {
                 const res = await recordLancioCallNowNoAnswer(lead.id)
                 if (!res.ok) { setErrore(res.error); return }
-                if (res.handoff) alert("Terzo tentativo a vuoto: il lead passa alle Conferme.")
+                if (res.handoff) alert(res.verso === "pool" ? "Terzo tentativo a vuoto: il lead torna nel pool GDO." : "Terzo tentativo a vuoto: il lead passa alle Conferme.")
                 onChanged()
             } catch {
                 setErrore("Errore di rete: il tentativo non è stato registrato. Riprova.")

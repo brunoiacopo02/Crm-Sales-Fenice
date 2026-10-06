@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { callNowColumn, callNowPendingCount, handoffAppointmentAt, isInCallNowCycle, nextCallNowState } from './callNow'
+import { callNowColumn, callNowPendingCount, destinazioneTerzoNr, handoffAppointmentAt, isInCallNowCycle, nextCallNowState } from './callNow'
 
 const SERA = new Date('2026-10-05T22:30:00+02:00')
 
@@ -90,4 +90,10 @@ test('un lead normale non e mai nel ciclo', () => {
     assert.equal(isInCallNowCycle({ lancioScelta: 'app_mattina', lancioCallNowAttempts: 0, salespersonOutcome: null }), false)
     // Campi assenti (riga letta senza le colonne del lancio): niente ciclo.
     assert.equal(isInCallNowCycle({ lancioScelta: undefined, lancioCallNowAttempts: undefined, salespersonOutcome: undefined }), false)
+})
+
+test('terzo NR: Conferme solo per gli appuntamenti veri, pool per i lead dati dall admin', () => {
+    assert.equal(destinazioneTerzoNr({ status: 'APPOINTMENT' }), 'conferme')
+    assert.equal(destinazioneTerzoNr({ status: 'NEW' }), 'pool')
+    assert.equal(destinazioneTerzoNr({ status: 'IN_PROGRESS' }), 'pool')
 })

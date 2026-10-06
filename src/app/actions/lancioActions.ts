@@ -14,7 +14,7 @@ import { dayFactsFor, getShiftMembers, venditoreLabel } from "@/lib/lancio/shift
 import { findLancioBotId } from "@/lib/lancio/botAccount"
 import { getLancioMonitor, type LancioMonitor } from "@/lib/lancio/monitor"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
-import { callNowColumn, isInCallNowCycle, nextCallNowState, CALL_NOW_TAB_WINDOW_MS, type CallNowColumn } from "@/lib/lancio/callNow"
+import { callNowColumn, destinazioneTerzoNr, isInCallNowCycle, nextCallNowState, CALL_NOW_TAB_WINDOW_MS, type CallNowColumn } from "@/lib/lancio/callNow"
 import { IN_CALL_NOW_CYCLE } from "@/lib/lancio/callNowSql"
 import { notifyConfermeLancio } from "@/lib/lancio/booking"
 import { countCycleNonClosed } from "@/lib/venditorePerformance/guard"
@@ -231,7 +231,7 @@ export async function getVenditoreLancioLeads(sellerId: string): Promise<LancioC
  * al terzo passa alle Conferme il giorno dopo (A1): venditore azzerato, esito
  * Conferme azzerato, appuntamento alle 09:00, badge LANCIO in board.
  */
-export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok: true; handoff: boolean } | { ok: false; error: string }> {
+export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok: true; handoff: boolean; verso?: 'conferme' | 'pool' } | { ok: false; error: string }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const role = user?.user_metadata?.role as string | undefined
@@ -267,6 +267,35 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
         // piedi e il tentativo è già stato contato. Non si scrive l'evento due
         // volte, e al venditore non si dice che è andato tutto bene.
         if (updated.length === 0) return { ok: false, error: 'Tentativo già registrato: ricarica la scheda' }
+    } else if (destinazioneTerzoNr(lead) === 'pool') {
+        // Terzo NR su un lead dato dall'admin senza appuntamento (PO 06/10): torna
+        // nel pool GDO del lancio su /import, come una restituzione del bot.
+        const updated = await db.update(leads).set({
+            lancioCallNowAttempts: next.attempts,
+            lancioCallNowNextAt: null,
+            lastCallDate: now,
+            salespersonUserId: null,
+            salespersonAssigned: null,
+            salespersonAssignedAt: null,
+            negotiationStartedAt: null,
+            assignedToId: null,
+            status: 'NEW',
+            callCount: 0,
+            recallDate: null,
+            recallNote: null,
+            recallMissedAt: null,
+            version: lead.version + 1,
+            updatedAt: now,
+        }).where(and(eq(leads.id, leadId), eq(leads.version, lead.version))).returning({ id: leads.id })
+        if (updated.length === 0) return { ok: false, error: 'Tentativo già registrato: ricarica la scheda' }
+        try {
+            await logLeadEvent({
+                leadId, eventType: 'LANCIO_RETURNED_TO_POOL', userId: user.id, companyId: ctx.companyId,
+                metadata: { motivo: 'venditore_tre_nr', fromSalesUserId: previousSeller, bucket: LANCIO_WEBDEV.bucket },
+            })
+        } catch (e) {
+            console.error('[lancio] log LANCIO_RETURNED_TO_POOL fallito', e)
+        }
     } else {
         // Terzo NR: il lead esce dal venditore e rientra nella board Conferme,
         // che filtra `confirmationsOutcome IS NULL` + `status='APPOINTMENT'`.
@@ -301,12 +330,13 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
     } catch (e) {
         console.error('[lancio] log CALL_LOGGED fallito', e)
     }
-    if (next.kind === 'handoff') {
+    const verso = next.kind === 'handoff' ? destinazioneTerzoNr(lead) : undefined
+    if (next.kind === 'handoff' && verso === 'conferme') {
         await notifyConfermeLancio({ id: lead.id, name: lead.name }, next.appointmentAt, '🚀 Lancio: 3 NR dal venditore, da richiamare')
     }
     revalidatePath('/venditore')
     revalidatePath('/lead-lancio')
-    return { ok: true, handoff: next.kind === 'handoff' }
+    return { ok: true, handoff: next.kind === 'handoff', verso }
 }
 
 // ── Sezione venditore "Lead del lancio" (PO 05/10/2026) ──────────────────────

@@ -115,3 +115,14 @@ export function nextCallNowState(attemptsSoFar: number, now: Date, cfg: LancioCo
     }
     return { kind: 'retry', attempts, nextAt: new Date(now.getTime() + CALL_NOW_RETRY_MINUTES * 60_000) }
 }
+
+/**
+ * Dove va un lead al terzo "Non risponde". Alle Conferme solo se è un appuntamento
+ * vero (il lead ha chiesto la chiamata dal pulsante: status APPOINTMENT). I lead che
+ * diamo noi al venditore senza appuntamento (PO 06/10/2026: i più presenti alla live)
+ * tornano nel pool GDO del lancio: alle Conferme non comparirebbero, perché la loro
+ * board legge solo gli APPOINTMENT.
+ */
+export function destinazioneTerzoNr(lead: { status: string | null }): 'conferme' | 'pool' {
+    return lead.status === 'APPOINTMENT' ? 'conferme' : 'pool'
+}

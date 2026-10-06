@@ -34,7 +34,7 @@ export function LancioCallNowTab({ leads, onOpen, onChanged }: {
             try {
                 const res = await recordLancioCallNowNoAnswer(lead.id)
                 if (!res.ok) alert(res.error)
-                else if (res.handoff) alert('Terzo tentativo a vuoto: il lead passa alle Conferme.')
+                else if (res.handoff) alert(res.verso === 'pool' ? 'Terzo tentativo a vuoto: il lead torna nel pool GDO.' : 'Terzo tentativo a vuoto: il lead passa alle Conferme.')
                 onChanged()
             } catch {
                 alert('Errore di rete: il tentativo non è stato registrato. Riprova.')
