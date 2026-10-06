@@ -163,6 +163,10 @@ export const leads = pgTable('leads', {
     // lead della lista AC 133 finiti nel CRM per un errore di configurazione il
     // 15/09/2026. Null sui lead normali.
     intakeBatch: text('intakeBatch'),
+    // Gruppo di prova "solo umani" (migr. 0040, PO 06/10/2026): primo uso
+    // 'LANCIO_UMANI_20261007', 400 lead del lancio tolti al bot e dati ai GDO
+    // 106 e 119. Resta anche se il lead cambia assegnatario. Null altrimenti.
+    humanTestCohort: text('humanTestCohort'),
     // Lancio "Web Developer AI" (ottobre 2026, migr. 0036). L'appartenenza al
     // lancio e' launchBucket='LANCIO_WEBDEV_2026' + funnel='Lancio Web Dev AI';
     // queste dicono come e' entrato e cosa ha scelto la sera della live.

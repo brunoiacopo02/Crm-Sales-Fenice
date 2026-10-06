@@ -16,6 +16,7 @@ const ConfermeRecallBlockingAlert = dynamic(() => import("@/components/ConfermeR
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions"
+import { hasLancioUmaniLeads } from "@/app/actions/lancioUmaniActions"
 import { getUserTheme } from "@/lib/userTheme"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
@@ -75,12 +76,21 @@ export default async function DashboardLayout({
         salesPipelineEnabled = salesPipelineConfig.enabled && salesPipelineConfig.salesUserId === session.user.id
     }
 
+    // Voce "Test lancio umani": solo ai GDO che hanno lead del gruppo. Una
+    // query al render del layout, non a ogni cambio pagina.
+    let lancioUmaniEnabled = false
+    if (session.user.role === 'GDO') {
+        try {
+            lancioUmaniEnabled = await hasLancioUmaniLeads()
+        } catch { /* la voce manca, la pagina resta raggiungibile */ }
+    }
+
     return (
         <RealtimeProvider userId={session.user.id} companies={tctx.allowedCompanies}>
             <SidebarProvider>
                 <SalesCompanyProvider company={dataCompany}>
                     <div data-company={dataCompany} data-theme={userTheme} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                        <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} />
+                        <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} lancioUmaniEnabled={lancioUmaniEnabled} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
                             <Topbar />

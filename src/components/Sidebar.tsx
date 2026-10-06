@@ -46,7 +46,7 @@ type NavGroup = {
     items: NavItem[]
 }
 
-export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: string; salesPipelineEnabled?: boolean }) {
+export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled }: { companyId?: string; salesPipelineEnabled?: boolean; lancioUmaniEnabled?: boolean }) {
     const pathname = usePathname()
     const { isOpen, close } = useSidebar()
     const { user: authUser, isLoading } = useAuth();
@@ -120,6 +120,9 @@ export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: strin
             { name: "I miei Richiami", href: "/richiami", icon: Calendar, badge: expiredCount },
             { name: "I miei Appuntamenti", href: "/appuntamenti", icon: Users },
             { name: "Le mie Performance", href: "/kpi-gdo", icon: LayoutDashboard },
+            // Solo ai GDO del test lancio umani (PO 06/10/2026): per gli altri
+            // la pagina sarebbe vuota, quindi la voce non compare.
+            ...(lancioUmaniEnabled ? [{ name: "Test lancio umani", href: "/lancio-umani", icon: Rocket }] : []),
             { name: "Storico Pause", href: "/storico-pause", icon: Clock },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
@@ -241,6 +244,8 @@ export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: strin
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
                         { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
                         { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
+                        // PO 06/10/2026: 400 lead del lancio lavorati solo dai GDO 106 e 119.
+                        { name: "Test lancio umani", href: "/lancio-umani", icon: Rocket },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
                         { name: "Pipeline venditore", href: "/pipeline-venditore", icon: PhoneCall },
                     ],
