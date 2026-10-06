@@ -85,7 +85,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
 
     // Outcome states
     const [outcome, setOutcome] = useState(lead?.confirmationsOutcome || "")
-    const [salesperson, setSalesperson] = useState(lead?.salespersonUserId || "")
+    // Venditore riservato (PO 06/10/2026): lead del lancio dati prima a un
+    // venditore e poi passati ai GDO: lo si preseleziona.
+    const [salesperson, setSalesperson] = useState(lead?.salespersonUserId || lead?.reservedSalespersonId || "")
     const [savingOutcome, setSavingOutcome] = useState(false)
 
     // Ref for inline Scheda Trattativa
@@ -148,7 +150,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
             }
             setEditNoteGdo(lead.appointmentNote || "")
             setOutcome(lead.confirmationsOutcome || "")
-            setSalesperson(lead.salespersonUserId || "")
+            setSalesperson(lead.salespersonUserId || lead.reservedSalespersonId || "")
             setSpOutcome(lead.salespersonOutcome || "")
             setSpNotes(lead.salespersonOutcomeNotes || "")
             setActiveTab(initialTab || "dati")
@@ -1149,6 +1151,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
 
                                         {outcome === "confermato" && (
                                             <div className="pl-11 -mt-2 mb-2 animate-in slide-in-from-top-2">
+                                                {lead.reservedSalespersonId && (
+                                                    <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                                                        Da assegnare a {salespeopleList.find(s => s.id === lead.reservedSalespersonId)?.name || "il venditore riservato"}: era suo prima di passare al GDO.
+                                                    </div>
+                                                )}
                                                 <select value={salesperson} onChange={e => setSalesperson(e.target.value)} className="w-full px-4 py-2.5 border-2 border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400 bg-white text-emerald-900 font-bold shadow-sm">
                                                     <option value="">-- Assegna a un Venditore --</option>
                                                     {salespeopleList.map(s => (

@@ -167,6 +167,11 @@ export const leads = pgTable('leads', {
     // 'LANCIO_UMANI_20261007', 400 lead del lancio tolti al bot e dati ai GDO
     // 106 e 119. Resta anche se il lead cambia assegnatario. Null altrimenti.
     humanTestCohort: text('humanTestCohort'),
+    // Venditore a cui le Conferme devono dare l'appuntamento quando il GDO lo
+    // fissa (migr. 0041, PO 06/10/2026): lead del lancio dati prima a un
+    // venditore da chiamare e poi passati ai GDO. Il pannello Conferme lo
+    // preseleziona. Null sui lead normali.
+    reservedSalespersonId: text('reservedSalespersonId').references(() => users.id, { onDelete: 'set null' }),
     // Lancio "Web Developer AI" (ottobre 2026, migr. 0036). L'appartenenza al
     // lancio e' launchBucket='LANCIO_WEBDEV_2026' + funnel='Lancio Web Dev AI';
     // queste dicono come e' entrato e cosa ha scelto la sera della live.
