@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { Download, Bot } from "lucide-react"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
-import type { LeadIaVocale } from "@/app/actions/iaVocaleActions"
+import type { LeadIaVocale } from "@/lib/iaVocaleQuery"
 
 const MOTIVI: Record<string, string> = {
     tetto_gdo_raggiunto: "GDO pieni (20 al giorno)",
