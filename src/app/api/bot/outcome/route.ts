@@ -608,7 +608,8 @@ export async function POST(req: NextRequest) {
         // Un 2xx che dice "reassigned: null" e basta è indistinguibile da un
         // successo: il fornitore deve poter leggere DENTRO la risposta che la
         // riassegnazione non è stata applicata, e perché.
-        if (r.assignedToId === null && 'note' in r && r.note !== 'no_eligible_gdo') {
+        // `ia_vocale` (PO 06/10) e `no_eligible_gdo` sono restituzioni riuscite: il lead e' uscito dal bot.
+        if (r.assignedToId === null && 'note' in r && r.note !== 'no_eligible_gdo' && r.note !== 'ia_vocale') {
             return NextResponse.json({ ok: true, reassigned: null, skipped: r.note });
         }
         return NextResponse.json({ ok: true, reassigned: r.assignedToId });

@@ -4,6 +4,8 @@ import { and, eq, asc, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { isLeadLocked } from './contactRequests';
 import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
+import { dayBoundsRome } from '@/lib/dateUtils';
+import { EVENTO_IA_VOCALE, MAX_RIDATI_GDO_GIORNO } from './iaVocale';
 
 const FENICE = 'fenice';
 
@@ -13,7 +15,7 @@ export type ReassignReason = 'mai_risposto' | 'chat_interrotta';
 
 type ReassignResult =
     | { ok: true; assignedToId: string }
-    | { ok: true; assignedToId: null; note: 'no_eligible_gdo' | 'locked_appointment' | 'already_rejected' | 'lead_not_found' | 'batch_senso_unico' };
+    | { ok: true; assignedToId: null; note: 'no_eligible_gdo' | 'ia_vocale' | 'locked_appointment' | 'already_rejected' | 'lead_not_found' | 'batch_senso_unico' };
 
 /**
  * Restituisce al pool umano un lead che il bot non ha convertito (mai risposto /
@@ -104,6 +106,9 @@ export async function reassignBotLeadToHumanPool(
         // scarti del bot. Round-robin sul proprio contatore
         // (`botReturnLastAssignedAt`) e non su `acLastAssignedAt`, altrimenti i
         // due flussi si sposterebbero il turno a vicenda.
+        // Tetto per GDO (PO 06/10/2026): al massimo MAX_RIDATI_GDO_GIORNO ridati al
+        // giorno a testa; chi l'ha raggiunto oggi esce dal giro fino a domani.
+        const inizioGiorno = dayBoundsRome(new Date()).start;
         const eligible = await tx.select({ id: users.id })
             .from(users)
             .where(and(
@@ -112,6 +117,7 @@ export async function reassignBotLeadToHumanPool(
                 eq(users.isActive, true),
                 eq(users.botReturnIntake, true),
                 eq(users.isBot, false),
+                sql`(select count(*) from ${leadEvents} e where e."eventType" = 'REASSIGNED_FROM_BOT' and e.metadata->>'toGdo' = ${users.id} and e."timestamp" >= ${inizioGiorno}) < ${MAX_RIDATI_GDO_GIORNO}`,
             ))
             .orderBy(asc(sql`coalesce(${users.botReturnLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id))
             .limit(1);
@@ -130,21 +136,34 @@ export async function reassignBotLeadToHumanPool(
         };
 
         if (eligible.length === 0) {
+            // Tutti i GDO del giro sono pieni (o non ce n'e' nessuno): il lead va
+            // nella coda dell'IA vocale, fuori dal CRM dei GDO (PO 06/10/2026).
             await tx.update(leads)
                 .set({ ...resetFields, assignedToId: null })
                 .where(eq(leads.id, leadId));
 
-            await tx.insert(leadEvents).values({
-                id: crypto.randomUUID(),
-                leadId,
-                eventType: 'REASSIGNED_FROM_BOT',
-                userId: null,
-                timestamp: now,
-                metadata: { reason, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'no_eligible_gdo' },
-                companyId: FENICE,
-            });
+            await tx.insert(leadEvents).values([
+                {
+                    id: crypto.randomUUID(),
+                    leadId,
+                    eventType: 'REASSIGNED_FROM_BOT',
+                    userId: null,
+                    timestamp: now,
+                    metadata: { reason, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'ia_vocale' },
+                    companyId: FENICE,
+                },
+                {
+                    id: crypto.randomUUID(),
+                    leadId,
+                    eventType: EVENTO_IA_VOCALE,
+                    userId: null,
+                    timestamp: now,
+                    metadata: { motivo: 'tetto_gdo_raggiunto', reason, botNote: botNote ?? null },
+                    companyId: FENICE,
+                },
+            ]);
 
-            return { ok: true, assignedToId: null, note: 'no_eligible_gdo' };
+            return { ok: true, assignedToId: null, note: 'ia_vocale' };
         }
 
         const gdoId = eligible[0].id;

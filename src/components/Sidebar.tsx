@@ -259,6 +259,8 @@ export function Sidebar({ companyId, salesPipelineEnabled }: { companyId?: strin
                     items: [
                         { name: "Appuntamenti Oggi", href: "/appuntamenti-oggi", icon: Calendar },
                         { name: "Importa Lead", href: "/import", icon: Upload },
+                        // PO 06/10/2026: ridati dal bot oltre il tetto dei GDO, per l'IA vocale.
+                        { name: "Lead per IA vocale", href: "/ia-vocale", icon: PhoneCall },
                         { name: "Lead Automatici (AC)", href: "/lead-automatici", icon: Zap },
                         { name: "Archivio Storico", href: "/archivio", icon: Database },
                         { name: "Richiami", href: "/richiami", icon: Calendar },
