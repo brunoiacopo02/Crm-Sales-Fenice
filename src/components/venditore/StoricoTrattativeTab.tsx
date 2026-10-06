@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { getVenditoreStorico, saveVenditoreOutcome } from "@/app/actions/venditoreActions"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
-import { Search, BadgeCheck, ChevronDown, ChevronUp } from "lucide-react"
+import { Search, BadgeCheck, ChevronDown, ChevronUp, Phone, FileText } from "lucide-react"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
 
 const OUTCOME_FILTERS = ["Tutti", "Chiuso", "Non chiuso", "Sparito"] as const
@@ -21,7 +21,13 @@ const outcomeBadgeClass = (o: string) =>
             ? "bg-ash-100 text-ash-600 border-ash-200"
             : "bg-amber-100 text-amber-700 border-amber-200"
 
-export function StoricoTrattativeTab({ sellerId, onChanged }: { sellerId: string; onChanged: () => void }) {
+export function StoricoTrattativeTab({ sellerId, reloadToken = 0, onChanged, onOpen }: {
+    sellerId: string
+    reloadToken?: number
+    onChanged: () => void
+    /** Apre la scheda del lead (telefono, note, esito) per provare il recupero. */
+    onOpen: (row: any) => void
+}) {
     const [rows, setRows] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [filter, setFilter] = useState<OutcomeFilter>("Tutti")
@@ -40,7 +46,7 @@ export function StoricoTrattativeTab({ sellerId, onChanged }: { sellerId: string
             .catch(() => setRows([]))
             .finally(() => setIsLoading(false))
     }
-    useEffect(load, [sellerId])
+    useEffect(load, [sellerId, reloadToken])
 
     const filtered = rows.filter(r => {
         if (filter !== "Tutti" && effectiveOutcome(r.salespersonOutcome) !== filter) return false
@@ -133,6 +139,14 @@ export function StoricoTrattativeTab({ sellerId, onChanged }: { sellerId: string
                                 >
                                     <div className="min-w-0">
                                         <div className="font-semibold text-ash-800 truncate">{r.name}</div>
+                                        {r.phone && (
+                                            <div onClick={e => e.stopPropagation()} className="mt-0.5">
+                                                <a href={`tel:${r.phone}`} className="inline-flex items-center gap-1 text-sm text-ash-600 hover:text-brand-orange hover:underline">
+                                                    <Phone className="h-3.5 w-3.5" />
+                                                    {r.phone}
+                                                </a>
+                                            </div>
+                                        )}
                                         <div className="text-xs text-ash-500 mt-1">
                                             {r.funnel || "Sconosciuto"}
                                             {r.salespersonOutcomeAt && <> · Esitato il {format(new Date(r.salespersonOutcomeAt), "dd MMM yyyy", { locale: it })}</>}
@@ -143,6 +157,16 @@ export function StoricoTrattativeTab({ sellerId, onChanged }: { sellerId: string
                                     <div className="flex items-center gap-2 shrink-0">
                                         <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${outcomeBadgeClass(outcome)}`}>
                                             {outcome}
+                                        </div>
+                                        <div onClick={e => e.stopPropagation()}>
+                                            <button
+                                                type="button"
+                                                onClick={() => onOpen(r)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-ash-200 text-ash-700 hover:border-brand-orange/50 hover:text-brand-orange transition-colors"
+                                            >
+                                                <FileText className="h-3.5 w-3.5" />
+                                                Apri scheda
+                                            </button>
                                         </div>
                                         {outcome !== "Chiuso" && (
                                             <div onClick={e => e.stopPropagation()}>

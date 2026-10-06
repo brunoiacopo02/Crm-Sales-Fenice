@@ -46,6 +46,8 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
 
     // Drawer state
     const [selectedLead, setSelectedLead] = useState<any>(null)
+    // Fa ricaricare lo Storico dopo un salvataggio dal drawer aperto da lì.
+    const [storicoReloadToken, setStoricoReloadToken] = useState(0)
     // true quando il lead è stato aperto dalla tab Follow-up: il drawer parte
     // in modalità "Esito Follow-up" (form pulito + recap tentativo precedente).
     const [drawerFollowUpMode, setDrawerFollowUpMode] = useState(false)
@@ -151,8 +153,13 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
         }
     }
 
-    const fetchAppointments = async () => {
-        setIsLoading(true)
+    // Lo spinner copre TUTTA l'area contenuti (qualunque tab): va mostrato solo
+    // al primo caricamento. I refetch dal bus `leads` — che durante il lancio
+    // arrivano ogni ~1,5s per i cambi di tutta l'azienda — devono essere
+    // silenziosi, altrimenti la pagina lampeggia e la tab aperta (es. Storico)
+    // viene smontata e rimontata, perdendo la riga espansa.
+    const fetchAppointments = async ({ showSpinner = false }: { showSpinner?: boolean } = {}) => {
+        if (showSpinner) setIsLoading(true)
         try {
             const data = await getVenditoreAppointments(sellerId)
             setAppointments(data)
@@ -203,7 +210,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     }
 
     useEffect(() => {
-        fetchAppointments()
+        fetchAppointments({ showSpinner: true })
         fetchFollowUps()
         fetchLancio()
         getMyLatePenalties()
@@ -780,7 +787,14 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                         </div>
                     </div>
                 ) : view === 'STORICO' ? (
-                    <StoricoTrattativeTab sellerId={sellerId} onChanged={() => { fetchFollowUps(); fetchAppointments() }} />
+                    <StoricoTrattativeTab
+                        sellerId={sellerId}
+                        reloadToken={storicoReloadToken}
+                        onChanged={() => { fetchFollowUps(); fetchAppointments() }}
+                        // La riga dello Storico ha meno campi dell'appuntamento:
+                        // se il lead è in lista si apre con la riga completa.
+                        onOpen={(row) => openLead(appointments.find(a => a.id === row.id) ?? row)}
+                    />
                 ) : (
                     <div className="p-2 sm:p-6 bg-gradient-to-b from-ash-50/50 to-white">
                         <KpiVenditoriClient currentUserRole="VENDITORE" currentUserId={sellerId} />
@@ -815,6 +829,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                 isStarting={isPending && pendingLeadId === selectedLead?.id}
                                 onSaved={() => {
                                     closeDrawer()
+                                    setStoricoReloadToken(t => t + 1)
                                     fetchAppointments()
                                     fetchFollowUps()
                                     fetchLancio()
