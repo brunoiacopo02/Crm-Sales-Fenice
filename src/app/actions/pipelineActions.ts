@@ -21,6 +21,7 @@ import { incrementDuelScore } from "@/app/actions/duelActions"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
 async function checkFourthCallEligibility(gdoId: string, companyId: string): Promise<boolean> {
@@ -318,10 +319,17 @@ export async function getPipelineLeads() {
         (l.tiHaCercato ? 2 : 0) + (l.confermatoAlBot ? 1 : 0)
     const recoverableFirst = <T extends { tiHaCercato: boolean; confermatoAlBot: boolean }>(arr: T[]) =>
         [...arr].sort((a, b) => urgentRank(b) - urgentRank(a))
+    // Lancio Web Dev (PO 07/10/2026): nella 1ª e nella 2ª chiamata i lead del lancio
+    // stanno sempre in cima, sopra anche i "ti ha cercato" degli altri funnel. Dentro
+    // ciascun gruppo restano l'ordine urgente e quello di prima (sort stabile).
+    const lancioRank = (l: { launchBucket: string | null; tiHaCercato: boolean; confermatoAlBot: boolean }) =>
+        (l.launchBucket === LANCIO_BUCKET ? 4 : 0) + urgentRank(l)
+    const lancioOnTop = <T extends { launchBucket: string | null; tiHaCercato: boolean; confermatoAlBot: boolean }>(arr: T[]) =>
+        [...arr].sort((a, b) => lancioRank(b) - lancioRank(a))
 
     return {
-        firstCall: recoverableFirst(withDupFlag(firstCall)),
-        secondCall: recoverableFirst(withDupFlag(secondCall)),
+        firstCall: lancioOnTop(withDupFlag(firstCall)),
+        secondCall: lancioOnTop(withDupFlag(secondCall)),
         thirdCall: recoverableFirst(withDupFlag(thirdCall)),
         fourthCall: fourthCallLeads,
         isFourthCallActive,
