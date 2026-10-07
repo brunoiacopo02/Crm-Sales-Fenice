@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '@/db';
 import { leads, leadEvents } from '@/db/schema';
@@ -10,12 +10,14 @@ import { LANCIO_BUCKET } from '@/lib/lancio/intake';
 export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/bot/lancio/vergine-scrive — un lead del pool "mai contattati dal
- * bot" (lancioPool = 'VERGINI', PO 07/10/2026) ha scritto al bot.
+ * POST /api/bot/lancio/vergine-scrive — un lead del lancio con la chat ferma
+ * (pool "mai contattati", ridato al pool, o di un GDO) ha scritto al bot.
  *
- * Chi scrive lo gestisce il bot: se il lead è ancora nel pool (nessuno lo ha
- * assegnato) passa al bot qui, così gli esiti del bot hanno dove tornare. Se il
- * TL lo ha già dato a un GDO resta al GDO e il bot non risponde.
+ * Regola PO 07/10/2026: chi scrive al bot lo gestisce il bot, in qualunque pool
+ * sia. Qui il lead passa al bot nel CRM se è ancora da lavorare (NEW o
+ * IN_PROGRESS, nel pool o di un GDO), così gli esiti del bot hanno dove tornare.
+ * Restano dove sono: appuntamenti e lead chiusi (la chat la gestisce comunque il
+ * bot) e il gruppo di prova "solo umani" del 106 e del 119.
  *
  * Body: { leadId }   Firma: `x-bot-signature` (BOT_WEBHOOK_SECRET)
  * Reply: { preso: boolean, motivo? }
@@ -35,36 +37,41 @@ export async function POST(req: NextRequest) {
     const botId = await findLancioBotId();
     if (!botId) return NextResponse.json({ preso: false, motivo: 'bot_assente' });
 
+    const [prima] = await db.select({ assignedToId: leads.assignedToId, status: leads.status, lancioPool: leads.lancioPool })
+        .from(leads).where(eq(leads.id, leadId)).limit(1);
+    if (!prima) return NextResponse.json({ preso: false, motivo: 'lead_sconosciuto' });
+    if (prima.assignedToId === botId) return NextResponse.json({ preso: true });
+
     const now = new Date();
     const presi = await db.update(leads).set({
         assignedToId: botId,
         assignedAt: now,
         lancioPool: null,
+        recallDate: null,
         updatedAt: now,
     }).where(and(
         eq(leads.id, leadId),
         eq(leads.launchBucket, LANCIO_BUCKET),
-        eq(leads.lancioPool, 'VERGINI'),
-        isNull(leads.assignedToId),
+        inArray(leads.status, ['NEW', 'IN_PROGRESS']),
+        isNull(leads.humanTestCohort),
     )).returning({ id: leads.id, companyId: leads.companyId });
 
-    if (presi.length > 0) {
-        await db.insert(leadEvents).values({
-            id: crypto.randomUUID(),
-            leadId,
-            eventType: 'REASSIGNED_TO_BOT',
-            userId: null,
-            fromSection: null,
-            toSection: null,
-            metadata: { source: 'lancio_vergine_scrive', bucket: LANCIO_BUCKET, lancioPool: 'VERGINI', toAssigneeId: botId },
-            timestamp: now,
-            companyId: presi[0].companyId,
-        });
-        return NextResponse.json({ preso: true });
+    if (presi.length === 0) {
+        return NextResponse.json({ preso: false, motivo: `stato_${String(prima.status).toLowerCase()}` });
     }
-
-    // Già del bot (un secondo messaggio, o il TL glielo aveva ridato): va bene uguale.
-    const [lead] = await db.select({ assignedToId: leads.assignedToId }).from(leads).where(eq(leads.id, leadId)).limit(1);
-    if (lead?.assignedToId === botId) return NextResponse.json({ preso: true });
-    return NextResponse.json({ preso: false, motivo: lead ? 'di_un_gdo' : 'lead_sconosciuto' });
+    await db.insert(leadEvents).values({
+        id: crypto.randomUUID(),
+        leadId,
+        eventType: 'REASSIGNED_TO_BOT',
+        userId: null,
+        fromSection: null,
+        toSection: null,
+        metadata: {
+            source: 'lead_scrive_al_bot', bucket: LANCIO_BUCKET,
+            fromAssigneeId: prima.assignedToId, lancioPool: prima.lancioPool, toAssigneeId: botId,
+        },
+        timestamp: now,
+        companyId: presi[0].companyId,
+    });
+    return NextResponse.json({ preso: true });
 }
