@@ -322,9 +322,11 @@ export async function getPipelineLeads() {
     // Lancio Web Dev (PO 07/10/2026): nella 1ª e nella 2ª chiamata i lead del lancio
     // stanno sempre in cima, sopra anche i "ti ha cercato" degli altri funnel. Dentro
     // ciascun gruppo restano l'ordine urgente e quello di prima (sort stabile).
-    const lancioRank = (l: { launchBucket: string | null; tiHaCercato: boolean; confermatoAlBot: boolean }) =>
-        (l.launchBucket === LANCIO_BUCKET ? 4 : 0) + urgentRank(l)
-    const lancioOnTop = <T extends { launchBucket: string | null; tiHaCercato: boolean; confermatoAlBot: boolean }>(arr: T[]) =>
+    // Sopra tutti, i lead del test "solo umani" (106 e 119): sono i più caldi della live.
+    type PerRank = { launchBucket: string | null; humanTestCohort: string | null; tiHaCercato: boolean; confermatoAlBot: boolean }
+    const lancioRank = (l: PerRank) =>
+        (l.humanTestCohort ? 8 : 0) + (l.launchBucket === LANCIO_BUCKET ? 4 : 0) + urgentRank(l)
+    const lancioOnTop = <T extends PerRank>(arr: T[]) =>
         [...arr].sort((a, b) => lancioRank(b) - lancioRank(a))
 
     return {

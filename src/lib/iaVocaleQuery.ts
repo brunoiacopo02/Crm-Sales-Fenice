@@ -11,6 +11,7 @@ export type LeadIaVocale = {
 export const MOTIVI_IA_VOCALE: Record<string, string> = {
     tetto_gdo_raggiunto: "GDO pieni (20 al giorno)",
     gdo_assente: "Tolto a GDO assente",
+    priorita_lancio: "Tolto ai GDO per chiamare prima il lancio",
 }
 
 /**
