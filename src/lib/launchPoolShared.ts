@@ -8,7 +8,16 @@ import { and, eq, sql, inArray } from "drizzle-orm"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
 import crypto from "crypto"
 
-export type BucketRequest = { bucket: string; count: number }
+export type BucketRequest = {
+    bucket: string
+    count: number
+    /**
+     * Sotto-pool del lancio (colonna lancioPool, migr. 0042). Una stringa pesca
+     * solo quel sotto-pool, null solo i lead senza sotto-pool, undefined
+     * (default, tutti gli altri pool) non filtra.
+     */
+    lancioPool?: string | null
+}
 export type PickAssignResult = {
     /** bucket → gdoId → n. lead assegnati */
     assigned: Record<string, Record<string, number>>
@@ -32,15 +41,23 @@ export async function pickAndAssignBuckets(params: {
     const { companyId, requests, selectedGdos, adminId } = params
     const result: PickAssignResult = { assigned: {}, totalAssigned: 0 }
     const pickedByBucket: Record<string, string[]> = {}
+    const pickedSottoPool: Record<string, string> = {}
+    for (const r of requests) if (typeof r.lancioPool === 'string') pickedSottoPool[r.bucket] = r.lancioPool
 
     await db.transaction(async (tx) => {
-        for (const { bucket, count } of requests) {
+        for (const { bucket, count, lancioPool } of requests) {
             if (count <= 0) continue
+            const filtroSottoPool = lancioPool === undefined
+                ? sql``
+                : lancioPool === null
+                    ? sql`AND "lancioPool" IS NULL`
+                    : sql`AND "lancioPool" = ${lancioPool}`
             const picked = await tx.execute(sql`
                 SELECT id FROM leads
                 WHERE "launchBucket" = ${bucket}
                   AND "assignedToId" IS NULL
                   AND "companyId" = ${companyId}
+                  ${filtroSottoPool}
                 ORDER BY "createdAt" ASC, id ASC
                 LIMIT ${count}
                 FOR UPDATE SKIP LOCKED
@@ -81,6 +98,8 @@ export async function pickAndAssignBuckets(params: {
                     .set({
                         assignedToId: gdoId,
                         assignedAt: sql`coalesce(${leads.assignedAt}, now())`,
+                        // Uscito dal pool: il sotto-pool non vale più (no-op fuori dal lancio).
+                        lancioPool: null,
                         updatedAt: new Date(),
                     })
                     .where(and(
@@ -113,7 +132,10 @@ export async function pickAndAssignBuckets(params: {
             userId: adminId || null,
             fromSection: null,
             toSection: null,
-            metadata: { source: 'launch_pool', bucket, assignedToUser: row.assignedToId },
+            metadata: {
+                source: 'launch_pool', bucket, assignedToUser: row.assignedToId,
+                ...(pickedSottoPool[bucket] ? { lancioPool: pickedSottoPool[bucket] } : {}),
+            },
             timestamp: new Date(),
             companyId,
         }))

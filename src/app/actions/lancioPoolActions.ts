@@ -24,6 +24,7 @@ import {
 import { findLancioBotId } from "@/lib/lancio/botAccount"
 import { lancioContactId, readLancioAcContact } from "@/lib/lancio/acContact"
 import { LANCIO_PUSH_LOCK_KEY, lockPreso } from "@/lib/lancio/pushLock"
+import { signPayload } from "@/lib/marketing-webhooks/signing"
 import { indexFieldValuesByContact, readUtmFields, hasAnyUtm } from "@/lib/acIntake/utmFields"
 
 // Chi può muovere il pool del lancio. Identico ai pool database
@@ -81,7 +82,8 @@ export async function getLancioPoolStatus(): Promise<LancioPoolStatus | null> {
     const botId = await findBotId()
     const [counts] = await db.select({
         totale: sql<number>`count(*)::int`,
-        nelPool: sql<number>`count(*) filter (where ${leads.assignedToId} is null)::int`,
+        // I "mai contattati dal bot" (lancioPool VERGINI) hanno la loro card.
+        nelPool: sql<number>`count(*) filter (where ${leads.assignedToId} is null and ${leads.lancioPool} is null)::int`,
         alBot: botId
             ? sql<number>`count(*) filter (where ${leads.assignedToId} = ${botId})::int`
             : sql<number>`0`,
@@ -548,7 +550,7 @@ export type LancioAssignReport = {
 }
 
 /** Distribuzione FIFO dei lead del pool (non assegnati) ai GDO scelti — come Black Summer. */
-export async function assignFromLancioPool(input: { count: number; gdoIds: string[] }): Promise<LancioAssignReport> {
+export async function assignFromLancioPool(input: { count: number; gdoIds: string[]; lancioPool?: string | null }): Promise<LancioAssignReport> {
     const report: LancioAssignReport = { ok: false, errors: [], perGdo: {}, totalAssigned: 0 }
     let ctx: TenantContext
     try {
@@ -596,7 +598,8 @@ export async function assignFromLancioPool(input: { count: number; gdoIds: strin
 
     const result = await pickAndAssignBuckets({
         companyId: ctx.companyId,
-        requests: [{ bucket: LANCIO_BUCKET, count }],
+        // Solo i ridati: i "mai contattati dal bot" si pescano dalla loro card.
+        requests: [{ bucket: LANCIO_BUCKET, count, lancioPool: input.lancioPool ?? null }],
         selectedGdos,
         adminId,
     })
@@ -610,5 +613,155 @@ export async function assignFromLancioPool(input: { count: number; gdoIds: strin
     if (report.totalAssigned === 0 && report.errors.length === 0) {
         report.errors.push("Nessun lead pescato (il pool potrebbe essere vuoto).")
     }
+    return report
+}
+
+// ─── Pool "Lead del lancio mai contattati dal bot" (PO 07/10/2026) ───────────
+// Lead del lancio a cui il bot non aveva ancora mandato il follow-up, tolti al
+// bot: stanno nel bucket del lancio con lancioPool = 'VERGINI' finché il TL non
+// li assegna ai GDO o non ne ridà N al bot.
+
+const VERGINI = 'VERGINI'
+const RIPRENDI_URL_DEFAULT = 'https://web-app-messaggistica.vercel.app/api/bot/lancio-riprendi'
+
+export type LancioVerginiStatus = {
+    nelPool: number
+    /** Usciti dal pool verso i GDO (eventi ASSIGNED con lancioPool VERGINI). */
+    aiGdo: number
+    /** Ridati al bot dal TL. */
+    alBot: number
+}
+
+export async function getLancioVerginiStatus(): Promise<LancioVerginiStatus | null> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    if (ctx.companyId !== LANCIO_COMPANY) return null
+
+    const [pool] = await db.select({ n: sql<number>`count(*)::int` }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.launchBucket, LANCIO_BUCKET),
+        eq(leads.lancioPool, VERGINI),
+        isNull(leads.assignedToId),
+    ))
+    const [usciti] = await db.select({
+        aiGdo: sql<number>`count(distinct ${leadEvents.leadId}) filter (where ${leadEvents.eventType} = 'ASSIGNED')::int`,
+        alBot: sql<number>`count(distinct ${leadEvents.leadId}) filter (where ${leadEvents.eventType} = 'REASSIGNED_TO_BOT')::int`,
+    }).from(leadEvents).where(and(
+        eq(leadEvents.companyId, ctx.companyId),
+        inArray(leadEvents.eventType, ['ASSIGNED', 'REASSIGNED_TO_BOT']),
+        sql`${leadEvents.metadata}->>'lancioPool' = ${VERGINI}`,
+    ))
+    const nelPool = pool?.n ?? 0
+    const aiGdo = usciti?.aiGdo ?? 0
+    const alBot = usciti?.alBot ?? 0
+    // Card nascosta quando non c'è mai stato niente dentro.
+    if (nelPool === 0 && aiGdo === 0 && alBot === 0) return null
+    return { nelPool, aiGdo, alBot }
+}
+
+/** Distribuzione FIFO dei "mai contattati dal bot" ai GDO scelti. */
+export async function assignFromLancioVergini(input: { count: number; gdoIds: string[] }): Promise<LancioAssignReport> {
+    return assignFromLancioPool({ ...input, lancioPool: VERGINI })
+}
+
+export type LancioVerginiBotReport = {
+    ok: boolean
+    errors: string[]
+    /** Lead ridati al bot e riattivati da lui. */
+    ridati: number
+    /** Pescati ma che il bot non ha potuto riprendere: restano nel pool. */
+    nonRipresi: number
+}
+
+/**
+ * Ridà al bot N lead del pool "mai contattati". Prima chiede al bot di
+ * riattivare le chat (POST /api/bot/lancio-riprendi, firma HMAC come l'intake);
+ * solo i lead che il bot conferma passano al bot nel CRM. Nessun messaggio parte
+ * da qui: il follow-up lo manda il cron del bot al suo giro.
+ */
+export async function giveLancioVerginiToBot(input: { count: number }): Promise<LancioVerginiBotReport> {
+    const report: LancioVerginiBotReport = { ok: false, errors: [], ridati: 0, nonRipresi: 0 }
+    let ctx: TenantContext
+    try {
+        ctx = await requireLancioCtx()
+    } catch (e: any) {
+        report.errors.push(String(e?.message || e)); return report
+    }
+    if (ctx.companyId !== LANCIO_COMPANY) {
+        report.errors.push("Il pool del lancio è disponibile solo con azienda attiva Fenice.")
+        return report
+    }
+    const count = Math.min(500, Math.max(0, Math.floor(input.count || 0)))
+    if (count === 0) { report.errors.push("Devi specificare almeno 1 lead."); return report }
+    const secret = process.env.BOT_WEBHOOK_SECRET
+    if (!secret) { report.errors.push("BOT_WEBHOOK_SECRET non configurato sul server."); return report }
+    const botId = await findBotId()
+    if (!botId) { report.errors.push("Account bot (GDO 201) non trovato o disattivo."); return report }
+
+    const picked = await db.select({ id: leads.id }).from(leads).where(and(
+        eq(leads.companyId, ctx.companyId),
+        eq(leads.launchBucket, LANCIO_BUCKET),
+        eq(leads.lancioPool, VERGINI),
+        isNull(leads.assignedToId),
+    )).orderBy(asc(leads.createdAt), asc(leads.id)).limit(count)
+    const ids = picked.map(p => p.id)
+    if (ids.length === 0) { report.errors.push("Il pool è vuoto."); return report }
+
+    const rawBody = JSON.stringify({ leadIds: ids })
+    let ripresi: string[] = []
+    try {
+        const res = await fetch(process.env.BOT_LANCIO_RIPRENDI_URL || RIPRENDI_URL_DEFAULT, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bot-signature': signPayload(rawBody, secret) },
+            body: rawBody,
+            signal: AbortSignal.timeout(60000),
+        })
+        const body = await res.json().catch(() => null) as { ok?: boolean; ripresi?: string[] } | null
+        if (!res.ok || !body?.ok || !Array.isArray(body.ripresi)) {
+            report.errors.push(`Il bot ha risposto ${res.status}: nessun lead ridato, riprova tra poco.`)
+            return report
+        }
+        ripresi = body.ripresi.filter(id => ids.includes(id))
+    } catch (e: any) {
+        report.errors.push(`Bot non raggiungibile: ${e?.message || e}. Nessun lead ridato.`)
+        return report
+    }
+
+    if (ripresi.length > 0) {
+        const supabase = await createClient()
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+        const adminId = supabaseUser?.id ?? null
+        const aggiornati = await db.update(leads).set({
+            assignedToId: botId,
+            assignedAt: sql`coalesce(${leads.assignedAt}, now())`,
+            lancioPool: null,
+            updatedAt: new Date(),
+        }).where(and(
+            eq(leads.companyId, ctx.companyId),
+            inArray(leads.id, ripresi),
+            isNull(leads.assignedToId),
+        )).returning({ id: leads.id })
+        const now = new Date()
+        const rows = aggiornati.map(r => ({
+            id: crypto.randomUUID(),
+            leadId: r.id,
+            eventType: 'REASSIGNED_TO_BOT' as const,
+            userId: adminId,
+            fromSection: null,
+            toSection: null,
+            metadata: { source: 'launch_pool', bucket: LANCIO_BUCKET, lancioPool: VERGINI, toAssigneeId: botId },
+            timestamp: now,
+            companyId: ctx.companyId,
+        }))
+        for (let i = 0; i < rows.length; i += 500) await db.insert(leadEvents).values(rows.slice(i, i + 500))
+        report.ridati = aggiornati.length
+    }
+    report.nonRipresi = ids.length - report.ridati
+    if (report.nonRipresi > 0) {
+        report.errors.push(`${report.nonRipresi} lead non ripresi dal bot (chat già presa da altri): restano nel pool.`)
+    }
+
+    revalidatePath('/', 'layout')
+    report.ok = report.ridati > 0
     return report
 }

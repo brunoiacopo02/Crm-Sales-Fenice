@@ -167,6 +167,11 @@ export const leads = pgTable('leads', {
     // 'LANCIO_UMANI_20261007', 400 lead del lancio tolti al bot e dati ai GDO
     // 106 e 119. Resta anche se il lead cambia assegnatario. Null altrimenti.
     humanTestCohort: text('humanTestCohort'),
+    // Pool del lancio in cui sta il lead finché non è assegnato (migr. 0042,
+    // PO 07/10/2026): 'VERGINI' = lead del lancio mai contattati dal bot dopo
+    // la live, tolti al bot. Si azzera quando il TL lo assegna (GDO o bot).
+    // Null = pool del lancio di sempre (ridati dal bot) o lead normale.
+    lancioPool: text('lancioPool'),
     // Venditore a cui le Conferme devono dare l'appuntamento quando il GDO lo
     // fissa (migr. 0041, PO 06/10/2026): lead del lancio dati prima a un
     // venditore da chiamare e poi passati ai GDO. Il pannello Conferme lo
