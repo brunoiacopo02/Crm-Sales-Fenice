@@ -384,19 +384,6 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                         attemptNumber: attemptWrite.mode === 'insert' ? attemptWrite.attemptNumber : 0,
                     };
 
-                    // La riga di storico precede le scritture reali: prima/dopo
-                    // coprono ENTRAMBE le tabelle toccate (Ruling A), altrimenti
-                    // il Task 7 non saprebbe quale riga salesAttempts cancellare.
-                    await tx.insert(riconciliazioneEntries).values({
-                        id: crypto.randomUUID(),
-                        runId,
-                        leadId,
-                        family: e.family,
-                        createdLead: true,
-                        before: { lead: {}, attempt: null },
-                        after: { lead: leadAfter, attempt: attemptAfter },
-                    });
-
                     await tx.insert(leads).values({
                         id: leadId,
                         companyId: COMPANY_ID,
@@ -424,6 +411,22 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                         outcome: attemptAfter.outcome,
                         outcomeAt: attemptAfter.outcomeAt!,
                         closeAmountEur: attemptAfter.closeAmountEur,
+                    });
+
+                    // La riga di storico va DOPO l'insert del lead: riconciliazioneEntries.leadId
+                    // ha una FK su leads, e scritta prima faceva fallire (e annullare)
+                    // ogni run con un lead-assente. La transazione resta la garanzia
+                    // che storico e scritture esistano insieme o per niente. Prima/dopo
+                    // coprono ENTRAMBE le tabelle toccate (Ruling A), altrimenti
+                    // il Task 7 non saprebbe quale riga salesAttempts cancellare.
+                    await tx.insert(riconciliazioneEntries).values({
+                        id: crypto.randomUUID(),
+                        runId,
+                        leadId,
+                        family: e.family,
+                        createdLead: true,
+                        before: { lead: {}, attempt: null },
+                        after: { lead: leadAfter, attempt: attemptAfter },
                     });
 
                     touched.push({ leadId, family: e.family });
