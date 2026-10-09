@@ -395,7 +395,10 @@ export function VenditoriAgendaModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                         // fissa": un'ora già mostrata come "Occupato", o un'ora
                                                         // di oggi già passata, non mantengono quella promessa.
                                                         if (v.blockedSlots.includes(k)) return false
-                                                        return romeInstant(dateStr, Number(k.split('@')[1])) > now
+                                                        // Un'ora di oggi già iniziata resta in elenco: non promette
+                                                        // più "qui si fissa" ma porta subito il "Non c'era", senza
+                                                        // aspettare domani (il server la accetta da inizio slot).
+                                                        return true
                                                     })
                                                     return (
                                                         <DayCell
@@ -538,10 +541,11 @@ function DayCell({
                             {emptyDeclaredSlots.map(k => {
                                 const [dateStr, hStr] = k.split('@')
                                 const slotStart = romeInstant(dateStr, Number(hStr))
-                                // Su oggi e sul futuro la pastiglia è il verso positivo del
-                                // muro: "qui si può fissare". Niente "Non c'era", che su una
-                                // giornata non ancora chiusa sarebbe solo un bottone spento.
-                                if (!isPast) {
+                                // Sulle ore non ancora iniziate la pastiglia è il verso positivo
+                                // del muro: "qui si può fissare". Niente "Non c'era", che lì
+                                // sarebbe solo un bottone spento. Da inizio ora in poi (anche
+                                // oggi) la pastiglia porta il "Non c'era".
+                                if (!isPast && slotStart > now) {
                                     return (
                                         <div
                                             key={k}
