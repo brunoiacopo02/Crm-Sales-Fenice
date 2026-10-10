@@ -92,6 +92,8 @@ export function LeaderboardClient({
     const [currentMetric, setCurrentMetric] = useState<LeaderboardMetric>('appointments')
     const defaultRole: LeaderboardRole = (userRole === 'CONFERME' || userRole === 'VENDITORE') ? userRole : 'GDO'
     const [currentRole, setCurrentRole] = useState<LeaderboardRole>(defaultRole)
+    // Il fatturato dei venditori e' un dato sensibile: niente tab Venditori per i GDO
+    const roleTabs = userRole === 'GDO' ? ROLE_TABS.filter(t => t.id !== 'VENDITORE') : ROLE_TABS
     const previousRanksRef = useRef<Map<string, number>>(new Map())
     const [rankChanges, setRankChanges] = useState<Map<string, number>>(new Map())
     const currentPeriod = (searchParams.get('period') as LeaderboardPeriod) || initialPeriod
@@ -346,7 +348,7 @@ export function LeaderboardClient({
 
             {/* Role Tabs */}
             <div className="bg-[var(--color-gaming-bg-card)]/90 backdrop-blur-sm p-1.5 rounded-xl border border-[var(--color-gaming-border)] shadow-gaming-card flex flex-wrap gap-1.5">
-                {ROLE_TABS.map(tab => {
+                {roleTabs.map(tab => {
                     const Icon = tab.icon
                     return (
                         <button

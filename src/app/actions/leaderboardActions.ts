@@ -372,6 +372,8 @@ export async function getVenditoriLeaderboard(period: LeaderboardPeriod) {
 
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    // Il fatturato dei venditori e' un dato sensibile: i GDO non lo vedono.
+    if (ctx.role === 'GDO') throw new Error('Forbidden: classifica venditori non visibile ai GDO')
 
     const allVenditori = await db.select().from(users)
         .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'VENDITORE')))
