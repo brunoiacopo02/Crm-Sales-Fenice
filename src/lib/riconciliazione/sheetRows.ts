@@ -38,6 +38,10 @@ const TUTOR_TO_SALES: Record<string, string> = {
     'paolo s.': 'Sales 004',
     'giacomo o.': 'Sales 008',
     'stefania c.': 'Sales 010',
+    // Aggiunti dal PO il 2026-10-10 (gestionale Elixir): Andrea B. è Sales 007,
+    // e "Altro" nel gestionale coincide di norma con Andrea.
+    'andrea b.': 'Sales 007',
+    'altro': 'Sales 007',
 };
 
 export function parseAmount(raw: string | undefined | null): number {

@@ -43,10 +43,12 @@ test('parseSheetDate legge dd/mm/yyyy e rifiuta il resto', () => {
     assert.equal(parseSheetDate(''), null);
 });
 
-test('tutorToSalesCode mappa i sei venditori noti e solo quelli', () => {
+test('tutorToSalesCode mappa i venditori noti e solo quelli', () => {
     assert.equal(tutorToSalesCode('Paolo S.'), 'Sales 004');
     assert.equal(tutorToSalesCode('Giacomo O.'), 'Sales 008');
     assert.equal(tutorToSalesCode('Bruno B.'), 'Sales 001');
+    assert.equal(tutorToSalesCode('Andrea B.'), 'Sales 007');
+    assert.equal(tutorToSalesCode('Altro'), 'Sales 007');
     assert.equal(tutorToSalesCode('Matteo D.'), null);
     assert.equal(tutorToSalesCode('Amministrazione'), null);
     assert.equal(tutorToSalesCode(''), null);
