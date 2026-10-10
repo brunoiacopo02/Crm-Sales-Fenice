@@ -7,7 +7,7 @@ import { getMyLatePenalties } from "@/app/actions/venditoriMonitorActions"
 import { getVenditoreLancioLeads, type LancioCallNowLead } from "@/app/actions/lancioActions"
 import { LancioCallNowTab } from "@/components/venditore/LancioCallNowTab"
 import { callNowPendingCount, isInCallNowCycle } from "@/lib/lancio/callNow"
-import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History, Timer, Rocket } from "lucide-react"
+import { Calendar, List, Search, Filter, Phone, Mail, User, Clock, CheckCircle2, AlertCircle, HelpCircle, Trophy, Bell, BarChart3, CalendarClock, PauseCircle, History, Rocket } from "lucide-react"
 import { toRomeDatetimeLocal, parseRomeDatetimeLocal } from "@/lib/dateUtils"
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns"
 import { it } from "date-fns/locale"
@@ -19,6 +19,7 @@ import { VenditorePerformanceView } from "@/components/venditore-performance/Ven
 import { WeeklyFocusBanner } from "@/components/venditore-performance/WeeklyFocusBanner"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { StoricoTrattativeTab } from "@/components/venditore/StoricoTrattativeTab"
+import { MyPenaltiesBanner, type MyPenaltiesData } from "@/components/venditore/MyPenaltiesBanner"
 
 const VenditoreDrawer = dynamic(
   () => import("@/components/VenditoreDrawer").then(mod => mod.VenditoreDrawer),
@@ -37,7 +38,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
     const [perfMonth, setPerfMonth] = useState<string>(() => currentYearMonthRome())
     const [perfData, setPerfData] = useState<any>(null)
-    const [latePenalties, setLatePenalties] = useState<{ count: number; openCount: number; totalEur: number } | null>(null)
+    const [latePenalties, setLatePenalties] = useState<MyPenaltiesData | null>(null)
 
     // Filters
     const [search, setSearch] = useState("")
@@ -295,24 +296,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                 (ruling PO 2026-09-12). "Ancora da esitare" resta invece
                 ritardi-only: è l'unico caso in cui esitare vuol dire qualcosa. */}
             {latePenalties && latePenalties.count > 0 && (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
-                    <Timer className="h-5 w-5 shrink-0 text-rose-600" />
-                    <div className="text-sm text-rose-900">
-                        <span className="font-bold">
-                            {latePenalties.count} {latePenalties.count === 1 ? 'trattenuta' : 'trattenute'} questo mese
-                        </span>
-                        <span className="mx-1.5 text-rose-400">&middot;</span>
-                        <span className="font-semibold">-{latePenalties.totalEur.toFixed(0)} &euro;</span>
-                        <span className="ml-2 text-rose-700/80">
-                            Ritardi sugli esiti e multe del calendario disponibilità.
-                        </span>
-                    </div>
-                    {latePenalties.openCount > 0 && (
-                        <span className="rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white">
-                            {latePenalties.openCount} {latePenalties.openCount === 1 ? 'ritardo' : 'ritardi'} ancora da esitare
-                        </span>
-                    )}
-                </div>
+                <MyPenaltiesBanner data={latePenalties} />
             )}
 
             {/* Toolbar */}

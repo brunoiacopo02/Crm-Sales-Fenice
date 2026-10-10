@@ -496,34 +496,75 @@ export async function getMyLatePenalties(monthKey?: string): Promise<{
      */
     openCount: number
     totalEur: number
+    /** Il perché di ogni trattenuta: quale lead, quale scadenza, quale ora. */
+    items: MyPenaltyItem[]
 }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { monthKey: monthKey || romeMonthKey(new Date()), count: 0, openCount: 0, totalEur: 0 }
+    if (!user) return { monthKey: monthKey || romeMonthKey(new Date()), count: 0, openCount: 0, totalEur: 0, items: [] }
 
     const ctx = await currentTenant()
     const mk = monthKey || romeMonthKey(new Date())
 
+    // Volutamente NON si leggono `reportedBy` né `note` per le assenze: il
+    // venditore deve sapere PERCHÉ è stato multato, non CHI lo ha segnalato
+    // (ruling PO 2026-10-10). La nota di un "Non c'era" è testo libero di chi
+    // segnala e potrebbe tradirne l'identità; resta visibile solo nel Monitor.
     const rows = await db.select({
+        id: salesLatePenalties.id,
         kind: salesLatePenalties.kind,
+        dueAt: salesLatePenalties.dueAt,
         resolvedAt: salesLatePenalties.resolvedAt,
         amountEur: salesLatePenalties.amountEur,
-    }).from(salesLatePenalties).where(and(
+        note: salesLatePenalties.note,
+        leadName: leads.name,
+    }).from(salesLatePenalties)
+    .leftJoin(leads, eq(leads.id, salesLatePenalties.leadId))
+    .where(and(
         eq(salesLatePenalties.companyId, ctx.companyId),
         eq(salesLatePenalties.salesUserId, user.id),
         eq(salesLatePenalties.monthKey, mk),
         // Una multa annullata (Task 10) non deve continuare a pesare sul
         // badge di chi l'ha ricevuta.
         isNull(salesLatePenalties.voidedAt),
-    ))
+    )).orderBy(desc(salesLatePenalties.dueAt))
 
+    const now = new Date()
     return {
         monthKey: mk,
         count: rows.length,
         openCount: rows.filter(r =>
             !r.resolvedAt && (r.kind === 'APPOINTMENT' || r.kind === 'FOLLOWUP')).length,
         totalEur: rows.reduce((s, r) => s + (r.amountEur || 0), 0),
+        items: rows.map(r => {
+            const isLateKind = r.kind === 'APPOINTMENT' || r.kind === 'FOLLOWUP'
+            return {
+                id: r.id,
+                kind: r.kind as LatePenaltyRowKind,
+                dueAtIso: r.dueAt.toISOString(),
+                leadName: r.leadName || null,
+                amountEur: r.amountEur,
+                resolvedAtIso: r.resolvedAt ? r.resolvedAt.toISOString() : null,
+                hoursLate: isLateKind ? lateHours(r.dueAt, r.resolvedAt ?? null, now) : null,
+                // Solo la nota del calendario non compilato: la scrive il sistema.
+                note: r.kind === 'CALENDAR_MISSING' ? (r.note ?? null) : null,
+            }
+        }),
     }
+}
+
+/** Una trattenuta vista dal venditore: il motivo, mai chi l'ha segnalata. */
+export interface MyPenaltyItem {
+    id: string
+    kind: LatePenaltyRowKind
+    /** Ora dell'appuntamento/follow-up, dello slot disertato o della scadenza del calendario. */
+    dueAtIso: string
+    leadName: string | null
+    amountEur: number
+    resolvedAtIso: string | null
+    /** Solo ritardi: ore fra la scadenza e l'esito (o adesso, se ancora aperto). */
+    hoursLate: number | null
+    note: string | null
 }
 
 /**
