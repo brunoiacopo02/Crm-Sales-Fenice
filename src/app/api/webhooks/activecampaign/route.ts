@@ -198,10 +198,13 @@ async function getListIdsByName(): Promise<Map<string, Set<string>>> {
  * accesa l'automazione che riempie la lista 133 (serve ad altro), quindi il
  * blocco è l'unica cosa che ci separa da quei lead: gli id sono la difesa che
  * sopravvive a una rinomina, e non dipendono dalla chiamata /lists.
+ *
+ * 135 dal 10/10/2026: il bot non deve scrivere a quella lista. Gli id fissi si
+ * SOMMANO all'env invece di farle da default: un'env impostata su Vercel non
+ * deve poter riaprire una lista bloccata qui.
  */
 const BLOCKED_LIST_IDS = new Set(
-    (process.env.ACTIVECAMPAIGN_BLOCKED_LIST_IDS || '133')
-        .split(',')
+    ['133', '135', ...(process.env.ACTIVECAMPAIGN_BLOCKED_LIST_IDS || '').split(',')]
         .map((s) => s.trim())
         .filter(Boolean),
 );
