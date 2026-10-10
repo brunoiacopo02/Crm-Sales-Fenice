@@ -319,6 +319,8 @@ export async function getConfermeLeaderboard(period: LeaderboardPeriod) {
 
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    // I GDO vedono solo la classifica GDO.
+    if (ctx.role === 'GDO') throw new Error('Forbidden: classifica conferme non visibile ai GDO')
 
     const allConferme = await db.select().from(users)
         .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'CONFERME')))
