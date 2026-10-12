@@ -22,7 +22,7 @@ function Tile({ label, sub, value, tone = "text-ash-800" }: { label: string; sub
     )
 }
 
-export default function IncassiAdminClient({ mese, months, data, lastRun, hasSynced }: { mese: string; months: string[]; data: AdminMonth; lastRun: RunInfo; hasSynced: boolean }) {
+export default function IncassiAdminClient({ mese, months, data, lastRun, hasSynced, configured, staleSince }: { mese: string; months: string[]; data: AdminMonth; lastRun: RunInfo; hasSynced: boolean; configured: boolean; staleSince: string | null }) {
     const router = useRouter()
     const [pending, startTransition] = useTransition()
     const [msg, setMsg] = useState<string | null>(null)
@@ -71,6 +71,15 @@ export default function IncassiAdminClient({ mese, months, data, lastRun, hasSyn
                 </div>
             </div>
 
+            {!configured ? (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+                    Aggiornamento automatico spento: su Vercel mancano GESTIONALE_API_URL o GESTIONALE_API_KEY. I numeri qui sotto sono fermi all&apos;ultima copia.
+                </div>
+            ) : staleSince && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+                    Dati vecchi: l&apos;ultimo aggiornamento riuscito è del {new Date(staleSince).toLocaleString("it-IT", { timeZone: "Europe/Rome" })}. Il cron orario non sta andando a buon fine.
+                </div>
+            )}
             {msg && <div className="rounded-md border border-ash-200 bg-ash-50 px-3 py-2 text-sm text-ash-700">{msg}</div>}
             {lastRun?.status === "error" && (
                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
