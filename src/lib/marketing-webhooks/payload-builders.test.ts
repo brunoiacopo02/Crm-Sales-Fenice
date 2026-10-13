@@ -129,3 +129,23 @@ describe('deterministicEventId per lead.rejected', () => {
         assert.notStrictEqual(a, b);
     });
 });
+
+describe('lead envelope: marketingContactId', () => {
+    test('viaggia nel blocco lead quando il lead e\' passato dalla coda del marketing', () => {
+        const env = buildLeadRejected({
+            lead: fakeLead({ marketingContactId: '0b6f2c1e-1111-4222-8333-944444444444' }),
+            actor: ACTOR, occurredAt: AT,
+            stage: 'GDO', automatic: false, byBot: false,
+        });
+        assert.strictEqual(env.lead.marketingContactId, '0b6f2c1e-1111-4222-8333-944444444444');
+        assert.strictEqual(env.lead.email, 'mario@example.com');
+    });
+
+    test('null sui lead mai passati dalla coda', () => {
+        const env = buildLeadRejected({
+            lead: fakeLead(), actor: ACTOR, occurredAt: AT,
+            stage: 'GDO', automatic: false, byBot: false,
+        });
+        assert.strictEqual(env.lead.marketingContactId, null);
+    });
+});

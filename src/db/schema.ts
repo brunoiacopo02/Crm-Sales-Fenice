@@ -172,6 +172,9 @@ export const leads = pgTable('leads', {
     // la live, tolti al bot. Si azzera quando il TL lo assegna (GDO o bot).
     // Null = pool del lancio di sempre (ridati dal bot) o lead normale.
     lancioPool: text('lancioPool'),
+    // Id stabile del contatto nel CRM marketing (migr. 0043): lo scrive la coda
+    // del giorno (POST /api/marketing-leads) e viaggia negli eventi al marketing.
+    marketingContactId: text('marketingContactId'),
     // Venditore a cui le Conferme devono dare l'appuntamento quando il GDO lo
     // fissa (migr. 0041, PO 06/10/2026): lead del lancio dati prima a un
     // venditore da chiamare e poi passati ai GDO. Il pannello Conferme lo
@@ -1782,4 +1785,28 @@ export const gestionaleSyncRuns = pgTable('gestionaleSyncRuns', {
     error: text('error'),
 }, (table) => ({
     startedIdx: index('gestionale_sync_runs_started_idx').on(table.startedAt),
+}));
+
+// Coda lead del giorno spinta dal CRM marketing (migr. 0043). Una riga per
+// (azienda, giorno, contatto marketing): il UNIQUE rende idempotente il
+// re-invio. Il lead resta uno solo in `leads`; qui c'è il "perché oggi".
+export const marketingQueueEntries = pgTable('marketingQueueEntries', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    queueDate: date('queueDate').notNull(),       // 'YYYY-MM-DD', giorno della coda (ora di Roma)
+    marketingContactId: text('marketingContactId').notNull(),
+    leadId: text('leadId').references(() => leads.id, { onDelete: 'set null' }),
+    posizione: integer('posizione').notNull(),
+    motivoChiamata: text('motivoChiamata'),
+    punteggio: real('punteggio'),
+    funnelOrigine: text('funnelOrigine'),
+    dataIngresso: date('dataIngresso'),
+    esito: text('esito').notNull(),                // 'creato' | 'aggiornato' | 'scartato'
+    motivoScarto: text('motivoScarto'),
+    payload: jsonb('payload').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => ({
+    companyDateContactUq: uniqueIndex('marketing_queue_company_date_contact_uq').on(table.companyId, table.queueDate, table.marketingContactId),
+    leadIdx: index('marketing_queue_lead_idx').on(table.leadId),
 }));

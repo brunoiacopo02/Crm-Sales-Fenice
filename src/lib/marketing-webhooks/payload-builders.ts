@@ -94,6 +94,7 @@ function leadEnvelope(lead: Lead): LeadEnvelope {
         phone: lead.phone,
         funnel: lead.funnel,
         source: lead.source,
+        marketingContactId: lead.marketingContactId ?? null,
         createdAt: lead.createdAt.toISOString(),
         utm: {
             source: lead.utmSource,

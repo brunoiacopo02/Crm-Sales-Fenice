@@ -256,6 +256,7 @@ export function ContactDrawer({
             // cercare l'audit di questi lead.
             case 'SALES_SELF_BOOKED': return '🎯 Appuntamento fissato dal venditore'
             case 'SALES_PIPELINE_ASSIGNED': return '➡️ Passato alla pipeline del venditore'
+            case 'MARKETING_QUEUE': return '📈 Nella coda del giorno del marketing'
             default: return 'Evento Sconosciuto'
         }
     }

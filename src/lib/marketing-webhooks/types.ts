@@ -35,6 +35,8 @@ export interface LeadEnvelope {
     phone: string;
     funnel: string | null;
     source: string | null;
+    /** Id stabile del contatto nel CRM marketing, se il lead e' passato dalla coda del giorno. */
+    marketingContactId: string | null;
     createdAt: string;
     utm: {
         source: string | null;
