@@ -285,7 +285,9 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
             const o = leadOutcomeMap.get(lid)
             if (!o) continue
             if (o.conf === 'confermato') confirmed++
-            if (o.presented) presenziati++
+            // Solo confermati (PO 2026-10-13): le presenze del lancio senza
+            // passaggio dalle Conferme non sono app presenziati del GDO.
+            if (o.presented && o.conf === 'confermato') presenziati++
         }
         const confermePerc = appointments > 0 ? Math.round((confirmed / appointments) * 100) : 0
         const presenziatiPerc = appointments > 0 ? Math.round((presenziati / appointments) * 100) : 0

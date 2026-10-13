@@ -144,6 +144,10 @@ export async function getManagerGdoTables(monthString: string) {
         // Presenze del mese (PO 2026-07-17): base `presentedAt` (giorno dell'appuntamento
         // in cui il lead ha presenziato, latch immutabile) — NON il cohort dei fissati.
         // Un lead fissato a giugno che presenzia a luglio conta nelle presenze di luglio.
+        // Solo appuntamenti CONFERMATI (PO 2026-10-13): i "chiamami adesso" del
+        // lancio presenziano col venditore senza passare dalle Conferme, e
+        // finivano nei presenziati del GDO pur non essendo mai stati confermati
+        // (GDO 115: presenze del lancio con esito Conferme vuoto o scartato).
         db.select({
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
@@ -151,6 +155,7 @@ export async function getManagerGdoTables(monthString: string) {
         }).from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                eq(leads.confirmationsOutcome, 'confermato'),
                 isNotNull(leads.presentedAt),
                 gte(leads.presentedAt, startObj),
                 lt(leads.presentedAt, endObj)
@@ -180,6 +185,7 @@ export async function getManagerGdoTables(monthString: string) {
             funnel: leads.funnel,
             salespersonOutcomeAt: leads.salespersonOutcomeAt,
             presentedAt: leads.presentedAt,
+            confirmationsOutcome: leads.confirmationsOutcome,
         }).from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
@@ -265,6 +271,9 @@ export async function getManagerGdoTables(monthString: string) {
     for (const lead of closedLeads) {
         if (!lead.assignedToId || !gdoStatsMap[lead.assignedToId]) continue;
         if (lead.presentedAt === null) continue;
+        // Stessa regola dei presenziati: senza conferma la presenza non conta,
+        // altrimenti percClosed tornerebbe a superare il 100%.
+        if (lead.confirmationsOutcome !== 'confermato') continue;
         if (!lead.salespersonOutcomeAt) continue;
         const gdoStats = gdoStatsMap[lead.assignedToId];
         const f = lead.funnel || 'ALTRO';
@@ -540,7 +549,9 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
     for (const lead of gdoLeads) {
         const isConfermato = lead.confirmationsOutcome === 'confermato';
         // Presenza = latch presentedAt (PO 2026-07-17): non sparisce con "Sparito" al follow-up.
-        const isPresenziatoFlag = lead.presentedAt !== null;
+        // Conta solo se confermato (PO 2026-10-13): le presenze del lancio senza
+        // passaggio dalle Conferme non sono merito del fissaggio.
+        const isPresenziatoFlag = lead.presentedAt !== null && isConfermato;
         const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
 
         const apptAt = lead.appointmentDate ? new Date(lead.appointmentDate) : null;
