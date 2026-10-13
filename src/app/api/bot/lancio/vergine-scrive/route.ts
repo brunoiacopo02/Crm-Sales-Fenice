@@ -17,7 +17,8 @@ export const dynamic = 'force-dynamic';
  * sia. Qui il lead passa al bot nel CRM se è ancora da lavorare (NEW o
  * IN_PROGRESS, nel pool o di un GDO), così gli esiti del bot hanno dove tornare.
  * Restano dove sono: appuntamenti e lead chiusi (la chat la gestisce comunque il
- * bot) e il gruppo di prova "solo umani" del 106 e del 119.
+ * bot), il gruppo di prova "solo umani" del 106 e del 119, e i lead a cui il GDO
+ * assegnatario ha mandato l'agenda (il lead sta rispondendo a lui, non al bot).
  *
  * Body: { leadId }   Firma: `x-bot-signature` (BOT_WEBHOOK_SECRET)
  * Reply: { preso: boolean, motivo? }
@@ -41,6 +42,19 @@ export async function POST(req: NextRequest) {
         .from(leads).where(eq(leads.id, leadId)).limit(1);
     if (!prima) return NextResponse.json({ preso: false, motivo: 'lead_sconosciuto' });
     if (prima.assignedToId === botId) return NextResponse.json({ preso: true });
+
+    // Il lead risponde all'agenda che gli ha appena mandato il SUO GDO (l'agenda
+    // parte dal numero del bot): non è un lead che scrive di sua iniziativa, è il
+    // GDO che sta fissando. Toglierglielo qui spostava l'appuntamento sul 201 e
+    // lo faceva sparire dalla schermata del GDO mentre lo stava salvando (13/10/2026).
+    if (prima.assignedToId) {
+        const [agendaDelGdo] = await db.select({ id: leadEvents.id }).from(leadEvents).where(and(
+            eq(leadEvents.leadId, leadId),
+            eq(leadEvents.eventType, 'AGENDA_SENT'),
+            eq(leadEvents.userId, prima.assignedToId),
+        )).limit(1);
+        if (agendaDelGdo) return NextResponse.json({ preso: false, motivo: 'agenda_del_gdo' });
+    }
 
     const now = new Date();
     const presi = await db.update(leads).set({
