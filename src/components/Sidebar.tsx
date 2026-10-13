@@ -23,6 +23,7 @@ import {
     CalendarClock,
     Rocket,
     PhoneCall,
+    Gift,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -220,6 +221,7 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled }:
                     items: [
                         ...(role === "ADMIN" ? [{ name: "Sales Manager", href: "/panoramica-generale", icon: Compass }] : []),
                         ...(role === "ADMIN" ? [{ name: "Incassi", href: "/incassi", icon: Briefcase }] : []),
+                        ...(role === "ADMIN" ? [{ name: "Bonus", href: "/bonus", icon: Gift }] : []),
                         { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
                     ],
                 },
