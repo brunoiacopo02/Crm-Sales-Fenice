@@ -4,7 +4,9 @@ import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { FIRST_MONTH, monthsFrom, pickMonth } from "@/lib/gestionale/metrics"
 import { loadAdminMonth, loadLastRun, loadLastOkAt } from "@/lib/gestionale/queries"
 import { gestionaleConfigured } from "@/lib/gestionale/client"
+import { isIncassiUnlocked } from "@/app/actions/incassiPinActions"
 import IncassiAdminClient from "./IncassiAdminClient"
+import IncassiLock from "./IncassiLock"
 
 export const dynamic = "force-dynamic"
 // "Aggiorna adesso" esegue il sync dentro questa pagina: il default Vercel può ucciderlo.
@@ -20,6 +22,8 @@ export default async function IncassiPage({ searchParams }: { searchParams: Prom
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || user.user_metadata?.role !== "ADMIN") redirect("/unauthorized")
+    // Prima del caricamento: senza password non si leggono nemmeno i dati.
+    if (!(await isIncassiUnlocked())) return <IncassiLock />
 
     const current = currentYearMonthRome()
     const mese = pickMonth((await searchParams).mese, current)
