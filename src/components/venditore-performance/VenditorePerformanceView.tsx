@@ -2,11 +2,16 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts"
 import type { VenditorePerformanceData } from "@/app/actions/venditorePerformanceActions"
+import { Eye, EyeOff } from "lucide-react"
+import { useHideAmounts, HIDDEN_AMOUNT } from "@/lib/venditore/hideAmounts"
 
-function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Kpi({ label, value, sub, action }: { label: string; value: string; sub?: string; action?: React.ReactNode }) {
     return (
         <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</div>
+            <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</div>
+                {action}
+            </div>
             <div className="text-2xl font-bold text-gray-900 mt-1">{value}</div>
             {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
         </div>
@@ -15,6 +20,8 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
 
 export function VenditorePerformanceView({ data }: { data: VenditorePerformanceData }) {
     const { closing: c, followUpFunnel: f, attemptsToClose: a } = data
+    const [hideAmounts, toggleHideAmounts] = useHideAmounts()
+    const eur = (n: number) => hideAmounts ? `€${HIDDEN_AMOUNT}` : `€${n.toLocaleString('it-IT')}`
     // Closing rate di coorte: denominatore = presenze del mese. Le trattative ancora
     // aperte stanno nel denominatore, quindi a metà mese il rate è fisiologicamente
     // basso: senza dirlo sembra un crollo.
@@ -26,7 +33,22 @@ export function VenditorePerformanceView({ data }: { data: VenditorePerformanceD
             {/* KPI principali */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <Kpi label="Closing rate" value={`${c.closingPct}%`} sub={closingSub} />
-                <Kpi label="Fatturato" value={`€${c.fatturato.toLocaleString('it-IT')}`} sub={`Ticket medio €${c.ticketMedio.toLocaleString('it-IT')}`} />
+                <Kpi
+                    label="Fatturato"
+                    value={eur(c.fatturato)}
+                    sub={`Ticket medio ${eur(c.ticketMedio)}`}
+                    action={
+                        <button
+                            type="button"
+                            onClick={toggleHideAmounts}
+                            title={hideAmounts ? "Mostra gli importi" : "Nascondi gli importi"}
+                            aria-label={hideAmounts ? "Mostra gli importi" : "Nascondi gli importi"}
+                            className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                        >
+                            {hideAmounts ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                    }
+                />
                 <Kpi label="Conversione follow-up" value={`${f.conversionPct}%`} sub={`${f.closed}/${f.enteredFollowUp} chiusi da richiamo`} />
                 <Kpi label="Tentativi medi a chiusura" value={`${a.avgAttempts}`} sub={`${a.firstShotPct}% chiusi al 1° colpo`} />
             </div>

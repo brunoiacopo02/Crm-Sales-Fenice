@@ -4,7 +4,8 @@ import { useEffect, useState } from "react"
 import { getVenditoreStorico, saveVenditoreOutcome } from "@/app/actions/venditoreActions"
 import { format } from "date-fns"
 import { it } from "date-fns/locale"
-import { Search, BadgeCheck, ChevronDown, ChevronUp, Phone, FileText } from "lucide-react"
+import { Search, BadgeCheck, ChevronDown, ChevronUp, Phone, FileText, Eye, EyeOff } from "lucide-react"
+import { useHideAmounts, HIDDEN_AMOUNT } from "@/lib/venditore/hideAmounts"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
 
 const OUTCOME_FILTERS = ["Tutti", "Chiuso", "Non chiuso", "Sparito"] as const
@@ -29,6 +30,7 @@ export function StoricoTrattativeTab({ sellerId, reloadToken = 0, onChanged, onO
     onOpen: (row: any) => void
 }) {
     const [rows, setRows] = useState<any[]>([])
+    const [hideAmounts, toggleHideAmounts] = useHideAmounts()
     const [isLoading, setIsLoading] = useState(true)
     const [filter, setFilter] = useState<OutcomeFilter>("Tutti")
     const [search, setSearch] = useState("")
@@ -108,7 +110,17 @@ export function StoricoTrattativeTab({ sellerId, reloadToken = 0, onChanged, onO
                         </button>
                     ))}
                 </div>
-                <div className="relative md:ml-auto md:w-64">
+                <button
+                    type="button"
+                    onClick={toggleHideAmounts}
+                    title={hideAmounts ? "Mostra gli importi dei contratti" : "Nascondi gli importi dei contratti"}
+                    aria-label={hideAmounts ? "Mostra gli importi dei contratti" : "Nascondi gli importi dei contratti"}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-ash-200 bg-white px-3 py-1.5 text-xs font-semibold text-ash-600 transition-colors hover:border-brand-orange/40 md:ml-auto"
+                >
+                    {hideAmounts ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {hideAmounts ? "Importi nascosti" : "Importi visibili"}
+                </button>
+                <div className="relative md:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ash-400" />
                     <input
                         type="text"
@@ -150,7 +162,7 @@ export function StoricoTrattativeTab({ sellerId, reloadToken = 0, onChanged, onO
                                         <div className="text-xs text-ash-500 mt-1">
                                             {r.funnel || "Sconosciuto"}
                                             {r.salespersonOutcomeAt && <> · Esitato il {format(new Date(r.salespersonOutcomeAt), "dd MMM yyyy", { locale: it })}</>}
-                                            {outcome === "Chiuso" && r.closeAmountEur ? <> · <strong>€{r.closeAmountEur}</strong>{r.closeProduct ? ` (${r.closeProduct})` : ""}</> : null}
+                                            {outcome === "Chiuso" && r.closeAmountEur ? <> · <strong>€{hideAmounts ? HIDDEN_AMOUNT : r.closeAmountEur}</strong>{r.closeProduct ? ` (${r.closeProduct})` : ""}</> : null}
                                             {outcome !== "Chiuso" && r.notClosedReason ? <> · {r.notClosedReason}</> : null}
                                         </div>
                                     </div>
@@ -252,7 +264,7 @@ export function StoricoTrattativeTab({ sellerId, reloadToken = 0, onChanged, onO
                                                             {effectiveOutcome(a.outcome)}
                                                         </span>
                                                         {a.notClosedReason && <span>· {a.notClosedReason}</span>}
-                                                        {a.closeAmountEur ? <span>· €{a.closeAmountEur}{a.closeProduct ? ` (${a.closeProduct})` : ""}</span> : null}
+                                                        {a.closeAmountEur ? <span>· €{hideAmounts ? HIDDEN_AMOUNT : a.closeAmountEur}{a.closeProduct ? ` (${a.closeProduct})` : ""}</span> : null}
                                                         {a.nextFollowUpDate && <span className="text-ash-400">· follow-up pianificato {format(new Date(a.nextFollowUpDate), "dd MMM", { locale: it })}</span>}
                                                     </div>
                                                 ))}
