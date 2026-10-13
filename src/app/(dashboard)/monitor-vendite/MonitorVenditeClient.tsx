@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { Calendar as CalendarIcon, AlertTriangle, Users, RefreshCw, Loader2, Phone, ClipboardList, Clock, Timer, Trash2 } from "lucide-react"
 import {
     getVenditoriMonitor,
@@ -11,6 +12,12 @@ import {
     type LatePenaltyRowKind,
 } from "@/app/actions/venditoriMonitorActions"
 import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
+
+// Stessa scheda contatto della ricerca in Topbar (caricata solo al primo clic).
+const ContactDrawer = dynamic(
+    () => import("@/components/ContactDrawer").then(mod => mod.ContactDrawer),
+    { ssr: false },
+)
 
 interface Props {
     initialData: VenditoriMonitorData
@@ -96,6 +103,7 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
     const [penaltyKindFilter, setPenaltyKindFilter] = useState<LatePenaltyRowKind | null>(null)
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
+    const [leadAperto, setLeadAperto] = useState<string | null>(null)
     const months = useMemo(() => lastMonths(), [])
     // Righe che la tabella sta mostrando ADESSO (annullate incluse: restano
     // visibili, barrate). Ogni numero dell'intestazione deve descrivere questo
@@ -551,8 +559,16 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                                         {formatDateTimeIT(a.appointmentDate)}
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <div className="text-sm font-semibold text-ash-900 truncate">{a.leadName}</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLeadAperto(a.leadId)}
+                                            title="Apri la scheda del lead"
+                                            className="block max-w-full truncate text-left text-sm font-semibold text-ash-900 hover:text-brand-orange hover:underline"
+                                        >
+                                            {a.leadName}
+                                        </button>
                                         <div className="text-[11px] text-ash-500 flex items-center gap-2 flex-wrap">
+                                            {a.gdoName && <span className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 font-bold text-violet-700">{a.gdoName}</span>}
                                             {a.funnel && <span className="uppercase">{a.funnel}</span>}
                                             {a.leadPhone && <span className="font-mono flex items-center gap-0.5"><Phone className="h-3 w-3" />{a.leadPhone}</span>}
                                             {a.appointmentNote && <span className="italic truncate max-w-[200px]" title={a.appointmentNote}>— {a.appointmentNote}</span>}
@@ -582,6 +598,14 @@ export function MonitorVenditeClient({ initialData, initialStart, initialEnd }: 
                     <FollowUpList items={data.upcomingFollowUps} />
                 )}
             </section>
+
+            {leadAperto && (
+                <ContactDrawer
+                    isOpen
+                    leadId={leadAperto}
+                    onClose={() => { setLeadAperto(null); apply() }}
+                />
+            )}
         </div>
     )
 }

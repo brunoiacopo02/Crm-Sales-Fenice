@@ -41,6 +41,8 @@ export interface AppointmentRow {
     confirmationsOutcome: string | null
     salespersonOutcome: string | null
     appointmentNote: string | null
+    /** GDO che ha in carico il lead (chi ha fissato l'appuntamento; il bot e' il GDO 201). */
+    gdoName: string | null
 }
 
 export interface FollowUpRow {
@@ -272,7 +274,12 @@ export async function getVenditoriMonitor(filters: {
         confirmationsOutcome: leads.confirmationsOutcome,
         salespersonOutcome: leads.salespersonOutcome,
         appointmentNote: leads.appointmentNote,
-    }).from(leads).where(and(
+        gdoCode: users.gdoCode,
+        gdoDisplayName: users.displayName,
+        gdoName: users.name,
+    }).from(leads)
+      .leftJoin(users, eq(users.id, leads.assignedToId))
+      .where(and(
         eq(leads.companyId, ctx.companyId),
         isNotNull(leads.appointmentDate),
         isNotNull(leads.salespersonUserId),
@@ -296,6 +303,9 @@ export async function getVenditoriMonitor(filters: {
         confirmationsOutcome: r.confirmationsOutcome ?? null,
         salespersonOutcome: r.salespersonOutcome ?? null,
         appointmentNote: r.appointmentNote ?? null,
+        gdoName: r.gdoCode
+            ? `GDO ${r.gdoCode}${r.gdoDisplayName || r.gdoName ? ` · ${r.gdoDisplayName || r.gdoName}` : ''}`
+            : (r.gdoDisplayName || r.gdoName || null),
     }))
 
     // Follow-up aperti: verità in salesAttempts.nextFollowUpDate (il nuovo
