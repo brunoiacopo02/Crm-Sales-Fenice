@@ -682,6 +682,7 @@ export async function getApptQuality(
         appointmentCreatedAt: leads.appointmentCreatedAt,
         appointmentDate: leads.appointmentDate,
         presentedAt: leads.presentedAt,
+        confirmationsOutcome: leads.confirmationsOutcome,
         salespersonOutcome: leads.salespersonOutcome,
         salespersonOutcomeAt: leads.salespersonOutcomeAt,
         closeAmountEur: leads.closeAmountEur,
@@ -715,14 +716,17 @@ export async function getApptQuality(
         if (!r.userId) continue
         const s = slot(r.userId, r.displayName || r.name || r.userId)
         if (inRange(apptSetAt(r))) s.app += 1
-        if (inRange(r.presentedAt)) s.presenziati += 1
+        // Solo confermati (PO 2026-10-13): le presenze del lancio senza
+        // passaggio dalle Conferme non sono merito del fissaggio.
+        const confermato = r.confirmationsOutcome === 'confermato'
+        if (confermato && inRange(r.presentedAt)) s.presenziati += 1
         if (r.salespersonOutcome?.toLowerCase() === 'chiuso' && inRange(r.salespersonOutcomeAt)) {
             s.chiusi += 1
             s.fatturato += r.closeAmountEur || 0
             // Numeratore di chiusuraPct: solo chiusure con presenza vera (la
             // riconciliazione fatturato può chiudere un lead scartato dal GDO,
             // mai presentato — reale per i soldi, non per il tasso di conversione).
-            if (isFunnelClosure(r)) s.chiusiConPresenza += 1
+            if (confermato && isFunnelClosure(r)) s.chiusiConPresenza += 1
         }
     }
 

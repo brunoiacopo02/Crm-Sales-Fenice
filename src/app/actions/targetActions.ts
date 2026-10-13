@@ -406,7 +406,9 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
 
         // Presenziati: latch presentedAt (PO 2026-07-17) — presenza contata nel
         // giorno dell'appuntamento, non sparisce con esiti successivi.
-        if (lead.presentedAt && inMonth(lead.presentedAt)) {
+        // Solo confermati (PO 2026-10-13): le presenze del lancio senza
+        // passaggio dalle Conferme non sono app presenziati del GDO.
+        if (lead.presentedAt && lead.confirmationsOutcome === 'confermato' && inMonth(lead.presentedAt)) {
             actAppsPresenziati++;
             bucket.presenziati++;
             if (inToday(lead.presentedAt)) {

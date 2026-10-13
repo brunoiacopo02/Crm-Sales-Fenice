@@ -6,6 +6,9 @@
  * Definizione canonica (PO 2026-07-17, latch `presentedAt`):
  *   - Lead `assignedToId = userId`
  *   - `presentedAt IS NOT NULL` ∈ [start, end)
+ *   - `confirmationsOutcome = 'confermato'` (PO 2026-10-13): i "chiamami adesso"
+ *     del lancio presenziano col venditore senza passare dalle Conferme e non
+ *     sono merito del fissaggio del GDO
  *   - + somma `manualAdjustments` (`type='presenze'`, `createdAt` nel range)
  *
  * `presentedAt` è il giorno dell'APPUNTAMENTO in cui il lead ha presenziato,
@@ -44,6 +47,7 @@ export async function countPresences(
         db.select({ id: leads.id }).from(leads).where(and(
             eq(leads.companyId, companyId),
             eq(leads.assignedToId, userId),
+            eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.presentedAt),
             gte(leads.presentedAt, start),
             lt(leads.presentedAt, end),

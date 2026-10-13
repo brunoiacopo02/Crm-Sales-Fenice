@@ -364,8 +364,9 @@ export async function getMarketingStatsByGdo(monthString: string) {
         }
 
         // Presenziato: latch presentedAt (PO 2026-07-17) — giorno dell'appuntamento,
-        // non sparisce con esiti successivi.
-        if (l.presentedAt && inMonth(l.presentedAt)) {
+        // non sparisce con esiti successivi. Solo confermati (PO 2026-10-13):
+        // le presenze del lancio senza passaggio dalle Conferme non sono del GDO.
+        if (l.presentedAt && isConfirmed && inMonth(l.presentedAt)) {
             gdoStat.appsPresenziati++;
         }
         // Close: data dell'azione = salespersonOutcomeAt.

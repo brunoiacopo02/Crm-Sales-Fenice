@@ -87,6 +87,9 @@ async function batchComputeRpgProfiles(
                     inArray(leads.assignedToId, gdoUserIds),
                     // Latch presentedAt (PO 2026-07-17): presenza al giorno dell'appuntamento,
                     // non sparisce con "Sparito" a un follow-up successivo.
+                    // Solo confermati (PO 2026-10-13): niente presenze del lancio
+                    // arrivate al venditore senza passare dalle Conferme.
+                    eq(leads.confirmationsOutcome, 'confermato'),
                     isNotNull(leads.presentedAt),
                     gte(leads.presentedAt, currentWeekStart),
                     lte(leads.presentedAt, currentWeekEnd)
