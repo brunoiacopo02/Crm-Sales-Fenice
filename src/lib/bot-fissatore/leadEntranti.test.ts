@@ -444,3 +444,34 @@ test('eventoIngressoCollegato: LANCIO_INTAKE tracciabile, con collegato=true', (
         conversationId: 7246,
     });
 });
+
+// ── Funnel Professioni (bot, 14/10/2026) ────────────────────────────────────
+const RIGA_PROFESSIONI: LeadEntranteRaw = {
+    telefono: '+393331112222',
+    provenienza: 'PROFESSIONI',
+    primoMessaggio: 'x',
+    scrittoIl: '2026-10-14T10:00:00+02:00',
+    conversationId: 5,
+};
+
+test('professioni: funnel PROFESSIONI e corso leggibile', () => {
+    const r = normalizzaLeadEntrante({ ...RIGA_PROFESSIONI, professione: 'video_editor' });
+    assert.ok(r.ok);
+    assert.equal(r.lead.funnel, 'PROFESSIONI');
+    assert.equal(r.lead.professione, 'Video Editor');
+});
+
+test('professioni: slug sconosciuto o assente -> null, il lead resta valido', () => {
+    const a = normalizzaLeadEntrante({ ...RIGA_PROFESSIONI, professione: 'pizzaiolo' });
+    const b = normalizzaLeadEntrante(RIGA_PROFESSIONI);
+    assert.ok(a.ok && b.ok);
+    assert.equal(a.lead.professione, null);
+    assert.equal(b.lead.professione, null);
+});
+
+test('professioni: la nota sulla timeline', () => {
+    const r = normalizzaLeadEntrante({ ...RIGA_PROFESSIONI, professione: 'copywriter' });
+    assert.ok(r.ok);
+    const v = valoriNuovoLead(r.lead, 'bot', new Date(), 'id1');
+    assert.equal(eventiNuovoLead(r.lead, v)[0].metadata.note, 'Interessato a: Copywriter');
+});

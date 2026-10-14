@@ -1225,7 +1225,7 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
         // informative e non devono far comparire righe che prima non c'erano.
 
         // Preserve a stable display order matching the Excel layout, then append any extras alphabetically
-        const CANONICAL_ORDER = ['TELEGRAM', 'JOB SIMULATOR', 'CORSO 10 ORE', 'ORG', 'DATABASE', 'GOOGLE', 'SOCIAL', 'TELEGRAM-TK'];
+        const CANONICAL_ORDER = ['TELEGRAM', 'JOB SIMULATOR', 'CORSO 10 ORE', 'ORG', 'DATABASE', 'GOOGLE', 'SOCIAL', 'TELEGRAM-TK', 'PROFESSIONI'];
         const extras = [...allFunnels].filter(f => !CANONICAL_ORDER.includes(f)).sort();
         const ordered = [...CANONICAL_ORDER.filter(f => allFunnels.has(f)), ...extras];
 

@@ -51,6 +51,7 @@ export const PINNED_FUNNELS = [
     'TELEGRAM-TK',
     'GOOGLE',
     'SOCIAL',
+    'PROFESSIONI',
 ] as const;
 
 /**

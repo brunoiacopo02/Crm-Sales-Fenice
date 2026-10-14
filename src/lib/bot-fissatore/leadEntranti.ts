@@ -36,6 +36,16 @@ export const FUNNEL_FALLBACK = 'SCONOSCIUTO';
 /** `source` scritto sui lead creati da qui: li rende isolabili in una query sola. */
 export const SOURCE_INBOUND = 'whatsapp-inbound';
 
+/** Funnel Professioni (bot, 14/10/2026): slug del corso -> nome sulla timeline. */
+const PROFESSIONI_NOMI: Record<string, string> = {
+    sviluppatore_web_ai: 'Sviluppatore Web AI',
+    video_editor: 'Video Editor',
+    project_manager: 'Project Manager',
+    graphic_designer: 'Graphic Designer',
+    copywriter: 'Copywriter',
+    social_media_manager: 'Social Media Manager',
+};
+
 /** Riga della risposta del fornitore. Tutto opzionale: valida `normalizzaLeadEntrante`. */
 export interface LeadEntranteRaw {
     telefono?: string | null;
@@ -53,6 +63,8 @@ export interface LeadEntranteRaw {
      * Assente sul canale push, dove è sempre falso per costruzione.
      */
     botHaRisposto?: boolean | null;
+    /** Slug del corso scelto (funnel Professioni). Sconosciuto o assente: ignorato. */
+    professione?: string | null;
 }
 
 export interface LeadEntranteNormalizzato {
@@ -78,6 +90,8 @@ export interface LeadEntranteNormalizzato {
     botHaRisposto: boolean | null;
     /** Perché un `appuntamento` presente nel payload NON è stato accettato. */
     appuntamentoScartato?: string;
+    /** Nome leggibile del corso scelto, o `null` (funnel Professioni). */
+    professione: string | null;
 }
 
 export type NormalizeResult =
@@ -239,6 +253,10 @@ export function normalizzaLeadEntrante(raw: LeadEntranteRaw): NormalizeResult {
         appuntamentoScartato = 'esito APPUNTAMENTO senza data';
     }
 
+    const professione = typeof raw.professione === 'string'
+        ? PROFESSIONI_NOMI[raw.professione.trim().toLowerCase()] ?? null
+        : null;
+
     return {
         ok: true,
         lead: {
@@ -253,6 +271,7 @@ export function normalizzaLeadEntrante(raw: LeadEntranteRaw): NormalizeResult {
             esito,
             appuntamento,
             botHaRisposto: typeof raw.botHaRisposto === 'boolean' ? raw.botHaRisposto : null,
+            professione,
             ...(appuntamentoScartato ? { appuntamentoScartato } : {}),
         },
     };
@@ -381,6 +400,7 @@ export function eventiNuovoLead(lead: LeadEntranteNormalizzato, valori: NuovoLea
                 conversationId: lead.conversationId,
                 statoBot: lead.statoBot,
                 scrittoIl: lead.scrittoIl?.toISOString() ?? null,
+                ...(lead.professione ? { note: `Interessato a: ${lead.professione}` } : {}),
             },
         },
         {
