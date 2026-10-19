@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import { db } from "@/db"
 import { leadEvents, leads } from "@/db/schema"
-import { EVENTO_IA_VOCALE } from "@/lib/bot-fissatore/iaVocale"
+import { EVENTO_IA_VOCALE, IA_VOCALE_ATTIVA } from "@/lib/bot-fissatore/iaVocale"
 
 export type LeadIaVocale = {
     id: string; nome: string; telefono: string; email: string | null; funnel: string | null
@@ -19,8 +19,12 @@ export const MOTIVI_IA_VOCALE: Record<string, string> = {
  * andati a un GDO. Restano in coda finche' sono fuori dal CRM dei GDO
  * (assignedToId null) e ancora NEW: se un admin li riassegna o li scarta escono da soli.
  * Senza controllo di sessione: lo fanno i chiamanti (azione admin, export col token).
+ *
+ * Spenta dal 19/10/2026 (PO): la coda e' vuota, cosi' anche il foglio che l'IA
+ * legge con IMPORTDATA si svuota e non richiama i lead che aveva gia'.
  */
 export async function leggiCodaIaVocale(companyId: string): Promise<LeadIaVocale[]> {
+    if (!IA_VOCALE_ATTIVA) return []
     const eventi = await db.select({ leadId: leadEvents.leadId, timestamp: leadEvents.timestamp, metadata: leadEvents.metadata })
         .from(leadEvents)
         .where(and(eq(leadEvents.companyId, companyId), eq(leadEvents.eventType, EVENTO_IA_VOCALE)))
