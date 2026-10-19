@@ -292,6 +292,34 @@ export async function getPipelineLeads() {
     }
     const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10)
 
+    // Ridati dal bot con chat interrotta (PO 19/10/2026): la persona ha parlato col
+    // bot e poi si e' fermata. Sono i ridati che rendono, e con tre GDO presenti vanno
+    // chiamati per primi: stella sulla card e cima di ogni tab. Conta l'ULTIMA
+    // restituzione del lead, come nel resto del codice sui ridati.
+    const chatInterrotta = new Set<string>()
+    try {
+        // Solo per la board di un GDO: la vista admin prende i lead di tutta la
+        // company e leggerne gli eventi a ogni caricamento costerebbe troppo.
+        const candidati = isGdo ? pipelineLeads.filter(l => !l.launchBucket).map(l => l.id) : []
+        const ultimoMotivo = new Map<string, string | null>()
+        for (let i = 0; i < candidati.length; i += 1000) {
+            const rows = await db.select({
+                leadId: leadEvents.leadId,
+                reason: sql<string | null>`${leadEvents.metadata}->>'reason'`,
+            })
+                .from(leadEvents)
+                .where(and(
+                    eq(leadEvents.eventType, 'REASSIGNED_FROM_BOT'),
+                    inArray(leadEvents.leadId, candidati.slice(i, i + 1000)),
+                ))
+                .orderBy(desc(leadEvents.timestamp))
+            for (const r of rows) if (!ultimoMotivo.has(r.leadId)) ultimoMotivo.set(r.leadId, r.reason)
+        }
+        for (const [id, reason] of ultimoMotivo) if (reason === 'chat_interrotta') chatInterrotta.add(id)
+    } catch (e) {
+        console.error('[pipeline] lettura ridati chat interrotta fallita', e)
+    }
+
     // Lead tornati dal bot con un sì già dato (aveva confermato e l'appuntamento non
     // è mai nato, oppure ha risposto dopo il 3° NR) e, più in generale, chi ha chiesto
     // di parlare con una persona: `cercati` e `recoverIds` sono letti in cima, prima
@@ -301,6 +329,7 @@ export async function getPipelineLeads() {
             ...l,
             duplicatePhone: dupPhoneKeys.has(phoneKey(l.phone)),
             confermatoAlBot: recoverIds.has(l.id),
+            chiamaPerPrimo: chatInterrotta.has(l.id),
             tiHaCercato: cercati.has(l.id),
             cercatoMotivo: cercati.get(l.id)?.reason ?? null,
             cercatoCategoria: cercati.get(l.id)
@@ -323,16 +352,19 @@ export async function getPipelineLeads() {
     // stanno sempre in cima, sopra anche i "ti ha cercato" degli altri funnel. Dentro
     // ciascun gruppo restano l'ordine urgente e quello di prima (sort stabile).
     // Sopra tutti, i lead del test "solo umani" (106 e 119): sono i più caldi della live.
-    type PerRank = { launchBucket: string | null; humanTestCohort: string | null; tiHaCercato: boolean; confermatoAlBot: boolean }
+    // Dal 19/10/2026 (PO) sopra anche a quelli, i ridati con chat interrotta (stella).
+    type PerRank = { launchBucket: string | null; humanTestCohort: string | null; tiHaCercato: boolean; confermatoAlBot: boolean; chiamaPerPrimo: boolean }
     const lancioRank = (l: PerRank) =>
-        (l.humanTestCohort ? 8 : 0) + (l.launchBucket === LANCIO_BUCKET ? 4 : 0) + urgentRank(l)
+        (l.chiamaPerPrimo ? 16 : 0) + (l.humanTestCohort ? 8 : 0) + (l.launchBucket === LANCIO_BUCKET ? 4 : 0) + urgentRank(l)
     const lancioOnTop = <T extends PerRank>(arr: T[]) =>
         [...arr].sort((a, b) => lancioRank(b) - lancioRank(a))
+    const starredFirst = <T extends PerRank>(arr: T[]) =>
+        [...arr].sort((a, b) => (Number(b.chiamaPerPrimo) * 4 + urgentRank(b)) - (Number(a.chiamaPerPrimo) * 4 + urgentRank(a)))
 
     return {
         firstCall: lancioOnTop(withDupFlag(firstCall)),
         secondCall: lancioOnTop(withDupFlag(secondCall)),
-        thirdCall: recoverableFirst(withDupFlag(thirdCall)),
+        thirdCall: starredFirst(withDupFlag(thirdCall)),
         fourthCall: fourthCallLeads,
         isFourthCallActive,
         recalls: recoverableFirst(withDupFlag(recallsLeads)),

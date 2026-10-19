@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil, Star } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
@@ -35,6 +35,8 @@ type LeadProps = {
         duplicatePhone?: boolean
         /** Tornato dal bot con un si' gia' dato: aveva confermato, o ha risposto dopo il 3o NR. */
         confermatoAlBot?: boolean
+        /** Ridato dal bot con chat interrotta: da chiamare per primo (PO 19/10/2026). */
+        chiamaPerPrimo?: boolean
         /** Ha chiesto di parlare con una persona: richiesta di contatto ancora aperta. */
         tiHaCercato?: boolean
         /** Parole del lead nella richiesta (tooltip del badge "Ti ha cercato"). */
@@ -239,6 +241,9 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                 <div className="flex-1 min-w-0 sm:min-w-[200px] flex flex-col justify-center">
                     <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2">
                         <div className="flex items-center gap-2">
+                            {lead.chiamaPerPrimo && (
+                                <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-500" aria-label="Da chiamare per primo" />
+                            )}
                             {lead.name}
                             {isJustArrived && (
                                 <span className="shrink-0 text-emerald-500 animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
@@ -250,6 +255,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             )}
                             {lead.callCount > 0 && (
                                 <div className="text-[10px] font-bold text-ash-500 bg-ash-100 px-1.5 py-0.5 rounded-md">{lead.callCount}° ch.</div>
+                            )}
+                            {lead.chiamaPerPrimo && (
+                                <div
+                                    className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 shrink-0"
+                                    title="Ha parlato col bot e poi si e' fermato: chiamalo per primo."
+                                >
+                                    <Star className="h-3 w-3 fill-amber-400 text-amber-500" /> Chiama per primo
+                                </div>
                             )}
                             {lead.tiHaCercato && (
                                 <div
