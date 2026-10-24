@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
         confermeOutcomeAt: leads.confirmationsTimestamp,
         confermeDiscardReason: leads.confirmationsDiscardReason,
         needsReschedule: leads.confNeedsReschedule,
+        recallDate: leads.recallDate,
         presentedAt: leads.presentedAt,
         salesOutcome: leads.salespersonOutcome,
         salesOutcomeAt: leads.salespersonOutcomeAt,
@@ -146,6 +147,9 @@ export async function POST(req: NextRequest) {
         // 'confermato' | 'scartato' | 'da_rifissare' | null — più la causale.
         confermeOutcome: r.needsReschedule ? 'da_rifissare' : r.confermeOutcome,
         confermeOutcomeAt: iso(r.confermeOutcomeAt),
+        // Il richiamo fissato dalle Conferme per un lead parcheggiato (da_rifissare):
+        // il bot lo usa per ricordarglielo ~2h prima. null se non c'è.
+        recallAt: iso(r.recallDate),
         confermeDiscardReason: r.confermeDiscardReason,
         // La presenza è latchata: una volta vera non torna falsa.
         presented: r.presentedAt !== null,
