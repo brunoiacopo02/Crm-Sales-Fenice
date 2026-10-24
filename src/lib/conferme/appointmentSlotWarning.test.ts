@@ -7,8 +7,14 @@ const PASSATO = 'Data nel passato o per oggi: fissa per domani o dopodomani, dal
 const LONTANA = 'Data troppo lontana: fissa per domani o dopodomani, dalle 10:00 alle 21:00.';
 
 test('sabato: lunedi e martedi ammessi (la domenica non conta)', () => {
-    assert.equal(appointmentSlotWarning('2026-10-26T11:00', SAB_15), null);
+    assert.equal(appointmentSlotWarning('2026-10-26T15:00', SAB_15), null);
     assert.equal(appointmentSlotWarning('2026-10-27T11:00', SAB_15), null);
+});
+test('lunedi 26/10: le Conferme attaccano alle 13, mattina non prenotabile', () => {
+    assert.equal(
+        appointmentSlotWarning('2026-10-26T11:00', SAB_15),
+        'Lunedì 26 le Conferme attaccano alle 13: fissa dalle 15:00 alle 21:00.',
+    );
 });
 test('sabato: mercoledi troppo lontano, oggi passato', () => {
     assert.equal(appointmentSlotWarning('2026-10-28T11:00', SAB_15), LONTANA);
