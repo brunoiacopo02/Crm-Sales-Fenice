@@ -25,6 +25,7 @@ import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
 import { lancioFirst } from "@/lib/lancio/conferme"
+import { confermeBoardColumn } from "@/lib/conferme/boardWindow"
 import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
@@ -151,98 +152,15 @@ export async function getConfermeAppointments(filters: {
     }
 
     if (filters.fetchMode === 'strict_kanban') {
+        // Regola della board (PO 24/10/2026): oggi dalle 9 alle 21, domani
+        // mattina solo per le call fissate prima di oggi. Vive in
+        // src/lib/conferme/boardWindow.ts, dove è testata. Le vecchie regole per
+        // giorno della settimana e gli override festivi datati sono spariti: alla
+        // vigilia di una chiusura si torna a fare un override a mano.
         const now = new Date();
-        const romeDayOfWeekStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', weekday: 'short' }).format(now); // Mon, Tue, etc.
-        const romeDayOfWeek = romeDayOfWeekStr.substring(0, 3).toLowerCase();
-
-        const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-
-        // Override una tantum: venerdì 2026-04-24 il sabato successivo
-        // (2026-04-25) è festa. Oggi le Conferme devono chiamare gli
-        // appuntamenti di LUNEDÌ mattina invece di sabato mattina,
-        // perché domani non si lavora. Rimuovere/aggiornare questa
-        // costante quando passa il giorno o per prossime festività.
-        const isHolidayOverrideFriday = todayStr === '04/24/2026';
-
-        // Override una tantum: giovedì 2026-04-30 il venerdì successivo
-        // (2026-05-01, Festa dei Lavoratori) è festa. Oggi le Conferme
-        // devono chiamare gli appuntamenti di SABATO mattina invece di
-        // venerdì mattina, perché domani non si lavora e nessuno potrà
-        // chiamare gli app di sabato venerdì. Costante datata: si
-        // auto-disattiva dopo oggi.
-        const isHolidayOverrideThursday = todayStr === '04/30/2026';
-
-        // Override una tantum: lunedì 2026-06-01 il martedì successivo
-        // (2026-06-02, Festa della Repubblica) è festa. Oggi le Conferme
-        // devono chiamare gli appuntamenti di MERCOLEDÌ mattina invece di
-        // martedì mattina, perché domani non si lavora. Costante datata:
-        // si auto-disattiva dopo oggi.
-        const isHolidayOverrideMonday = todayStr === '06/01/2026';
-
-        results = results.filter(row => {
-            if (row.lead.confNeedsReschedule) return true; // Always show da definire
-            if (!row.lead.appointmentDate) return false;
-
-            const appt = new Date(row.lead.appointmentDate);
-            const apptDateStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(appt);
-            const apptHour = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(appt), 10);
-
-            const isToday = apptDateStr === todayStr;
-
-            // Calculate tomorrow/next working day string
-            const nextWorkDay = new Date(now);
-            if (romeDayOfWeek === 'fri') {
-                // Override festivo: il 24/04/2026 (Ven) salta sabato festivo,
-                // next work day = Lunedì (+3).
-                nextWorkDay.setDate(nextWorkDay.getDate() + (isHolidayOverrideFriday ? 3 : 1));
-            } else if (romeDayOfWeek === 'sat') {
-                nextWorkDay.setDate(nextWorkDay.getDate() + 2); // Monday
-            } else if (romeDayOfWeek === 'sun') {
-                nextWorkDay.setDate(nextWorkDay.getDate() + 1); // Monday
-            } else {
-                // Mon-Thu. Override festivo: il 30/04/2026 (Gio) salta
-                // venerdì 1° maggio, next work day = Sabato (+2).
-                // Override festivo: il 01/06/2026 (Lun) salta martedì
-                // 2 giugno (Festa Repubblica), next work day = Mercoledì (+2).
-                const skipTomorrow = isHolidayOverrideThursday || isHolidayOverrideMonday;
-                nextWorkDay.setDate(nextWorkDay.getDate() + (skipTomorrow ? 2 : 1));
-            }
-            const nextWorkDayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(nextWorkDay);
-
-            const isNextWorkDay = apptDateStr === nextWorkDayStr;
-
-            if (romeDayOfWeek === 'sat') {
-                // Saturday Rule: Today 13:00-21:00, Monday 09:00-14:00
-                if (isToday && apptHour >= 13 && apptHour <= 21) return true;
-                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) return true;
-            } else if (romeDayOfWeek === 'fri') {
-                // Friday Rule: Today 15:00-21:00, Saturday 09:00-14:00
-                if (isToday && apptHour >= 15 && apptHour <= 21) return true;
-                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) {
-                    // Override festivo: next work day è Lunedì (normale giorno
-                    // lavorativo), nessuna eccezione 13-14 applicabile.
-                    if (isHolidayOverrideFriday) return true;
-                    // Exception for 13:00 and 14:00 on Saturday
-                    if (apptHour === 13 || apptHour === 14) {
-                        if (!row.lead.appointmentCreatedAt) return false;
-                        const created = new Date(row.lead.appointmentCreatedAt);
-                        const hoursSinceCreated = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
-                        if (hoursSinceCreated >= 12) return true;
-                        return false;
-                    }
-                    return true;
-                }
-            } else if (romeDayOfWeek === 'sun') {
-                // Sunday Rule: Tomorrow (Monday) 09:00-14:00
-                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) return true;
-            } else {
-                // Mon-Thu Rule: Today 15:00-21:00, Tomorrow 09:00-14:00
-                if (isToday && apptHour >= 15 && apptHour <= 21) return true;
-                if (isNextWorkDay && apptHour >= 9 && apptHour <= 14) return true;
-            }
-
-            return false;
-        });
+        results = results.filter(row =>
+            row.lead.confNeedsReschedule || confermeBoardColumn(row.lead, now) !== null
+        );
     }
 
     // Attach ultima nota Conferme per lead (per anteprima nella riga board)
