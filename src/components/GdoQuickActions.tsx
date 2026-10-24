@@ -45,9 +45,11 @@ function spawnMiniConfetti(card: HTMLElement) {
 }
 
 /**
- * Finestre valide per fissare un appuntamento (richiesta manager 2026-06-11):
- * domani 15:00-22:00 oppure dopodomani 9:00-22:00. Fuori finestra → warning
- * NON bloccante (il GDO può comunque confermare).
+ * Finestre valide per fissare un appuntamento (PO 24/10/2026, prima era
+ * domani 15-22 / dopodomani 9-22): dalle Conferme che chiamano la mattina
+ * stessa, domani e dopodomani vanno entrambi dalle 10:00 alle 21:00. Le 9:00 si
+ * possono fissare, ma solo in emergenza. Fuori finestra → warning NON
+ * bloccante (il GDO può comunque confermare).
  */
 function appointmentSlotWarning(dateStr: string): string | null {
     if (!dateStr) return null
@@ -57,13 +59,11 @@ function appointmentSlotWarning(dateStr: string): string | null {
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
     const dayDiff = Math.round((startOfDay(dt) - startOfDay(now)) / 86400000)
     const h = dt.getHours() + dt.getMinutes() / 60
-    if (dayDiff === 1 && h >= 15 && h <= 22) return null
-    if (dayDiff === 2 && h >= 9 && h <= 22) return null
-    if (dayDiff < 1) return "Data nel passato o per oggi: le finestre giuste sono domani 15:00-22:00 o dopodomani 9:00-22:00."
-    if (dayDiff > 2) return "Data troppo lontana: fissa per domani (15:00-22:00) o dopodomani (9:00-22:00)."
-    return dayDiff === 1
-        ? "Orario fuori finestra: domani l'appuntamento va dalle 15:00 alle 22:00."
-        : "Orario fuori finestra: dopodomani l'appuntamento va dalle 9:00 alle 22:00."
+    if (dayDiff < 1) return "Data nel passato o per oggi: fissa per domani o dopodomani, dalle 10:00 alle 21:00."
+    if (dayDiff > 2) return "Data troppo lontana: fissa per domani o dopodomani, dalle 10:00 alle 21:00."
+    if (h >= 10 && h <= 21) return null
+    if (h >= 9 && h < 10) return "Le 9:00 solo se il lead non può in nessun altro orario: la fascia giusta è dalle 10:00 alle 21:00."
+    return "Orario fuori finestra: l'appuntamento va dalle 10:00 alle 21:00."
 }
 
 export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillNote, popoverDirection = 'down' }: GdoQuickActionsProps) {
