@@ -18,6 +18,7 @@ import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions"
 import { hasLancioUmaniLeads } from "@/app/actions/lancioUmaniActions"
 import { getUserTheme } from "@/lib/userTheme"
+import { isDirettaOn } from "@/lib/diretta/settings"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
 import { SalesCompanyProvider } from "@/components/providers/SalesCompanyProvider"
@@ -49,10 +50,17 @@ export default async function DashboardLayout({
         redirect('/seleziona-azienda')
     }
 
+    // Restyle "Diretta" (PO 25/10/2026): acceso per ruolo da appSettings, si
+    // spegne senza deploy. Con la Diretta le vecchie skin e gli overlay della
+    // gamification non si applicano.
+    const diretta = await isDirettaOn(session.user.role)
+
     let skinCss: string | null = null;
-    try {
-        skinCss = await getEquippedSkinCss(session.user.id);
-    } catch { /* ignore skin errors */ }
+    if (!diretta) {
+        try {
+            skinCss = await getEquippedSkinCss(session.user.id);
+        } catch { /* ignore skin errors */ }
+    }
     const isTheme = skinCss?.includes('skin-theme')
 
     // Modalità "Tutte le aziende": tema neutro (no Serenamente) sulla vista di
@@ -64,8 +72,8 @@ export default async function DashboardLayout({
     const userTheme = getUserTheme(session.user.email)
 
     // Gamification attiva solo per GDO, CONFERME e supervisori — disabilitata per VENDITORE
-    const showSprintBanner = ['GDO', 'MANAGER', 'ADMIN'].includes(session.user.role)
-    const showGamificationOverlays = session.user.role !== 'VENDITORE'
+    const showSprintBanner = !diretta && ['GDO', 'MANAGER', 'ADMIN'].includes(session.user.role)
+    const showGamificationOverlays = !diretta && session.user.role !== 'VENDITORE'
 
     // Voce di menu "La mia pipeline": solo per il venditore su cui e' accesa
     // oggi. Una voce che rimanda alla home per chiunque altro sarebbe un
@@ -89,7 +97,7 @@ export default async function DashboardLayout({
         <RealtimeProvider userId={session.user.id} companies={tctx.allowedCompanies}>
             <SidebarProvider>
                 <SalesCompanyProvider company={dataCompany}>
-                    <div data-company={dataCompany} data-theme={userTheme} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
+                    <div data-company={dataCompany} data-theme={userTheme} data-ui={diretta ? 'diretta' : undefined} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
                         <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} lancioUmaniEnabled={lancioUmaniEnabled} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                             {showSprintBanner && <SprintBanner />}

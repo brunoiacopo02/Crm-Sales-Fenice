@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Sora, Plus_Jakarta_Sans, Playfair_Display } from "next/font/google";
+import { Geist, Geist_Mono, Sora, Plus_Jakarta_Sans, Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,6 +33,14 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
+// Font del brand Fenice, usato solo sotto [data-ui="diretta"].
+const poppins = Poppins({
+  variable: "--font-poppins",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.VERCEL_URL
@@ -59,7 +67,7 @@ export default function RootLayout({
   return (
     <html lang="it">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${sora.variable} ${jakarta.variable} ${playfair.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${sora.variable} ${jakarta.variable} ${playfair.variable} ${poppins.variable} antialiased`}
       >
         <AuthProvider>
           {children}
