@@ -69,6 +69,15 @@ export const users = pgTable('users', {
     // Title system
     activeTitle: text('activeTitle'), // Currently equipped title, nullable
 
+    // Restyle "Diretta" (migr. 0045): nome vero mostrato in UI (name/displayName
+    // restano "GDO 1xx" per bot, cron e webhook); chi ha firstName è in squadra.
+    firstName: text('firstName'),
+    // Nuova economia: Scintille (ritmo) e Piume (risultati verificati).
+    // Saldi cache del registro currencyLedger, aggiornati nella stessa transazione.
+    scintille: integer('scintille').default(0).notNull(),
+    piume: integer('piume').default(0).notNull(),
+    profileImageUrl: text('profileImageUrl'),
+
     // Universe: creature drop counter (triggers drop every ~25 actions)
     creatureDropCounter: integer('creatureDropCounter').default(0).notNull(),
     lastTimedChestAt: timestamp('lastTimedChestAt', { withTimezone: true, mode: 'date' }),
@@ -1813,3 +1822,105 @@ export const marketingQueueEntries = pgTable('marketingQueueEntries', {
     companyDateContactUq: uniqueIndex('marketing_queue_company_date_contact_uq').on(table.companyId, table.queueDate, table.marketingContactId),
     leadIdx: index('marketing_queue_lead_idx').on(table.leadId),
 }));
+
+// ── Restyle "Diretta" e nuova gamification (migr. 0045, PO 25/10/2026) ──
+
+// Registro unico di Scintille ('S') e Piume ('P'). Ogni riga ha una chiave
+// idempotente: rifare la stessa operazione non accredita due volte. Gli storni
+// sono righe negative con la loro chiave.
+export const currencyLedger = pgTable('currencyLedger', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    currency: text('currency').notNull(),
+    amount: integer('amount').notNull(),
+    reason: text('reason').notNull(),
+    idemKey: text('idemKey').notNull().unique(),
+    leadId: text('leadId').references(() => leads.id, { onDelete: 'set null' }),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+}, (t) => [index('currency_ledger_user_created_idx').on(t.userId, t.createdAt)]);
+
+// Forzieri di squadra: uno per scalino al giorno ('giorno_1', 'giorno_2',
+// 'punta_1', 'punta_2'), creato una volta sola.
+export const teamChests = pgTable('teamChests', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    day: date('day').notNull(),
+    kind: text('kind').notNull(),
+    tier: text('tier').notNull(),
+    reached: integer('reached').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => [unique().on(t.companyId, t.day, t.kind)]);
+
+export const teamChestAwards = pgTable('teamChestAwards', {
+    id: text('id').primaryKey(),
+    chestId: text('chestId').notNull().references(() => teamChests.id, { onDelete: 'cascade' }),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    currency: text('currency').notNull(),
+    amount: integer('amount').notNull(),
+    openedAt: timestamp('openedAt', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => [unique().on(t.chestId, t.userId)]);
+
+// Negozio nuovo (i vecchi shopItems restano come storico).
+export const rewardItems = pgTable('rewardItems', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    kind: text('kind').notNull(),            // 'concreto' | 'immagine' | 'personalizzazione' | 'corso'
+    currency: text('currency').notNull(),    // 'S' | 'P'
+    price: integer('price').notNull(),
+    imageUrl: text('imageUrl'),
+    roles: text('roles').array().default(sql`array['GDO','CONFERME']`).notNull(),
+    giftable: boolean('giftable').default(false).notNull(),
+    isActive: boolean('isActive').default(true).notNull(),
+    sortOrder: integer('sortOrder').default(0).notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const rewardPurchases = pgTable('rewardPurchases', {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    itemId: text('itemId').notNull().references(() => rewardItems.id),
+    currency: text('currency').notNull(),
+    price: integer('price').notNull(),
+    status: text('status').default('richiesto').notNull(),   // 'richiesto' | 'consegnato' | 'annullato'
+    giftTo: text('giftTo'),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    handledAt: timestamp('handledAt', { withTimezone: true, mode: 'date' }),
+    handledBy: text('handledBy'),
+}, (t) => [index('reward_purchases_user_idx').on(t.userId, t.createdAt)]);
+
+// Citazione del giorno ('citazione') e consiglio di vendita ('vendita').
+// suggestedReflection è solo una bozza: in UI si mostra soltanto la
+// reflection approvata in dailyQuoteSchedule.
+export const dailyQuotes = pgTable('dailyQuotes', {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(),
+    text: text('text').notNull(),
+    author: text('author').notNull(),
+    work: text('work'),
+    reference: text('reference'),
+    translationUrl: text('translationUrl'),
+    translator: text('translator'),
+    theme: text('theme'),
+    occasions: text('occasions').array().default(sql`'{}'::text[]`).notNull(),
+    roles: text('roles').array().default(sql`array['GDO','CONFERME','VENDITORE','ADMIN','MANAGER']`).notNull(),
+    suggestedReflection: text('suggestedReflection'),
+    reflectionSource: text('reflectionSource'),
+    verified: boolean('verified').default(false).notNull(),
+    isActive: boolean('isActive').default(true).notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+export const dailyQuoteSchedule = pgTable('dailyQuoteSchedule', {
+    day: date('day').notNull(),
+    kind: text('kind').notNull(),
+    quoteId: text('quoteId').notNull().references(() => dailyQuotes.id),
+    reflection: text('reflection'),
+    approved: boolean('approved').default(false).notNull(),
+    approvedBy: text('approvedBy'),
+    approvedAt: timestamp('approvedAt', { withTimezone: true, mode: 'date' }),
+}, (t) => [primaryKey({ columns: [t.day, t.kind] })]);
