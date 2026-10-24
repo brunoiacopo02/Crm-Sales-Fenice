@@ -18,15 +18,16 @@ import { ConfermeActiveTimerBanner } from "@/components/ConfermeActiveTimerBanne
 import { CloseLeadModal } from "@/components/CloseLeadModal"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
+import { confermeBoardColumn, OGGI_ORE, DOMANI_ORE } from "@/lib/conferme/boardWindow"
 import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeLeadChanges } from "@/lib/confermePresence"
 
 type LeadData = any;
 
-type ViewMode = 'pomeriggio' | 'mattina' | 'da_definire' | 'storico' | 'table';
+type ViewMode = 'oggi' | 'domani' | 'da_definire' | 'storico' | 'table';
 type NrFilterMode = 'tutti' | '0' | '1' | '2' | '3';
 
 export function ConfermeBoard({ currentUser }: { currentUser: any }) {
-    const [viewMode, setViewMode] = useState<ViewMode>('pomeriggio')
+    const [viewMode, setViewMode] = useState<ViewMode>('oggi')
     const [nrFilter, setNrFilter] = useState<NrFilterMode>('tutti')
     const [selectedHour, setSelectedHour] = useState<string | null>(null)
 
@@ -168,34 +169,15 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 })
                 setKanbanData({ flatList: data.flatList, daDefinire: data.daDefinire })
 
-                // Process Data Split
+                // Oggi / Domani mattina: la regola sta in src/lib/conferme/boardWindow.ts
+                // (PO 24/10/2026), la stessa che il server ha già applicato. Qui
+                // smista solo nelle due colonne; le ore sono uguali tutti i giorni.
                 const now = new Date();
-                const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-                const romeDayOfWeekStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', weekday: 'short' }).format(now);
-                const romeDayOfWeek = romeDayOfWeekStr.substring(0, 3).toLowerCase();
-
-                const oLeads = data.flatList.filter(l => {
-                    if (!l.lead.appointmentDate) return false;
-                    const dateStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(l.lead.appointmentDate));
-                    return dateStr === todayStr;
-                });
-
-                const dLeads = data.flatList.filter(l => {
-                    if (!l.lead.appointmentDate) return false;
-                    const dateStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(l.lead.appointmentDate));
-                    return dateStr !== todayStr;
-                });
-
-                setOggiLeads(oLeads);
-                setDomaniLeads(dLeads);
-
-                // Set Dynamic Hours based on Day of Week rules
-                if (romeDayOfWeek === 'sat') {
-                    setOggiHours(Array.from({ length: 9 }, (_, i) => `${(i + 13).toString().padStart(2, '0')}:00`)); // 13-21
-                } else {
-                    setOggiHours(Array.from({ length: 7 }, (_, i) => `${(i + 15).toString().padStart(2, '0')}:00`)); // 15-21
-                }
-                setDomaniHours(Array.from({ length: 6 }, (_, i) => `${(i + 9).toString().padStart(2, '0')}:00`)); // 09-14
+                setOggiLeads(data.flatList.filter(l => confermeBoardColumn(l.lead, now) === 'oggi'));
+                setDomaniLeads(data.flatList.filter(l => confermeBoardColumn(l.lead, now) === 'domani'));
+                const hh = (h: number) => `${h.toString().padStart(2, '0')}:00`;
+                setOggiHours(OGGI_ORE.map(hh));
+                setDomaniHours(DOMANI_ORE.map(hh));
             }
         } catch (error) {
             console.error(error)
@@ -215,9 +197,9 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     // Auto-select first hour when views change
     useEffect(() => {
-        if (viewMode === 'pomeriggio' && oggiHours.length > 0 && !oggiHours.includes(selectedHour || '')) {
+        if (viewMode === 'oggi' && oggiHours.length > 0 && !oggiHours.includes(selectedHour || '')) {
             setSelectedHour(oggiHours[0]);
-        } else if (viewMode === 'mattina' && domaniHours.length > 0 && !domaniHours.includes(selectedHour || '')) {
+        } else if (viewMode === 'domani' && domaniHours.length > 0 && !domaniHours.includes(selectedHour || '')) {
             setSelectedHour(domaniHours[0]);
         }
     }, [viewMode, oggiHours, domaniHours, selectedHour]);
@@ -330,8 +312,8 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     )
 
     const renderActiveTimeline = () => {
-        const activeLeads = viewMode === "pomeriggio" ? oggiLeads : viewMode === "mattina" ? domaniLeads : [];
-        const activeHours = viewMode === "pomeriggio" ? oggiHours : viewMode === "mattina" ? domaniHours : [];
+        const activeLeads = viewMode === "oggi" ? oggiLeads : viewMode === "domani" ? domaniLeads : [];
+        const activeHours = viewMode === "oggi" ? oggiHours : viewMode === "domani" ? domaniHours : [];
 
         if (activeHours.length === 0) return null;
 
@@ -394,7 +376,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
 
     const renderSelectedHourLeads = () => {
         if (!selectedHour) return null;
-        const activeLeads = viewMode === "pomeriggio" ? oggiLeads : viewMode === "mattina" ? domaniLeads : [];
+        const activeLeads = viewMode === "oggi" ? oggiLeads : viewMode === "domani" ? domaniLeads : [];
         const hNum = parseInt(selectedHour.split(':')[0], 10);
 
         let targetLeads = activeLeads.filter(l => {
@@ -479,16 +461,16 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             <div className="flex items-center justify-between gap-4 mb-2 sticky top-0 z-20 bg-white/80 backdrop-blur-md pt-3 pb-3 border-b border-ash-200/40">
                 <div className="flex p-1 bg-ash-100/80 rounded-xl max-w-2xl border border-ash-200/60 shadow-soft">
                     <button
-                        onClick={() => setViewMode('pomeriggio')}
-                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'pomeriggio' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
+                        onClick={() => setViewMode('oggi')}
+                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'oggi' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
                     >
-                        <Sun className="w-4 h-4" /> Pomeriggio <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'pomeriggio' ? 'bg-brand-orange text-white' : 'bg-ash-300/60 text-ash-600'}`}>{oggiLeads.length}</span>
+                        <Sun className="w-4 h-4" /> Oggi <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'oggi' ? 'bg-brand-orange text-white' : 'bg-ash-300/60 text-ash-600'}`}>{oggiLeads.length}</span>
                     </button>
                     <button
-                        onClick={() => setViewMode('mattina')}
-                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'mattina' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
+                        onClick={() => setViewMode('domani')}
+                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'domani' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
                     >
-                        <Sunrise className="w-4 h-4" /> Mattina <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'mattina' ? 'bg-gold-400 text-white' : 'bg-ash-300/60 text-ash-600'}`}>{domaniLeads.length}</span>
+                        <Sunrise className="w-4 h-4" /> Domani mattina <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'domani' ? 'bg-gold-400 text-white' : 'bg-ash-300/60 text-ash-600'}`}>{domaniLeads.length}</span>
                     </button>
                     <button
                         onClick={() => setViewMode('da_definire')}
@@ -535,14 +517,14 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                     </div>
                 ) : (
                     <>
-                        {viewMode === 'pomeriggio' && (
+                        {viewMode === 'oggi' && (
                             <div className="w-full h-full flex flex-col pt-0">
                                 {renderActiveTimeline()}
                                 {renderSelectedHourLeads()}
                             </div>
                         )}
 
-                        {viewMode === 'mattina' && (
+                        {viewMode === 'domani' && (
                             <div className="w-full h-full flex flex-col pt-0">
                                 {renderActiveTimeline()}
                                 {renderSelectedHourLeads()}

@@ -17,6 +17,7 @@ import { isConfermeTl } from "@/lib/confermeTl"
 import { resolveLatePenalties } from "@/lib/venditore/latePenaltiesRunner";
 import { syncFollowUpBlock, releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks";
 import { isLancioLiberoLead } from "@/lib/lancio/liberi";
+import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 // Gamification disabled for VENDITORE role — import removed
 
 async function resolveIsStaff() {
@@ -935,6 +936,7 @@ export async function rescheduleAppointmentFromSales(
         const updated = await tx.update(leads)
             .set({
                 appointmentDate: newDate,
+                ...appointmentMoveStamp(previousDate, newDate),
                 ...(attemptCount === 0 ? { negotiationStartedAt: null } : {}),
                 version: lead.version + 1,
                 updatedAt: new Date(),

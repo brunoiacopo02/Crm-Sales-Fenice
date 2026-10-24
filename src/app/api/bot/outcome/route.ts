@@ -16,6 +16,7 @@ import { CONFERME_DISCARD_RESET } from '@/lib/confermeReset';
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
 import { readSalesPipelineConfig } from '@/app/actions/salesPipelineConfigActions';
+import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -290,6 +291,8 @@ export async function POST(req: NextRequest) {
             .set({
                 ...(reopensDiscard ? CONFERME_DISCARD_RESET : {}),
                 appointmentDate: newSlot,
+                // sameSlot è già escluso sopra: qui la data cambia davvero.
+                ...appointmentMoveStamp(previous, newSlot),
                 updatedAt: new Date(),
             })
             .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')));

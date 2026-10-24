@@ -760,6 +760,7 @@ Content-Type: application/json
       "appointmentCreatedAt": "2026-08-26T09:12:00.000Z",
       "confermeOutcome": "confermato",      // confermato | scartato | da_rifissare | null
       "confermeOutcomeAt": "2026-08-27T10:03:00.000Z",
+      "recallAt": null,                     // ISO: richiamo Conferme di un lead da_rifissare (campo additivo, retrocompatibile)
       "confermeDiscardReason": null,
       "presented": true,                    // si è presentato alla call
       "presentedAt": "2026-08-28T17:00:00.000Z",

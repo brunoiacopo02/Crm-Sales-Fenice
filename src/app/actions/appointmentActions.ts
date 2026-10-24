@@ -13,6 +13,7 @@ import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
 import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
+import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -108,6 +109,7 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
         ...confermeReset,
         appointmentDate: dateObj,
         appointmentNote: note,
+        ...appointmentMoveStamp(lead.appointmentDate, dateObj),
         version: lead.version + 1,
         updatedAt: new Date(),
     }).where(and(

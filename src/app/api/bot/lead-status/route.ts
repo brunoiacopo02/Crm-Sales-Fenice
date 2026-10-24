@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, inArray, or, isNotNull, sql } from 'drizzle-orm
 import { db } from '@/db';
 import { botContactRequests, leadEvents, leads, users } from '@/db/schema';
 import { verifySignature } from '@/lib/marketing-webhooks/signing';
+import { serveConfermeOutcome } from '@/lib/bot-fissatore/leadStatusRecall';
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 
 export const dynamic = 'force-dynamic';
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
         confermeOutcomeAt: leads.confirmationsTimestamp,
         confermeDiscardReason: leads.confirmationsDiscardReason,
         needsReschedule: leads.confNeedsReschedule,
+        recallDate: leads.recallDate,
         presentedAt: leads.presentedAt,
         salesOutcome: leads.salespersonOutcome,
         salesOutcomeAt: leads.salespersonOutcomeAt,
@@ -138,14 +140,19 @@ export async function POST(req: NextRequest) {
     }
 
     const iso = (d: Date | null) => (d ? d.toISOString() : null);
-    const payload = page.map(r => ({
+    const payload = page.map(r => {
+    const served = serveConfermeOutcome(r.needsReschedule, r.confermeOutcome, r.recallDate);
+    return {
         leadId: r.leadId,
         status: r.status,
         appointmentDate: iso(r.appointmentDate),
         appointmentCreatedAt: iso(r.appointmentCreatedAt),
         // 'confermato' | 'scartato' | 'da_rifissare' | null — più la causale.
-        confermeOutcome: r.needsReschedule ? 'da_rifissare' : r.confermeOutcome,
+        confermeOutcome: served.confermeOutcome,
         confermeOutcomeAt: iso(r.confermeOutcomeAt),
+        // Il richiamo fissato dalle Conferme per un lead parcheggiato (da_rifissare):
+        // il bot lo usa per ricordarglielo ~2h prima. null se non c'è.
+        recallAt: served.recallAt,
         confermeDiscardReason: r.confermeDiscardReason,
         // La presenza è latchata: una volta vera non torna falsa.
         presented: r.presentedAt !== null,
@@ -175,7 +182,8 @@ export async function POST(req: NextRequest) {
                 richiestaIl: iso(c.createdAt),
             };
         })(),
-    }));
+    };
+    });
 
     // `nextSince` è l'updatedAt dell'ultima riga servita, non "adesso": ripartire
     // da adesso salterebbe tutto ciò che cambia mentre si scorrono le pagine.
