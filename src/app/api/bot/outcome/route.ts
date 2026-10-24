@@ -290,6 +290,8 @@ export async function POST(req: NextRequest) {
             .set({
                 ...(reopensDiscard ? CONFERME_DISCARD_RESET : {}),
                 appointmentDate: newSlot,
+                // sameSlot è già escluso sopra: qui la data cambia davvero.
+                ...(previous ? { appointmentMovedAt: new Date() } : {}),
                 updatedAt: new Date(),
             })
             .where(and(eq(leads.id, leadId), eq(leads.companyId, 'fenice')));

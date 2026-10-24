@@ -108,6 +108,8 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
         ...confermeReset,
         appointmentDate: dateObj,
         appointmentNote: note,
+        ...(lead.appointmentDate && lead.appointmentDate.getTime() !== dateObj.getTime()
+            ? { appointmentMovedAt: new Date() } : {}),
         version: lead.version + 1,
         updatedAt: new Date(),
     }).where(and(

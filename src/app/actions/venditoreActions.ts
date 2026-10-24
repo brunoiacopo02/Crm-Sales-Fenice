@@ -935,6 +935,8 @@ export async function rescheduleAppointmentFromSales(
         const updated = await tx.update(leads)
             .set({
                 appointmentDate: newDate,
+                ...(previousDate && previousDate.getTime() !== newDate.getTime()
+                    ? { appointmentMovedAt: new Date() } : {}),
                 ...(attemptCount === 0 ? { negotiationStartedAt: null } : {}),
                 version: lead.version + 1,
                 updatedAt: new Date(),

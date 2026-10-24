@@ -217,6 +217,9 @@ export const leads = pgTable('leads', {
     appointmentDate: timestamp('appointmentDate', { withTimezone: true, mode: 'date' }),
     appointmentNote: text('appointmentNote'),
     appointmentCreatedAt: timestamp('appointmentCreatedAt', { withTimezone: true, mode: 'date' }),
+    // Ultimo spostamento di un appuntamento già fissato (migr. 0044): la board
+    // Conferme lo tratta come un fissaggio nuovo (src/lib/conferme/boardWindow.ts).
+    appointmentMovedAt: timestamp('appointmentMovedAt', { withTimezone: true, mode: 'date' }),
     discardReason: text('discardReason'),
 
     // Conferme Flow

@@ -545,6 +545,11 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
             email: data.email,
             appointmentDate: data.appointmentDate,
             appointmentNote: data.appointmentNote,
+            // Spostamento vero di una data già fissata: per la board conta come
+            // un fissaggio nuovo (migr. 0044).
+            ...(oldLead.appointmentDate && data.appointmentDate
+                && oldLead.appointmentDate.getTime() !== data.appointmentDate.getTime()
+                ? { appointmentMovedAt: new Date() } : {}),
             version: oldLead.version + 1,
             updatedAt: new Date()
         }).where(and(
@@ -1545,6 +1550,9 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
         } else if (payload.newAppointmentDate) {
             toUpdate.appointmentDate = payload.newAppointmentDate;
             newApptDate = payload.newAppointmentDate;
+            if (oldLead.appointmentDate && oldLead.appointmentDate.getTime() !== payload.newAppointmentDate.getTime()) {
+                toUpdate.appointmentMovedAt = new Date();
+            }
             if (oldLead.appointmentDate?.getTime() !== payload.newAppointmentDate.getTime() && oldLead.confirmationsOutcome === "confermato") {
                 calendarNeedsUpdate = true;
             }
