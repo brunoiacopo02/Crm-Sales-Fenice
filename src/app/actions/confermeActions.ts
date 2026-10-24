@@ -25,7 +25,7 @@ import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
 import { lancioFirst } from "@/lib/lancio/conferme"
-import { confermeBoardColumn } from "@/lib/conferme/boardWindow"
+import { appointmentMoveStamp, confermeBoardColumn } from "@/lib/conferme/boardWindow"
 import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
@@ -463,11 +463,9 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
             email: data.email,
             appointmentDate: data.appointmentDate,
             appointmentNote: data.appointmentNote,
-            // Spostamento vero di una data già fissata: per la board conta come
-            // un fissaggio nuovo (migr. 0044).
-            ...(oldLead.appointmentDate && data.appointmentDate
-                && oldLead.appointmentDate.getTime() !== data.appointmentDate.getTime()
-                ? { appointmentMovedAt: new Date() } : {}),
+            // Data nuova (anche su un lead parcheggiato senza data): per la board
+            // conta come un fissaggio nuovo (migr. 0044).
+            ...appointmentMoveStamp(oldLead.appointmentDate, data.appointmentDate),
             version: oldLead.version + 1,
             updatedAt: new Date()
         }).where(and(
@@ -1468,9 +1466,8 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
         } else if (payload.newAppointmentDate) {
             toUpdate.appointmentDate = payload.newAppointmentDate;
             newApptDate = payload.newAppointmentDate;
-            if (oldLead.appointmentDate && oldLead.appointmentDate.getTime() !== payload.newAppointmentDate.getTime()) {
-                toUpdate.appointmentMovedAt = new Date();
-            }
+            // Anche il rifissaggio di un parcheggiato (data null) è uno spostamento.
+            Object.assign(toUpdate, appointmentMoveStamp(oldLead.appointmentDate, payload.newAppointmentDate));
             if (oldLead.appointmentDate?.getTime() !== payload.newAppointmentDate.getTime() && oldLead.confirmationsOutcome === "confermato") {
                 calendarNeedsUpdate = true;
             }

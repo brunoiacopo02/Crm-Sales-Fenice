@@ -70,8 +70,8 @@ CRM e bot si preparano su branch, niente push su `main` prima del via.
 - **Appuntamenti spostati**: uno spostamento conta come un fissaggio nuovo.
   "Fissato prima di oggi" vuol dire che l'ultimo fissaggio o spostamento è prima
   di oggi. Lo spostamento si legge dall'evento che lo registra (quello con
-  `previousAppointmentDate`): una query sola sui lead candidati, nessuna colonna
-  nuova. Esempio: spostato oggi a domani 10:00 → oggi non compare in "Domani
+  `previousAppointmentDate`). [Costruzione: i percorsi di spostamento non lasciano
+  tutti la stessa traccia, quindi si usa una colonna nuova `appointmentMovedAt`, migr. 0044.] Esempio: spostato oggi a domani 10:00 → oggi non compare in "Domani
   mattina", domani è in "Oggi".
 - **"Senza NR" vuol dire senza NR registrati oggi**: un NR vecchio, di una data
   precedente, non lo nasconde. Il conteggio dei 3 NR resta quello di adesso: la

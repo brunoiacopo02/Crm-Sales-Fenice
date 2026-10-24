@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { confermeBoardColumn, nextWorkDayRome, OGGI_ORE, DOMANI_ORE, type BoardLeadInput } from './boardWindow';
+import { appointmentMoveStamp, confermeBoardColumn, nextWorkDayRome, OGGI_ORE, DOMANI_ORE, type BoardLeadInput } from './boardWindow';
 
 // Lunedì 26/10/2026 alle 11:00 di Roma (ora solare, +01:00).
 const LUN_11 = new Date('2026-10-26T10:00:00Z');
@@ -105,4 +105,15 @@ test('il sabato "domani" è il lunedì', () => {
 test('a mezzanotte e mezza di Roma oggi è già il giorno nuovo', () => {
     const MAR_0030 = new Date('2026-10-26T23:30:00Z'); // 00:30 di martedì 27 a Roma
     assert.equal(confermeBoardColumn(lead({ appointmentDate: roma('2026-10-27T10:00:00+01:00') }), MAR_0030), 'oggi');
+});
+
+// Review finale: un lead parcheggiato (data azzerata) che riceve una data nuova è uno
+// spostamento, anche se la data vecchia è null.
+test('timbro di spostamento: data nuova diversa dalla vecchia, anche da null', () => {
+    const ora = new Date('2026-10-26T15:00:00Z');
+    const mar10 = new Date('2026-10-27T09:00:00Z');
+    assert.deepEqual(appointmentMoveStamp(new Date('2026-10-29T09:00:00Z'), mar10, ora), { appointmentMovedAt: ora });
+    assert.deepEqual(appointmentMoveStamp(null, mar10, ora), { appointmentMovedAt: ora });
+    assert.deepEqual(appointmentMoveStamp(mar10, new Date(mar10), ora), {});
+    assert.deepEqual(appointmentMoveStamp(mar10, null, ora), {});
 });

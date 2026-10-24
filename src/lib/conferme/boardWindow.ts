@@ -74,3 +74,18 @@ export function confermeBoardColumn(lead: BoardLeadInput, now: Date): BoardColum
     if (fissaggi.length === 0) return 'domani';
     return Math.max(...fissaggi) < inizioOggi.getTime() ? 'domani' : null;
 }
+
+/**
+ * Il pezzo di `.set()` che timbra uno spostamento (migr. 0044): c'è quando la data nuova
+ * esiste ed è diversa dalla vecchia, anche se la vecchia era null (lead parcheggiato in
+ * "da definire" che riceve una data). Per la board conta come un fissaggio nuovo.
+ */
+export function appointmentMoveStamp(
+    oldDate: Date | null | undefined,
+    newDate: Date | null | undefined,
+    now: Date = new Date(),
+): { appointmentMovedAt?: Date } {
+    if (!newDate) return {};
+    if (oldDate && new Date(oldDate).getTime() === new Date(newDate).getTime()) return {};
+    return { appointmentMovedAt: now };
+}
