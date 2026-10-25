@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback } from "react"
 import { getGdoPauseStatus, startPause, stopPause, PauseSummary } from "@/app/actions/pauseActions"
 import { Play, Square, AlertTriangle, Clock } from "lucide-react"
 
-export function PauseTimer() {
+/** `variant="diretta"`: stessa logica, veste scura della barra in alto Diretta. */
+export function PauseTimer({ variant }: { variant?: 'diretta' } = {}) {
     const { user: authUser, isLoading: isAuthLoading } = useAuth();
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;
     const [status, setStatus] = useState<PauseSummary | null>(null)
@@ -77,7 +78,11 @@ export function PauseTimer() {
         return `${m}:${s}`
     }
 
-    if (!session?.user?.id || isLoading && !status) return <div className="animate-pulse h-8 w-24 bg-gray-200 rounded-md"></div>
+    if (!session?.user?.id || isLoading && !status) {
+        return variant === 'diretta'
+            ? <div className="h-9 w-28 rounded-lg bg-[#262626]" />
+            : <div className="animate-pulse h-8 w-24 bg-gray-200 rounded-md"></div>
+    }
 
     const isOngoing = !!status?.currentPause
     // Daily total including current pause
@@ -88,6 +93,36 @@ export function PauseTimer() {
     const dailyExceeded = dailyUsedDisplay > 30 * 60
     const remainingDisplay = Math.max(0, 30 * 60 - dailyUsedDisplay)
     const canStart = !isOngoing && !!status
+
+    if (variant === 'diretta') {
+        const fuori = dailyExceeded ? `oltre di ${formatTime(dailyUsedDisplay - 30 * 60)}` : `restano ${formatTime(remainingDisplay)}`
+        return isOngoing ? (
+            <div className="flex items-center gap-2">
+                <div className={`flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] tabular-nums ${dailyExceeded ? 'bg-[#F2F2F2] text-[#171717]' : 'bg-[#262626] text-[#F2F2F2]'}`}>
+                    <span className="font-semibold">In pausa {formatTime(localSeconds)}</span>
+                    <span className={dailyExceeded ? 'text-[#171717]' : 'text-[#BFBFBF]'}>{fuori}</span>
+                </div>
+                <button
+                    onClick={handleStop}
+                    disabled={isLoading}
+                    className="flex h-9 items-center gap-1.5 rounded-lg bg-[#FF9330] px-3 text-[13px] font-semibold text-[#171717] transition-colors hover:bg-[#FFA552] disabled:opacity-50"
+                >
+                    <Square className="h-3 w-3" fill="currentColor" strokeWidth={1.5} />
+                    Termina
+                </button>
+            </div>
+        ) : (
+            <button
+                onClick={handleStart}
+                disabled={!canStart || isLoading}
+                title={`Pausa di oggi: ${fuori}`}
+                className="flex h-9 items-center gap-2 rounded-lg border-2 border-[#3D3D3D] px-3 text-[13px] font-medium text-[#F2F2F2] transition-colors hover:border-[#8C8C8C] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+                Inizia pausa
+                <span className={`tabular-nums ${dailyExceeded ? 'text-[#FF9330]' : 'text-[#BFBFBF]'}`}>{dailyExceeded ? `-${formatTime(dailyUsedDisplay - 30 * 60)}` : formatTime(remainingDisplay)}</span>
+            </button>
+        )
+    }
 
     return (
         <div className="flex items-center gap-3">

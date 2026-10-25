@@ -18,7 +18,9 @@ import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions"
 import { hasLancioUmaniLeads } from "@/app/actions/lancioUmaniActions"
 import { getUserTheme } from "@/lib/userTheme"
-import { isDirettaOn } from "@/lib/diretta/settings"
+import { direttaAccesa, leggiIo, type DirettaIo } from "@/lib/diretta/io"
+import { leggiObiettivi } from "@/lib/diretta/live"
+import type { GamificationTargets } from "@/lib/diretta/config"
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider"
 import { SidebarProvider } from "@/components/providers/SidebarProvider"
 import { SalesCompanyProvider } from "@/components/providers/SalesCompanyProvider"
@@ -53,7 +55,19 @@ export default async function DashboardLayout({
     // Restyle "Diretta" (PO 25/10/2026): acceso per ruolo da appSettings, si
     // spegne senza deploy. Con la Diretta le vecchie skin e gli overlay della
     // gamification non si applicano.
-    const diretta = await isDirettaOn(session.user.role)
+    const diretta = await direttaAccesa(session.user.role)
+
+    // Barra in alto della Diretta: nome vero, avatar, saldo e orari del turno.
+    let direttaIo: DirettaIo | null = null
+    let direttaObiettivi: GamificationTargets | null = null
+    if (diretta) {
+        try {
+            [direttaIo, direttaObiettivi] = await Promise.all([
+                leggiIo(session.user.id, session.user.name ?? null),
+                leggiObiettivi(),
+            ])
+        } catch { /* la barra mostra il nome di sessione */ }
+    }
 
     let skinCss: string | null = null;
     if (!diretta) {
@@ -86,8 +100,9 @@ export default async function DashboardLayout({
 
     // Voce "Test lancio umani": solo ai GDO che hanno lead del gruppo. Una
     // query al render del layout, non a ogni cambio pagina.
+    // Con la Diretta il lancio non è più dei GDO e la voce non c'è: niente query.
     let lancioUmaniEnabled = false
-    if (session.user.role === 'GDO') {
+    if (session.user.role === 'GDO' && !diretta) {
         try {
             lancioUmaniEnabled = await hasLancioUmaniLeads()
         } catch { /* la voce manca, la pagina resta raggiungibile */ }
@@ -98,10 +113,10 @@ export default async function DashboardLayout({
             <SidebarProvider>
                 <SalesCompanyProvider company={dataCompany}>
                     <div data-company={dataCompany} data-theme={userTheme} data-ui={diretta ? 'diretta' : undefined} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                        <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} lancioUmaniEnabled={lancioUmaniEnabled} />
+                        <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} lancioUmaniEnabled={lancioUmaniEnabled} diretta={diretta} ruolo={session.user.role} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
-                            <Topbar />
+                            <Topbar diretta={diretta} ruolo={session.user.role} io={direttaIo} obiettivi={direttaObiettivi} />
                             <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
                                 <AllCompaniesGate active={isAllCompanies}>
                                     {children}

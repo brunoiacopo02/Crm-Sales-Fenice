@@ -5,6 +5,7 @@ import { leads, leadEvents, users } from "@/db/schema"
 import { eq, desc, and } from "drizzle-orm"
 import crypto from "crypto"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 
 export async function getLeadProfile(leadId: string) {
     const ctx = await currentTenant()
@@ -18,7 +19,8 @@ export async function getLeadProfile(leadId: string) {
             status: leads.status,
             callCount: leads.callCount,
             assignedToId: leads.assignedToId,
-            assignedToName: users.name,
+            // Nome vero del GDO (firstName), non "GDO 1xx" (PO 25/10/2026).
+            assignedToName: nomeVeroOppure(users.firstName, users.name),
             lastCallDate: leads.lastCallDate,
             lastCallNote: leads.lastCallNote,
             agendaSentAt: leads.agendaSentAt,
@@ -42,7 +44,7 @@ export async function getLeadProfile(leadId: string) {
             id: leadEvents.id,
             eventType: leadEvents.eventType,
             userId: leadEvents.userId,
-            userName: users.name,
+            userName: nomeVeroOppure(users.firstName, users.name),
             fromSection: leadEvents.fromSection,
             toSection: leadEvents.toSection,
             metadata: leadEvents.metadata,

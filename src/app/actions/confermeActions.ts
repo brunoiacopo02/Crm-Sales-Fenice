@@ -21,6 +21,7 @@ import { getConfermeSurveyByLead } from "@/app/actions/surveyActions"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
 import { slotKey, slotLabel, slotStartFor, weekStartFor, romeInstant } from "@/lib/venditore/calendarSlots"
 import { toRomeDateStr } from "@/lib/dateUtils"
+import { personName } from "@/lib/diretta/config"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
 import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
@@ -231,6 +232,9 @@ export async function getConfermeAppointments(filters: {
         ].filter((d): d is Date => !!d).map(d => new Date(d).getTime());
         return {
             ...r,
+            // Le Conferme vedono il nome vero del GDO (PO 25/10/2026): la board
+            // mostra gdo.displayName, che nel database resta "GDO 1xx".
+            gdo: r.gdo ? { ...r.gdo, displayName: personName(r.gdo) } : r.gdo,
             lastConfermeNote,
             lastBotNote: bot
                 ? { ...bot, isNew: lastTouch.length === 0 || bot.createdAt.getTime() > Math.max(...lastTouch) }

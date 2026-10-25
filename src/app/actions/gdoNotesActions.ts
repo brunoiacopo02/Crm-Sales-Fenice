@@ -5,6 +5,7 @@ import { gdoNotes, users } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
 
 export type GdoNoteCategory = 'formazione' | 'positivo' | 'negativo' | 'disciplinare';
 
@@ -32,7 +33,8 @@ export async function getGdoUsersForNotes(): Promise<GdoUserForNotes[]> {
     const allGdos = await db.select({
         id: users.id,
         name: users.name,
-        displayName: users.displayName,
+        // Nome vero (firstName) se c'è, poi il codice (PO 25/10/2026).
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
         gdoCode: users.gdoCode,
         level: users.level,
         isActive: users.isActive,

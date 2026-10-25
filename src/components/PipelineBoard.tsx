@@ -9,8 +9,12 @@ const OutcomeModal = dynamic(
   { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
 )
 import { Flame, Inbox } from "lucide-react"
+import { DirettaUiProvider } from "./diretta/DirettaUi"
 
 type LeadList = any[]
+
+/** Code della board. 'recalls' esiste solo nella Diretta (PO 25/10/2026). */
+export type PipelineTab = 'first' | 'second' | 'third' | 'fourth' | 'recalls'
 
 export function PipelineBoard({
     firstCall,
@@ -18,7 +22,9 @@ export function PipelineBoard({
     thirdCall,
     fourthCall = [],
     isFourthCallActive = false,
-    recalls = []
+    recalls = [],
+    variant,
+    richiestaTab = null,
 }: {
     firstCall: LeadList
     secondCall: LeadList
@@ -26,9 +32,13 @@ export function PipelineBoard({
     fourthCall?: LeadList
     isFourthCallActive?: boolean
     recalls?: LeadList
+    /** 'diretta' = veste scura della home Diretta, con la coda dei richiami. */
+    variant?: 'diretta'
+    /** Richiesta di cambio coda dall'esterno (es. "Inizia dai richiami"): `n` cambia a ogni richiesta. */
+    richiestaTab?: { tab: PipelineTab; n: number } | null
 }) {
     const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<'first' | 'second' | 'third' | 'fourth'>('first')
+    const [activeTab, setActiveTab] = useState<PipelineTab>('first')
     const [isTransitioning, setIsTransitioning] = useState(false)
     const tabIndicatorRef = useRef<HTMLDivElement>(null)
     const tabContainerRef = useRef<HTMLDivElement>(null)
@@ -64,7 +74,7 @@ export function PipelineBoard({
     }, [recalls]);
 
     // Tab transition handler
-    const switchTab = (tab: 'first' | 'second' | 'third' | 'fourth') => {
+    const switchTab = (tab: PipelineTab) => {
         if (tab === activeTab) return
         setIsTransitioning(true)
         setTimeout(() => {
@@ -72,6 +82,11 @@ export function PipelineBoard({
             setIsTransitioning(false)
         }, 150)
     }
+
+    // Cambio coda chiesto da fuori (schermata d'inizio turno della Diretta).
+    useEffect(() => {
+        if (richiestaTab) setActiveTab(richiestaTab.tab)
+    }, [richiestaTab?.n]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Sliding indicator position (GPU-accelerated via transform)
     useEffect(() => {
@@ -92,11 +107,80 @@ export function PipelineBoard({
             case 'second': return secondCall
             case 'third': return thirdCall
             case 'fourth': return fourthCall
+            case 'recalls': return recalls
             default: return firstCall
         }
     }
 
     const currentList = getCurrentList()
+
+    // ── Veste Diretta: stesse code e stesso ordine (arrivano già ordinate dal
+    // server), stesse card e stessi esiti. Il primo lead della coda è "aperto":
+    // card più grande e bottoni esito grandi, da chiamare adesso.
+    if (variant === 'diretta') {
+        const tabs: { key: PipelineTab; label: string; count: number }[] = [
+            { key: 'first', label: 'Prima chiamata', count: firstCall.length },
+            { key: 'second', label: 'Seconda', count: secondCall.length },
+            { key: 'third', label: 'Terza', count: thirdCall.length },
+            ...(isFourthCallActive ? [{ key: 'fourth' as const, label: 'Recupero', count: fourthCall.length }] : []),
+            { key: 'recalls', label: 'Richiami', count: recalls.length },
+        ]
+        return (
+            <div className="d-board flex h-full min-h-0 flex-1 flex-col">
+                <div role="tablist" aria-label="Code" className="flex shrink-0 gap-1 overflow-x-auto pb-3">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            role="tab"
+                            aria-selected={activeTab === tab.key}
+                            onClick={() => switchTab(tab.key)}
+                            className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-2.5 text-[14px] transition-colors ${activeTab === tab.key
+                                ? 'bg-[#F2F2F2] font-semibold text-[#171717]'
+                                : 'text-[#BFBFBF] hover:text-[#F2F2F2]'}`}
+                        >
+                            {tab.label} <span className="tabular-nums">{tab.count}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className={`d-coda min-h-0 flex-1 overflow-y-auto pb-48 transition-opacity duration-150 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+                    <div className="flex flex-col gap-2.5">
+                        {currentList.map((lead, index) => (
+                            <DirettaUiProvider key={lead.id} aperto={index === 0}>
+                                <div className={index === 0 ? 'd-aperto' : undefined}>
+                                    <LeadCard
+                                        lead={lead}
+                                        onOutcomeClick={setSelectedLeadId}
+                                        isRowLayout={true}
+                                    />
+                                </div>
+                            </DirettaUiProvider>
+                        ))}
+
+                        {currentList.length === 0 && (
+                            <div className="rounded-2xl border-2 border-[#262626] px-6 py-12 text-center">
+                                <div className="text-[16px] font-semibold text-[#F2F2F2]">Coda vuota</div>
+                                <div className="mt-1 text-[14px] text-[#BFBFBF]">
+                                    {activeTab === 'recalls' ? 'Nessun richiamo in agenda.' : 'Nessun lead in questa coda, adesso.'}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <OutcomeModal
+                    isOpen={!!selectedLeadId}
+                    leadId={selectedLeadId || ""}
+                    leadVersion={(() => {
+                        const allLeads = [...firstCall, ...secondCall, ...thirdCall, ...fourthCall, ...recalls]
+                        return allLeads.find(l => l.id === selectedLeadId)?.version ?? 0
+                    })()}
+                    onClose={() => setSelectedLeadId(null)}
+                />
+            </div>
+        )
+    }
 
     const tabConfig = [
         { key: 'first' as const, label: '1ª Chiamata', count: firstCall.length, color: 'brand-orange' },

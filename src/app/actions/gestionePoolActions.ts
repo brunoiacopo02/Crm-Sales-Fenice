@@ -24,6 +24,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
 import { revalidatePath } from "next/cache";
 
 /** Solo ADMIN: questa scheda sposta i lead di tutti, non è una pagina di reparto. */
@@ -83,7 +84,8 @@ export async function listGdoPools(): Promise<GdoPoolRow[]> {
         id: users.id,
         gdoCode: users.gdoCode,
         name: users.name,
-        displayName: users.displayName,
+        // Nome vero (firstName) se c'è, poi il codice (PO 25/10/2026).
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
         isActive: users.isActive,
         isBot: users.isBot,
         freschi: users.acAutoIntake,
