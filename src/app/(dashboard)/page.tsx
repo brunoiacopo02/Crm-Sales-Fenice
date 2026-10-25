@@ -8,6 +8,7 @@ import { DirettaHome } from "@/components/diretta/DirettaHome"
 import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 import { direttaAccesa, leggiIo } from "@/lib/diretta/io"
+import { readTodayQuotes } from "@/lib/quotes/today"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
@@ -62,7 +63,11 @@ export default async function DashboardPage() {
     // Restyle "Diretta" (PO 25/10/2026): con l'interruttore acceso il GDO vede la
     // home nuova; spento, l'albero qui sotto resta quello di sempre.
     if (session?.user?.role === 'GDO' && await direttaAccesa('GDO')) {
-        const io = await leggiIo(session.user.id, session.user.name ?? null).catch(() => null)
+        const [io, frasi] = await Promise.all([
+            leggiIo(session.user.id, session.user.name ?? null).catch(() => null),
+            // In cache sul server (un quarto d'ora): niente giro in più dal browser.
+            readTodayQuotes('GDO').catch(() => null),
+        ])
         return (
             <>
                 <VesteAllineata diretta />
@@ -76,6 +81,7 @@ export default async function DashboardPage() {
                     isFourthCallActive={isFourthCallActive}
                     recalls={recalls}
                     pipelineError={pipelineError}
+                    frasi={frasi}
                 />
             </>
         )

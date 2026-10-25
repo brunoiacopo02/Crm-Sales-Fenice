@@ -16,6 +16,8 @@ import { InizioTurno } from "./InizioTurno"
 import { SchedaPersonale } from "./SchedaPersonale"
 import { useDirettaLive } from "./useDirettaLive"
 import { useOrologio } from "./useOrologio"
+import { DailyQuoteSlot } from "./DailyQuoteSlot"
+import type { TodayQuotes } from "@/lib/quotes/display"
 
 type LeadList = any[] // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -29,9 +31,11 @@ type Props = {
     isFourthCallActive: boolean
     recalls: LeadList
     pipelineError: string
+    /** Frase e consiglio del giorno, letti sul server (in cache): restano anche dopo l'inizio turno. */
+    frasi?: TodayQuotes | null
 }
 
-export function DirettaHome({ userId, nome, firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive, recalls, pipelineError }: Props) {
+export function DirettaHome({ userId, nome, firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive, recalls, pipelineError, frasi = null }: Props) {
     const { live, fissatiOggi, squadra, punta, momento } = useDirettaLive()
     const obiettivi = live?.squadra.obiettivi ?? DEFAULT_TARGETS
     const adesso = useOrologio(30_000)
@@ -91,6 +95,7 @@ export function DirettaHome({ userId, nome, firstCall, secondCall, thirdCall, fo
                     </div>
 
                     <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start xl:flex xl:w-[300px] xl:shrink-0 xl:flex-col xl:overflow-y-auto xl:pb-6">
+                        {frasi && <DailyQuoteSlot initial={frasi} compatta />}
                         <Cronaca voci={live?.squadra.cronaca ?? []} mioId={live?.io.id ?? userId} caricato={!!live} />
                         <SchedaPersonale mia={live?.mia ?? null} obiettivi={obiettivi} />
                     </div>

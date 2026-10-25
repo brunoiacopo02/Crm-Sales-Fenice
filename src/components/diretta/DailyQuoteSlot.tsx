@@ -21,9 +21,15 @@ interface Props {
     /** Solo admin: link alla pagina di approvazione. */
     manageHref?: string
     className?: string
+    /**
+     * Riga compatta della home GDO (collaudo del 25/10/2026): la citazione resta
+     * consultabile dopo la schermata d'inizio turno. Citazione in due righe al
+     * massimo e autore; "Approfondisci" apre riflessione e consiglio di vendita.
+     */
+    compatta?: boolean
 }
 
-export function DailyQuoteSlot({ initial, manageHref, className = "" }: Props) {
+export function DailyQuoteSlot({ initial, manageHref, className = "", compatta = false }: Props) {
     const [data, setData] = useState<TodayQuotes | null>(initial ?? null)
 
     useEffect(() => {
@@ -36,6 +42,8 @@ export function DailyQuoteSlot({ initial, manageHref, className = "" }: Props) {
     }, [initial])
 
     if (!data || (!data.citazione && !data.vendita)) return null
+
+    if (compatta) return <RigaCompatta data={data} className={className} />
 
     return (
         <section
@@ -61,6 +69,62 @@ export function DailyQuoteSlot({ initial, manageHref, className = "" }: Props) {
 }
 
 export default DailyQuoteSlot
+
+/** La frase del giorno in poco spazio: la citazione (o il consiglio, se manca) e un solo "Approfondisci". */
+function RigaCompatta({ data, className }: { data: TodayQuotes; className: string }) {
+    const [open, setOpen] = useState(false)
+    const panelId = useId()
+    const principale = data.citazione ?? data.vendita
+    if (!principale) return null
+    const altro = data.citazione ? data.vendita : null
+    const haDettagli = !!principale.deepen || !!altro
+    return (
+        <section
+            aria-label="Frase del giorno"
+            className={`rounded-[16px] bg-[color:var(--d-surface,#262626)] px-4 py-3.5 text-[color:var(--d-text,#F2F2F2)] ${className}`}
+            style={{ fontFamily: "var(--font-poppins), system-ui, sans-serif" }}
+        >
+            <div className="text-[13px] text-[color:var(--d-muted,#BFBFBF)]">{data.citazione ? 'Frase del giorno' : 'Consiglio di vendita'}</div>
+            {principale.text && (
+                <blockquote className="mt-1 line-clamp-2 text-[14px] font-medium leading-snug" title={principale.text}>
+                    {principale.text}
+                </blockquote>
+            )}
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                <div className="min-w-0 truncate text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{principale.author}</div>
+                {haDettagli && (
+                    <button
+                        type="button"
+                        onClick={() => setOpen(o => !o)}
+                        aria-expanded={open}
+                        aria-controls={panelId}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] font-medium transition-colors hover:bg-[color:var(--d-surface-2,#2E2E2E)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--d-orange,#FF9330)]"
+                    >
+                        Approfondisci
+                        <ChevronDown aria-hidden className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} strokeWidth={1.5} />
+                    </button>
+                )}
+            </div>
+            {haDettagli && (
+                <div id={panelId} hidden={!open} className="mt-2 space-y-3">
+                    {principale.deepen && (
+                        <div>
+                            {principale.deepen.work && (
+                                <div className="text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{principale.deepen.work}</div>
+                            )}
+                            <div className="mt-1 whitespace-pre-line text-[13px] leading-relaxed">{principale.deepen.text}</div>
+                        </div>
+                    )}
+                    {altro && (
+                        <div className="border-t-2 border-[color:var(--d-line,#3D3D3D)] pt-3">
+                            <QuoteBlock kind="vendita" item={altro} />
+                        </div>
+                    )}
+                </div>
+            )}
+        </section>
+    )
+}
 
 /** Più la citazione è lunga, più il corpo scende: deve restare in due righe. */
 function quoteSize(text: string): string {
