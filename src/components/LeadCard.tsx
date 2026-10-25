@@ -254,8 +254,46 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
     // card classica e per la veste Diretta (frammento: nessun nodo in più).
     const modali = (
         <>
-            {/* Script Drawer */}
-            {showScript && (
+            {/* Script Drawer: nella Diretta il foglio è scuro (collaudo del 25/10/2026),
+                colori scritti per esteso perché .fixed rimette la palette chiara. */}
+            {showScript && direttaUi.attiva && (
+                <div className="fixed inset-0 z-[60] flex justify-end" onClick={(e) => { e.stopPropagation(); setShowScript(false); }}>
+                    <div className="absolute inset-0 bg-black/60" />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`Script della chiamata con ${lead.name}`}
+                        className="relative h-full w-full max-w-2xl overflow-y-auto overflow-x-hidden border-l-2 border-[#262626] bg-[#171717] font-[family-name:var(--font-poppins)] text-[#F2F2F2] [color-scheme:dark]"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b-2 border-[#262626] bg-[#171717] px-4 py-3.5 sm:px-5">
+                            <div className="min-w-0">
+                                <div className="text-[17px] font-semibold">Script della chiamata</div>
+                                <div className="mt-0.5 flex flex-wrap gap-x-3 text-[13px] text-[#BFBFBF]">
+                                    <div className="min-w-0 truncate">{lead.name}</div>
+                                    <div className="whitespace-nowrap">{lead.phone}</div>
+                                </div>
+                            </div>
+                            <button type="button" onClick={() => setShowScript(false)} aria-label="Chiudi lo script" className="rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]">
+                                <X className="h-5 w-5" strokeWidth={1.5} />
+                            </button>
+                        </div>
+                        <div className="p-4 sm:p-5">
+                            <ScriptWidget
+                                leadId={lead.id}
+                                funnel={lead.funnel}
+                                leadEmail={lead.email}
+                                leadName={lead.name}
+                                leadPhone={lead.phone}
+                                agendaSentAt={lead.agendaSentAt ?? null}
+                                agendaStatus={lead.agendaStatus ?? null}
+                                variant="diretta"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showScript && !direttaUi.attiva && (
                 <div className="fixed inset-0 z-[60] flex justify-end" onClick={() => setShowScript(false)}>
                     <div className="absolute inset-0 bg-black/50" />
                     <div

@@ -13,6 +13,7 @@ import {
     type GdoSurveyField,
 } from '@/lib/surveys/questions';
 import { saveGdoSurvey, type GdoSurveyPayload } from '@/app/actions/surveyActions';
+import { funnelLeggibile } from '@/lib/diretta/funnel';
 
 type ScriptBlock = {
   title: string;
@@ -386,9 +387,16 @@ interface ScriptWidgetProps {
   agendaStatus?: string | null;
   /** Optional callback invoked when the survey is saved (used by parent to refresh UI). */
   onSurveySaved?: () => void;
+  /**
+   * 'diretta' = veste scura del GDO (collaudo del 25/10/2026). Cambiano solo
+   * colori e contenitori: testo dello script, passi, sondaggio e agenda sono
+   * gli stessi della veste di sempre.
+   */
+  variant?: 'diretta';
 }
 
-export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, agendaSentAt, agendaStatus, onSurveySaved }: ScriptWidgetProps = {}) {
+export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, agendaSentAt, agendaStatus, onSurveySaved, variant }: ScriptWidgetProps = {}) {
+  const d = variant === 'diretta';
   const company = useSalesCompany();
   const isSerenamente = company === 'serenamente';
   const blocks = isSerenamente ? SERENAMENTE_BLOCKS : SCRIPT_BLOCKS;
@@ -563,6 +571,159 @@ export function ScriptWidget({ leadId, funnel, leadEmail, leadName, leadPhone, a
   const progress = ((current + 1) / blocks.length) * 100;
 
   const blockFields = requiredFieldsForBlock(current);
+
+  if (d) {
+    // ── Veste Diretta: stessi blocchi, stessi gestori, stesso ordine. Solo la grafica.
+    const attrezzo = "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border-2 border-[#3D3D3D] px-3 text-[13px] font-medium text-[#F2F2F2] transition-colors hover:border-[#8C8C8C] disabled:opacity-30 disabled:hover:border-[#3D3D3D]";
+    const freccia = "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-[#3D3D3D] text-[#F2F2F2] transition-colors hover:border-[#8C8C8C] disabled:opacity-30 disabled:hover:border-[#3D3D3D]";
+    const funnelUi = funnelLeggibile(funnel) ?? funnel;
+    return (
+      <div className="mx-auto w-full min-w-0 max-w-3xl font-[family-name:var(--font-poppins)] text-[#F2F2F2] tabular-nums [color-scheme:dark]">
+        {surveyEnabled && (leadEmail || funnelUi || surveySaved) && (
+            <div className="mb-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-[#BFBFBF]">
+                {leadEmail && <div className="min-w-0 break-all">{leadEmail}</div>}
+                {funnelUi && <div className="font-medium text-[#F2F2F2]">{funnelUi}</div>}
+                {surveySaved && <div className="inline-flex items-center gap-1 font-medium text-[#31BC00]"><CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" /> Sondaggio salvato</div>}
+            </div>
+        )}
+
+        {surveyExcludedByFunnel && (
+            <div className="mb-3 rounded-lg bg-[#262626] px-3 py-2.5 text-[13px] text-[#BFBFBF]">
+                {funnelUi && <span className="mr-2 font-medium text-[#F2F2F2]">{funnelUi}</span>}
+                <span>Nessun sondaggio per questo funnel — prosegui liberamente con lo script.</span>
+            </div>
+        )}
+
+        {/* Barra: passi a sinistra, attrezzi a destra; a 390 vanno a capo */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={goPrev} disabled={current === 0} className={freccia} aria-label="Blocco precedente">
+              <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+            </button>
+            <div className="min-w-[3.5rem] text-center text-[13px] font-medium text-[#BFBFBF]">{current + 1} / {blocks.length}</div>
+            <button type="button" onClick={goNext} disabled={!canGoNext()} className={freccia} aria-label="Blocco successivo">
+              <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setShowVoice(!showVoice)} aria-pressed={showVoice} className={`${attrezzo} ${showVoice ? '!border-[#FF9330] text-[#FF9330]' : ''}`}>
+              <Mic className="h-3.5 w-3.5" strokeWidth={1.75} /> Voce
+            </button>
+            {leadId && leadName && leadPhone && (
+                <AgendaButton
+                    leadId={leadId}
+                    leadName={leadName}
+                    leadPhone={leadPhone}
+                    agendaSentAt={agendaSentAt ?? null}
+                    agendaStatus={agendaStatus ?? null}
+                    variant="diretta-testo"
+                />
+            )}
+            {surveyEnabled && !surveySaved && (
+                <button type="button" onClick={() => setShowEarlyExit(true)} className={attrezzo}>
+                  <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} /> Chiudi script
+                </button>
+            )}
+            <button type="button" onClick={resetCall} className={attrezzo}>
+              <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} /> Nuova chiamata
+            </button>
+          </div>
+        </div>
+
+        {/* Avanzamento */}
+        <div className="mb-4 h-1 overflow-hidden rounded-full bg-[#2E2E2E]">
+          <div className="h-full rounded-full bg-[#FF9330] transition-all duration-500" style={{ width: `${progress}%` }} />
+        </div>
+
+        {timerSeconds > 0 && (
+          <div className={`mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border-2 px-4 py-2.5 text-[14px] ${timerDone ? 'border-[#31BC00] text-[#F2F2F2]' : 'border-[#3D3D3D] text-[#BFBFBF]'}`}>
+            <Clock className={`h-4 w-4 shrink-0 ${timerDone ? 'text-[#31BC00]' : 'text-[#BFBFBF]'}`} strokeWidth={1.75} aria-hidden="true" />
+            <div className="text-[18px] font-semibold text-[#F2F2F2]">{timerMin}:{timerSec.toString().padStart(2, '0')}</div>
+            <div className="text-[13px]">{timerDone ? 'Puoi procedere al pitch' : 'Timer — sblocca il pitch dopo 4 min'}</div>
+          </div>
+        )}
+
+        {saveError && (
+            <div role="alert" className="mb-3 rounded-lg border-2 border-[#FF9330] px-4 py-2.5 text-[14px] text-[#F2F2F2]">
+                {saveError}
+            </div>
+        )}
+
+        {/* Il blocco */}
+        <div className="overflow-hidden rounded-2xl bg-[#262626]">
+          <div className="border-b-2 border-[#2E2E2E] px-4 py-3.5 sm:px-5">
+            <h3 className="text-[15px] font-semibold text-[#FF9330]">{block.title}</h3>
+          </div>
+
+          <div className="px-4 py-4 sm:px-5">
+            {showVoice && block.voice && (
+              <div className="mb-4 rounded-lg bg-[#2E2E2E] px-4 py-3 text-[14px] leading-relaxed text-[#D9D9D9]">
+                <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#FF9330]">
+                  <Mic className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" /> Come dirlo
+                </div>
+                <div className="whitespace-pre-line">{block.voice}</div>
+              </div>
+            )}
+
+            {block.warning && (
+              <div className="mb-4 flex items-start gap-2 rounded-lg border-2 border-[#FF9330] px-4 py-3 text-[14px] font-semibold text-[#F2F2F2]">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#FF9330]" strokeWidth={1.75} aria-hidden="true" /> <div className="min-w-0">{block.warning}</div>
+              </div>
+            )}
+
+            {block.checklist ? (
+              <div>
+                <div className={`mb-4 flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-2.5 text-[18px] font-semibold ${checkedCount >= minRequired ? 'border-[#31BC00] text-[#F2F2F2]' : 'border-[#3D3D3D] text-[#F2F2F2]'}`}>
+                  {checkedCount >= minRequired ? <CheckCircle2 className="h-5 w-5 text-[#31BC00]" strokeWidth={1.75} /> : null}
+                  {minRequired === 0 ? `${checkedCount} segnate · facoltative` : `${checkedCount} / ${minRequired}`}
+                </div>
+                {block.checklist.sections.map((sec, si) => (
+                  <div key={si} className="mb-4">
+                    <div className="mb-2 text-[13px] font-semibold text-[#FF9330]">{sec.title}</div>
+                    {sec.items.map((item, ii) => {
+                      const key = `${si}-${ii}`;
+                      const isChecked = checked.has(key);
+                      return (
+                        <div key={key} onClick={() => toggleCheck(key)} className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-[#2E2E2E]">
+                          <input type="checkbox" checked={isChecked} onChange={() => {}} className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[#FF9330]" />
+                          <span className={`text-[15px] leading-relaxed ${isChecked ? 'text-[#8C8C8C] line-through' : 'text-[#F2F2F2]'}`}>{item}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="whitespace-pre-line break-words text-[16px] leading-[1.85] text-[#F2F2F2]">{block.content}</div>
+            )}
+
+            {surveyEnabled && !surveySaved && blockFields.length > 0 && (
+                <div className="mt-4 space-y-1 border-t-2 border-[#2E2E2E] pt-3">
+                    {blockFields.map((f) => (
+                        <GdoSurveyInline
+                            key={f}
+                            field={f}
+                            value={answers[f] ?? null}
+                            onChange={setAnswer}
+                            disabled={saving}
+                            variant="diretta"
+                        />
+                    ))}
+                </div>
+            )}
+          </div>
+        </div>
+
+        <GdoEarlyExitDialog
+            open={showEarlyExit}
+            onClose={() => setShowEarlyExit(false)}
+            onConfirm={handleEarlyExit}
+            saving={saving}
+            variant="diretta"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-3xl mx-auto">

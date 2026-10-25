@@ -282,8 +282,8 @@ export function ContactDrawer({
     // ── Veste Diretta (collaudo del 25/10/2026): cornice scura ed esiti con le
     // stesse etichette della card ("Non risponde", "Richiamo", "Da scartare",
     // "Appuntamento"). Stessi dati, stessi gestori, stessa logica: cambiano
-    // solo la grafica e le parole. Script e sondaggi restano su un foglio
-    // chiaro, come nelle card.
+    // solo la grafica e le parole. Lo script del GDO è scuro come nelle card
+    // (stesso testo); script delle Conferme e sondaggi restano su un foglio chiaro.
     if (diretta) {
         const tab = (attiva: boolean) => `shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-[14px] transition-colors ${attiva
             ? 'border-[#FF9330] font-semibold text-[#F2F2F2]'
@@ -491,23 +491,27 @@ export function ContactDrawer({
                                 </div>
                             </div>
                         ) : activeTab === 'script' && lead ? (
-                            <div className="p-3 sm:p-4">
-                                <div className="overflow-hidden rounded-2xl bg-white p-3 text-[#171717] sm:p-4">
-                                    {authUser?.user_metadata?.role === 'CONFERME' ? (
+                            authUser?.user_metadata?.role === 'CONFERME' ? (
+                                <div className="p-3 sm:p-4">
+                                    <div className="overflow-hidden rounded-2xl bg-white p-3 text-[#171717] sm:p-4">
                                         <ConfermeScriptWidget />
-                                    ) : (
-                                        <ScriptWidget
-                                            leadId={lead.id}
-                                            funnel={lead.funnel}
-                                            leadEmail={lead.email}
-                                            leadName={lead.name}
-                                            leadPhone={lead.phone}
-                                            agendaSentAt={lead.agendaSentAt ?? null}
-                                            agendaStatus={lead.agendaStatus ?? null}
-                                        />
-                                    )}
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                // Script del GDO in veste scura (collaudo del 25/10/2026): stesso testo, stessi passi.
+                                <div className="p-4">
+                                    <ScriptWidget
+                                        leadId={lead.id}
+                                        funnel={lead.funnel}
+                                        leadEmail={lead.email}
+                                        leadName={lead.name}
+                                        leadPhone={lead.phone}
+                                        agendaSentAt={lead.agendaSentAt ?? null}
+                                        agendaStatus={lead.agendaStatus ?? null}
+                                        variant="diretta"
+                                    />
+                                </div>
+                            )
                         ) : null}
                     </div>
                 </div>
