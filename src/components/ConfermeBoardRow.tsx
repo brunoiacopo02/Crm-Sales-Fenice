@@ -323,8 +323,9 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                         )}
                     </div>
 
-                    {/* Azioni: stessi gestori della grafica classica */}
-                    <div className={`relative flex shrink-0 flex-wrap items-center gap-2 ${layoutMode === 'snooze' ? 'w-full border-t-2 border-[var(--d-line)] pt-3' : 'justify-end'}`}>
+                    {/* Azioni: stessi gestori della grafica classica. Niente shrink-0:
+                        sul telefono i bottoni vanno a capo dentro la card invece di uscirne. */}
+                    <div className={`relative flex max-w-full flex-wrap items-center gap-2 ${layoutMode === 'snooze' ? 'w-full border-t-2 border-[var(--d-line)] pt-3' : 'justify-start sm:justify-end'}`}>
                         {lead.confirmationsOutcome === "confermato" ? (
                             <div className="flex items-center gap-1.5 font-medium text-[var(--d-muted)]">
                                 <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} /> Confermato
