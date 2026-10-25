@@ -5,6 +5,7 @@ import { db } from "@/db"
 import { callLogs, leadEvents, leads, users } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import {
     LANCIO_UMANI_COHORT,
     LANCIO_UMANI_EVENT_REASON,
@@ -56,7 +57,8 @@ export async function getLancioUmani(gdoUserId?: string): Promise<LancioUmaniDat
         closeAmountEur: leads.closeAmountEur,
         discardReason: leads.discardReason,
         gdoCode: users.gdoCode,
-        gdoDisplayName: users.displayName,
+        // Nome vero prima del codice (PO 25/10/2026).
+        gdoDisplayName: nomeVeroOppure(users.firstName, users.displayName),
         gdoName: users.name,
         zoomMinuti: sql<string | null>`${leadEvents.metadata}->>'zoomMinuti'`,
         cohortAt: leadEvents.timestamp,

@@ -6,6 +6,7 @@ import { and, desc, eq, gte, lte, or, sql, getTableColumns } from "drizzle-orm";
 import { aliasedTable } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { leadDelMondoDiAccount } from "@/lib/prova/sql";
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
 
 export type ArchiveFilters = {
     fromDate?: string;
@@ -114,6 +115,8 @@ export async function getArchiveLeads({
         let baseQuery = db.select({
             ...getTableColumns(leads),
             gdoName: gdoUser.name,
+            // A schermo il nome vero (PO 25/10/2026); il CSV tiene il codice di prima.
+            gdoNomeVero: nomeVeroOppure(gdoUser.firstName, gdoUser.name),
             salespersonName: salesUser.name,
             confermeName: confUser.name
         })

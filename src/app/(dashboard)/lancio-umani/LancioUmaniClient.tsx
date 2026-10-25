@@ -4,8 +4,7 @@ import { useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { ArrowDown, ArrowUp, FlaskConical } from "lucide-react"
-import { format } from "date-fns"
-import { it } from "date-fns/locale"
+import { dataBreveRoma, euroIt, numeroIt, oraRoma } from "@/lib/diretta/formato"
 import {
     percentuale,
     type LancioUmaniDati,
@@ -58,13 +57,16 @@ const VOCI: Voce[] = [
     { key: "daRichiamare", label: "Da richiamare", base: s => s.leadDati, baseLabel: "dei lead" },
 ]
 
-const euro = (n: number) => n.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })
-const quando = (iso: string | null) => (iso ? format(new Date(iso), "d MMM HH:mm", { locale: it }) : "—")
+// Numeri e ore scritti a mano (src/lib/diretta/formato.ts): Intl e date-fns
+// davano testi diversi fra server (UTC, ICU di Node) e browser, errore #418.
+const euro = (n: number) => euroIt(Math.round(n))
+const quando = (iso: string | null) => (iso ? `${dataBreveRoma(new Date(iso))} ${oraRoma(new Date(iso))}` : "—")
+// Il nome vero se c'è (PO 25/10/2026), altrimenti il codice.
 const etichettaGdo = (codice: number | null, nome: string | null) =>
-    codice ? `GDO ${codice}` : (nome ?? "Non assegnato")
+    nome || (codice ? `GDO ${codice}` : "Non assegnato")
 
 function valore(v: Voce, s: StatsLancioUmani) {
-    return v.euro ? euro(s[v.key]) : s[v.key].toLocaleString("it-IT")
+    return v.euro ? euro(s[v.key]) : numeroIt(s[v.key])
 }
 
 function perc(v: Voce, s: StatsLancioUmani) {

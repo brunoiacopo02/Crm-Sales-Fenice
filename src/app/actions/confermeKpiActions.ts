@@ -731,6 +731,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             id: users.id,
             name: users.name,
             displayName: users.displayName,
+            firstName: users.firstName,
             role: users.role,
             isActive: users.isActive,
             isTest: users.isTest,
@@ -765,7 +766,8 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             }
             return {
                 userId: id,
-                name: u?.name || u?.displayName || id,
+                // Nome vero prima del codice (PO 25/10/2026).
+                name: u?.firstName?.trim() || u?.name || u?.displayName || id,
                 confermati,
                 scartati,
                 presenziati,

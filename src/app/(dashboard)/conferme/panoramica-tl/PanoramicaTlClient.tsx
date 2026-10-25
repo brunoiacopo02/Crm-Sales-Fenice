@@ -6,6 +6,7 @@ import {
     Filter, Clock, TrendingUp, TrendingDown, Minus, XCircle,
 } from "lucide-react"
 import { getConfermeTlOverview, type ConfermeTlOverview, type TlFunnelRow } from "@/app/actions/confermeKpiActions"
+import { numeroIt, numeroItFino } from "@/lib/diretta/formato"
 
 const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
     'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
@@ -28,20 +29,19 @@ function monthLabel(ym: string): string {
     return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`
 }
 
+// Numeri scritti a mano (src/lib/diretta/formato.ts): Intl di Node e del
+// browser non mettono gli stessi separatori e l'idratazione si rompeva (#418).
 function fmtPct(v: number | null, decimals = 0): string {
     if (v === null || !isFinite(v)) return "—"
-    return `${(v * 100).toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}%`
+    return `${numeroIt(v * 100, decimals)}%`
 }
 
 function fmtEur(v: number, decimals = 0): string {
-    return new Intl.NumberFormat("it-IT", {
-        style: "currency", currency: "EUR",
-        minimumFractionDigits: decimals, maximumFractionDigits: decimals,
-    }).format(v)
+    return `${numeroIt(v, decimals)} €`
 }
 
 function fmtNum(v: number): string {
-    return v.toLocaleString("it-IT")
+    return numeroItFino(v, 3)
 }
 
 /** "BLACK SUMMER" → "Black Summer" */
@@ -64,7 +64,7 @@ function DeltaPp({ value }: { value: number | null }) {
     return (
         <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>
             {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {up ? "+" : ""}{pp.toLocaleString("it-IT", { maximumFractionDigits: 1 })} pp
+            {up ? "+" : ""}{numeroItFino(pp, 1)} pp
         </span>
     )
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { getMarketingStats, saveMarketingBudget, getMarketingStatsByGdo, getInboundSpontaneiStats } from "@/app/actions/marketingActions";
 import { Loader2, TrendingUp, Save, Filter, Users, Send } from "lucide-react";
+import { numeroIt } from "@/lib/diretta/formato";
 
 type Stat = {
     funnel: string;
@@ -123,8 +124,10 @@ export default function MarketingAnalyticsClient({
         return val.toFixed(2) + "%";
     };
 
+    // Euro scritti a mano (src/lib/diretta/formato.ts): Intl di Node e del
+    // browser non mettono gli stessi separatori e l'idratazione si rompeva (#418).
     const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val);
+        return `${numeroIt(val, 2)} €`;
     };
 
     const uniqueFunnels = Array.from(new Set(stats.map(s => s.funnel)));

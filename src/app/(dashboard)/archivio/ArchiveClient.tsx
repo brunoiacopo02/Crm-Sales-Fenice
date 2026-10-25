@@ -252,7 +252,7 @@ export function ArchiveClient({ gdoUsers, salesUsers }: { gdoUsers: any[], sales
                                         </td>
                                         <td className="px-5 py-3 font-medium text-white">{item.name}</td>
                                         <td className="px-5 py-3 text-ash-400">{item.phone}</td>
-                                        <td className="px-5 py-3 text-brand-orange/90">{item.gdoName || "-"}</td>
+                                        <td className="px-5 py-3 text-brand-orange/90">{item.gdoNomeVero || item.gdoName || "-"}</td>
                                         <td className="px-5 py-3">
                                             {item.appointmentDate ? format(new Date(item.appointmentDate), "dd/MM/yyyy") : "-"}
                                         </td>

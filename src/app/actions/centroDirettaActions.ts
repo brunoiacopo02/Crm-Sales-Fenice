@@ -377,8 +377,17 @@ export async function getRegistroDettaglio(filtri: { persona?: string | null; va
             .from(users)
             .where(and(inArray(users.role, ['GDO', 'CONFERME']), eq(users.isBot, false), accountVero())),
     ])
+    // Nel menu Persona (collaudo 25/10/2026) chi ha un nome vero, anche se ora
+    // è fuori, e le Conferme. Gli account senza nome (108, i codici dismessi)
+    // solo se hanno un saldo o se sono quello scelto. Delle Conferme il nome è
+    // in `name`: displayName porta già "(Conferme)", che il menu scrive da sé.
     const persone = utenti
-        .map(u => ({ id: u.id, persona: personName(u), ruolo: u.role, isActive: u.isActive, scintille: u.scintille, piume: u.piume }))
+        .filter(u => u.role === 'CONFERME' || !!u.firstName?.trim() || u.scintille !== 0 || u.piume !== 0 || u.id === persona)
+        .map(u => ({
+            id: u.id,
+            persona: u.role === 'CONFERME' ? (u.firstName?.trim() || u.name || u.displayName || '') : personName(u),
+            ruolo: u.role, isActive: u.isActive, scintille: u.scintille, piume: u.piume,
+        }))
         .sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.persona.localeCompare(b.persona, 'it'))
     return {
         movimenti: righe,

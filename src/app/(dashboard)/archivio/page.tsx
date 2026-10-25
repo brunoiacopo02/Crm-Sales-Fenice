@@ -5,6 +5,8 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { currentTenant } from "@/lib/tenancy";
 import { and, eq, or, sql } from "drizzle-orm";
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
+import { accountVero } from "@/lib/prova/sql";
 
 export default async function ArchivePage() {
     const supabase = await createClient();
@@ -20,16 +22,19 @@ export default async function ArchivePage() {
     // Fetch employees for dropdowns, scoped sull'azienda attiva. Staff condiviso:
     // utenti con companyId='fenice' operano anche su Serenamente via allowedCompanies
     // (fallback legacy su companyId) — pattern venditoriMonitorActions.ts:68-71.
+    // Nome vero prima del codice (PO 25/10/2026); gli account di prova fuori,
+    // tanto l'archivio dell'admin non mostra i loro lead.
     const allUsers = await db.select({
         id: users.id,
-        name: users.name,
+        name: nomeVeroOppure(users.firstName, users.name),
         role: users.role
-    }).from(users).where(
+    }).from(users).where(and(
         or(
             sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
             and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
-        )
-    );
+        ),
+        accountVero(),
+    ));
 
     const gdoUsers = allUsers.filter(u => u.role === 'GDO');
     const salesUsers = allUsers.filter(u => u.role === 'VENDITORE');

@@ -15,6 +15,7 @@ import crypto from "crypto";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isConfermeTl } from "@/lib/confermeTl";
 import { leadDelMondoDiAccount, leadVisibileA, nonDaAccountDiProva } from "@/lib/prova/sql";
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
 // Le costanti di monete e XP di @/lib/surveys/rewards non si usano più: dal
 // restyle "Diretta" (PO 25/10/2026) i sondaggi non pagano e non penalizzano.
 import {
@@ -505,7 +506,8 @@ export async function listSuspiciousSurveys(): Promise<{
         id: gdoLeadSurveys.id,
         leadId: gdoLeadSurveys.leadId,
         gdoUserId: gdoLeadSurveys.gdoUserId,
-        userName: users.name,
+        // Nome vero prima del codice (PO 25/10/2026).
+        userName: nomeVeroOppure(users.firstName, users.name),
         createdAt: gdoLeadSurveys.createdAt,
         fillDurationMs: gdoLeadSurveys.fillDurationMs,
         invalidatedAt: gdoLeadSurveys.invalidatedAt,
