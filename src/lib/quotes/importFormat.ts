@@ -155,12 +155,16 @@ function parseVendita(o: Record<string, unknown>): ParseResult {
     const advice = str(o.consiglio)
     const phraseUrl = str(o.frase_fonte_url)
     const adviceUrl = str(o.fonte_consiglio_url)
+    // Materiale interno dato da Bruno (per esempio il manuale di vendita di
+    // Hormozi in italiano, PO 25/10/2026): niente URL, la fonte è il documento
+    // con la pagina, scritta in "fonte_interna".
+    const internal = str(o.fonte_interna)
     if (!author) return fail('autore mancante')
     if (!work) return fail('opera mancante')
     if (!phrase && !technique) return fail('né frase né tecnica')
-    if (phrase && !isUrl(phraseUrl)) return fail('frase senza URL della fonte')
+    if (phrase && !isUrl(phraseUrl) && !internal) return fail('frase senza URL della fonte')
     if (!advice) return fail('consiglio mancante')
-    if (!isUrl(adviceUrl)) return fail('consiglio senza URL della fonte')
+    if (!isUrl(adviceUrl) && !internal) return fail('consiglio senza URL della fonte')
     const roles = mapRoles(o.ruoli)
     if (!roles.ok) return fail(roles.reason)
     const theme = str(o.tema)
@@ -186,7 +190,7 @@ function parseVendita(o: Record<string, unknown>): ParseResult {
             occasions: [],
             roles: roles.roles,
             suggestedReflection: advice,
-            reflectionSource: adviceUrl,
+            reflectionSource: isUrl(adviceUrl) ? adviceUrl : internal,
             technique: orNull(technique),
             usage: USAGES.has(usage) ? usage : null,
             originalText: null,

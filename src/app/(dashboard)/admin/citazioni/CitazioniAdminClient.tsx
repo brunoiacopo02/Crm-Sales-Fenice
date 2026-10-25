@@ -29,6 +29,7 @@ const USAGE_LABEL: Record<string, string> = {
     riconosci_e_difenditi: "da riconoscere, per difendersi",
 }
 
+const isLink = (s: string) => /^https?:\/\//i.test(s)
 const shortDate = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
 
@@ -250,7 +251,9 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
                                             {kind === "citazione" ? "Riflessione suggerita" : "Consiglio suggerito"}
                                         </div>
                                         <div className="flex items-center gap-1">
-                                            {q.reflectionSource && <SourceLink href={q.reflectionSource} label="Fonte" />}
+                                            {q.reflectionSource && (isLink(q.reflectionSource)
+                                                ? <SourceLink href={q.reflectionSource} label="Fonte" />
+                                                : <span className="px-2.5 text-[13px] text-[#BFBFBF]">{q.reflectionSource === "admin" ? "Scritta dall'admin" : q.reflectionSource}</span>)}
                                             <button
                                                 type="button"
                                                 className={bottone("testo", "piccola")}
@@ -474,6 +477,10 @@ function QuoteDetails({ quote, kind }: { quote: AdminQuote; kind: Kind }) {
                 <div className="-ml-2.5 flex">
                     <SourceLink href={quote.translationUrl} label={kind === "citazione" ? "Fonte della traduzione" : "Fonte della frase"} />
                 </div>
+            ) : quote.reflectionSource === "admin" ? (
+                <div className="text-[13px] text-[#BFBFBF]">Frase scritta dall&apos;admin.</div>
+            ) : quote.reflectionSource && !isLink(quote.reflectionSource) ? (
+                <div className="text-[13px] text-[#BFBFBF]">Fonte: {quote.reflectionSource}.</div>
             ) : (
                 <div className="text-[13px] text-[#BFBFBF]">{kind === "citazione" ? "Manca il link alla traduzione." : "Manca il link alla fonte."}</div>
             )}
