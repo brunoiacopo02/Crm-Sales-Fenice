@@ -932,6 +932,22 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
         // Sempre null: resta nel tipo di ritorno perché ConfermeDrawer lo legge.
         const rewardData = null as RewardEarnedDetail | null;
 
+        // Lead di prova (migr. 0050): nessun venditore, ma il GDO di prova riceve
+        // la notifica della conferma come quello vero, per provare il giro intero.
+        if (outcome === "confermato" && oldLead.isTest && oldLead.assignedToId) {
+            await db.insert(notifications).values({
+                id: crypto.randomUUID(),
+                recipientUserId: oldLead.assignedToId,
+                type: 'appointment_confirmed',
+                title: 'Appuntamento confermato',
+                body: `Il tuo appuntamento per ${oldLead.name} è stato confermato. È un lead di prova: nessun venditore assegnato.`,
+                metadata: { leadId },
+                status: 'unread',
+                createdAt: new Date(),
+                companyId: ctx.companyId,
+            }).catch((e: unknown) => console.error("Notifica conferma di prova err:", e))
+        }
+
         // Notifiche Live (Pilota E2E)
         if (outcome === "confermato" && salespersonAssigned) {
             const spName = await getSalespersonName(salespersonAssigned, ctx.companyId) || salespersonAssigned

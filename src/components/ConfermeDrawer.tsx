@@ -1086,7 +1086,9 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                         ))}
                                                     </select>
                                                     <p className="text-[13px] text-[var(--d-muted)]">
-                                                        Salvando confermi l&apos;appuntamento: il lead passa al venditore e parte l&apos;invito su Google Calendar.
+                                                        {lead.isTest
+                                                            ? "Lead di prova: la conferma si salva, ma il venditore non viene assegnato e nessun invito parte su Google Calendar."
+                                                            : "Salvando confermi l'appuntamento: il lead passa al venditore e parte l'invito su Google Calendar."}
                                                     </p>
                                                 </div>
                                             )}
@@ -1114,9 +1116,13 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                         )}
                                     </section>
 
-                                    {lead.confirmationsOutcome === "confermato" && lead.salespersonAssigned && (
+                                    {/* Lead di prova (migr. 0050): il venditore non si assegna mai, ma
+                                        presenza e chiusura si devono poter provare da qui (collaudo 25/10/2026). */}
+                                    {lead.confirmationsOutcome === "confermato" && (lead.salespersonAssigned || lead.isTest) && (
                                         <section aria-label="Esito dell'appuntamento" className="rounded-2xl border-2 border-[var(--d-line)] p-5">
-                                            <h3 className="text-base font-semibold">Esito dell&apos;appuntamento con {lead.salespersonAssigned}</h3>
+                                            <h3 className="text-base font-semibold">
+                                                {lead.salespersonAssigned ? <>Esito dell&apos;appuntamento con {lead.salespersonAssigned}</> : <>Esito dell&apos;appuntamento, lead di prova</>}
+                                            </h3>
 
                                             <div className="mt-4 space-y-4">
                                                 <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} aria-label="Esito finale" className={dUi.input}>
@@ -1754,11 +1760,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                 </div>
 
                                 {/* Salesperson Outcome (only if confirmed & assigned) */}
-                                {lead.confirmationsOutcome === "confermato" && lead.salespersonAssigned && (
+                                {lead.confirmationsOutcome === "confermato" && (lead.salespersonAssigned || lead.isTest) && (
                                     <div className="bg-ash-50 border-2 border-ash-200 rounded-2xl p-6 border-dashed animate-in fade-in">
                                         <h3 className="text-sm font-bold text-ash-800 mb-5 flex items-center gap-2">
                                             <User className="w-4 h-4 text-ash-500" />
-                                            Esito Post Appuntamento ({lead.salespersonAssigned})
+                                            Esito Post Appuntamento ({lead.salespersonAssigned || 'lead di prova'})
                                         </h3>
 
                                         <div className="space-y-4">
