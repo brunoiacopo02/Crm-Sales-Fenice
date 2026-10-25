@@ -286,19 +286,35 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
     // ── Veste Diretta (GDO e Conferme con l'interruttore acceso) ──
     // Scura e sobria: logo, menu (GDO, schermi larghi), ricerca, orologio con il
     // tempo a fine turno (solo lato client), pausa, notifiche, saldo, avatar col
-    // nome vero. La logica di ricerca, notifiche e drawer è quella di sempre.
+    // nome vero che apre il profilo. La logica di ricerca, notifiche e drawer è
+    // quella di sempre.
+    //
+    // Larghezze misurate (Poppins, 25/10/2026): menu 608 px, pausa in corso
+    // 318, saldo 124 (226 con le etichette), avatar col nome fino a 206, ora col
+    // turno 212. Per stare su una riga senza sovrapposizioni da 1024 px in su:
+    // - sotto 2xl (1536) il menu è quello a scomparsa e da xl (1280) ci stanno
+    //   turno e nome;
+    // - da 2xl il menu sta nella barra e i testi facoltativi tornano da 1920
+    //   (120rem); la ricerca larga da 2240 (140rem), sotto è a comparsa.
+    // Tutto è shrink-0 tranne lo spazio vuoto e il nome accanto all'avatar: se
+    // un numero cresce si stringono quelli (il nome si tronca), mai il menu.
     if (diretta && (ruolo === 'GDO' || ruolo === 'CONFERME')) {
         const nonLette = notifications.filter(n => n.status === 'unread').length
         const nome = io?.nomeVero ?? io?.nome ?? session?.user?.name ?? ''
         const iniziale = io?.iniziale ?? (nome.charAt(0).toUpperCase() || 'F')
         const turno = direttaGdo && adesso && obiettivi ? testoTurno(adesso, obiettivi) : null
+        // Testi facoltativi (nome, turno, etichette del saldo): al GDO solo dove
+        // il menu nella barra lascia posto; le Conferme hanno la sidebar fissa e
+        // la barra corta, quindi da lg.
+        const facoltativo = direttaGdo ? 'hidden xl:inline 2xl:hidden min-[120rem]:inline' : 'hidden lg:inline'
+        const etichettaSaldo = direttaGdo ? 'sr-only min-[120rem]:not-sr-only min-[120rem]:text-[#BFBFBF]' : 'sr-only lg:not-sr-only lg:text-[#BFBFBF]'
         return (
             <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b-2 border-[#262626] bg-[#171717] px-4 text-[#F2F2F2] lg:px-6">
                 <button
                     type="button"
                     onClick={toggle}
                     aria-label="Apri il menu"
-                    className={`-ml-1 shrink-0 rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] ${direttaGdo ? 'xl:hidden' : 'lg:hidden'}`}
+                    className={`-ml-1 shrink-0 rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] ${direttaGdo ? '2xl:hidden' : 'lg:hidden'}`}
                 >
                     <Menu className="h-5 w-5" strokeWidth={1.5} />
                 </button>
@@ -311,7 +327,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                 )}
 
                 {direttaGdo && (
-                    <nav aria-label="Menu" className="hidden min-w-0 items-center gap-1 xl:flex">
+                    <nav aria-label="Menu" className="hidden shrink-0 items-center gap-1 2xl:flex">
                         {MENU_GDO_DIRETTA.map(v => {
                             const attiva = pathname === v.href
                             return (
@@ -334,17 +350,17 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                 <div className="min-w-0 flex-1" />
 
                 {direttaGdo && (
-                    <div className="relative" ref={wrapperRef}>
+                    <div className="relative shrink-0" ref={wrapperRef}>
                         <button
                             type="button"
                             onClick={() => setCercaAperta(v => !v)}
                             aria-label="Cerca un lead"
                             aria-expanded={cercaAperta}
-                            className="rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] min-[1760px]:hidden"
+                            className="rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] min-[140rem]:hidden"
                         >
                             <Search className="h-5 w-5" strokeWidth={1.5} />
                         </button>
-                        <div className={`${cercaAperta ? 'absolute right-0 top-full z-[100] mt-2 w-[min(26rem,calc(100vw-2rem))]' : 'hidden'} min-[1760px]:static min-[1760px]:mt-0 min-[1760px]:block min-[1760px]:w-72`}>
+                        <div className={`${cercaAperta ? 'absolute right-0 top-full z-[100] mt-2 w-[min(26rem,calc(100vw-2rem))]' : 'hidden'} min-[140rem]:static min-[140rem]:mt-0 min-[140rem]:block min-[140rem]:w-72`}>
                             <div className="relative">
                                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8C8C8C]" strokeWidth={1.5} />
                                 <input
@@ -398,16 +414,20 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     </div>
                 )}
 
-                <div className="hidden shrink-0 text-[14px] tabular-nums text-[#BFBFBF] md:block">
+                <div className="hidden shrink-0 whitespace-nowrap text-[14px] tabular-nums text-[#BFBFBF] md:block">
                     {adesso && (
                         <>
                             <span className="text-[#F2F2F2]">{oraBreve(adesso)}</span>
-                            {turno && <span className="hidden 2xl:inline">, {turno}</span>}
+                            {turno && <span className={facoltativo}>, {turno}</span>}
                         </>
                     )}
                 </div>
 
-                {direttaGdo && <PauseTimer variant="diretta" />}
+                {direttaGdo && (
+                    <div className="shrink-0">
+                        <PauseTimer variant="diretta" />
+                    </div>
+                )}
 
                 <div className="relative shrink-0" ref={notifRef}>
                     <button
@@ -460,16 +480,16 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     )}
                 </div>
 
-                <div className="relative flex shrink-0 items-center gap-3 rounded-lg bg-[#262626] px-3 py-1.5 text-[13px] tabular-nums" title="Il tuo saldo di Scintille e Piume">
+                <div className="relative flex shrink-0 items-center gap-3 whitespace-nowrap rounded-lg bg-[#262626] px-3 py-1.5 text-[13px] tabular-nums" title="Il tuo saldo di Scintille e Piume">
                     <div className="flex items-center gap-1.5">
                         <Sparkles className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
                         <span className="font-semibold">{saldo?.scintille ?? 0}</span>
-                        <span className="sr-only 2xl:not-sr-only 2xl:text-[#BFBFBF]">Scintille</span>
+                        <span className={etichettaSaldo}>Scintille</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <Feather className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
                         <span className="font-semibold">{saldo?.piume ?? 0}</span>
-                        <span className="sr-only 2xl:not-sr-only 2xl:text-[#BFBFBF]">Piume</span>
+                        <span className={etichettaSaldo}>Piume</span>
                     </div>
                     {guadagno && (
                         <div key={guadagno.chiave} aria-live="polite" className="d-svanisce pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap rounded-lg bg-[#FF9330] px-2.5 py-1 text-[12px] font-semibold text-[#171717]">
@@ -478,17 +498,22 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     )}
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2.5">
-                    <span className="hidden max-w-[10rem] truncate text-[14px] text-[#F2F2F2] 2xl:inline">{nome}</span>
+                <Link
+                    href="/profilo"
+                    aria-label={nome ? `Il tuo profilo, ${nome}` : 'Il tuo profilo'}
+                    aria-current={pathname === '/profilo' ? 'page' : undefined}
+                    className="flex min-w-0 items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80"
+                >
+                    <span className={`${facoltativo} max-w-[10rem] truncate text-[14px] text-[#F2F2F2]`}>{nome}</span>
                     {io?.immagine ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={io.immagine} alt={nome} className="h-9 w-9 rounded-lg object-cover" />
+                        <img src={io.immagine} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
                     ) : (
-                        <div aria-label={nome} className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F2F2F2] text-[14px] font-semibold text-[#171717]">
+                        <div aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F2F2F2] text-[14px] font-semibold text-[#171717]">
                             {iniziale}
                         </div>
                     )}
-                </div>
+                </Link>
 
                 <ContactDrawer
                     isOpen={isDrawerOpen}

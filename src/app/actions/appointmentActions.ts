@@ -14,7 +14,7 @@ import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
 import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
-import { reverseFissato, syncLeadPiume } from "@/lib/economy/awards";
+import { reverseFissato, riallineaScaliniDopoUscita, syncLeadPiume } from "@/lib/economy/awards";
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -197,6 +197,10 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
         ));
         if (!lead) return { success: false, error: "Lead non trovato" };
 
+        // Istante dell'annullamento per lo storno: la storia del lead conta
+        // fino a qui, l'evento di annullamento scritto più sotto no.
+        const annullatoAlle = new Date();
+
         const previousState = {
             appointmentDate: lead.appointmentDate,
             appointmentNote: lead.appointmentNote,
@@ -251,9 +255,13 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
         // Nuova economia (PO 25/10/2026): un appuntamento annullato non vale.
         // Tornano indietro le Scintille del fissato di questo ciclo e le Piume
         // di conferma, presenza e chiusura del GDO (l'update qui sopra ha
-        // azzerato conferma, esito e latch presentedAt).
-        await reverseFissato(leadId, lead.appointmentCreatedAt, 'appuntamento annullato')
+        // azzerato conferma, esito e latch presentedAt). Il ciclo si ricostruisce
+        // dalla storia del lead (lavori delle Conferme letti prima dell'update),
+        // non da appointmentCreatedAt, che un rifissaggio riscrive.
+        await reverseFissato(lead, annullatoAlle, 'appuntamento annullato')
             .catch((e: unknown) => console.error('Economia storno fissato (annullamento) err:', e));
+        await riallineaScaliniDopoUscita(leadId, ctx.companyId, annullatoAlle)
+            .catch((e: unknown) => console.error('Economia scalini (annullamento) err:', e));
         await syncLeadPiume(leadId, user.id)
             .catch((e: unknown) => console.error('Economia Piume (annullamento) err:', e));
 

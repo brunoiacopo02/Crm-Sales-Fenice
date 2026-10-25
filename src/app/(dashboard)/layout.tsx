@@ -112,7 +112,9 @@ export default async function DashboardLayout({
         <RealtimeProvider userId={session.user.id} companies={tctx.allowedCompanies}>
             <SidebarProvider>
                 <SalesCompanyProvider company={dataCompany}>
-                    <div data-company={dataCompany} data-theme={userTheme} data-ui={diretta ? 'diretta' : undefined} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
+                    {/* data-ui è la veste della cornice: le pagine che leggono l'interruttore la
+                        confrontano con la loro (VesteAllineata) e, se diverse, ridisegnano tutto. */}
+                    <div data-radice-dashboard="" data-company={dataCompany} data-theme={userTheme} data-ui={diretta ? 'diretta' : undefined} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
                         <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} lancioUmaniEnabled={lancioUmaniEnabled} diretta={diretta} ruolo={session.user.role} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
                             {showSprintBanner && <SprintBanner />}

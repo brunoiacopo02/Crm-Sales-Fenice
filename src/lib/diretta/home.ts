@@ -153,17 +153,6 @@ export function ultimiPerLead<T extends { leadId: string }>(righeDalPiuRecente: 
     return out
 }
 
-/** Lead distinti fra le righe con l'istante in [start, end). */
-export function leadDistinti(righe: { leadId: string; at: Date }[], start?: Date, end?: Date): number {
-    const ids = new Set<string>()
-    for (const r of righe) {
-        if (start && r.at.getTime() < start.getTime()) continue
-        if (end && r.at.getTime() >= end.getTime()) continue
-        ids.add(r.leadId)
-    }
-    return ids.size
-}
-
 export interface Casella { n: number; euro: boolean; piena: boolean }
 
 /** Binario delle presenze: almeno l'obiettivo (7), dalla soglia in poi le caselle valgono euro. */

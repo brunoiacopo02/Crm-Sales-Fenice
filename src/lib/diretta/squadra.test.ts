@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    parseLeaderboardMode, contaFissati, ordinaClassifica, primiTre, mancaPerSalire,
+    parseLeaderboardMode, ordinaClassifica, primiTre, mancaPerSalire,
     feniciDellaSettimana, blocchiSquadra, fasePunta, fraseScalini, buildSquadraView,
     type MembroSquadra, type SquadraSnapshot,
 } from './squadra'
@@ -15,22 +15,6 @@ test('modalità classifica: top3 di default, valori sconosciuti tornano al defau
     assert.equal(parseLeaderboardMode('completa'), 'completa')
     assert.equal(parseLeaderboardMode(' nessuna '), 'nessuna')
     assert.equal(parseLeaderboardMode('tutti'), 'top3')
-})
-
-test('fissati: lead distinti nel periodo, per squadra e per persona', () => {
-    const start = new Date('2026-10-26T12:30:00Z')
-    const end = new Date('2026-10-26T19:00:00Z')
-    const rows = [
-        { userId: 'u1', leadId: 'A', createdAt: '2026-10-26T13:00:00Z' },
-        { userId: 'u1', leadId: 'A', createdAt: '2026-10-26T14:00:00Z' },   // stesso lead, una volta
-        { userId: 'u1', leadId: 'B', createdAt: new Date('2026-10-26T15:00:00Z') },
-        { userId: 'u2', leadId: 'A', createdAt: '2026-10-26T16:00:00Z' },   // stesso lead di u1
-        { userId: 'u2', leadId: 'C', createdAt: '2026-10-26T19:00:00Z' },   // fine esclusa
-        { userId: null, leadId: 'D', createdAt: '2026-10-26T15:00:00Z' },
-    ]
-    const r = contaFissati(rows, start, end)
-    assert.equal(r.totale, 2)
-    assert.deepEqual(r.perUtente, { u1: 2, u2: 1 })
 })
 
 test('ordine: presenze, poi fissati, poi nome', () => {

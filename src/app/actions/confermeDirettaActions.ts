@@ -15,6 +15,7 @@ import { and, asc, eq, gte, inArray, or } from "drizzle-orm"
 import { db } from "@/db"
 import { appSettings, leads, users } from "@/db/schema"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { conRuoloDb, haRuoloDb } from "@/lib/auth/ruoloDb"
 import { writeSetting } from "@/lib/diretta/settings"
 import {
     CONFERME_BONUS_KEY, parseConfermeBonus, validateConfermeBonus,
@@ -84,7 +85,8 @@ export type ConfermeDirettaStats = ConfermeDirettaNumeri & {
 export async function getConfermeDirettaStats(): Promise<ConfermeDirettaStats> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    if (!['CONFERME', 'MANAGER', 'ADMIN'].includes(ctx.role)) throw new Error('Unauthorized')
+    // Ruolo dalla tabella users, non dai metadati della sessione.
+    if (!(await haRuoloDb(ctx.userId, ['CONFERME', 'MANAGER', 'ADMIN']))) throw new Error('Unauthorized')
 
     const now = new Date()
     const cfg = await readConfermeBonusConfig()
@@ -127,10 +129,10 @@ export type ConfermeBonusSettings = {
     anteprima: Record<BonusUnita, Record<BonusPeriodo, number>>
 }
 
-/** Configurazione del bonus Conferme per la pagina admin. Solo ADMIN. */
+/** Configurazione del bonus Conferme per la pagina admin. Solo ADMIN, letto dalla tabella users. */
 export async function getConfermeBonusSettings(): Promise<ConfermeBonusSettings> {
     const ctx = await currentTenant()
-    if (ctx.role !== 'ADMIN') throw new Error('Unauthorized')
+    if (!(await haRuoloDb(ctx.userId, ['ADMIN']))) throw new Error('Unauthorized')
 
     const now = new Date()
     const config = await readConfermeBonusConfig()
@@ -143,17 +145,20 @@ export async function getConfermeBonusSettings(): Promise<ConfermeBonusSettings>
     return { config, account, anteprima: conteggiSquadra(rows, bounds) }
 }
 
-/** Salva la configurazione del bonus Conferme. Solo ADMIN; i valori sbagliati si rifiutano, non si correggono. */
+/**
+ * Salva la configurazione del bonus Conferme. Solo ADMIN (letto dalla tabella
+ * users); i valori sbagliati si rifiutano, non si correggono.
+ */
 export async function saveConfermeBonusSettings(
     input: unknown,
 ): Promise<{ success: true; config: ConfermeBonusConfig } | { success: false; error: string }> {
     try {
-        const ctx = await currentTenant()
-        if (ctx.role !== 'ADMIN') return { success: false, error: 'Non autorizzato.' }
+        const admin = await conRuoloDb(['ADMIN'])
+        if (!admin) return { success: false, error: 'Non autorizzato.' }
         const account = await listConfermeAccounts()
         const v = validateConfermeBonus(input, new Set(account.map(a => a.id)))
         if (!v.ok) return { success: false, error: v.error }
-        await writeSetting(CONFERME_BONUS_KEY, JSON.stringify(v.value), ctx.userId)
+        await writeSetting(CONFERME_BONUS_KEY, JSON.stringify(v.value), admin.id)
         return { success: true, config: v.value }
     } catch (error) {
         console.error('Errore saveConfermeBonusSettings:', error)

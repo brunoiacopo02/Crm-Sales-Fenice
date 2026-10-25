@@ -4,6 +4,7 @@ import { getAdventureProgress, getAllBosses } from "@/app/actions/adventureActio
 import { getTeamAdventureProgress } from "@/app/actions/teamAdventureActions"
 import dynamic from "next/dynamic"
 import { isDirettaOn } from "@/lib/diretta/settings"
+import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 
 const MappaAvventuraClient = dynamic(() => import("./MappaAvventuraClient"), { loading: () => <div className="animate-pulse space-y-4"><div className="h-10 bg-ash-200 rounded-lg w-1/3" /><div className="h-96 bg-ash-100 rounded-xl" /></div> })
 
@@ -36,11 +37,15 @@ export default async function MappaAvventuraPage() {
     ]);
 
     return (
-        <MappaAvventuraClient
-            progress={progress}
-            bosses={bosses}
-            isTeam={isTeam}
-            userId={supabaseUser.id}
-        />
+        <>
+            {/* Interruttore spento a sessione aperta: la cornice scura si riallinea. */}
+            <VesteAllineata diretta={false} />
+            <MappaAvventuraClient
+                progress={progress}
+                bosses={bosses}
+                isTeam={isTeam}
+                userId={supabaseUser.id}
+            />
+        </>
     );
 }

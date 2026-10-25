@@ -9,22 +9,25 @@
 // non deve mai bloccare un esito.
 
 import { randomInt, randomUUID } from 'crypto'
-import { and, countDistinct, eq, gte, inArray, isNotNull, lt } from 'drizzle-orm'
+import { and, eq, gte, inArray, lt } from 'drizzle-orm'
 import { db } from '@/db'
-import { appSettings, callLogs, currencyLedger, leads, teamChestAwards, teamChests, users } from '@/db/schema'
+import { appSettings, callLogs, currencyLedger, leadEvents, leads, teamChestAwards, teamChests, users } from '@/db/schema'
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
-import { isTeamMember, peakWindow, stepReached } from '@/lib/diretta/config'
+import { isTeamMember, peakWindow, stepReached, type GamificationTargets } from '@/lib/diretta/config'
 import { readGamificationTargets } from '@/lib/diretta/settings'
+import { contaFissati } from '@/lib/diretta/fissati'
+import { leggiFissati, leggiMembriSquadra } from '@/lib/diretta/fissatiDb'
 import { countPresences } from '@/lib/presenceCounting'
 import { creditOnce, reverseOnce } from './ledger'
 import {
     ECONOMY_RULES_KEY, parseEconomyRules, inizioEconomia,
-    pianoFissato, fissatiDaStornare, bonusScalini, scalinoIdemKey, rewardFissato,
+    pianoFissato, fissatiDaStornare, inizioStorno, pianoScalini, rewardFissato,
     piumeDovute, pianoPiuma, piumePresenza, isPersonaleUmano, puoAccreditarePiume,
-    contaFissatiPerPersona, sommaFissati, forzieriRaggiunti, tierForziere,
-    contenutoForziere, destinatariForziere, chestIdemKey,
-    type EconomyRules, type FissatoReward, type TipoPiuma, type ChestTier,
+    forzieriRaggiunti, tierForziere, contenutoForziere, destinatariForziere, chestIdemKey,
+    type EconomyRules, type EventoCiclo, type FissatoReward, type TipoPiuma, type ChestTier,
 } from './rules'
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** Causali del registro (colonna reason). Gli storni hanno 'storno ...'. */
 export const CAUSALI = {
@@ -37,7 +40,7 @@ export const CAUSALI = {
 
 const TIPI_PIUMA: TipoPiuma[] = ['conferma', 'presenza', 'chiusura']
 
-/** Margine fra l'orologio dell'app (appointmentCreatedAt) e quello del DB (createdAt del registro). */
+/** Margine fra l'orologio dell'app (createdAt del callLog) e quello del DB (createdAt del registro). */
 const MARGINE_OROLOGI_MS = 10 * 60 * 1000
 
 export async function readEconomyRules(): Promise<EconomyRules> {
@@ -58,8 +61,9 @@ export async function readEconomyRules(): Promise<EconomyRules> {
  * tetto del giorno, più i bonus degli scalini personali (8 e 10 fissati).
  *
  * Restituisce null se `userId` non è un GDO della squadra (bot, 108, admin,
- * manager): per loro niente premio e niente forzieri. Il callLog dell'esito
- * deve essere già scritto, perché i fissati del giorno si contano da lì.
+ * manager): per loro niente premio e niente forzieri. Il callLog dell'esito e
+ * lo stato APPOINTMENT del lead devono essere già scritti, perché i fissati del
+ * giorno si contano da lì (fissati validi, src/lib/diretta/fissati.ts).
  */
 export async function awardFissato(input: { userId: string; leadId: string; companyId: string; at: Date }): Promise<FissatoReward | null> {
     const { userId, leadId, companyId, at } = input
@@ -101,49 +105,145 @@ export async function awardFissato(input: { userId: string; leadId: string; comp
             if (ok) guadagnate += rules.fissato.scintille
         }
 
-        // Fissati del giorno = lead distinti con un callLog APPUNTAMENTO della
-        // persona (stessa definizione dei contatori della Diretta).
-        const [{ n }] = await tx.select({ n: countDistinct(callLogs.leadId) }).from(callLogs).where(and(
-            eq(callLogs.companyId, companyId),
-            eq(callLogs.userId, userId),
-            eq(callLogs.outcome, 'APPUNTAMENTO'),
-            gte(callLogs.createdAt, start),
-            lt(callLogs.createdAt, end),
-        ))
-        const fissatiOggi = Number(n) || 0
-        const giaPresi = new Set(righeOggi.map(r => r.idemKey))
-        for (const b of bonusScalini(fissatiOggi, targets.personale, rules.scaliniPersonali)) {
-            const idemKey = scalinoIdemKey(userId, giorno, b.scalino)
-            if (giaPresi.has(idemKey)) continue
-            const ok = await creditOnce({
-                userId, currency: 'S', amount: b.scintille, reason: CAUSALI.scalino,
-                idemKey, companyId, metadata: { giorno, scalino: b.scalino, fissatiOggi },
-            }, tx)
-            if (ok) guadagnate += b.scintille
-        }
+        // Fissati validi del giorno: la stessa query della home e della pagina
+        // Squadra, quindi lo scalino segue il numero che il GDO vede.
+        const fissatiOggi = contaFissati(await leggiFissati({ companyId, userIds: [userId], start, end }, tx)).totale
+        const scalini = await allineaScalini(tx, { userId, companyId, giorno, fissati: fissatiOggi, targets, rules, righe: righeOggi })
+        guadagnate += scalini.accreditate
 
         return rewardFissato({
             scintille: guadagnate,
             fissatiOggi,
             scalino: stepReached(fissatiOggi, targets.personale),
-            saldo: u.scintille + guadagnate,
+            saldo: u.scintille + guadagnate - scalini.stornate,
         })
     })
 }
 
 /**
- * Storna le Scintille del fissato quando l'appuntamento sparisce (annullato
- * dall'admin, o tolto dal GDO prima che le Conferme lo vedessero). `dal` è
- * l'appointmentCreatedAt del ciclo che si chiude: i fissati di cicli
- * precedenti, già lavorati dalle Conferme, restano. Ritorna quanti storni ha scritto.
+ * Allinea gli scalini personali del giorno ai fissati validi (pianoScalini):
+ * accredita quelli raggiunti, storna quelli non più raggiunti. Va chiamata
+ * dentro la transazione che tiene il lock sulla riga della persona; `righe`
+ * sono le righe del registro della persona nel giorno.
  */
-export async function reverseFissato(leadId: string, dal: Date | null, motivo: string): Promise<number> {
-    const righe = await db.select({
-        idemKey: currencyLedger.idemKey, amount: currencyLedger.amount, createdAt: currencyLedger.createdAt,
-    }).from(currencyLedger).where(eq(currencyLedger.leadId, leadId))
-    const daStornare = fissatiDaStornare(righe, leadId, dal ? new Date(dal.getTime() - MARGINE_OROLOGI_MS) : null)
+async function allineaScalini(tx: Tx, p: {
+    userId: string
+    companyId: string
+    giorno: string
+    fissati: number
+    targets: GamificationTargets
+    rules: EconomyRules
+    righe: { idemKey: string; amount: number }[]
+}): Promise<{ accreditate: number; stornate: number }> {
+    const piano = pianoScalini(p.righe, p.userId, p.giorno, p.fissati, p.targets.personale, p.rules.scaliniPersonali)
+    let accreditate = 0
+    let stornate = 0
+    for (const k of piano.storna) {
+        if (await reverseOnce(k, `storno scalino: fissati validi scesi a ${p.fissati}`, tx)) {
+            stornate += p.righe.find(r => r.idemKey === k)?.amount ?? 0
+        }
+    }
+    for (const a of piano.accredita) {
+        const ok = await creditOnce({
+            userId: p.userId, currency: 'S', amount: a.scintille, reason: CAUSALI.scalino,
+            idemKey: a.idemKey, companyId: p.companyId, metadata: { giorno: p.giorno, scalino: a.scalino, fissatiOggi: p.fissati },
+        }, tx)
+        if (ok) accreditate += a.scintille
+    }
+    return { accreditate, stornate }
+}
+
+/**
+ * Un lead è uscito dall'appuntamento (altro esito, annullamento dell'admin):
+ * per chi l'aveva fissato oggi è un fissato valido in meno, e gli scalini di
+ * oggi sopra il nuovo conteggio si stornano (si riprendono se il conteggio
+ * risale). I giorni passati restano come sono, come i forzieri già aperti.
+ */
+export async function riallineaScaliniDopoUscita(leadId: string, companyId: string, at: Date): Promise<void> {
+    const { start, end } = dayBoundsRome(at)
+    const chi = await db.select({ userId: callLogs.userId }).from(callLogs).where(and(
+        eq(callLogs.leadId, leadId),
+        eq(callLogs.outcome, 'APPUNTAMENTO'),
+        gte(callLogs.createdAt, start),
+        lt(callLogs.createdAt, end),
+    ))
+    const ids = [...new Set(chi.map(c => c.userId).filter((x): x is string => !!x))]
+    if (ids.length === 0) return
+    const [targets, rules] = await Promise.all([readGamificationTargets(), readEconomyRules()])
+    const giorno = toRomeDateStr(at)
+    for (const userId of ids) {
+        await db.transaction(async (tx) => {
+            // Stesso lock di awardFissato: un fissato e un'uscita simultanei
+            // della stessa persona non si incrociano sugli scalini.
+            const [u] = await tx.select({
+                id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, firstName: users.firstName,
+            }).from(users).where(eq(users.id, userId)).for('no key update')
+            if (!u || !isTeamMember(u)) return
+            const righe = await tx.select({ idemKey: currencyLedger.idemKey, amount: currencyLedger.amount })
+                .from(currencyLedger).where(and(
+                    eq(currencyLedger.userId, userId),
+                    gte(currencyLedger.createdAt, start),
+                    lt(currencyLedger.createdAt, end),
+                ))
+            const fissati = contaFissati(await leggiFissati({ companyId, userIds: [userId], start, end }, tx)).totale
+            await allineaScalini(tx, { userId, companyId, giorno, fissati, targets, rules, righe })
+        }).catch((e: unknown) => console.error('[economia] riallineo scalini err', userId, e))
+    }
+}
+
+/** Il lead come serve allo storno: i lavori di Conferme e venditore letti PRIMA dell'uscita. */
+export interface LeadPerStorno {
+    id: string
+    confCall1At: Date | null
+    confCall2At: Date | null
+    confCall3At: Date | null
+    confirmationsTimestamp: Date | null
+    presentedAt: Date | null
+    salespersonOutcomeAt: Date | null
+}
+
+/** Eventi del lead che chiudono un ciclo d'appuntamento (vedi cicloInCorso in ./rules). */
+const EVENTI_CHIUSURA = ['appointment_cancelled_admin', 'conferme_scarto_reset', 'APPOINTMENT_SET']
+
+/**
+ * Storna le Scintille del fissato quando l'appuntamento sparisce (annullato
+ * dall'admin, o tolto dal GDO prima che le Conferme lo vedessero): tutti gli
+ * accrediti non stornati del ciclo in corso, dal primo fissato della serie.
+ * Il ciclo si ricostruisce dai callLog e dagli eventi del lead, non da
+ * appointmentCreatedAt: rifissare un lead già in appuntamento lo riscrive, e
+ * il limite si sposterebbe oltre l'accredito da stornare. I fissati di cicli
+ * precedenti (chiusi, o lavorati dalle Conferme) restano.
+ *
+ * `prima` è l'istante dell'uscita: il callLog e gli eventi scritti da lì in
+ * poi (l'esito che toglie l'appuntamento, l'annullamento) non contano.
+ * Ritorna quanti storni ha scritto.
+ */
+export async function reverseFissato(lead: LeadPerStorno, prima: Date, motivo: string): Promise<number> {
+    const [registro, chiamate, eventi] = await Promise.all([
+        db.select({ idemKey: currencyLedger.idemKey, amount: currencyLedger.amount, createdAt: currencyLedger.createdAt })
+            .from(currencyLedger).where(eq(currencyLedger.leadId, lead.id)),
+        db.select({ outcome: callLogs.outcome, at: callLogs.createdAt })
+            .from(callLogs).where(and(eq(callLogs.leadId, lead.id), lt(callLogs.createdAt, prima))),
+        db.select({ at: leadEvents.timestamp })
+            .from(leadEvents).where(and(
+                eq(leadEvents.leadId, lead.id),
+                inArray(leadEvents.eventType, EVENTI_CHIUSURA),
+                lt(leadEvents.timestamp, prima),
+            )),
+    ])
+    const lavori = [
+        lead.confCall1At, lead.confCall2At, lead.confCall3At,
+        lead.confirmationsTimestamp, lead.presentedAt, lead.salespersonOutcomeAt,
+    ].filter((d): d is Date => !!d && d.getTime() < prima.getTime())
+    const storia: EventoCiclo[] = [
+        ...chiamate.map(c => ({ at: c.at, tipo: c.outcome === 'APPUNTAMENTO' ? 'fissato' as const : 'chiusura' as const })),
+        ...eventi.map(e => ({ at: e.at, tipo: 'chiusura' as const })),
+        ...lavori.map(at => ({ at, tipo: 'lavoro' as const })),
+    ]
+    const dal = inizioStorno(storia, MARGINE_OROLOGI_MS)
+    if (!dal) return 0
     let scritti = 0
-    for (const k of daStornare) {
+    for (const k of fissatiDaStornare(registro, lead.id, dal)) {
         if (await reverseOnce(k, `storno fissato: ${motivo}`)) scritti++
     }
     return scritti
@@ -243,41 +343,28 @@ const casuale = () => randomInt(0, 1_000_000) / 1_000_000
 const asTier = (t: string): ChestTier => (t === 'leggendario' ? 'leggendario' : 'raro')
 
 /**
- * Dopo un APPUNTAMENTO della squadra: conta i fissati di squadra del giorno e
- * dell'ora di punta, crea i forzieri degli scalini raggiunti (uno per tipo al
- * giorno: lo garantisce l'indice unico azienda/giorno/tipo, anche con due esiti
+ * Dopo un APPUNTAMENTO della squadra: conta i fissati validi di squadra del
+ * giorno e dell'ora di punta (gli stessi numeri della home e della pagina
+ * Squadra), crea i forzieri degli scalini raggiunti (uno per tipo al giorno: lo
+ * garantisce l'indice unico azienda/giorno/tipo, anche con due esiti
  * simultanei) e li consegna a chi ne ha diritto. Chi arriva dopo (primo fissato
- * della giornata a forziere già aperto) lo riceve al suo primo fissato.
+ * della giornata a forziere già aperto) lo riceve al suo primo fissato. Un
+ * forziere creato resta: se poi un appuntamento viene tolto non si storna.
  */
 export async function evaluateTeamChests(input: { companyId: string; at: Date }): Promise<void> {
     const { companyId, at } = input
     const [targets, rules] = await Promise.all([readGamificationTargets(), readEconomyRules()])
 
-    const squadra = (await db.select({
-        id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, firstName: users.firstName,
-    }).from(users).where(and(
-        eq(users.role, 'GDO'),
-        eq(users.isActive, true),
-        eq(users.isBot, false),
-        isNotNull(users.firstName),
-    ))).filter(isTeamMember)
+    const squadra = await leggiMembriSquadra(companyId)
     if (!squadra.length) return
     const ids = squadra.map(u => u.id)
 
     const { start, end } = dayBoundsRome(at)
-    const righe = await db.select({ userId: callLogs.userId, leadId: callLogs.leadId, createdAt: callLogs.createdAt })
-        .from(callLogs)
-        .where(and(
-            eq(callLogs.companyId, companyId),
-            eq(callLogs.outcome, 'APPUNTAMENTO'),
-            inArray(callLogs.userId, ids),
-            gte(callLogs.createdAt, start),
-            lt(callLogs.createdAt, end),
-        ))
-    const delGiorno = contaFissatiPerPersona(righe)
+    const righe = await leggiFissati({ companyId, userIds: ids, start, end })
+    const delGiorno = contaFissati(righe)
     const punta = peakWindow(at, targets)
-    const inPunta = punta ? contaFissatiPerPersona(righe, punta) : null
-    const raggiunti = forzieriRaggiunti(sommaFissati(delGiorno), inPunta ? sommaFissati(inPunta) : null, targets)
+    const inPunta = punta ? contaFissati(righe, punta.start, punta.end) : null
+    const raggiunti = forzieriRaggiunti(delGiorno.totale, inPunta ? inPunta.totale : null, targets)
     if (!raggiunti.length) return
 
     const giorno = toRomeDateStr(at)
@@ -289,7 +376,7 @@ export async function evaluateTeamChests(input: { companyId: string; at: Date })
             day: giorno,
             kind,
             tier: tierForziere(kind),
-            reached: sommaFissati(conteggi),
+            reached: conteggi.totale,
         }).onConflictDoNothing({ target: [teamChests.companyId, teamChests.day, teamChests.kind] })
     }
 
@@ -305,7 +392,7 @@ export async function evaluateTeamChests(input: { companyId: string; at: Date })
 
     for (const f of forzieri) {
         const diPunta = f.kind.startsWith('punta')
-        const conteggi = diPunta ? (inPunta ?? new Map<string, number>()) : delGiorno
+        const conteggi = diPunta ? (inPunta?.perUtente ?? {}) : delGiorno.perUtente
         const minimo = diPunta ? rules.forzieri.minFissatiPunta : rules.forzieri.minFissatiGiorno
         for (const userId of destinatariForziere(conteggi, ids, minimo)) {
             if (giaDati.has(`${f.id}:${userId}`)) continue

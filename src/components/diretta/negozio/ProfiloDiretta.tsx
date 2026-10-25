@@ -3,6 +3,8 @@
 // Profilo semplice della Diretta (/profilo per GDO e Conferme con
 // l'interruttore acceso): nome, immagine scelta tra quelle comprate, saldo e
 // storico del negozio. Creature, avventura, scambi e quest non ci sono più.
+// Ci si arriva dall'avatar della barra in alto; al GDO porta anche allo
+// storico delle pause.
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
@@ -54,6 +56,12 @@ export function ProfiloDiretta({ view }: { view: NegozioView }) {
                     <div className="min-w-0">
                         <div className="text-[28px] font-semibold leading-tight">{view.nome}</div>
                         {view.stile.titolo && <div className="mt-1 text-[15px] text-[var(--d-muted)]">{view.stile.titolo}</div>}
+                        {/* Nella barra in alto della Diretta lo storico delle pause non ha una voce: si apre da qui. */}
+                        {view.ruolo === 'GDO' && (
+                            <Link href="/storico-pause" className="mt-2 inline-block text-sm font-medium text-[var(--d-muted)] underline underline-offset-4 hover:text-[var(--d-text)]">
+                                Storico delle pause
+                            </Link>
+                        )}
                     </div>
                 </div>
                 <div className="grid w-full grid-cols-2 gap-3 sm:ml-auto sm:w-[360px]">

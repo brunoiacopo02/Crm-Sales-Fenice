@@ -6,6 +6,7 @@ import { isDirettaOn } from "@/lib/diretta/settings"
 import { getNegozioView } from "@/app/actions/negozioActions"
 import { NegozioDiretta } from "@/components/diretta/negozio/NegozioDiretta"
 import { PaginaDiretta } from "@/components/diretta/negozio/ui"
+import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 
 const ShopClient = dynamic(() => import("@/components/ShopClient").then(m => ({ default: m.ShopClient })), { loading: () => <div className="animate-pulse space-y-4"><div className="h-12 bg-ash-200 rounded-lg w-1/4" /><div className="grid grid-cols-3 gap-4"><div className="h-48 bg-ash-100 rounded-xl" /><div className="h-48 bg-ash-100 rounded-xl" /><div className="h-48 bg-ash-100 rounded-xl" /></div></div> })
 
@@ -24,6 +25,7 @@ export default async function StorePage() {
         const view = await getNegozioView()
         return (
             <PaginaDiretta>
+                <VesteAllineata diretta />
                 <NegozioDiretta view={view} />
             </PaginaDiretta>
         )
@@ -31,6 +33,7 @@ export default async function StorePage() {
 
     return (
         <div className="space-y-6">
+            <VesteAllineata diretta={false} />
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div className="flex items-center gap-3">
                     <div className="p-2.5 rounded-xl bg-gradient-to-br from-gold-100 to-brand-orange-100 border border-gold-200 shadow-soft">

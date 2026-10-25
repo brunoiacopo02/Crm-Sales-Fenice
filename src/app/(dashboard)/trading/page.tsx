@@ -4,6 +4,7 @@ import { getUserCreatures } from "@/app/actions/creatureActions";
 import { getAllOffers, getGdoUsersForTrading } from "@/app/actions/tradingActions";
 import dynamic from "next/dynamic";
 import { isDirettaOn } from "@/lib/diretta/settings";
+import { VesteAllineata } from "@/components/diretta/VesteAllineata";
 
 const TradingClient = dynamic(() => import("./TradingClient"), { loading: () => <div className="animate-pulse space-y-4"><div className="h-10 bg-ash-200 rounded-lg w-1/3" /><div className="grid grid-cols-2 gap-4"><div className="h-64 bg-ash-100 rounded-xl" /><div className="h-64 bg-ash-100 rounded-xl" /></div></div> });
 
@@ -24,11 +25,15 @@ export default async function TradingPage() {
     ]);
 
     return (
-        <TradingClient
-            userId={user.id}
-            myCreatures={myCreatures}
-            offers={offers}
-            gdoUsers={gdoUsers}
-        />
+        <>
+            {/* Interruttore spento a sessione aperta: la cornice scura si riallinea. */}
+            <VesteAllineata diretta={false} />
+            <TradingClient
+                userId={user.id}
+                myCreatures={myCreatures}
+                offers={offers}
+                gdoUsers={gdoUsers}
+            />
+        </>
     );
 }

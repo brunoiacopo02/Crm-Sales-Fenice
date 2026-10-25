@@ -12,8 +12,8 @@ import { and, asc, desc, eq, ne } from "drizzle-orm"
 import { revalidatePath, updateTag } from "next/cache"
 import { db } from "@/db"
 import { appSettings, notifications, rewardItems, rewardPurchases, users } from "@/db/schema"
-import { createClient } from "@/utils/supabase/server"
 import { assertSalesArea, currentTenant } from "@/lib/tenancy"
+import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { creditOnce, type Currency } from "@/lib/economy/ledger"
 import { DIRETTA_FLAG_KEYS, personName } from "@/lib/diretta/config"
 import {
@@ -265,14 +265,11 @@ export async function setProfileImage(itemId: string | null): Promise<{ ok: true
 
 // ── Admin ────────────────────────────────────────────────────────────────
 
-/** Solo ADMIN, controllato anche sulla tabella users: i metadati della sessione non bastano. */
+/** Solo ADMIN, letto dalla tabella users: i metadati della sessione non bastano. */
 async function requireAdmin(): Promise<{ id: string }> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user || user.user_metadata?.role !== 'ADMIN') throw new Error('Unauthorized')
-    const [row] = await db.select({ role: users.role }).from(users).where(eq(users.id, user.id)).limit(1)
-    if (row?.role !== 'ADMIN') throw new Error('Unauthorized')
-    return { id: user.id }
+    const admin = await conRuoloDb(['ADMIN'])
+    if (!admin) throw new Error('Unauthorized')
+    return { id: admin.id }
 }
 
 export interface RichiestaPremio {

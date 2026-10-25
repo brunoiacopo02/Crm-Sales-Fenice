@@ -12,28 +12,8 @@ export function parseLeaderboardMode(raw: string | null | undefined): Leaderboar
     return v === 'completa' || v === 'nessuna' ? v : 'top3'
 }
 
-export interface FissatoRow { userId: string | null; leadId: string; createdAt: string | Date }
-
-/**
- * "Fissato" = lead distinto con callLog APPUNTAMENTO nel periodo [start, end).
- * La squadra conta i lead distinti di tutti; la persona i suoi.
- */
-export function contaFissati(rows: FissatoRow[], start: Date, end: Date): { totale: number; perUtente: Record<string, number> } {
-    const s = start.getTime()
-    const e = end.getTime()
-    const squadra = new Set<string>()
-    const perUtente = new Map<string, Set<string>>()
-    for (const r of rows) {
-        if (!r.userId) continue
-        const t = new Date(r.createdAt).getTime()
-        if (t < s || t >= e) continue
-        squadra.add(r.leadId)
-        let set = perUtente.get(r.userId)
-        if (!set) { set = new Set(); perUtente.set(r.userId, set) }
-        set.add(r.leadId)
-    }
-    return { totale: squadra.size, perUtente: Object.fromEntries([...perUtente].map(([k, v]) => [k, v.size])) }
-}
+// I fissati (squadra e persona) si contano con contaFissati di ./fissati.ts,
+// la stessa definizione della home, degli scalini e dei forzieri.
 
 export interface MembroSquadra {
     id: string

@@ -6,6 +6,7 @@ import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
 import { SafeWrapper } from "@/components/SafeWrapper"
 import { DirettaHome } from "@/components/diretta/DirettaHome"
 import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
+import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 import { direttaAccesa, leggiIo } from "@/lib/diretta/io"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
@@ -63,22 +64,27 @@ export default async function DashboardPage() {
     if (session?.user?.role === 'GDO' && await direttaAccesa('GDO')) {
         const io = await leggiIo(session.user.id, session.user.name ?? null).catch(() => null)
         return (
-            <DirettaHome
-                userId={session.user.id}
-                nome={io?.nomeVero ?? ''}
-                firstCall={firstCall}
-                secondCall={secondCall}
-                thirdCall={thirdCall}
-                fourthCall={fourthCall}
-                isFourthCallActive={isFourthCallActive}
-                recalls={recalls}
-                pipelineError={pipelineError}
-            />
+            <>
+                <VesteAllineata diretta />
+                <DirettaHome
+                    userId={session.user.id}
+                    nome={io?.nomeVero ?? ''}
+                    firstCall={firstCall}
+                    secondCall={secondCall}
+                    thirdCall={thirdCall}
+                    fourthCall={fourthCall}
+                    isFourthCallActive={isFourthCallActive}
+                    recalls={recalls}
+                    pipelineError={pipelineError}
+                />
+            </>
         )
     }
 
     return (
         <div className="space-y-4">
+            {/* Interruttore spento a sessione aperta: la cornice scura si riallinea. */}
+            <VesteAllineata diretta={false} />
             {/* Overlays — wrapped in SafeWrapper so crashes don't take down the page */}
             <SafeWrapper><CelebrationOverlay /></SafeWrapper>
             <SafeWrapper><LootDropModal userId={session!.user.id} /></SafeWrapper>

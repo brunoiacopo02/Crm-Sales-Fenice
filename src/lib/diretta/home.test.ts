@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DEFAULT_TARGETS } from './config'
 import {
     articoloNumero, durataTesto, fraseRitmo, fraseSquadra, traguardo, statoFinestra, testoTurno,
-    statoPausa, pauseDelGiorno, etichettaGiorno, fraseCronaca, ultimiPerLead, leadDistinti,
+    statoPausa, pauseDelGiorno, etichettaGiorno, fraseCronaca, ultimiPerLead,
     binarioPresenze, chiaveSettimana, sommaPerSettimana, distintiPerSettimana, migliorSettimana,
     giornoLavorativoPrecedente, mostraInizioTurno, conPavimento, tipoMomento, oraBreve,
     oraParlata, euro, etichettaSettimana, giornoSettimanaRoma,
@@ -107,18 +107,6 @@ test('cronaca: un lead una volta sola, al massimo N', () => {
     ]
     assert.deepEqual(ultimiPerLead(righe, 8).map(r => r.id), ['c4', 'c3', 'c1'])
     assert.deepEqual(ultimiPerLead(righe, 2).map(r => r.id), ['c4', 'c3'])
-})
-
-test('lead distinti nella finestra (ora di punta)', () => {
-    const righe = [
-        { leadId: 'a', at: LUN('17:59') },
-        { leadId: 'b', at: LUN('18:00') },
-        { leadId: 'b', at: LUN('18:30') },
-        { leadId: 'c', at: LUN('18:59') },
-        { leadId: 'd', at: LUN('19:00') },
-    ]
-    assert.equal(leadDistinti(righe), 4)
-    assert.equal(leadDistinti(righe, LUN('18:00'), LUN('19:00')), 2)
 })
 
 test('binario presenze: 7 caselle, euro dalla quinta, si allunga oltre', () => {

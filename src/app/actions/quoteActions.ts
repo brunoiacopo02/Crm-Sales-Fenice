@@ -10,7 +10,7 @@ import { revalidatePath, updateTag } from 'next/cache'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import { appSettings, dailyQuotes, dailyQuoteSchedule } from '@/db/schema'
-import { createClient } from '@/utils/supabase/server'
+import { conRuoloDb, ruoloDb } from '@/lib/auth/ruoloDb'
 import { toRomeDateStr } from '@/lib/dateUtils'
 import { readTodayQuotes, QUOTES_CACHE_TAG } from '@/lib/quotes/today'
 import { countLines, emptyToday, REFLECTION_MAX_LINES, type TodayQuotes } from '@/lib/quotes/display'
@@ -21,16 +21,9 @@ type Kind = 'citazione' | 'vendita'
 const isKind = (k: unknown): k is Kind => k === 'citazione' || k === 'vendita'
 const REFLECTION_MAX_CHARS = 2000
 
-async function sessionUser() {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    return user
-}
-
-async function requireAdmin(): Promise<{ id: string } | null> {
-    const user = await sessionUser()
-    if (!user || user.user_metadata?.role !== 'ADMIN') return null
-    return { id: user.id }
+/** ADMIN letto dalla tabella users, non dai metadati della sessione. */
+function requireAdmin(): Promise<{ id: string } | null> {
+    return conRuoloDb(['ADMIN'])
 }
 
 function invalidate() {
@@ -40,13 +33,12 @@ function invalidate() {
 
 /**
  * Citazione e consiglio di oggi (giorno di Roma) per il ruolo di chi guarda.
- * Il ruolo arriva dalla sessione; solo l'admin può chiedere la vista di un altro ruolo.
+ * Il ruolo arriva dalla tabella users; solo l'admin può chiedere la vista di un altro ruolo.
  */
 export async function getTodayQuotes(role?: string | null): Promise<TodayQuotes> {
-    const user = await sessionUser()
-    if (!user) return emptyToday(toRomeDateStr(new Date()))
-    const own = typeof user.user_metadata?.role === 'string' ? user.user_metadata.role : null
-    return readTodayQuotes(own === 'ADMIN' && role ? role : own)
+    const io = await ruoloDb()
+    if (!io) return emptyToday(toRomeDateStr(new Date()))
+    return readTodayQuotes(io.role === 'ADMIN' && role ? role : io.role)
 }
 
 async function readClosedDays(): Promise<string[]> {

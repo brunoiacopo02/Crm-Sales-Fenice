@@ -21,7 +21,7 @@ export function DirettaAdminClient({ flags, obiettivi }: { flags: Flags; obietti
     const cambiaFlag = (ruolo: keyof Flags) => {
         const acceso = !stato[ruolo]
         const chi = ruolo === 'GDO' ? 'i GDO' : 'le Conferme'
-        if (!window.confirm(`${acceso ? 'Accendere' : 'Spegnere'} la Diretta per ${chi}? Vale dalla prossima pagina che aprono.`)) return
+        if (!window.confirm(`${acceso ? 'Accendere' : 'Spegnere'} la Diretta per ${chi}? Chi ha il CRM aperto la vede cambiare al primo aggiornamento della pagina.`)) return
         avvia(async () => {
             const r = await setDirettaFlag(ruolo, acceso)
             if (r.success) {

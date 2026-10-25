@@ -18,6 +18,7 @@ import { isDirettaOn } from '@/lib/diretta/settings';
 import { getNegozioView } from '@/app/actions/negozioActions';
 import { ProfiloDiretta } from '@/components/diretta/negozio/ProfiloDiretta';
 import { PaginaDiretta } from '@/components/diretta/negozio/ui';
+import { VesteAllineata } from '@/components/diretta/VesteAllineata';
 
 const ProfileClient = dynamic(() => import('./ProfileClient'), { loading: () => <div className="animate-pulse space-y-4"><div className="h-48 bg-ash-100 rounded-xl" /><div className="grid grid-cols-2 gap-4"><div className="h-32 bg-ash-100 rounded-xl" /><div className="h-32 bg-ash-100 rounded-xl" /></div><div className="h-64 bg-ash-100 rounded-xl" /></div> });
 
@@ -37,6 +38,7 @@ export default async function ProfiloPage() {
         const view = await getNegozioView();
         return (
             <PaginaDiretta>
+                <VesteAllineata diretta />
                 <ProfiloDiretta view={view} />
             </PaginaDiretta>
         );
@@ -76,6 +78,8 @@ export default async function ProfiloPage() {
             : null;
 
         return (
+            <>
+            <VesteAllineata diretta={false} />
             <ProfileClient
                 profileData={profileData}
                 achievements={achievementData.achievements}
@@ -135,6 +139,7 @@ export default async function ProfiloPage() {
                 tradingOffers={tradingOffers}
                 tradingGdoUsers={tradingGdoUsers}
             />
+            </>
         );
     } catch (e) {
         console.error(e);

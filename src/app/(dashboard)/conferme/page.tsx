@@ -6,6 +6,7 @@ import { SafeWrapper } from "@/components/SafeWrapper"
 import { VenditoriAgendaButton } from "@/components/VenditoriAgendaButton"
 import { ConfermeDirettaColumn } from "@/components/conferme/diretta/ConfermeDirettaColumn"
 import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
+import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 import { isDirettaOn } from "@/lib/diretta/settings"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
@@ -38,6 +39,7 @@ export default async function ConfermePage() {
     if (diretta) {
         return (
             <div className="d-conferme flex min-h-full flex-col bg-[var(--d-bg)] text-[var(--d-text)]">
+                <VesteAllineata diretta />
                 <h1 className="sr-only">Conferme</h1>
                 <TeamRadarWidget currentUser={session.user} variant="diretta" />
                 <div className="flex flex-1 flex-wrap">
@@ -56,6 +58,7 @@ export default async function ConfermePage() {
 
     return (
         <div className="space-y-6 flex flex-col pt-0">
+            <VesteAllineata diretta={false} />
             <div className="-mx-8 -mt-8 mb-6 relative z-50">
                 <TeamRadarWidget currentUser={session.user} />
             </div>

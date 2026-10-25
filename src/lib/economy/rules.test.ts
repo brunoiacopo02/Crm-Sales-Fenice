@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import {
     DEFAULT_ECONOMY_RULES, parseEconomyRules, inizioEconomia,
     finestraIndex, fissatoIdemKey, pianoFissato, fissatiDaStornare,
-    scalinoIdemKey, bonusScalini, rewardFissato,
+    cicloInCorso, inizioStorno,
+    scalinoIdemKey, pianoScalini, rewardFissato,
     piumeDovute, pianoPiuma, piumePresenza,
-    contaFissatiPerPersona, sommaFissati, forzieriRaggiunti, tierForziere,
+    forzieriRaggiunti, tierForziere,
     contenutoForziere, destinatariForziere, chestIdemKey,
     confermeNonHannoToccato, isPersonaleUmano, puoAccreditarePiume, fissatoPremiabile,
-    type LedgerRow,
+    type EventoCiclo, type LedgerRow,
 } from './rules'
 import { DEFAULT_TARGETS, isTeamMember } from '@/lib/diretta/config'
 
@@ -131,13 +132,122 @@ test('fissatiDaStornare: solo gli accrediti attivi del ciclo corrente', () => {
     assert.deepEqual(fissatiDaStornare(stornato, LEAD, giorno('2026-10-26T13:59:00Z')), [])
 })
 
+// ── Ciclo dell'appuntamento: il limite dello storno ─────────────────────
+
+const MARGINE = 10 * 60_000
+const ev = (iso: string, tipo: EventoCiclo['tipo']): EventoCiclo => ({ at: giorno(iso), tipo })
+
+test('storno dopo un rifissaggio: il limite resta al primo fissato del ciclo', () => {
+    // 14:00 fissato (+10 S), 14:30 rifissato dalla drawer per cambiare data
+    // (nessun accredito, appointmentCreatedAt riscritto), 14:35 richiamo.
+    const storia = [ev('2026-10-26T14:00:00Z', 'fissato'), ev('2026-10-26T14:30:00Z', 'fissato')]
+    assert.deepEqual(cicloInCorso(storia), { inizio: giorno('2026-10-26T14:00:00Z'), dopo: null })
+    const k = fissatoIdemKey(LEAD, '2026-10-26', 30)
+    const rows: LedgerRow[] = [{ idemKey: k, amount: 10, createdAt: giorno('2026-10-26T14:00:00.400Z') }]
+    assert.deepEqual(fissatiDaStornare(rows, LEAD, inizioStorno(storia, MARGINE)), [k])
+    // Il vecchio limite (appointmentCreatedAt riscritto alle 14:30, meno il margine) lo perdeva.
+    assert.deepEqual(fissatiDaStornare(rows, LEAD, new Date(giorno('2026-10-26T14:30:00Z').getTime() - MARGINE)), [])
+})
+
+test('storno: un ciclo chiuso prima (esito diverso) resta, si storna solo quello in corso', () => {
+    const k1 = fissatoIdemKey(LEAD, '2026-09-01', 30)
+    const k2 = fissatoIdemKey(LEAD, '2026-10-26', 30)
+    const rows: LedgerRow[] = [
+        { idemKey: k1, amount: 10, createdAt: giorno('2026-09-01T14:00:01Z') },
+        { idemKey: k2, amount: 10, createdAt: giorno('2026-10-26T14:00:01Z') },
+    ]
+    const storia = [
+        ev('2026-09-01T14:00:00Z', 'fissato'),
+        ev('2026-09-02T10:00:00Z', 'lavoro'),      // chiamata delle Conferme
+        ev('2026-09-02T11:00:00Z', 'chiusura'),    // poi richiamo: le Conferme l'avevano toccato, k1 resta
+        ev('2026-10-26T14:00:00Z', 'fissato'),
+        ev('2026-10-26T14:20:00Z', 'fissato'),     // rifissato
+    ]
+    assert.deepEqual(cicloInCorso(storia), { inizio: giorno('2026-10-26T14:00:00Z'), dopo: giorno('2026-09-02T11:00:00Z') })
+    assert.deepEqual(fissatiDaStornare(rows, LEAD, inizioStorno(storia, MARGINE)), [k2])
+})
+
+test('storno: scarto delle Conferme riaperto da un nuovo fissato, il fissato vecchio resta', () => {
+    // 20/10 fissato (k1), le Conferme lo scartano; 26/10 il GDO lo rifissa: il
+    // reset dello scarto e il nuovo fissato hanno lo stesso istante (bloccato
+    // dai 30 giorni, nessun accredito); poi lo mette a richiamo.
+    const k1 = fissatoIdemKey(LEAD, '2026-10-20', 30)
+    const rows: LedgerRow[] = [{ idemKey: k1, amount: 10, createdAt: giorno('2026-10-20T14:00:01Z') }]
+    const storia = [
+        ev('2026-10-20T14:00:00Z', 'fissato'),
+        ev('2026-10-26T14:00:00Z', 'fissato'),
+        ev('2026-10-26T14:00:00Z', 'chiusura'),    // conferme_scarto_reset, stesso istante
+    ]
+    assert.deepEqual(cicloInCorso(storia), { inizio: giorno('2026-10-26T14:00:00Z'), dopo: giorno('2026-10-26T14:00:00Z') })
+    assert.deepEqual(fissatiDaStornare(rows, LEAD, inizioStorno(storia, MARGINE)), [])
+    // Riaperto con lo spostamento della data (nessun callLog): il ciclo in corso non ha fissati.
+    assert.equal(cicloInCorso([ev('2026-10-20T14:00:00Z', 'fissato'), ev('2026-10-26T13:00:00Z', 'chiusura')]), null)
+    assert.equal(inizioStorno([ev('2026-10-20T14:00:00Z', 'fissato'), ev('2026-10-26T13:00:00Z', 'chiusura')], MARGINE), null)
+})
+
+test('storno: il lavoro delle Conferme sul ciclo in corso non lo chiude (annullamento admin)', () => {
+    const k = fissatoIdemKey(LEAD, '2026-10-26', 30)
+    const rows: LedgerRow[] = [{ idemKey: k, amount: 10, createdAt: giorno('2026-10-26T14:00:01Z') }]
+    const storia = [
+        ev('2026-10-26T14:00:00Z', 'fissato'),
+        ev('2026-10-27T10:00:00Z', 'lavoro'),
+        ev('2026-10-27T10:05:00Z', 'lavoro'),
+    ]
+    assert.deepEqual(fissatiDaStornare(rows, LEAD, inizioStorno(storia, MARGINE)), [k])
+    // Un ciclo vecchio lavorato dalle Conferme e poi presentato separa il nuovo fissato.
+    const k1 = fissatoIdemKey(LEAD, '2026-09-01', 30)
+    const conVecchio: LedgerRow[] = [...rows, { idemKey: k1, amount: 10, createdAt: giorno('2026-09-01T14:00:01Z') }]
+    const storia2 = [ev('2026-09-01T14:00:00Z', 'fissato'), ev('2026-09-05T16:00:00Z', 'lavoro'), ...storia]
+    assert.deepEqual(fissatiDaStornare(conVecchio, LEAD, inizioStorno(storia2, MARGINE)), [k])
+})
+
+test('storno: il margine degli orologi non scavalca la chiusura del ciclo prima', () => {
+    const storia = [ev('2026-10-26T14:00:00Z', 'fissato'), ev('2026-10-26T14:02:00Z', 'chiusura'), ev('2026-10-26T14:05:00Z', 'fissato')]
+    assert.deepEqual(inizioStorno(storia, MARGINE), giorno('2026-10-26T14:02:00Z'))
+    assert.deepEqual(inizioStorno([ev('2026-10-26T14:05:00Z', 'fissato')], MARGINE), giorno('2026-10-26T13:55:00Z'))
+    assert.equal(cicloInCorso([]), null)
+    assert.equal(cicloInCorso([ev('2026-10-26T14:00:00Z', 'chiusura')]), null)
+})
+
 // ── Scalini personali ───────────────────────────────────────────────────
 
+const G = '2026-10-26'
+
 test('scalini personali: +20 all\'8°, +60 al 10°, chiave per utente e giorno', () => {
-    assert.deepEqual(bonusScalini(7, [8, 10], [20, 60]), [])
-    assert.deepEqual(bonusScalini(8, [8, 10], [20, 60]), [{ scalino: 1, scintille: 20 }])
-    assert.deepEqual(bonusScalini(12, [8, 10], [20, 60]), [{ scalino: 1, scintille: 20 }, { scalino: 2, scintille: 60 }])
-    assert.equal(scalinoIdemKey('u1', '2026-10-26', 2), 'S:scalino:u1:2026-10-26:2')
+    assert.deepEqual(pianoScalini([], 'u1', G, 7, [8, 10], [20, 60]), { accredita: [], storna: [] })
+    assert.deepEqual(pianoScalini([], 'u1', G, 8, [8, 10], [20, 60]).accredita, [{ scalino: 1, scintille: 20, idemKey: 'S:scalino:u1:2026-10-26:1' }])
+    assert.deepEqual(pianoScalini([], 'u1', G, 12, [8, 10], [20, 60]).accredita.map(a => [a.scalino, a.scintille]), [[1, 20], [2, 60]])
+    assert.equal(scalinoIdemKey('u1', G, 2), 'S:scalino:u1:2026-10-26:2')
+    assert.equal(scalinoIdemKey('u1', G, 2, 3), 'S:scalino:u1:2026-10-26:2:3')
+    // già presi: niente di nuovo
+    const presi: LedgerRow[] = [{ idemKey: scalinoIdemKey('u1', G, 1), amount: 20 }]
+    assert.deepEqual(pianoScalini(presi, 'u1', G, 9, [8, 10], [20, 60]), { accredita: [], storna: [] })
+})
+
+test('scalini: fissati validi scesi sotto la soglia si stornano, e si riprendono con una chiave nuova', () => {
+    const k1 = scalinoIdemKey('u1', G, 1)
+    const k2 = scalinoIdemKey('u1', G, 2)
+    const presi: LedgerRow[] = [{ idemKey: k1, amount: 20 }, { idemKey: k2, amount: 60 }]
+    assert.deepEqual(pianoScalini(presi, 'u1', G, 9, [8, 10], [20, 60]), { accredita: [], storna: [k2] })
+    assert.deepEqual(pianoScalini(presi, 'u1', G, 7, [8, 10], [20, 60]), { accredita: [], storna: [k1, k2] })
+    // stornato il secondo, si torna a 10: si riprende con la chiave :2
+    const dopo: LedgerRow[] = [...presi, { idemKey: `storno:${k2}`, amount: -60 }]
+    assert.deepEqual(pianoScalini(dopo, 'u1', G, 9, [8, 10], [20, 60]), { accredita: [], storna: [] })
+    assert.deepEqual(pianoScalini(dopo, 'u1', G, 10, [8, 10], [20, 60]), { accredita: [{ scalino: 2, scintille: 60, idemKey: `${k2}:2` }], storna: [] })
+    // e se riscende, si storna la generazione nuova
+    const ripreso: LedgerRow[] = [...dopo, { idemKey: `${k2}:2`, amount: 60 }]
+    assert.deepEqual(pianoScalini(ripreso, 'u1', G, 9, [8, 10], [20, 60]).storna, [`${k2}:2`])
+})
+
+test('scalini: altre persone e altri giorni non contano, un importo a zero non storna', () => {
+    const altri: LedgerRow[] = [
+        { idemKey: scalinoIdemKey('u10', G, 1), amount: 20 },
+        { idemKey: scalinoIdemKey('u1', '2026-10-27', 1), amount: 20 },
+    ]
+    assert.deepEqual(pianoScalini(altri, 'u1', G, 8, [8, 10], [20, 60]).accredita.map(a => a.idemKey), [scalinoIdemKey('u1', G, 1)])
+    const presi: LedgerRow[] = [{ idemKey: scalinoIdemKey('u1', G, 1), amount: 20 }]
+    assert.deepEqual(pianoScalini(presi, 'u1', G, 8, [8, 10], [0, 60]), { accredita: [], storna: [] })
+    assert.deepEqual(pianoScalini([], 'u1', G, 8, [8, 10], [0, 60]), { accredita: [], storna: [] })
 })
 
 test('rewardFissato: compatibile con reward_earned (xp 0, coinsGained = Scintille)', () => {
@@ -242,23 +352,6 @@ test('chi può far guadagnare Piume: solo Conferme, venditori e staff, mai il GD
 
 // ── Forzieri di squadra ─────────────────────────────────────────────────
 
-test('conta fissati: lead distinti per persona, eventualmente in una finestra', () => {
-    const rows = [
-        { userId: 'a', leadId: 'l1', createdAt: giorno('2026-10-26T14:00:00Z') },
-        { userId: 'a', leadId: 'l1', createdAt: giorno('2026-10-26T17:10:00Z') },   // rifissato: conta una volta
-        { userId: 'a', leadId: 'l2', createdAt: giorno('2026-10-26T17:20:00Z') },
-        { userId: 'b', leadId: 'l3', createdAt: giorno('2026-10-26T17:30:00Z') },
-        { userId: null, leadId: 'l4', createdAt: giorno('2026-10-26T17:30:00Z') },
-    ]
-    const giornata = contaFissatiPerPersona(rows)
-    assert.equal(giornata.get('a'), 2)
-    assert.equal(giornata.get('b'), 1)
-    assert.equal(sommaFissati(giornata), 3)
-    const punta = contaFissatiPerPersona(rows, { start: giorno('2026-10-26T17:00:00Z'), end: giorno('2026-10-26T18:00:00Z') })
-    assert.equal(punta.get('a'), 2)
-    assert.equal(punta.get('b'), 1)
-})
-
 test('forzieri raggiunti: 55/65 di squadra e 14/20 nell\'ora di punta', () => {
     assert.deepEqual(forzieriRaggiunti(54, 13, DEFAULT_TARGETS), [])
     assert.deepEqual(forzieriRaggiunti(55, null, DEFAULT_TARGETS), ['giorno_1'])
@@ -298,7 +391,7 @@ test('contenuto del forziere: le probabilità tornano su molti tiri', () => {
 })
 
 test('destinatari del forziere: chi ha fissato almeno N volte, 0 = tutta la squadra', () => {
-    const conteggi = new Map([['a', 3], ['b', 1], ['x', 5]])   // x non è in squadra
+    const conteggi = { a: 3, b: 1, x: 5 }   // x non è in squadra
     assert.deepEqual(destinatariForziere(conteggi, ['a', 'b', 'c'], 1), ['a', 'b'])
     assert.deepEqual(destinatariForziere(conteggi, ['a', 'b', 'c'], 2), ['a'])
     assert.deepEqual(destinatariForziere(conteggi, ['a', 'b', 'c'], 0), ['a', 'b', 'c'])

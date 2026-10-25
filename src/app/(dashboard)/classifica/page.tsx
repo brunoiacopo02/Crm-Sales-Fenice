@@ -7,6 +7,7 @@ import { isDirettaOn } from "@/lib/diretta/settings"
 import { getSquadraView } from "@/app/actions/squadraActions"
 import { SquadraDiretta } from "@/components/diretta/negozio/SquadraDiretta"
 import { PaginaDiretta } from "@/components/diretta/negozio/ui"
+import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 
 export default async function ClassificaPage({
     searchParams
@@ -31,6 +32,7 @@ export default async function ClassificaPage({
         const view = await getSquadraView()
         return (
             <PaginaDiretta>
+                <VesteAllineata diretta />
                 <SquadraDiretta iniziale={view} />
             </PaginaDiretta>
         )
@@ -45,6 +47,7 @@ export default async function ClassificaPage({
 
     return (
         <div className="flex-1 bg-gradient-to-b from-ash-50/50 to-white flex flex-col min-h-screen">
+            <VesteAllineata diretta={false} />
             {/* Header / Hero Section */}
             <div className="bg-gradient-to-br from-brand-charcoal via-ash-900 to-ember-900/50 text-white pt-6 sm:pt-8 pb-16 sm:pb-20 px-4 sm:px-8 relative overflow-hidden">
                 {/* Decorative fire elements */}

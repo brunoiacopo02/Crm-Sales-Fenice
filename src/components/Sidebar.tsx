@@ -24,6 +24,8 @@ import {
     Rocket,
     PhoneCall,
     Gift,
+    User,
+    type LucideIcon,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
 import { isConfermeTl } from "@/lib/confermeTl"
@@ -34,7 +36,7 @@ import { countPendingContactRequests } from "@/app/actions/contactRequestActions
 import { getDirettaRichiamiScaduti } from "@/app/actions/direttaActions"
 import { onBusEvent } from "@/lib/realtimeBus"
 import { createClient } from "@/utils/supabase/client"
-import { MENU_GDO_DIRETTA } from "@/components/diretta/menu"
+import { MENU_GDO_DIRETTA, MENU_GDO_DIRETTA_PERSONALE } from "@/components/diretta/menu"
 
 type NavItem = {
     name: string
@@ -306,8 +308,12 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
                 {
                     label: "Gamification",
                     items: [
-                        // Interruttori e obiettivi della Diretta (PO 25/10/2026): solo ADMIN.
-                        ...(role === "ADMIN" ? [{ name: "Diretta: obiettivi", href: "/admin/diretta", icon: Target }] : []),
+                        // Interruttori e obiettivi della Diretta, bonus e obiettivi
+                        // delle Conferme (PO 25/10/2026): solo ADMIN.
+                        ...(role === "ADMIN" ? [
+                            { name: "Diretta: obiettivi", href: "/admin/diretta", icon: Target },
+                            { name: "Diretta: Conferme", href: "/admin/diretta/conferme", icon: Target },
+                        ] : []),
                         { name: "Monitor RPG GDO", href: "/manager-rpg-monitor", icon: Gamepad2 },
                         { name: "Gestione Store", href: "/team/store", icon: Store },
                     ],
@@ -333,23 +339,44 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
     }
 
     // ── Veste Diretta (GDO e Conferme con l'interruttore acceso): scura e sobria.
-    // Il GDO sugli schermi larghi ha il menu nella barra in alto, quindi qui la
-    // sidebar resta solo come menu a scomparsa; le Conferme la tengono fissa.
+    // Il GDO sugli schermi larghi (da 2xl, 1536 px) ha il menu nella barra in
+    // alto, quindi qui la sidebar resta solo come menu a scomparsa; le Conferme
+    // la tengono fissa. Il profilo resta raggiungibile anche dall'avatar.
     if (diretta && (ruolo === 'GDO' || ruolo === 'CONFERME')) {
         const gdo = ruolo === 'GDO'
-        const voci: { name: string; href: string; icon: any; badge?: number }[] = gdo
+        type VoceDiretta = { name: string; href: string; icon: LucideIcon; badge?: number }
+        const voci: VoceDiretta[] = gdo
             ? MENU_GDO_DIRETTA.map(v => ({ ...v, badge: v.richiami ? expiredCount : undefined }))
-            : navItems
-                .filter(v => v.href !== '/profilo')
-                .map(v => v.href === '/classifica' ? { ...v, name: 'Squadra' } : v.href === '/store' ? { ...v, name: 'Negozio' } : v)
+            : navItems.map(v => v.href === '/classifica' ? { ...v, name: 'Squadra' }
+                : v.href === '/store' ? { ...v, name: 'Negozio' }
+                : v.href === '/profilo' ? { ...v, name: 'Il mio profilo', icon: User }
+                : v)
+        const personali: VoceDiretta[] = gdo ? MENU_GDO_DIRETTA_PERSONALE : []
+        const voce = (item: VoceDiretta) => {
+            const attiva = pathname === item.href
+            return (
+                <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={attiva ? 'page' : undefined}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] transition-colors ${attiva ? 'bg-[#262626] font-medium text-[#F2F2F2]' : 'text-[#BFBFBF] hover:text-[#F2F2F2]'}`}
+                >
+                    <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
+                    <span className="min-w-0 truncate">{item.name}</span>
+                    {item.badge !== undefined && item.badge > 0 && (
+                        <span className="ml-auto text-[13px] font-semibold tabular-nums text-[#FF9330]">{item.badge}</span>
+                    )}
+                </Link>
+            )
+        }
         return (
             <>
                 {isOpen && (
-                    <div className={`fixed inset-0 z-30 bg-black/60 ${gdo ? 'xl:hidden' : 'lg:hidden'}`} onClick={close} />
+                    <div className={`fixed inset-0 z-30 bg-black/60 ${gdo ? '2xl:hidden' : 'lg:hidden'}`} onClick={close} />
                 )}
                 <aside
                     aria-label="Menu"
-                    className={`fixed inset-y-0 left-0 z-40 flex h-screen w-72 flex-col border-r-2 border-[#262626] bg-[#171717] text-[#F2F2F2] transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${gdo ? 'xl:hidden' : 'lg:relative lg:z-auto lg:w-60 lg:translate-x-0'}`}
+                    className={`fixed inset-y-0 left-0 z-40 flex h-screen w-72 flex-col border-r-2 border-[#262626] bg-[#171717] text-[#F2F2F2] transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${gdo ? '2xl:hidden' : 'lg:relative lg:z-auto lg:w-60 lg:translate-x-0'}`}
                 >
                     <div className="flex h-16 shrink-0 items-center justify-between px-5">
                         <Link href={gdo ? '/' : '/conferme'} className="flex items-center gap-2.5">
@@ -360,29 +387,16 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
                             type="button"
                             onClick={close}
                             aria-label="Chiudi il menu"
-                            className={`rounded-lg p-1.5 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] ${gdo ? 'xl:hidden' : 'lg:hidden'}`}
+                            className={`rounded-lg p-1.5 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] ${gdo ? '2xl:hidden' : 'lg:hidden'}`}
                         >
                             <X className="h-5 w-5" strokeWidth={1.5} />
                         </button>
                     </div>
-                    <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4 pt-2">
-                        {voci.map(item => {
-                            const attiva = pathname === item.href
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    aria-current={attiva ? 'page' : undefined}
-                                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] transition-colors ${attiva ? 'bg-[#262626] font-medium text-[#F2F2F2]' : 'text-[#BFBFBF] hover:text-[#F2F2F2]'}`}
-                                >
-                                    <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
-                                    <span className="min-w-0 truncate">{item.name}</span>
-                                    {item.badge !== undefined && item.badge > 0 && (
-                                        <span className="ml-auto text-[13px] font-semibold tabular-nums text-[#FF9330]">{item.badge}</span>
-                                    )}
-                                </Link>
-                            )
-                        })}
+                    <nav className="flex-1 overflow-y-auto px-3 pb-4 pt-2">
+                        <div className="space-y-1">{voci.map(voce)}</div>
+                        {personali.length > 0 && (
+                            <div className="mt-3 space-y-1 border-t-2 border-[#262626] pt-3">{personali.map(voce)}</div>
+                        )}
                     </nav>
                     <div className="border-t-2 border-[#262626] p-3">
                         <button

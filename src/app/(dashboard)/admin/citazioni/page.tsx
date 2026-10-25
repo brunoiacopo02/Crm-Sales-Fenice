@@ -1,15 +1,13 @@
-import { createClient } from "@/utils/supabase/server"
-import { requireRole } from "@/lib/authz"
+import { redirect } from "next/navigation"
+import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { getQuoteCalendar } from "@/app/actions/quoteActions"
 import { CitazioniAdminClient } from "./CitazioniAdminClient"
 
 // Calendario della citazione del giorno e del consiglio di vendita (PO 25/10/2026):
 // l'admin controlla le fonti, approva, modifica o riscrive riflessioni e consigli
-// e, se serve, cambia la citazione di un giorno.
+// e, se serve, cambia la citazione di un giorno. Solo ADMIN, letto dalla tabella users.
 export default async function CitazioniAdminPage() {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    await requireRole(user ? { user: { role: user.user_metadata?.role } } : null, ["ADMIN"])
+    if (!(await conRuoloDb(["ADMIN"]))) redirect("/unauthorized")
 
     const data = await getQuoteCalendar(14)
 

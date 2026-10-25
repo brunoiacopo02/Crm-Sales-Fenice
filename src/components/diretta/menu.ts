@@ -2,7 +2,7 @@
 // in alto (schermi larghi) e nel menu a scomparsa (schermi stretti). Niente
 // creature, avventura, scambi né profilo dei giochi.
 
-import { Calendar, CalendarClock, LayoutDashboard, Phone, Store, Users, type LucideIcon } from "lucide-react"
+import { Calendar, CalendarClock, Clock, LayoutDashboard, Phone, Store, User, Users, type LucideIcon } from "lucide-react"
 
 export type VoceMenu = { name: string; href: string; icon: LucideIcon; richiami?: boolean }
 
@@ -13,4 +13,13 @@ export const MENU_GDO_DIRETTA: VoceMenu[] = [
     { name: "I miei risultati", href: "/kpi-gdo", icon: LayoutDashboard },
     { name: "Squadra", href: "/classifica", icon: Users },
     { name: "Negozio", href: "/store", icon: Store },
+]
+
+/**
+ * Voci in più del menu a scomparsa. Nella barra in alto il profilo si apre
+ * dall'avatar e lo storico delle pause dal profilo.
+ */
+export const MENU_GDO_DIRETTA_PERSONALE: VoceMenu[] = [
+    { name: "Il mio profilo", href: "/profilo", icon: User },
+    { name: "Storico pause", href: "/storico-pause", icon: Clock },
 ]

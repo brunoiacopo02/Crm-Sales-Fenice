@@ -15,7 +15,7 @@ import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
 import { subDays } from "date-fns"
 import { after } from "next/server"
-import { awardFissato, evaluateTeamChests, reverseFissato } from "@/lib/economy/awards"
+import { awardFissato, evaluateTeamChests, reverseFissato, riallineaScaliniDopoUscita } from "@/lib/economy/awards"
 import { confermeNonHannoToccato, fissatoPremiabile, type FissatoReward } from "@/lib/economy/rules"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
@@ -759,13 +759,21 @@ export async function updateLeadOutcome(
                 }
             }
         }
-    } else if (lead.status === 'APPOINTMENT' && !isBotActor && confermeNonHannoToccato(lead)) {
+    } else if (lead.status === 'APPOINTMENT') {
         // Appuntamento tolto con un altro esito prima che le Conferme lo
         // vedessero: le Scintille del fissato tornano indietro, così fissare e
         // togliere subito non rende niente. Se poi lo rifissa, il lead paga di
-        // nuovo una volta sola.
-        await reverseFissato(leadId, lead.appointmentCreatedAt, 'appuntamento tolto con un altro esito')
-            .catch((e: unknown) => console.error("Economia storno fissato err:", e))
+        // nuovo una volta sola. Il ciclo da stornare si ricostruisce dalla
+        // storia del lead (callLog ed eventi prima di questo esito), non da
+        // appointmentCreatedAt, che un rifissaggio riscrive.
+        if (!isBotActor && confermeNonHannoToccato(lead)) {
+            await reverseFissato(lead, now, 'appuntamento tolto con un altro esito')
+                .catch((e: unknown) => console.error("Economia storno fissato err:", e))
+        }
+        // Il lead non è più in appuntamento: per chi l'aveva fissato oggi è un
+        // fissato valido in meno, e gli scalini sopra il nuovo conteggio si stornano.
+        await riallineaScaliniDopoUscita(leadId, ctx.companyId, now)
+            .catch((e: unknown) => console.error("Economia scalini dopo uscita err:", e))
     }
 
     // Marketing: il lead e' morto qui. Copre i tre casi che passano da questa

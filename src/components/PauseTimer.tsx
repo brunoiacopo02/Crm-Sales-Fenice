@@ -97,7 +97,7 @@ export function PauseTimer({ variant }: { variant?: 'diretta' } = {}) {
     if (variant === 'diretta') {
         const fuori = dailyExceeded ? `oltre di ${formatTime(dailyUsedDisplay - 30 * 60)}` : `restano ${formatTime(remainingDisplay)}`
         return isOngoing ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 whitespace-nowrap">
                 <div className={`flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] tabular-nums ${dailyExceeded ? 'bg-[#F2F2F2] text-[#171717]' : 'bg-[#262626] text-[#F2F2F2]'}`}>
                     <span className="font-semibold">In pausa {formatTime(localSeconds)}</span>
                     <span className={dailyExceeded ? 'text-[#171717]' : 'text-[#BFBFBF]'}>{fuori}</span>
@@ -116,7 +116,7 @@ export function PauseTimer({ variant }: { variant?: 'diretta' } = {}) {
                 onClick={handleStart}
                 disabled={!canStart || isLoading}
                 title={`Pausa di oggi: ${fuori}`}
-                className="flex h-9 items-center gap-2 rounded-lg border-2 border-[#3D3D3D] px-3 text-[13px] font-medium text-[#F2F2F2] transition-colors hover:border-[#8C8C8C] disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border-2 border-[#3D3D3D] px-3 text-[13px] font-medium text-[#F2F2F2] transition-colors hover:border-[#8C8C8C] disabled:cursor-not-allowed disabled:opacity-50"
             >
                 Inizia pausa
                 <span className={`tabular-nums ${dailyExceeded ? 'text-[#FF9330]' : 'text-[#BFBFBF]'}`}>{dailyExceeded ? `-${formatTime(dailyUsedDisplay - 30 * 60)}` : formatTime(remainingDisplay)}</span>

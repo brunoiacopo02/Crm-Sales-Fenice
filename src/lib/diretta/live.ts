@@ -7,19 +7,22 @@
 // leads_presented_at_idx): si leggono freschi, tranne le settimane passate
 // della miglior settimana, che non cambiano più e restano in cache un'ora.
 //
-// "Fissato" = lead distinto con callLog APPUNTAMENTO del GDO nel giorno di
-// Roma (append-only): il conteggio non scende se l'appuntamento poi cambia.
+// "Fissato" = fissato valido (./fissati.ts): lead distinto con callLog
+// APPUNTAMENTO del GDO nel periodo che è ancora in appuntamento. È la stessa
+// definizione degli scalini personali e dei forzieri: numeri e premi coincidono.
 
 import { unstable_cache } from 'next/cache'
-import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm'
+import { and, eq, gte, inArray, isNotNull, lt } from 'drizzle-orm'
 import { db } from '@/db'
-import { callLogs, leads, manualAdjustments, users } from '@/db/schema'
+import { leads, manualAdjustments, users } from '@/db/schema'
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
 import { countPresences } from '@/lib/presenceCounting'
-import { euroFromPresences, isTeamMember, peakWindow, personName, type GamificationTargets } from './config'
+import { euroFromPresences, peakWindow, personName, type GamificationTargets } from './config'
 import { readGamificationTargets } from './settings'
+import { contaFissati } from './fissati'
+import { leggiFissati, leggiMembriSquadra } from './fissatiDb'
 import {
-    FISSATI_DAL, PRESENZE_DAL, distintiPerSettimana, etichettaGiorno, leadDistinti,
+    FISSATI_DAL, PRESENZE_DAL, distintiPerSettimana, etichettaGiorno,
     migliorSettimana, sommaPerSettimana, ultimiPerLead,
 } from './home'
 
@@ -58,56 +61,17 @@ export interface DirettaMia {
     piume: number
 }
 
-/** GDO della squadra: umani attivi con un nome vero (108 e 201 restano fuori). */
-async function leggiSquadraMembri(companyId: string) {
-    const roster = await db.select({
-        id: users.id,
-        role: users.role,
-        isActive: users.isActive,
-        isBot: users.isBot,
-        firstName: users.firstName,
-        displayName: users.displayName,
-        name: users.name,
-    })
-        .from(users)
-        .where(and(
-            eq(users.role, 'GDO'),
-            eq(users.isActive, true),
-            eq(users.isBot, false),
-            isNotNull(users.firstName),
-            or(
-                eq(users.companyId, companyId),
-                sql`${companyId} = ANY(${users.allowedCompanies})`,
-            ),
-        ))
-    return roster.filter(isTeamMember)
-}
-
 async function calcolaSquadra(companyId: string, giorno: string): Promise<DirettaSquadra> {
     const now = new Date()
     const obiettivi = await readGamificationTargets()
     const { start, end } = dayBoundsRome(now)
-    const membri = await leggiSquadraMembri(companyId)
+    const membri = await leggiMembriSquadra(companyId)
     const ids = membri.map(m => m.id)
     const punta = peakWindow(now, obiettivi)
 
-    const righe = ids.length === 0 ? [] : await db.select({
-        id: callLogs.id,
-        leadId: callLogs.leadId,
-        userId: callLogs.userId,
-        createdAt: callLogs.createdAt,
-    })
-        .from(callLogs)
-        .where(and(
-            eq(callLogs.companyId, companyId),
-            inArray(callLogs.userId, ids),
-            eq(callLogs.outcome, 'APPUNTAMENTO'),
-            gte(callLogs.createdAt, start),
-            lt(callLogs.createdAt, end),
-        ))
-        .orderBy(desc(callLogs.createdAt), desc(callLogs.id))
-
-    const conIstante = righe.map(r => ({ leadId: r.leadId, at: r.createdAt }))
+    // Fissati validi di oggi, dal più recente: anche la cronaca mostra solo
+    // gli appuntamenti che ci sono ancora.
+    const righe = await leggiFissati({ companyId, userIds: ids, start, end })
     const ultimi = ultimiPerLead(righe, 8)
     const appuntamenti = ultimi.length === 0 ? [] : await db.select({ id: leads.id, appointmentDate: leads.appointmentDate })
         .from(leads)
@@ -119,8 +83,8 @@ async function calcolaSquadra(companyId: string, giorno: string): Promise<Dirett
         giorno,
         calcolatoAlle: now.toISOString(),
         obiettivi,
-        fissati: leadDistinti(conIstante),
-        punta: punta ? leadDistinti(conIstante, punta.start, punta.end) : 0,
+        fissati: contaFissati(righe).totale,
+        punta: punta ? contaFissati(righe, punta.start, punta.end).totale : 0,
         puntaInizio: punta?.start.toISOString() ?? null,
         puntaFine: punta?.end.toISOString() ?? null,
         cronaca: ultimi.map(r => {
@@ -184,15 +148,9 @@ async function calcolaMiglioriPassate(userId: string, companyId: string, inizioS
                 gte(manualAdjustments.createdAt, PRESENZE_DAL),
                 lt(manualAdjustments.createdAt, inizio),
             )).catch(() => [] as { at: Date; n: number }[]) : Promise.resolve([]),
-        inizio > FISSATI_DAL ? db.select({ leadId: callLogs.leadId, at: callLogs.createdAt })
-            .from(callLogs)
-            .where(and(
-                eq(callLogs.companyId, companyId),
-                eq(callLogs.userId, userId),
-                eq(callLogs.outcome, 'APPUNTAMENTO'),
-                gte(callLogs.createdAt, FISSATI_DAL),
-                lt(callLogs.createdAt, inizio),
-            )) : Promise.resolve([]),
+        inizio > FISSATI_DAL
+            ? leggiFissati({ companyId, userIds: [userId], start: FISSATI_DAL, end: inizio })
+            : Promise.resolve([]),
     ])
     const presenze = sommaPerSettimana([
         ...presentati.filter(p => p.at).map(p => ({ at: p.at as Date, n: 1 })),
@@ -200,7 +158,7 @@ async function calcolaMiglioriPassate(userId: string, companyId: string, inizioS
     ])
     return {
         presenze: migliorSettimana(presenze),
-        fissati: migliorSettimana(distintiPerSettimana(fissati)),
+        fissati: migliorSettimana(distintiPerSettimana(fissati.map(f => ({ at: f.createdAt, leadId: f.leadId })))),
     }
 }
 
@@ -214,21 +172,13 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
     const daFissati = settimana.start > FISSATI_DAL ? settimana.start : FISSATI_DAL
 
     const [righeSettimana, presenze, saldo, passate] = await Promise.all([
-        db.select({ leadId: callLogs.leadId, at: callLogs.createdAt })
-            .from(callLogs)
-            .where(and(
-                eq(callLogs.companyId, companyId),
-                eq(callLogs.userId, userId),
-                eq(callLogs.outcome, 'APPUNTAMENTO'),
-                gte(callLogs.createdAt, settimana.start),
-                lt(callLogs.createdAt, settimana.end),
-            )),
+        leggiFissati({ companyId, userIds: [userId], start: settimana.start, end: settimana.end }),
         countPresences(userId, settimana.start, settimana.end, companyId),
         db.select({ scintille: users.scintille, piume: users.piume }).from(users).where(eq(users.id, userId)).limit(1),
         miglioriInCache(userId, companyId, settimana.start.toISOString()),
     ])
 
-    const fissatiSettimana = leadDistinti(righeSettimana, daFissati, settimana.end)
+    const fissatiSettimana = contaFissati(righeSettimana, daFissati, settimana.end).totale
     const presenzeSettimana = presenze.total
     const settimanaCorrente = toRomeDateStr(settimana.start)
     const migliorePresenze = presenzeSettimana > passate.presenze.valore
@@ -239,7 +189,7 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
         : passate.fissati
 
     return {
-        fissatiOggi: leadDistinti(righeSettimana, giorno.start, giorno.end),
+        fissatiOggi: contaFissati(righeSettimana, giorno.start, giorno.end).totale,
         fissatiSettimana,
         presenzeSettimana,
         euroSettimana: euroFromPresences(presenzeSettimana, obiettivi),

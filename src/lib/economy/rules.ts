@@ -183,7 +183,8 @@ export function pianoFissato(rows: LedgerRow[], leadId: string, at: Date, giorno
 
 /**
  * Fissati ancora validi del lead da stornare quando l'appuntamento sparisce.
- * `dal` limita al ciclo corrente (gli accrediti nati da `dal` in poi); null = tutti.
+ * `dal` limita al ciclo corrente (gli accrediti nati da `dal` in poi, vedi
+ * `inizioStorno`); null = tutti.
  */
 export function fissatiDaStornare(rows: LedgerRow[], leadId: string, dal: Date | null): string[] {
     const { accrediti, stornati } = accreditiEStorni(rows, `S:fissato:${leadId}:`)
@@ -191,6 +192,66 @@ export function fissatiDaStornare(rows: LedgerRow[], leadId: string, dal: Date |
         .filter(c => !stornati.has(c.idemKey))
         .filter(c => !dal || !c.createdAt || c.createdAt.getTime() >= dal.getTime())
         .map(c => c.idemKey)
+}
+
+// ── Ciclo dell'appuntamento (per gli storni) ────────────────────────────
+
+/**
+ * Fatti della storia di un lead che contano per capire a quale ciclo
+ * d'appuntamento appartiene un accredito:
+ * - 'fissato': un callLog APPUNTAMENTO (di chiunque);
+ * - 'chiusura': un callLog con un altro esito, l'annullamento dell'admin, la
+ *   riapertura di uno scarto delle Conferme, un appuntamento messo da un'altra
+ *   strada (lancio, venditore);
+ * - 'lavoro': un lavoro delle Conferme o del venditore sul lead (chiamate,
+ *   conferma, presenza, esito).
+ */
+export type TipoEventoCiclo = 'fissato' | 'chiusura' | 'lavoro'
+
+export interface EventoCiclo {
+    at: Date
+    tipo: TipoEventoCiclo
+}
+
+// A pari istante la chiusura e il lavoro vengono prima del fissato: la
+// riapertura di uno scarto scritta insieme al nuovo fissato apre il ciclo nuovo.
+const PESO_EVENTO: Record<TipoEventoCiclo, number> = { chiusura: 0, lavoro: 1, fissato: 2 }
+
+/**
+ * Ciclo d'appuntamento in corso: la serie più recente di APPUNTAMENTO, a
+ * ritroso fino alla prima chiusura o al primo lavoro delle Conferme.
+ * Rifissare un lead già in appuntamento allunga la serie ma non ne sposta
+ * l'inizio, anche se riscrive appointmentCreatedAt. Il lavoro delle Conferme
+ * DOPO l'ultimo fissato non chiude il ciclo (l'appuntamento è quello). `dopo` è
+ * il fatto che precede il ciclo, se c'è.
+ *
+ * null = dopo l'ultimo fissato c'è una chiusura (il ciclo in corso non ha
+ * fissati) oppure non c'è nessun fissato: niente da stornare.
+ */
+export function cicloInCorso(eventi: readonly EventoCiclo[]): { inizio: Date; dopo: Date | null } | null {
+    const ord = [...eventi].sort((a, b) => a.at.getTime() - b.at.getTime() || PESO_EVENTO[a.tipo] - PESO_EVENTO[b.tipo])
+    let ultimo = -1
+    for (let i = ord.length - 1; i >= 0; i--) {
+        if (ord[i].tipo === 'fissato') { ultimo = i; break }
+        if (ord[i].tipo === 'chiusura') return null
+    }
+    if (ultimo < 0) return null
+    let primo = ultimo
+    while (primo > 0 && ord[primo - 1].tipo === 'fissato') primo--
+    return { inizio: ord[primo].at, dopo: primo > 0 ? ord[primo - 1].at : null }
+}
+
+/**
+ * Da quando stornare gli accrediti del fissato di un lead il cui appuntamento
+ * sparisce: dall'inizio del ciclo in corso meno `margineMs` (orologio dell'app
+ * contro orologio del DB), mai prima del fatto che chiude il ciclo precedente.
+ * null = niente da stornare.
+ */
+export function inizioStorno(eventi: readonly EventoCiclo[], margineMs: number): Date | null {
+    const ciclo = cicloInCorso(eventi)
+    if (!ciclo) return null
+    const t = ciclo.inizio.getTime() - margineMs
+    return new Date(ciclo.dopo ? Math.max(t, ciclo.dopo.getTime()) : t)
 }
 
 /**
@@ -212,17 +273,44 @@ export function fissatoPremiabile(i: {
 
 // ── Scalini personali ───────────────────────────────────────────────────
 
-export function scalinoIdemKey(userId: string, giornoRoma: string, scalino: 1 | 2): string {
-    return `S:scalino:${userId}:${giornoRoma}:${scalino}`
+/**
+ * Chiave dello scalino del giorno. Dopo uno storno (fissati scesi sotto la
+ * soglia) lo scalino si può riprendere con una chiave nuova: ':2', ':3'...
+ */
+export function scalinoIdemKey(userId: string, giornoRoma: string, scalino: 1 | 2, generazione = 1): string {
+    const base = `S:scalino:${userId}:${giornoRoma}:${scalino}`
+    return generazione > 1 ? `${base}:${generazione}` : base
 }
 
-/** Bonus degli scalini raggiunti con `fissati` fissati nel giorno (entrambi, se si è oltre il secondo). */
-export function bonusScalini(fissati: number, soglie: [number, number], importi: [number, number]): Array<{ scalino: 1 | 2; scintille: number }> {
+/**
+ * Scalini personali del giorno allineati ai fissati validi (vedi
+ * src/lib/diretta/fissati.ts): si accredita lo scalino raggiunto che non ha un
+ * accredito attivo e si storna quello che non è più raggiunto, per esempio dopo
+ * un appuntamento tolto. Un importo messo a zero non storna niente: conta solo
+ * la soglia.
+ */
+export function pianoScalini(
+    rows: LedgerRow[], userId: string, giornoRoma: string, fissati: number,
+    soglie: [number, number], importi: [number, number],
+): { accredita: Array<{ scalino: 1 | 2; scintille: number; idemKey: string }>; storna: string[] } {
     const raggiunto = stepReached(fissati, soglie)
-    const out: Array<{ scalino: 1 | 2; scintille: number }> = []
-    if (raggiunto >= 1 && importi[0] > 0) out.push({ scalino: 1, scintille: importi[0] })
-    if (raggiunto >= 2 && importi[1] > 0) out.push({ scalino: 2, scintille: importi[1] })
-    return out
+    const accredita: Array<{ scalino: 1 | 2; scintille: number; idemKey: string }> = []
+    const storna: string[] = []
+    for (const scalino of [1, 2] as const) {
+        const base = scalinoIdemKey(userId, giornoRoma, scalino)
+        const { accrediti, stornati } = accreditiEStorni(rows, base)
+        const propri = accrediti.filter(c => c.idemKey === base || c.idemKey.startsWith(`${base}:`))
+        const attivi = propri.filter(c => !stornati.has(c.idemKey)).map(c => c.idemKey)
+        if (raggiunto < scalino) {
+            storna.push(...attivi)
+        } else if (attivi.length === 0) {
+            const scintille = importi[scalino - 1]
+            if (scintille > 0) accredita.push({ scalino, scintille, idemKey: scalinoIdemKey(userId, giornoRoma, scalino, propri.length + 1) })
+        } else {
+            storna.push(...attivi.slice(1))
+        }
+    }
+    return { accredita, storna }
 }
 
 /**
@@ -239,7 +327,7 @@ export interface FissatoReward {
     valuta: 'S'
     /** Scintille entrate con questo esito: fissato più eventuali scalini. */
     scintille: number
-    /** Lead distinti fissati oggi, questo compreso. */
+    /** Fissati validi di oggi (src/lib/diretta/fissati.ts), questo compreso. */
     fissatiOggi: number
     /** Scalino personale raggiunto oggi (0, 1 o 2). */
     scalino: 0 | 1 | 2
@@ -345,33 +433,8 @@ export function puoAccreditarePiume(autore: PersonaEconomia | undefined | null, 
 }
 
 // ── Forzieri di squadra ─────────────────────────────────────────────────
-
-export interface RigaFissato {
-    userId: string | null
-    leadId: string
-    createdAt: Date
-}
-
-/** Lead distinti fissati da ciascuno, eventualmente solo dentro una finestra [start, end). */
-export function contaFissatiPerPersona(rows: RigaFissato[], finestra?: { start: Date; end: Date }): Map<string, number> {
-    const perPersona = new Map<string, Set<string>>()
-    for (const r of rows) {
-        if (!r.userId) continue
-        const t = r.createdAt.getTime()
-        if (finestra && (t < finestra.start.getTime() || t >= finestra.end.getTime())) continue
-        const s = perPersona.get(r.userId) ?? new Set<string>()
-        s.add(r.leadId)
-        perPersona.set(r.userId, s)
-    }
-    return new Map([...perPersona].map(([k, v]) => [k, v.size]))
-}
-
-/** Fissati di squadra = somma dei fissati di ciascuno. */
-export function sommaFissati(conteggi: Map<string, number>): number {
-    let n = 0
-    for (const v of conteggi.values()) n += v
-    return n
-}
+// I conteggi (fissati validi di squadra e di ciascuno) arrivano da
+// contaFissati di src/lib/diretta/fissati.ts, gli stessi della home.
 
 /** Forzieri sbloccati dai fissati di squadra del giorno e dell'ora di punta (null = niente ora di punta). */
 export function forzieriRaggiunti(squadra: number, punta: number | null, t: Pick<GamificationTargets, 'squadra' | 'punta'>): ChestKind[] {
@@ -401,8 +464,8 @@ export function contenutoForziere(tier: ChestTier, r: EconomyRules, rand: () => 
 }
 
 /** Chi riceve il forziere: i membri della squadra con almeno `minimo` fissati nel periodo (0 = tutti). */
-export function destinatariForziere(conteggi: Map<string, number>, squadra: string[], minimo: number): string[] {
-    return squadra.filter(id => (conteggi.get(id) ?? 0) >= minimo)
+export function destinatariForziere(perUtente: Record<string, number>, squadra: string[], minimo: number): string[] {
+    return squadra.filter(id => (perUtente[id] ?? 0) >= minimo)
 }
 
 export function chestIdemKey(chestId: string, userId: string): string {

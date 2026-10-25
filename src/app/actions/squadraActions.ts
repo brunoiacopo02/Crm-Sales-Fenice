@@ -8,22 +8,25 @@
 // squadra, appuntamenti della settimana, presenze (countPresences per persona,
 // indice leads_presented_at_idx) e personalizzazioni.
 //
-// "Fissato" = lead distinto con callLog APPUNTAMENTO della persona (append-only),
-// come nella home. Squadra = isTeamMember: fuori 108 (IA vocale) e 201 (bot).
+// "Fissato" = fissato valido (src/lib/diretta/fissati.ts), con la stessa query
+// della home, degli scalini personali e dei forzieri. Squadra = isTeamMember:
+// fuori 108 (IA vocale) e 201 (bot).
 
 import { revalidatePath, unstable_cache, updateTag } from "next/cache"
-import { and, eq, gte, inArray, isNotNull, lt, ne } from "drizzle-orm"
+import { and, eq, inArray, ne } from "drizzle-orm"
 import { db } from "@/db"
-import { appSettings, callLogs, rewardPurchases, users } from "@/db/schema"
-import { createClient } from "@/utils/supabase/server"
+import { appSettings, rewardPurchases } from "@/db/schema"
 import { assertSalesArea, currentTenant } from "@/lib/tenancy"
+import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { countPresences } from "@/lib/presenceCounting"
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from "@/lib/dateUtils"
-import { isTeamMember, peakWindow, personName } from "@/lib/diretta/config"
+import { peakWindow, personName } from "@/lib/diretta/config"
 import { readGamificationTargets, writeSetting } from "@/lib/diretta/settings"
+import { contaFissati } from "@/lib/diretta/fissati"
+import { leggiFissati, leggiMembriSquadra } from "@/lib/diretta/fissatiDb"
 import { PERSONALIZZAZIONI, stileProfilo } from "@/lib/diretta/negozio"
 import {
-    buildSquadraView, contaFissati, LEADERBOARD_MODE_KEY, parseLeaderboardMode,
+    buildSquadraView, LEADERBOARD_MODE_KEY, parseLeaderboardMode,
     type LeaderboardMode, type SquadraSnapshot, type SquadraView,
 } from "@/lib/diretta/squadra"
 
@@ -41,17 +44,7 @@ async function loadSnapshot(day: string): Promise<SquadraSnapshot> {
     const settimana = weekBoundsRome(now)
     const punta = peakWindow(now, targets)
 
-    const candidati = await db.select({
-        id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot,
-        firstName: users.firstName, displayName: users.displayName, name: users.name,
-        profileImageUrl: users.profileImageUrl,
-    }).from(users).where(and(
-        eq(users.companyId, FENICE),
-        eq(users.role, 'GDO'),
-        eq(users.isActive, true),
-        isNotNull(users.firstName),
-    ))
-    const squadra = candidati.filter(isTeamMember)
+    const squadra = await leggiMembriSquadra(FENICE)
     const ids = squadra.map(u => u.id)
 
     const base = {
@@ -65,15 +58,7 @@ async function loadSnapshot(day: string): Promise<SquadraSnapshot> {
     }
 
     const [righe, presenze, stili] = await Promise.all([
-        db.select({ userId: callLogs.userId, leadId: callLogs.leadId, createdAt: callLogs.createdAt })
-            .from(callLogs)
-            .where(and(
-                eq(callLogs.companyId, FENICE),
-                inArray(callLogs.userId, ids),
-                eq(callLogs.outcome, 'APPUNTAMENTO'),
-                gte(callLogs.createdAt, settimana.start),
-                lt(callLogs.createdAt, settimana.end),
-            )),
+        leggiFissati({ companyId: FENICE, userIds: ids, start: settimana.start, end: settimana.end }),
         Promise.all(ids.map(id => countPresences(id, settimana.start, settimana.end, FENICE))),
         db.select({ userId: rewardPurchases.userId, itemId: rewardPurchases.itemId, price: rewardPurchases.price })
             .from(rewardPurchases)
@@ -120,14 +105,11 @@ export async function getSquadraView(): Promise<SquadraView> {
 
 // ── Admin: forma della classifica (proposta di Bruno ancora da confermare) ──
 
-/** Solo ADMIN, controllato anche sulla tabella users. */
+/** Solo ADMIN, letto dalla tabella users. */
 async function requireAdminId(): Promise<string> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user || user.user_metadata?.role !== 'ADMIN') throw new Error('Unauthorized')
-    const [row] = await db.select({ role: users.role }).from(users).where(eq(users.id, user.id)).limit(1)
-    if (row?.role !== 'ADMIN') throw new Error('Unauthorized')
-    return user.id
+    const admin = await conRuoloDb(['ADMIN'])
+    if (!admin) throw new Error('Unauthorized')
+    return admin.id
 }
 
 export async function getLeaderboardMode(): Promise<LeaderboardMode> {
