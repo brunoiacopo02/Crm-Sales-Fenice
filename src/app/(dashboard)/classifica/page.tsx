@@ -3,6 +3,10 @@ import { Trophy, Star } from "lucide-react"
 import { LeaderboardClient } from "./LeaderboardClient"
 import { getLeaderboard, getPlayerOfTheWeek, LeaderboardPeriod } from "@/app/actions/leaderboardActions"
 import { TeamGoalBanner } from "@/components/TeamGoalBanner"
+import { isDirettaOn } from "@/lib/diretta/settings"
+import { getSquadraView } from "@/app/actions/squadraActions"
+import { SquadraDiretta } from "@/components/diretta/negozio/SquadraDiretta"
+import { PaginaDiretta } from "@/components/diretta/negozio/ui"
 
 export default async function ClassificaPage({
     searchParams
@@ -20,6 +24,17 @@ export default async function ClassificaPage({
 
     const loggedUserId = session?.user?.id
     const userRole = session?.user?.role as string | undefined
+
+    // Diretta accesa per il ruolo: pagina Squadra (senza TeamGoalBanner, XP,
+    // streak e chiamate grezze). Spenta: la classifica di sempre.
+    if (await isDirettaOn(userRole)) {
+        const view = await getSquadraView()
+        return (
+            <PaginaDiretta>
+                <SquadraDiretta iniziale={view} />
+            </PaginaDiretta>
+        )
+    }
 
     const sp = await searchParams
     const period = (sp.period as LeaderboardPeriod) || 'today'

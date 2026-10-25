@@ -2,6 +2,10 @@ import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { ShoppingBag } from "lucide-react"
 import dynamic from "next/dynamic"
+import { isDirettaOn } from "@/lib/diretta/settings"
+import { getNegozioView } from "@/app/actions/negozioActions"
+import { NegozioDiretta } from "@/components/diretta/negozio/NegozioDiretta"
+import { PaginaDiretta } from "@/components/diretta/negozio/ui"
 
 const ShopClient = dynamic(() => import("@/components/ShopClient").then(m => ({ default: m.ShopClient })), { loading: () => <div className="animate-pulse space-y-4"><div className="h-12 bg-ash-200 rounded-lg w-1/4" /><div className="grid grid-cols-3 gap-4"><div className="h-48 bg-ash-100 rounded-xl" /><div className="h-48 bg-ash-100 rounded-xl" /><div className="h-48 bg-ash-100 rounded-xl" /></div></div> })
 
@@ -12,6 +16,17 @@ export default async function StorePage() {
 
     if (!session) {
         redirect("/")
+    }
+
+    // Diretta accesa per il ruolo (GDO, Conferme): negozio nuovo con Scintille
+    // e Piume. Spenta: il vecchio Fenice Store, identico.
+    if (await isDirettaOn(session.user.role)) {
+        const view = await getNegozioView()
+        return (
+            <PaginaDiretta>
+                <NegozioDiretta view={view} />
+            </PaginaDiretta>
+        )
     }
 
     return (

@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
+import Link from "next/link"
 import { ShopAdminClient } from "@/components/ShopAdminClient"
 
 export default async function StoreAdminPage() {
@@ -23,6 +24,12 @@ export default async function StoreAdminPage() {
                         Crea e modifica personalizzazioni estetiche, badge o sfondi acquistabili dai GDO con i Fenice Coins.
                     </p>
                 </div>
+                {/* Negozio nuovo della Diretta (Scintille e Piume): richieste e catalogo stanno altrove. */}
+                {session.user.role === 'ADMIN' && (
+                    <Link href="/admin/premi" className="text-sm font-semibold text-brand-charcoal underline underline-offset-4 hover:text-brand-orange">
+                        Premi del negozio nuovo
+                    </Link>
+                )}
             </div>
 
             <ShopAdminClient />
