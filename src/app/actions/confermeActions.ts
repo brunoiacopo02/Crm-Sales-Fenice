@@ -112,9 +112,19 @@ export async function getConfermeAppointments(filters: {
         conditions.push(between(col, filters.startDate, filters.endDate));
     }
 
+    // Del GDO al browser vanno solo i campi che la board usa: niente password,
+    // email o saldi (prima si mandava la riga intera di users, audit 25/10/2026).
     let query = db.select({
         lead: leads,
-        gdo: users,
+        gdo: {
+            id: users.id,
+            name: users.name,
+            displayName: users.displayName,
+            firstName: users.firstName,
+            gdoCode: users.gdoCode,
+            isBot: users.isBot,
+            avatarUrl: users.avatarUrl,
+        },
     }).from(leads)
         .leftJoin(users, eq(leads.assignedToId, users.id))
         .where(and(...conditions))
