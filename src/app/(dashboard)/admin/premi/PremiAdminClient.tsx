@@ -209,7 +209,7 @@ export function PremiAdminClient({ richieste, modalita }: {
 
             <section aria-label="Pagina Squadra" className="rounded-[16px] bg-white p-5 sm:p-6">
                 <h2 className="text-lg font-semibold">Pagina Squadra</h2>
-                <div className="mt-1 text-sm text-[#3D3D3D]">Come si vede la classifica della settimana a GDO e Conferme con la Diretta accesa.</div>
+                <div className="mt-1 text-sm text-[#3D3D3D]">Come si vede la classifica della settimana a GDO e Conferme con la Rinascita accesa.</div>
                 <div className="mt-4 flex flex-col gap-2">
                     {MODALITA.map(m => (
                         <label key={m.value} className={`flex cursor-pointer items-start gap-3 rounded-[8px] border-2 px-4 py-3 ${mode === m.value ? 'border-[#171717]' : 'border-[#F2F2F2] hover:border-[#D9D9D9]'}`}>

@@ -16,7 +16,6 @@ const ConfermeRecallBlockingAlert = dynamic(() => import("@/components/ConfermeR
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions"
-import { hasLancioUmaniLeads } from "@/app/actions/lancioUmaniActions"
 import { getUserTheme } from "@/lib/userTheme"
 import { direttaAccesa, leggiIo, type DirettaIo } from "@/lib/diretta/io"
 import { leggiObiettivi } from "@/lib/diretta/live"
@@ -102,16 +101,6 @@ export default async function DashboardLayout({
         salesPipelineEnabled = salesPipelineConfig.enabled && salesPipelineConfig.salesUserId === session.user.id
     }
 
-    // Voce "Test lancio umani": solo ai GDO che hanno lead del gruppo. Una
-    // query al render del layout, non a ogni cambio pagina.
-    // Con la Diretta il lancio non è più dei GDO e la voce non c'è: niente query.
-    let lancioUmaniEnabled = false
-    if (session.user.role === 'GDO' && !diretta) {
-        try {
-            lancioUmaniEnabled = await hasLancioUmaniLeads()
-        } catch { /* la voce manca, la pagina resta raggiungibile */ }
-    }
-
     return (
         <RealtimeProvider userId={session.user.id} companies={tctx.allowedCompanies}>
             <SidebarProvider>
@@ -119,7 +108,7 @@ export default async function DashboardLayout({
                     {/* data-ui è la veste della cornice: le pagine che leggono l'interruttore la
                         confrontano con la loro (VesteAllineata) e, se diverse, ridisegnano tutto. */}
                     <div data-radice-dashboard="" data-company={dataCompany} data-theme={userTheme} data-ui={diretta ? 'diretta' : undefined} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
-                        <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} lancioUmaniEnabled={lancioUmaniEnabled} diretta={diretta} ruolo={session.user.role} />
+                        <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} diretta={diretta} ruolo={session.user.role} />
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''} ${direttaAdmin ? 'bg-[#171717]' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
                             <Topbar diretta={diretta} ruolo={session.user.role} io={direttaIo} obiettivi={direttaObiettivi} />

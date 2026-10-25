@@ -34,7 +34,7 @@ export default async function PremiSettimanaPage() {
         <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
             <Link href="/admin/diretta" className="inline-flex items-center gap-1 text-sm text-ash-500 transition-colors hover:text-brand-charcoal">
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                Diretta
+                Rinascita
             </Link>
             <div>
                 <h1 className="text-2xl font-bold text-brand-charcoal">Premi della settimana</h1>

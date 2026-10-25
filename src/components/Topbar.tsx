@@ -444,12 +444,6 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     </div>
                 )}
 
-                {direttaAdmin && (
-                    <div className="shrink-0">
-                        <SalesCompanySwitcher variant="diretta" />
-                    </div>
-                )}
-
                 <div className="hidden shrink-0 whitespace-nowrap text-[14px] tabular-nums text-[#BFBFBF] md:block">
                     {adesso && (
                         <>
@@ -695,7 +689,8 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
             </div>
 
             <div className="flex items-center gap-3 lg:gap-5 shrink-0">
-                <SalesCompanySwitcher />
+                {/* L'admin lavora sempre su Fenice (PO 25/10/2026): niente badge né scelta. */}
+                {session?.user?.role !== "ADMIN" && <SalesCompanySwitcher />}
                 {session?.user?.role === "GDO" && <PauseTimer />}
 
                 {/* Notifications */}

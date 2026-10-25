@@ -8,9 +8,6 @@ import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import { leadVero } from "@/lib/prova/sql"
 import { CalendarCheck, Phone, Mail, User as UserIcon, Clock } from "lucide-react"
 import { AdminCancelApptButton } from "@/components/AdminCancelApptButton"
-import { getLaunchPipelineStats } from "@/lib/launchPipelineStats"
-import { LaunchPipelinePanel } from "@/components/LaunchPipelinePanel"
-import { LANCIO_BUCKET, LANCIO_COMPANY, LANCIO_FUNNEL } from "@/lib/lancio/intake"
 
 export const dynamic = 'force-dynamic'
 
@@ -63,16 +60,6 @@ export default async function AppuntamentiOggiPage() {
         )
         .orderBy(asc(leads.appointmentDate))
 
-    // Monitor del lancio "Web Developer AI" (webinar 5/10/2026): l'imbuto del
-    // lancio separato dal resto della giornata. Stesso pannello del monitor
-    // Black Summer, ora parametrico sul perimetro del lancio. Il pannello si
-    // nasconde da solo finché non c'è nemmeno un lead nel perimetro.
-    const lancioStats = await getLaunchPipelineStats(
-        { companyId: LANCIO_COMPANY, funnel: LANCIO_FUNNEL, bucket: LANCIO_BUCKET },
-        todayStart,
-        todayEnd,
-    )
-
     // Raggruppa per GDO
     const groupedByGdo = todayAppointments.reduce<Record<string, typeof todayAppointments>>((acc, appt) => {
         const key = appt.assignedToId || 'unknown'
@@ -108,12 +95,6 @@ export default async function AppuntamentiOggiPage() {
                     </div>
                 </div>
             </div>
-
-            <LaunchPipelinePanel
-                title="Monitor Lancio Web Dev AI"
-                subtitle={`Funnel "${LANCIO_FUNNEL}" — dal pool del lancio e caricati a mano.`}
-                stats={lancioStats}
-            />
 
             {/* Lista appuntamenti */}
             {totalCount === 0 ? (

@@ -36,7 +36,8 @@ import { countPendingContactRequests } from "@/app/actions/contactRequestActions
 import { getDirettaRichiamiScaduti } from "@/app/actions/direttaActions"
 import { onBusEvent } from "@/lib/realtimeBus"
 import { createClient } from "@/utils/supabase/client"
-import { MENU_GDO_DIRETTA, MENU_GDO_DIRETTA_PERSONALE, menuAdminDiretta, type VoceGruppo } from "@/components/diretta/menu"
+import { MENU_GDO_DIRETTA, MENU_GDO_DIRETTA_PERSONALE, menuAdminDiretta } from "@/components/diretta/menu"
+import { MenuAdminGruppi } from "@/components/diretta/MenuAdminGruppi"
 
 type NavItem = {
     name: string
@@ -51,10 +52,9 @@ type NavGroup = {
     items: NavItem[]
 }
 
-export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, diretta = false, ruolo }: {
+export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruolo }: {
     companyId?: string
     salesPipelineEnabled?: boolean
-    lancioUmaniEnabled?: boolean
     /** Diretta accesa per il ruolo (dal layout, lato server: niente lampo della veste vecchia). */
     diretta?: boolean
     ruolo?: string
@@ -142,9 +142,6 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
             { name: "I miei Richiami", href: "/richiami", icon: Calendar, badge: expiredCount },
             { name: "I miei Appuntamenti", href: "/appuntamenti", icon: Users },
             { name: "Le mie Performance", href: "/kpi-gdo", icon: LayoutDashboard },
-            // Solo ai GDO del test lancio umani (PO 06/10/2026): per gli altri
-            // la pagina sarebbe vuota, quindi la voce non compare.
-            ...(lancioUmaniEnabled ? [{ name: "Test lancio umani", href: "/lancio-umani", icon: Rocket }] : []),
             { name: "Storico Pause", href: "/storico-pause", icon: Clock },
             { name: "Il mio Profilo", href: "/profilo", icon: Gamepad2, gamification: true },
             { name: "Classifica", href: "/classifica", icon: Trophy, gamification: true },
@@ -206,10 +203,6 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
                 items: [
                     { name: "Sales Manager", href: "/panoramica-generale", icon: Compass },
                     { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
-                    // La pagina del lancio ammette ADMIN, MANAGER e TL: per il
-                    // TL e' sola lettura (turni e copertura li scrive l'admin),
-                    // ma senza la voce ci arrivava solo chi sapeva l'URL.
-                    { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
                 ],
             },
             {
@@ -266,9 +259,6 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
                         ...(role === "ADMIN" ? [{ name: "Performance Venditori", href: "/performance-venditori", icon: Trophy }] : []),
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
                         { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
-                        { name: "Lancio Web Dev", href: "/lancio", icon: Rocket },
-                        // PO 06/10/2026: 400 lead del lancio lavorati solo dai GDO 106 e 119.
-                        { name: "Test lancio umani", href: "/lancio-umani", icon: Rocket },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
                         { name: "Pipeline venditore", href: "/pipeline-venditore", icon: PhoneCall },
                     ],
@@ -314,8 +304,8 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
                         // Interruttori e obiettivi della Diretta, bonus e obiettivi
                         // delle Conferme (PO 25/10/2026): solo ADMIN.
                         ...(role === "ADMIN" ? [
-                            { name: "Diretta: centro di controllo", href: "/admin/diretta", icon: Target },
-                            { name: "Diretta: Conferme", href: "/admin/diretta/conferme", icon: Target },
+                            { name: "Rinascita: centro di controllo", href: "/admin/diretta", icon: Target },
+                            { name: "Rinascita: Conferme", href: "/admin/diretta/conferme", icon: Target },
                         ] : []),
                         { name: "Monitor RPG GDO", href: "/manager-rpg-monitor", icon: Gamepad2 },
                         { name: "Gestione Store", href: "/team/store", icon: Store },
@@ -343,27 +333,10 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
 
     // ── Veste Diretta dell'admin (interruttore admin_ui_diretta): scura e sobria,
     // fissa dagli schermi larghi come quella delle Conferme. Le voci sono quelle
-    // del menu classico (menuAdminDiretta): centro di controllo in cima, pagine
-    // della Diretta nel loro gruppo, nomi dei gruppi senza maiuscolo spaziato.
+    // del menu classico (menuAdminDiretta): centro di controllo in cima, poi i
+    // gruppi a tendina (MenuAdminGruppi), con la pagina corrente già aperta.
     if (diretta && ruolo === 'ADMIN') {
         const menu = menuAdminDiretta(navGroups ?? (navItems.length > 0 ? [{ label: '', items: navItems }] : []))
-        const voce = (item: VoceGruppo) => {
-            const attiva = pathname === item.href
-            return (
-                <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={attiva ? 'page' : undefined}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] transition-colors ${attiva ? 'bg-[#262626] font-medium text-[#F2F2F2]' : 'text-[#BFBFBF] hover:text-[#F2F2F2]'}`}
-                >
-                    <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
-                    <span className="min-w-0 truncate">{item.name}</span>
-                    {item.badge !== undefined && item.badge > 0 && (
-                        <span className="ml-auto text-[13px] font-semibold tabular-nums text-[#FF9330]">{item.badge}</span>
-                    )}
-                </Link>
-            )
-        }
         return (
             <>
                 {/* Sopra la barra in alto (z-40): aperto, il menu non resta sotto la barra. */}
@@ -389,13 +362,7 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
                         </button>
                     </div>
                     <nav className="flex-1 overflow-y-auto px-3 pb-4 pt-2">
-                        <div className="space-y-1">{voce(menu.centro)}</div>
-                        {menu.gruppi.map(g => (
-                            <div key={g.label || 'voci'} className="mt-3 border-t-2 border-[#262626] pt-3">
-                                {g.label && <div className="px-3 pb-1.5 text-[13px] font-medium text-[#BFBFBF]">{g.label}</div>}
-                                <div className="space-y-0.5">{g.items.map(voce)}</div>
-                            </div>
-                        ))}
+                        <MenuAdminGruppi centro={menu.centro} gruppi={menu.gruppi} pathname={pathname} />
                     </nav>
                     <div className="border-t-2 border-[#262626] p-3">
                         <button
