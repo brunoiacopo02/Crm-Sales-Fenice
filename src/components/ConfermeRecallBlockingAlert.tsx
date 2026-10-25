@@ -58,7 +58,15 @@ function quando(dueAt: string): string {
     }).format(new Date(dueAt))
 }
 
-export function ConfermeRecallBlockingAlert() {
+/** Nome dell'azienda per la grafica Diretta, senza maiuscolo spaziato. */
+const COMPANY_NAME: Record<string, string> = { fenice: 'Fenice', serenamente: 'Serenamente', fcd: 'FCD' }
+
+/**
+ * `variant` 'diretta' = restyle scuro delle Conferme (PO 25/10/2026): stesse tre
+ * uscite, stessi tempi. L'avviso è montato nel layout fuori dal contenitore con
+ * `data-ui`, quindi in Diretta l'attributo lo mette lui per avere i token --d-*.
+ */
+export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?: 'classic' | 'diretta' }) {
     const [data, setData] = useState<BlockingAlertPayload | null>(null)
     const [busy, setBusy] = useState(false)
     const activeCompany = useSalesCompany()
@@ -137,6 +145,102 @@ export function ConfermeRecallBlockingAlert() {
         router.push(`/conferme?lead=${alert.id}`)
         router.refresh()
     })
+
+    if (variant === 'diretta') {
+        const azienda = COMPANY_NAME[alert.companyId] || alert.companyId
+        return (
+            <div
+                data-ui="diretta"
+                role="alertdialog"
+                aria-modal="true"
+                aria-label="Richiamo Conferme da fare"
+                className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--d-bg)] p-4"
+            >
+                <div className="w-full max-w-2xl rounded-2xl bg-[var(--d-surface)] p-8 text-center text-[var(--d-text)]">
+                    <AlarmClock className="mx-auto h-12 w-12 text-[var(--d-orange)]" strokeWidth={1.5} />
+
+                    <div className="mt-5 text-sm font-medium text-[var(--d-orange)]">
+                        {alert.kind === 'parcheggiato' ? 'Richiamo programmato' : 'Richiamo da fare'}, {ritardo(alert.dueAt)}
+                    </div>
+                    {data && data.queueTotal > 1 && (
+                        <div className="mt-1 text-sm text-[var(--d-muted)]">1 di {data.queueTotal} in coda</div>
+                    )}
+
+                    <h2 className="mt-3 text-4xl font-semibold leading-tight">{alert.name}</h2>
+
+                    {alert.kind === 'parcheggiato' && (
+                        <p className="mt-2 text-sm text-[var(--d-muted)]">
+                            Parcheggiato per {quando(alert.dueAt)}: appuntamento da rifissare.
+                        </p>
+                    )}
+
+                    {alert.phone && (
+                        <a
+                            href={`tel:${alert.phone}`}
+                            className="mt-3 inline-block text-4xl font-semibold text-[var(--d-text)] hover:text-white"
+                        >
+                            {alert.phone}
+                        </a>
+                    )}
+
+                    {alert.notes && (
+                        <p className="mx-auto mt-4 max-w-lg rounded-lg bg-[var(--d-bg)] p-3 text-sm text-[var(--d-muted)]">
+                            &ldquo;{alert.notes}&rdquo;
+                        </p>
+                    )}
+
+                    {alert.claimedByMe && (
+                        <p className="mt-4 text-sm font-medium text-[var(--d-orange)]">
+                            L&apos;hai preso in carico tu: gli altri non lo vedono più.
+                        </p>
+                    )}
+
+                    {isOtherCompany && (
+                        <p className="mt-3 text-sm text-[var(--d-muted)]">
+                            È un lead {azienda}: aprendolo il CRM passa in automatico a quell&apos;azienda.
+                        </p>
+                    )}
+
+                    <div className="mt-8 flex flex-col gap-3">
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={apriLead}
+                            className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-[var(--d-orange)] px-6 text-lg font-semibold text-[var(--d-orange-ink)] transition-opacity hover:opacity-90 disabled:opacity-60"
+                        >
+                            <Phone className="h-5 w-5" strokeWidth={1.75} />
+                            Apri e chiamalo
+                        </button>
+
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                            <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => act(() => claimConfermeAlert(alert.id))}
+                                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border-2 border-[var(--d-line)] px-4 text-sm font-medium transition-colors hover:bg-[var(--d-surface-2)] disabled:opacity-60"
+                            >
+                                <Hand className="h-4 w-4" strokeWidth={1.75} />
+                                Lo chiamo io
+                            </button>
+                            <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => act(() => snoozeConfermeAlert(alert.id))}
+                                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border-2 border-[var(--d-line)] px-4 text-sm font-medium text-[var(--d-muted)] transition-colors hover:bg-[var(--d-surface-2)] disabled:opacity-60"
+                            >
+                                <Timer className="h-4 w-4" strokeWidth={1.75} />
+                                Snooze 2 min
+                            </button>
+                        </div>
+                    </div>
+
+                    <p className="mt-5 text-xs text-[var(--d-faint)]">
+                        &ldquo;Lo chiamo io&rdquo; tiene l&apos;avviso solo per te per 10 minuti. Lo snooze lo ripropone a tutti fra 2 minuti.
+                    </p>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div

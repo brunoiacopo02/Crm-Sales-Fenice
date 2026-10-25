@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { ConfermeKpiBoard } from "@/components/ConfermeKpiBoard"
+import { isDirettaOn } from "@/lib/diretta/settings"
 
 export default async function ConfermeKpiPage() {
     const supabase = await createClient()
@@ -16,9 +17,14 @@ export default async function ConfermeKpiPage() {
         redirect("/unauthorized")
     }
 
+    // Con la Diretta accesa le Conferme hanno il bonus nuovo nella colonna della
+    // loro pagina (PO 25/10/2026): il vecchio a scaglioni (30/38 chiusure,
+    // 145/290 euro) qui lo direbbe diverso. Manager e admin continuano a vederlo.
+    const hideOldBonus = role === "CONFERME" && await isDirettaOn("CONFERME")
+
     return (
         <main className="min-h-screen bg-ash-50 flex flex-col p-4 md:p-8 overflow-y-auto">
-            <ConfermeKpiBoard currentUser={{ id: user.id, role, name: user.user_metadata?.name }} />
+            <ConfermeKpiBoard currentUser={{ id: user.id, role, name: user.user_metadata?.name }} hideOldBonus={hideOldBonus} />
         </main>
     )
 }

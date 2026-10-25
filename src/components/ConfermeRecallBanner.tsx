@@ -28,7 +28,12 @@ const COMPANY_CHIP: Record<string, { label: string; className: string }> = {
     fcd: { label: 'FCD', className: 'bg-purple-100 text-purple-700 border-purple-300' },
 }
 
-export function ConfermeRecallBanner() {
+/**
+ * `variant` 'diretta' = restyle scuro delle Conferme (PO 25/10/2026). Il banner
+ * è montato nel layout fuori dal contenitore con `data-ui`, quindi in Diretta
+ * l'attributo lo mette lui sul proprio contenitore per avere i token --d-*.
+ */
+export function ConfermeRecallBanner({ variant = 'classic' }: { variant?: 'classic' | 'diretta' }) {
     const [alerts, setAlerts] = useState<RecallAlert[]>([])
     const [dismissed, setDismissed] = useState<Set<string>>(new Set())
     const activeCompany = useSalesCompany()
@@ -56,6 +61,48 @@ export function ConfermeRecallBanner() {
     const keyOf = (a: RecallAlert) => `${a.id}|${a.snoozeAt}`
     const visible = alerts.filter(a => !dismissed.has(keyOf(a)))
     if (visible.length === 0) return null
+
+    if (variant === 'diretta') {
+        return (
+            <div data-ui="diretta" className="fixed bottom-4 right-4 z-[80] flex max-w-sm flex-col gap-2">
+                {visible.map((a) => {
+                    const due = new Date(a.snoozeAt)
+                    const isExpired = due.getTime() <= Date.now()
+                    const isOtherCompany = a.companyId !== activeCompany
+                    return (
+                        <div
+                            key={keyOf(a)}
+                            className={`flex items-start gap-3 rounded-2xl border-2 bg-[var(--d-surface)] p-4 text-[var(--d-text)] ${isExpired ? 'border-[var(--d-orange)]' : 'border-[var(--d-line)]'}`}
+                        >
+                            <BellRing className={`mt-0.5 h-4 w-4 shrink-0 ${isExpired ? 'text-[var(--d-orange)]' : 'text-[var(--d-muted)]'}`} strokeWidth={1.75} />
+                            <div className="min-w-0 flex-1 text-[13px]">
+                                <div className="font-semibold">{isExpired ? 'Richiamo da fare adesso' : 'Richiamo in arrivo'}</div>
+                                <div className="mt-1 font-medium">{a.name}</div>
+                                {a.phone && <div className="text-[var(--d-muted)]">{a.phone}</div>}
+                                <div className="text-[var(--d-muted)]">
+                                    {due.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
+                                </div>
+                                {isOtherCompany && (
+                                    <div className="text-[var(--d-muted)]">È di un&apos;altra azienda: cambiala dal menu in alto per gestirlo.</div>
+                                )}
+                                {a.notes && (
+                                    <div className="mt-1 line-clamp-2 text-[var(--d-muted)]">&ldquo;{a.notes}&rdquo;</div>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => setDismissed(prev => new Set(prev).add(keyOf(a)))}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--d-muted)] transition-colors hover:bg-[var(--d-surface-2)] hover:text-[var(--d-text)]"
+                                title="Nascondi"
+                                aria-label="Nascondi"
+                            >
+                                <X className="h-4 w-4" strokeWidth={1.75} />
+                            </button>
+                        </div>
+                    )
+                })}
+            </div>
+        )
+    }
 
     return (
         <div className="fixed bottom-4 right-4 z-[80] flex max-w-sm flex-col gap-2">

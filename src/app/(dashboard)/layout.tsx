@@ -144,8 +144,8 @@ export default async function DashboardLayout({
                         stessa cosa. */}
                     {session.user.role === 'CONFERME' && (
                         <>
-                            <SafeWrapper><ConfermeRecallBanner /></SafeWrapper>
-                            <SafeWrapper><ConfermeRecallBlockingAlert /></SafeWrapper>
+                            <SafeWrapper><ConfermeRecallBanner variant={diretta ? 'diretta' : 'classic'} /></SafeWrapper>
+                            <SafeWrapper><ConfermeRecallBlockingAlert variant={diretta ? 'diretta' : 'classic'} /></SafeWrapper>
                         </>
                     )}
                 </SalesCompanyProvider>

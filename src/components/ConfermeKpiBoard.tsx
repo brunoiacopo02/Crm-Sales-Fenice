@@ -15,7 +15,7 @@ import { useState, useEffect } from "react"
 import { getConfermeKpiStats, getConfermeSalesList } from "@/app/actions/confermeKpiActions"
 import { CalendarDays, Target, Filter, AlertCircle, Users, Trophy, Gift, CheckCircle2, History, TrendingUp } from "lucide-react"
 
-export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
+export function ConfermeKpiBoard({ currentUser, hideOldBonus = false }: { currentUser: any; hideOldBonus?: boolean }) {
     const [monthDate, setMonthDate] = useState(new Date())
     const [stats, setStats] = useState<any>(null)
     const [salesList, setSalesList] = useState<any[]>([])
@@ -138,6 +138,13 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
             <div className="flex flex-col lg:flex-row gap-6 w-full pb-10">
                 <div className="flex-1 flex flex-col gap-6 min-w-0">
 
+                    {hideOldBonus && (
+                        <div className="rounded-2xl border border-ash-200/60 bg-white p-5 text-sm text-ash-600">
+                            Il bonus di squadra delle Conferme è nella colonna arancione della pagina Conferme.
+                        </div>
+                    )}
+
+                    {!hideOldBonus && (<>
                     {/* HERO CARD — Chiusure settimanali */}
                     <div className={`relative overflow-hidden rounded-2xl border shadow-elevated p-6 ${tier2Reached
                         ? 'bg-gradient-to-br from-gold-700 via-gold-600 to-emerald-700 border-gold-400 text-white'
@@ -305,6 +312,7 @@ export function ConfermeKpiBoard({ currentUser }: { currentUser: any }) {
                             </div>
                         )}
                     </div>
+                    </>)}
 
                     {/* CALENDARIO MESE */}
                     <div className="bg-white rounded-2xl shadow-sm border border-ash-200 flex flex-col w-full">

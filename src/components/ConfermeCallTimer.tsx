@@ -6,6 +6,8 @@ import { readTimerState, writeTimerState, type TimerState } from "@/lib/conferme
 interface Props {
     leadId: string;
     disabled?: boolean;
+    /** Grafica: 'diretta' = restyle scuro (PO 25/10/2026). La logica non cambia. */
+    variant?: 'classic' | 'diretta';
 }
 
 function fmtMMSS(totalSeconds: number): string {
@@ -14,7 +16,7 @@ function fmtMMSS(totalSeconds: number): string {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-export function ConfermeCallTimer({ leadId, disabled }: Props) {
+export function ConfermeCallTimer({ leadId, disabled, variant = 'classic' }: Props) {
     const [state, setState] = useState<TimerState>({ status: "idle" });
     const [tick, setTick] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -60,12 +62,19 @@ export function ConfermeCallTimer({ leadId, disabled }: Props) {
         }
     };
 
-    const baseClasses = "border px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card flex items-center gap-1";
-    const colorClasses = isRunningHere
-        ? "bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700"
-        : isStoppedHere
-            ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-700"
-            : "bg-white hover:bg-sky-50 border-ash-200 hover:border-sky-300 text-ash-500 hover:text-sky-600";
+    const baseClasses = variant === 'diretta'
+        ? "z-10 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-2 px-3 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+        : "border px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 z-10 disabled:opacity-50 shadow-soft hover:shadow-card flex items-center gap-1";
+    // Diretta: il timer che corre è la cosa che conta adesso (arancione).
+    const colorClasses = variant === 'diretta'
+        ? isRunningHere
+            ? "border-[var(--d-orange)] bg-[var(--d-orange)] text-[var(--d-orange-ink)]"
+            : "border-[var(--d-line)] bg-transparent text-[var(--d-text)] hover:bg-[var(--d-surface-2)]"
+        : isRunningHere
+            ? "bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700"
+            : isStoppedHere
+                ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-700"
+                : "bg-white hover:bg-sky-50 border-ash-200 hover:border-sky-300 text-ash-500 hover:text-sky-600";
 
     return (
         <button
