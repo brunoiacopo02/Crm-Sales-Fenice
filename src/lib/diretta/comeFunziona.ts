@@ -17,13 +17,22 @@ const alNumero = (n: number) => `${articoloNumero(n) === "l'" ? "all'" : 'al '}$
 const piume = (n: number) => `${numeroIt(n)} ${n === 1 ? 'Piuma' : 'Piume'}`
 const scintille = (n: number) => `${numeroIt(n)} ${n === 1 ? 'Scintilla' : 'Scintille'}`
 
+/** "3 giorni 15 Scintille, 6 giorni 30 Scintille, ..., 60 giorni 250 Scintille e 20 Piume". */
+function tappe(r: EconomyRules): string {
+    return r.serie.tappe.map(tp => {
+        const premio = [tp.scintille > 0 ? scintille(tp.scintille) : null, tp.piume > 0 ? piume(tp.piume) : null].filter(Boolean).join(' e ')
+        return `${numeroIt(tp.giorni)} giorni ${premio}`
+    }).join(', ')
+}
+
 export function comeFunziona(ruolo: string, r: EconomyRules, t: GamificationTargets): BloccoSpiegazione[] {
     const compra: BloccoSpiegazione = {
         titolo: 'Come si compra',
         righe: [
             'Premi e permessi: premi Richiedi e conferma. Il prezzo si scala subito e la richiesta arriva all\'admin, che te la consegna. Se un permesso non si può approvare, il prezzo torna nel saldo.',
             'Immagini e personalizzazioni sono tue subito, e le scegli dal profilo.',
-            ...(ruolo === 'GDO' ? ['I potenziamenti partono appena li attivi, solo durante il turno.'] : []),
+            'La tua postazione: cuffie, tastiera, mouse, monitor e un gadget per la scrivania. Ognuno si prende una volta sola, si chiede all\'admin come i premi e costa parecchio, perché è un oggetto vero.',
+            ...(ruolo === 'GDO' ? ['I potenziamenti partono appena li attivi: booster e moltiplicatore solo durante il turno, lo scudo quando vuoi.'] : []),
         ],
     }
     const usi: BloccoSpiegazione = {
@@ -71,6 +80,22 @@ export function comeFunziona(ruolo: string, r: EconomyRules, t: GamificationTarg
             righe: [
                 `Per ogni tuo appuntamento: ${piume(r.piume.conferma)} se viene confermato, ${numeroIt(r.piume.presenza)} se la persona si presenta, ${numeroIt(r.piume.chiusura)} se si iscrive.`,
                 'Vale il passo più alto raggiunto, non si sommano.',
+            ],
+        },
+        {
+            titolo: 'La serie',
+            righe: [
+                `Ogni giorno di lavoro in cui arrivi ${alNumero(t.personale[0])} appuntamento, la serie sale di uno. Domeniche e feste non contano; un giorno sotto, o di assenza, la fa ripartire da zero.`,
+                `Tappe: ${tappe(r)}.`,
+                'Se oggi un appuntamento viene tolto e scendi sotto, la tappa di oggi torna indietro.',
+            ],
+        },
+        {
+            titolo: 'Potenziamenti',
+            righe: [
+                `Booster: per ${numeroIt(r.booster.minuti)} minuti ogni appuntamento fissato vale doppio, fino a ${numeroIt(r.booster.maxFissati)}.`,
+                `Moltiplicatore presenza: da quando lo prendi a fine giornata, ogni appuntamento che fissi ti dà ${scintille(r.moltiplicatore.bonus)} in più se la persona si presenta davvero, fino a ${numeroIt(r.moltiplicatore.maxPresenze)} presenze.`,
+                `Scudo della serie: salva la serie per un giorno mancato e si usa da solo. Uno da parte alla volta, al massimo ${numeroIt(r.serie.scudiAlMese)} al mese.`,
             ],
         },
         usi,

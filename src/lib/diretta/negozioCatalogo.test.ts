@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CATALOGO_NEGOZIO, settimaneAlMassimo, MASSIMO_PATTO_SETTIMANA } from './negozioCatalogo'
-import { PERSONALIZZAZIONI } from './negozio'
+import { PERSONALIZZAZIONI, SOLO_REGALO, isPotenziamento, unaVoltaSola } from './negozio'
 import { DEFAULT_TARGETS } from './config'
 import { DEFAULT_ECONOMY_RULES } from '@/lib/economy/rules'
 import { guadagnoGdo, guadagnoConferme, SCENARI_CONFERME, SCENARI_GDO, PATTO, CHIUSURA_SCENARI } from '@/lib/economy/scenari'
@@ -14,8 +14,8 @@ const settimane = (id: string) => {
     return settimaneAlMassimo(i.currency, i.price)
 }
 
-test('catalogo: 12-16 articoli con id unici e prezzi interi positivi', () => {
-    assert.ok(CATALOGO_NEGOZIO.length >= 12 && CATALOGO_NEGOZIO.length <= 16, `articoli: ${CATALOGO_NEGOZIO.length}`)
+test('catalogo: 25-32 articoli con id unici e prezzi interi positivi', () => {
+    assert.ok(CATALOGO_NEGOZIO.length >= 25 && CATALOGO_NEGOZIO.length <= 32, `articoli: ${CATALOGO_NEGOZIO.length}`)
     const ids = new Set(CATALOGO_NEGOZIO.map(i => i.id))
     assert.equal(ids.size, CATALOGO_NEGOZIO.length)
     for (const i of CATALOGO_NEGOZIO) {
@@ -35,19 +35,23 @@ test('taratura: la settimana al massimo del patto è quella che danno le regole 
     assert.ok(Math.abs(settimaneAlMassimo('P', 13.5) - 1) < 1e-9)
 })
 
-test('corso Fenice Academy: circa tre mesi al massimo del patto, regalabile, unico articolo regalabile', () => {
+test('corso Fenice Academy: circa tre mesi al massimo del patto, regalabile; regalabile anche il caffè per un collega', () => {
     const corsi = CATALOGO_NEGOZIO.filter(i => i.kind === 'corso')
     assert.equal(corsi.length, 1)
     assert.equal(corsi[0].currency, 'P')
     assert.equal(corsi[0].giftable, true)
     const mesi = settimaneAlMassimo('P', corsi[0].price) / (52 / 12)
     assert.ok(mesi >= 2.8 && mesi <= 3.2, `${mesi.toFixed(2)} mesi`)
-    assert.deepEqual(CATALOGO_NEGOZIO.filter(i => i.giftable).map(i => i.id), [corsi[0].id])
+    assert.deepEqual(CATALOGO_NEGOZIO.filter(i => i.giftable).map(i => i.id).sort(), [corsi[0].id, 'caffe-per-un-collega'].sort())
+    for (const id of SOLO_REGALO) assert.equal(CATALOGO_NEGOZIO.find(i => i.id === id)?.giftable, true, id)
 })
 
-test('premi concreti e permessi: in Scintille e almeno una settimana al massimo del patto', () => {
+test('premi concreti e permessi: in Scintille e almeno una settimana al massimo del patto (il caffè per un collega no, apposta)', () => {
     assert.ok(concreti.length >= 5)
-    for (const i of concreti) {
+    const caffeCollega = concreti.find(i => i.id === 'caffe-per-un-collega')!
+    assert.equal(caffeCollega.currency, 'S')
+    assert.ok(settimaneAlMassimo('S', caffeCollega.price) >= 0.3 && settimaneAlMassimo('S', caffeCollega.price) < 1)
+    for (const i of concreti.filter(x => x.id !== 'caffe-per-un-collega')) {
         assert.equal(i.currency, 'S', `${i.id}: dal 25/10 le Piume servono solo per il corso`)
         assert.ok(settimaneAlMassimo(i.currency, i.price) >= 1, `${i.id}: ${settimaneAlMassimo(i.currency, i.price).toFixed(2)} settimane`)
     }
@@ -111,11 +115,48 @@ test('personalizzazioni del catalogo e registro coincidono', () => {
     assert.deepEqual(pers, Object.keys(PERSONALIZZAZIONI).sort())
 })
 
-test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno e il booster (solo GDO)", () => {
+test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno e i potenziamenti (solo GDO)", () => {
     for (const i of CATALOGO_NEGOZIO) {
-        const attesi = i.id === 'pausa-30-bruno-fissa' || i.kind === 'booster' ? ['GDO'] : ['CONFERME', 'GDO']
+        const attesi = i.id === 'pausa-30-bruno-fissa' || isPotenziamento(i.kind) ? ['GDO'] : ['CONFERME', 'GDO']
         assert.deepEqual([...i.roles].sort(), attesi, i.id)
     }
+})
+
+test('potenziamenti: moltiplicatore e scudo della serie, solo GDO, non regalabili', () => {
+    const m = CATALOGO_NEGOZIO.find(i => i.kind === 'moltiplicatore')!
+    const s = CATALOGO_NEGOZIO.find(i => i.kind === 'scudo')!
+    assert.equal(m.price, 20)
+    assert.equal(s.price, 400)
+    for (const i of [m, s]) {
+        assert.deepEqual(i.roles, ['GDO'])
+        assert.equal(i.giftable, false)
+        assert.equal(i.currency, 'S')
+    }
+    // Il testo del moltiplicatore dice i numeri delle regole di default.
+    assert.match(m.description, new RegExp(`${DEFAULT_ECONOMY_RULES.moltiplicatore.bonus} Scintille.*${DEFAULT_ECONOMY_RULES.moltiplicatore.maxPresenze} presenze`))
+})
+
+test('premi nuovi del 25/10: pausa quando vuoi mai in punta, abbonamento, cinema, buoni; niente tazza, salvadanaio, cena', () => {
+    const pausa = CATALOGO_NEGOZIO.find(i => i.id === 'pausa-quando-vuoi')!
+    assert.equal(pausa.kind, 'permesso')
+    assert.match(pausa.description, /mai nell'ora di punta \(18-19, il sabato 12:30-13:30\)/)
+    for (const id of ['spotify-o-netflix', 'cinema-per-due', 'buono-amazon-10', 'buono-amazon-25', 'caffe-per-un-collega']) {
+        assert.ok(CATALOGO_NEGOZIO.some(i => i.id === id), id)
+    }
+    assert.ok(settimane('buono-amazon-25') > settimane('buono-amazon-10'))
+    assert.ok(!CATALOGO_NEGOZIO.some(i => /tazza|borraccia|salvadanaio/i.test(`${i.name} ${i.description}`)))
+})
+
+test('la tua postazione: cinque upgrade, una volta a persona, per GDO e Conferme, cari apposta', () => {
+    const p = CATALOGO_NEGOZIO.filter(i => i.kind === 'postazione')
+    assert.deepEqual(p.map(i => i.id).sort(), ['postazione-cuffie', 'postazione-gadget', 'postazione-monitor', 'postazione-mouse', 'postazione-tastiera'])
+    for (const i of p) {
+        assert.equal(i.currency, 'S')
+        assert.equal(i.giftable, false)
+        assert.ok(unaVoltaSola(i.kind))
+        assert.ok(settimaneAlMassimo('S', i.price) >= 2, `${i.id}: ${settimaneAlMassimo('S', i.price).toFixed(1)} settimane`)
+    }
+    assert.ok(settimane('postazione-monitor') > settimane('postazione-cuffie'))
 })
 
 test('settimane al massimo dei premi principali', () => {

@@ -426,3 +426,59 @@ Esempio di `economy_rules` da scrivere solo se si vuole cambiare qualcosa (tutto
   - Freno al farming: al massimo +15 netti al giorno, ~+90 a settimana, ~14% del massimo del patto (640). Non tocca il tetto di 15 fissati pagati né gli scalini, e il raddoppio si storna insieme al suo fissato (`boost:<chiave del fissato>`).
   - Costo per l'azienda: 0 € diretti; le Scintille in più valgono al massimo ~90 a settimana a testa nel margine del negozio.
   - Rischio: spinge a forzare appuntamenti in quell'ora. Mitigato da tetto di 3 e storno; se dopo il lancio le disdette dei fissati col booster salgono, si paga il raddoppio solo a conferma avvenuta.
+
+## Aggiornamento 25/10/2026 notte: serie, potenziamenti, premi nuovi, la tua postazione
+
+Decisioni del PO del 25/10. I numeri segnati "proposta" sono default nelle regole (`economy_rules`, chiavi `serie` e `moltiplicatore`; i prezzi stanno negli articoli) e vanno confermati da Bruno. Margine di una presenza: 544 € (sezione 2.3). Scintilla spesa in premi concreti: in media 0,018 € (sezione 5.1).
+
+### Serie (solo GDO)
+
+- **Cosa conta**: giorni lavorativi di fila (lun-sab; domeniche, feste nazionali e chiusure dell'ufficio `quotes_closed_days` saltate) in cui il GDO arriva al primo scalino personale del giorno (8 fissati validi, come in home). Un giorno sotto, o di assenza, la azzera. Oggi conta appena lo scalino è raggiunto; finché il giorno non è chiuso, non averlo ancora raggiunto non rompe niente.
+- **Da dove**: solo dal registro. Un giorno è fatto se ha l'accredito attivo del primo scalino (`S:scalino:<id>:<giorno>:1`). I giorni passati restano come sono, come gli scalini; solo oggi può cambiare. Attenzione: se il primo scalino venisse messo a 0 Scintille, la serie non vedrebbe più i giorni fatti.
+- **Tappe (proposta)**: 3 giorni +15, 6 +30, 12 +60, 24 +100, 36 +150, 48 +200, 60 +250 Scintille e 20 Piume. Dopo 60 giorni non ci sono altre tappe (si può decidere di ripartire).
+- **Accredito**: dentro `awardFissato` e `riallineaScaliniDopoUscita`, subito dopo gli scalini, nella stessa transazione col lock sulla persona (`allineaSerie` in `awards.ts`). Chiave `S:serie:<id>:<inizio serie>:<giorni>` (Piume `P:serie:...`): una serie nuova ripaga le tappe, la stessa no. Se oggi lo scalino si storna, la tappa nata oggi si storna; se si torna su, si riprende con una chiave nuova (`:2`).
+- **Resa**: tutte le tappe fino a 60 = 805 Scintille e 20 Piume in 10 settimane, circa 80 Scintille a settimana (12,6% della settimana al massimo del patto) più 2 Piume a settimana in media.
+- **Costo**: chi arriva a 60 giorni costa circa 14 € di Scintille (805 × 0,018) e 34 € di Piume (20 × 1,71), 48 € in 10 settimane, ~21 € al mese. Vale 0,09 presenze. Arrivare a 8 fissati validi tutti i giorni per 60 giorni è sopra il patto (7,4 al giorno): chi ci arriva produce molto di più di quel che costa.
+
+### Potenziamenti (solo GDO)
+
+| Potenziamento | Prezzo | Regola | Resa netta | Costo per l'azienda |
+|---|---|---|---|---|
+| Booster dei fissati | 15 Scintille | vedi sopra | da -5 a +15 al giorno | 0 € diretti |
+| Moltiplicatore presenza (proposta) | 20 Scintille | dall'acquisto a fine giornata, ogni fissato pagato vale +25 Scintille se la persona si presenta (presenza verificata, stessa condizione delle Piume), al massimo 4 presenze; solo in turno, uno al giorno | da -20 a +80 al giorno; al ritmo del patto (11% di presenze sui fissati, ~7 fissati dopo l'acquisto) circa +0/+5 | 0 € diretti; al massimo +80 Scintille al giorno, ~1,4 € |
+| Scudo della serie (proposta) | 400 Scintille | salva la serie per un giorno lavorativo mancato; si consuma da solo al primo giorno mancato dopo l'acquisto (se c'è una serie da salvare); uno da parte, al massimo 2 al mese | non rende Scintille: protegge le tappe | 0 €: è un modo di spendere Scintille |
+
+- **Moltiplicatore**: accredito in `sincronizzaLead` (`allineaMoltiplicatore` in `awards.ts`) con il lock sulla persona per il tetto; chiave `molt:<chiave del fissato>` (dopo uno storno `:g2`). Si storna se la presenza sparisce, se il fissato si storna (`reverseFissato`) o se l'acquisto viene annullato e rimborsato. Paga solo i fissati che hanno pagato le loro Scintille (sotto il tetto del giorno).
+- **Scudo**: deterministico, ricostruito dal registro (`calcolaSerie` in `src/lib/economy/serie.ts`). Uno scudo comprato il giorno stesso del buco vale per quel giorno; uno comprato a serie zero resta da parte. Uno scudo annullato dall'admin (rimborsato) non conta.
+
+### Premi nuovi (Scintille, GDO e Conferme, richiesta all'admin)
+
+| Premio | Prezzo (proposta) | Settimane al massimo del patto | Costo stimato | Come | Euro per Scintilla | Presenze per ripagarlo |
+|---|---|---|---|---|---|---|
+| Caffè per un collega (solo regalo, a un collega) | 250 | 0,4 | 1,5 € | un caffè al bar | 0,006 | 0,003 |
+| Pausa quando vuoi per una settimana (da approvare; mai 18-19, il sabato 12:30-13:30) | 1.200 | 1,9 | ~5 € | le pause restano quelle, cambia solo quando; il costo è il rischio di sale scoperte (stima) | 0,004 | 0,01 |
+| Un mese di Spotify o Netflix | 1.300 | 2,0 | 12-14 € | Spotify Premium individuale o Netflix standard, prezzi pubblici da verificare | 0,010 | 0,02 |
+| Cinema per due | 1.800 | 2,8 | 20 € | due biglietti interi | 0,011 | 0,04 |
+| Buono Amazon da 10 | 1.200 | 1,9 | 10 € | valore del buono | 0,008 | 0,02 |
+| Buono Amazon da 25 | 3.000 | 4,7 | 25 € | valore del buono | 0,008 | 0,05 |
+
+Tutti sotto la media dei premi concreti di prima (0,018 € per Scintilla): non alzano il costo del negozio. Il caffè per un collega sta sotto la settimana al massimo del patto apposta: è un gesto verso un collega e si compra solo come regalo (`SOLO_REGALO`). Non ci sono tazza, borraccia, salvadanaio di squadra né cena, come deciso.
+
+### La tua postazione (Scintille, GDO e Conferme, una volta a persona, richiesta all'admin)
+
+| Upgrade | Prezzo (proposta) | Settimane al massimo del patto | Costo stimato | Euro per Scintilla | Presenze per ripagarlo |
+|---|---|---|---|---|---|
+| Cuffie nuove | 5.000 | 7,8 | ~100 € (cuffie da call center con cancellazione del rumore) | 0,020 | 0,18 |
+| Tastiera nuova | 4.000 | 6,3 | ~50 € | 0,013 | 0,09 |
+| Mouse nuovo | 2.500 | 3,9 | ~30 € | 0,012 | 0,06 |
+| Monitor nuovo | 12.000 | 18,8 | ~160 € (24 pollici) | 0,013 | 0,29 |
+| Gadget per la scrivania | 1.500 | 2,3 | ~20 € | 0,013 | 0,04 |
+
+Tutta la postazione: 25.000 Scintille, circa 39 settimane al massimo del patto, ~360 € (0,66 presenze). Sono oggetti veri: il prezzo alto è voluto. Ogni upgrade si prende una volta (`kind` `postazione`, `unaVoltaSola` in `src/lib/diretta/negozio.ts`); se l'admin annulla, le Scintille tornano e lo slot torna "Di base". La schermata nel negozio mostra la scrivania con gli slot: Di base, In arrivo (richiesto), Tuo (consegnato).
+
+### Da decidere
+
+1. Tutti i numeri qui sopra segnati "proposta".
+2. Postazione: gli oggetti restano dell'azienda (alla postazione) o della persona? Il testo del negozio non lo dice.
+3. Serie dopo i 60 giorni: niente più tappe, oppure si riparte con le stesse.
+4. Pausa quando vuoi: chi approva la settimana e come si evita che due persone della stessa fila la prendano insieme.

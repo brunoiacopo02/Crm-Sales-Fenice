@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     checkPurchase, normalizzaRegalo, ownedItemIds, canTransition, isDigitale, daApprovare,
-    stileProfilo, messaggioErrore, statoIniziale, GIFT_TO_MAX,
+    stileProfilo, messaggioErrore, statoIniziale, GIFT_TO_MAX, isPotenziamento, unaVoltaSola, SOLO_REGALO, statoPostazione,
 } from './negozio'
 
 const gdo = { role: 'GDO', isActive: true, isBot: false, scintille: 1000, piume: 50 }
@@ -106,6 +106,41 @@ test('stile profilo: cornice se posseduta, titolo più caro tra quelli posseduti
     )
     // gli articoli sconosciuti non cambiano niente
     assert.deepEqual(stileProfilo([{ itemId: 'qualcosa', price: 10 }]), { cornice: false, titolo: null })
+})
+
+test('postazione: una volta a persona, potenziamenti consegnati subito', () => {
+    const cuffie = { ...caffe, kind: 'postazione', price: 900 }
+    assert.deepEqual(checkPurchase({ user: gdo, item: cuffie, alreadyOwned: true }), { ok: false, error: 'postazione_tua' })
+    assert.equal(checkPurchase({ user: gdo, item: cuffie, alreadyOwned: false }).ok, true)
+    assert.equal(unaVoltaSola('postazione'), true)
+    assert.equal(unaVoltaSola('concreto'), false)
+    assert.equal(statoIniziale('postazione'), 'richiesto')
+    for (const k of ['booster', 'moltiplicatore', 'scudo']) {
+        assert.equal(isPotenziamento(k), true, k)
+        assert.equal(statoIniziale(k), 'consegnato', k)
+    }
+    assert.equal(isPotenziamento('postazione'), false)
+})
+
+test('postazione: stato dello slot dalle richieste', () => {
+    assert.equal(statoPostazione('cuffie', []), 'base')
+    assert.equal(statoPostazione('cuffie', [{ itemId: 'cuffie', status: 'annullato' }]), 'base')
+    assert.equal(statoPostazione('cuffie', [{ itemId: 'cuffie', status: 'richiesto' }]), 'in_arrivo')
+    assert.equal(statoPostazione('cuffie', [{ itemId: 'cuffie', status: 'annullato' }, { itemId: 'cuffie', status: 'consegnato' }]), 'tuo')
+    assert.equal(statoPostazione('mouse', [{ itemId: 'cuffie', status: 'consegnato' }]), 'base')
+})
+
+test('caffè per un collega: solo come regalo', () => {
+    const c = { ...caffe, id: 'caffe-per-un-collega', giftable: true, price: 250 }
+    assert.ok(SOLO_REGALO.has('caffe-per-un-collega'))
+    assert.deepEqual(checkPurchase({ user: gdo, item: c }), { ok: false, error: 'solo_regalo' })
+    assert.deepEqual(checkPurchase({ user: gdo, item: c, giftTo: ' Zora ' }), { ok: true, giftTo: 'Zora' })
+})
+
+test('messaggi dei potenziamenti e della postazione', () => {
+    for (const e of ['postazione_tua', 'solo_regalo', 'moltiplicatore_turno', 'moltiplicatore_oggi', 'scudo_tasca', 'scudo_mese'] as const) {
+        assert.ok(messaggioErrore(e).length > 5 && !/riprova/i.test(messaggioErrore(e)), e)
+    }
 })
 
 test('messaggi di errore in italiano, mai vuoti', () => {

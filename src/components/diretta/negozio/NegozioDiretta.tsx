@@ -8,18 +8,28 @@ import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-    CalendarOff, Clock, Coffee, Cookie, Frame, Gift, GraduationCap, Headphones, Type, UtensilsCrossed, Zap,
+    CalendarOff, Clapperboard, Clock, Coffee, Cookie, Flame, Frame, Gift, GraduationCap, Headphones, Music, Shield,
+    ShoppingBag, Timer, Type, UserCheck, UtensilsCrossed, Zap,
     type LucideIcon,
 } from "lucide-react"
 import { buyReward, setProfileImage, type NegozioArticolo, type NegozioView } from "@/app/actions/negozioActions"
-import { daApprovare, GIFT_TO_MAX, isDigitale } from "@/lib/diretta/negozio"
-import { oraRoma } from "@/lib/diretta/formato"
+import { daApprovare, GIFT_TO_MAX, isDigitale, isPotenziamento, SOLO_REGALO } from "@/lib/diretta/negozio"
+import { numeroIt, oraRoma } from "@/lib/diretta/formato"
 import { AvatarDiretta, STATO_TESTO, TitoloDiretta, btn, dataBreve, numero, prezzoTesto } from "./ui"
+import { PostazioneDiretta } from "./PostazioneDiretta"
 
 const ICONE: Record<string, LucideIcon> = {
     'corso-fenice-academy': GraduationCap,
     'sabato-libero': CalendarOff,
     'booster-fissati': Zap,
+    'moltiplicatore-presenza': UserCheck,
+    'scudo-serie': Shield,
+    'pausa-quando-vuoi': Timer,
+    'spotify-o-netflix': Music,
+    'cinema-per-due': Clapperboard,
+    'buono-amazon-10': ShoppingBag,
+    'buono-amazon-25': ShoppingBag,
+    'caffe-per-un-collega': Gift,
     'mezza-giornata-venditore': Headphones,
     'uscita-30-minuti': Clock,
     'merenda-sala': Cookie,
@@ -54,8 +64,10 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
 
     const corso = view.articoli.find(a => a.kind === 'corso')
     const premi = view.articoli.filter(a => a.kind === 'concreto' || a.kind === 'permesso')
-    const potenziamenti = view.articoli.filter(a => a.kind === 'booster')
+    const potenziamenti = view.articoli.filter(a => isPotenziamento(a.kind))
+    const postazione = view.articoli.filter(a => a.kind === 'postazione')
     const boosterFino = view.boosterFino ? new Date(view.boosterFino) : null
+    const serie = view.serie
     const immagini = view.articoli.filter(a => a.kind === 'immagine')
     const personalizzazioni = view.articoli.filter(a => a.kind === 'personalizzazione')
     const ultime = view.acquisti.slice(0, 5)
@@ -64,7 +76,7 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
 
     const apri = (a: NegozioArticolo) => {
         setEsito(null)
-        setConferma({ itemId: a.id, requestId: nuovoId(), regalo: false, nome: '' })
+        setConferma({ itemId: a.id, requestId: nuovoId(), regalo: SOLO_REGALO.has(a.id), nome: '' })
     }
 
     const compra = async (a: NegozioArticolo) => {
@@ -80,7 +92,9 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                     itemId: a.id, ok: true,
                     testo: r.status === 'consegnato'
                         ? (a.kind === 'immagine' ? 'Fatto, è tua. Puoi usarla subito come immagine profilo.'
-                            : a.kind === 'booster' ? 'Booster attivo: per un\'ora i tuoi fissati valgono doppio.' : 'Fatto, è già attiva.')
+                            : a.kind === 'booster' ? 'Booster attivo: per un\'ora i tuoi fissati valgono doppio.'
+                                : a.kind === 'moltiplicatore' ? 'Moltiplicatore attivo fino a fine giornata: ora conta chi si presenta.'
+                                    : a.kind === 'scudo' ? 'Scudo da parte: salva il primo giorno che manchi.' : 'Fatto, è già attiva.')
                         : 'Richiesta inviata. Ti arriva una notifica quando è pronta.',
                 })
                 // Per chi mostra il saldo altrove (barra in alto).
@@ -120,6 +134,13 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
         if (a.kind === 'booster' && boosterFino) {
             return <div className="text-sm font-semibold text-[var(--d-orange)]">Attivo fino alle {oraRoma(boosterFino)}</div>
         }
+        if (a.kind === 'moltiplicatore' && view.moltiplicatoreOggi) {
+            return <div className="text-sm font-semibold text-[var(--d-orange)]">Attivo fino a fine giornata</div>
+        }
+        if (a.kind === 'scudo' && serie) {
+            if (serie.scudiInTasca > 0) return <div className="text-sm font-semibold text-[var(--d-orange)]">Da parte</div>
+            if (serie.scudiMese >= serie.scudiAlMese) return <div className="text-sm text-[var(--d-muted)]">Finiti per questo mese</div>
+        }
         if (a.posseduto && isDigitale(a.kind)) {
             if (a.kind === 'immagine') {
                 if (a.imageUrl && inUso === a.imageUrl) return <div className="text-sm font-medium text-[var(--d-muted)]">In uso</div>
@@ -138,7 +159,7 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
         }
         return (
             <button type="button" className={btn.linea} onClick={() => apri(a)}>
-                {a.kind === 'booster' ? 'Attiva' : isDigitale(a.kind) ? 'Prendi' : 'Richiedi'}
+                {isPotenziamento(a.kind) ? 'Attiva' : isDigitale(a.kind) ? 'Prendi' : SOLO_REGALO.has(a.id) ? 'Offri' : 'Richiedi'}
             </button>
         )
     }
@@ -152,7 +173,20 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                         Scali <span className="font-semibold">{prezzoTesto(a.currency, a.price)}</span>
                         {daApprovare(a.kind) ? '. Se non si può approvare, tornano nel saldo.' : '.'}
                     </div>
-                    {a.giftable && (
+                    {SOLO_REGALO.has(a.id) && (
+                        <label className="flex flex-col gap-1.5 text-sm">
+                            A chi lo offri
+                            <input
+                                type="text"
+                                maxLength={GIFT_TO_MAX}
+                                value={conferma.nome}
+                                onChange={e => setConferma({ ...conferma, nome: e.target.value })}
+                                placeholder="Nome del collega"
+                                className="h-10 w-full max-w-sm rounded-[8px] border-2 border-[var(--d-line)] bg-transparent px-3 text-sm text-[var(--d-text)] placeholder:text-[var(--d-faint)] focus:border-[var(--d-muted)] focus:outline-none"
+                            />
+                        </label>
+                    )}
+                    {a.giftable && !SOLO_REGALO.has(a.id) && (
                         <div className="flex flex-col gap-2">
                             <label className="flex items-center gap-2 text-sm">
                                 <input
@@ -310,6 +344,16 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
             {potenziamenti.length > 0 && (
                 <section>
                     <h2 className="text-lg font-semibold">Potenziamenti</h2>
+                    {serie && (
+                        <div className="mt-1 flex items-center gap-2 text-sm text-[var(--d-muted)]">
+                            <Flame className={`h-4 w-4 shrink-0 ${serie.giorni > 0 ? 'text-[var(--d-orange)]' : ''}`} strokeWidth={2} aria-hidden="true" />
+                            <div>
+                                La tua serie: <span className="font-semibold text-[var(--d-text)]">{numeroIt(serie.giorni)} {serie.giorni === 1 ? 'giorno' : 'giorni'}</span>
+                                {serie.prossima ? `, prossima tappa a ${numeroIt(serie.prossima.giorni)}.` : '.'}
+                                {' '}Scudi presi questo mese: {numeroIt(serie.scudiMese)} su {numeroIt(serie.scudiAlMese)}.
+                            </div>
+                        </div>
+                    )}
                     <div className="mt-1 divide-y-2 divide-[var(--d-surface)]">
                         {potenziamenti.map(a => riga(a, icona(a)))}
                     </div>
@@ -323,6 +367,15 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                         {premi.map(a => riga(a, icona(a)))}
                     </div>
                 </section>
+            )}
+
+            {postazione.length > 0 && (
+                <PostazioneDiretta
+                    articoli={postazione}
+                    acquisti={view.acquisti}
+                    azione={a => (a.posseduto ? null : azione(a))}
+                    dettaglio={dettaglio}
+                />
             )}
 
             {immagini.length > 0 && (
