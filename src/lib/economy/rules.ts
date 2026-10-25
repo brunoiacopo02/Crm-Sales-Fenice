@@ -534,41 +534,58 @@ export function pianoStadi(rows: LedgerRow[], prefisso: string, leadId: string, 
 // e non si toglie più. Le monete invece pagano una presenza o una chiusura
 // solo se qualcuno l'ha registrata all'ora dell'appuntamento o dopo, e solo
 // quando quell'ora è passata: prima nessuno può sapere se il lead si
-// presenterà, e un esito scritto in anticipo non è un risultato verificato.
-// Se poi arriva un esito vero (il venditore dopo la call), paga quello.
+// presenterà, e un esito scritto in anticipo non è un risultato verificato
+// (non lo diventa da solo quando l'ora passa). Se poi arriva un esito vero
+// (il venditore dopo la call), paga quello.
 
 /** Un esito del venditore registrato sul lead: quando è stato scritto e cosa dice. */
 export interface RegistrazioneEsito {
     at: Date
     /** 'Chiuso', 'Non chiuso', 'Lead non presenziato'... null = non dice niente di presenza o chiusura. */
     esito: string | null
+    /**
+     * Vendita applicata dal foglio (riconciliazione): è già avvenuta, qualunque
+     * ora dica l'appuntamento nel CRM.
+     */
+    daFoglio?: boolean
 }
 
 /** Gli esiti che dicono che il lead si è presentato. */
 export const ESITI_PRESENZA: readonly string[] = ['Chiuso', 'Non chiuso']
 
-/** Famiglie della riconciliazione col foglio (src/lib/riconciliazione) e l'esito che scrivono. */
+/**
+ * Famiglie della riconciliazione col foglio (src/lib/riconciliazione) che
+ * registrano una vendita. 'solo-crm' (una chiusura che il foglio non ha e che
+ * torna "Non chiuso") resta fuori: non dice che il lead si è presentato.
+ */
 const ESITO_RICONCILIAZIONE: Record<string, string> = {
     'esito-mancante': 'Chiuso',
     'lead-scartato': 'Chiuso',
-    'solo-crm': 'Non chiuso',
 }
 
 /**
  * Le registrazioni dagli eventi del lead: 'salesperson_outcome_set' (Conferme
- * dallo Storico e venditori, `metadata.outcome`) e 'RECONCILED' (chiusure
- * applicate dal foglio, fatte sempre a cose avvenute; l'annullamento della
- * run non registra niente: lo stato del lead torna com'era).
+ * dallo Storico e venditori, `metadata.outcome`) e 'RECONCILED' (vendite
+ * applicate dal foglio, fatte sempre a cose avvenute). Una run annullata non
+ * registra niente: si saltano l'annullamento e gli eventi della run con lo
+ * stesso runId, perché lo stato del lead è tornato com'era.
  */
 export function registrazioniDaEventi(eventi: readonly { eventType: string; timestamp: Date; metadata: unknown }[]): RegistrazioneEsito[] {
+    const meta = (e: { metadata: unknown }) => (e.metadata && typeof e.metadata === 'object' ? e.metadata : {}) as Record<string, unknown>
+    const annullate = new Set<string>()
+    for (const e of eventi) {
+        const m = meta(e)
+        if (e.eventType === 'RECONCILED' && m.undo === true && typeof m.runId === 'string') annullate.add(m.runId)
+    }
     const out: RegistrazioneEsito[] = []
     for (const e of eventi) {
-        const m = (e.metadata && typeof e.metadata === 'object' ? e.metadata : {}) as Record<string, unknown>
+        const m = meta(e)
         if (e.eventType === 'salesperson_outcome_set') {
             out.push({ at: e.timestamp, esito: typeof m.outcome === 'string' ? m.outcome : null })
         } else if (e.eventType === 'RECONCILED' && m.undo !== true && typeof m.family === 'string') {
+            if (typeof m.runId === 'string' && annullate.has(m.runId)) continue
             const esito = ESITO_RICONCILIAZIONE[m.family]
-            if (esito) out.push({ at: e.timestamp, esito })
+            if (esito) out.push({ at: e.timestamp, esito, daFoglio: true })
         }
     }
     return out
@@ -578,25 +595,40 @@ export function registrazioniDaEventi(eventi: readonly { eventType: string; time
 export const EVENTI_REGISTRAZIONE = ['salesperson_outcome_set', 'RECONCILED'] as const
 
 /**
- * Presenza e chiusura del lead valgono per l'economia solo se l'appuntamento
- * è passato e una registrazione dell'esito è arrivata a quell'ora o dopo.
- * L'ora di riferimento è presentedAt (il latch: l'ora dell'appuntamento alla
- * prima presenza), altrimenti l'appuntamento; senza nessuna delle due non c'è
- * un "prima" da cui guardarsi.
+ * Presenza e chiusura del lead valgono per l'economia solo se una
+ * registrazione dell'esito è arrivata all'ora dell'appuntamento o dopo, e
+ * quell'ora è passata.
+ *
+ * L'ora di riferimento di una registrazione è l'appuntamento che valeva
+ * quando è stata scritta:
+ * - quello di adesso, se da allora non è stato spostato (appointmentMovedAt);
+ * - quello del latch presentedAt (l'ora dell'appuntamento alla prima
+ *   presenza), se è stato spostato dopo.
+ * Così un esito scritto dopo uno spostamento guarda il nuovo appuntamento (il
+ * latch lasciato da un esito in anticipo non conta), e una presenza già
+ * verificata non si perde se poi l'appuntamento cambia. Senza appuntamento né
+ * latch non c'è un "prima" da cui guardarsi. Le vendite dal foglio valgono
+ * sempre: sono già avvenute.
  */
 export function esitiVerificati(
-    s: { presentedAt: Date | null; appointmentDate: Date | null; salespersonOutcome: string | null },
+    s: { presentedAt: Date | null; appointmentDate: Date | null; appointmentMovedAt?: Date | null; salespersonOutcome: string | null },
     registrazioni: readonly RegistrazioneEsito[],
     now: Date,
 ): { presenza: boolean; chiusura: boolean } {
-    const ora = s.presentedAt ?? s.appointmentDate
-    const passata = !ora || ora.getTime() <= now.getTime()
-    const dopo = (r: RegistrazioneEsito) => !ora || r.at.getTime() >= ora.getTime()
+    const riferimento = (r: RegistrazioneEsito): Date | null => {
+        const spostatoDopo = !!s.appointmentMovedAt && s.appointmentMovedAt.getTime() > r.at.getTime()
+        return spostatoDopo ? (s.presentedAt ?? s.appointmentDate) : (s.appointmentDate ?? s.presentedAt)
+    }
+    const valida = (r: RegistrazioneEsito) => {
+        if (r.daFoglio) return true
+        const ora = riferimento(r)
+        return !ora || (r.at.getTime() >= ora.getTime() && ora.getTime() <= now.getTime())
+    }
     return {
-        presenza: !!s.presentedAt && passata
-            && registrazioni.some(r => !!r.esito && ESITI_PRESENZA.includes(r.esito) && dopo(r)),
-        chiusura: s.salespersonOutcome === 'Chiuso' && passata
-            && registrazioni.some(r => r.esito === 'Chiuso' && dopo(r)),
+        presenza: !!s.presentedAt
+            && registrazioni.some(r => !!r.esito && ESITI_PRESENZA.includes(r.esito) && valida(r)),
+        chiusura: s.salespersonOutcome === 'Chiuso'
+            && registrazioni.some(r => r.esito === 'Chiuso' && valida(r)),
     }
 }
 

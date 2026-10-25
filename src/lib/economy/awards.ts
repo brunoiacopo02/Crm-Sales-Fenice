@@ -321,6 +321,8 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
             confirmationsTimestamp: leads.confirmationsTimestamp,
             presentedAt: leads.presentedAt,
             appointmentDate: leads.appointmentDate,
+            // Per l'ora di riferimento delle registrazioni (esitiVerificati).
+            appointmentMovedAt: leads.appointmentMovedAt,
             salespersonOutcome: leads.salespersonOutcome,
             salespersonOutcomeAt: leads.salespersonOutcomeAt,
         }).from(leads).where(eq(leads.id, leadId)).for('no key update')
@@ -558,6 +560,7 @@ async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end:
         confirmationsUserId: leads.confirmationsUserId,
         confirmationsTimestamp: leads.confirmationsTimestamp,
         appointmentDate: leads.appointmentDate,
+        appointmentMovedAt: leads.appointmentMovedAt,
         presentedAt: leads.presentedAt,
         salespersonOutcome: leads.salespersonOutcome,
         salespersonOutcomeAt: leads.salespersonOutcomeAt,

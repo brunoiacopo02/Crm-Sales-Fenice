@@ -377,18 +377,64 @@ test('esitiVerificati: la chiusura vale solo se registrata come Chiuso a appunta
     assert.deepEqual(esitiVerificati({ ...statoLatch, presentedAt: null }, [{ at: DOPO, esito: 'Non chiuso' }], DOPO).presenza, false)
 })
 
-test('registrazioniDaEventi: esiti del venditore e riconciliazione col foglio, mai l\'annullamento', () => {
+test('registrazioniDaEventi: esiti del venditore e vendite dal foglio, mai l\'annullamento', () => {
     const r = registrazioniDaEventi([
         { eventType: 'salesperson_outcome_set', timestamp: DOPO, metadata: { outcome: 'Chiuso', notes: '' } },
         { eventType: 'salesperson_outcome_set', timestamp: PRIMA, metadata: null },
         { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'esito-mancante', runId: 'r1' } },
-        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'solo-crm' } },
-        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'importo' } },
-        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'esito-mancante', undo: true } },
+        // Una chiusura che il foglio non ha non dice che il lead si è presentato.
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'solo-crm', runId: 'r1' } },
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'importo', runId: 'r1' } },
         { eventType: 'CALL_LOGGED', timestamp: DOPO, metadata: { outcome: 'Chiuso' } },
     ])
-    assert.deepEqual(r.map(x => x.esito), ['Chiuso', null, 'Chiuso', 'Non chiuso'])
+    assert.deepEqual(r.map(x => x.esito), ['Chiuso', null, 'Chiuso'])
+    assert.deepEqual(r.map(x => !!x.daFoglio), [false, false, true])
     assert.deepEqual([...EVENTI_REGISTRAZIONE].sort(), ['RECONCILED', 'salesperson_outcome_set'])
+})
+
+test('registrazioniDaEventi: una run annullata non registra niente, le altre run sì', () => {
+    const r = registrazioniDaEventi([
+        { eventType: 'RECONCILED', timestamp: PRIMA, metadata: { family: 'esito-mancante', runId: 'r1' } },
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'esito-mancante', runId: 'r1', undo: true } },
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'lead-scartato', runId: 'r2' } },
+    ])
+    assert.deepEqual(r, [{ at: DOPO, esito: 'Chiuso', daFoglio: true }])
+})
+
+// Spostamenti dell'appuntamento dopo un esito in anticipo (revisione del 25/10).
+const A0 = giorno('2026-10-27T14:00:00Z')             // martedì 27/10, anticipato
+const A2 = giorno('2026-10-30T14:00:00Z')             // venerdì 30/10, rimandato
+const TRA = giorno('2026-10-29T09:00:00Z')            // giovedì 29/10, dopo APP e prima di A2
+const SPOSTATO = giorno('2026-10-26T10:00:00Z')       // lunedì 26/10, quando si sposta
+
+test('esitiVerificati: dopo uno spostamento conta il nuovo appuntamento, non il latch lasciato in anticipo', () => {
+    // Presenziato scritto domenica per mercoledì (latch APP), poi rimandato a venerdì:
+    // un Non chiuso di giovedì è ancora prima dell'appuntamento.
+    const rimandato = { presentedAt: APP, appointmentDate: A2, appointmentMovedAt: SPOSTATO, salespersonOutcome: 'Non chiuso' as string | null }
+    const presto = { at: PRIMA, esito: 'Non chiuso' }
+    assert.equal(esitiVerificati(rimandato, [presto, { at: TRA, esito: 'Non chiuso' }], TRA).presenza, false)
+    // Dopo la call di venerdì il venditore registra: vale.
+    const dopoA2 = giorno('2026-10-30T15:00:00Z')
+    assert.equal(esitiVerificati(rimandato, [presto, { at: dopoA2, esito: 'Non chiuso' }], dopoA2).presenza, true)
+    // Presenziato in anticipo per mercoledì, poi anticipato a martedì: l'esito vero
+    // di martedì sera paga, anche se è prima del latch.
+    const anticipato = { presentedAt: APP, appointmentDate: A0, appointmentMovedAt: SPOSTATO, salespersonOutcome: 'Non chiuso' as string | null }
+    const martediSera = giorno('2026-10-27T16:00:00Z')
+    assert.equal(esitiVerificati(anticipato, [presto, { at: martediSera, esito: 'Non chiuso' }], martediSera).presenza, true)
+})
+
+test('esitiVerificati: una presenza verificata resta tale se poi l\'appuntamento si sposta', () => {
+    // Presente mercoledì, registrato dopo la call; giovedì il venditore sposta a venerdì.
+    const spostatoDopo = { presentedAt: APP, appointmentDate: A2, appointmentMovedAt: TRA, salespersonOutcome: 'Non chiuso' as string | null }
+    assert.equal(esitiVerificati(spostatoDopo, [{ at: DOPO, esito: 'Non chiuso' }], TRA).presenza, true)
+    // Senza spostamenti timbrati vale l'appuntamento di adesso.
+    assert.equal(esitiVerificati({ ...spostatoDopo, appointmentDate: APP, appointmentMovedAt: null }, [{ at: DOPO, esito: 'Non chiuso' }], TRA).presenza, true)
+})
+
+test('esitiVerificati: le vendite dal foglio valgono anche con un appuntamento futuro nel CRM', () => {
+    const futuro = { presentedAt: A2, appointmentDate: A2, salespersonOutcome: 'Chiuso' as string | null }
+    assert.deepEqual(esitiVerificati(futuro, [{ at: TRA, esito: 'Chiuso', daFoglio: true }], TRA), { presenza: true, chiusura: true })
+    assert.deepEqual(esitiVerificati(futuro, [{ at: TRA, esito: 'Chiuso' }], TRA), { presenza: false, chiusura: false })
 })
 
 test('Piume del GDO e Scintille delle Conferme: niente per una presenza o chiusura non verificata', () => {
