@@ -14,7 +14,7 @@ import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isConfermeTl } from "@/lib/confermeTl";
-import { nonDaAccountDiProva } from "@/lib/prova/sql";
+import { leadDelMondoDiAccount, leadVisibileA, nonDaAccountDiProva } from "@/lib/prova/sql";
 // Le costanti di monete e XP di @/lib/surveys/rewards non si usano più: dal
 // restyle "Diretta" (PO 25/10/2026) i sondaggi non pagano e non penalizzano.
 import {
@@ -171,6 +171,8 @@ export async function saveGdoSurvey(
 
         const err = validateGdoPayload(payload);
         if (err) return { success: false, error: err };
+        // Prova (migr. 0050): prova con prova, vero con vero, anche sui sondaggi.
+        if (!(await leadVisibileA(leadId, ctx.userId))) return { success: false, error: "Lead non trovato" };
 
         const { eligible } = await isLeadEligible(leadId, ctx.companyId);
         if (!eligible) return { success: false, error: "Lead non idoneo (funnel escluso o inesistente)" };
@@ -234,6 +236,8 @@ export async function getGdoSurveyByLead(leadId: string) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     await requireRole(["GDO", "CONFERME", "VENDITORE", "MANAGER", "ADMIN"]);
+    // Prova (migr. 0050): i sondaggi di un lead dell'altra parte non si leggono.
+    if (!(await leadVisibileA(leadId, ctx.userId))) return null;
     const [row] = await db.select().from(gdoLeadSurveys).where(and(eq(gdoLeadSurveys.leadId, leadId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
     return row || null;
 }
@@ -286,7 +290,7 @@ export async function saveConfermeSurvey(
         // Le Conferme raccolgono il sondaggio SU TUTTI i lead, inclusi
         // quelli con funnel 'database'. Il contesto è post-appuntamento,
         // ha senso raccogliere feedback indipendentemente dal funnel.
-        const [leadRow] = await db.select({ id: leads.id }).from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)));
+        const [leadRow] = await db.select({ id: leads.id }).from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId), leadDelMondoDiAccount(ctx.userId)));
         if (!leadRow) return { success: false, error: "Lead non trovato" };
 
         const suspicious = payload.fillDurationMs < MIN_FILL_DURATION_MS;
@@ -344,6 +348,8 @@ export async function getConfermeSurveyByLead(leadId: string) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     await requireRole(["GDO", "CONFERME", "VENDITORE", "MANAGER", "ADMIN"]);
+    // Prova (migr. 0050): i sondaggi di un lead dell'altra parte non si leggono.
+    if (!(await leadVisibileA(leadId, ctx.userId))) return null;
     const [row] = await db.select().from(confermeLeadSurveys).where(and(eq(confermeLeadSurveys.leadId, leadId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
     return row || null;
 }
@@ -423,6 +429,8 @@ export async function getSalesSurveyByLead(leadId: string) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     await requireRole(["GDO", "CONFERME", "VENDITORE", "MANAGER", "ADMIN"]);
+    // Prova (migr. 0050): i sondaggi di un lead dell'altra parte non si leggono.
+    if (!(await leadVisibileA(leadId, ctx.userId))) return null;
     const [row] = await db.select().from(salesLeadSurveys).where(and(eq(salesLeadSurveys.leadId, leadId), eq(salesLeadSurveys.companyId, ctx.companyId)));
     return row || null;
 }
@@ -536,7 +544,7 @@ export async function getLeadSurveyContext(leadId: string): Promise<{
 }> {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
-    const [row] = await db.select({ funnel: leads.funnel }).from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)));
+    const [row] = await db.select({ funnel: leads.funnel }).from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId), leadDelMondoDiAccount(ctx.userId)));
     if (!row) return { funnel: null, eligible: false, eligibilityReason: "not_found" };
     const funnelLower = (row.funnel || "").trim().toLowerCase();
     if (funnelLower === EXCLUDED_FUNNEL) {

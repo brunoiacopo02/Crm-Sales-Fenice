@@ -26,7 +26,7 @@ import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDe
 import { lancioFirst } from "@/lib/lancio/conferme"
 import { appointmentMoveStamp, confermeBoardColumn } from "@/lib/conferme/boardWindow"
 import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
-import { leadDelMondoDiAccount, leadVero, rifiutoMondoDiverso } from "@/lib/prova/sql"
+import { accountDiProva, leadDelMondoDiAccount, leadVero, leadVisibileA, rifiutoMondoDiverso } from "@/lib/prova/sql"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -591,6 +591,10 @@ export async function getConfermeNotes(leadId: string): Promise<ConfermeNoteItem
 
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+
+    // Prova (migr. 0050): le note di un lead dell'altra parte non si leggono,
+    // anche se l'id arriva dal browser (per esempio da una notifica vecchia).
+    if (!(await leadVisibileA(leadId, ctx.userId))) return []
 
     const [confermeRows, botRows] = await Promise.all([
         db.select({
@@ -2000,13 +2004,18 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date, opts?: 
         ? []
         : await weekCoverage(ctx, weekStartFor(startDate));
 
+    // Prova (migr. 0050): le agende dei venditori sono fatte di lead veri. La
+    // Conferma di prova vede le disponibilità, mai nomi, telefoni e note dei
+    // lead veri (i lead di prova non hanno mai un venditore).
+    const vistaDiProva = await accountDiProva(supabaseUser.id);
+
     return {
         venditori: venditori
             .map(v => {
                 return {
                     id: v.id,
                     name: v.displayName || v.name || 'Venditore',
-                    appointments: rows
+                    appointments: vistaDiProva ? [] : rows
                         .filter(r => r.salespersonUserId === v.id && r.appointmentDate)
                         .map(r => ({
                             leadId: r.id,
@@ -2019,7 +2028,7 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date, opts?: 
                         })),
                     declaredSlots: declaredByVenditore.get(v.id) ?? [],
                     blockedSlots: blockedByVenditore.get(v.id) ?? [],
-                    blockDetails: blockDetailsByVenditore.get(v.id) ?? [],
+                    blockDetails: (blockDetailsByVenditore.get(v.id) ?? []).map(d => (vistaDiProva ? { ...d, leadName: null } : d)),
                     calendarExempt: v.calendarExempt,
                 };
             })

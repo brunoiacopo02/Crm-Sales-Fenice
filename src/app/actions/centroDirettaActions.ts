@@ -303,8 +303,12 @@ async function forzieriDiOggi(giorno: string): Promise<ForziereOggi[]> {
 }
 
 async function richiesteNegozio(): Promise<{ daGestire: number; prime: RichiestaCentro[] }> {
+    // Come squadra, registro e saldi: le richieste degli account di prova
+    // (migr. 0050) restano fuori dal centro di controllo.
     const [conto, prime] = await Promise.all([
-        db.select({ n: sql<number>`count(*)::int` }).from(rewardPurchases).where(eq(rewardPurchases.status, 'richiesto')),
+        db.select({ n: sql<number>`count(*)::int` }).from(rewardPurchases)
+            .innerJoin(users, eq(rewardPurchases.userId, users.id))
+            .where(and(eq(rewardPurchases.status, 'richiesto'), accountVero())),
         db.select({
             id: rewardPurchases.id, createdAt: rewardPurchases.createdAt, currency: rewardPurchases.currency,
             price: rewardPurchases.price, giftTo: rewardPurchases.giftTo, articolo: rewardItems.name,
@@ -313,7 +317,7 @@ async function richiesteNegozio(): Promise<{ daGestire: number; prime: Richiesta
             .from(rewardPurchases)
             .innerJoin(rewardItems, eq(rewardPurchases.itemId, rewardItems.id))
             .innerJoin(users, eq(rewardPurchases.userId, users.id))
-            .where(eq(rewardPurchases.status, 'richiesto'))
+            .where(and(eq(rewardPurchases.status, 'richiesto'), accountVero()))
             .orderBy(asc(rewardPurchases.createdAt))
             .limit(3),
     ])

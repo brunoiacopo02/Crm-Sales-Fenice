@@ -20,6 +20,7 @@ import { db } from "@/db"
 import { presenceHeartbeats, users } from "@/db/schema"
 import { eq, and, gte } from "drizzle-orm"
 import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
+import { accountDelMondoDiAccount } from "@/lib/prova/sql"
 
 /** Heartbeat considerato "fresco" se aggiornato entro questa finestra.
  *  Non esportata: un file "use server" può esportare solo funzioni async
@@ -83,6 +84,10 @@ export async function getConfermeHeartbeats(): Promise<ConfermeHeartbeat[]> {
         .where(and(
             companyScope(ctx, presenceHeartbeats.companyId),
             gte(presenceHeartbeats.updatedAt, freshSince),
+            // Prova (migr. 0050): l'account di prova vede solo i colleghi di
+            // prova e gli altri solo quelli veri. Il battito porta l'id del lead
+            // su cui si lavora: un lead vero non arriva mai alla prova.
+            accountDelMondoDiAccount(ctx.userId),
         ))
 
     return rows.map(r => ({

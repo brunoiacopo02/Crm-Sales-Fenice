@@ -19,6 +19,7 @@ import { isValidTemplateSlot, slotsFromTemplate, templateKey, type TemplateSlot 
 import { materializeTemplates } from "@/lib/venditore/calendarRunner"
 import { revalidatePath } from "next/cache"
 import crypto from "crypto"
+import { accountDiProva } from "@/lib/prova/sql"
 
 /**
  * Ruoli ammessi al calendario venditori (spec §7, riga "Vedere la copertura"):
@@ -284,11 +285,15 @@ export async function getCalendarWeek(input?: {
         activeVenditori(ctx),
     ])
 
+    // Prova (migr. 0050): sul calendario di un venditore ci sono solo lead veri.
+    // La Conferma di prova vede gli slot occupati, mai di chi sono.
+    const vistaDiProva = await accountDiProva(userId)
+
     const myAppointments = apptRows.flatMap(r => {
         if (!r.appointmentDate) return []
         const slot = slotStartFor(r.appointmentDate)
         if (!slot) return []
-        return [{ slotKey: slotKey(slot), leadId: r.leadId, leadName: r.leadName }]
+        return [{ slotKey: slotKey(slot), leadId: vistaDiProva ? '' : r.leadId, leadName: vistaDiProva ? 'Appuntamento' : r.leadName }]
     })
 
     const plan = planRows[0]
@@ -354,8 +359,8 @@ export async function getCalendarWeek(input?: {
         myBlocks: blockRows.map(r => ({
             slotKey: slotKey(r.slotStart),
             kind: r.kind,
-            leadId: r.leadId,
-            leadName: r.leadName,
+            leadId: vistaDiProva ? null : r.leadId,
+            leadName: vistaDiProva ? null : r.leadName,
             orphan: r.kind === 'FOLLOWUP' && r.leadOwner !== targetUserId,
         })),
         myAppointments,

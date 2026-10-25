@@ -6,12 +6,15 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { botContactRequests, leadEvents, leads, notifications, users } from '@/db/schema';
 import { contactLane, isLeadLocked } from '@/lib/bot-fissatore/contactRequests';
+import { personName } from '@/lib/diretta/config';
 import { notificaTiHaCercato } from '@/lib/diretta/vistaGdo';
+import { leadDelMondoDi } from '@/lib/prova/sql';
 import { createClient } from '@/utils/supabase/server';
 
 const COMPANY = 'fenice'; // il bot fissatore lavora solo lead Fenice
 
-type Viewer = { id: string; role: string; lane: 'admin' | 'conferme' };
+/** `isTest` = account di prova (migr. 0050): vede e tocca solo richieste di lead di prova. */
+type Viewer = { id: string; role: string; lane: 'admin' | 'conferme'; isTest: boolean };
 
 /**
  * Chi può vedere la coda, e quale fetta.
@@ -21,20 +24,32 @@ type Viewer = { id: string; role: string; lane: 'admin' | 'conferme' };
  *   su 64 (22%) che oggi finiscono in coda per un GDO.
  * Le Conferme NON assegnano: spostare l'assegnatario cambia l'attribuzione dei
  * KPI, e non è il loro mestiere.
+ *
+ * Ruolo e marcatore di prova si leggono dalla tabella users, non dai metadati
+ * della sessione (PO 25/10/2026): la Conferma di prova vedeva le richieste dei
+ * lead veri, con nome, telefono e i bottoni per prenderle in carico.
  */
 async function requireViewer(): Promise<Viewer | null> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
-    const role = user.user_metadata?.role;
-    if (role === 'ADMIN') return { id: user.id, role, lane: 'admin' };
-    if (role === 'CONFERME') return { id: user.id, role, lane: 'conferme' };
+    const [riga] = await db.select({ role: users.role, isActive: users.isActive, isTest: users.isTest })
+        .from(users).where(eq(users.id, user.id)).limit(1);
+    if (!riga?.isActive) return null;
+    const isTest = riga.isTest === true;
+    if (riga.role === 'ADMIN') return { id: user.id, role: riga.role, lane: 'admin', isTest };
+    if (riga.role === 'CONFERME') return { id: user.id, role: riga.role, lane: 'conferme', isTest };
     return null;
+}
+
+/** La richiesta riguarda un lead della parte di chi la tocca (prova con prova, vero con vero). */
+function stessaParte(leadIsTest: boolean | null, viewer: Pick<Viewer, 'isTest'>): boolean {
+    return (leadIsTest === true) === viewer.isTest;
 }
 
 async function requireAdmin() {
     const v = await requireViewer();
-    return v?.lane === 'admin' ? { id: v.id } : null;
+    return v?.lane === 'admin' ? { id: v.id, isTest: v.isTest } : null;
 }
 
 /**
@@ -133,12 +148,15 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
 
     // Lo storico si limita a 30 giorni; le pending si vogliono TUTTE, anche
     // quelle ferme da luglio — sono esattamente quelle da recuperare.
+    // Prova (migr. 0050): ognuno vede solo le richieste dei lead della sua parte.
+    const delMondo = leadDelMondoDi(viewer.isTest);
     const [recent, pendingRows] = await Promise.all([
         db.select(selection)
             .from(botContactRequests)
             .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
             .where(and(
                 eq(botContactRequests.companyId, COMPANY),
+                delMondo,
                 gte(botContactRequests.updatedAt, new Date(Date.now() - HANDLED_WINDOW_DAYS * 86400_000)),
             ))
             .orderBy(desc(botContactRequests.createdAt)),
@@ -147,6 +165,7 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
             .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
             .where(and(
                 eq(botContactRequests.companyId, COMPANY),
+                delMondo,
                 eq(botContactRequests.status, 'pending'),
             ))
             .orderBy(desc(botContactRequests.createdAt)),
@@ -158,10 +177,11 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
 
     const userIds = [...new Set(all.flatMap(r => [r.r.assignedToId, r.ownerId].filter(Boolean) as string[]))];
     const people = userIds.length
-        ? await db.select({ id: users.id, name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
+        ? await db.select({ id: users.id, name: users.name, displayName: users.displayName, firstName: users.firstName, isBot: users.isBot })
             .from(users).where(inArray(users.id, userIds))
         : [];
-    const nameOf = new Map(people.map(p => [p.id, p.gdoCode ? `GDO ${p.gdoCode}` : (p.displayName || p.name || '—')]));
+    // Nomi veri anche alle Conferme e all'admin (PO 25/10/2026); il bot resta "il bot".
+    const nameOf = new Map(people.map(p => [p.id, p.isBot ? 'il bot' : (personName(p) || '—')]));
 
     const now = Date.now();
     const toRow = (r: QueueRow): ContactRequestRow => ({
@@ -189,7 +209,7 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
         note: r.r.note,
     });
 
-    const gdoRows = await db.select({ id: users.id, name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
+    const gdoRows = await db.select({ id: users.id, name: users.name, displayName: users.displayName, firstName: users.firstName })
         .from(users)
         // L'account di prova (migr. 0050) non riceve richieste di lead veri.
         .where(and(eq(users.companyId, COMPANY), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.isBot, false), eq(users.isTest, false)));
@@ -206,8 +226,8 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
         handled: all.filter(r => r.r.status !== 'pending').map(toRow).filter(inLane)
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-        gdos: viewer.lane === 'admin'
-            ? gdoRows.map(g => ({ id: g.id, label: g.gdoCode ? `GDO ${g.gdoCode}` : (g.displayName || g.name || g.id) }))
+        gdos: viewer.lane === 'admin' && !viewer.isTest
+            ? gdoRows.map(g => ({ id: g.id, label: personName(g) || g.id }))
                 .sort((a, b) => a.label.localeCompare(b.label, 'it'))
             : [],
     };
@@ -231,12 +251,13 @@ export async function assignContactRequest(requestId: string, gdoId: string): Pr
         leadName: leads.name,
         leadStatus: leads.status,
         presentedAt: leads.presentedAt,
+        leadIsTest: leads.isTest,
     })
         .from(botContactRequests)
         .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
         .where(eq(botContactRequests.id, requestId))
         .limit(1);
-    if (!row) return { ok: false, error: 'Richiesta non trovata.' };
+    if (!row || !stessaParte(row.leadIsTest, admin)) return { ok: false, error: 'Richiesta non trovata.' };
     if (row.r.status !== 'pending') return { ok: false, error: 'Richiesta già gestita.' };
 
     const [gdo] = await db.select({ id: users.id, role: users.role, isActive: users.isActive, isTest: users.isTest, companyId: users.companyId })
@@ -307,6 +328,14 @@ export async function closeContactRequest(requestId: string): Promise<{ ok: bool
     const admin = await requireAdmin();
     if (!admin) return { ok: false, error: 'Solo gli ADMIN possono chiudere le richieste di contatto.' };
 
+    // Prova con prova, vero con vero: la richiesta di un lead dell'altra parte non si tocca.
+    const [parte] = await db.select({ leadIsTest: leads.isTest })
+        .from(botContactRequests)
+        .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
+        .where(eq(botContactRequests.id, requestId))
+        .limit(1);
+    if (!parte || !stessaParte(parte.leadIsTest, admin)) return { ok: false, error: 'Richiesta non trovata o già gestita.' };
+
     const now = new Date();
     const updated = await db.update(botContactRequests)
         .set({ status: 'closed', closedAt: now, closedByUserId: admin.id, updatedAt: now })
@@ -329,12 +358,12 @@ export async function takeChargeContactRequest(requestId: string): Promise<{ ok:
     const viewer = await requireViewer();
     if (!viewer) return { ok: false, error: 'Non autorizzato.' };
 
-    const [row] = await db.select({ r: botContactRequests, leadStatus: leads.status })
+    const [row] = await db.select({ r: botContactRequests, leadStatus: leads.status, leadIsTest: leads.isTest })
         .from(botContactRequests)
         .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
         .where(eq(botContactRequests.id, requestId))
         .limit(1);
-    if (!row) return { ok: false, error: 'Richiesta non trovata.' };
+    if (!row || !stessaParte(row.leadIsTest, viewer)) return { ok: false, error: 'Richiesta non trovata.' };
     if (row.r.status !== 'pending') return { ok: false, error: 'Richiesta già gestita.' };
     if (viewer.lane === 'conferme' && contactLane(row.leadStatus) !== 'conferme') {
         return { ok: false, error: 'Questa richiesta non è di competenza delle Conferme.' };
@@ -367,12 +396,12 @@ export async function resolveContactRequest(
         return { ok: false, error: 'Esito non valido.' };
     }
 
-    const [row] = await db.select({ r: botContactRequests, leadStatus: leads.status })
+    const [row] = await db.select({ r: botContactRequests, leadStatus: leads.status, leadIsTest: leads.isTest })
         .from(botContactRequests)
         .innerJoin(leads, eq(leads.id, botContactRequests.leadId))
         .where(eq(botContactRequests.id, requestId))
         .limit(1);
-    if (!row) return { ok: false, error: 'Richiesta non trovata.' };
+    if (!row || !stessaParte(row.leadIsTest, viewer)) return { ok: false, error: 'Richiesta non trovata.' };
     if (viewer.lane === 'conferme' && contactLane(row.leadStatus) !== 'conferme') {
         return { ok: false, error: 'Questa richiesta non è di competenza delle Conferme.' };
     }
@@ -423,6 +452,8 @@ export async function countPendingContactRequests(): Promise<number> {
             .where(and(
                 eq(botContactRequests.companyId, COMPANY),
                 eq(botContactRequests.status, 'pending'),
+                // Prova (migr. 0050): il pallino conta solo le richieste della propria parte.
+                leadDelMondoDi(viewer.isTest),
             ));
 
         if (viewer.lane === 'admin') return rows.length;

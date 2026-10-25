@@ -50,6 +50,20 @@ const STATUS_LABEL: Record<string, string> = {
     REJECTED: 'Scartato',
 };
 
+/** Date e ore sempre in ora di Roma: uguali fra server e browser, niente errori di idratazione. */
+const ORA_ROMA: Intl.DateTimeFormatOptions = { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' };
+
+/** Un valore del bot che è una data ISO completa ("2026-10-26T13:00:00+00:00") si mostra in ora di Roma. */
+function valoreLeggibile(v: unknown): string {
+    if (Array.isArray(v)) return v.join(', ');
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
+        const d = new Date(s);
+        if (!Number.isNaN(d.getTime())) return d.toLocaleString('it-IT', ORA_ROMA);
+    }
+    return s;
+}
+
 function InfoGrid({ info }: { info: Record<string, unknown> }) {
     const entries = Object.entries(info).filter(([, v]) => v !== null && v !== undefined && v !== '');
     if (entries.length === 0) return null;
@@ -58,7 +72,7 @@ function InfoGrid({ info }: { info: Record<string, unknown> }) {
             {entries.map(([k, v]) => (
                 <div key={k} className="flex gap-2 text-sm">
                     <span className="shrink-0 font-medium capitalize text-ash-500">{k.replace(/([A-Z])/g, ' $1')}:</span>
-                    <span className="text-brand-charcoal">{Array.isArray(v) ? v.join(', ') : String(v)}</span>
+                    <span className="text-brand-charcoal">{valoreLeggibile(v)}</span>
                 </div>
             ))}
         </div>
@@ -94,11 +108,11 @@ function RequestCard({ row, gdos, canAssign }: { row: ContactRequestRow; gdos: C
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-bold text-brand-charcoal">{row.leadName}</span>
-                        <span className="rounded-full border border-ash-200 bg-ash-50 px-2 py-0.5 text-xs font-semibold text-ash-600">
+                        <span className="rounded-lg border border-ash-200 bg-ash-50 px-2 py-0.5 text-xs font-semibold text-ash-600">
                             {contactCategoryLabel(row.category)}
                         </span>
                         {row.updatesCount > 1 && (
-                            <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                            <span className="rounded-lg border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
                                 ha riscritto {row.updatesCount} volte
                             </span>
                         )}
@@ -114,7 +128,7 @@ function RequestCard({ row, gdos, canAssign }: { row: ContactRequestRow; gdos: C
                         {row.currentOwnerName && <span>· ora a {row.currentOwnerName}</span>}
                     </div>
                 </div>
-                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${waitTone(row.waitingHours)}`}>
+                <span className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold ${waitTone(row.waitingHours)}`}>
                     <Clock className="h-3.5 w-3.5" />aspetta da {waitLabel(row.waitingHours)}
                 </span>
             </div>
@@ -129,7 +143,7 @@ function RequestCard({ row, gdos, canAssign }: { row: ContactRequestRow; gdos: C
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
-                        Ha già un appuntamento{row.appointmentDate ? ` per il ${new Date(row.appointmentDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}` : ''}:
+                        Ha già un appuntamento{row.appointmentDate ? ` per il ${new Date(row.appointmentDate).toLocaleString('it-IT', ORA_ROMA)}` : ''}:
                         il lead <strong>non cambia mano</strong> (sposterebbe presenze e fatturato già contati).
                         Il GDO che scegli riceve la richiesta e può chiamarlo dalla scheda.
                     </span>
@@ -271,7 +285,7 @@ export default function ContactRequestsClient({ view }: { view: ContactRequestsV
 
             {handled.length > 0 && (
                 <div>
-                    <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-ash-500">Gestite di recente</h2>
+                    <h2 className="mb-2 text-sm font-semibold text-ash-500">Gestite di recente</h2>
                     <div className="divide-y divide-ash-100 overflow-hidden rounded-xl border border-ash-200/60 bg-white shadow-soft">
                         {handled.map(row => (
                             <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
@@ -288,7 +302,7 @@ export default function ContactRequestsClient({ view }: { view: ContactRequestsV
                                             ? `assegnata a ${row.assignedToName ?? '—'}`
                                             : 'chiusa senza assegnazione'}
                                     {' · '}
-                                    {new Date(row.updatedAt).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                                    {new Date(row.updatedAt).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Rome' })}
                                 </div>
                             </div>
                         ))}

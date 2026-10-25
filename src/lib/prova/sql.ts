@@ -6,7 +6,7 @@
 // lo stesso con `users`. Per le tabelle che hanno soltanto l'id di chi ha
 // scritto la riga (callLogs, leadEvents, ...) c'è nonDaAccountDiProva().
 
-import { eq, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm'
+import { and, eq, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { db } from '@/db'
 import { leads, users } from '@/db/schema'
@@ -47,6 +47,29 @@ export function nonDaAccountDiProva(col: AnyPgColumn): SQL {
         isNull(col),
         notInArray(col, db.select({ id: users.id }).from(users).where(eq(users.isTest, true))),
     )!
+}
+
+/**
+ * Come leadDelMondoDiAccount per la tabella users: gli account che vede chi
+ * guarda. Un account di prova vede solo gli account di prova, gli altri solo
+ * quelli veri. Serve alle letture che mostrano colleghi e su che lead stanno
+ * lavorando (presenze delle Conferme).
+ */
+export function accountDelMondoDiAccount(userId: string): SQL {
+    return sql`${users.isTest} = coalesce((select u."isTest" from "users" u where u."id" = ${userId}), false)`
+}
+
+/**
+ * Il lead esiste e sta dalla parte di chi guarda (prova con prova, vero con
+ * vero): una lettura per chiave primaria. Per le letture per id che arrivano
+ * dal browser (note, sondaggi, duplicati), dove un id dell'altra parte non
+ * deve restituire niente.
+ */
+export async function leadVisibileA(leadId: string | null | undefined, userId: string | null | undefined): Promise<boolean> {
+    if (!leadId || !userId) return false
+    const [l] = await db.select({ id: leads.id }).from(leads)
+        .where(and(eq(leads.id, leadId), leadDelMondoDiAccount(userId))).limit(1)
+    return !!l
 }
 
 /** L'account è di prova (riga di users). Un id sconosciuto non lo è. */

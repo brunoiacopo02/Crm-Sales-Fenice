@@ -237,6 +237,8 @@ export async function getPipelineLeads() {
 
             const fourthCallConditions = [
                 eq(leads.companyId, ctx.companyId),
+                // Prova (migr. 0050): come la 1ª-3ª chiamata e i richiami.
+                leadDelMondoDiAccount(userId),
                 eq(leads.status, 'REJECTED'),
                 eq(leads.callCount, 3),
                 // Il refuso storico "irriperebile" è stato corretto in "irreperibile"
@@ -447,9 +449,11 @@ export async function getLeadsWithSamePhone(leadId: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
 
+    // Prova (migr. 0050): un lead dell'altra parte non esiste per chi guarda,
+    // e i duplicati mostrati sono solo quelli della sua parte.
     const [target] = await db.select({ id: leads.id, phone: leads.phone })
         .from(leads)
-        .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)))
+        .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId), leadDelMondoDiAccount(ctx.userId)))
         .limit(1)
     if (!target) return { success: false as const, error: 'Lead non trovato' }
 
@@ -479,6 +483,7 @@ export async function getLeadsWithSamePhone(leadId: string) {
         .where(and(
             eq(leads.companyId, ctx.companyId),
             ne(leads.id, leadId),
+            leadDelMondoDiAccount(ctx.userId),
             sql`${phoneKeyExpr} = ${key}`,
             // Coerente con il badge "duplicato" di getPipelineLeads: le copie
             // tecniche di un'infornata anomala non sono un collega che ha già
