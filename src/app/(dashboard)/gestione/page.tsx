@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/utils/supabase/server";
+import { conRuoloDb } from "@/lib/auth/ruoloDb";
 import { listGdoPools } from "@/app/actions/gestionePoolActions";
 import GestioneClient from "./GestioneClient";
 
@@ -15,9 +15,9 @@ import GestioneClient from "./GestioneClient";
  * stare davanti a un ADMIN.
  */
 export default async function GestionePage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || user.user_metadata?.role !== "ADMIN") redirect("/unauthorized");
+    // Ruolo letto dalla tabella users (collaudo del 25/10/2026), come nel
+    // resto dell'admin della Diretta: i metadati della sessione non bastano.
+    if (!(await conRuoloDb(["ADMIN"]))) redirect("/unauthorized");
 
     const gdos = await listGdoPools();
     return <GestioneClient initialGdos={gdos} />;

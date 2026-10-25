@@ -30,6 +30,7 @@ import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
+import { haRuoloDb } from "@/lib/auth/ruoloDb";
 import { revalidatePath } from "next/cache";
 
 /** Solo ADMIN: questa scheda sposta i lead di tutti, non è una pagina di reparto. */
@@ -38,6 +39,9 @@ async function requireAdmin(): Promise<{ id: string; ctx: TenantContext }> {
     const { data: { user } } = await supabase.auth.getUser();
     const role = user?.user_metadata?.role as string | undefined;
     if (!user || role !== "ADMIN") throw new Error("Unauthorized");
+    // Anche la tabella users deve dire ADMIN: i metadati li può riscrivere
+    // l'utente stesso finché la migrazione 0047 non è applicata.
+    if (!(await haRuoloDb(user.id, ["ADMIN"]))) throw new Error("Unauthorized");
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     return { id: user.id, ctx };

@@ -33,7 +33,8 @@ test('durate in italiano', () => {
 })
 
 test('frase di ritmo sui due scalini', () => {
-    assert.equal(fraseRitmo(0, [8, 10]), "Ti mancano 8 per l'8.")
+    assert.equal(fraseRitmo(0, [8, 10]), 'Comincia dal primo.')
+    assert.equal(fraseRitmo(2, [8, 10]), "Ti mancano 6 per l'8.")
     assert.equal(fraseRitmo(7, [8, 10]), "Ti manca 1 per l'8.")
     assert.equal(fraseRitmo(8, [8, 10]), 'Primo obiettivo preso. Ti mancano 2 per il 10.')
     assert.equal(fraseRitmo(9, [8, 10]), 'Primo obiettivo preso. Ti manca 1 per il 10.')
@@ -44,6 +45,7 @@ test('frase di ritmo sui due scalini', () => {
 })
 
 test('frase di squadra', () => {
+    assert.equal(fraseSquadra(0, [55, 65]), 'Ne servono 55 per il primo obiettivo.')
     assert.equal(fraseSquadra(37, [55, 65]), 'Ne mancano 18 per il 55.')
     assert.equal(fraseSquadra(54, [55, 65]), 'Ne manca 1 per il 55.')
     assert.equal(fraseSquadra(58, [55, 65]), 'Primo obiettivo di squadra preso. Ne mancano 7 per il 65.')

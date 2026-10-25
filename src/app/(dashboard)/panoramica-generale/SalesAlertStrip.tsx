@@ -10,35 +10,36 @@
 import { useState, useEffect, useTransition } from "react"
 import { AlertTriangle, CheckCircle2, MinusCircle, Loader2, RefreshCw } from "lucide-react"
 import { getSalesAlerts, type SalesAlertsResult, type SalesAlertCard } from "@/app/actions/salesAlertsActions"
+import { euroIt, numeroIt, numeroItFino } from "@/lib/diretta/formato"
 
 function formatValue(card: SalesAlertCard): string {
     switch (card.unit) {
         case 'eur':
-            return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(card.actualToday)
+            return euroIt(Math.round(card.actualToday))
         case 'ratio':
         case 'avg':
-            return card.actualToday.toLocaleString("it-IT", { maximumFractionDigits: 2 })
+            return numeroItFino(card.actualToday, 2)
         default:
-            return Math.round(card.actualToday).toLocaleString("it-IT")
+            return numeroIt(Math.round(card.actualToday))
     }
 }
 
 function formatTarget(card: SalesAlertCard): string {
     switch (card.unit) {
         case 'eur':
-            return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(card.targetToday)
+            return euroIt(Math.round(card.targetToday))
         case 'ratio':
         case 'avg':
-            return card.targetToday.toLocaleString("it-IT", { maximumFractionDigits: 2 })
+            return numeroItFino(card.targetToday, 2)
         default:
-            return card.targetToday.toLocaleString("it-IT", { maximumFractionDigits: 1 })
+            return numeroItFino(card.targetToday, 1)
     }
 }
 
 function formatDeviation(dev: number | null): string {
     if (dev === null || !isFinite(dev)) return '—'
     const pct = dev * 100
-    return `${pct > 0 ? '+' : ''}${pct.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%`
+    return `${pct > 0 ? '+' : ''}${numeroItFino(pct, 1)}%`
 }
 
 function AlertBadge({ status }: { status: SalesAlertCard['status'] }) {

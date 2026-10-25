@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    numeroIt, numeroConSegno, euroIt, partiRoma, oraRoma, giornoMeseRoma, dataOraRoma,
+    numeroIt, numeroItFino, numeroConSegno, euroIt, partiRoma, oraRoma, giornoMeseRoma, dataOraRoma,
     dataBreveRoma, dataOraBreveRoma, giornoMeseLungo, meseLungo,
 } from './formato'
 
@@ -18,6 +18,16 @@ test('numeri: punto delle migliaia anche a quattro cifre (Node scriveva 3030, il
     assert.equal(numeroIt(-0.2), '0')
     assert.equal(numeroIt(Number.NaN), '0')
     assert.equal(numeroIt(Number.POSITIVE_INFINITY), '0')
+})
+
+test('numeri coi decimali solo se servono (maximumFractionDigits)', () => {
+    assert.equal(numeroItFino(12, 1), '12')
+    assert.equal(numeroItFino(12.5, 1), '12,5')
+    assert.equal(numeroItFino(12.54, 1), '12,5')
+    assert.equal(numeroItFino(1234.5, 2), '1.234,5')
+    assert.equal(numeroItFino(0.126, 2), '0,13')
+    assert.equal(numeroItFino(-3.04, 1), '-3')
+    assert.equal(numeroItFino(Number.NaN, 2), '0')
 })
 
 test('numeri col segno ed euro', () => {

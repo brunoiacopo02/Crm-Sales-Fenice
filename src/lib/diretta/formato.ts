@@ -29,6 +29,18 @@ export function numeroIt(n: number, decimali = 0): string {
     return `${tuttoZero ? '' : segno}${conPunti}${parteDecimale ? `,${parteDecimale}` : ''}`
 }
 
+/**
+ * Come numeroIt, ma i decimali solo se servono e al massimo `maxDecimali`:
+ * 12,5 e 12 con maxDecimali 1 (l'equivalente di maximumFractionDigits).
+ */
+export function numeroItFino(n: number, maxDecimali: number): string {
+    if (!Number.isFinite(n)) return '0'
+    const d = Math.max(0, Math.min(6, maxDecimali))
+    const arrotondato = Number(n.toFixed(d))
+    const decimali = (String(Math.abs(arrotondato)).split('.')[1] ?? '').length
+    return numeroIt(arrotondato, Math.min(d, decimali))
+}
+
 /** Importo del registro col segno: "+10", "-2", "0". */
 export function numeroConSegno(n: number): string {
     return n > 0 ? `+${numeroIt(n)}` : numeroIt(n)

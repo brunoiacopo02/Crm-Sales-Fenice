@@ -61,6 +61,8 @@ export function fraseRitmo(n: number, scalini: [number, number]): string {
     if (n >= secondo) return 'Obiettivo pieno raggiunto.'
     const mancano = (k: number) => (k === 1 ? 'Ti manca 1' : `Ti mancano ${k}`)
     if (n >= primo) return `Primo obiettivo preso. ${mancano(secondo - n)} per ${articoloNumero(secondo)}${secondo}.`
+    // A zero "Ti mancano 8 per l'8" suonava strano (collaudo del 25/10/2026).
+    if (n <= 0) return 'Comincia dal primo.'
     return `${mancano(primo - n)} per ${articoloNumero(primo)}${primo}.`
 }
 
@@ -70,6 +72,7 @@ export function fraseSquadra(n: number, scalini: [number, number]): string {
     if (n >= secondo) return 'Obiettivo pieno di squadra raggiunto.'
     const mancano = (k: number) => (k === 1 ? 'Ne manca 1' : `Ne mancano ${k}`)
     if (n >= primo) return `Primo obiettivo di squadra preso. ${mancano(secondo - n)} per ${articoloNumero(secondo)}${secondo}.`
+    if (n <= 0) return `Ne servono ${primo} per il primo obiettivo.`
     return `${mancano(primo - n)} per ${articoloNumero(primo)}${primo}.`
 }
 

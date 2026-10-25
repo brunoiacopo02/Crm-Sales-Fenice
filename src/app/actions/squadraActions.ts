@@ -59,7 +59,10 @@ async function loadSnapshot(day: string): Promise<SquadraSnapshot> {
         scaliniSquadra: targets.squadra,
         sogliaFenici: targets.presenzeSogliaEuro,
         mode,
-        premiEuro: economia.classifica.premiEuro,
+        // I premi in euro valgono dalla prima settimana della nuova economia
+        // (26/10): il podio di una settimana di prima resta senza euro, così
+        // nessuno lo legge come un premio da incassare (collaudo del 25/10/2026).
+        premiEuro: settimana.lunedi >= economia.inizio ? economia.classifica.premiEuro : [0, 0, 0] as [number, number, number],
         minPresenze: economia.classifica.minPresenze,
         settimana: { lunedi: settimana.lunedi, sabato: settimana.sabato },
     }

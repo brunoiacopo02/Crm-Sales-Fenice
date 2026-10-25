@@ -3,6 +3,7 @@
 import { Fragment, useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Settings, Calendar, TrendingUp, RefreshCw, X, AlertTriangle, AlertCircle, CheckCircle2, Pencil } from 'lucide-react';
+import { euroIt, numeroIt, numeroItFino } from "@/lib/diretta/formato"
 import {
     getLeadOverview,
     setLeadMonthlyTarget,
@@ -138,7 +139,7 @@ export function PanoramicaClient({
                             </div>
                             <div>
                                 <span className="text-ash-500">Target mensile</span>{' '}
-                                <span className="font-bold text-ash-800">{(config.targetNuovi + config.targetDatabase).toLocaleString('it-IT')}</span>
+                                <span className="font-bold text-ash-800">{numeroIt(config.targetNuovi + config.targetDatabase)}</span>
                             </div>
                         </div>
                     )}
@@ -209,23 +210,23 @@ export function PanoramicaClient({
                                             {row.label}
                                         </td>
                                         <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100">
-                                            {row.actCount.toLocaleString('it-IT')}
+                                            {numeroIt(row.actCount)}
                                         </td>
                                         <td className="px-4 py-3 text-right text-ash-600 tabular-nums">
                                             {isTotale
-                                                ? totals.actDailyAvg.toLocaleString('it-IT')
+                                                ? numeroItFino(totals.actDailyAvg, 3)
                                                 : formatPercent(row.actPercent)}
                                         </td>
                                         <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100">
-                                            {row.targetCount.toLocaleString('it-IT')}
+                                            {numeroIt(row.targetCount)}
                                         </td>
                                         <td className="px-4 py-3 text-right text-ash-600 tabular-nums">
                                             {isTotale
-                                                ? totals.targetDailyAvg.toLocaleString('it-IT')
+                                                ? numeroItFino(totals.targetDailyAvg, 3)
                                                 : formatPercent(row.targetPercent)}
                                         </td>
                                         <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100">
-                                            {row.aggiungere === null ? '' : row.aggiungere.toLocaleString('it-IT')}
+                                            {row.aggiungere === null ? '' : numeroIt(row.aggiungere)}
                                         </td>
                                     </tr>
                                 );
@@ -288,12 +289,14 @@ function fmtPct(v: number | null): string {
     return `${v.toFixed(2)}%`;
 }
 
+// Numeri scritti a mano (src/lib/diretta/formato.ts): Intl di Node e del
+// browser non mettono gli stessi separatori e l'idratazione si rompeva (#418).
 function fmtInt(n: number): string {
-    return n.toLocaleString('it-IT');
+    return numeroIt(n);
 }
 
 function fmtEur(n: number): string {
-    return n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+    return euroIt(Math.round(n));
 }
 
 function fmtRoas(n: number | null): string {
@@ -890,7 +893,7 @@ function TargetModal({
 // ──────────────────────────────────────────────────────────────────────────
 
 function fmtNum(n: number, maxDecimals = 0): string {
-    return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: maxDecimals });
+    return numeroItFino(n, maxDecimals);
 }
 
 function MetricsSection({ data, onRefresh, readOnly = false, isPastMonth = false }: { data: MetricsOverviewResult; onRefresh: () => void; readOnly?: boolean; isPastMonth?: boolean }) {

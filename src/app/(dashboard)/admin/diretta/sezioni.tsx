@@ -488,9 +488,10 @@ export function SezioneObiettivi({ o }: { o: GamificationTargets }) {
                         valore={fasciaTesto(o.turnoFeriale)}
                         nota={`Sabato ${fasciaTesto(o.turnoSabato)}.`}
                     />
+                    {/* "2" da solo non si capiva (collaudo del 25/10/2026): si dice "2 al giorno". */}
                     <Riga
                         etichetta="Pause"
-                        valore={String(o.pauseFeriali.length)}
+                        valore={o.pauseFeriali.length === 0 ? 'nessuna' : `${o.pauseFeriali.length} al giorno`}
                         nota={`${maiuscola(pause(o.pauseFeriali))}. Sabato ${pause(o.pauseSabato)}.`}
                     />
                     <Riga

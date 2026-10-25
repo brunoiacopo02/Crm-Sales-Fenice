@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useTransition } from "react"
 import { Target, TrendingDown, Inbox, PackageOpen, Loader2, Users, ChevronDown, ChevronUp } from "lucide-react"
+import { euroIt, numeroItFino } from "@/lib/diretta/formato"
 import {
     getManagerOverview, getGdoStatsRoster, setGdoStatsActive,
     type ManagerOverviewResult, type ManagerParamCard, type GdoStatsRosterRow,
@@ -20,11 +21,11 @@ function fmtValue(card: ManagerParamCard, v: number | null): string {
     if (v === null || !isFinite(v)) return '—'
     switch (card.unit) {
         case 'eur':
-            return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v)
+            return euroIt(Math.round(v))
         case 'pct':
             return `${Math.round(v * 100)}%`
         default:
-            return v.toLocaleString("it-IT", { maximumFractionDigits: 1 })
+            return numeroItFino(v, 1)
     }
 }
 
@@ -213,7 +214,7 @@ export function ManagerParamsStrip() {
                                 <div key={u.gdoId} className="flex items-center justify-between rounded-md bg-red-50 px-2 py-1 text-xs">
                                     <span className="font-semibold text-red-700">{u.name}</span>
                                     <span className="text-red-600">
-                                        {u.appWeekAvg !== null ? u.appWeekAvg.toLocaleString('it-IT', { maximumFractionDigits: 1 }) : '—'} app/gg
+                                        {u.appWeekAvg !== null ? numeroItFino(u.appWeekAvg, 1) : '—'} app/gg
                                         <span className="text-red-400"> · oggi {u.appToday}</span>
                                     </span>
                                 </div>
