@@ -9,15 +9,19 @@ const OutcomeModal = dynamic(
   { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
 )
 import { AlertCircle, Clock } from "lucide-react"
+import { DirettaUiProvider } from "./diretta/DirettaUi"
 
 type LeadList = any[]
 
 export function RecallBoard({
     expired,
-    upcoming
+    upcoming,
+    variant,
 }: {
     expired: LeadList
     upcoming: LeadList
+    /** 'diretta' = veste scura del GDO (collaudo del 25/10/2026): stesse card della home. */
+    variant?: 'diretta'
 }) {
     const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'expired' | 'upcoming'>('expired')
@@ -54,6 +58,61 @@ export function RecallBoard({
     }, [expired, upcoming]);
 
     const currentList = activeTab === 'expired' ? expired : upcoming
+    const versioneDi = (id: string | null) => [...expired, ...upcoming].find(l => l.id === id)?.version ?? 0
+
+    // ── Veste Diretta: le card della home (due righe, esiti sempre visibili),
+    // stessi esiti e stessa sveglia dei richiami.
+    if (variant === 'diretta') {
+        const tabs = [
+            { key: 'expired' as const, label: 'Da richiamare ora', count: expired.length },
+            { key: 'upcoming' as const, label: 'In arrivo', count: upcoming.length },
+        ]
+        return (
+            <div className="d-board mx-auto flex w-full max-w-5xl flex-col">
+                <div role="tablist" aria-label="Richiami" className="flex shrink-0 gap-1 overflow-x-auto pb-3">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            role="tab"
+                            aria-selected={activeTab === tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-2.5 text-[14px] transition-colors ${activeTab === tab.key
+                                ? 'bg-[#F2F2F2] font-semibold text-[#171717]'
+                                : 'text-[#BFBFBF] hover:text-[#F2F2F2]'}`}
+                        >
+                            {tab.label} <span className="tabular-nums">{tab.count}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex flex-col gap-2.5 pb-24">
+                    {currentList.map(lead => (
+                        <DirettaUiProvider key={lead.id}>
+                            <LeadCard lead={lead} onOutcomeClick={setSelectedLeadId} isRowLayout={true} />
+                        </DirettaUiProvider>
+                    ))}
+                    {currentList.length === 0 && (
+                        <div className="rounded-2xl border-2 border-[#262626] px-6 py-12 text-center">
+                            <div className="text-[16px] font-semibold text-[#F2F2F2]">
+                                {activeTab === 'expired' ? 'Nessun richiamo da fare adesso' : 'Nessun richiamo in arrivo'}
+                            </div>
+                            <div className="mt-1 text-[14px] text-[#BFBFBF]">
+                                {activeTab === 'expired' ? 'Hai gestito tutti i richiami scaduti.' : 'Non ci sono chiamate programmate.'}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <OutcomeModal
+                    isOpen={!!selectedLeadId}
+                    leadId={selectedLeadId || ""}
+                    leadVersion={versioneDi(selectedLeadId)}
+                    onClose={() => setSelectedLeadId(null)}
+                />
+            </div>
+        )
+    }
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden max-w-5xl mx-auto">

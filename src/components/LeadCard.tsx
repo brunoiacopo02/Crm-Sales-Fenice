@@ -1,16 +1,19 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil, Star } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, CalendarClock, Clock, CheckCircle2, MoreVertical, Copy, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil, Star } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
 import { AgendaButton } from "./AgendaButton"
 import { CompanyBadge } from "./CompanyBadge"
 import { RecallDateTimePicker } from "./DateTimePickers"
+import { useDirettaUi } from "./diretta/DirettaUi"
 import { getLeadsWithSamePhone } from "@/app/actions/pipelineActions"
 import { updateRecallDetails } from "@/app/actions/recallActions"
 import { tempoDaArrivo } from "@/lib/diretta/arrivo"
+import { funnelLeggibile } from "@/lib/diretta/funnel"
+import { dataOraRoma } from "@/lib/diretta/formato"
 
 type LeadProps = {
     lead: {
@@ -140,6 +143,8 @@ function toLocalInputValue(d: Date): string {
 
 export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayout = false }: LeadProps) {
     const router = useRouter()
+    // Diretta (PO 25/10/2026): sotto il provider della board la card prende la veste scura.
+    const direttaUi = useDirettaUi()
     const [showScript, setShowScript] = useState(false)
     const [showNoteModal, setShowNoteModal] = useState(false)
     const [showDupModal, setShowDupModal] = useState(false)
@@ -245,10 +250,378 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
     // Note shown in the card: prefer recallNote (preserved across outcomes) over lastCallNote
     const displayNote = lead.recallNote || lead.lastCallNote || ''
 
+    // Script, modifica del richiamo, duplicati e note: le stesse modali per la
+    // card classica e per la veste Diretta (frammento: nessun nodo in più).
+    const modali = (
+        <>
+            {/* Script Drawer */}
+            {showScript && (
+                <div className="fixed inset-0 z-[60] flex justify-end" onClick={() => setShowScript(false)}>
+                    <div className="absolute inset-0 bg-black/50" />
+                    <div
+                        className="relative w-full max-w-2xl h-full bg-white shadow-2xl overflow-y-auto animate-slide-in-right"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="sticky top-0 z-10 bg-white border-b border-ash-200 px-5 py-3 flex items-center justify-between">
+                            <div>
+                                <div className="text-sm font-bold text-ash-800">Script Chiamata</div>
+                                <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
+                            </div>
+                            <button onClick={() => setShowScript(false)} className="p-2 rounded-lg hover:bg-ash-100 transition-colors">
+                                <X className="w-5 h-5 text-ash-500" />
+                            </button>
+                        </div>
+                        <div className="p-5">
+                            <ScriptWidget
+                                leadId={lead.id}
+                                funnel={lead.funnel}
+                                leadEmail={lead.email}
+                                leadName={lead.name}
+                                leadPhone={lead.phone}
+                                agendaSentAt={lead.agendaSentAt ?? null}
+                                agendaStatus={lead.agendaStatus ?? null}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modifica Richiamo Modal */}
+            {showEditRecall && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }}>
+                    <div className="absolute inset-0 bg-black/50" />
+                    <div
+                        className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200 px-5 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Pencil className="h-4 w-4 text-blue-600" />
+                                <div>
+                                    <div className="text-sm font-bold text-ash-900">Modifica Richiamo</div>
+                                    <div className="text-xs text-ash-500">{lead.name} — nessuna chiamata registrata</div>
+                                </div>
+                            </div>
+                            <button onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }} className="p-1.5 rounded-lg hover:bg-blue-200/50 transition-colors">
+                                <X className="w-5 h-5 text-ash-600" />
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Nuova data e ora *</label>
+                            <div className="mb-3">
+                                <RecallDateTimePicker value={editRecallDate} onChange={setEditRecallDate} compact />
+                            </div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Note (già compilate)</label>
+                            <textarea
+                                value={editRecallNote}
+                                onChange={(e) => setEditRecallNote(e.target.value)}
+                                className="input-fenice !text-xs !py-2 !px-2.5 resize-none h-20 mb-3 w-full"
+                            />
+                            <div className="flex justify-end gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }} className="px-2 py-1 text-xs text-ash-500 font-semibold">Annulla</button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); saveEditRecall(); }}
+                                    disabled={savingRecall || !editRecallDate}
+                                    className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold disabled:opacity-50"
+                                >
+                                    {savingRecall ? 'Salvataggio…' : 'Salva richiamo'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Duplicati Modal */}
+            {showDupModal && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setShowDupModal(false); }}>
+                    <div className="absolute inset-0 bg-black/50" />
+                    <div
+                        className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="bg-gradient-to-r from-orange-50 to-orange-100 border-b border-orange-200 px-5 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Users className="h-5 w-5 text-orange-600" />
+                                <div>
+                                    <div className="text-sm font-bold text-ash-900">Numero presente su altri lead</div>
+                                    <div className="text-xs text-ash-500">{lead.phone} — verifica prima di richiamare</div>
+                                </div>
+                            </div>
+                            <button onClick={(e) => { e.stopPropagation(); setShowDupModal(false); }} className="p-1.5 rounded-lg hover:bg-orange-200/50 transition-colors">
+                                <X className="w-5 h-5 text-ash-600" />
+                            </button>
+                        </div>
+                        <div className="p-4 max-h-[60vh] overflow-y-auto">
+                            {dupList === null ? (
+                                <div className="flex items-center gap-2 py-4 text-sm text-ash-500">
+                                    <Loader2 className="h-4 w-4 animate-spin" /> Caricamento…
+                                </div>
+                            ) : dupList.length === 0 ? (
+                                <div className="py-4 text-sm text-ash-500">Nessun altro lead trovato con questo numero.</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {dupList.map((d) => (
+                                        <div key={d.id} className="rounded-lg border border-ash-200 bg-ash-50/50 px-3 py-2">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="text-sm font-semibold text-ash-800 truncate">{d.name}</div>
+                                                {d.funnel && <div className="text-[10px] font-bold uppercase text-ash-400 shrink-0">{d.funnel}</div>}
+                                            </div>
+                                            <div className="mt-0.5 text-xs text-ash-600">
+                                                {d.inLavorazione
+                                                    ? 'In lavorazione'
+                                                    : <>In carico a: <span className="font-semibold">{d.assignedToName}</span></>}
+                                            </div>
+                                            <div className="text-xs text-ash-500">{describeDuplicate(d)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Note Modal */}
+            {showNoteModal && displayNote && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={() => setShowNoteModal(false)}>
+                    <div className="absolute inset-0 bg-black/50" />
+                    <div
+                        className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="bg-gradient-to-r from-amber-50 to-amber-100 border-b border-amber-200 px-5 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <StickyNote className="h-5 w-5 text-amber-600" />
+                                <div>
+                                    <div className="text-sm font-bold text-ash-900">
+                                        {lead.recallNote ? 'Note Richiamo' : 'Note Chiamata Precedente'}
+                                    </div>
+                                    <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowNoteModal(false)} className="p-1.5 rounded-lg hover:bg-amber-200/50 transition-colors">
+                                <X className="w-5 h-5 text-ash-600" />
+                            </button>
+                        </div>
+                        <div className="p-5">
+                            {lead.lastCallDate && (
+                                <div className="text-[11px] text-ash-400 mb-2 uppercase tracking-wider font-semibold">
+                                    {new Date(lead.lastCallDate).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Rome' })}
+                                </div>
+                            )}
+                            <div className="text-sm text-ash-800 leading-relaxed whitespace-pre-wrap">
+                                {displayNote}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    )
+
+    // ── Veste Diretta (collaudo del 25/10/2026): due righe pulite a 1366, 1600
+    // e 1920. Riga 1: nome, segnali, telefono, quando, funnel e gli attrezzi a
+    // icone (modifica del richiamo, note, script, agenda). Riga 2: gli esiti e,
+    // finché c'è posto, la nota dell'ultima chiamata. Il lead aperto (in cima
+    // alla coda) ha il nome più grande, i bottoni esito grandi e la nota sotto.
+    // Gli spazi si decidono sulla larghezza della card (@container), così la
+    // stessa card vale nella home e in /richiami. Stessi gestori e stesse
+    // modali della card classica.
+    if (direttaUi.attiva) {
+        const aperto = direttaUi.aperto
+        const funnel = funnelLeggibile(lead.funnel)
+        const richiamo = lead.recallDate ? new Date(lead.recallDate) : null
+        const richiamoScaduto = !!richiamo && clientNow > 0 && richiamo.getTime() < clientNow
+        const ultima = lead.lastCallDate ? new Date(lead.lastCallDate) : null
+        // Quando: il richiamo se c'è, poi l'ultima chiamata, poi l'arrivo.
+        let quandoLungo = 'mai chiamato'
+        let quandoBreve = 'mai chiamato'
+        let IconaQuando = Clock
+        if (richiamo) {
+            quandoLungo = `${richiamoScaduto ? 'richiamo scaduto' : 'richiamo'} ${dataOraRoma(richiamo)}`
+            quandoBreve = dataOraRoma(richiamo)
+            IconaQuando = CalendarClock
+        } else if (ultima) {
+            quandoLungo = `ultima chiamata ${dataOraRoma(ultima)}`
+            quandoBreve = dataOraRoma(ultima)
+        } else if (arrivato) {
+            quandoLungo = `arrivato ${arrivato}`
+            quandoBreve = arrivato
+        }
+        const arrivoInPiu = (richiamo || ultima) && arrivato ? `arrivato ${arrivato}` : null
+
+        const segnale = "inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#3D3D3D] px-2 py-0.5 text-[12px] font-medium text-[#F2F2F2]"
+        const attrezzo = "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 border-[#3D3D3D] text-[#F2F2F2] transition-colors hover:border-[#8C8C8C]"
+        const icona = "h-4 w-4"
+
+        return (
+            <div
+                data-lead-card={lead.id}
+                className={`@container relative flex flex-col rounded-2xl border-2 bg-[#262626] text-[#F2F2F2] transition-colors ${aperto ? 'gap-3 border-[#FF9330] px-5 py-4' : 'gap-2.5 border-transparent px-4 py-3 hover:border-[#3D3D3D]'}`}
+            >
+                {/* Vergine del giorno (PO 25/10 mattina): una riga sobria, il lead è già in cima. */}
+                {lead.vergine && (
+                    <div className="truncate text-[13px] font-medium leading-tight text-[#FF9330]">
+                        Appena arrivato: chiamalo subito
+                    </div>
+                )}
+
+                {/* Riga 1 */}
+                <div className="flex min-w-0 items-center gap-x-3 gap-y-2 @max-[560px]:flex-wrap">
+                    <div className="flex min-w-0 flex-1 items-center gap-x-3 gap-y-1 @max-[560px]:flex-wrap">
+                        {lead.chiamaPerPrimo && (
+                            <Star className="h-4 w-4 shrink-0 fill-[#FF9330] text-[#FF9330]" aria-label="Da chiamare per primo" />
+                        )}
+                        <div
+                            className={`min-w-0 max-w-[16rem] shrink truncate font-semibold leading-tight ${aperto ? 'text-[20px]' : 'text-[16px]'} @min-[1000px]:max-w-[22rem]`}
+                            title={lead.name}
+                        >
+                            {lead.name}
+                        </div>
+                        {lead.tiHaCercato && (
+                            <div className={segnale} title={lead.cercatoMotivo ? `Ti ha cercato: "${lead.cercatoMotivo}"` : 'Ti ha cercato'}>
+                                <Phone className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                                <div className="sr-only @min-[760px]:not-sr-only">Ti ha cercato</div>
+                            </div>
+                        )}
+                        {lead.confermatoAlBot && (
+                            <div className={segnale} title="Aveva già detto sì e l'appuntamento non è mai nato: il sì c'è già.">
+                                <CheckCircle2 className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                                <div className="sr-only @min-[760px]:not-sr-only">Aveva detto sì</div>
+                            </div>
+                        )}
+                        {lead.recallMissedAt && (
+                            <div className={segnale} title={`Aveva un richiamo e non ha risposto (${dataOraRoma(new Date(lead.recallMissedAt))})`}>
+                                <PhoneMissed className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                                <div className="sr-only @min-[760px]:not-sr-only">Richiamo NR</div>
+                            </div>
+                        )}
+
+                        <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[14px] tabular-nums">
+                            <Phone className="h-3.5 w-3.5 shrink-0 text-[#8C8C8C]" strokeWidth={1.5} aria-hidden="true" />
+                            <div>{lead.phone}</div>
+                            {lead.phoneSuspicious && (
+                                <AlertTriangle
+                                    className="h-3.5 w-3.5 shrink-0 text-[#FF9330]"
+                                    aria-label="Telefono forse incompleto: verificalo prima di chiamare"
+                                />
+                            )}
+                            {lead.duplicatePhone && (
+                                <button
+                                    type="button"
+                                    onClick={openDupModal}
+                                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#3D3D3D] px-1.5 py-0.5 text-[12px] font-medium text-[#F2F2F2] transition-colors hover:border-[#8C8C8C]"
+                                    title="Numero presente su altri lead: clicca per i dettagli"
+                                >
+                                    <Users className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                                    <div className="sr-only @min-[760px]:not-sr-only">Duplicato</div>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigator.clipboard.writeText(lead.phone); alert('Numero copiato!'); }}
+                                className="rounded-lg p-1 text-[#8C8C8C] transition-colors hover:text-[#F2F2F2]"
+                                title="Copia numero"
+                                aria-label="Copia numero"
+                            >
+                                <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            </button>
+                        </div>
+
+                        <div className="min-w-0 flex-1 truncate text-[13px] text-[#BFBFBF]">
+                            <span className={richiamoScaduto ? 'font-medium text-[#FF9330]' : undefined} title={quandoLungo}>
+                                <span className="@min-[800px]:hidden">
+                                    <IconaQuando className="mr-1 inline-block h-3.5 w-3.5 align-[-2px]" strokeWidth={1.5} aria-hidden="true" />
+                                    {quandoBreve}
+                                </span>
+                                <span className="hidden @min-[800px]:inline">{quandoLungo}</span>
+                            </span>
+                            {funnel && <span className="ml-4 hidden @min-[600px]:inline">{funnel}</span>}
+                            {arrivoInPiu && <span className="ml-4 hidden @min-[960px]:inline">{arrivoInPiu}</span>}
+                        </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        {lead.recallDate && (
+                            <button
+                                type="button"
+                                onClick={openEditRecall}
+                                className={attrezzo}
+                                title="Modifica data e note del richiamo, senza registrare una chiamata"
+                                aria-label="Modifica il richiamo"
+                            >
+                                <Pencil className={icona} strokeWidth={1.5} />
+                            </button>
+                        )}
+                        {displayNote && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setShowNoteModal(true); }}
+                                className={attrezzo}
+                                title={displayNote}
+                                aria-label="Leggi le note"
+                            >
+                                <StickyNote className={icona} strokeWidth={1.5} />
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setShowScript(true); }}
+                            className={attrezzo}
+                            title="Apri lo script della chiamata"
+                            aria-label="Script"
+                        >
+                            <FileText className={icona} strokeWidth={1.5} />
+                        </button>
+                        <AgendaButton
+                            leadId={lead.id}
+                            leadName={lead.name}
+                            leadPhone={lead.phone}
+                            agendaSentAt={lead.agendaSentAt}
+                            agendaStatus={lead.agendaStatus ?? null}
+                            variant="diretta"
+                        />
+                    </div>
+                </div>
+
+                {/* Riga 2: gli esiti. Nella card chiusa la nota usa lo spazio che avanza. */}
+                {aperto ? (
+                    <GdoQuickActions leadId={lead.id} leadVersion={lead.version} recallPrefillNote={lead.recallNote || lead.lastCallNote || null} />
+                ) : (
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="shrink-0 @max-[560px]:shrink">
+                            <GdoQuickActions leadId={lead.id} leadVersion={lead.version} recallPrefillNote={lead.recallNote || lead.lastCallNote || null} />
+                        </div>
+                        {displayNote && (
+                            <div className="hidden min-w-0 flex-1 truncate text-[13px] text-[#8C8C8C] @min-[640px]:block" title={displayNote}>
+                                {displayNote}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {aperto && displayNote && (
+                    <div className="flex min-w-0 items-start gap-2 text-[13px] text-[#BFBFBF]">
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8C8C8C]" strokeWidth={1.5} aria-hidden="true" />
+                        <div className="min-w-0 line-clamp-2">{displayNote}</div>
+                    </div>
+                )}
+
+                {modali}
+            </div>
+        )
+    }
+
+
     if (isRowLayout) {
         return (
             <div data-lead-card={lead.id} className={`relative bg-white border border-ash-200/80 border-l-[3px] ${rarityStyle.border} rounded-xl px-4 py-3 shadow-soft ${rarityStyle.hoverGlow} hover:border-brand-orange/30 transition-all duration-200 flex flex-col gap-2 group cursor-pointer ${leftAccent}`}>
-                <div className="flex items-center justify-between gap-4">
+                {/* flex-wrap (collaudo del 25/10/2026): in /richiami, largo 1024 px,
+                    le azioni di una card con richiamo e note non ci stavano e
+                    "Richiamo" e "App Preso" finivano fuori dalla card, con la
+                    Diretta accesa o spenta. Ora vanno a capo sotto i dati. */}
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
 
                 {/* 1. Nome & Contatti */}
                 <div className="flex-1 min-w-0 sm:min-w-[200px] flex flex-col justify-center">
@@ -312,8 +685,8 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                         </div>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-ash-500 mt-1">
-                        <div className="flex items-center gap-1.5 group/phone">
-                            <Phone className="h-3 w-3 text-ash-400" />
+                        <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap group/phone">
+                            <Phone className="h-3 w-3 shrink-0 text-ash-400" />
                             <div className="font-medium text-ash-600">{lead.phone}</div>
                             {lead.phoneSuspicious && (
                                 <AlertTriangle
@@ -425,7 +798,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                 </div>
 
                 {/* 4. Actions Right */}
-                <div className="flex items-center justify-end shrink-0 pl-2 gap-2">
+                <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2 pl-2">
                     {lead.recallDate && (
                         <button
                             onClick={openEditRecall}
@@ -474,169 +847,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                     </div>
                 )}
 
-                {/* Script Drawer */}
-                {showScript && (
-                    <div className="fixed inset-0 z-[60] flex justify-end" onClick={() => setShowScript(false)}>
-                        <div className="absolute inset-0 bg-black/50" />
-                        <div
-                            className="relative w-full max-w-2xl h-full bg-white shadow-2xl overflow-y-auto animate-slide-in-right"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="sticky top-0 z-10 bg-white border-b border-ash-200 px-5 py-3 flex items-center justify-between">
-                                <div>
-                                    <div className="text-sm font-bold text-ash-800">Script Chiamata</div>
-                                    <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
-                                </div>
-                                <button onClick={() => setShowScript(false)} className="p-2 rounded-lg hover:bg-ash-100 transition-colors">
-                                    <X className="w-5 h-5 text-ash-500" />
-                                </button>
-                            </div>
-                            <div className="p-5">
-                                <ScriptWidget
-                                    leadId={lead.id}
-                                    funnel={lead.funnel}
-                                    leadEmail={lead.email}
-                                    leadName={lead.name}
-                                    leadPhone={lead.phone}
-                                    agendaSentAt={lead.agendaSentAt ?? null}
-                                    agendaStatus={lead.agendaStatus ?? null}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Modifica Richiamo Modal */}
-                {showEditRecall && (
-                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }}>
-                        <div className="absolute inset-0 bg-black/50" />
-                        <div
-                            className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200 px-5 py-3 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Pencil className="h-4 w-4 text-blue-600" />
-                                    <div>
-                                        <div className="text-sm font-bold text-ash-900">Modifica Richiamo</div>
-                                        <div className="text-xs text-ash-500">{lead.name} — nessuna chiamata registrata</div>
-                                    </div>
-                                </div>
-                                <button onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }} className="p-1.5 rounded-lg hover:bg-blue-200/50 transition-colors">
-                                    <X className="w-5 h-5 text-ash-600" />
-                                </button>
-                            </div>
-                            <div className="p-4">
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Nuova data e ora *</label>
-                                <div className="mb-3">
-                                    <RecallDateTimePicker value={editRecallDate} onChange={setEditRecallDate} compact />
-                                </div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Note (già compilate)</label>
-                                <textarea
-                                    value={editRecallNote}
-                                    onChange={(e) => setEditRecallNote(e.target.value)}
-                                    className="input-fenice !text-xs !py-2 !px-2.5 resize-none h-20 mb-3 w-full"
-                                />
-                                <div className="flex justify-end gap-2">
-                                    <button onClick={(e) => { e.stopPropagation(); setShowEditRecall(false); }} className="px-2 py-1 text-xs text-ash-500 font-semibold">Annulla</button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); saveEditRecall(); }}
-                                        disabled={savingRecall || !editRecallDate}
-                                        className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold disabled:opacity-50"
-                                    >
-                                        {savingRecall ? 'Salvataggio…' : 'Salva richiamo'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Duplicati Modal */}
-                {showDupModal && (
-                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setShowDupModal(false); }}>
-                        <div className="absolute inset-0 bg-black/50" />
-                        <div
-                            className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="bg-gradient-to-r from-orange-50 to-orange-100 border-b border-orange-200 px-5 py-3 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Users className="h-5 w-5 text-orange-600" />
-                                    <div>
-                                        <div className="text-sm font-bold text-ash-900">Numero presente su altri lead</div>
-                                        <div className="text-xs text-ash-500">{lead.phone} — verifica prima di richiamare</div>
-                                    </div>
-                                </div>
-                                <button onClick={(e) => { e.stopPropagation(); setShowDupModal(false); }} className="p-1.5 rounded-lg hover:bg-orange-200/50 transition-colors">
-                                    <X className="w-5 h-5 text-ash-600" />
-                                </button>
-                            </div>
-                            <div className="p-4 max-h-[60vh] overflow-y-auto">
-                                {dupList === null ? (
-                                    <div className="flex items-center gap-2 py-4 text-sm text-ash-500">
-                                        <Loader2 className="h-4 w-4 animate-spin" /> Caricamento…
-                                    </div>
-                                ) : dupList.length === 0 ? (
-                                    <div className="py-4 text-sm text-ash-500">Nessun altro lead trovato con questo numero.</div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {dupList.map((d) => (
-                                            <div key={d.id} className="rounded-lg border border-ash-200 bg-ash-50/50 px-3 py-2">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <div className="text-sm font-semibold text-ash-800 truncate">{d.name}</div>
-                                                    {d.funnel && <div className="text-[10px] font-bold uppercase text-ash-400 shrink-0">{d.funnel}</div>}
-                                                </div>
-                                                <div className="mt-0.5 text-xs text-ash-600">
-                                                    {d.inLavorazione
-                                                        ? 'In lavorazione'
-                                                        : <>In carico a: <span className="font-semibold">{d.assignedToName}</span></>}
-                                                </div>
-                                                <div className="text-xs text-ash-500">{describeDuplicate(d)}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Note Modal */}
-                {showNoteModal && displayNote && (
-                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={() => setShowNoteModal(false)}>
-                        <div className="absolute inset-0 bg-black/50" />
-                        <div
-                            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="bg-gradient-to-r from-amber-50 to-amber-100 border-b border-amber-200 px-5 py-3 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <StickyNote className="h-5 w-5 text-amber-600" />
-                                    <div>
-                                        <div className="text-sm font-bold text-ash-900">
-                                            {lead.recallNote ? 'Note Richiamo' : 'Note Chiamata Precedente'}
-                                        </div>
-                                        <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
-                                    </div>
-                                </div>
-                                <button onClick={() => setShowNoteModal(false)} className="p-1.5 rounded-lg hover:bg-amber-200/50 transition-colors">
-                                    <X className="w-5 h-5 text-ash-600" />
-                                </button>
-                            </div>
-                            <div className="p-5">
-                                {lead.lastCallDate && (
-                                    <div className="text-[11px] text-ash-400 mb-2 uppercase tracking-wider font-semibold">
-                                        {new Date(lead.lastCallDate).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Rome' })}
-                                    </div>
-                                )}
-                                <div className="text-sm text-ash-800 leading-relaxed whitespace-pre-wrap">
-                                    {displayNote}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {modali}
             </div>
         )
     }

@@ -2434,45 +2434,14 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   --color-brand-orange-900: var(--d-o-brand-orange-900);
 }
 
-[data-ui="diretta"] .d-board [data-lead-card] {
-  background-color: var(--d-surface);
-  border: 2px solid transparent;
-  border-radius: var(--d-radius-l);
-  box-shadow: none;
-  color: var(--d-text);
-  transition: border-color 150ms ease-out;
-}
-[data-ui="diretta"] .d-board [data-lead-card]::before { display: none; }
-[data-ui="diretta"] .d-board [data-lead-card]:hover { border-color: var(--d-line); }
+/* La card dei lead nella Diretta ha la sua veste in LeadCard (due righe
+   pulite a ogni larghezza, collaudo del 25/10/2026): qui restano solo le
+   regole per i pezzi riusati dentro la card. */
 [data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) :is(.shadow-soft, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-card) { box-shadow: none; }
 [data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) .uppercase { text-transform: none; letter-spacing: 0; }
 [data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) .italic { font-style: normal; }
 [data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) :is(.animate-pulse, .animate-pulse-slow, .animate-glow-pulse) { animation: none; }
 [data-ui="diretta"] .d-board :focus-visible { outline: 2px solid var(--d-orange); outline-offset: 2px; }
-/* Per GDO e Conferme Serenamente non esiste: il bollino "Fenice" su ogni card è rumore. */
-[data-ui="diretta"] .d-board [data-lead-card] [title="Lead Fenice"] { display: none; }
-/* Lo script è un aiuto, non una cosa da fare adesso: niente arancione. */
-[data-ui="diretta"] .d-board [data-lead-card] [title="Apri script chiamata"] { color: var(--d-text); border-color: var(--d-line); background: transparent; }
-
-/* Il lead in cima alla coda è "aperto": bordo arancione, nome grande e
-   bottoni esito grandi su una riga a parte. */
-[data-ui="diretta"] .d-board .d-aperto [data-lead-card] { border-color: var(--d-orange); padding: 20px 24px; }
-[data-ui="diretta"] .d-board .d-aperto [data-lead-card] [class~="text-[15px]"] { font-size: 22px; line-height: 1.2; }
-[data-ui="diretta"] .d-board .d-aperto [data-lead-card] > div:first-child { flex-wrap: wrap; row-gap: 16px; }
-[data-ui="diretta"] .d-board .d-aperto [data-lead-card] > div:first-child > div:last-child {
-  flex-basis: 100%; flex-wrap: wrap; justify-content: flex-start; padding-left: 0;
-}
-
-/* Colonna centrale stretta (schermi da laptop): le azioni vanno a capo sotto
-   i dati del lead invece di schiacciarli. Dipende dalla struttura della riga
-   di LeadCard: riga principale = primo figlio, azioni = suo ultimo figlio. */
-[data-ui="diretta"] .d-coda { container-type: inline-size; }
-@container (max-width: 1080px) {
-  [data-ui="diretta"] .d-board [data-lead-card] > div:first-child { flex-wrap: wrap; row-gap: 12px; }
-  [data-ui="diretta"] .d-board [data-lead-card] > div:first-child > div:last-child {
-    flex-basis: 100%; flex-wrap: wrap; justify-content: flex-start; padding-left: 0;
-  }
-}
 
 /* Momento appuntamento: parte subito, dura al massimo 2 secondi, più ricco
    al 1°, all'8° e al 10° e nell'ora di punta. Con prefers-reduced-motion le

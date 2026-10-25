@@ -444,12 +444,14 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
         }
         return (
             <>
+                {/* Sopra la barra in alto e sopra la barra "Colleghi online" (z-40): aperto
+                    sul telefono, il menu non resta sotto (collaudo del 25/10/2026). */}
                 {isOpen && (
-                    <div className={`fixed inset-0 z-30 bg-black/60 ${gdo ? '2xl:hidden' : 'lg:hidden'}`} onClick={close} />
+                    <div className={`fixed inset-0 z-[45] bg-black/60 ${gdo ? '2xl:hidden' : 'lg:hidden'}`} onClick={close} />
                 )}
                 <aside
                     aria-label="Menu"
-                    className={`fixed inset-y-0 left-0 z-40 flex h-screen w-72 flex-col border-r-2 border-[#262626] bg-[#171717] text-[#F2F2F2] transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${gdo ? '2xl:hidden' : 'lg:relative lg:z-auto lg:w-60 lg:translate-x-0'}`}
+                    className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-col border-r-2 border-[#262626] bg-[#171717] text-[#F2F2F2] transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${gdo ? '2xl:hidden' : 'lg:relative lg:z-auto lg:w-60 lg:translate-x-0'}`}
                 >
                     <div className="flex h-16 shrink-0 items-center justify-between px-5">
                         <Link href={gdo ? '/' : '/conferme'} className="flex items-center gap-2.5">

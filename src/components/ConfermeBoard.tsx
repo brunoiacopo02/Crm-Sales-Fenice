@@ -26,6 +26,7 @@ import {
 } from "@/lib/conferme/boardView"
 import { VenditoriAgendaButton } from "@/components/VenditoriAgendaButton"
 import { dUi, dTab, dChip } from "@/components/conferme/diretta/ui"
+import { funnelLeggibile } from "@/lib/diretta/funnel"
 
 type LeadData = any;
 
@@ -486,6 +487,7 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
             <CloseLeadModal
                 open={!!closeModalLead}
                 leadName={closeModalLead?.name}
+                variant={variant}
                 onCancel={() => setCloseModalLead(null)}
                 onSubmit={async ({ closeAmountEur, closedAtDateStr, closeProduct }) => {
                     if (!closeModalLead) return;
@@ -671,7 +673,7 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                                         <tr key={item.lead.id} onClick={() => openDrawer(item)} className="cursor-pointer border-t-2 border-[var(--d-bg)] transition-colors hover:bg-[var(--d-surface-2)]">
                                             <td className={td}>
                                                 <div className="font-semibold">{item.lead.name}</div>
-                                                {item.lead.funnel && <div className="text-[13px] text-[var(--d-muted)]">{item.lead.funnel}</div>}
+                                                {item.lead.funnel && <div className="text-[13px] text-[var(--d-muted)]">{funnelLeggibile(item.lead.funnel)}</div>}
                                             </td>
                                             <td className={`${td} whitespace-nowrap text-[var(--d-muted)]`}>{item.lead.phone}</td>
                                             <td className={td}>{gdoName(item.gdo)}</td>

@@ -6,6 +6,7 @@ import { sendAgendaToLead } from "@/app/actions/activeCampaignActions"
 import { sendAgendaSerenamente } from "@/app/actions/serenamenteAgendaActions"
 import { useSalesCompany } from "@/components/providers/SalesCompanyProvider"
 import { useRouter } from "next/navigation"
+import { dataOraRoma } from "@/lib/diretta/formato"
 
 /** Esito dell'ultimo invio. Volutamente senza riferimenti al canale sottostante. */
 export type AgendaStatus = 'consegnato' | 'inviato' | 'fallito'
@@ -16,9 +17,11 @@ type AgendaButtonProps = {
     leadPhone: string
     agendaSentAt?: Date | null
     agendaStatus?: string | null
+    /** 'diretta' = bottone a icona della card Diretta (collaudo 25/10/2026); la finestra resta la stessa. */
+    variant?: 'diretta'
 }
 
-export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agendaStatus }: AgendaButtonProps) {
+export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agendaStatus, variant }: AgendaButtonProps) {
     const router = useRouter()
     const company = useSalesCompany()
     const isSerenamente = company === 'serenamente'
@@ -155,8 +158,14 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
             : isFailed
                 ? "L'ultimo invio non è andato a buon fine — clicca per riprovare"
                 : alreadySent
-                    ? `Agenda già inviata (${new Date(agendaSentAt!).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}) — clicca per reinviare`
+                    ? `Agenda già inviata (${agendaSentAt ? dataOraRoma(new Date(agendaSentAt)) : 'adesso'}), clicca per reinviare`
                     : "Invia agenda al lead via WhatsApp"
+
+    // Veste Diretta: bottone a icona, bordo neutro; l'arancione solo quando
+    // l'invio va guardato adesso (consegna non confermata o fallita).
+    const direttaClass = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 transition-colors disabled:cursor-not-allowed ${isLocked || isFailed
+        ? 'border-[#FF9330] text-[#FF9330]'
+        : 'border-[#3D3D3D] text-[#F2F2F2] hover:border-[#8C8C8C]'}`
 
     return (
         <>
@@ -164,8 +173,9 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                 type="button"
                 onClick={isSerenamente ? handleDirectSend : handleOpen}
                 disabled={(isSerenamente && loading) || isLocked}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${buttonClass}`}
+                className={variant === 'diretta' ? direttaClass : `flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${buttonClass}`}
                 title={buttonTitle}
+                aria-label={variant === 'diretta' ? (isSerenamente ? 'Agenda' : buttonLabel) : undefined}
             >
                 {isSerenamente && loading
                     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -174,7 +184,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                             : alreadySent ? <CheckCircle2 className="w-3.5 h-3.5" />
                                 : <Send className="w-3.5 h-3.5" />
                 }
-                {isSerenamente ? 'Agenda' : buttonLabel}
+                {variant !== 'diretta' && (isSerenamente ? 'Agenda' : buttonLabel)}
             </button>
 
             {showModal && (

@@ -118,7 +118,8 @@ export function PauseTimer({ variant }: { variant?: 'diretta' } = {}) {
                 title={`Pausa di oggi: ${fuori}`}
                 className="flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border-2 border-[#3D3D3D] px-3 text-[13px] font-medium text-[#F2F2F2] transition-colors hover:border-[#8C8C8C] disabled:cursor-not-allowed disabled:opacity-50"
             >
-                Inizia pausa
+                <span className="sm:hidden">Pausa</span>
+                <span className="hidden sm:inline">Inizia pausa</span>
                 <span className={`tabular-nums ${dailyExceeded ? 'text-[#FF9330]' : 'text-[#BFBFBF]'}`}>{dailyExceeded ? `-${formatTime(dailyUsedDisplay - 30 * 60)}` : formatTime(remainingDisplay)}</span>
             </button>
         )

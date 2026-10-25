@@ -65,7 +65,7 @@ export default function GdoPauseHistory() {
             <div className="flex items-center gap-3">
                 <Clock className="h-6 w-6 text-brand-orange" />
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Storico Pause</h1>
+                    <h1 className="text-2xl font-bold text-white">Storico delle pause</h1>
                     <div className="text-sm text-gray-400 capitalize">{currentMonth}</div>
                 </div>
             </div>
@@ -73,11 +73,11 @@ export default function GdoPauseHistory() {
             {/* Summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-                    <div className="text-sm text-gray-400">Pause Totali</div>
+                    <div className="text-sm text-gray-400">Pause totali</div>
                     <div className="text-2xl font-bold text-white">{totalPauses}</div>
                 </div>
                 <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-                    <div className="text-sm text-gray-400">Durata Totale</div>
+                    <div className="text-sm text-gray-400">Durata totale</div>
                     <div className="text-2xl font-bold text-white">{formatDuration(totalDuration)}</div>
                 </div>
                 <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
@@ -87,7 +87,7 @@ export default function GdoPauseHistory() {
                     </div>
                 </div>
                 <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-                    <div className="text-sm text-gray-400">Tempo Ecceduto</div>
+                    <div className="text-sm text-gray-400">Tempo in più</div>
                     <div className={`text-2xl font-bold ${totalExceeded > 0 ? "text-red-400" : "text-green-400"}`}>
                         {totalExceeded > 0 ? formatDuration(totalExceeded) : "0m 00s"}
                     </div>
@@ -105,10 +105,10 @@ export default function GdoPauseHistory() {
                         <thead>
                             <tr className="bg-gray-800 text-gray-300">
                                 <th className="px-4 py-3 text-left font-medium">Data</th>
-                                <th className="px-4 py-3 text-left font-medium">Ora Inizio</th>
+                                <th className="px-4 py-3 text-left font-medium">Ora di inizio</th>
                                 <th className="px-4 py-3 text-left font-medium">Durata</th>
                                 <th className="px-4 py-3 text-left font-medium">Stato</th>
-                                <th className="px-4 py-3 text-left font-medium">Tempo Ecceduto</th>
+                                <th className="px-4 py-3 text-left font-medium">Tempo in più</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700/50">
@@ -133,7 +133,7 @@ export default function GdoPauseHistory() {
                                         {p.status === "in_corso" && (
                                             <div className="flex items-center gap-1.5 text-gold-400">
                                                 <Clock className="h-4 w-4 animate-pulse" />
-                                                In Corso
+                                                In corso
                                             </div>
                                         )}
                                     </td>

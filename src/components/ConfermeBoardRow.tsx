@@ -12,6 +12,8 @@ import { logConfermeCallDuration } from "@/app/actions/confermeAnalyticsActions"
 import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
 import { collegaName, gdoName } from "@/lib/conferme/boardView"
 import { dUi } from "@/components/conferme/diretta/ui"
+import { dataOraRoma, oraRoma } from "@/lib/diretta/formato"
+import { funnelLeggibile } from "@/lib/diretta/funnel"
 
 /**
  * Riga della board Conferme. `variant` 'diretta' = restyle scuro (PO 25/10/2026):
@@ -242,7 +244,8 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
     const isSnoozeOverdue = clientNow > 0 && lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() <= clientNow && !lead.confirmationsOutcome;
 
     if (variant === 'diretta') {
-        const ora = (d: string | Date) => new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(d))
+        // Ore in ora di Roma, scritte a mano: uguali sul server e nel browser.
+        const ora = (d: string | Date) => oraRoma(new Date(d))
         const esito = (() => {
             if (!lead.confirmationsOutcome) return null
             const sales = lead.salespersonOutcome
@@ -270,9 +273,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
             >
                 <div className={`flex gap-x-3 gap-y-3 ${layoutMode === 'snooze' ? 'flex-col' : 'flex-wrap items-start justify-between'}`}>
 
-                    {/* Chi è e a che punto è */}
-                    <div className="pointer-events-none flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5">
-                        <div className="flex min-w-0 items-center gap-2">
+                    {/* Chi è e a che punto è. La base di 24rem (collaudo del 25/10/2026):
+                        se accanto ai bottoni non resta posto, i bottoni vanno a capo
+                        invece di schiacciare il nome a "P…". */}
+                    <div className={`pointer-events-none flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5 ${layoutMode === 'snooze' ? '' : 'basis-[24rem]'}`}>
+                        <div className="flex min-w-[9rem] max-w-full items-center gap-2">
                             <span className={`truncate text-[15px] font-semibold ${layoutMode === 'snooze' ? '' : 'max-w-[240px]'}`}>{lead.name}</span>
                             {lead.confVslSeen
                                 ? <MonitorPlay className="h-4 w-4 shrink-0 text-[var(--d-faint)]" strokeWidth={1.75} aria-label="Video visto" />
@@ -291,13 +296,13 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                         {layoutMode !== 'snooze' && (
                             <div className="hidden shrink-0 items-center gap-3 sm:flex">
                                 <span className="font-medium">{gdoName(item.gdo)}</span>
-                                {lead.funnel && <span className="max-w-[160px] truncate text-[var(--d-muted)]">{lead.funnel}</span>}
+                                {lead.funnel && <span className="max-w-[160px] truncate text-[var(--d-muted)]">{funnelLeggibile(lead.funnel)}</span>}
                             </div>
                         )}
                         {layoutMode === 'richiami' && lead.recallDate ? (
                             <div className="flex shrink-0 items-center gap-1.5 font-medium">
                                 <Calendar className="h-3.5 w-3.5" strokeWidth={1.75} />
-                                Richiamo {new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(lead.recallDate))}
+                                Richiamo {dataOraRoma(new Date(lead.recallDate))}
                             </div>
                         ) : (
                             !lead.confirmationsOutcome && callsMade > 0 && layoutMode !== 'richiami' && (

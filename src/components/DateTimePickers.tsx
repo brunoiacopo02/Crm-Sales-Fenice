@@ -28,24 +28,31 @@ const APPT_HOURS = ['09', '10', '11', '12', '13', '14', '15', '16', '17', '18', 
 const RECALL_HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
 const FIVE_MIN_STEPS = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']
 
-export function AppointmentDateTimePicker({ value, onChange, compact = false }: { value: string; onChange: (v: string) => void; compact?: boolean }) {
+/**
+ * `impilato` (Diretta, collaudo del 25/10/2026): la data su una riga intera e
+ * l'ora sotto. Nei popover stretti la data in una colonna di griglia si
+ * leggeva solo come "…/2026".
+ */
+export function AppointmentDateTimePicker({ value, onChange, compact = false, impilato = false }: { value: string; onChange: (v: string) => void; compact?: boolean; impilato?: boolean }) {
     const { date, hour } = parseValue(value)
     const inputClass = compact ? "input-fenice !text-xs !py-2 !px-2.5" : "input-fenice text-sm"
 
     return (
-        <div className="grid grid-cols-2 gap-2">
+        <div className={impilato ? "grid grid-cols-1 gap-2" : "grid grid-cols-2 gap-2"}>
             <input
                 type="date"
                 value={date}
                 min={getTodayStr()}
                 onChange={(e) => onChange(buildValue(e.target.value, hour || '09', '00'))}
                 className={inputClass}
+                aria-label="Data"
                 required
             />
             <select
                 value={hour}
                 onChange={(e) => onChange(buildValue(date || getTodayStr(), e.target.value, '00'))}
                 className={inputClass}
+                aria-label="Ora"
                 required
             >
                 <option value="" disabled>Ora</option>
@@ -57,24 +64,26 @@ export function AppointmentDateTimePicker({ value, onChange, compact = false }: 
     )
 }
 
-export function RecallDateTimePicker({ value, onChange, compact = false }: { value: string; onChange: (v: string) => void; compact?: boolean }) {
+export function RecallDateTimePicker({ value, onChange, compact = false, impilato = false }: { value: string; onChange: (v: string) => void; compact?: boolean; impilato?: boolean }) {
     const { date, hour, minute } = parseValue(value)
     const inputClass = compact ? "input-fenice !text-xs !py-2 !px-2.5" : "input-fenice text-sm"
 
     return (
-        <div className="grid grid-cols-3 gap-2">
+        <div className={impilato ? "grid grid-cols-2 gap-2" : "grid grid-cols-3 gap-2"}>
             <input
                 type="date"
                 value={date}
                 min={getTodayStr()}
                 onChange={(e) => onChange(buildValue(e.target.value, hour || '09', minute || '00'))}
-                className={inputClass}
+                className={impilato ? `${inputClass} col-span-2` : inputClass}
+                aria-label="Data"
                 required
             />
             <select
                 value={hour}
                 onChange={(e) => onChange(buildValue(date || getTodayStr(), e.target.value, minute || '00'))}
                 className={inputClass}
+                aria-label="Ora"
                 required
             >
                 <option value="" disabled>Ora</option>
@@ -86,6 +95,7 @@ export function RecallDateTimePicker({ value, onChange, compact = false }: { val
                 value={minute}
                 onChange={(e) => onChange(buildValue(date || getTodayStr(), hour || '09', e.target.value))}
                 className={inputClass}
+                aria-label="Minuti"
             >
                 {FIVE_MIN_STEPS.map(m => (
                     <option key={m} value={m}>{m}</option>

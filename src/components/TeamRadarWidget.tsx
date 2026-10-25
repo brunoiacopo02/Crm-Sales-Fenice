@@ -102,8 +102,8 @@ export function TeamRadarWidget({ currentUser, variant = 'classic' }: { currentU
                     className="flex shrink-0 items-center gap-2 font-medium"
                     title={connected ? "Collegamento in tempo reale attivo" : "Collegamento in tempo reale perso: i colleghi potrebbero non essere aggiornati. Ricarica la pagina se continua."}
                 >
-                    <Users className="h-4 w-4" strokeWidth={1.75} />
-                    Colleghi online
+                    <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    <span className="sr-only sm:not-sr-only">Colleghi online</span>
                     {!connected && <span className="text-[var(--d-orange)]">collegamento perso</span>}
                 </div>
                 <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none]">

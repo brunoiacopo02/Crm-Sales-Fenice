@@ -130,7 +130,11 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
             }
             // Il server ha registrato l'appuntamento: la home Diretta fa avanzare
             // il contatore subito, senza aspettare il prossimo aggiornamento.
+            // Lo stesso evento, col segno meno, quando un altro esito toglie un
+            // appuntamento (per esempio dal drawer della ricerca): contatore e
+            // saldo si rileggono subito invece di aspettare il giro dei 25 s.
             if (outcome === 'APPUNTAMENTO') emettiAppuntamentoDiretta(leadId)
+            else if (result && 'appuntamentoTolto' in result && result.appuntamentoTolto) emettiAppuntamentoDiretta(leadId, -1)
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
@@ -206,12 +210,17 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
     // Il lead in cima alla coda ("aperto") ha i bottoni grandi su una riga.
     if (direttaUi.attiva) {
         const grande = direttaUi.aperto
-        const base = `flex items-center justify-center gap-2 rounded-lg border-2 font-medium transition-colors disabled:opacity-50 ${grande ? 'h-14 px-4 text-[15px]' : 'h-9 px-3 text-[13px]'}`
+        // Le misure seguono la larghezza della card (@container in LeadCard):
+        // a 1366 i quattro bottoni grandi stanno su una riga senza andare a capo.
+        const base = `flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg border-2 font-medium transition-colors disabled:opacity-50 ${grande
+            ? 'h-12 gap-2 px-3 text-[15px] @max-[700px]:gap-1.5 @max-[700px]:px-2 @max-[700px]:text-[14px]'
+            : 'h-9 gap-1.5 px-3 text-[13px]'}`
         const neutro = (attivo: boolean) => `${base} bg-transparent text-[#F2F2F2] hover:border-[#8C8C8C] ${attivo ? 'border-[#F2F2F2]' : 'border-[#3D3D3D]'}`
-        const icona = grande ? 'h-[18px] w-[18px]' : 'h-4 w-4'
+        const icona = grande ? 'h-[18px] w-[18px] shrink-0' : 'h-4 w-4 shrink-0'
         const avviso = activePopover === 'appuntamento' && dateStr ? appointmentSlotWarning(dateStr, new Date()) : null
+        const popover = `absolute right-0 ${popoverPositionClass} z-50 w-80 max-w-[calc(100vw-2rem)] whitespace-normal rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] p-4 text-left text-[#F2F2F2]`
         return (
-            <div className={grande ? "relative grid w-full grid-cols-2 gap-2 sm:grid-cols-4" : "relative flex flex-wrap items-center gap-1.5"} ref={containerRef}>
+            <div className={grande ? "relative grid w-full grid-cols-4 gap-2 @max-[560px]:grid-cols-2" : "relative flex flex-wrap items-center gap-1.5"} ref={containerRef}>
                 <button
                     onClick={(e) => { e.stopPropagation(); handleAction('NON_RISPOSTO'); }}
                     disabled={loading}
@@ -242,8 +251,8 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                 </button>
 
                 {activePopover === 'scartato' && (
-                    <div ref={popoverRef} onClick={e => e.stopPropagation()} className={`absolute right-0 ${popoverPositionClass} z-50 w-72 rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] p-4 text-[#F2F2F2]`}>
-                        <div className="mb-3 text-[15px] font-semibold">Scarta il lead</div>
+                    <div ref={popoverRef} onClick={e => e.stopPropagation()} className={popover}>
+                        <div className="mb-3 text-[15px] font-semibold leading-tight">Scarta il lead</div>
                         <select
                             value={discardReason}
                             onChange={(e) => setDiscardReason(e.target.value)}
@@ -264,16 +273,16 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                 )}
 
                 {(activePopover === 'richiamo' || activePopover === 'appuntamento') && (
-                    <div ref={popoverRef} onClick={e => e.stopPropagation()} className={`absolute right-0 ${popoverPositionClass} z-50 w-72 rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] p-4 text-[#F2F2F2]`}>
-                        <div className="mb-3 text-[15px] font-semibold">
+                    <div ref={popoverRef} onClick={e => e.stopPropagation()} className={popover}>
+                        <div className="mb-3 text-[15px] font-semibold leading-tight">
                             {activePopover === 'appuntamento' ? "Fissa l'appuntamento" : 'Programma il richiamo'}
                         </div>
                         <div className="mb-1 text-[13px] text-[#BFBFBF]">Data e ora</div>
                         <div className="mb-3">
                             {activePopover === 'appuntamento' ? (
-                                <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact />
+                                <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact impilato />
                             ) : (
-                                <RecallDateTimePicker value={dateStr} onChange={setDateStr} compact />
+                                <RecallDateTimePicker value={dateStr} onChange={setDateStr} compact impilato />
                             )}
                         </div>
                         {avviso && (
