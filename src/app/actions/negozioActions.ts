@@ -10,6 +10,8 @@
 import { randomUUID } from "crypto"
 import { and, asc, desc, eq, ne } from "drizzle-orm"
 import { revalidatePath, updateTag } from "next/cache"
+import { after } from "next/server"
+import { numeroIt } from "@/lib/diretta/formato"
 import { db } from "@/db"
 import { appSettings, notifications, rewardItems, rewardPurchases, users } from "@/db/schema"
 import { assertSalesArea, currentTenant } from "@/lib/tenancy"
@@ -68,7 +70,7 @@ export interface NegozioView {
 const asCurrency = (c: string): 'S' | 'P' => (c === 'P' ? 'P' : 'S')
 const asStatus = (s: string): PurchaseStatus => (s === 'consegnato' || s === 'annullato' ? s : 'richiesto')
 const prezzo = (currency: string, price: number) =>
-    `${new Intl.NumberFormat('it-IT').format(price)} ${nomeValuta(currency, price)}`
+    `${numeroIt(price)} ${nomeValuta(currency, price)}`
 
 /** Saldo, catalogo per il ruolo e storico di chi guarda: serve a /store e a /profilo. */
 export async function getNegozioView(): Promise<NegozioView> {
@@ -224,12 +226,23 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
 
     // Gli acquisti dell'account di prova (migr. 0050) non avvisano gli admin:
     // la richiesta resta comunque in /admin/premi, col nome "Prova".
+    // L'avviso parte dopo la risposta (collaudo del 25/10/2026: la conferma
+    // del corso restava su "Un attimo" per secondi). Fuori da una richiesta
+    // (script) si manda subito.
     if (esito.nuovo && esito.status === 'richiesto' && !esito.diProva) {
-        await avvisaAdmin(esito.persona, esito.articolo, esito.prezzo, purchaseId)
+        const { persona, articolo, prezzo: costo } = esito
+        const avviso = () => avvisaAdmin(persona, articolo, costo, purchaseId)
+        try {
+            after(avviso)
+        } catch {
+            await avviso()
+        }
     }
     if (esito.nuovo && esito.status === 'consegnato') updateTag(TAG_SQUADRA)
-    revalidatePath('/store')
-    revalidatePath('/profilo')
+    // Niente revalidatePath qui: con la pagina in uso Next la ridisegnava
+    // dentro la risposta dell'action, e il bottone aspettava anche quello. Il
+    // saldo nuovo arriva nella risposta, il negozio chiama router.refresh() e
+    // /store e /profilo sono dinamiche (si rileggono a ogni visita).
     return { ok: true, purchaseId, status: esito.status, scintille: esito.scintille, piume: esito.piume }
 }
 

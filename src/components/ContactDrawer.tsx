@@ -10,6 +10,17 @@ import { useRouter } from "next/navigation"
 import { SurveysReadOnlyPanel } from "./surveys/SurveysReadOnlyPanel"
 import { ScriptWidget } from "./ScriptWidget"
 import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
+import { DirettaUiProvider } from "./diretta/DirettaUi"
+import { funnelLeggibile } from "@/lib/diretta/funnel"
+import { dataOraBreveRoma } from "@/lib/diretta/formato"
+
+/** Stato del lead in parole, per la veste Diretta (niente "APPOINTMENT" grezzo). */
+const STATO_LEAD: Record<string, string> = {
+    NEW: 'Da chiamare',
+    IN_PROGRESS: 'In lavorazione',
+    APPOINTMENT: 'Appuntamento',
+    REJECTED: 'Scartato',
+}
 
 function DrawerSkeleton() {
     return (
@@ -48,11 +59,14 @@ function DrawerSkeleton() {
 export function ContactDrawer({
     isOpen,
     leadId,
-    onClose
+    onClose,
+    diretta = false,
 }: {
     isOpen: boolean
     leadId: string | null
     onClose: () => void
+    /** Veste Diretta (barra in alto della Diretta): cornice scura, stesse azioni. */
+    diretta?: boolean
 }) {
     const [profile, setProfile] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(false)
@@ -263,6 +277,242 @@ export function ContactDrawer({
             case 'MARKETING_QUEUE': return '📈 Nella coda del giorno del marketing'
             default: return 'Evento Sconosciuto'
         }
+    }
+
+    // ── Veste Diretta (collaudo del 25/10/2026): cornice scura ed esiti con le
+    // stesse etichette della card ("Non risponde", "Richiamo", "Da scartare",
+    // "Appuntamento"). Stessi dati, stessi gestori, stessa logica: cambiano
+    // solo la grafica e le parole. Script e sondaggi restano su un foglio
+    // chiaro, come nelle card.
+    if (diretta) {
+        const tab = (attiva: boolean) => `shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-[14px] transition-colors ${attiva
+            ? 'border-[#FF9330] font-semibold text-[#F2F2F2]'
+            : 'border-transparent text-[#BFBFBF] hover:text-[#F2F2F2]'}`
+        const etichettaEvento = (ev: any) => String(ev.label ?? getEventLabel(ev.eventType)).replace(/^[^\p{L}\p{N}]+/u, '')
+        const funnel = funnelLeggibile(lead?.funnel)
+        return (
+            <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
+                <div className="absolute inset-0 bg-black/60" onClick={requestClose} />
+
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={lead?.name ? `Scheda di ${lead.name}` : 'Scheda del lead'}
+                    className="relative z-50 flex h-full w-full max-w-md flex-col border-l-2 border-[#262626] bg-[#171717] font-[family-name:var(--font-poppins)] text-[#F2F2F2] tabular-nums"
+                >
+                    {/* Intestazione */}
+                    <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+                        <div className="min-w-0 flex-1">
+                            <h2 className="truncate text-[20px] font-semibold leading-tight">{lead?.name || 'Caricamento'}</h2>
+                            {(funnel || lead?.phone) && (
+                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-[#BFBFBF]">
+                                    {lead?.phone && <div className="whitespace-nowrap">{lead.phone}</div>}
+                                    {funnel && <div>{funnel}</div>}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                            {isAdmin && lead?.id && (
+                                <button
+                                    type="button"
+                                    onClick={handleDeleteLead}
+                                    disabled={isDeletingLead}
+                                    title="Cancella definitivamente il lead (solo admin)"
+                                    aria-label="Cancella il lead"
+                                    className="rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] disabled:opacity-50"
+                                >
+                                    {isDeletingLead ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" strokeWidth={1.5} />}
+                                </button>
+                            )}
+                            <button type="button" onClick={requestClose} aria-label="Chiudi" className="rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]">
+                                <X className="h-5 w-5" strokeWidth={1.5} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Schede */}
+                    <div role="tablist" aria-label="Scheda del lead" className="flex gap-1 overflow-x-auto border-b-2 border-[#262626] px-3">
+                        <button type="button" role="tab" aria-selected={activeTab === 'details'} onClick={() => setActiveTab('details')} className={tab(activeTab === 'details')}>Dettagli</button>
+                        <button type="button" role="tab" aria-selected={activeTab === 'script'} onClick={() => setActiveTab('script')} className={tab(activeTab === 'script')}>Script</button>
+                        <button type="button" role="tab" aria-selected={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} className={tab(activeTab === 'timeline')}>Storia</button>
+                        <button type="button" role="tab" aria-selected={activeTab === 'surveys'} onClick={() => setActiveTab('surveys')} className={tab(activeTab === 'surveys')}>Sondaggi</button>
+                    </div>
+
+                    <div className="custom-scrollbar flex-1 overflow-y-auto">
+                        {isLoading ? (
+                            <div className="space-y-3 p-5" aria-hidden="true">
+                                <div className="h-5 w-1/3 rounded-lg bg-[#262626]" />
+                                <div className="h-4 w-1/2 rounded-lg bg-[#262626]" />
+                                <div className="h-24 rounded-2xl bg-[#262626]" />
+                                <div className="h-24 rounded-2xl bg-[#262626]" />
+                            </div>
+                        ) : activeTab === 'details' && lead ? (
+                            <div className="space-y-5 p-5">
+                                {saveMessage && (
+                                    <div role="status" className={`rounded-lg border-2 px-4 py-2.5 text-[14px] ${saveMessage.type === 'success' ? 'border-[#3D3D3D] text-[#F2F2F2]' : 'border-[#FF9330] text-[#F2F2F2]'}`}>
+                                        {saveMessage.text}
+                                    </div>
+                                )}
+
+                                {/* Esito della chiamata: in alto, è la cosa da fare adesso */}
+                                <section className="rounded-2xl bg-[#262626] p-4">
+                                    <h3 className="text-[15px] font-semibold">Esito della chiamata</h3>
+                                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                                        <DirettaUiProvider>
+                                            <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} popoverDirection="up" />
+                                        </DirettaUiProvider>
+                                        <AgendaButton
+                                            leadId={lead.id}
+                                            leadName={lead.name}
+                                            leadPhone={lead.phone}
+                                            agendaSentAt={lead.agendaSentAt}
+                                            agendaStatus={lead.agendaStatus ?? null}
+                                            variant="diretta"
+                                        />
+                                    </div>
+                                </section>
+
+                                {/* Dati */}
+                                <section>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <h3 className="text-[15px] font-semibold">Dati</h3>
+                                        {!isEditing ? (
+                                            <button type="button" onClick={enterEditMode} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]">
+                                                <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} /> Modifica
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                <button type="button" onClick={cancelEdit} disabled={isSaving} className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]">
+                                                    Annulla
+                                                </button>
+                                                <button type="button" onClick={handleSave} disabled={isSaving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#F2F2F2] px-3 py-1.5 text-[13px] font-semibold text-[#171717] disabled:opacity-50">
+                                                    {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" strokeWidth={1.5} />}
+                                                    Salva
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {isEditing ? (
+                                        <div className="mt-3 space-y-3">
+                                            {([
+                                                ['Nome', editName, setEditName, 'text'],
+                                                ['Telefono', editPhone, setEditPhone, 'tel'],
+                                                ['Email', editEmail, setEditEmail, 'email'],
+                                            ] as const).map(([etichetta, valore, imposta, tipo]) => (
+                                                <label key={etichetta} className="block">
+                                                    <div className="mb-1 text-[13px] text-[#BFBFBF]">{etichetta}</div>
+                                                    <input
+                                                        type={tipo}
+                                                        value={valore}
+                                                        onChange={(e) => imposta(e.target.value)}
+                                                        className="h-10 w-full rounded-lg border-2 border-[#3D3D3D] bg-[#171717] px-3 text-[14px] text-[#F2F2F2] [color-scheme:dark] focus:border-[#FF9330] focus:outline-none"
+                                                    />
+                                                </label>
+                                            ))}
+                                            <label className="block">
+                                                <div className="mb-1 text-[13px] text-[#BFBFBF]">Note</div>
+                                                <textarea
+                                                    value={editNote}
+                                                    onChange={(e) => setEditNote(e.target.value)}
+                                                    rows={3}
+                                                    className="w-full resize-none rounded-lg border-2 border-[#3D3D3D] bg-[#171717] px-3 py-2 text-[14px] text-[#F2F2F2] focus:border-[#FF9330] focus:outline-none"
+                                                />
+                                            </label>
+                                        </div>
+                                    ) : (
+                                        <dl className="mt-3 space-y-2 text-[14px]">
+                                            <div className="flex items-center gap-3">
+                                                <dt className="sr-only">Telefono</dt>
+                                                <Phone className="h-4 w-4 shrink-0 text-[#8C8C8C]" strokeWidth={1.5} aria-hidden="true" />
+                                                <dd className="whitespace-nowrap font-medium">{lead.phone}</dd>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <dt className="sr-only">Email</dt>
+                                                <Mail className="h-4 w-4 shrink-0 text-[#8C8C8C]" strokeWidth={1.5} aria-hidden="true" />
+                                                <dd className="min-w-0 truncate text-[#BFBFBF]">{lead.email || 'nessuna email'}</dd>
+                                            </div>
+                                            {lead.lastCallNote && (
+                                                <div className="flex items-start gap-3">
+                                                    <dt className="sr-only">Note</dt>
+                                                    <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#8C8C8C]" strokeWidth={1.5} aria-hidden="true" />
+                                                    <dd className="text-[#BFBFBF]">{lead.lastCallNote}</dd>
+                                                </div>
+                                            )}
+                                        </dl>
+                                    )}
+                                </section>
+
+                                {/* Dove sta */}
+                                <section>
+                                    <h3 className="text-[15px] font-semibold">Dove sta</h3>
+                                    <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                        <div className="rounded-lg bg-[#262626] px-3 py-2.5">
+                                            <dt className="text-[12px] text-[#BFBFBF]">Stato</dt>
+                                            <dd className="mt-0.5 text-[14px] font-semibold">{STATO_LEAD[lead.status] ?? lead.status}</dd>
+                                        </div>
+                                        <div className="rounded-lg bg-[#262626] px-3 py-2.5">
+                                            <dt className="text-[12px] text-[#BFBFBF]">In mano a</dt>
+                                            <dd className="mt-0.5 truncate text-[14px] font-semibold">{lead.assignedToName || 'Nessuno'}</dd>
+                                        </div>
+                                        <div className="rounded-lg bg-[#262626] px-3 py-2.5">
+                                            <dt className="text-[12px] text-[#BFBFBF]">Chiamate</dt>
+                                            <dd className="mt-0.5 text-[14px] font-semibold">{lead.callCount} di 3</dd>
+                                        </div>
+                                    </dl>
+                                </section>
+                            </div>
+                        ) : activeTab === 'timeline' && events ? (
+                            <div className="p-5">
+                                {events.length === 0 ? (
+                                    <div className="py-8 text-center text-[14px] text-[#BFBFBF]">Nessun evento registrato.</div>
+                                ) : (
+                                    <ol className="space-y-2.5">
+                                        {events.map((ev: any) => (
+                                            <li key={ev.id} className="rounded-2xl bg-[#262626] px-4 py-3">
+                                                <div className="flex items-baseline justify-between gap-3">
+                                                    <div className="text-[14px] font-semibold">{etichettaEvento(ev)}</div>
+                                                    <time className="shrink-0 text-[12px] text-[#8C8C8C]">{dataOraBreveRoma(new Date(ev.timestamp))}</time>
+                                                </div>
+                                                {ev.userName && <div className="mt-1 text-[13px] text-[#BFBFBF]">{ev.userName}</div>}
+                                                {ev.testo ? (
+                                                    <div className="mt-1 text-[13px] text-[#BFBFBF]">{ev.testo}</div>
+                                                ) : ev.metadata?.note ? (
+                                                    <div className="mt-1 text-[13px] text-[#BFBFBF]">&quot;{ev.metadata.note}&quot;</div>
+                                                ) : null}
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+                            </div>
+                        ) : activeTab === 'surveys' && leadId ? (
+                            <div className="p-3 sm:p-4">
+                                <div className="overflow-hidden rounded-2xl bg-white text-[#171717]">
+                                    <SurveysReadOnlyPanel leadId={leadId} />
+                                </div>
+                            </div>
+                        ) : activeTab === 'script' && lead ? (
+                            <div className="p-3 sm:p-4">
+                                <div className="overflow-hidden rounded-2xl bg-white p-3 text-[#171717] sm:p-4">
+                                    {authUser?.user_metadata?.role === 'CONFERME' ? (
+                                        <ConfermeScriptWidget />
+                                    ) : (
+                                        <ScriptWidget
+                                            leadId={lead.id}
+                                            funnel={lead.funnel}
+                                            leadEmail={lead.email}
+                                            leadName={lead.name}
+                                            leadPhone={lead.phone}
+                                            agendaSentAt={lead.agendaSentAt ?? null}
+                                            agendaStatus={lead.agendaStatus ?? null}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     return (

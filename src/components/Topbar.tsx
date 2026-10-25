@@ -28,6 +28,7 @@ import type { GamificationTargets } from "@/lib/diretta/config"
 import type { DirettaIo } from "@/lib/diretta/io"
 import { MENU_GDO_DIRETTA } from "@/components/diretta/menu"
 import { useOrologio } from "@/components/diretta/useOrologio"
+import { numeroIt } from "@/lib/diretta/formato"
 
 type TopbarProps = {
     /** Diretta accesa per il ruolo (dal layout, lato server). */
@@ -140,7 +141,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
         if (p) {
             const ds = saldo.scintille - p.scintille
             const dp = saldo.piume - p.piume
-            const parti = [ds > 0 ? `+${ds} Scintille` : null, dp > 0 ? `+${dp} ${dp === 1 ? 'Piuma' : 'Piume'}` : null].filter(Boolean)
+            const parti = [ds > 0 ? `+${numeroIt(ds)} Scintille` : null, dp > 0 ? `+${numeroIt(dp)} ${dp === 1 ? 'Piuma' : 'Piume'}` : null].filter(Boolean)
             if (parti.length > 0) setGuadagno({ testo: parti.join(', '), chiave: Date.now() })
         }
         saldoPrima.current = saldo
@@ -329,7 +330,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
         const facoltativo = direttaGdo ? 'hidden xl:inline 2xl:hidden min-[120rem]:inline' : 'hidden lg:inline'
         const etichettaSaldo = direttaGdo ? 'sr-only min-[120rem]:not-sr-only min-[120rem]:text-[#BFBFBF]' : 'sr-only lg:not-sr-only lg:text-[#BFBFBF]'
         return (
-            <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b-2 border-[#262626] bg-[#171717] px-4 text-[#F2F2F2] lg:px-6">
+            <header className="relative z-40 flex h-16 shrink-0 items-center gap-2 border-b-2 border-[#262626] bg-[#171717] px-4 text-[#F2F2F2] sm:gap-3 lg:px-6">
                 <button
                     type="button"
                     onClick={toggle}
@@ -506,16 +507,17 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     )}
                 </div>
 
+                {/* Sul telefono il saldo non ci sta (collaudo del 25/10/2026): resta nel profilo e nel negozio. */}
                 {conSaldo && (
-                    <div className="relative flex shrink-0 items-center gap-3 whitespace-nowrap rounded-lg bg-[#262626] px-3 py-1.5 text-[13px] tabular-nums" title="Il tuo saldo di Scintille e Piume">
+                    <div className="relative hidden shrink-0 items-center gap-3 whitespace-nowrap rounded-lg bg-[#262626] px-3 py-1.5 text-[13px] tabular-nums sm:flex" title="Il tuo saldo di Scintille e Piume">
                         <div className="flex items-center gap-1.5">
                             <Sparkles className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
-                            <span className="font-semibold">{saldo?.scintille ?? 0}</span>
+                            <span className="font-semibold">{numeroIt(saldo?.scintille ?? 0)}</span>
                             <span className={etichettaSaldo}>Scintille</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <Feather className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
-                            <span className="font-semibold">{saldo?.piume ?? 0}</span>
+                            <span className="font-semibold">{numeroIt(saldo?.piume ?? 0)}</span>
                             <span className={etichettaSaldo}>Piume</span>
                         </div>
                         {guadagno && (
@@ -561,6 +563,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     isOpen={isDrawerOpen}
                     leadId={selectedLeadId}
                     onClose={() => setIsDrawerOpen(false)}
+                    diretta
                 />
 
                 {liveToast && (

@@ -264,7 +264,14 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                             <div className="h-full bg-[var(--d-orange)]" style={{ width: `${pctCorso}%` }} />
                         </div>
                         <div className="mt-2 text-sm text-[var(--d-muted)]">
-                            Hai <span className="font-semibold text-[var(--d-text)] tabular-nums">{numero(saldo.piume)}</span> Piume su {numero(corso.price)}.
+                            {saldo.piume >= corso.price ? (
+                                <>Hai <span className="font-semibold text-[var(--d-text)] tabular-nums">{numero(saldo.piume)}</span> Piume: bastano per il corso.</>
+                            ) : (
+                                <>
+                                    Hai <span className="font-semibold text-[var(--d-text)] tabular-nums">{numero(saldo.piume)}</span> Piume
+                                    su {numero(corso.price)}: {corso.price - saldo.piume === 1 ? 'ne manca 1' : `ne mancano ${numero(corso.price - saldo.piume)}`}.
+                                </>
+                            )}
                         </div>
                     </div>
                     {saldo.piume >= corso.price && <div className="mt-4 flex">{azione(corso)}</div>}

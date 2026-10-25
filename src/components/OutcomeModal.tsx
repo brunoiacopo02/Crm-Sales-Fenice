@@ -83,6 +83,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
             }
             // Appuntamento registrato dal server: avanza il contatore della Diretta.
             if (outcome === 'APPUNTAMENTO') emettiAppuntamentoDiretta(leadId)
+            else if (result && 'appuntamentoTolto' in result && result.appuntamentoTolto) emettiAppuntamentoDiretta(leadId, -1)
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);

@@ -822,5 +822,8 @@ export async function updateLeadOutcome(
         }).catch((e: unknown) => console.error("Marketing webhook (lead.rejected GDO) err:", e));
     }
 
-    return { success: true, rewardData }
+    // Un altro esito ha tolto l'appuntamento: la home Diretta rilegge subito
+    // contatore e saldo (GdoQuickActions emette lo stesso evento del fissato).
+    const appuntamentoTolto = lead.status === 'APPOINTMENT' && outcome !== 'APPUNTAMENTO'
+    return { success: true, rewardData, appuntamentoTolto }
 }

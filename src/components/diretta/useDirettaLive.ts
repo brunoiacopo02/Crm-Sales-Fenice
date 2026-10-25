@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getDirettaLive, type DirettaLive } from "@/app/actions/direttaActions"
-import { DIRETTA_APPUNTAMENTO } from "@/lib/diretta/eventi"
+import { DIRETTA_APPUNTAMENTO, deltaAppuntamento } from "@/lib/diretta/eventi"
 import { conPavimento, tipoMomento } from "@/lib/diretta/home"
 
 const OGNI_MS = 25_000
@@ -104,8 +104,17 @@ export function useDirettaLive() {
     }, [carica])
 
     // Momento appuntamento: avanza subito, poi chiede il dato vero.
+    // Appuntamento tolto da un altro esito (evento col segno meno): niente
+    // avanzamento, via i pavimenti che terrebbero su il numero, e dato vero
+    // subito. I miei numeri sono freschi; quelli di squadra hanno la cache del
+    // server (15 s).
     useEffect(() => {
-        const suAppuntamento = () => {
+        const suAppuntamento = (e: Event) => {
+            if (deltaAppuntamento(e) < 0) {
+                setPav({ mia: null, squadra: null, punta: null })
+                void carica()
+                return
+            }
             const adesso = Date.now()
             ultimoAppuntamento.current = adesso
             const fino = adesso + PAVIMENTO_MS
