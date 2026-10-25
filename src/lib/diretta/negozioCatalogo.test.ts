@@ -115,9 +115,12 @@ test('personalizzazioni del catalogo e registro coincidono', () => {
     assert.deepEqual(pers, Object.keys(PERSONALIZZAZIONI).sort())
 })
 
-test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno e i potenziamenti (solo GDO)", () => {
+test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno, i potenziamenti e le cuffie (solo GDO), auricolari e telefono (solo Conferme)", () => {
+    const soloConferme = new Set(['postazione-auricolari', 'postazione-telefono'])
     for (const i of CATALOGO_NEGOZIO) {
-        const attesi = i.id === 'pausa-30-bruno-fissa' || isPotenziamento(i.kind) ? ['GDO'] : ['CONFERME', 'GDO']
+        const attesi = soloConferme.has(i.id) ? ['CONFERME']
+            : i.id === 'pausa-30-bruno-fissa' || i.id === 'postazione-cuffie' || isPotenziamento(i.kind) ? ['GDO']
+            : ['CONFERME', 'GDO']
         assert.deepEqual([...i.roles].sort(), attesi, i.id)
     }
 })
@@ -150,9 +153,19 @@ test('premi nuovi del 25/10: pausa quando vuoi mai in punta, abbonamento, cinema
     assert.ok(!CATALOGO_NEGOZIO.some(i => /tazza|borraccia|salvadanaio/i.test(`${i.name} ${i.description}`)))
 })
 
-test('la tua postazione: cinque upgrade, una volta a persona, per GDO e Conferme, cari apposta', () => {
+test('la tua postazione: cinque upgrade a ruolo, una volta a persona, cari apposta', () => {
     const p = CATALOGO_NEGOZIO.filter(i => i.kind === 'postazione')
-    assert.deepEqual(p.map(i => i.id).sort(), ['postazione-cuffie', 'postazione-gadget', 'postazione-monitor', 'postazione-mouse', 'postazione-tastiera'])
+    assert.deepEqual(p.map(i => i.id).sort(), [
+        'postazione-auricolari', 'postazione-cuffie', 'postazione-gadget', 'postazione-monitor',
+        'postazione-mouse', 'postazione-tastiera', 'postazione-telefono',
+    ])
+    // PO 25/10/2026: le Conferme chiamano col telefono, niente cuffie ma
+    // auricolari e telefono; il resto per entrambi.
+    const di = (ruolo: string) => p.filter(i => i.roles.includes(ruolo)).map(i => i.id).sort()
+    assert.deepEqual(di('GDO'), ['postazione-cuffie', 'postazione-gadget', 'postazione-monitor', 'postazione-mouse', 'postazione-tastiera'])
+    assert.deepEqual(di('CONFERME'), [
+        'postazione-auricolari', 'postazione-gadget', 'postazione-monitor', 'postazione-mouse', 'postazione-tastiera', 'postazione-telefono',
+    ])
     for (const i of p) {
         assert.equal(i.currency, 'S')
         assert.equal(i.giftable, false)
@@ -162,6 +175,7 @@ test('la tua postazione: cinque upgrade, una volta a persona, per GDO e Conferme
         assert.ok(settimaneAlMassimo('S', i.price) >= 2, `${i.id}: ${settimaneAlMassimo('S', i.price).toFixed(1)} settimane`)
     }
     assert.ok(settimane('postazione-monitor') > settimane('postazione-cuffie'))
+    assert.ok(settimane('postazione-telefono') > settimane('postazione-auricolari'))
 })
 
 test('settimane al massimo dei premi principali', () => {

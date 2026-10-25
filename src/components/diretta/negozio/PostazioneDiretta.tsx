@@ -7,9 +7,11 @@
 // Gli oggetti restano dell'azienda (PO 25/10/2026): per questo lo slot
 // consegnato dice "Arrivato", non "Tuo".
 // Pulsanti e conferma sono quelli del negozio (azione e dettaglio).
+// Ogni ruolo vede i suoi pezzi (rewardItems.roles): i GDO le cuffie, le
+// Conferme, che chiamano col telefono, auricolari e telefono (PO 25/10/2026).
 
 import type { ReactNode } from "react"
-import { Gift, Headphones, Keyboard, LampDesk, Monitor, Mouse, type LucideIcon } from "lucide-react"
+import { Ear, Gift, Headphones, Keyboard, LampDesk, Monitor, Mouse, Smartphone, type LucideIcon } from "lucide-react"
 import type { NegozioAcquisto, NegozioArticolo } from "@/app/actions/negozioActions"
 import { statoPostazione, type StatoPostazione } from "@/lib/diretta/negozio"
 import { numeroIt } from "@/lib/diretta/formato"
@@ -17,6 +19,8 @@ import { prezzoTesto } from "./ui"
 
 const ICONA: Record<string, LucideIcon> = {
     'postazione-cuffie': Headphones,
+    'postazione-auricolari': Ear,
+    'postazione-telefono': Smartphone,
     'postazione-tastiera': Keyboard,
     'postazione-mouse': Mouse,
     'postazione-monitor': Monitor,
@@ -24,11 +28,15 @@ const ICONA: Record<string, LucideIcon> = {
 }
 
 // Dove sta ogni slot sulla scrivania, da tablet in su: monitor al centro,
-// tastiera davanti, cuffie e gadget a sinistra, mouse a destra.
+// tastiera davanti, cuffie (o auricolari) e gadget a sinistra, mouse a destra.
+// Il telefono delle Conferme sta a destra del monitor: il riepilogo della
+// scrivania allora scende sotto, su tutta la riga.
 const POSTO: Record<string, string> = {
     'postazione-monitor': 'sm:col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-1',
     'postazione-tastiera': 'lg:col-start-2 lg:row-start-2',
     'postazione-cuffie': 'lg:col-start-1 lg:row-start-1',
+    'postazione-auricolari': 'lg:col-start-1 lg:row-start-1',
+    'postazione-telefono': 'lg:col-start-3 lg:row-start-1',
     'postazione-gadget': 'lg:col-start-1 lg:row-start-2',
     'postazione-mouse': 'lg:col-start-3 lg:row-start-2',
 }
@@ -56,6 +64,10 @@ export function PostazioneDiretta({ articoli, acquisti, azione, dettaglio }: {
     const stati = articoli.map(a => ({ a, stato: statoPostazione(a.id, acquisti) }))
     const tuoi = stati.filter(s => s.stato === 'tuo').length
     const inArrivo = stati.filter(s => s.stato === 'in_arrivo').length
+    const conTelefono = articoli.some(a => a.id === 'postazione-telefono')
+    const postoRiepilogo = conTelefono
+        ? 'sm:col-span-2 lg:col-span-3 lg:col-start-1 lg:row-start-3'
+        : 'sm:col-span-2 lg:col-span-1 lg:col-start-3 lg:row-start-1'
 
     return (
         <section aria-label="La tua postazione" id="postazione">
@@ -72,7 +84,7 @@ export function PostazioneDiretta({ articoli, acquisti, azione, dettaglio }: {
                     {stati.map(({ a, stato }) => (
                         <Slot key={a.id} articolo={a} stato={stato} posto={POSTO[a.id] ?? ''} azione={azione(a)} dettaglio={dettaglio(a)} />
                     ))}
-                    <div className="flex flex-col justify-center rounded-[12px] px-1 py-2 sm:col-span-2 lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:px-4">
+                    <div className={`flex flex-col justify-center rounded-[12px] px-1 py-2 lg:px-4 ${postoRiepilogo}`}>
                         <div className="text-sm text-[var(--d-muted)]">La tua scrivania</div>
                         <div className="mt-1 text-[28px] font-semibold leading-tight tabular-nums">
                             {numeroIt(tuoi)}<span className="text-[var(--d-muted)]"> su {numeroIt(articoli.length)}</span>

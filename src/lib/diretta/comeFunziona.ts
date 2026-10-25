@@ -31,7 +31,7 @@ export function comeFunziona(ruolo: string, r: EconomyRules, t: GamificationTarg
         righe: [
             'Premi e permessi: premi Richiedi e conferma. Il prezzo si scala subito e la richiesta arriva all\'admin, che te la consegna. Se un permesso non si può approvare, il prezzo torna nel saldo. La pausa quando vuoi la approva Bruno.',
             'Immagini e personalizzazioni sono tue subito, e le scegli dal profilo.',
-            'La tua postazione: cuffie, tastiera, mouse, monitor e un gadget per la scrivania. Ognuno si prende una volta sola, si chiede all\'admin come i premi e costa parecchio, perché è un oggetto vero. Gli oggetti restano dell\'azienda: sono per la tua postazione di lavoro.',
+            `La tua postazione: ${ruolo === 'CONFERME' ? 'auricolari, telefono' : 'cuffie'}, tastiera, mouse, monitor e un gadget per la scrivania. Ognuno si prende una volta sola, si chiede all'admin come i premi e costa parecchio, perché è un oggetto vero. Gli oggetti restano dell'azienda: sono per la tua postazione di lavoro.`,
             ...(ruolo === 'GDO' ? ['I potenziamenti partono appena li attivi: booster e moltiplicatore solo durante il turno, lo scudo quando vuoi.'] : []),
         ],
     }

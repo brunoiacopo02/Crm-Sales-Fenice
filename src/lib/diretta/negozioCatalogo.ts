@@ -42,6 +42,9 @@ const RUOLI = ['GDO', 'CONFERME']
 // "Fissa Bruno per te" ha senso solo per chi fissa (collaudo del 25/10/2026):
 // alle Conferme non si offre.
 const SOLO_GDO = ['GDO']
+// Le Conferme chiamano col telefono (PO 25/10/2026): al posto delle cuffie
+// hanno gli auricolari, e il telefono come upgrade in più.
+const SOLO_CONFERME = ['CONFERME']
 
 /**
  * Articoli tolti dal catalogo: lo script li spegne (isActive false) senza
@@ -214,7 +217,13 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
         id: 'postazione-cuffie',
         name: 'Cuffie nuove',
         description: 'Cuffie da call center con microfono che taglia il rumore della sala. Il modello si sceglie dopo la richiesta. Restano dell\'azienda: sono per la tua postazione di lavoro.',
-        kind: 'postazione', currency: 'S', price: 5000, imageUrl: null, giftable: false, sortOrder: 200, roles: RUOLI,
+        kind: 'postazione', currency: 'S', price: 5000, imageUrl: null, giftable: false, sortOrder: 200, roles: SOLO_GDO,
+    },
+    {
+        id: 'postazione-auricolari',
+        name: 'Auricolari nuovi',
+        description: "Auricolari con microfono per chiamare col telefono, comodi per tutto il turno. Il modello si sceglie dopo la richiesta. Restano dell'azienda: sono per la tua postazione di lavoro.",
+        kind: 'postazione', currency: 'S', price: 4000, imageUrl: null, giftable: false, sortOrder: 205, roles: SOLO_CONFERME,
     },
     {
         id: 'postazione-tastiera',
@@ -233,6 +242,12 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
         name: 'Monitor nuovo',
         description: 'Un monitor più grande per la tua postazione: CRM e agenda insieme, senza cambiare finestra. Resta dell\'azienda: è per la tua postazione di lavoro.',
         kind: 'postazione', currency: 'S', price: 12000, imageUrl: null, giftable: false, sortOrder: 230, roles: RUOLI,
+    },
+    {
+        id: 'postazione-telefono',
+        name: 'Telefono nuovo',
+        description: "Un telefono migliore per le chiamate di conferma: si sente bene e regge tutto il turno. Il modello si sceglie dopo la richiesta. Resta dell'azienda: è per la tua postazione di lavoro.",
+        kind: 'postazione', currency: 'S', price: 12000, imageUrl: null, giftable: false, sortOrder: 235, roles: SOLO_CONFERME,
     },
     {
         id: 'postazione-gadget',
