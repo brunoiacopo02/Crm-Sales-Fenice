@@ -51,9 +51,13 @@ Le Piume entrano solo se l'esito lo scrive lo staff (Conferme, venditori, manage
 
 Presenza e chiusura pagano solo se verificate (`esitiVerificati` in `rules.ts`, dal collaudo del 25/10):
 - l'ora dell'appuntamento è passata;
-- c'è un esito registrato all'ora dell'appuntamento o dopo: "Chiuso" o "Non chiuso" per la presenza, "Chiuso" per la chiusura (eventi `salesperson_outcome_set` di Conferme e venditori, e `RECONCILED` delle chiusure applicate dal foglio).
+- c'è un esito registrato all'ora dell'appuntamento o dopo: "Chiuso" o "Non chiuso" per la presenza, "Chiuso" per la chiusura (eventi `salesperson_outcome_set` di Conferme e venditori).
 
-Un "Presenziato" scritto in anticipo non paga mai da solo: paga l'esito che il venditore registra dopo la call. Se il venditore scrive "Lead non presenziato", il latch `presentedAt` resta (logica di sempre, conta per i KPI) ma per le monete non è una presenza.
+L'ora di riferimento di ogni registrazione è l'appuntamento che valeva quando è stata scritta: quello di adesso, se da allora non è stato spostato (`appointmentMovedAt`), altrimenti quello del latch `presentedAt`. Così un esito scritto dopo uno spostamento guarda il nuovo appuntamento, e una presenza già verificata non si perde se poi l'appuntamento cambia.
+
+Le vendite applicate dal foglio (`RECONCILED`, famiglie esito-mancante e lead-scartato) valgono sempre: sono già avvenute, qualunque ora dica l'appuntamento nel CRM. La famiglia solo-crm (una chiusura che il foglio non ha, che torna "Non chiuso") non registra una presenza, e gli eventi di una run annullata non contano.
+
+Un "Presenziato" scritto in anticipo non paga mai da solo, e non diventa valido quando l'ora passa: paga l'esito che il venditore registra dopo la call. Se il venditore scrive "Lead non presenziato", il latch `presentedAt` resta (logica di sempre, conta per i KPI) ma per le monete non è una presenza.
 
 Avvio del 26/10: contano sia il fatto sia la sua registrazione. La conferma guarda quando è stata scritta; presenza e chiusura guardano l'ora dell'appuntamento, e la verifica chiede che la registrazione sia arrivata dopo, quindi anche lei dal 26/10. Così un esito scritto il 25/10 non paga, anche per un appuntamento dal 26 in poi, e un appuntamento di prima dell'avvio registrato in ritardo resta del periodo vecchio, come per il bonus presenze e la classifica, che contano per settimana dell'appuntamento.
 
