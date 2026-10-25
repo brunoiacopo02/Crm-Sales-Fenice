@@ -20,6 +20,11 @@ import { stessoMondo } from '@/lib/prova/regole'
 import { leadDelMondoDiAccount } from '@/lib/prova/sql'
 import { readGamificationTargets } from '@/lib/diretta/settings'
 import { boostIdemKey, boosterAttivo, raddoppia, CAUSALE_BOOSTER } from './booster'
+import {
+    acquistoMoltiplicatore, fissatoValido, moltiplicatoreCopre, pianoMoltiplicatore, premiPerAcquisto, CAUSALE_MOLTIPLICATORE,
+} from './moltiplicatore'
+import { pianoSerie, CAUSALE_SERIE } from './serie'
+import { leggiSerie } from './serieDb'
 import { contaFissati } from '@/lib/diretta/fissati'
 import { leggiFissati, leggiMembriSquadra } from '@/lib/diretta/fissatiDb'
 import { creditOnce, reverseOnce } from './ledger'
@@ -146,12 +151,15 @@ export async function awardFissato(input: { userId: string; leadId: string; comp
         const fissatiOggi = contaFissati(await leggiFissati({ companyId, userIds: [userId], start, end }, tx)).totale
         const scalini = await allineaScalini(tx, { userId, companyId, giorno, fissati: fissatiOggi, targets, rules, righe: righeOggi })
         guadagnate += scalini.accreditate
+        // La serie legge il primo scalino appena scritto: stessa transazione, stesso lock.
+        const serie = await allineaSerie(tx, { userId, companyId, at, rules })
+        guadagnate += serie.accreditate
 
         return rewardFissato({
             scintille: guadagnate,
             fissatiOggi,
             scalino: stepReached(fissatiOggi, targets.personale),
-            saldo: u.scintille + guadagnate - scalini.stornate,
+            saldo: u.scintille + guadagnate - scalini.stornate - serie.stornate,
         })
     })
 }
@@ -190,6 +198,32 @@ async function allineaScalini(tx: Tx, p: {
 }
 
 /**
+ * Allinea le tappe della serie (./serie) al registro: dopo gli scalini, nella
+ * stessa transazione col lock sulla persona. Accredita le tappe raggiunte
+ * dalla serie in corso e storna quelle nate oggi che la serie non giustifica
+ * più (lo scalino di oggi stornato). Restituisce le Scintille mosse.
+ */
+async function allineaSerie(tx: Tx, p: { userId: string; companyId: string; at: Date; rules: EconomyRules }): Promise<{ accreditate: number; stornate: number }> {
+    const { stato, righe } = await leggiSerie(tx, p.userId, p.at)
+    const piano = pianoSerie(righe, p.userId, stato, p.rules.serie, dayBoundsRome(p.at).start)
+    let accreditate = 0
+    let stornate = 0
+    for (const k of piano.storna) {
+        const fatto = await reverseOnce(k, "storno tappa della serie: oggi il primo scalino non c'è più", tx)
+        if (fatto && k.startsWith('S:')) stornate += righe.find(r => r.idemKey === k)?.amount ?? 0
+    }
+    for (const a of piano.accredita) {
+        const ok = await creditOnce({
+            userId: p.userId, currency: a.valuta, amount: a.amount, reason: CAUSALE_SERIE,
+            idemKey: a.idemKey, companyId: p.companyId,
+            metadata: { giorno: toRomeDateStr(p.at), serieDal: stato.inizio, giorni: stato.giorni, tappa: a.giorni },
+        }, tx)
+        if (ok && a.valuta === 'S') accreditate += a.amount
+    }
+    return { accreditate, stornate }
+}
+
+/**
  * Un lead è uscito dall'appuntamento (altro esito, annullamento dell'admin):
  * per chi l'aveva fissato oggi è un fissato valido in meno, e gli scalini di
  * oggi sopra il nuovo conteggio si stornano (si riprendono se il conteggio
@@ -223,6 +257,7 @@ export async function riallineaScaliniDopoUscita(leadId: string, companyId: stri
                 ))
             const fissati = contaFissati(await leggiFissati({ companyId, userIds: [userId], start, end }, tx)).totale
             await allineaScalini(tx, { userId, companyId, giorno, fissati, targets, rules, righe })
+            await allineaSerie(tx, { userId, companyId, at, rules })
         }).catch((e: unknown) => console.error('[economia] riallineo scalini err', userId, e))
     }
 }
@@ -283,6 +318,12 @@ export async function reverseFissato(lead: LeadPerStorno, prima: Date, motivo: s
         if (await reverseOnce(k, `storno fissato: ${motivo}`)) scritti++
         // il raddoppio del booster segue il suo fissato
         if (await reverseOnce(boostIdemKey(k), `storno booster: ${motivo}`)) scritti++
+        // e così il premio del moltiplicatore presenza (tutte le generazioni)
+        for (const r of registro) {
+            if (r.amount > 0 && (r.idemKey === `molt:${k}` || r.idemKey.startsWith(`molt:${k}:g`))) {
+                if (await reverseOnce(r.idemKey, `storno moltiplicatore: ${motivo}`)) scritti++
+            }
+        }
     }
     return scritti
 }
@@ -391,6 +432,17 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
             }
         }
 
+        // 1b. Moltiplicatore presenza (./moltiplicatore): stessa condizione delle
+        // Piume della presenza (stadio dal 2 in su, accreditabile), sul fissato
+        // valido del lead coperto da un moltiplicatore comprato lo stesso giorno.
+        await allineaMoltiplicatore(tx, {
+            lead: { id: lead.id, companyId: lead.companyId }, righe, rules,
+            presenzaValida: stadio >= 2,
+            presenzaPagabile: accreditabile && stadio >= 2,
+            destinatarioId: destinatario?.id ?? null,
+            autore: actorUserId,
+        })
+
         // 2. Scintille di chi ha confermato (Conferme), a stadi.
         const statoConferme = {
             confirmationsOutcome: lead.confirmationsOutcome,
@@ -454,6 +506,72 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
         }
     })
     return daRiallineare
+}
+
+/**
+ * Premio del moltiplicatore presenza su un lead: accredito (con il lock sulla
+ * persona, per il tetto di presenze per acquisto) o storno se la presenza non
+ * vale più. Un moltiplicatore annullato dall'admin (rimborsato) non paga.
+ */
+async function allineaMoltiplicatore(tx: Tx, p: {
+    lead: { id: string; companyId: string }
+    righe: LedgerRow[]
+    rules: EconomyRules
+    presenzaValida: boolean
+    presenzaPagabile: boolean
+    destinatarioId: string | null
+    autore: string | null
+}): Promise<void> {
+    const fissato = p.presenzaPagabile ? fissatoValido(p.righe, p.lead.id) : null
+    let copertura: { purchaseId: string; usati: number } | null = null
+    if (fissato && fissato.userId === p.destinatarioId) {
+        await tx.select({ id: users.id }).from(users).where(eq(users.id, fissato.userId)).for('no key update')
+        const { start, end } = dayBoundsRome(fissato.createdAt)
+        const delGiorno = await tx.select({
+            reason: currencyLedger.reason, amount: currencyLedger.amount,
+            createdAt: currencyLedger.createdAt, metadata: currencyLedger.metadata,
+        }).from(currencyLedger).where(and(
+            eq(currencyLedger.userId, fissato.userId),
+            eq(currencyLedger.reason, 'negozio'),
+            gte(currencyLedger.createdAt, start),
+            lt(currencyLedger.createdAt, end),
+        ))
+        const rimborsati = new Set((await tx.select({ idemKey: currencyLedger.idemKey }).from(currencyLedger).where(and(
+            eq(currencyLedger.userId, fissato.userId),
+            eq(currencyLedger.reason, 'negozio_rimborso'),
+            gte(currencyLedger.createdAt, start),
+        ))).map(r => r.idemKey.slice('refund:'.length)))
+        const acquisti = delGiorno.filter(r => {
+            const id = acquistoMoltiplicatore(r)
+            return !!id && !rimborsati.has(id)
+        })
+        const purchaseId = moltiplicatoreCopre(acquisti, fissato.createdAt)
+        if (purchaseId) {
+            // I premi arrivano anche giorni dopo: si contano dal giorno dell'acquisto in poi.
+            const premi = await tx.select({
+                idemKey: currencyLedger.idemKey, reason: currencyLedger.reason, amount: currencyLedger.amount,
+                createdAt: currencyLedger.createdAt, metadata: currencyLedger.metadata,
+            }).from(currencyLedger).where(and(
+                eq(currencyLedger.userId, fissato.userId),
+                or(like(currencyLedger.idemKey, 'molt:%'), like(currencyLedger.idemKey, 'storno:molt:%')),
+                gte(currencyLedger.createdAt, start),
+            ))
+            copertura = { purchaseId, usati: premiPerAcquisto(premi, purchaseId) }
+        }
+    }
+    const piano = pianoMoltiplicatore({
+        righeLead: p.righe, leadId: p.lead.id,
+        presenzaValida: p.presenzaValida, presenzaPagabile: p.presenzaPagabile,
+        destinatarioId: p.destinatarioId, copertura, rules: p.rules.moltiplicatore,
+    })
+    for (const k of piano.storna) await reverseOnce(k, 'storno moltiplicatore: la presenza non vale più', tx)
+    if (piano.accredita && fissato) {
+        await creditOnce({
+            userId: fissato.userId, currency: 'S', amount: p.rules.moltiplicatore.bonus, reason: CAUSALE_MOLTIPLICATORE,
+            idemKey: piano.accredita.idemKey, leadId: p.lead.id, companyId: p.lead.companyId,
+            metadata: { purchaseId: piano.accredita.purchaseId, fissato: piano.accredita.fissatoIdemKey, autore: p.autore },
+        }, tx)
+    }
 }
 
 /** Chi ha scritto l'ultimo esito del venditore sul lead (null se nessuno), dagli eventi già letti. */

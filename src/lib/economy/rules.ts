@@ -15,6 +15,8 @@
 // lead sale si accredita solo la differenza, quando scende si storna.
 
 import { DEFAULT_BOOSTER, parseBooster, type BoosterRules } from './booster'
+import { DEFAULT_MOLTIPLICATORE, parseMoltiplicatore, type MoltiplicatoreRules } from './moltiplicatore'
+import { DEFAULT_SERIE, parseSerie, type SerieRules } from './serie'
 import { dayBoundsRome } from '@/lib/dateUtils'
 import { stepReached, guadagnaPremiPersonali, type GamificationTargets } from '@/lib/diretta/config'
 
@@ -93,6 +95,10 @@ export interface EconomyRules {
     }
     /** Booster dei fissati comprato in negozio (./booster): il prezzo sta nell'articolo. */
     booster: BoosterRules
+    /** Moltiplicatore presenza comprato in negozio (./moltiplicatore): il prezzo sta nell'articolo. */
+    moltiplicatore: MoltiplicatoreRules
+    /** Serie dei giorni al primo scalino, tappe e scudo (./serie). */
+    serie: SerieRules
 }
 
 export const DEFAULT_ECONOMY_RULES: EconomyRules = {
@@ -116,6 +122,8 @@ export const DEFAULT_ECONOMY_RULES: EconomyRules = {
     },
     classifica: { premiEuro: [50, 25, 10], minPresenze: 1 },
     booster: DEFAULT_BOOSTER,
+    moltiplicatore: DEFAULT_MOLTIPLICATORE,
+    serie: DEFAULT_SERIE,
 }
 
 // ── Lettura delle regole ────────────────────────────────────────────────
@@ -238,6 +246,8 @@ export function parseEconomyRules(raw: string | null | undefined): EconomyRules 
             minPresenze: intero(classifica.minPresenze, d.classifica.minPresenze, 1),
         },
         booster: parseBooster(saved.booster),
+        moltiplicatore: parseMoltiplicatore(saved.moltiplicatore),
+        serie: parseSerie(saved.serie),
     }
 }
 
