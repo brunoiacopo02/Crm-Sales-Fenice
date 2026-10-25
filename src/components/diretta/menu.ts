@@ -83,7 +83,6 @@ const ORDINE_GRUPPI = [
 const NOMI: Record<string, string> = {
     "/manager-targets": "Target e previsioni",
     "/operativa-team": "Operativa team",
-    "/monitor-pause": "Monitor pause",
     "/statistiche-fissatore": "Statistiche fissatore",
     "/richieste-contatto": "Richieste di contatto",
     "/kpi-venditori": "KPI venditori",
