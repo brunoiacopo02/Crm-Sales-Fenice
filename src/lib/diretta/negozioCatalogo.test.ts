@@ -115,11 +115,11 @@ test('personalizzazioni del catalogo e registro coincidono', () => {
     assert.deepEqual(pers, Object.keys(PERSONALIZZAZIONI).sort())
 })
 
-test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno, i potenziamenti e le cuffie (solo GDO), auricolari e telefono (solo Conferme)", () => {
+test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno, i potenziamenti, la pausa quando vuoi e le cuffie (solo GDO), auricolari e telefono (solo Conferme)", () => {
     const soloConferme = new Set(['postazione-auricolari', 'postazione-telefono'])
     for (const i of CATALOGO_NEGOZIO) {
         const attesi = soloConferme.has(i.id) ? ['CONFERME']
-            : i.id === 'pausa-30-bruno-fissa' || i.id === 'postazione-cuffie' || isPotenziamento(i.kind) ? ['GDO']
+            : i.id === 'pausa-30-bruno-fissa' || i.id === 'postazione-cuffie' || i.id === 'pausa-quando-vuoi' || isPotenziamento(i.kind) ? ['GDO']
             : ['CONFERME', 'GDO']
         assert.deepEqual([...i.roles].sort(), attesi, i.id)
     }
@@ -146,6 +146,7 @@ test('premi nuovi del 25/10: pausa quando vuoi mai in punta, abbonamento, cinema
     // PO 25/10/2026: la approva Bruno, con il suo nome
     assert.match(pausa.description, /la approva Bruno/)
     assert.ok(APPROVA_BRUNO.has(pausa.id))
+    assert.deepEqual(pausa.roles, ['GDO'])   // le Conferme si gestiscono le pause da sole
     for (const id of ['spotify-o-netflix', 'cinema-per-due', 'buono-amazon-10', 'buono-amazon-25', 'caffe-per-un-collega']) {
         assert.ok(CATALOGO_NEGOZIO.some(i => i.id === id), id)
     }

@@ -32,6 +32,7 @@ test('come funziona: la postazione per tutti, la serie solo ai GDO', () => {
     assert.match(testo('CONFERME'), /La tua postazione/)
     assert.match(testo('GDO'), /restano dell'azienda: sono per la tua postazione di lavoro/)
     assert.match(testo('GDO'), /La pausa quando vuoi la approva Bruno/)
+    assert.doesNotMatch(testo('CONFERME'), /pausa quando vuoi/i)
     assert.doesNotMatch(testo('CONFERME'), /La serie|Scudo|Moltiplicatore/)
     // PO 25/10/2026: le Conferme chiamano col telefono
     assert.match(testo('GDO'), /La tua postazione: cuffie, tastiera/)

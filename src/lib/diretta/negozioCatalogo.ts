@@ -112,11 +112,12 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
     },
     {
         // Mai nell'ora di punta (DEFAULT_TARGETS: 18-19, sabato 12:30-13:30).
-        // La approva Bruno (APPROVA_BRUNO in ./negozio, PO 25/10/2026).
+        // La approva Bruno (APPROVA_BRUNO in ./negozio, PO 25/10/2026). Solo GDO:
+        // le Conferme si gestiscono già le pause da sole.
         id: 'pausa-quando-vuoi',
         name: 'Pausa quando vuoi per una settimana',
         description: "Per una settimana scegli tu quando fare le pause del turno, mai nell'ora di punta (18-19, il sabato 12:30-13:30). La settimana si concorda e la approva Bruno: se non si può, le Scintille tornano nel saldo.",
-        kind: 'permesso', currency: 'S', price: 1200, imageUrl: null, giftable: false, sortOrder: 65, roles: RUOLI,
+        kind: 'permesso', currency: 'S', price: 1200, imageUrl: null, giftable: false, sortOrder: 65, roles: SOLO_GDO,
     },
     {
         id: 'pranzo-offerto',
