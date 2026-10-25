@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
-import { gte, lte, lt, and, eq, desc, isNotNull, sql } from "drizzle-orm"
+import { gte, lte, lt, and, eq, desc, isNotNull, sql, inArray, aliasedTable } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
@@ -211,10 +211,20 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
 
     // Richiami non convertiti
     const recallLogs = validLogs.filter(l => l.outcome === 'RICHIAMO')
+    // Per ogni lead l'ultimo APPUNTAMENTO del periodo: un richiamo è
+    // convertito se il lead ha un appuntamento dopo. Stesso risultato del
+    // confronto di ogni richiamo con tutte le chiamate, senza il costo
+    // quadratico sul mese di squadra.
+    const ultimoAppuntamento = new Map<string, number>()
+    for (const l of validLogs) {
+        if (l.outcome !== 'APPUNTAMENTO') continue
+        const t = l.createdAt.getTime()
+        if (t > (ultimoAppuntamento.get(l.leadId) ?? -Infinity)) ultimoAppuntamento.set(l.leadId, t)
+    }
     let unconvertedRecalls = 0
     recallLogs.forEach(recall => {
         // Did this lead get an appointment AFTER this recall?
-        const hasApptAfter = validLogs.some(l => l.leadId === recall.leadId && l.outcome === 'APPUNTAMENTO' && l.createdAt > recall.createdAt)
+        const hasApptAfter = (ultimoAppuntamento.get(recall.leadId) ?? -Infinity) > recall.createdAt.getTime()
         if (!hasApptAfter) unconvertedRecalls++
     })
     const recallUnconvertedPerc = recallLogs.length > 0 ? Math.round((unconvertedRecalls / recallLogs.length) * 100) : 0
@@ -437,10 +447,14 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     // appointmentDate IS NOT NULL, attribuiti al GDO assegnatario del lead.
     // Sostituisce il vecchio conteggio da callLogs.outcome='APPUNTAMENTO'
     // (righe, non lead — poteva contare 2 volte lo stesso lead).
+    // I lead di prova (migr. 0050) restano fuori come nel resto della pagina
+    // (getAdvancedKpi conta con contaNeiKpiSql): per un GDO vero non cambia
+    // niente, il GDO di prova vede zero ovunque invece di numeri mischiati.
     const todayApptLeads = await db.select({ id: leads.id })
         .from(leads)
         .where(and(
             companyScope(ctx, leads.companyId),
+            leadVero(),
             eq(leads.assignedToId, gdoId),
             isNotNull(leads.appointmentDate),
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${todayStart}`,
@@ -454,6 +468,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
         .from(leads)
         .where(and(
             companyScope(ctx, leads.companyId),
+            leadVero(),
             eq(leads.assignedToId, gdoId),
             eq(leads.confirmationsOutcome, 'confermato'),
             gte(leads.confirmationsTimestamp, weekStart),
@@ -467,6 +482,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
         .from(leads)
         .where(and(
             companyScope(ctx, leads.companyId),
+            leadVero(),
             eq(leads.assignedToId, gdoId),
             eq(leads.salespersonOutcome, 'Chiuso'),
             gte(leads.salespersonOutcomeAt, weekStart),
@@ -787,7 +803,21 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
         .where(and(companyScope(ctx, users.companyId), eq(users.isBot, true)))
     const botIds = new Set(botRows.map(r => r.id))
 
-    // CTE: rn = posizione della chiamata nella storia completa del lead
+    // CTE: rn = posizione della chiamata nella storia completa del lead.
+    // Per un GDO solo i lead che ha chiamato nel periodo: di questi la storia
+    // si legge tutta, quindi la posizione resta la stessa, ma il conto non
+    // scorre più tutte le chiamate della tabella (4,5 s per un GDO su 7
+    // giorni, 0,2 s così; collaudo del 25/10/2026). Per la squadra il
+    // sottoinsieme è quasi tutta la tabella e la lettura intera resta più svelta.
+    const nelPeriodo = aliasedTable(callLogs, 'cl_periodo')
+    const leadDelGdo = filters.gdoId
+        ? db.select({ leadId: nelPeriodo.leadId }).from(nelPeriodo).where(and(
+            companyScope(ctx, nelPeriodo.companyId),
+            gte(nelPeriodo.createdAt, start),
+            lte(nelPeriodo.createdAt, end),
+            eq(nelPeriodo.userId, filters.gdoId),
+        ))
+        : null
     const ranked = db.$with('ranked').as(
         db.select({
             leadId: callLogs.leadId,
@@ -796,7 +826,10 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
             discardReason: callLogs.discardReason,
             createdAt: callLogs.createdAt,
             rn: sql<number>`row_number() over (partition by ${callLogs.leadId} order by ${callLogs.createdAt}, ${callLogs.id})`.as('rn'),
-        }).from(callLogs).where(companyScope(ctx, callLogs.companyId)),
+        }).from(callLogs).where(and(
+            companyScope(ctx, callLogs.companyId),
+            leadDelGdo ? inArray(callLogs.leadId, leadDelGdo) : undefined,
+        )),
     )
     const rows = await db.with(ranked)
         .select({
