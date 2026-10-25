@@ -62,6 +62,27 @@ export function daApprovare(kind: string): boolean {
     return kind === 'permesso'
 }
 
+/**
+ * Permessi che approva Bruno di persona (PO 25/10/2026: "Pausa quando vuoi per
+ * una settimana"). Passano dalla stessa coda di Premi del negozio: nascono
+ * 'richiesto', l'admin li approva o li annulla (e le Scintille tornano).
+ */
+export const APPROVA_BRUNO: ReadonlySet<string> = new Set(['pausa-quando-vuoi'])
+
+/** Etichetta accanto al prezzo: chi approva, oppure niente se non c'è da approvare. */
+export function etichettaApprovazione(itemId: string, kind: string): string | null {
+    if (!daApprovare(kind)) return null
+    return APPROVA_BRUNO.has(itemId) ? 'La approva Bruno' : 'Da approvare'
+}
+
+/** Riga della conferma d'acquisto, dopo il prezzo. */
+export function avvisoApprovazione(itemId: string, kind: string): string {
+    if (!daApprovare(kind)) return '.'
+    return APPROVA_BRUNO.has(itemId)
+        ? '. La approva Bruno: se non si può, tornano nel saldo.'
+        : '. Se non si può approvare, tornano nel saldo.'
+}
+
 /** Stato con cui nasce la richiesta: i digitali sono già consegnati. */
 export function statoIniziale(kind: string): PurchaseStatus {
     // i potenziamenti partono all'acquisto: niente da consegnare

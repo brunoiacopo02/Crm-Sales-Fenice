@@ -13,7 +13,7 @@ import {
     type LucideIcon,
 } from "lucide-react"
 import { buyReward, setProfileImage, type NegozioArticolo, type NegozioView } from "@/app/actions/negozioActions"
-import { daApprovare, GIFT_TO_MAX, isDigitale, isPotenziamento, SOLO_REGALO } from "@/lib/diretta/negozio"
+import { avvisoApprovazione, etichettaApprovazione, GIFT_TO_MAX, isDigitale, isPotenziamento, SOLO_REGALO } from "@/lib/diretta/negozio"
 import { numeroIt, oraRoma } from "@/lib/diretta/formato"
 import { AvatarDiretta, STATO_TESTO, TitoloDiretta, btn, dataBreve, numero, prezzoTesto } from "./ui"
 import { PostazioneDiretta } from "./PostazioneDiretta"
@@ -171,7 +171,7 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                 <div className="mt-3 flex flex-col gap-3 rounded-[8px] border-2 border-[var(--d-line)] p-4">
                     <div className="text-sm leading-relaxed">
                         Scali <span className="font-semibold">{prezzoTesto(a.currency, a.price)}</span>
-                        {daApprovare(a.kind) ? '. Se non si può approvare, tornano nel saldo.' : '.'}
+                        {avvisoApprovazione(a.id, a.kind)}
                     </div>
                     {SOLO_REGALO.has(a.id) && (
                         <label className="flex flex-col gap-1.5 text-sm">
@@ -242,7 +242,7 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                 </div>
                 <div className="shrink-0 sm:text-right">
                     <div className="font-semibold tabular-nums">{prezzoTesto(a.currency, a.price)}</div>
-                    {daApprovare(a.kind) && <div className="text-xs text-[var(--d-muted)]">Da approvare</div>}
+                    {etichettaApprovazione(a.id, a.kind) && <div className="text-xs text-[var(--d-muted)]">{etichettaApprovazione(a.id, a.kind)}</div>}
                 </div>
                 <div className="flex w-full shrink-0 sm:w-auto sm:justify-end">{azione(a)}</div>
             </div>

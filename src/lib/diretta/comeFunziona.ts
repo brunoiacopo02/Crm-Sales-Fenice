@@ -29,9 +29,9 @@ export function comeFunziona(ruolo: string, r: EconomyRules, t: GamificationTarg
     const compra: BloccoSpiegazione = {
         titolo: 'Come si compra',
         righe: [
-            'Premi e permessi: premi Richiedi e conferma. Il prezzo si scala subito e la richiesta arriva all\'admin, che te la consegna. Se un permesso non si può approvare, il prezzo torna nel saldo.',
+            'Premi e permessi: premi Richiedi e conferma. Il prezzo si scala subito e la richiesta arriva all\'admin, che te la consegna. Se un permesso non si può approvare, il prezzo torna nel saldo. La pausa quando vuoi la approva Bruno.',
             'Immagini e personalizzazioni sono tue subito, e le scegli dal profilo.',
-            'La tua postazione: cuffie, tastiera, mouse, monitor e un gadget per la scrivania. Ognuno si prende una volta sola, si chiede all\'admin come i premi e costa parecchio, perché è un oggetto vero.',
+            'La tua postazione: cuffie, tastiera, mouse, monitor e un gadget per la scrivania. Ognuno si prende una volta sola, si chiede all\'admin come i premi e costa parecchio, perché è un oggetto vero. Gli oggetti restano dell\'azienda: sono per la tua postazione di lavoro.',
             ...(ruolo === 'GDO' ? ['I potenziamenti partono appena li attivi: booster e moltiplicatore solo durante il turno, lo scudo quando vuoi.'] : []),
         ],
     }
@@ -87,6 +87,10 @@ export function comeFunziona(ruolo: string, r: EconomyRules, t: GamificationTarg
             righe: [
                 `Ogni giorno di lavoro in cui arrivi ${alNumero(t.personale[0])} appuntamento, la serie sale di uno. Domeniche e feste non contano; un giorno sotto, o di assenza, la fa ripartire da zero.`,
                 `Tappe: ${tappe(r)}.`,
+                // PO 25/10/2026: dopo l'ultima tappa (180) la serie conta ancora, ma senza premi.
+                ...(r.serie.tappe.length > 0
+                    ? [`Dopo i ${numeroIt(r.serie.tappe[r.serie.tappe.length - 1].giorni)} giorni la serie continua a contare, ma non dà altri premi.`]
+                    : []),
                 'Se oggi un appuntamento viene tolto e scendi sotto, la tappa di oggi torna indietro.',
             ],
         },

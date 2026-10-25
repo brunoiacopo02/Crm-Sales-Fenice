@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CATALOGO_NEGOZIO, settimaneAlMassimo, MASSIMO_PATTO_SETTIMANA } from './negozioCatalogo'
-import { PERSONALIZZAZIONI, SOLO_REGALO, isPotenziamento, unaVoltaSola } from './negozio'
+import { APPROVA_BRUNO, PERSONALIZZAZIONI, SOLO_REGALO, isPotenziamento, unaVoltaSola } from './negozio'
 import { DEFAULT_TARGETS } from './config'
 import { DEFAULT_ECONOMY_RULES } from '@/lib/economy/rules'
 import { guadagnoGdo, guadagnoConferme, SCENARI_CONFERME, SCENARI_GDO, PATTO, CHIUSURA_SCENARI } from '@/lib/economy/scenari'
@@ -140,6 +140,9 @@ test('premi nuovi del 25/10: pausa quando vuoi mai in punta, abbonamento, cinema
     const pausa = CATALOGO_NEGOZIO.find(i => i.id === 'pausa-quando-vuoi')!
     assert.equal(pausa.kind, 'permesso')
     assert.match(pausa.description, /mai nell'ora di punta \(18-19, il sabato 12:30-13:30\)/)
+    // PO 25/10/2026: la approva Bruno, con il suo nome
+    assert.match(pausa.description, /la approva Bruno/)
+    assert.ok(APPROVA_BRUNO.has(pausa.id))
     for (const id of ['spotify-o-netflix', 'cinema-per-due', 'buono-amazon-10', 'buono-amazon-25', 'caffe-per-un-collega']) {
         assert.ok(CATALOGO_NEGOZIO.some(i => i.id === id), id)
     }
@@ -154,6 +157,8 @@ test('la tua postazione: cinque upgrade, una volta a persona, per GDO e Conferme
         assert.equal(i.currency, 'S')
         assert.equal(i.giftable, false)
         assert.ok(unaVoltaSola(i.kind))
+        // PO 25/10/2026: restano dell'azienda, sono per la postazione di lavoro
+        assert.match(i.description, /Rest(a|ano) dell'azienda: (è|sono) per la tua postazione di lavoro\./, i.id)
         assert.ok(settimaneAlMassimo('S', i.price) >= 2, `${i.id}: ${settimaneAlMassimo('S', i.price).toFixed(1)} settimane`)
     }
     assert.ok(settimane('postazione-monitor') > settimane('postazione-cuffie'))

@@ -24,5 +24,8 @@ test('serie in home: da tenere viva, domenica, tutte le tappe fatte', () => {
     assert.equal(testoSerie({ ...base, giorni: 1 }).titolo, 'Serie: 1 giorno')
     assert.equal(testoSerie({ ...base, giorni: 4 }).oggi, 'Arriva a 8 fissati oggi per tenerla viva.')
     assert.match(testoSerie({ ...base, giorni: 4, oggiLavorativo: false }).oggi, /non si conta/)
-    assert.equal(testoSerie({ ...base, giorni: 61, prossima: null }).prossima, null)
+    assert.equal(testoSerie({ ...base, giorni: 181, prossima: null }).prossima, 'Hai preso tutte le tappe: la serie continua a contare.')
+    assert.equal(testoSerie({ ...base, giorni: 0, prossima: null }).prossima, null)
+    assert.equal(testoSerie({ ...base, giorni: 150, prossima: { giorni: 180, scintille: 250, piume: 20 } }).prossima,
+        'Prossima tappa a 180 giorni: 250 Scintille e 20 Piume. Mancano 30 giorni.')
 })

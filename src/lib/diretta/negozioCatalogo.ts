@@ -109,9 +109,10 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
     },
     {
         // Mai nell'ora di punta (DEFAULT_TARGETS: 18-19, sabato 12:30-13:30).
+        // La approva Bruno (APPROVA_BRUNO in ./negozio, PO 25/10/2026).
         id: 'pausa-quando-vuoi',
         name: 'Pausa quando vuoi per una settimana',
-        description: "Per una settimana scegli tu quando fare le pause del turno, mai nell'ora di punta (18-19, il sabato 12:30-13:30). La settimana si concorda e va approvata: se non si può, le Scintille tornano nel saldo.",
+        description: "Per una settimana scegli tu quando fare le pause del turno, mai nell'ora di punta (18-19, il sabato 12:30-13:30). La settimana si concorda e la approva Bruno: se non si può, le Scintille tornano nel saldo.",
         kind: 'permesso', currency: 'S', price: 1200, imageUrl: null, giftable: false, sortOrder: 65, roles: RUOLI,
     },
     {
@@ -208,34 +209,35 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
     },
     // La tua postazione (PO 25/10/2026): upgrade fisici, uno per tipo a persona,
     // richiesti all'admin. Costano parecchio apposta: sono oggetti veri.
+    // Restano dell'azienda e servono alla postazione di lavoro (PO 25/10/2026).
     {
         id: 'postazione-cuffie',
         name: 'Cuffie nuove',
-        description: 'Cuffie da call center con microfono che taglia il rumore della sala. Il modello si sceglie dopo la richiesta.',
+        description: 'Cuffie da call center con microfono che taglia il rumore della sala. Il modello si sceglie dopo la richiesta. Restano dell\'azienda: sono per la tua postazione di lavoro.',
         kind: 'postazione', currency: 'S', price: 5000, imageUrl: null, giftable: false, sortOrder: 200, roles: RUOLI,
     },
     {
         id: 'postazione-tastiera',
         name: 'Tastiera nuova',
-        description: 'Una tastiera comoda per scrivere note ed esiti tutto il turno.',
+        description: 'Una tastiera comoda per scrivere note ed esiti tutto il turno. Resta dell\'azienda: è per la tua postazione di lavoro.',
         kind: 'postazione', currency: 'S', price: 4000, imageUrl: null, giftable: false, sortOrder: 210, roles: RUOLI,
     },
     {
         id: 'postazione-mouse',
         name: 'Mouse nuovo',
-        description: 'Un mouse preciso e comodo in mano.',
+        description: 'Un mouse preciso e comodo in mano. Resta dell\'azienda: è per la tua postazione di lavoro.',
         kind: 'postazione', currency: 'S', price: 2500, imageUrl: null, giftable: false, sortOrder: 220, roles: RUOLI,
     },
     {
         id: 'postazione-monitor',
         name: 'Monitor nuovo',
-        description: 'Un monitor più grande per la tua postazione: CRM e agenda insieme, senza cambiare finestra.',
+        description: 'Un monitor più grande per la tua postazione: CRM e agenda insieme, senza cambiare finestra. Resta dell\'azienda: è per la tua postazione di lavoro.',
         kind: 'postazione', currency: 'S', price: 12000, imageUrl: null, giftable: false, sortOrder: 230, roles: RUOLI,
     },
     {
         id: 'postazione-gadget',
         name: 'Gadget per la scrivania',
-        description: 'Una lampada, una pianta o un oggetto per la tua scrivania, da scegliere insieme.',
+        description: 'Una lampada, una pianta o un oggetto per la tua scrivania, da scegliere insieme. Resta dell\'azienda: è per la tua postazione di lavoro.',
         kind: 'postazione', currency: 'S', price: 1500, imageUrl: null, giftable: false, sortOrder: 240, roles: RUOLI,
     },
 ]

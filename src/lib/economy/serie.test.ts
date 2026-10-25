@@ -5,6 +5,7 @@ import {
     scudiComprati, scudiDelMese, tappaIdemKey, type RigaSerie,
 } from './serie'
 import { toRomeDateStr } from '@/lib/dateUtils'
+import { addDays, isWorkingDay } from '@/lib/quotes/calendar'
 
 const U = 'u1'
 const at = (giorno: string, hhmm = '18:00') => new Date(`${giorno}T${hhmm}:00+01:00`)
@@ -130,7 +131,7 @@ test('tappe: quelle di una serie finita e dei giorni passati non si toccano', ()
     assert.deepEqual(pianoSerie([vecchia], U, stato, DEFAULT_SERIE, at('2026-10-28', '00:00')), { accredita: [], storna: [] })
 })
 
-test('tappe: all\'ultima anche le Piume; prossima tappa', () => {
+test('tappe: a 60 anche le Piume; prossima tappa', () => {
     const giorni: string[] = []
     let d = new Date(Date.UTC(2026, 10, 2))
     while (giorni.length < 60) {
@@ -146,7 +147,39 @@ test('tappe: all\'ultima anche le Piume; prossima tappa', () => {
     assert.deepEqual(p.accredita.filter(a => a.valuta === 'P'), [{ valuta: 'P', amount: 20, giorni: 60, idemKey: tappaIdemKey('P', U, giorni[0], 60) }])
     assert.deepEqual(prossimaTappa(0, DEFAULT_SERIE), DEFAULT_SERIE.tappe[0])
     assert.equal(prossimaTappa(3, DEFAULT_SERIE)?.giorni, 6)
-    assert.equal(prossimaTappa(60, DEFAULT_SERIE), null)
+    assert.deepEqual(prossimaTappa(60, DEFAULT_SERIE), { giorni: 90, scintille: 250, piume: 0 })
+})
+
+/** I primi `n` giorni lavorativi da lunedì 2/11/2026. */
+function giorniDiLavoro(n: number): string[] {
+    const out: string[] = []
+    for (let d = '2026-11-02'; out.length < n; d = addDays(d, 1)) if (isWorkingDay(d)) out.push(d)
+    return out
+}
+
+test('tappe oltre i 60 (PO 25/10/2026): ogni 30 giorni 250 Scintille, Piume a 120 e 180, poi più niente', () => {
+    assert.deepEqual(DEFAULT_SERIE.tappe.slice(-5), [
+        { giorni: 60, scintille: 250, piume: 20 },
+        { giorni: 90, scintille: 250, piume: 0 },
+        { giorni: 120, scintille: 250, piume: 20 },
+        { giorni: 150, scintille: 250, piume: 0 },
+        { giorni: 180, scintille: 250, piume: 20 },
+    ])
+    const giorni = giorniDiLavoro(200)
+    // A 180 giorni: tutte le tappe, una volta sola.
+    const a180 = giorni.slice(0, 180)
+    const stato180 = calcolaSerie({ fatti: new Set(a180), scudi: [], oggi: a180[179] })
+    assert.equal(stato180.giorni, 180)
+    const p = pianoSerie([], U, stato180, DEFAULT_SERIE, at(a180[179], '00:00'))
+    assert.equal(p.accredita.filter(a => a.valuta === 'S').reduce((s, a) => s + a.amount, 0), 805 + 4 * 250)
+    assert.deepEqual(p.accredita.filter(a => a.valuta === 'P').map(a => a.giorni), [60, 120, 180])
+    assert.equal(prossimaTappa(150, DEFAULT_SERIE)?.giorni, 180)
+    assert.equal(prossimaTappa(180, DEFAULT_SERIE), null)
+    // Oltre i 180 la serie conta ma non paga altro.
+    const stato200 = calcolaSerie({ fatti: new Set(giorni), scudi: [], oggi: giorni[199] })
+    assert.equal(stato200.giorni, 200)
+    const gia: RigaSerie[] = p.accredita.map(a => ({ idemKey: a.idemKey, reason: 'serie', amount: a.amount, createdAt: at(a180[179]), metadata: null }))
+    assert.deepEqual(pianoSerie(gia, U, stato200, DEFAULT_SERIE, at(giorni[199], '00:00')), { accredita: [], storna: [] })
 })
 
 test('serie: regole lette dal JSON', () => {

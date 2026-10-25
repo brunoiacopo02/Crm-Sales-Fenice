@@ -8,7 +8,7 @@
 // I giorni passati restano come sono, come gli scalini: solo il giorno di oggi
 // può ancora cambiare (fissato tolto = scalino stornato = giorno non fatto).
 //
-// Le tappe (3, 6, 12... giorni) danno Scintille e, all'ultima, Piume. Ogni
+// Le tappe (3, 6, 12... fino a 180 giorni) danno Scintille e, a 60, 120 e 180, Piume. Ogni
 // tappa ha una chiave legata all'inizio della serie: una serie nuova paga di
 // nuovo, la stessa serie no. Se oggi lo scalino si storna, la tappa raggiunta
 // oggi si storna con lui (e si riprende con una chiave nuova se si torna su).
@@ -46,6 +46,12 @@ export const DEFAULT_SERIE: SerieRules = {
         { giorni: 36, scintille: 150, piume: 0 },
         { giorni: 48, scintille: 200, piume: 0 },
         { giorni: 60, scintille: 250, piume: 20 },
+        // Oltre i 60 (PO 25/10/2026): una tappa ogni 30 giorni, Piume ogni 60, fino a 180.
+        // Dopo l'ultima la serie conta ancora ma non dà altri premi.
+        { giorni: 90, scintille: 250, piume: 0 },
+        { giorni: 120, scintille: 250, piume: 20 },
+        { giorni: 150, scintille: 250, piume: 0 },
+        { giorni: 180, scintille: 250, piume: 20 },
     ],
     scudiAlMese: 2,
     scudiInTasca: 1,

@@ -20,7 +20,8 @@ test('come funziona, GDO: serie con le tappe e i tre potenziamenti', () => {
     assert.match(t, /La serie/)
     assert.match(t, /arrivi all'8° appuntamento, la serie sale di uno/)
     assert.match(t, /3 giorni 15 Scintille, 6 giorni 30 Scintille/)
-    assert.match(t, /60 giorni 250 Scintille e 20 Piume/)
+    assert.match(t, /60 giorni 250 Scintille e 20 Piume, 90 giorni 250 Scintille, 120 giorni 250 Scintille e 20 Piume, 150 giorni 250 Scintille, 180 giorni 250 Scintille e 20 Piume\./)
+    assert.match(t, /Dopo i 180 giorni la serie continua a contare, ma non dà altri premi\./)
     assert.match(t, /Booster: per 60 minuti/)
     assert.match(t, /25 Scintille in più se la persona si presenta davvero, fino a 4 presenze/)
     assert.match(t, /Scudo della serie: .*al massimo 2 al mese/)
@@ -29,6 +30,8 @@ test('come funziona, GDO: serie con le tappe e i tre potenziamenti', () => {
 test('come funziona: la postazione per tutti, la serie solo ai GDO', () => {
     assert.match(testo('GDO'), /La tua postazione/)
     assert.match(testo('CONFERME'), /La tua postazione/)
+    assert.match(testo('GDO'), /restano dell'azienda: sono per la tua postazione di lavoro/)
+    assert.match(testo('GDO'), /La pausa quando vuoi la approva Bruno/)
     assert.doesNotMatch(testo('CONFERME'), /La serie|Scudo|Moltiplicatore/)
 })
 

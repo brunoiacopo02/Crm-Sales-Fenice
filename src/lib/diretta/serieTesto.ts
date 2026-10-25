@@ -37,6 +37,9 @@ export function testoSerie(s: SerieDaMostrare): TestoSerie {
         ].filter(Boolean).join(' e ')
         const mancano = s.prossima.giorni - s.giorni
         prossima = `Prossima tappa a ${giorniTesto(s.prossima.giorni)}${premio ? `: ${premio}` : ''}. ${mancano === 1 ? 'Manca 1 giorno' : `Mancano ${giorniTesto(mancano)}`}.`
+    } else if (s.giorni > 0) {
+        // PO 25/10/2026: oltre l'ultima tappa (180) niente più premi, ma la serie conta.
+        prossima = 'Hai preso tutte le tappe: la serie continua a contare.'
     }
     return {
         titolo: `Serie: ${giorniTesto(s.giorni)}`,

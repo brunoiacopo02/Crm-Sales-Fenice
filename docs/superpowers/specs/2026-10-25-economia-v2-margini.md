@@ -435,10 +435,11 @@ Decisioni del PO del 25/10. I numeri segnati "proposta" sono default nelle regol
 
 - **Cosa conta**: giorni lavorativi di fila (lun-sab; domeniche, feste nazionali e chiusure dell'ufficio `quotes_closed_days` saltate) in cui il GDO arriva al primo scalino personale del giorno (8 fissati validi, come in home). Un giorno sotto, o di assenza, la azzera. Oggi conta appena lo scalino è raggiunto; finché il giorno non è chiuso, non averlo ancora raggiunto non rompe niente.
 - **Da dove**: solo dal registro. Un giorno è fatto se ha l'accredito attivo del primo scalino (`S:scalino:<id>:<giorno>:1`). I giorni passati restano come sono, come gli scalini; solo oggi può cambiare. Attenzione: se il primo scalino venisse messo a 0 Scintille, la serie non vedrebbe più i giorni fatti.
-- **Tappe (proposta)**: 3 giorni +15, 6 +30, 12 +60, 24 +100, 36 +150, 48 +200, 60 +250 Scintille e 20 Piume. Dopo 60 giorni non ci sono altre tappe (si può decidere di ripartire).
+- **Tappe (proposta)**: 3 giorni +15, 6 +30, 12 +60, 24 +100, 36 +150, 48 +200, 60 +250 Scintille e 20 Piume. Oltre i 60 (PO 25/10/2026): una tappa ogni 30 giorni, Piume ogni 60, fino a 180: 90 +250, 120 +250 e 20 Piume, 150 +250, 180 +250 e 20 Piume. Dopo i 180 la serie conta ma non dà altri premi. Il +250 come numero fisso è una proposta.
 - **Accredito**: dentro `awardFissato` e `riallineaScaliniDopoUscita`, subito dopo gli scalini, nella stessa transazione col lock sulla persona (`allineaSerie` in `awards.ts`). Chiave `S:serie:<id>:<inizio serie>:<giorni>` (Piume `P:serie:...`): una serie nuova ripaga le tappe, la stessa no. Se oggi lo scalino si storna, la tappa nata oggi si storna; se si torna su, si riprende con una chiave nuova (`:2`).
 - **Resa**: tutte le tappe fino a 60 = 805 Scintille e 20 Piume in 10 settimane, circa 80 Scintille a settimana (12,6% della settimana al massimo del patto) più 2 Piume a settimana in media.
 - **Costo**: chi arriva a 60 giorni costa circa 14 € di Scintille (805 × 0,018) e 34 € di Piume (20 × 1,71), 48 € in 10 settimane, ~21 € al mese. Vale 0,09 presenze. Arrivare a 8 fissati validi tutti i giorni per 60 giorni è sopra il patto (7,4 al giorno): chi ci arriva produce molto di più di quel che costa.
+- **Dopo i 60**: da 61 a 180 giorni altre 1.000 Scintille e 40 Piume in circa 20 settimane (~50 Scintille e 2 Piume a settimana), circa 18 € di Scintille e 68 € di Piume. Tutta la serie fino a 180: 1.805 Scintille e 60 Piume, circa 135 € in 30 settimane.
 
 ### Potenziamenti (solo GDO)
 
@@ -479,6 +480,6 @@ Tutta la postazione: 25.000 Scintille, circa 39 settimane al massimo del patto, 
 ### Da decidere
 
 1. Tutti i numeri qui sopra segnati "proposta".
-2. Postazione: gli oggetti restano dell'azienda (alla postazione) o della persona? Il testo del negozio non lo dice.
-3. Serie dopo i 60 giorni: niente più tappe, oppure si riparte con le stesse.
-4. Pausa quando vuoi: chi approva la settimana e come si evita che due persone della stessa fila la prendano insieme.
+2. ~~Postazione~~: deciso dal PO il 25/10, gli oggetti restano dell'azienda e servono alla postazione di lavoro (scritto nel negozio e in Come funziona; lo slot consegnato dice "Arrivato").
+3. ~~Serie dopo i 60 giorni~~: deciso dal PO il 25/10, tappe ogni 30 giorni fino a 180 (vedi sopra); resta da confermare il +250.
+4. Pausa quando vuoi: la approva Bruno (`APPROVA_BRUNO` in `src/lib/diretta/negozio.ts`), dalla coda di Premi del negozio come gli altri permessi; se annullata le Scintille tornano. Resta da decidere come si evita che due persone della stessa fila la prendano insieme.

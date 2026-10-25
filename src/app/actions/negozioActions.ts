@@ -29,7 +29,7 @@ import { dayBoundsRome } from "@/lib/dateUtils"
 import { comeFunziona, type BloccoSpiegazione } from "@/lib/diretta/comeFunziona"
 import { DIRETTA_FLAG_KEYS, personName } from "@/lib/diretta/config"
 import {
-    canTransition, checkPurchase, messaggioErrore, unaVoltaSola, nomeValuta, ownedItemIds, statoIniziale,
+    canTransition, checkPurchase, daApprovare, messaggioErrore, unaVoltaSola, nomeValuta, ownedItemIds, statoIniziale,
     stileProfilo, type BuyError, type PurchaseStatus, type StileProfilo,
 } from "@/lib/diretta/negozio"
 
@@ -448,7 +448,7 @@ export async function handleRewardPurchase(purchaseId: string, to: 'consegnato' 
     if (typeof purchaseId !== 'string' || !UUID_RE.test(purchaseId)) return { ok: false, error: 'Richiesta non trovata.' }
     if (to !== 'consegnato' && to !== 'annullato') return { ok: false, error: 'Stato non valido.' }
 
-    type Esito = { ok: true; userId: string; itemNome: string; prezzo: string } | { ok: false; error: string }
+    type Esito = { ok: true; userId: string; itemNome: string; kind: string; prezzo: string } | { ok: false; error: string }
     let esito: Esito
     try {
         esito = await db.transaction(async (tx): Promise<Esito> => {
@@ -486,7 +486,7 @@ export async function handleRewardPurchase(purchaseId: string, to: 'consegnato' 
                     }
                 }
             }
-            return { ok: true, userId: p.userId, itemNome: item?.name ?? 'Premio', prezzo: prezzo(p.currency, p.price) }
+            return { ok: true, userId: p.userId, itemNome: item?.name ?? 'Premio', kind: item?.kind ?? '', prezzo: prezzo(p.currency, p.price) }
         })
     } catch (e) {
         console.error('[negozio] handleRewardPurchase', e)
@@ -494,7 +494,7 @@ export async function handleRewardPurchase(purchaseId: string, to: 'consegnato' 
     }
     if (!esito.ok) return esito
 
-    await avvisaUtente(esito.userId, to, esito.itemNome, esito.prezzo, purchaseId)
+    await avvisaUtente(esito.userId, to, esito.itemNome, esito.kind, esito.prezzo, purchaseId)
     if (to === 'annullato') updateTag(TAG_SQUADRA)
     revalidatePath('/admin/premi')
     revalidatePath('/store')
@@ -526,15 +526,17 @@ async function avvisaAdmin(persona: string, articolo: string, costo: string, pur
     }
 }
 
-async function avvisaUtente(userId: string, to: 'consegnato' | 'annullato', itemNome: string, costo: string, purchaseId: string) {
+async function avvisaUtente(userId: string, to: 'consegnato' | 'annullato', itemNome: string, kind: string, costo: string, purchaseId: string) {
+    // Un permesso (es. la pausa quando vuoi, che approva Bruno) si approva, non si consegna (PO 25/10/2026).
+    const permesso = daApprovare(kind)
     try {
         await db.insert(notifications).values({
             id: randomUUID(),
             recipientUserId: userId,
             type: 'negozio_esito',
-            title: to === 'consegnato' ? 'Premio consegnato' : 'Richiesta annullata',
+            title: to === 'consegnato' ? (permesso ? 'Permesso approvato' : 'Premio consegnato') : 'Richiesta annullata',
             body: to === 'consegnato'
-                ? `La richiesta di ${itemNome} è stata segnata come consegnata.`
+                ? (permesso ? `La richiesta di ${itemNome} è stata approvata.` : `La richiesta di ${itemNome} è stata segnata come consegnata.`)
                 : `La richiesta di ${itemNome} è stata annullata e le ${costo} sono tornate nel saldo.`,
             metadata: { purchaseId, status: to },
             status: 'unread',

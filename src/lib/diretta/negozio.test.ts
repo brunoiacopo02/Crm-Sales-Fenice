@@ -3,7 +3,20 @@ import assert from 'node:assert/strict'
 import {
     checkPurchase, normalizzaRegalo, ownedItemIds, canTransition, isDigitale, daApprovare,
     stileProfilo, messaggioErrore, statoIniziale, GIFT_TO_MAX, isPotenziamento, unaVoltaSola, SOLO_REGALO, statoPostazione,
+    APPROVA_BRUNO, etichettaApprovazione, avvisoApprovazione,
 } from './negozio'
+
+test('pausa quando vuoi (PO 25/10/2026): la approva Bruno, nasce richiesta e non parte da sola', () => {
+    assert.ok(APPROVA_BRUNO.has('pausa-quando-vuoi'))
+    assert.equal(statoIniziale('permesso'), 'richiesto')
+    assert.equal(canTransition('richiesto', 'consegnato'), true)
+    assert.equal(canTransition('richiesto', 'annullato'), true)
+    assert.equal(etichettaApprovazione('pausa-quando-vuoi', 'permesso'), 'La approva Bruno')
+    assert.equal(etichettaApprovazione('sabato-libero', 'permesso'), 'Da approvare')
+    assert.equal(etichettaApprovazione('caffe-cornetto', 'concreto'), null)
+    assert.match(avvisoApprovazione('pausa-quando-vuoi', 'permesso'), /La approva Bruno: se non si può, tornano nel saldo/)
+    assert.equal(avvisoApprovazione('caffe-cornetto', 'concreto'), '.')
+})
 
 const gdo = { role: 'GDO', isActive: true, isBot: false, scintille: 1000, piume: 50 }
 const caffe = { isActive: true, roles: ['GDO', 'CONFERME'], currency: 'S', price: 700, giftable: false, kind: 'concreto' }

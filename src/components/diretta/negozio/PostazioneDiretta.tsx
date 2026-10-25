@@ -3,7 +3,9 @@
 // "La tua postazione" nel negozio (PO 25/10/2026): gli upgrade fisici della
 // scrivania disegnati come slot di una postazione. Ognuno si prende una volta
 // sola a persona e passa dall'admin come gli altri premi. Lo stato dello slot
-// viene dalle richieste: Di base, In arrivo (richiesto), Tuo (consegnato).
+// viene dalle richieste: Di base, In arrivo (richiesto), Arrivato (consegnato).
+// Gli oggetti restano dell'azienda (PO 25/10/2026): per questo lo slot
+// consegnato dice "Arrivato", non "Tuo".
 // Pulsanti e conferma sono quelli del negozio (azione e dettaglio).
 
 import type { ReactNode } from "react"
@@ -31,7 +33,7 @@ const POSTO: Record<string, string> = {
     'postazione-mouse': 'lg:col-start-3 lg:row-start-2',
 }
 
-const ETICHETTA: Record<StatoPostazione, string> = { base: 'Di base', in_arrivo: 'In arrivo', tuo: 'Tuo' }
+const ETICHETTA: Record<StatoPostazione, string> = { base: 'Di base', in_arrivo: 'In arrivo', tuo: 'Arrivato' }
 
 const BORDO: Record<StatoPostazione, string> = {
     base: 'border-dashed border-[var(--d-line)]',
@@ -62,6 +64,7 @@ export function PostazioneDiretta({ articoli, acquisti, azione, dettaglio }: {
             </h2>
             <div className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--d-muted)]">
                 Gli upgrade veri della tua scrivania. Ognuno si prende una volta sola e arriva dall&apos;admin, come gli altri premi.
+                Restano dell&apos;azienda: sono per la tua postazione di lavoro, così lavori meglio ogni giorno.
             </div>
 
             <div className="mt-4 rounded-[16px] bg-[var(--d-surface)] p-4 sm:p-6">
@@ -75,7 +78,7 @@ export function PostazioneDiretta({ articoli, acquisti, azione, dettaglio }: {
                             {numeroIt(tuoi)}<span className="text-[var(--d-muted)]"> su {numeroIt(articoli.length)}</span>
                         </div>
                         <div className="mt-1 text-sm text-[var(--d-muted)]">
-                            {inArrivo > 0 ? `${numeroIt(inArrivo)} in arrivo.` : tuoi === articoli.length ? 'Postazione completa.' : 'Upgrade tuoi.'}
+                            {inArrivo > 0 ? `${numeroIt(inArrivo)} in arrivo.` : tuoi === articoli.length ? 'Postazione completa.' : 'Upgrade arrivati.'}
                         </div>
                     </div>
                 </div>
