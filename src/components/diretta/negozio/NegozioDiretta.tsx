@@ -18,7 +18,7 @@ import { AvatarDiretta, STATO_TESTO, TitoloDiretta, btn, dataBreve, numero, prez
 const ICONE: Record<string, LucideIcon> = {
     'corso-fenice-academy': GraduationCap,
     'sabato-libero': CalendarOff,
-    'cena-per-due': Wine,
+    'cena-con-bruno-e-federico': Wine,
     'mezza-giornata-venditore': Headphones,
     'uscita-30-minuti': Clock,
     'merenda-sala': Cookie,
@@ -222,7 +222,10 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                 <div className="max-w-xl">
                     <TitoloDiretta prima="Il" accento="negozio" />
                     <div className="mt-2 text-[15px] leading-relaxed text-[var(--d-muted)]">
-                        Le Scintille arrivano dagli appuntamenti fissati, le Piume dai risultati confermati dagli altri.
+                        {view.ruolo === 'CONFERME'
+                            ? 'Le Scintille arrivano dalle tue conferme, di più quando il lead si presenta; le Piume dagli obiettivi della settimana su presenze e chiusure.'
+                            : 'Le Scintille arrivano dagli appuntamenti fissati, le Piume da conferme, presenze e chiusure dei tuoi lead.'}
+                        {' '}Le Scintille comprano immagini e personalizzazioni, le Piume i premi veri.
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:w-[360px]">

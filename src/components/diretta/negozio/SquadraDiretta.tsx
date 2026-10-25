@@ -13,6 +13,8 @@ import { AvatarDiretta, TitoloDiretta } from "./ui"
 
 const AGGIORNA_MS = 30_000
 const ORA = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' })
+const EURO = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+const GIORNO = (iso: string) => new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`))
 
 function Blocchi({ valore, scalini, tono }: { valore: number; scalini: [number, number]; tono: 'su-arancione' | 'su-scuro' }) {
     const { blocchi, primoScalinoIndex } = blocchiSquadra(valore, scalini)
@@ -140,7 +142,10 @@ export function SquadraDiretta({ iniziale }: { iniziale: SquadraView }) {
                     {view.mode === 'top3' && (
                         <section aria-label="I primi tre della settimana">
                             <h2 className="text-lg font-semibold">I primi tre della settimana</h2>
-                            <div className="mt-1 text-sm text-[var(--d-muted)]">Per presenze, da lunedì a oggi.</div>
+                            <div className="mt-1 text-sm leading-relaxed text-[var(--d-muted)]">
+                                Da lunedì {GIORNO(view.settimana.lunedi)} a sabato {GIORNO(view.settimana.sabato)}, per presenze.
+                                A pari presenze contano i fissati validi, poi l&apos;ordine alfabetico. Lunedì si riparte da zero.
+                            </div>
                             {view.primiTre.length === 0 ? (
                                 <div className="mt-4 text-[15px] text-[var(--d-muted)]">Ancora nessuna presenza questa settimana.</div>
                             ) : (
@@ -156,8 +161,11 @@ export function SquadraDiretta({ iniziale }: { iniziale: SquadraView }) {
                                                 {r.titolo && <div className="truncate text-sm text-[var(--d-muted)]">{r.titolo}</div>}
                                             </div>
                                             <div className="shrink-0 text-right">
-                                                <span className="text-xl font-semibold tabular-nums">{r.presenze}</span>{' '}
-                                                <span className="text-sm text-[var(--d-muted)]">{r.presenze === 1 ? 'presenza' : 'presenze'}</span>
+                                                <div>
+                                                    <span className="text-xl font-semibold tabular-nums">{r.presenze}</span>{' '}
+                                                    <span className="text-sm text-[var(--d-muted)]">{r.presenze === 1 ? 'presenza' : 'presenze'}</span>
+                                                </div>
+                                                {r.premio > 0 && <div className="text-sm font-medium tabular-nums text-[var(--d-orange)]">{EURO.format(r.premio)}</div>}
                                             </div>
                                         </li>
                                     ))}

@@ -1,8 +1,9 @@
-// Bonus delle Conferme (decisione PO 25/10/2026, dettagli ancora da confermare):
-// una soglia di SQUADRA e, oltre la soglia, una cifra fissa per ogni unità in
-// più; in aggiunta gli obiettivi individuali sugli account (Andrea, Alberto).
-// Non è ancora deciso se l'unità siano le presenze o le chiusure, né se il
-// periodo sia la settimana o il mese: per questo sono parametri.
+// Bonus delle Conferme (PO 25/10/2026, confermato nella seconda tornata): una
+// soglia di SQUADRA sulle CHIUSURE della settimana lun-sab, 16; oltre la soglia
+// 12 euro lordi a testa per ogni chiusura in più. Unità e periodo restano
+// parametri, modificabili dall'admin. In aggiunta gli obiettivi individuali
+// sugli account (Andrea, Alberto); le Piume degli obiettivi settimanali di
+// presenze e chiusure stanno nelle regole dell'economia (src/lib/economy/rules.ts).
 //
 // I valori vivono in appSettings (chiave CONFERME_BONUS_KEY, JSON) e li cambia
 // l'admin da /admin/diretta/conferme. Qui ci sono i default e i calcoli, puri e
@@ -35,8 +36,8 @@ export interface ConfermeBonusConfig {
 
 export const DEFAULT_CONFERME_BONUS: ConfermeBonusConfig = {
     unita: 'chiusure',
-    periodo: 'mese',
-    soglia: 17,
+    periodo: 'settimana',
+    soglia: 16,
     euroPerUnita: 12,
     obiettivi: {},
 }

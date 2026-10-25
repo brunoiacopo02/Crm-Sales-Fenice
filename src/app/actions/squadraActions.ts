@@ -11,6 +11,10 @@
 // "Fissato" = fissato valido (src/lib/diretta/fissati.ts), con la stessa query
 // della home, degli scalini personali e dei forzieri. Squadra = isTeamMember:
 // fuori 108 (IA vocale) e 201 (bot).
+//
+// La settimana della classifica va da lunedì a sabato (di domenica resta
+// quella appena chiusa) e i premi in euro dei primi tre vengono dalle regole
+// dell'economia: gli stessi che l'admin registra a settimana chiusa.
 
 import { revalidatePath, unstable_cache, updateTag } from "next/cache"
 import { and, eq, inArray, ne } from "drizzle-orm"
@@ -19,12 +23,14 @@ import { appSettings, rewardPurchases } from "@/db/schema"
 import { assertSalesArea, currentTenant } from "@/lib/tenancy"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { countPresences } from "@/lib/presenceCounting"
-import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from "@/lib/dateUtils"
+import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
 import { peakWindow, personName } from "@/lib/diretta/config"
 import { readGamificationTargets, writeSetting } from "@/lib/diretta/settings"
 import { contaFissati } from "@/lib/diretta/fissati"
 import { leggiFissati, leggiMembriSquadra } from "@/lib/diretta/fissatiDb"
 import { PERSONALIZZAZIONI, stileProfilo } from "@/lib/diretta/negozio"
+import { readEconomyRules } from "@/lib/economy/awards"
+import { settimanaLunSab } from "@/lib/economy/premiSettimana"
 import {
     buildSquadraView, LEADERBOARD_MODE_KEY, parseLeaderboardMode,
     type LeaderboardMode, type SquadraSnapshot, type SquadraView,
@@ -35,13 +41,14 @@ const TAG_SQUADRA = 'diretta-squadra'
 
 async function loadSnapshot(day: string): Promise<SquadraSnapshot> {
     const now = new Date()
-    const [targets, modeRows] = await Promise.all([
+    const [targets, modeRows, economia] = await Promise.all([
         readGamificationTargets(),
         db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, LEADERBOARD_MODE_KEY)).limit(1),
+        readEconomyRules(),
     ])
     const mode = parseLeaderboardMode(modeRows[0]?.value)
     const giorno = dayBoundsRome(now)
-    const settimana = weekBoundsRome(now)
+    const settimana = settimanaLunSab(now)
     const punta = peakWindow(now, targets)
 
     const squadra = await leggiMembriSquadra(FENICE)
@@ -52,6 +59,9 @@ async function loadSnapshot(day: string): Promise<SquadraSnapshot> {
         scaliniSquadra: targets.squadra,
         sogliaFenici: targets.presenzeSogliaEuro,
         mode,
+        premiEuro: economia.classifica.premiEuro,
+        minPresenze: economia.classifica.minPresenze,
+        settimana: { lunedi: settimana.lunedi, sabato: settimana.sabato },
     }
     if (ids.length === 0) {
         return { ...base, squadraOggi: 0, punta: punta ? { start: punta.start.toISOString(), end: punta.end.toISOString(), count: 0, scalini: targets.punta } : null, membri: [] }
@@ -93,7 +103,7 @@ async function loadSnapshot(day: string): Promise<SquadraSnapshot> {
 }
 
 // Chiave per giorno di Roma: a mezzanotte il conto riparte da solo.
-const snapshotInCache = unstable_cache(loadSnapshot, ['diretta-squadra-v1'], { revalidate: 20, tags: [TAG_SQUADRA] })
+const snapshotInCache = unstable_cache(loadSnapshot, ['diretta-squadra-v2'], { revalidate: 20, tags: [TAG_SQUADRA] })
 
 /** Vista della pagina Squadra per chi guarda (vedi buildSquadraView). */
 export async function getSquadraView(): Promise<SquadraView> {

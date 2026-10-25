@@ -1,21 +1,32 @@
 // Regole della nuova economia: Scintille (ritmo) e Piume (risultati verificati
-// da altri), PO 25/10/2026.
+// da altri), PO 25/10/2026, riviste il 25/10 sera ("economia v2": più
+// parsimoniosa, calcoli in docs/superpowers/specs/2026-10-25-economia-v2-margini.md).
 //
 // I valori vivono in appSettings, chiave ECONOMY_RULES_KEY (JSON), e l'admin li
-// può cambiare senza deploy. Qui ci sono i default decisi da Bruno e tutti i
-// calcoli puri: chiavi idempotenti del registro, regola dei 30 giorni per lead,
-// scalini personali, Piume dovute a un lead, contenuto e destinatari dei
-// forzieri di squadra. Le soglie (8/10, 55/65, 14/20, presenze) non stanno
-// qui: sono gli obiettivi della Diretta (src/lib/diretta/config.ts).
+// può cambiare senza deploy. Qui ci sono i default e tutti i calcoli puri:
+// chiavi idempotenti del registro, regola dei 30 giorni per lead, scalini
+// personali, stadi dei lead (Piume del GDO e Scintille delle Conferme),
+// obiettivi settimanali delle Conferme, forzieri di squadra e premi della
+// classifica. Le soglie della Diretta (8/10, 55/65, 14/20, presenze) non stanno
+// qui: sono gli obiettivi in src/lib/diretta/config.ts.
+//
+// Regola d'oro della v2: sullo stesso lead le Piume NON si sommano per stadio.
+// Vale lo stadio più alto raggiunto (confermato, presentato, chiuso): quando il
+// lead sale si accredita solo la differenza, quando scende si storna.
 
 import { dayBoundsRome } from '@/lib/dateUtils'
 import { stepReached, isTeamMember, type GamificationTargets } from '@/lib/diretta/config'
 
 export const ECONOMY_RULES_KEY = 'economy_rules'
 
-export type TipoPiuma = 'conferma' | 'presenza' | 'chiusura'
 export type ChestTier = 'raro' | 'leggendario'
 export type ChestKind = 'giorno_1' | 'giorno_2' | 'punta_1' | 'punta_2'
+
+/** Stadio di un lead per le Piume del GDO: 0 nessuno, 1 confermato, 2 presentato, 3 chiuso. */
+export type StadioGdo = 0 | 1 | 2 | 3
+/** Stadio di un lead per le Scintille delle Conferme: 0 nessuno, 1 confermato in tempo utile, 2 presentato. */
+export type StadioConferme = 0 | 1 | 2
+export type TipoObiettivo = 'presenze' | 'chiusure'
 
 export interface ChestOdds {
     probPiuma: number              // probabilità (0..1) che il forziere contenga Piume
@@ -23,8 +34,14 @@ export interface ChestOdds {
     scintille: [number, number]    // altrimenti Scintille fra min e max, estremi inclusi
 }
 
+/** Obiettivo settimanale a due scalini: soglie (1° e 2°) e Piume di ciascuno scalino. */
+export interface Obiettivo {
+    soglie: [number, number]
+    piume: [number, number]
+}
+
 export interface EconomyRules {
-    /** Giorno di Roma 'YYYY-MM-DD' da cui contano gli esiti per le Piume. */
+    /** Giorno di Roma 'YYYY-MM-DD' da cui contano gli esiti per Piume e premi delle Conferme. */
     inizio: string
     fissato: {
         scintille: number          // per ogni lead fissato
@@ -33,10 +50,14 @@ export interface EconomyRules {
     }
     /** Scintille al primo e al secondo scalino personale del giorno. */
     scaliniPersonali: [number, number]
+    /**
+     * Piume del GDO per lead: VALORE dello stadio più alto raggiunto, non una
+     * somma. Un lead chiuso vale `chiusura` in tutto, non conferma + presenza +
+     * chiusura. Devono crescere: conferma ≤ presenza ≤ chiusura.
+     */
     piume: {
         conferma: number
         presenza: number
-        presenzaOltreSoglia: number    // dalla presenza successiva a presenzeSogliaEuro
         chiusura: number
     }
     forzieri: {
@@ -48,19 +69,49 @@ export interface EconomyRules {
         minFissatiGiorno: number
         minFissatiPunta: number
     }
+    /** Premi delle Conferme (solo ruolo CONFERME letto dal DB). */
+    conferme: {
+        /** Scintille per lead, a stadi come le Piume del GDO (vale lo stadio più alto). */
+        scintille: {
+            conferma: number           // stadio 1: confermato prima dell'ora dell'appuntamento
+            presenza: number           // stadio 2: il lead si è presentato (valore totale del lead)
+            inTempo: number            // in più sulla presenza se la conferma è arrivata con anticipo
+            inTempoMinuti: number      // anticipo minimo sull'ora dell'appuntamento
+            tettoConfermeGiorno: number // stadi 1 pagati al giorno a persona
+        }
+        /** Obiettivi settimanali (lun-sab) sui lead confermati da chi guarda. */
+        obiettivi: Record<TipoObiettivo, Obiettivo>
+        /** Soglie diverse per persona (per esempio chi fa le Conferme a metà tempo). */
+        perPersona: Record<string, Partial<Record<TipoObiettivo, [number, number]>>>
+    }
+    /** Classifica settimanale (lun-sab): euro lordi al 1°, 2° e 3°. */
+    classifica: {
+        premiEuro: [number, number, number]
+        /** Presenze minime per stare sul podio (e prendere il premio). */
+        minPresenze: number
+    }
 }
 
 export const DEFAULT_ECONOMY_RULES: EconomyRules = {
     inizio: '2026-10-26',
     fissato: { scintille: 10, finestraGiorni: 30, tettoGiorno: 15 },
     scaliniPersonali: [20, 60],
-    piume: { conferma: 1, presenza: 2, presenzaOltreSoglia: 4, chiusura: 5 },
+    piume: { conferma: 1, presenza: 2, chiusura: 4 },
     forzieri: {
-        raro: { probPiuma: 0.05, piume: 1, scintille: [20, 60] },
-        leggendario: { probPiuma: 0.2, piume: 1, scintille: [60, 150] },
+        raro: { probPiuma: 0.05, piume: 1, scintille: [10, 30] },
+        leggendario: { probPiuma: 0.2, piume: 1, scintille: [30, 80] },
         minFissatiGiorno: 1,
         minFissatiPunta: 1,
     },
+    conferme: {
+        scintille: { conferma: 3, presenza: 20, inTempo: 6, inTempoMinuti: 60, tettoConfermeGiorno: 12 },
+        obiettivi: {
+            presenze: { soglie: [16, 22], piume: [3, 4] },
+            chiusure: { soglie: [5, 7], piume: [4, 5] },
+        },
+        perPersona: {},
+    },
+    classifica: { premiEuro: [50, 25, 10], minPresenze: 1 },
 }
 
 // ── Lettura delle regole ────────────────────────────────────────────────
@@ -73,7 +124,12 @@ const coppia = (v: unknown, d: [number, number], min: number): [number, number] 
     Array.isArray(v) && v.length === 2 && v.every(x => Number.isInteger(x) && x >= min) && v[0] <= v[1]
         ? [v[0], v[1]]
         : d
+const coppiaLibera = (v: unknown, d: [number, number], min: number): [number, number] =>
+    Array.isArray(v) && v.length === 2 && v.every(x => Number.isInteger(x) && x >= min) ? [v[0], v[1]] : d
 const giornoIso = (v: unknown, d: string) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : d)
+/** Euro lordi: da 0 a 1.000, al massimo due decimali. */
+const euro = (v: unknown, d: number) =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1000 && Math.abs(v * 100 - Math.round(v * 100)) < 1e-6 ? v : d
 
 function parseOdds(v: unknown, d: ChestOdds): ChestOdds {
     const o = isObj(v) ? v : {}
@@ -82,6 +138,42 @@ function parseOdds(v: unknown, d: ChestOdds): ChestOdds {
         piume: intero(o.piume, d.piume, 1),
         scintille: coppia(o.scintille, d.scintille, 1),
     }
+}
+
+function parseObiettivo(v: unknown, d: Obiettivo): Obiettivo {
+    const o = isObj(v) ? v : {}
+    return { soglie: coppia(o.soglie, d.soglie, 1), piume: coppiaLibera(o.piume, d.piume, 0) }
+}
+
+/**
+ * Valori degli stadi: interi da 0 in su e non decrescenti. Se l'ordine è
+ * rotto (per esempio la presenza vale meno della conferma) torna il default
+ * intero del blocco: con un valore che scende uno stadio più alto toglierebbe
+ * Piume invece di darne.
+ */
+function stadiCrescenti<T extends Record<string, number>>(raw: unknown, d: T, ordine: (keyof T)[]): T {
+    const o = isObj(raw) ? raw : {}
+    const out = { ...d }
+    for (const k of ordine) out[k] = intero(o[k as string], d[k], 0) as T[keyof T]
+    for (let i = 1; i < ordine.length; i++) {
+        if (out[ordine[i]] < out[ordine[i - 1]]) return { ...d }
+    }
+    return out
+}
+
+function parsePerPersona(raw: unknown): EconomyRules['conferme']['perPersona'] {
+    const out: EconomyRules['conferme']['perPersona'] = {}
+    if (!isObj(raw)) return out
+    for (const [userId, v] of Object.entries(raw)) {
+        if (!userId || !isObj(v)) continue
+        const voce: Partial<Record<TipoObiettivo, [number, number]>> = {}
+        for (const tipo of ['presenze', 'chiusure'] as const) {
+            const c = coppia(v[tipo], [0, 0], 1)
+            if (c[0] >= 1) voce[tipo] = c
+        }
+        if (voce.presenze || voce.chiusure) out[userId] = voce
+    }
+    return out
 }
 
 /** Unisce il JSON salvato ai default, chiave per chiave: un valore mancante o assurdo resta al default. */
@@ -96,8 +188,19 @@ export function parseEconomyRules(raw: string | null | undefined): EconomyRules 
     }
     if (!isObj(saved)) return d
     const fissato = isObj(saved.fissato) ? saved.fissato : {}
-    const piume = isObj(saved.piume) ? saved.piume : {}
     const forzieri = isObj(saved.forzieri) ? saved.forzieri : {}
+    const conferme = isObj(saved.conferme) ? saved.conferme : {}
+    const obiettivi = isObj(conferme.obiettivi) ? conferme.obiettivi : {}
+    const sc = isObj(conferme.scintille) ? conferme.scintille : {}
+    const classifica = isObj(saved.classifica) ? saved.classifica : {}
+    const premi = Array.isArray(classifica.premiEuro) && classifica.premiEuro.length === 3
+        ? classifica.premiEuro.map((v, i) => euro(v, d.classifica.premiEuro[i])) as [number, number, number]
+        : d.classifica.premiEuro
+    const stadiConferme = stadiCrescenti(
+        { conferma: sc.conferma, presenza: sc.presenza },
+        { conferma: d.conferme.scintille.conferma, presenza: d.conferme.scintille.presenza },
+        ['conferma', 'presenza'],
+    )
     return {
         inizio: giornoIso(saved.inizio, d.inizio),
         fissato: {
@@ -106,17 +209,29 @@ export function parseEconomyRules(raw: string | null | undefined): EconomyRules 
             tettoGiorno: intero(fissato.tettoGiorno, d.fissato.tettoGiorno, 0),
         },
         scaliniPersonali: coppia(saved.scaliniPersonali, d.scaliniPersonali, 0),
-        piume: {
-            conferma: intero(piume.conferma, d.piume.conferma, 0),
-            presenza: intero(piume.presenza, d.piume.presenza, 0),
-            presenzaOltreSoglia: intero(piume.presenzaOltreSoglia, d.piume.presenzaOltreSoglia, 0),
-            chiusura: intero(piume.chiusura, d.piume.chiusura, 0),
-        },
+        piume: stadiCrescenti(saved.piume, d.piume, ['conferma', 'presenza', 'chiusura']),
         forzieri: {
             raro: parseOdds(forzieri.raro, d.forzieri.raro),
             leggendario: parseOdds(forzieri.leggendario, d.forzieri.leggendario),
             minFissatiGiorno: intero(forzieri.minFissatiGiorno, d.forzieri.minFissatiGiorno, 0),
             minFissatiPunta: intero(forzieri.minFissatiPunta, d.forzieri.minFissatiPunta, 0),
+        },
+        conferme: {
+            scintille: {
+                ...stadiConferme,
+                inTempo: intero(sc.inTempo, d.conferme.scintille.inTempo, 0),
+                inTempoMinuti: intero(sc.inTempoMinuti, d.conferme.scintille.inTempoMinuti, 0),
+                tettoConfermeGiorno: intero(sc.tettoConfermeGiorno, d.conferme.scintille.tettoConfermeGiorno, 0),
+            },
+            obiettivi: {
+                presenze: parseObiettivo(obiettivi.presenze, d.conferme.obiettivi.presenze),
+                chiusure: parseObiettivo(obiettivi.chiusure, d.conferme.obiettivi.chiusure),
+            },
+            perPersona: parsePerPersona(conferme.perPersona),
+        },
+        classifica: {
+            premiEuro: premi,
+            minPresenze: intero(classifica.minPresenze, d.classifica.minPresenze, 1),
         },
     }
 }
@@ -132,6 +247,8 @@ export interface LedgerRow {
     idemKey: string
     amount: number
     createdAt?: Date
+    /** Chi possiede la riga: serve a sapere chi tiene la conferma di un lead. */
+    userId?: string
 }
 
 const STORNO = 'storno:'
@@ -143,6 +260,41 @@ function accreditiEStorni(rows: LedgerRow[], prefisso: string) {
         rows.filter(r => r.idemKey.startsWith(STORNO + prefisso)).map(r => r.idemKey.slice(STORNO.length)),
     )
     return { accrediti, stornati }
+}
+
+/** Chiave con generazione: la prima è la base, le successive ':2', ':3'... (servono solo dopo uno storno). */
+function conGenerazione(base: string, generazione: number): string {
+    return generazione > 1 ? `${base}:${generazione}` : base
+}
+
+export interface Gradino { gradino: number; amount: number; idemKey: string }
+export interface PianoGradini { accredita: Gradino[]; storna: string[] }
+
+/**
+ * Motore comune di scalini, stadi e obiettivi: `importi[i]` è il valore del
+ * gradino i+1. Ogni gradino raggiunto deve avere esattamente un accredito
+ * attivo, ogni gradino non più raggiunto nessuno. Dopo uno storno il gradino
+ * si riprende con una chiave nuova. Un importo a zero non accredita e non
+ * storna niente: conta solo la soglia.
+ */
+function pianoGradini(rows: LedgerRow[], chiave: (gradino: number) => string, raggiunto: number, importi: readonly number[]): PianoGradini {
+    const accredita: Gradino[] = []
+    const storna: string[] = []
+    for (let gradino = 1; gradino <= importi.length; gradino++) {
+        const base = chiave(gradino)
+        const { accrediti, stornati } = accreditiEStorni(rows, base)
+        const propri = accrediti.filter(c => c.idemKey === base || c.idemKey.startsWith(`${base}:`))
+        const attivi = propri.filter(c => !stornati.has(c.idemKey)).map(c => c.idemKey)
+        if (raggiunto < gradino) {
+            storna.push(...attivi)
+        } else if (attivi.length === 0) {
+            const amount = importi[gradino - 1]
+            if (amount > 0) accredita.push({ gradino, amount, idemKey: conGenerazione(base, propri.length + 1) })
+        } else {
+            storna.push(...attivi.slice(1))
+        }
+    }
+    return { accredita, storna }
 }
 
 // ── Fissato ─────────────────────────────────────────────────────────────
@@ -162,8 +314,7 @@ export function finestraIndex(giornoRoma: string, giorni: number): number {
  * seconda chiave nella stessa finestra serve solo dopo uno storno.
  */
 export function fissatoIdemKey(leadId: string, giornoRoma: string, giorni: number, generazione = 1): string {
-    const base = `S:fissato:${leadId}:${finestraIndex(giornoRoma, giorni)}`
-    return generazione > 1 ? `${base}:${generazione}` : base
+    return conGenerazione(`S:fissato:${leadId}:${finestraIndex(giornoRoma, giorni)}`, generazione)
 }
 
 /**
@@ -278,8 +429,7 @@ export function fissatoPremiabile(i: {
  * soglia) lo scalino si può riprendere con una chiave nuova: ':2', ':3'...
  */
 export function scalinoIdemKey(userId: string, giornoRoma: string, scalino: 1 | 2, generazione = 1): string {
-    const base = `S:scalino:${userId}:${giornoRoma}:${scalino}`
-    return generazione > 1 ? `${base}:${generazione}` : base
+    return conGenerazione(`S:scalino:${userId}:${giornoRoma}:${scalino}`, generazione)
 }
 
 /**
@@ -293,24 +443,11 @@ export function pianoScalini(
     rows: LedgerRow[], userId: string, giornoRoma: string, fissati: number,
     soglie: [number, number], importi: [number, number],
 ): { accredita: Array<{ scalino: 1 | 2; scintille: number; idemKey: string }>; storna: string[] } {
-    const raggiunto = stepReached(fissati, soglie)
-    const accredita: Array<{ scalino: 1 | 2; scintille: number; idemKey: string }> = []
-    const storna: string[] = []
-    for (const scalino of [1, 2] as const) {
-        const base = scalinoIdemKey(userId, giornoRoma, scalino)
-        const { accrediti, stornati } = accreditiEStorni(rows, base)
-        const propri = accrediti.filter(c => c.idemKey === base || c.idemKey.startsWith(`${base}:`))
-        const attivi = propri.filter(c => !stornati.has(c.idemKey)).map(c => c.idemKey)
-        if (raggiunto < scalino) {
-            storna.push(...attivi)
-        } else if (attivi.length === 0) {
-            const scintille = importi[scalino - 1]
-            if (scintille > 0) accredita.push({ scalino, scintille, idemKey: scalinoIdemKey(userId, giornoRoma, scalino, propri.length + 1) })
-        } else {
-            storna.push(...attivi.slice(1))
-        }
+    const p = pianoGradini(rows, g => scalinoIdemKey(userId, giornoRoma, g as 1 | 2), stepReached(fissati, soglie), importi)
+    return {
+        accredita: p.accredita.map(a => ({ scalino: a.gradino as 1 | 2, scintille: a.amount, idemKey: a.idemKey })),
+        storna: p.storna,
     }
-    return { accredita, storna }
 }
 
 /**
@@ -362,7 +499,35 @@ export function confermeNonHannoToccato(l: {
     return !l.confirmationsOutcome && !l.confCall1At && !l.confNeedsReschedule && !l.confSnoozeAt
 }
 
-// ── Piume ───────────────────────────────────────────────────────────────
+// ── Stadi del lead (comuni a GDO e Conferme) ────────────────────────────
+
+/** Prefissi delle chiavi a stadi: Piume del GDO e Scintille delle Conferme. */
+export const PREFISSO_STADI = { gdo: 'P:lead', conferme: 'S:conf' } as const
+
+/** Chiave dello stadio `stadio` di un lead: '<prefisso>:<leadId>:<stadio>', poi ':2', ':3' dopo gli storni. */
+export function stadioIdemKey(prefisso: string, leadId: string, stadio: number, generazione = 1): string {
+    return conGenerazione(`${prefisso}:${leadId}:${stadio}`, generazione)
+}
+
+/**
+ * Importi dei gradini a partire dai VALORI degli stadi: il primo gradino vale
+ * lo stadio 1, ogni gradino dopo vale la differenza con lo stadio prima. Così
+ * un lead allo stadio k ha in tutto esattamente il valore dello stadio k.
+ */
+export function importiDaValori(valori: readonly number[]): number[] {
+    return valori.map((v, i) => Math.max(0, v - (i > 0 ? valori[i - 1] : 0)))
+}
+
+/**
+ * Cosa fare sul registro perché il lead abbia gli accrediti dei gradini fino
+ * allo stadio raggiunto e nessuno sopra: sale di stadio = si accredita la
+ * differenza, scende = si storna il gradino perso.
+ */
+export function pianoStadi(rows: LedgerRow[], prefisso: string, leadId: string, stadio: number, importi: readonly number[]): PianoGradini {
+    return pianoGradini(rows, g => stadioIdemKey(prefisso, leadId, g), stadio, importi)
+}
+
+// ── Piume del GDO ───────────────────────────────────────────────────────
 
 export interface StatoPiumeLead {
     confirmationsOutcome: string | null
@@ -375,12 +540,12 @@ export interface StatoPiumeLead {
 }
 
 /**
- * Piume che il lead deve aver dato al suo GDO, dato lo stato attuale. Tutte
- * richiedono una conferma fatta da una persona: le Piume premiano risultati
- * verificati da Conferme e venditori, non dal bot. Gli esiti di prima
- * dell'avvio dell'economia non pagano.
+ * Quali risultati del lead valgono per il suo GDO, dato lo stato attuale.
+ * Tutti richiedono una conferma fatta da una persona: le Piume premiano
+ * risultati verificati da Conferme e venditori, non dal bot. Gli esiti di
+ * prima dell'avvio dell'economia non pagano.
  */
-export function piumeDovute(s: StatoPiumeLead, inizio: Date): Record<TipoPiuma, boolean> {
+export function piumeDovute(s: StatoPiumeLead, inizio: Date): { conferma: boolean; presenza: boolean; chiusura: boolean } {
     const confermato = s.confirmationsOutcome === 'confermato' && s.confermatoDaPersona
     const dopoInizio = (d: Date | null) => !!d && d.getTime() >= inizio.getTime()
     return {
@@ -390,26 +555,23 @@ export function piumeDovute(s: StatoPiumeLead, inizio: Date): Record<TipoPiuma, 
     }
 }
 
-export function piumaIdemKey(tipo: TipoPiuma, leadId: string, generazione: number): string {
-    return `P:${tipo}:${leadId}:${generazione}`
+/** Stadio più alto raggiunto dal lead per le Piume del GDO. */
+export function stadioGdo(s: StatoPiumeLead, inizio: Date): StadioGdo {
+    const d = piumeDovute(s, inizio)
+    if (d.chiusura) return 3
+    if (d.presenza) return 2
+    if (d.conferma) return 1
+    return 0
 }
 
-/**
- * Cosa fare sul registro perché il lead abbia esattamente una Piuma di quel
- * tipo se è dovuta, e nessuna se non lo è. Ogni nuovo accredito dopo uno
- * storno ha una chiave nuova (generazione successiva).
- */
-export function pianoPiuma(rows: LedgerRow[], tipo: TipoPiuma, leadId: string, dovuta: boolean): { accredita: string | null; storna: string[] } {
-    const { accrediti, stornati } = accreditiEStorni(rows, `P:${tipo}:${leadId}:`)
-    const attivi = accrediti.filter(c => !stornati.has(c.idemKey)).map(c => c.idemKey)
-    if (!dovuta) return { accredita: null, storna: attivi }
-    if (attivi.length === 0) return { accredita: piumaIdemKey(tipo, leadId, accrediti.length + 1), storna: [] }
-    return { accredita: null, storna: attivi.slice(1) }
+/** Importi dei tre gradini del GDO (conferma, presenza, chiusura) dai valori degli stadi. */
+export function importiGdo(r: EconomyRules): number[] {
+    return importiDaValori([r.piume.conferma, r.piume.presenza, r.piume.chiusura])
 }
 
-/** Piume di una presenza: di più dalla presenza che supera la soglia degli euro (dalla 5ª con soglia 4). */
-export function piumePresenza(ordinaleSettimana: number, sogliaEuro: number, r: EconomyRules): number {
-    return ordinaleSettimana > sogliaEuro ? r.piume.presenzaOltreSoglia : r.piume.presenza
+/** Causale del gradino del GDO sul registro. */
+export function causaleGradinoGdo(gradino: number): string {
+    return gradino === 3 ? 'chiusura' : gradino === 2 ? 'presenza' : 'conferma'
 }
 
 export interface PersonaEconomia {
@@ -430,6 +592,130 @@ export function isPersonaleUmano(u: PersonaEconomia | undefined | null): boolean
 /** Le Piume entrano solo se a scrivere l'esito è lo staff e a riceverle è un GDO della squadra (mai sé stesso). */
 export function puoAccreditarePiume(autore: PersonaEconomia | undefined | null, destinatario: PersonaEconomia | undefined | null): boolean {
     return !!autore && !!destinatario && isPersonaleUmano(autore) && isTeamMember(destinatario) && autore.id !== destinatario.id
+}
+
+// ── Conferme: Scintille per lead ────────────────────────────────────────
+
+/** Account delle Conferme che guadagna: ruolo CONFERME letto dal DB, attivo, non bot. */
+export function isConfermePersona(u: Pick<PersonaEconomia, 'role' | 'isActive' | 'isBot'> | undefined | null): boolean {
+    return !!u && u.role === 'CONFERME' && u.isActive && !u.isBot
+}
+
+export interface StatoConfermeLead {
+    confirmationsOutcome: string | null
+    confirmationsTimestamp: Date | null
+    appointmentDate: Date | null
+    presentedAt: Date | null
+}
+
+/**
+ * La conferma conta per le Conferme solo se è arrivata PRIMA dell'ora
+ * dell'appuntamento: una conferma registrata a call iniziata (il lead è già
+ * davanti al venditore) serve al conteggio delle presenze del GDO, ma non è
+ * lavoro di conferma e non paga.
+ */
+export function confermaUtile(s: StatoConfermeLead): boolean {
+    return s.confirmationsOutcome === 'confermato' && !!s.confirmationsTimestamp && !!s.appointmentDate
+        && s.confirmationsTimestamp.getTime() < s.appointmentDate.getTime()
+}
+
+/** Conferma arrivata con almeno `minuti` di anticipo sull'appuntamento. */
+export function confermaInTempo(s: Pick<StatoConfermeLead, 'confirmationsTimestamp' | 'appointmentDate'>, minuti: number): boolean {
+    return !!s.confirmationsTimestamp && !!s.appointmentDate
+        && s.appointmentDate.getTime() - s.confirmationsTimestamp.getTime() >= minuti * 60_000
+}
+
+/**
+ * Stadio del lead per le Scintille di chi l'ha confermato. La presenza vale
+ * dall'avvio dell'economia; la sola conferma solo se fatta dall'avvio in poi.
+ * `giaRegistrata` = la conferma ha già il suo accredito attivo (era utile
+ * quando è stata fatta): un salvataggio successivo a call iniziata, per
+ * esempio per cambiare venditore, sposta confirmationsTimestamp ma non la
+ * rende meno vera.
+ */
+export function stadioConferme(s: StatoConfermeLead, inizio: Date, giaRegistrata = false): StadioConferme {
+    if (s.confirmationsOutcome !== 'confermato') return 0
+    if (!giaRegistrata && !confermaUtile(s)) return 0
+    if (s.presentedAt && s.presentedAt.getTime() >= inizio.getTime()) return 2
+    if (giaRegistrata || (s.confirmationsTimestamp && s.confirmationsTimestamp.getTime() >= inizio.getTime())) return 1
+    return 0
+}
+
+/** Importi dei due gradini delle Conferme: la conferma e il resto della presenza (più il bonus "in tempo"). */
+export function importiConferme(r: EconomyRules, inTempo: boolean): number[] {
+    const s = r.conferme.scintille
+    const [g1, g2] = importiDaValori([s.conferma, s.presenza])
+    return [g1, g2 + (inTempo ? s.inTempo : 0)]
+}
+
+/** L'accredito attivo del primo gradino delle Conferme sul lead (la conferma pagata), se c'è. */
+export function confermaRegistrata(rows: LedgerRow[], leadId: string): LedgerRow | undefined {
+    const base = stadioIdemKey(PREFISSO_STADI.conferme, leadId, 1)
+    const { accrediti, stornati } = accreditiEStorni(rows, base)
+    return accrediti.find(c => (c.idemKey === base || c.idemKey.startsWith(`${base}:`)) && !stornati.has(c.idemKey))
+}
+
+/**
+ * Chi tiene la conferma del lead per i premi delle Conferme: chi ha
+ * l'accredito attivo del primo gradino (la prima conferma del ciclo), così una
+ * seconda conferma di un collega sullo stesso lead non sposta il premio;
+ * altrimenti chi risulta sul lead.
+ */
+export function titolareConferma(rows: LedgerRow[], leadId: string, confirmationsUserId: string | null): string | null {
+    return confermaRegistrata(rows, leadId)?.userId ?? confirmationsUserId
+}
+
+/** Il tetto giornaliero delle conferme pagate: true se se ne può pagare un'altra. */
+export function sottoTettoConferme(pagateOggi: number, r: EconomyRules): boolean {
+    return pagateOggi < r.conferme.scintille.tettoConfermeGiorno
+}
+
+// ── Conferme: obiettivi settimanali (Piume) ─────────────────────────────
+
+/** Soglie e Piume degli obiettivi di una persona: le sue soglie se impostate, altrimenti quelle di tutti. */
+export function obiettiviPersona(r: EconomyRules, userId: string): Record<TipoObiettivo, Obiettivo> {
+    const p = r.conferme.perPersona[userId]
+    return {
+        presenze: { soglie: p?.presenze ?? r.conferme.obiettivi.presenze.soglie, piume: r.conferme.obiettivi.presenze.piume },
+        chiusure: { soglie: p?.chiusure ?? r.conferme.obiettivi.chiusure.soglie, piume: r.conferme.obiettivi.chiusure.piume },
+    }
+}
+
+/** Chiave dello scalino di un obiettivo: 'P:obiettivo:<tipo>:<userId>:<lunedì>:<scalino>'. */
+export function obiettivoIdemKey(tipo: TipoObiettivo, userId: string, lunedi: string, scalino: number, generazione = 1): string {
+    return conGenerazione(`P:obiettivo:${tipo}:${userId}:${lunedi}:${scalino}`, generazione)
+}
+
+/** Scalini dell'obiettivo settimanale allineati al conteggio: come gli scalini personali dei GDO. */
+export function pianoObiettivo(rows: LedgerRow[], tipo: TipoObiettivo, userId: string, lunedi: string, valore: number, o: Obiettivo): PianoGradini {
+    return pianoGradini(rows, g => obiettivoIdemKey(tipo, userId, lunedi, g), stepReached(valore, o.soglie), o.piume)
+}
+
+/**
+ * Lead che contano per gli obiettivi di una Conferma in una settimana. Contano
+ * solo i lead che tiene lei (titolareConferma), confermati prima
+ * dell'appuntamento, e solo se presenza o chiusura le ha scritte qualcun
+ * altro: chi conferma non si premia registrando da sé l'esito del venditore.
+ */
+export interface LeadObiettivo {
+    titolare: string | null
+    confermaUtile: boolean
+    /** Chi ha scritto l'ultimo esito del venditore (null = nessun evento). */
+    autoreEsito: string | null
+    presentedAt: Date | null
+    chiusoAt: Date | null
+}
+
+export function contaObiettivi(rows: readonly LeadObiettivo[], userId: string, start: Date, end: Date): Record<TipoObiettivo, number> {
+    const dentro = (d: Date | null) => !!d && d.getTime() >= start.getTime() && d.getTime() < end.getTime()
+    let presenze = 0
+    let chiusure = 0
+    for (const r of rows) {
+        if (r.titolare !== userId || !r.confermaUtile || r.autoreEsito === userId) continue
+        if (dentro(r.presentedAt)) presenze++
+        if (dentro(r.chiusoAt)) chiusure++
+    }
+    return { presenze, chiusure }
 }
 
 // ── Forzieri di squadra ─────────────────────────────────────────────────
@@ -470,4 +756,11 @@ export function destinatariForziere(perUtente: Record<string, number>, squadra: 
 
 export function chestIdemKey(chestId: string, userId: string): string {
     return `chest:${chestId}:${userId}`
+}
+
+// ── Classifica settimanale ──────────────────────────────────────────────
+
+/** Euro lordi della posizione (1, 2, 3); fuori dal podio 0. */
+export function premioClassifica(posizione: number, r: EconomyRules): number {
+    return posizione >= 1 && posizione <= 3 ? r.classifica.premiEuro[posizione - 1] : 0
 }

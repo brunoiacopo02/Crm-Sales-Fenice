@@ -1,4 +1,5 @@
-// Premi della nuova economia scritti sul registro (Scintille e Piume, PO 25/10/2026).
+// Premi della nuova economia scritti sul registro (Scintille e Piume, PO 25/10/2026,
+// "economia v2" del 25/10 sera).
 //
 // Funzioni lato server chiamate dalle action degli esiti. Questo file NON è
 // "use server": nessuna funzione qui dentro è raggiungibile dal browser, e
@@ -9,25 +10,32 @@
 // non deve mai bloccare un esito.
 
 import { randomInt, randomUUID } from 'crypto'
-import { and, eq, gte, inArray, lt } from 'drizzle-orm'
+import { after } from 'next/server'
+import { and, desc, eq, gte, inArray, isNotNull, like, lt, or } from 'drizzle-orm'
 import { db } from '@/db'
 import { appSettings, callLogs, currencyLedger, leadEvents, leads, teamChestAwards, teamChests, users } from '@/db/schema'
-import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
+import { dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils'
 import { isTeamMember, peakWindow, stepReached, type GamificationTargets } from '@/lib/diretta/config'
 import { readGamificationTargets } from '@/lib/diretta/settings'
 import { contaFissati } from '@/lib/diretta/fissati'
 import { leggiFissati, leggiMembriSquadra } from '@/lib/diretta/fissatiDb'
-import { countPresences } from '@/lib/presenceCounting'
 import { creditOnce, reverseOnce } from './ledger'
+import { settimanaDaLunedi, settimanaLunSab } from './premiSettimana'
 import {
     ECONOMY_RULES_KEY, parseEconomyRules, inizioEconomia,
     pianoFissato, fissatiDaStornare, inizioStorno, pianoScalini, rewardFissato,
-    piumeDovute, pianoPiuma, piumePresenza, isPersonaleUmano, puoAccreditarePiume,
+    stadioGdo, importiGdo, causaleGradinoGdo, pianoStadi, PREFISSO_STADI,
+    isPersonaleUmano, puoAccreditarePiume, isConfermePersona,
+    stadioConferme, importiConferme, confermaInTempo, confermaUtile, confermaRegistrata, titolareConferma, sottoTettoConferme,
+    obiettiviPersona, pianoObiettivo, contaObiettivi,
     forzieriRaggiunti, tierForziere, contenutoForziere, destinatariForziere, chestIdemKey,
-    type EconomyRules, type EventoCiclo, type FissatoReward, type TipoPiuma, type ChestTier,
+    type EconomyRules, type EventoCiclo, type FissatoReward, type ChestTier, type LedgerRow, type LeadObiettivo, type TipoObiettivo,
+    type Obiettivo,
 } from './rules'
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+/** db oppure una transazione: basta che sappia leggere. */
+type Lettore = Pick<typeof db, 'select' | 'selectDistinctOn'>
 
 /** Causali del registro (colonna reason). Gli storni hanno 'storno ...'. */
 export const CAUSALI = {
@@ -36,9 +44,16 @@ export const CAUSALI = {
     forziere: 'forziere',
     benvenuto: 'benvenuto',
     azzeramento: 'azzeramento',
+    confermeConferma: 'conferme_conferma',
+    confermePresenza: 'conferme_presenza',
+    obiettivoPresenze: 'obiettivo_presenze',
+    obiettivoChiusure: 'obiettivo_chiusure',
 } as const
 
-const TIPI_PIUMA: TipoPiuma[] = ['conferma', 'presenza', 'chiusura']
+const CAUSALE_OBIETTIVO: Record<TipoObiettivo, string> = {
+    presenze: CAUSALI.obiettivoPresenze,
+    chiusure: CAUSALI.obiettivoChiusure,
+}
 
 /** Margine fra l'orologio dell'app (createdAt del callLog) e quello del DB (createdAt del registro). */
 const MARGINE_OROLOGI_MS = 10 * 60 * 1000
@@ -249,22 +264,33 @@ export async function reverseFissato(lead: LeadPerStorno, prima: Date, motivo: s
     return scritti
 }
 
-// ── Piume del GDO assegnatario ──────────────────────────────────────────
+// ── Esiti di Conferme e venditori: Piume del GDO e premi delle Conferme ──
+
+/** Coppie (persona delle Conferme, lunedì) i cui obiettivi settimanali vanno riallineati. */
+type DaRiallineare = Set<string>
+const coppia = (userId: string, lunedi: string) => `${userId}|${lunedi}`
 
 /**
- * Allinea le Piume di un lead al suo stato attuale: 1 per la conferma, 2 o 4
- * per la presenza, 5 per la chiusura, al GDO assegnatario. Se l'esito non c'è
- * più (conferma cambiata, presenza o chiusura tolte, appuntamento annullato)
- * storna. Va chiamata DOPO aver scritto l'esito, da tutti i punti che toccano
- * conferma, presenza o esito del venditore.
+ * Allinea al suo stato attuale tutti i premi che dipendono dagli esiti di un
+ * lead, dentro una transazione col lock sul lead:
  *
- * Gli accrediti richiedono che a scrivere l'esito sia lo staff (Conferme,
- * venditori, manager, admin: ruolo letto dal DB) e che a confermare
- * l'appuntamento sia stata una persona, non il bot. Gli storni valgono sempre.
+ * 1. Piume del GDO assegnatario a stadi: confermato 1, presentato 2, chiuso 4
+ *    (valori di default). Vale lo stadio più alto raggiunto: quando il lead
+ *    sale si accredita la differenza, quando scende si storna il gradino perso.
+ *    Gli accrediti richiedono che a scrivere l'esito sia lo staff (Conferme,
+ *    venditori, manager, admin: ruolo letto dal DB) e che a confermare sia
+ *    stata una persona, non il bot. Gli storni valgono sempre.
+ * 2. Scintille di chi ha confermato il lead (solo ruolo CONFERME, dal DB):
+ *    3 alla conferma fatta prima dell'appuntamento, 20 in tutto se il lead si
+ *    presenta, 26 se la conferma era arrivata con almeno un'ora d'anticipo.
+ *    Le conferme pagate al giorno hanno un tetto; la presenza scritta da chi ha
+ *    confermato non paga.
+ *
+ * Restituisce le settimane degli obiettivi delle Conferme da riallineare.
  */
-export async function syncLeadPiume(leadId: string, actorUserId: string | null): Promise<void> {
-    const [targets, rules] = await Promise.all([readGamificationTargets(), readEconomyRules()])
+async function sincronizzaLead(leadId: string, actorUserId: string | null, rules: EconomyRules): Promise<DaRiallineare> {
     const inizio = inizioEconomia(rules)
+    const daRiallineare: DaRiallineare = new Set()
 
     await db.transaction(async (tx) => {
         // Lock sul lead: due sincronizzazioni dello stesso lead non si incrociano
@@ -279,13 +305,17 @@ export async function syncLeadPiume(leadId: string, actorUserId: string | null):
             presentedAt: leads.presentedAt,
             appointmentDate: leads.appointmentDate,
             salespersonOutcome: leads.salespersonOutcome,
+            salespersonOutcomeAt: leads.salespersonOutcomeAt,
         }).from(leads).where(eq(leads.id, leadId)).for('no key update')
         if (!lead) return
 
-        const righe = await tx.select({ idemKey: currencyLedger.idemKey, amount: currencyLedger.amount })
-            .from(currencyLedger).where(eq(currencyLedger.leadId, leadId))
+        const righe: LedgerRow[] = await tx.select({
+            idemKey: currencyLedger.idemKey, amount: currencyLedger.amount, userId: currencyLedger.userId, createdAt: currencyLedger.createdAt,
+        }).from(currencyLedger).where(eq(currencyLedger.leadId, leadId))
 
-        const ids = [...new Set([lead.confirmationsUserId, lead.assignedToId, actorUserId].filter((x): x is string => !!x))]
+        const registrata = confermaRegistrata(righe, leadId)
+        const titolare = titolareConferma(righe, leadId, lead.confirmationsUserId)
+        const ids = [...new Set([lead.confirmationsUserId, lead.assignedToId, actorUserId, titolare].filter((x): x is string => !!x))]
         const persone = ids.length
             ? await tx.select({
                 id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, firstName: users.firstName,
@@ -293,7 +323,8 @@ export async function syncLeadPiume(leadId: string, actorUserId: string | null):
             : []
         const persona = (id: string | null) => (id ? persone.find(p => p.id === id) : undefined)
 
-        const dovute = piumeDovute({
+        // 1. Piume del GDO, a stadi.
+        const stadio = stadioGdo({
             confirmationsOutcome: lead.confirmationsOutcome,
             confermatoDaPersona: isPersonaleUmano(persona(lead.confirmationsUserId)),
             confirmationsTimestamp: lead.confirmationsTimestamp,
@@ -303,36 +334,250 @@ export async function syncLeadPiume(leadId: string, actorUserId: string | null):
         }, inizio)
         const destinatario = persona(lead.assignedToId)
         const accreditabile = puoAccreditarePiume(persona(actorUserId), destinatario)
-
-        for (const tipo of TIPI_PIUMA) {
-            const piano = pianoPiuma(righe, tipo, leadId, dovute[tipo])
-            for (const k of piano.storna) await reverseOnce(k, `storno ${tipo}`, tx)
-            if (!piano.accredita || !accreditabile || !destinatario) continue
-
-            let amount = rules.piume[tipo]
-            let ordinale: number | null = null
-            if (tipo === 'presenza' && lead.presentedAt) {
-                // La presenza vale di più dalla 5ª della settimana (soglia degli
-                // euro della Diretta): conta le presenze già maturate, questa compresa.
-                const sett = weekBoundsRome(lead.presentedAt)
-                ordinale = (await countPresences(destinatario.id, sett.start, sett.end, lead.companyId)).total
-                amount = piumePresenza(ordinale, targets.presenzeSogliaEuro, rules)
+        const pianoGdo = pianoStadi(righe, PREFISSO_STADI.gdo, leadId, stadio, importiGdo(rules))
+        for (const k of pianoGdo.storna) await reverseOnce(k, `storno ${causaleGradinoGdo(Number(k.split(':')[3]))}: il lead è sceso di stadio`, tx)
+        if (accreditabile && destinatario) {
+            for (const a of pianoGdo.accredita) {
+                await creditOnce({
+                    userId: destinatario.id, currency: 'P', amount: a.amount, reason: causaleGradinoGdo(a.gradino),
+                    idemKey: a.idemKey, leadId, companyId: lead.companyId,
+                    metadata: { autore: actorUserId, stadio, gradino: a.gradino },
+                }, tx)
             }
-            if (amount <= 0) continue
-            await creditOnce({
-                userId: destinatario.id, currency: 'P', amount, reason: tipo,
-                idemKey: piano.accredita, leadId, companyId: lead.companyId,
-                metadata: { autore: actorUserId, ...(ordinale !== null ? { presenzaSettimana: ordinale } : {}) },
-            }, tx)
+        }
+
+        // 2. Scintille di chi ha confermato (Conferme), a stadi.
+        const statoConferme = {
+            confirmationsOutcome: lead.confirmationsOutcome,
+            confirmationsTimestamp: lead.confirmationsTimestamp,
+            appointmentDate: lead.appointmentDate,
+            presentedAt: lead.presentedAt,
+        }
+        let stadioConf = stadioConferme(statoConferme, inizio, !!registrata)
+        const chiConferma = persona(titolare)
+        if (stadioConf === 2 && titolare) {
+            // La presenza la scrive il venditore: se l'ultimo esito l'ha scritto
+            // chi ha confermato, per le sue Scintille il lead resta confermato.
+            if ((await autoreUltimoEsito(tx, leadId)) === titolare) stadioConf = 1
+        }
+        // L'anticipo si misura sulla prima conferma pagata, se c'è: un salvataggio
+        // successivo (cambio di venditore) non lo cancella.
+        const inTempo = confermaInTempo({
+            confirmationsTimestamp: registrata?.createdAt ?? lead.confirmationsTimestamp,
+            appointmentDate: lead.appointmentDate,
+        }, rules.conferme.scintille.inTempoMinuti)
+        const pianoConf = pianoStadi(righe, PREFISSO_STADI.conferme, leadId, stadioConf, importiConferme(rules, inTempo))
+        for (const k of pianoConf.storna) await reverseOnce(k, 'storno Scintille conferma: il lead è sceso di stadio', tx)
+        if (titolare && isConfermePersona(chiConferma)) {
+            for (const a of pianoConf.accredita) {
+                if (a.gradino === 1) {
+                    // Tetto delle conferme pagate al giorno: lock sulla persona,
+                    // così due conferme simultanee non lo sforano.
+                    await tx.select({ id: users.id }).from(users).where(eq(users.id, titolare)).for('no key update')
+                    const { start, end } = dayBoundsRome(new Date())
+                    const oggi = await tx.select({ id: currencyLedger.id }).from(currencyLedger).where(and(
+                        eq(currencyLedger.userId, titolare),
+                        eq(currencyLedger.reason, CAUSALI.confermeConferma),
+                        gte(currencyLedger.createdAt, start),
+                        lt(currencyLedger.createdAt, end),
+                    ))
+                    if (!sottoTettoConferme(oggi.length, rules)) continue
+                }
+                await creditOnce({
+                    userId: titolare, currency: 'S', amount: a.amount,
+                    reason: a.gradino === 1 ? CAUSALI.confermeConferma : CAUSALI.confermePresenza,
+                    idemKey: a.idemKey, leadId, companyId: lead.companyId,
+                    metadata: { autore: actorUserId, stadio: stadioConf, gradino: a.gradino },
+                }, tx)
+            }
+        }
+
+        // Obiettivi settimanali di chi tiene la conferma (e di chi la teneva):
+        // la settimana in corso e la precedente (esiti registrati in ritardo),
+        // più quelle della presenza e della chiusura del lead.
+        const chi = [...new Set([titolare, lead.confirmationsUserId].filter((x): x is string => !!x))]
+        if (chi.length) {
+            const adesso = new Date()
+            const settimane = new Set<string>([
+                settimanaLunSab(adesso).lunedi,
+                settimanaLunSab(new Date(adesso.getTime() - 7 * 86_400_000)).lunedi,
+            ])
+            if (lead.presentedAt) settimane.add(settimanaLunSab(lead.presentedAt).lunedi)
+            if (lead.salespersonOutcome === 'Chiuso' && lead.salespersonOutcomeAt) settimane.add(settimanaLunSab(lead.salespersonOutcomeAt).lunedi)
+            for (const u of chi) for (const s of settimane) daRiallineare.add(coppia(u, s))
         }
     })
+    return daRiallineare
+}
+
+/** Chi ha scritto l'ultimo esito del venditore sul lead (null se nessuno). */
+async function autoreUltimoEsito(tx: Tx, leadId: string): Promise<string | null> {
+    const [e] = await tx.select({ userId: leadEvents.userId }).from(leadEvents)
+        .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.eventType, 'salesperson_outcome_set')))
+        .orderBy(desc(leadEvents.timestamp)).limit(1)
+    return e?.userId ?? null
+}
+
+async function riallineaCoppie(coppie: DaRiallineare, rules: EconomyRules): Promise<void> {
+    for (const c of coppie) {
+        const [userId, lunedi] = c.split('|')
+        await riallineaObiettiviConferme(userId, lunedi, rules)
+            .catch((e: unknown) => console.error('[economia] obiettivi Conferme err', userId, lunedi, e))
+    }
+}
+
+/**
+ * Gli obiettivi settimanali si riallineano dopo la risposta (after di Next),
+ * così l'esito delle Conferme e dei venditori non aspetta i conteggi della
+ * settimana; fuori da una richiesta (script) si fa subito.
+ */
+async function riallineaDopo(coppie: DaRiallineare, rules: EconomyRules): Promise<void> {
+    if (coppie.size === 0) return
+    const lavoro = () => riallineaCoppie(coppie, rules)
+    try {
+        after(lavoro)
+    } catch {
+        await lavoro()
+    }
+}
+
+/**
+ * Allinea le Piume del GDO e i premi delle Conferme di un lead al suo stato
+ * attuale. Va chiamata DOPO aver scritto l'esito, da tutti i punti che toccano
+ * conferma, presenza o esito del venditore (il nome è rimasto quello della v1).
+ */
+export async function syncLeadPiume(leadId: string, actorUserId: string | null): Promise<void> {
+    const rules = await readEconomyRules()
+    const coppie = await sincronizzaLead(leadId, actorUserId, rules)
+    await riallineaDopo(coppie, rules)
 }
 
 /** Come syncLeadPiume su più lead, uno alla volta: un errore su un lead non ferma gli altri. */
 export async function syncPiumeForLeads(leadIds: string[], actorUserId: string | null): Promise<void> {
+    const rules = await readEconomyRules()
+    const tutte: DaRiallineare = new Set()
     for (const id of new Set(leadIds)) {
-        await syncLeadPiume(id, actorUserId).catch(e => console.error('[economia] sync Piume err', id, e))
+        const coppie = await sincronizzaLead(id, actorUserId, rules)
+            .catch((e: unknown) => { console.error('[economia] sync Piume err', id, e); return new Set<string>() })
+        for (const c of coppie) tutte.add(c)
     }
+    await riallineaDopo(tutte, rules)
+}
+
+// ── Obiettivi settimanali delle Conferme (Piume) ────────────────────────
+
+/**
+ * Riallinea gli scalini degli obiettivi settimanali (presenze e chiusure dei
+ * lead confermati) di una persona delle Conferme per la settimana lun-sab del
+ * `lunedi`: accredita gli scalini raggiunti, storna quelli persi (per esempio
+ * una chiusura tolta). Solo per il ruolo CONFERME letto dal DB e solo dalla
+ * settimana d'avvio dell'economia. Le settimane più vecchie della precedente si
+ * riallineano solo alla chiusura dei premi della settimana.
+ */
+export async function riallineaObiettiviConferme(userId: string, lunedi: string, rulesIn?: EconomyRules): Promise<void> {
+    const rules = rulesIn ?? await readEconomyRules()
+    const settimana = settimanaDaLunedi(lunedi)
+    if (!settimana || settimana.end.getTime() <= inizioEconomia(rules).getTime()) return
+    const { start, end } = settimana
+
+    await db.transaction(async (tx) => {
+        // Lock sulla persona: due esiti simultanei non accreditano due volte lo stesso scalino.
+        const [u] = await tx.select({ id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot })
+            .from(users).where(eq(users.id, userId)).for('no key update')
+        if (!u || !isConfermePersona(u)) return
+
+        const righe: LedgerRow[] = await tx.select({ idemKey: currencyLedger.idemKey, amount: currencyLedger.amount })
+            .from(currencyLedger).where(and(
+                eq(currencyLedger.userId, userId),
+                or(like(currencyLedger.idemKey, `P:obiettivo:%:${userId}:${lunedi}:%`), like(currencyLedger.idemKey, `storno:P:obiettivo:%:${userId}:${lunedi}:%`)),
+            ))
+
+        const conteggi = contaObiettivi(await leggiLeadObiettivi(tx, userId, start, end), userId, start, end)
+        const obiettivi = obiettiviPersona(rules, userId)
+        for (const tipo of ['presenze', 'chiusure'] as const) {
+            const piano = pianoObiettivo(righe, tipo, userId, lunedi, conteggi[tipo], obiettivi[tipo])
+            for (const k of piano.storna) await reverseOnce(k, `storno obiettivo ${tipo}: ${conteggi[tipo]} nella settimana`, tx)
+            for (const a of piano.accredita) {
+                await creditOnce({
+                    userId, currency: 'P', amount: a.amount, reason: CAUSALE_OBIETTIVO[tipo],
+                    idemKey: a.idemKey, metadata: { settimana: lunedi, scalino: a.gradino, conteggio: conteggi[tipo], soglie: obiettivi[tipo].soglie },
+                }, tx)
+            }
+        }
+    })
+}
+
+/**
+ * Lead confermati che possono contare per gli obiettivi della persona nella
+ * settimana: confermati da lei o tenuti da lei sul registro, con presenza o
+ * chiusura nella settimana. Il filtro vero (titolare, conferma prima
+ * dell'appuntamento, esito scritto da altri) lo fa contaObiettivi.
+ */
+async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end: Date): Promise<LeadObiettivo[]> {
+    const tenutiDaLei = tx.select({ id: currencyLedger.leadId }).from(currencyLedger).where(and(
+        eq(currencyLedger.userId, userId),
+        like(currencyLedger.idemKey, `${PREFISSO_STADI.conferme}:%`),
+        isNotNull(currencyLedger.leadId),
+    ))
+    const candidati = await tx.select({
+        id: leads.id,
+        confirmationsOutcome: leads.confirmationsOutcome,
+        confirmationsUserId: leads.confirmationsUserId,
+        confirmationsTimestamp: leads.confirmationsTimestamp,
+        appointmentDate: leads.appointmentDate,
+        presentedAt: leads.presentedAt,
+        salespersonOutcome: leads.salespersonOutcome,
+        salespersonOutcomeAt: leads.salespersonOutcomeAt,
+    }).from(leads).where(and(
+        eq(leads.confirmationsOutcome, 'confermato'),
+        or(eq(leads.confirmationsUserId, userId), inArray(leads.id, tenutiDaLei)),
+        or(
+            and(gte(leads.presentedAt, start), lt(leads.presentedAt, end)),
+            and(eq(leads.salespersonOutcome, 'Chiuso'), gte(leads.salespersonOutcomeAt, start), lt(leads.salespersonOutcomeAt, end)),
+        ),
+    ))
+    if (candidati.length === 0) return []
+    const ids = candidati.map(c => c.id)
+    const [registro, autori] = await Promise.all([
+        tx.select({ idemKey: currencyLedger.idemKey, amount: currencyLedger.amount, userId: currencyLedger.userId, leadId: currencyLedger.leadId })
+            .from(currencyLedger).where(and(
+                inArray(currencyLedger.leadId, ids),
+                or(like(currencyLedger.idemKey, `${PREFISSO_STADI.conferme}:%`), like(currencyLedger.idemKey, `storno:${PREFISSO_STADI.conferme}:%`)),
+            )),
+        tx.selectDistinctOn([leadEvents.leadId], { leadId: leadEvents.leadId, userId: leadEvents.userId })
+            .from(leadEvents)
+            .where(and(inArray(leadEvents.leadId, ids), eq(leadEvents.eventType, 'salesperson_outcome_set')))
+            .orderBy(leadEvents.leadId, desc(leadEvents.timestamp)),
+    ])
+    const autorePer = new Map(autori.map(a => [a.leadId, a.userId]))
+    return candidati.map(c => {
+        const delLead = registro.filter(r => r.leadId === c.id)
+        return {
+            titolare: titolareConferma(delLead, c.id, c.confirmationsUserId),
+            // Utile se fatta prima dell'appuntamento, o già pagata quando lo era.
+            confermaUtile: confermaUtile(c) || !!confermaRegistrata(delLead, c.id),
+            autoreEsito: autorePer.get(c.id) ?? null,
+            presentedAt: c.presentedAt,
+            chiusoAt: c.salespersonOutcome === 'Chiuso' ? c.salespersonOutcomeAt : null,
+        }
+    })
+}
+
+export interface ProgressoObiettivi {
+    lunedi: string
+    valori: Record<TipoObiettivo, number>
+    obiettivi: Record<TipoObiettivo, Obiettivo>
+}
+
+/**
+ * Dove sta una persona delle Conferme con gli obiettivi della settimana in
+ * corso: gli stessi conteggi che decidono le Piume (solo lettura).
+ */
+export async function progressoObiettiviConferme(userId: string, at: Date = new Date()): Promise<ProgressoObiettivi> {
+    const rules = await readEconomyRules()
+    const s = settimanaLunSab(at)
+    const righe = await leggiLeadObiettivi(db, userId, s.start, s.end)
+    return { lunedi: s.lunedi, valori: contaObiettivi(righe, userId, s.start, s.end), obiettivi: obiettiviPersona(rules, userId) }
 }
 
 // ── Forzieri di squadra ─────────────────────────────────────────────────
