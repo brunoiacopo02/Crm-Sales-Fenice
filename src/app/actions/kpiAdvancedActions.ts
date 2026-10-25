@@ -543,6 +543,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
         id: users.id,
         name: users.name,
         displayName: users.displayName,
+        firstName: users.firstName,
         role: users.role,
         isActive: users.isActive,
         isBot: users.isBot,
@@ -715,7 +716,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
 
         return {
             gdoId: u.id,
-            gdoName: u.displayName ?? u.name ?? u.id,
+            gdoName: u.firstName?.trim() || (u.displayName ?? u.name ?? u.id),
             avgCallsPerLead,
             callsPerDay,
             dailyCapacity,

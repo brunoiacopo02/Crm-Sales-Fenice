@@ -6,6 +6,7 @@ import { eq, and, desc, sql, gte, lte } from "drizzle-orm"
 import crypto from "crypto"
 import { BREAK_RULES, getLocalDateRome } from "@/lib/pauseUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
+import { nomeVeroOppure } from '@/lib/diretta/nomeSql';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -217,7 +218,8 @@ export async function getManagerPauseReport(dateLocal?: string) {
         id: breakSessions.id,
         gdoUserId: breakSessions.gdoUserId,
         userName: users.name,
-        displayName: users.displayName,
+        // Nome vero (firstName) se c'è, poi il codice (PO 25/10/2026).
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
         dateLocal: breakSessions.dateLocal,
         breakIndex: breakSessions.breakIndex,
         startTime: breakSessions.startTime,
@@ -335,7 +337,7 @@ export type PauseAggregateReport = {
 async function getAggregateReport(dateFrom: string, dateTo: string, companyId: string): Promise<PauseAggregateReport> {
     const sessions = await db.select({
         gdoUserId: breakSessions.gdoUserId,
-        displayName: users.displayName,
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
         userName: users.name,
         dateLocal: breakSessions.dateLocal,
         durationSeconds: breakSessions.durationSeconds,

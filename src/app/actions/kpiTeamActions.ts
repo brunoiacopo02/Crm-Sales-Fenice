@@ -164,7 +164,7 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
         rankingMap.set(u.id, {
             userId: u.id,
             gdoCode: u.gdoCode,
-            displayName: u.displayName || u.name || `GDO ${u.gdoCode}`,
+            displayName: u.firstName?.trim() || u.displayName || u.name || `GDO ${u.gdoCode}`,
             avatarUrl: u.avatarUrl,
             calls: 0,
             answers: 0,

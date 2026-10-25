@@ -55,6 +55,7 @@ import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
 import { shiftBoundsFor, lateAndEarly, trainingAllowanceSec, isCollectiveTrainingDay, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN, WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN, romeDowOf } from "@/lib/cdr/shift"
 import { apptSetAt, isFunnelClosure } from "@/lib/kpi/canon"
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 
 /** Sotto questa soglia la giornata non è rappresentativa (mezze giornate, assenze). */
 const MIN_CALLS_PER_DAY = 40
@@ -235,7 +236,8 @@ export async function getPhoneProductivity(
         disposition: pbxCalls.disposition,
         dstKey: pbxCalls.dstKey,
         name: users.name,
-        displayName: users.displayName,
+        // Etichetta della riga: nome vero se c'è (PO 25/10/2026).
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
     })
         .from(pbxCalls)
         .innerJoin(users, eq(users.id, pbxCalls.userId))
@@ -259,7 +261,7 @@ export async function getPhoneProductivity(
     // Chi è fuori dalla scheda e perché: si mostra in pagina, non si nasconde.
     const excludedRows = await db.select({
         name: users.name,
-        displayName: users.displayName,
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
     })
         .from(users)
         .where(and(
@@ -678,7 +680,7 @@ export async function getApptQuality(
     const rows = await db.select({
         userId: leads.assignedToId,
         name: users.name,
-        displayName: users.displayName,
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
         appointmentCreatedAt: leads.appointmentCreatedAt,
         appointmentDate: leads.appointmentDate,
         presentedAt: leads.presentedAt,

@@ -406,6 +406,7 @@ export async function getLeadsWithSamePhone(leadId: string) {
         discardReason: leads.discardReason,
         assignedToName: users.displayName,
         assignedToRealName: users.name,
+        assignedToFirstName: users.firstName,
     })
         .from(leads)
         .leftJoin(users, eq(users.id, leads.assignedToId))
@@ -434,7 +435,8 @@ export async function getLeadsWithSamePhone(leadId: string) {
             appointmentDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
             salespersonOutcome: r.salespersonOutcome,
             discardReason: r.discardReason,
-            assignedToName: r.assignedToRealName || r.assignedToName || 'Non assegnato',
+            // Nome vero del collega (firstName) prima del codice "GDO 1xx" (PO 25/10/2026).
+            assignedToName: r.assignedToFirstName?.trim() || r.assignedToRealName || r.assignedToName || 'Non assegnato',
         })),
     }
 }

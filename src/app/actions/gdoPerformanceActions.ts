@@ -203,7 +203,7 @@ export async function getManagerGdoTables(monthString: string) {
     for (const gdo of activeGdos) {
         gdoStatsMap[gdo.id] = {
             gdoId: gdo.id,
-            gdoName: gdo.displayName || `GDO ${gdo.gdoCode || gdo.id.slice(0, 4)}`,
+            gdoName: gdo.firstName?.trim() || gdo.displayName || `GDO ${gdo.gdoCode || gdo.id.slice(0, 4)}`,
             funnelStats: {} as Record<string, any>,
             // Lead chiamati dal GDO per ciascun funnel (denominatore per % fissaggio per-funnel)
             leadChiamatiFunnel: {} as Record<string, number>,

@@ -140,7 +140,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
     // Usiamo Promise.all() per queries pesanti simultanee
     const [gdosRaw, logsRaw, appointments, closedLeads, assignedLeadsRaw, cplEur] = await Promise.all([
         db.select({
-            id: users.id, name: users.name, displayName: users.displayName,
+            id: users.id, name: users.name, displayName: users.displayName, firstName: users.firstName,
             role: users.role, isActive: users.isActive, isBot: users.isBot,
         }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId))),
         db.select({
@@ -226,7 +226,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
     for (const gdo of gdos) {
         gdoDataMap.set(gdo.id, {
             userId: gdo.id,
-            userName: gdo.displayName || gdo.name || 'GDO',
+            userName: gdo.firstName?.trim() || gdo.displayName || gdo.name || 'GDO',
             oreLavorate: 0,
             chiamate: 0,
             risposte: 0,

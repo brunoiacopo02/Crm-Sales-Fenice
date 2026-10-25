@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { leads, users } from "@/db/schema"
 import { eq, gte, lt, and, isNotNull, asc } from "drizzle-orm"
 import { dayBoundsRome } from "@/lib/dateUtils"
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import { CalendarCheck, Phone, Mail, User as UserIcon, Clock } from "lucide-react"
 import { AdminCancelApptButton } from "@/components/AdminCancelApptButton"
 import { getLaunchPipelineStats } from "@/lib/launchPipelineStats"
@@ -45,7 +46,7 @@ export default async function AppuntamentiOggiPage() {
             appointmentNote: leads.appointmentNote,
             appointmentCreatedAt: leads.appointmentCreatedAt,
             assignedToId: leads.assignedToId,
-            gdoName: users.displayName,
+            gdoName: nomeVeroOppure(users.firstName, users.displayName),
             gdoCode: users.gdoCode,
         })
         .from(leads)
