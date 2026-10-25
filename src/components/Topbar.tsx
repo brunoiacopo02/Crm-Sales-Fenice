@@ -22,6 +22,7 @@ import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications"
 import { getAnimationsEnabled, type RewardEarnedDetail } from "@/lib/animationUtils"
 import { getDirettaRichiamiScaduti, getDirettaSaldo } from "@/app/actions/direttaActions"
 import { DIRETTA_APPUNTAMENTO } from "@/lib/diretta/eventi"
+import { TIPO_NOTIFICA_APPENA_ARRIVATO } from "@/lib/diretta/notificaArrivo"
 import { oraBreve, testoTurno } from "@/lib/diretta/home"
 import type { GamificationTargets } from "@/lib/diretta/config"
 import type { DirettaIo } from "@/lib/diretta/io"
@@ -230,6 +231,15 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
             // "Chiamami adesso": chi la riceve è il venditore di turno e il
             // lead si lavora nella sua tab Lancio, non nel drawer della ricerca.
             router.push('/venditore?view=lancio')
+        } else if (notif.type === TIPO_NOTIFICA_APPENA_ARRIVATO) {
+            // Lead appena arrivato (PO 25/10/2026): si apre il lead, con gli
+            // stessi esiti della card, da qualunque coda o pagina sia il GDO.
+            if (meta?.leadId) {
+                setSelectedLeadId(meta.leadId)
+                setIsDrawerOpen(true)
+            } else {
+                router.push('/')
+            }
         } else if (notif.type === 'appointment_confirmed' || notif.type === 'sales_outcome_set' || notif.type === 'appointment_assigned' || notif.type === 'bot_contatto_umano' || notif.type === 'contatto_umano_assegnato' || notif.type === 'appointment_rescheduled_by_sales') {
             // `contatto_umano_assegnato` era l'unico tipo che notificava e basta: il GDO
             // leggeva "Chiamalo tu", cliccava e non succedeva niente (11/09).

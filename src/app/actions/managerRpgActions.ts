@@ -1,12 +1,11 @@
 'use server';
 
 import { db } from "@/db";
-import { users, questProgress, quests, coinTransactions, leads, weeklyGamificationRules, manualAdjustments } from "@/db/schema";
+import { users, questProgress, leads, weeklyGamificationRules, manualAdjustments } from "@/db/schema";
 import { eq, and, inArray, sql, gte, lte, isNotNull } from "drizzle-orm";
 import { getEvolutionStage, GAME_CONSTANTS, ROADMAP_REWARDS, EVOLUTION_STAGES, UNLOCKABLE_TITLES } from "@/lib/gamificationEngine";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
-import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 // ---- Helpers replicated from gdoPerformanceActions to avoid circular deps ----
 
@@ -378,50 +377,7 @@ export async function getTeamGamificationOverview() {
     };
 }
 
-export async function updateGdoBaseSalary(userId: string, newSalary: number) {
-    const ctx = await currentTenant();
-    assertSalesArea(ctx);
-    if (newSalary < 0) throw new Error("Salario non valido");
-    await db.update(users).set({ baseSalaryEur: newSalary }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
-}
-
-export async function addGdoCoins(userId: string, amount: number) {
-    // Vecchie monete congelate dal restyle "Diretta" (PO 25/10/2026). Questa
-    // action non controllava nessun ruolo: chiunque poteva accreditarsi monete.
-    if (VECCHIA_ECONOMIA_CONGELATA) throw new Error("Le vecchie monete sono congelate");
-    const ctx = await currentTenant();
-    assertSalesArea(ctx);
-    const u = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
-    if (u.length > 0) {
-        await db.update(users).set({ walletCoins: sql`${users.walletCoins} + ${amount}` }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
-        // Log the transaction
-        await db.insert(coinTransactions).values({
-            id: crypto.randomUUID(),
-            userId,
-            amount,
-            reason: `Bonus manuale dal TL`,
-            companyId: ctx.companyId,
-        });
-    }
-}
-
-export async function updateVenditoreSalesTarget(userId: string, salesTargetEur: number) {
-    const ctx = await currentTenant();
-    assertSalesArea(ctx);
-    if (salesTargetEur < 0) throw new Error("Target non valido");
-    await db.update(users).set({ salesTargetEur }).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));
-}
-
-export async function getVenditoriWithTargets() {
-    const ctx = await currentTenant();
-    assertSalesArea(ctx);
-    const venditori = await db.select({
-        id: users.id,
-        name: users.name,
-        displayName: users.displayName,
-        email: users.email,
-        isActive: users.isActive,
-        salesTargetEur: users.salesTargetEur,
-    }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'VENDITORE')));
-    return venditori.filter(v => v.isActive);
-}
+// Tolte il 25/10/2026 (PO, "funzioni scoperte"): updateGdoBaseSalary,
+// updateVenditoreSalesTarget, addGdoCoins e getVenditoriWithTargets. Nessuna
+// controllava il ruolo: qualunque utente loggato poteva cambiare uno stipendio
+// base o il target di un venditore. Stipendi e target non si toccano da qui.

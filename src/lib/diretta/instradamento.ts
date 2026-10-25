@@ -5,7 +5,8 @@
 // Le scelte per persona restano i flag che /gestione già governa, così le
 // spunte di quella pagina dicono il vero e le assenze si gestiscono da lì:
 //   Freschi  (`acAutoIntake`)    riceve i vergini, fino a `dailyFreshCap` al giorno
-//   Ridati   (`botReturnIntake`) riceve i ridati dal bot con chat interrotta
+//   Ridati   (`botReturnIntake`) riceve i ridati dal bot con chat interrotta,
+//                                fino a `dailyReturnCap` al giorno se c'è
 // In più vale sempre la squadra (`isTeamMember`): nome vero, GDO umano, attivo.
 // 108 e il bot non hanno nome, quindi non ricevono nemmeno con un flag acceso.
 
@@ -30,6 +31,15 @@ export function riceveRidati(u: GdoInstradabile): boolean {
 
 export function riceveVergini(u: GdoInstradabile): boolean {
     return isTeamMember(u) && u.acAutoIntake
+}
+
+/**
+ * Sotto il tetto del giorno: `tetto` null = nessun tetto. Vale per i freschi
+ * (`dailyFreshCap`, webhook AC) e per i ridati (`dailyReturnCap`, reassign.ts):
+ * a tetto pieno il GDO esce dal giro fino a domani.
+ */
+export function sottoTetto(ricevutiOggi: number, tetto: number | null | undefined): boolean {
+    return tetto == null || ricevutiOggi < tetto
 }
 
 /**
@@ -60,9 +70,14 @@ export interface ScelteInstradamento {
     verginiAlGiorno: number
 }
 
-/** Decisioni del 25/10/2026: Christel (114) e Beatrice (112) in malattia, Lorenzo (118) solo ridati. */
+/**
+ * Decisioni del 25/10/2026: Christel (114) e Beatrice (112) in malattia.
+ * Lorenzo (118) niente lead nuovi finché Bruno non lo accende da /gestione
+ * (PO 25/10 mattina): né vergini né ridati. I suoi tetti a 30 al giorno li
+ * prepara scripts/diretta/lead-lorenzo.ts, accenderlo è una spunta.
+ */
 export const SCELTE_PO_25_10: ScelteInstradamento = {
-    ridatiEsclusi: [112, 114],
+    ridatiEsclusi: [112, 114, 118],
     verginiEsclusi: [112, 114, 118],
     verginiAlGiorno: 10,
 }

@@ -3,61 +3,11 @@
 import { db } from "@/db"
 import { users } from "@/db/schema"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
-import crypto from "crypto"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 
-// Codici GDO richiesti da specifiche
-const GDO_CODES = [105, 113, 114, 115, 116, 117, 118, 119]
-
-export async function seedGdoAccounts() {
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
-    await requireTeamEditor(ctx.userId)
-    // 1. Controlla quali esistono già per evitare duplicati ciecamente
-    const existingUsers = await db.select({ gdoCode: users.gdoCode }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
-    const existingCodes = new Set(existingUsers.map(u => u.gdoCode).filter(Boolean))
-
-    const newAccounts = []
-
-    // Password standard facilmente comunicabile (es. Cambiami123!)
-    const defaultPasswordStr = "Fenice2026!"
-    const hashedPassword = crypto.createHash('sha256').update(defaultPasswordStr).digest('hex')
-
-    for (const code of GDO_CODES) {
-        if (!existingCodes.has(code)) {
-            const username = `gdo${code}`
-            const newId = crypto.randomUUID()
-
-            await db.insert(users).values({
-                id: newId,
-                name: `GDO ${code}`, // Display Name di default
-                email: `${username}@fenice.local`, // Fake internal email, usata come username nel login
-                password: hashedPassword,
-                role: 'GDO',
-                gdoCode: code,
-                displayName: `GDO ${code}`,
-                isActive: true,
-                createdAt: new Date(),
-                companyId: ctx.companyId,
-            })
-
-            newAccounts.push({
-                username: `${username}@fenice.local`,
-                password: defaultPasswordStr,
-                gdoCode: code
-            })
-        }
-    }
-
-    return {
-        success: true,
-        createdCount: newAccounts.length,
-        accounts: newAccounts, // Restituiti al client solo la prima volta per copia/incolla del Manager
-        message: newAccounts.length > 0
-            ? `Creati ${newAccounts.length} account GDO con successo.`
-            : `Tutti gli account GDO (105-119) sono già presenti a sistema.`
-    }
-}
+// La generazione massiva degli account GDO (seedGdoAccounts) è stata tolta il
+// 25/10/2026 (PO): creava utenti con una password fissa uguale per tutti e
+// fuori da Supabase Auth. Gli account nuovi si creano da Supabase.
 
 export async function getTeamAccounts() {
     const ctx = await currentTenant()

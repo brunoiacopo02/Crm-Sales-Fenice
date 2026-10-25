@@ -62,9 +62,9 @@ Noemi e Lavinia tornano a fissare lunedì e Bruno vuole che tutti percepiscano u
 | Squadra, fissati al giorno | 55 | 65 |
 | Ora di punta, fissati di squadra | 14 | 20 |
 
-- Ora di punta: lun-ven 18:00-19:00, sabato 11:00-12:00. Il sabato valgono gli stessi scalini.
+- Ora di punta: lun-ven 18:00-19:00, sabato 12:30-13:30 (PO 25/10 mattina). Il sabato valgono gli stessi scalini.
 - Turno: lun-ven 13:30-20:00, sabato 10:00-16:30.
-- Pause: 15:30-15:45 e 17:45-18:00 (sabato: da definire).
+- Pause: 15:30-15:45 e 17:45-18:00 (sabato: 12:00-12:15 e 14:15-14:30).
 - Presenze: obiettivo 7 a settimana. Ogni presenza dalla **5ª** vale €12 lordi, soglia fissa. La pagina /bonus va allineata. Il vecchio bonus bisettimanale 18/22 sparisce da /kpi-gdo e /profilo.
 - "Fissato" = lead distinto con callLog `APPUNTAMENTO` del GDO, giorno di Roma (append-only).
 - Presenze: `countPresences` (`src/lib/presenceCounting.ts`), settimana `weekBoundsRome`.

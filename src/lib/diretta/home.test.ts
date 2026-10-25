@@ -69,7 +69,7 @@ test('turno in alto: prima, durante, dopo, domenica niente', () => {
     assert.equal(testoTurno(new Date('2026-11-01T15:00:00+01:00'), DEFAULT_TARGETS), null)
 })
 
-test('pause del giorno: prossima e in corso, sabato senza pause', () => {
+test('pause del giorno: prossima e in corso', () => {
     assert.equal(pauseDelGiorno(LUN('14:00'), DEFAULT_TARGETS).length, 2)
     const p1 = statoPausa(LUN('14:00'), DEFAULT_TARGETS)!
     assert.equal(p1.fase, 'prossima')
@@ -80,7 +80,23 @@ test('pause del giorno: prossima e in corso, sabato senza pause', () => {
     const p3 = statoPausa(LUN('16:00'), DEFAULT_TARGETS)!
     assert.equal(oraBreve(p3.start), '17:45')
     assert.equal(statoPausa(LUN('18:30'), DEFAULT_TARGETS), null)
-    assert.equal(statoPausa(new Date('2026-10-31T11:00:00+01:00'), DEFAULT_TARGETS), null)
+})
+
+test('pause del sabato: 12:00-12:15 e 14:15-14:30, ora di Roma', () => {
+    const SAB = (hhmm: string) => new Date(`2026-10-31T${hhmm}:00+01:00`)
+    assert.equal(pauseDelGiorno(SAB('10:00'), DEFAULT_TARGETS).length, 2)
+    const p1 = statoPausa(SAB('11:00'), DEFAULT_TARGETS)!
+    assert.equal(p1.fase, 'prossima')
+    assert.equal(oraBreve(p1.start), '12:00')
+    const p2 = statoPausa(SAB('12:05'), DEFAULT_TARGETS)!
+    assert.equal(p2.fase, 'durante')
+    assert.equal(Math.round(p2.minuti), 10)
+    const p3 = statoPausa(SAB('13:00'), DEFAULT_TARGETS)!
+    assert.equal(p3.fase, 'prossima')
+    assert.equal(oraBreve(p3.start), '14:15')
+    assert.equal(statoPausa(SAB('15:00'), DEFAULT_TARGETS), null)
+    // la domenica nessuna pausa
+    assert.equal(pauseDelGiorno(new Date('2026-11-01T11:00:00+01:00'), DEFAULT_TARGETS).length, 0)
 })
 
 test('etichette del giorno dell\'appuntamento', () => {

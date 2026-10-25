@@ -1,15 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getTeamAccounts, seedGdoAccounts, updateGdoProfile, updateGdoTargets, updateConfermeTargets } from "@/app/actions/teamActions"
-import { User, ShieldAlert, Check, X, Edit2, KeyRound } from "lucide-react"
+import { getTeamAccounts, updateGdoProfile, updateGdoTargets, updateConfermeTargets } from "@/app/actions/teamActions"
+import { User, ShieldAlert, Check, X, Edit2 } from "lucide-react"
 import { DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon"
 
 export function TeamManagementClient() {
     const [team, setTeam] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [seedResult, setSeedResult] = useState<any>(null)
-    const [isSeeding, setIsSeeding] = useState(false)
 
     const [activeTab, setActiveTab] = useState<'GDO' | 'VENDITORE' | 'CONFERME'>('GDO')
 
@@ -62,20 +60,6 @@ export function TeamManagementClient() {
     useEffect(() => {
         fetchTeam()
     }, [])
-
-    const handleSeed = async () => {
-        if (!confirm("Vuoi procedere alla generazione massiva degli account GDO mancanti (105-119)?")) return
-        setIsSeeding(true)
-        try {
-            const result = await seedGdoAccounts()
-            setSeedResult(result)
-            fetchTeam()
-        } catch (error: any) {
-            alert(error.message)
-        } finally {
-            setIsSeeding(false)
-        }
-    }
 
     const startEdit = (user: any) => {
         setEditingId(user.id)
@@ -144,20 +128,11 @@ export function TeamManagementClient() {
     return (
         <div className="bg-white rounded-xl shadow-sm border border-ash-200 overflow-hidden max-w-7xl mx-auto">
 
-            {/* Header / Actions */}
+            {/* Header */}
             <div className="p-4 border-b border-ash-200 flex items-center justify-between bg-ash-50">
                 <div className="text-sm font-medium text-ash-700">
                     Totale Account GDO: {team.length}
                 </div>
-
-                <button
-                    onClick={handleSeed}
-                    disabled={isSeeding}
-                    className="flex items-center gap-2 px-4 py-2 bg-brand-charcoal text-white rounded-md text-sm font-medium hover:bg-ash-800 disabled:opacity-50 transition-colors"
-                >
-                    <KeyRound className="h-4 w-4" />
-                    {isSeeding ? "Generazione in corso..." : "Auto-Genera Account (Seed)"}
-                </button>
             </div>
 
             {/* Tabs for Roles */}
@@ -225,23 +200,6 @@ export function TeamManagementClient() {
                     </button>
                 </div>
             </div>
-
-            {/* Seed Result Alert */}
-            {seedResult && seedResult.createdCount > 0 && (
-                <div className="p-4 bg-green-50 border-b border-green-200">
-                    <h3 className="text-green-800 font-bold mb-2">{seedResult.message}</h3>
-                    <p className="text-sm text-green-700 mb-2">
-                        ATTENZIONE: Copia le seguenti credenziali per fornirle ai GDO. Non verranno più mostrate in chiaro.
-                    </p>
-                    <div className="bg-white p-3 rounded border border-green-100 max-h-48 overflow-y-auto font-mono text-xs">
-                        {seedResult.accounts.map((acc: any) => (
-                            <div key={acc.gdoCode} className="mb-1">
-                                <strong>Username:</strong> {acc.username} | <strong>Password:</strong> {acc.password}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {/* Team Table */}
             <div className="overflow-x-auto">

@@ -1,15 +1,14 @@
 // Cosa vede un GDO dei lead che passano dal bot (PO 25/10/2026): niente.
 // Nessuna schermata GDO deve nominare il bot, la chat, il Fissatore o "GDO 201".
-// Le parole del lead restano: sono sue, e servono a chi lo richiama.
-// Funzioni pure, usate lato server prima che i dati arrivino al browser.
+// Le note del bot non si mostrano proprio, nemmeno ridotte o rese neutre
+// (PO 25/10 mattina): niente "ha scritto di nuovo, aspetta prima di chiamarlo".
+// Resta solo "Ti ha cercato" con le parole del lead: sono sue, e servono a chi
+// lo richiama. Funzioni pure, usate lato server prima che i dati arrivino al browser.
 
 import { destinatarioAssegnazione } from './arrivo'
 
 /** Parole che un testo mostrato al GDO non deve contenere (le usano anche i test). */
 export const PAROLE_VIETATE = /\b(bot|chat|fissatore)\b|gdo\s*201|evento sconosciuto/i
-
-/** Avviso al posto della nota "il bot ha ripreso la chat": dice cosa fare, non chi. */
-export const AVVISO_HA_RISCRITTO = 'Ha scritto di nuovo: aspetta un aggiornamento prima di chiamarlo.'
 
 const MARCATORE_PAROLE = /(?:parole del lead|sue parole)\s*:\s*/i
 const CHIUSURE: Record<string, string> = { '"': '"', '“': '”', '«': '»' }
@@ -36,26 +35,6 @@ export function paroleDelLead(testo: string | null | undefined): string | null {
     }
     // Testo troncato senza chiusura: vale quel che c'è.
     return corpo.trim() || null
-}
-
-/** "SPOSTAMENTO CHIESTO — ..." → "Spostamento chiesto", se il motivo non nomina il bot. */
-function motivoNota(testo: string): string | null {
-    const i = testo.indexOf(' — ')
-    if (i <= 0) return null
-    const testa = testo.slice(0, i).trim()
-    if (testa.length > 40 || testa !== testa.toUpperCase() || PAROLE_VIETATE.test(testa)) return null
-    return testa.charAt(0) + testa.slice(1).toLowerCase()
-}
-
-/** Nota del bot ridotta a ciò che un GDO può leggere; null se non resta niente. */
-export function notaPerGdo(testo: string | null | undefined): string | null {
-    const t = testo?.trim()
-    if (!t) return null
-    if (/^IL BOT HA RIPRESO LA CHAT/i.test(t)) return AVVISO_HA_RISCRITTO
-    const parole = paroleDelLead(t)
-    if (!parole) return null
-    const motivo = motivoNota(t)
-    return motivo ? `${motivo}: "${parole}"` : `"${parole}"`
 }
 
 export interface EventoTimeline {
@@ -136,10 +115,8 @@ export function eventoTimelinePerGdo(e: EventoTimeline, io: string): EventoTimel
         return destinatario === io ? { tipo: 'ASSIGNED', etichetta: 'Lead assegnato a te', ...vuoto } : null
     }
 
-    if (e.eventType === 'BOT_NOTE') {
-        const testo = notaPerGdo(testoDi(meta.note))
-        return testo ? { tipo: 'NOTE', etichetta: 'Nota', ...vuoto, testo } : null
-    }
+    // Le note del bot non arrivano al GDO, in nessuna forma.
+    if (e.eventType === 'BOT_NOTE') return null
 
     if (e.eventType === 'BOT_CONTACT_REQUEST') {
         const parole = paroleDelLead(testoDi(meta.note))

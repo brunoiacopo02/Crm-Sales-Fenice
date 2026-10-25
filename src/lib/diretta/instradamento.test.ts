@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     riceveRidati, riceveVergini, ORDINE_RIPIEGO_FRESCHI, ordineRipiegoFreschi, SCELTE_PO_25_10,
-    pianoInstradamento, pianoRidistribuzione, eLeadDelLancio,
+    pianoInstradamento, pianoRidistribuzione, eLeadDelLancio, sottoTetto,
     type GdoInstradabile,
 } from './instradamento'
 
@@ -78,7 +78,7 @@ function squadraOggi(): GdoInstradabile[] {
     ]
 }
 
-test('piano: ridati a tutta la squadra tranne 112 e 114, vergini 10 al giorno tranne 112, 114 e 118', () => {
+test('piano: ridati e vergini (10 al giorno) a tutta la squadra tranne 112, 114 e Lorenzo (118)', () => {
     const piano = pianoInstradamento(squadraOggi(), SCELTE_PO_25_10)
     const dopo = new Map(piano.map((r) => [r.gdoCode, r.dopo]))
 
@@ -88,13 +88,32 @@ test('piano: ridati a tutta la squadra tranne 112 e 114, vergini 10 al giorno tr
         assert.equal(d.acAutoIntake, true, `vergini ${c}`)
         assert.equal(d.dailyFreshCap, 10, `tetto ${c}`)
     }
-    assert.equal(dopo.get(118)!.botReturnIntake, true)
-    assert.equal(dopo.get(118)!.acAutoIntake, false)
-    for (const c of [112, 114]) {
+    for (const c of [112, 114, 118]) {
         const d = dopo.get(c) ?? squadraOggi().find((g) => g.gdoCode === c)!
         assert.equal(d.botReturnIntake, false, `ridati ${c}`)
         assert.equal(d.acAutoIntake, false, `vergini ${c}`)
     }
+})
+
+test('piano: Lorenzo (118) non riceve lead nuovi finché Bruno non lo accende, e il suo tetto resta', () => {
+    // qualcuno gli aveva acceso i flag: il go-live li spegne
+    const gdos = [gdo(118, { acAutoIntake: true, botReturnIntake: true, dailyFreshCap: 30 })]
+    const [r] = pianoInstradamento(gdos, SCELTE_PO_25_10)
+    assert.deepEqual(r.dopo, { acAutoIntake: false, botReturnIntake: false, dailyFreshCap: 30 })
+    // già spento: niente da cambiare
+    assert.deepEqual(pianoInstradamento([gdo(118, { dailyFreshCap: 30 })], SCELTE_PO_25_10), [])
+})
+
+// ------------------------------------------------------------- tetti del giorno
+
+test('tetto: vuoto vuol dire nessun tetto, altrimenti si riceve finché si è sotto', () => {
+    assert.equal(sottoTetto(500, null), true)
+    assert.equal(sottoTetto(0, undefined), true)
+    assert.equal(sottoTetto(29, 30), true)
+    assert.equal(sottoTetto(30, 30), false)
+    assert.equal(sottoTetto(31, 30), false)
+    // tetto 0: spento anche col flag acceso
+    assert.equal(sottoTetto(0, 0), false)
 })
 
 test('piano: non tocca il bot né chi è fuori squadra', () => {
