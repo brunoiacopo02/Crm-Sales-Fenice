@@ -19,6 +19,7 @@ import { db } from '@/db';
 import { leads, users } from '@/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { aziendeEffettive } from '@/lib/diretta/aziende';
 
 /** Cookie HttpOnly con l'azienda sales selezionata. Distinto dal cookie marketing. */
 export const SALES_ACTIVE_COMPANY_COOKIE = 'sales_active_company';
@@ -65,13 +66,16 @@ export async function currentTenant(): Promise<TenantContext> {
 
     const meta = user.user_metadata ?? {};
 
+    const role: string = meta.role ?? 'GDO';
+
     const fallbackCompany: CompanyId = meta.companyId ?? 'fenice';
-    const allowedCompanies: CompanyId[] =
+    // GDO e Conferme: solo Fenice, Serenamente per loro non esiste (PO 25/10/2026).
+    const allowedCompanies: CompanyId[] = aziendeEffettive(
+        role,
         Array.isArray(meta.allowedCompanies) && meta.allowedCompanies.length > 0
             ? meta.allowedCompanies
-            : [fallbackCompany];
-
-    const role: string = meta.role ?? 'GDO';
+            : [fallbackCompany],
+    );
 
     // Azienda attiva: cookie se consentito, altrimenti companyId metadata se
     // consentito, altrimenti la prima consentita. Sempre validato server-side.

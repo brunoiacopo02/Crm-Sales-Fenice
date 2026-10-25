@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { botContactRequests, leadEvents, leads, notifications, users } from '@/db/schema';
 import { contactLane, isLeadLocked } from '@/lib/bot-fissatore/contactRequests';
+import { notificaTiHaCercato } from '@/lib/diretta/vistaGdo';
 import { createClient } from '@/utils/supabase/server';
 
 const COMPANY = 'fenice'; // il bot fissatore lavora solo lead Fenice
@@ -279,12 +280,15 @@ export async function assignContactRequest(requestId: string, gdoId: string): Pr
         .set({ status: 'assigned', assignedToId: gdoId, assignedByUserId: admin.id, assignedAt: now, updatedAt: now })
         .where(eq(botContactRequests.id, requestId));
 
+    // Il destinatario è sempre un GDO: niente bot né chat nel testo (PO
+    // 25/10/2026), solo il nome e le parole del lead.
+    const testoNotifica = notificaTiHaCercato(row.leadName, row.r.reason)
     await db.insert(notifications).values({
         id: crypto.randomUUID(),
         recipientUserId: gdoId,
         type: 'contatto_umano_assegnato',
-        title: '☎️ Chiamalo tu: ha chiesto di parlare con una persona',
-        body: `${row.leadName}: ${row.r.reason.length > 180 ? row.r.reason.slice(0, 180) + '…' : row.r.reason}`,
+        title: testoNotifica.title,
+        body: testoNotifica.body,
         metadata: { leadId: row.r.leadId, requestId },
         status: 'unread',
         createdAt: now,

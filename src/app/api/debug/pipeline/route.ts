@@ -28,7 +28,6 @@ export async function GET() {
                 thirdCall: data.thirdCall.length,
                 fourthCall: data.fourthCall.length,
                 recalls: data.recalls.length,
-                appointments: data.appointments?.length || 0,
                 firstCallLaunch: data.firstCall.filter((l: any) => l.launchBucket).length,
                 secondCallLaunch: data.secondCall.filter((l: any) => l.launchBucket).length,
             },

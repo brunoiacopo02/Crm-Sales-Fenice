@@ -5,7 +5,11 @@ import { db } from "@/db"
 import { leads, callLogs, pipelineSnapshots, users, leadEvents, botContactRequests } from "@/db/schema"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 import { contaNeiKpiSql } from "@/lib/intakeBatch"
-import { contactCategoryLabel, isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
+import { isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
+import { oraArrivo, eVergineDelGiorno, ordinaPrimaChiamata, type EventoLead } from "@/lib/diretta/arrivo"
+import { paroleDelLead } from "@/lib/diretta/vistaGdo"
+import { eLeadDelLancio } from "@/lib/diretta/instradamento"
+import { dayBoundsRome } from "@/lib/dateUtils"
 import { eq, and, ne, isNull, isNotNull, inArray, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
@@ -216,20 +220,11 @@ export async function getPipelineLeads() {
     }
 
 
-    // 3. Appointments — tenant-scoped
-    const apptBaseConditions = [
-        eq(leads.companyId, ctx.companyId),
-        eq(leads.status, 'APPOINTMENT')
-    ]
-    if (isGdo) apptBaseConditions.push(eq(leads.assignedToId, userId))
+    // Gli appuntamenti storici non si leggono più qui (PO 25/10/2026): la home
+    // non li usa, e la query portava a ogni caricamento tutti gli APPOINTMENT
+    // del GDO. La pagina /appuntamenti ha le sue action.
 
-    const appointmentsLeads = await db.select()
-        .from(leads)
-        .where(and(...apptBaseConditions))
-        .orderBy(desc(leads.appointmentCreatedAt), leads.id)
-
-
-    // 4. Fourth Call "Recupero"
+    // 3. Fourth Call "Recupero"
     let isFourthCallActive = false
     let fourthCall: typeof recallBaseConditions[] = [] // typing alias hack per array vuoto o tipato corr.
     let fourthCallLeads: any[] = []
@@ -256,10 +251,13 @@ export async function getPipelineLeads() {
             ]
             if (isGdo) fourthCallConditions.push(eq(leads.assignedToId, userId))
 
-            fourthCallLeads = await db.select()
+            fourthCallLeads = (await db.select()
                 .from(leads)
                 .where(and(...fourthCallConditions))
-                .orderBy(desc(leads.updatedAt))
+                .orderBy(desc(leads.updatedAt)))
+                // I lead del lancio sono tolti ai GDO (PO 24-25/10/2026), anche
+                // quelli scartati che il recupero rimetterebbe in board.
+                .filter(l => !eLeadDelLancio(l))
 
         }
     }
@@ -269,61 +267,106 @@ export async function getPipelineLeads() {
     // nove si fondono 134 gruppi di numeri realmente diversi (6.565 gruppi a 9
     // cifre contro 6.459 a 10). Le card mostrano un badge; il dettaglio si
     // carica on-demand con getLeadsWithSamePhone().
+    //
+    // Per il GDO (PO 25/10/2026) si guardano solo i numeri dei lead che ha in
+    // board: il badge non cambia, perché il conteggio resta su tutta la company
+    // (un collega che ha lo stesso numero fa duplicato come prima), ma la query
+    // passa dall'indice leads_company_phonekey_idx invece di raggruppare tutta
+    // la tabella a ogni caricamento (misurato: ~240 ms e 94k buffer contro pochi ms).
+    const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10)
     let dupPhoneKeys = new Set<string>()
     try {
         const phoneKeyExpr = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10)`
-        const dupRows = await db.select({ key: phoneKeyExpr })
+        // Gli scarti di un'infornata anomala non fanno duplicato: sono copie
+        // tecniche dello stesso numero, non due persone che ci hanno lasciato i
+        // dati due volte. Il flood del 15/09/2026 ha acceso il badge su 6.811
+        // lead legittimi — 1.645 ancora aperti e 902 con un appuntamento — e un
+        // GDO che vede "duplicato" su una card buona ci perde tempo, o peggio la scarta.
+        const contaDuplicati = (numeri?: string[]) => db.select({ key: phoneKeyExpr })
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
-                // Gli scarti di un'infornata anomala non fanno duplicato: sono
-                // copie tecniche dello stesso numero, non due persone che ci
-                // hanno lasciato i dati due volte. Il flood del 15/09/2026 ha
-                // acceso il badge su 6.811 lead legittimi — 1.645 ancora aperti
-                // e 902 con un appuntamento — e un GDO che vede "duplicato" su
-                // una card buona ci perde tempo, o peggio la scarta.
                 contaNeiKpiSql(),
+                numeri ? inArray(phoneKeyExpr, numeri) : undefined,
             ))
             .groupBy(phoneKeyExpr)
             .having(sql`count(*) > 1`)
-        dupPhoneKeys = new Set(dupRows.map(r => r.key).filter(k => !!k && k.length >= 6))
+
+        if (isGdo) {
+            const numeri = [...new Set([...pipelineLeads, ...recallsLeads].map(l => phoneKey(l.phone)))]
+                .filter(k => k.length >= 6)
+            for (let i = 0; i < numeri.length; i += 1000) {
+                for (const r of await contaDuplicati(numeri.slice(i, i + 1000))) {
+                    if (r.key) dupPhoneKeys.add(r.key)
+                }
+            }
+        } else {
+            const dupRows = await contaDuplicati()
+            dupPhoneKeys = new Set(dupRows.map(r => r.key).filter(k => !!k && k.length >= 6))
+        }
     } catch (e) {
         console.error('[dupPhones] detection failed', e)
     }
-    const phoneKey = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10)
 
     // Ridati dal bot con chat interrotta (PO 19/10/2026): la persona ha parlato col
     // bot e poi si e' fermata. Sono i ridati che rendono, e con tre GDO presenti vanno
     // chiamati per primi: stella sulla card e cima di ogni tab. Conta l'ULTIMA
     // restituzione del lead, come nel resto del codice sui ridati.
+    //
+    // La stessa lettura dà anche l'ora di arrivo vera e i vergini del giorno (PO
+    // 25/10/2026): oltre ai ritorni dal bot porta gli assegnamenti (ASSIGNED,
+    // REASSIGNED_ADMIN) e i passaggi al bot (BOT_PUSHED), in una query sola.
     const chatInterrotta = new Set<string>()
+    const eventiAssegnazione = new Map<string, EventoLead[]>()
+    const ridatiDalBot = new Set<string>()
+    const passatiDalBot = new Set<string>()
     try {
         // Solo per la board di un GDO: la vista admin prende i lead di tutta la
         // company e leggerne gli eventi a ogni caricamento costerebbe troppo.
-        const candidati = isGdo ? pipelineLeads.filter(l => !l.launchBucket).map(l => l.id) : []
+        const candidati = isGdo ? pipelineLeads.map(l => l.id) : []
         const ultimoMotivo = new Map<string, string | null>()
         for (let i = 0; i < candidati.length; i += 1000) {
             const rows = await db.select({
                 leadId: leadEvents.leadId,
+                eventType: leadEvents.eventType,
+                userId: leadEvents.userId,
+                timestamp: leadEvents.timestamp,
                 reason: sql<string | null>`${leadEvents.metadata}->>'reason'`,
+                toAssigneeId: sql<string | null>`${leadEvents.metadata}->>'toAssigneeId'`,
+                assignedToUser: sql<string | null>`${leadEvents.metadata}->>'assignedToUser'`,
             })
                 .from(leadEvents)
                 .where(and(
-                    eq(leadEvents.eventType, 'REASSIGNED_FROM_BOT'),
+                    inArray(leadEvents.eventType, ['REASSIGNED_FROM_BOT', 'REASSIGNED_ADMIN', 'ASSIGNED', 'BOT_PUSHED']),
                     inArray(leadEvents.leadId, candidati.slice(i, i + 1000)),
                 ))
                 .orderBy(desc(leadEvents.timestamp))
-            for (const r of rows) if (!ultimoMotivo.has(r.leadId)) ultimoMotivo.set(r.leadId, r.reason)
+            for (const r of rows) {
+                if (r.eventType === 'BOT_PUSHED') { passatiDalBot.add(r.leadId); continue }
+                if (r.eventType === 'REASSIGNED_FROM_BOT') {
+                    ridatiDalBot.add(r.leadId)
+                    if (!ultimoMotivo.has(r.leadId)) ultimoMotivo.set(r.leadId, r.reason)
+                }
+                const lista = eventiAssegnazione.get(r.leadId)
+                if (lista) lista.push(r)
+                else eventiAssegnazione.set(r.leadId, [r])
+            }
         }
-        for (const [id, reason] of ultimoMotivo) if (reason === 'chat_interrotta') chatInterrotta.add(id)
+        // La stella resta sui soli lead fuori dai pool, come prima del 25/10.
+        const fuoriDaiPool = new Set(pipelineLeads.filter(l => !l.launchBucket).map(l => l.id))
+        for (const [id, reason] of ultimoMotivo) if (reason === 'chat_interrotta' && fuoriDaiPool.has(id)) chatInterrotta.add(id)
     } catch (e) {
-        console.error('[pipeline] lettura ridati chat interrotta fallita', e)
+        console.error('[pipeline] lettura eventi di assegnazione fallita', e)
     }
 
     // Lead tornati dal bot con un sì già dato (aveva confermato e l'appuntamento non
     // è mai nato, oppure ha risposto dopo il 3° NR) e, più in generale, chi ha chiesto
     // di parlare con una persona: `cercati` e `recoverIds` sono letti in cima, prima
     // della query di pipeline, perché decidono anche chi entra in board.
+    //
+    // Del "ti ha cercato" al GDO arrivano solo le parole del lead (PO 25/10/2026):
+    // il motivo scritto dal bot e la categoria ("non si fida della chat") restano
+    // fuori dalle schermate GDO.
     const withDupFlag = <T extends { phone: string; id: string }>(arr: T[]) =>
         arr.map(l => ({
             ...l,
@@ -331,10 +374,31 @@ export async function getPipelineLeads() {
             confermatoAlBot: recoverIds.has(l.id),
             chiamaPerPrimo: chatInterrotta.has(l.id),
             tiHaCercato: cercati.has(l.id),
-            cercatoMotivo: cercati.get(l.id)?.reason ?? null,
-            cercatoCategoria: cercati.get(l.id)
-                ? contactCategoryLabel(cercati.get(l.id)!.category)
-                : null,
+            cercatoMotivo: paroleDelLead(cercati.get(l.id)?.reason),
+        }))
+
+    // Ora di arrivo vera (ultima assegnazione al proprietario attuale) e
+    // vergini del giorno, per le tab della pipeline. "Arrivato X fa" lo
+    // calcola la card nel browser: qui c'è solo l'istante.
+    const inizioOggi = dayBoundsRome(now).start
+    type PerArrivo = {
+        id: string; status: string; callCount: number; source: string | null; launchBucket: string | null
+        assignedToId: string | null; assignedAt: Date | null; createdAt: Date; tiHaCercato: boolean
+    }
+    const withArrivo = <T extends PerArrivo>(arr: T[]) =>
+        arr.map(l => ({
+            ...l,
+            arrivedAt: oraArrivo({
+                eventi: eventiAssegnazione.get(l.id) ?? [],
+                proprietario: l.assignedToId,
+                assignedAt: l.assignedAt,
+                createdAt: l.createdAt,
+            }),
+            vergine: isGdo && eVergineDelGiorno({
+                ...l,
+                ridatoDalBot: ridatiDalBot.has(l.id),
+                passatoDalBot: passatiDalBot.has(l.id),
+            }, inizioOggi),
         }))
 
     /**
@@ -362,13 +426,14 @@ export async function getPipelineLeads() {
         [...arr].sort((a, b) => (Number(b.chiamaPerPrimo) * 4 + urgentRank(b)) - (Number(a.chiamaPerPrimo) * 4 + urgentRank(a)))
 
     return {
-        firstCall: lancioOnTop(withDupFlag(firstCall)),
-        secondCall: lancioOnTop(withDupFlag(secondCall)),
-        thirdCall: starredFirst(withDupFlag(thirdCall)),
+        // 1ª chiamata (PO 25/10/2026): vergini del giorno in cima appena arrivano,
+        // poi le priorità di prima, poi l'ora di arrivo più recente, `id` come spareggio.
+        firstCall: ordinaPrimaChiamata(withArrivo(withDupFlag(firstCall)), lancioRank),
+        secondCall: lancioOnTop(withArrivo(withDupFlag(secondCall))),
+        thirdCall: starredFirst(withArrivo(withDupFlag(thirdCall))),
         fourthCall: fourthCallLeads,
         isFourthCallActive,
         recalls: recoverableFirst(withDupFlag(recallsLeads)),
-        appointments: appointmentsLeads
     }
 }
 
@@ -406,6 +471,7 @@ export async function getLeadsWithSamePhone(leadId: string) {
         discardReason: leads.discardReason,
         assignedToName: users.displayName,
         assignedToRealName: users.name,
+        assignedToIsBot: users.isBot,
     })
         .from(leads)
         .leftJoin(users, eq(users.id, leads.assignedToId))
@@ -421,21 +487,28 @@ export async function getLeadsWithSamePhone(leadId: string) {
         .orderBy(desc(leads.updatedAt))
         .limit(10)
 
+    // Al GDO un numero in mano al bot si mostra come "In lavorazione", senza
+    // nome (PO 25/10/2026). Admin e manager vedono l'assegnatario come prima.
+    const perGdo = ctx.role === 'GDO'
     return {
         success: true as const,
-        duplicates: rows.map(r => ({
-            id: r.id,
-            name: r.name,
-            funnel: r.funnel,
-            status: r.status,
-            callCount: r.callCount,
-            lastCallDate: r.lastCallDate ? r.lastCallDate.toISOString() : null,
-            recallDate: r.recallDate ? r.recallDate.toISOString() : null,
-            appointmentDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
-            salespersonOutcome: r.salespersonOutcome,
-            discardReason: r.discardReason,
-            assignedToName: r.assignedToRealName || r.assignedToName || 'Non assegnato',
-        })),
+        duplicates: rows.map(r => {
+            const inLavorazione = perGdo && r.assignedToIsBot === true
+            return {
+                id: r.id,
+                name: r.name,
+                funnel: r.funnel,
+                status: r.status,
+                callCount: r.callCount,
+                lastCallDate: r.lastCallDate ? r.lastCallDate.toISOString() : null,
+                recallDate: r.recallDate ? r.recallDate.toISOString() : null,
+                appointmentDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
+                salespersonOutcome: r.salespersonOutcome,
+                discardReason: r.discardReason,
+                assignedToName: inLavorazione ? null : (r.assignedToRealName || r.assignedToName || 'Non assegnato'),
+                inLavorazione,
+            }
+        }),
     }
 }
 

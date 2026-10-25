@@ -5,11 +5,12 @@ import { leads, leadEvents, users } from "@/db/schema"
 import { eq, desc, and } from "drizzle-orm"
 import crypto from "crypto"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { assegnatarioPerGdo, eventoTimelinePerGdo } from "@/lib/diretta/vistaGdo"
 
 export async function getLeadProfile(leadId: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    const lead = (await db.select({
+    const leadRow = (await db.select({
             id: leads.id,
             name: leads.name,
             email: leads.email,
@@ -19,6 +20,7 @@ export async function getLeadProfile(leadId: string) {
             callCount: leads.callCount,
             assignedToId: leads.assignedToId,
             assignedToName: users.name,
+            assignedToIsBot: users.isBot,
             lastCallDate: leads.lastCallDate,
             lastCallNote: leads.lastCallNote,
             agendaSentAt: leads.agendaSentAt,
@@ -36,13 +38,15 @@ export async function getLeadProfile(leadId: string) {
             .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId))))
         [0]
 
-    if (!lead) return null
+    if (!leadRow) return null
+    const { assignedToIsBot, ...lead } = leadRow
 
     const events = await db.select({
             id: leadEvents.id,
             eventType: leadEvents.eventType,
             userId: leadEvents.userId,
             userName: users.name,
+            userIsBot: users.isBot,
             fromSection: leadEvents.fromSection,
             toSection: leadEvents.toSection,
             metadata: leadEvents.metadata,
@@ -52,13 +56,42 @@ export async function getLeadProfile(leadId: string) {
             .leftJoin(users, eq(leadEvents.userId, users.id))
             .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.companyId, ctx.companyId)))
             .orderBy(desc(leadEvents.timestamp))
-        
+
+    // Il GDO non vede mai il bot (PO 25/10/2026): l'assegnatario bot diventa
+    // "In lavorazione" e la timeline arriva già filtrata e rinominata, così nel
+    // browser non passa né un'etichetta né un metadata del bot. Per admin,
+    // manager e Conferme la scheda resta quella di sempre.
+    if (ctx.role === 'GDO') {
+        return {
+            lead: { ...lead, assignedToName: assegnatarioPerGdo(lead.assignedToName, assignedToIsBot) },
+            events: events.flatMap(e => {
+                const v = eventoTimelinePerGdo(e, ctx.userId)
+                return v ? [{
+                    id: e.id,
+                    eventType: v.tipo,
+                    label: v.etichetta,
+                    testo: v.testo,
+                    userName: v.operatore,
+                    fromSection: v.fromSection,
+                    toSection: v.toSection,
+                    metadata: null,
+                    timestamp: e.timestamp,
+                }] : []
+            }),
+        }
+    }
 
     return {
         lead,
         events: events.map(e => ({
-            ...e,
-            metadata: e.metadata || null
+            id: e.id,
+            eventType: e.eventType,
+            userId: e.userId,
+            userName: e.userName,
+            fromSection: e.fromSection,
+            toSection: e.toSection,
+            metadata: e.metadata || null,
+            timestamp: e.timestamp,
         }))
     }
 }

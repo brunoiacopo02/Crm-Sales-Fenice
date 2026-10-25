@@ -121,9 +121,12 @@ export function LancioUmaniClient({ dati, isStaff }: { dati: LancioUmaniDati; is
                 <FlaskConical className="h-6 w-6 text-brand-orange" />
                 <h1 className="text-2xl font-bold text-ash-900">Test lancio umani</h1>
             </div>
+            {/* Il GDO non legge mai del bot (PO 25/10/2026): la frase sul bot resta allo staff. */}
             <p className="mb-6 text-sm text-ash-600">
-                400 lead del lancio Web Developer AI che hanno visto la live, lavorati solo dai GDO 106 e 119:
-                il bot non li contatta. Contano anche nelle KPI normali; qui li vedi da soli.
+                {isStaff
+                    ? "400 lead del lancio Web Developer AI che hanno visto la live, lavorati solo dai GDO 106 e 119: il bot non li contatta."
+                    : "Lead del lancio Web Developer AI che hanno visto la live."}
+                {" "}Contano anche nelle KPI normali; qui li vedi da soli.
             </p>
 
             <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">

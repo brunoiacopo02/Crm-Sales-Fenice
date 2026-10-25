@@ -224,6 +224,10 @@ export function ContactDrawer({
             case 'BOT_NOTE': return <FileText className="h-4 w-4 text-sky-500" />
             case 'REASSIGNED_TO_BOT': return <User className="h-4 w-4 text-indigo-500" />
             case 'BOT_CONTACT_REQUEST': return <Phone className="h-4 w-4 text-sky-500" />
+            // Tipi neutri della timeline GDO (getLeadProfile li rinomina lato server).
+            case 'CONTACT_REQUEST': return <Phone className="h-4 w-4 text-sky-500" />
+            case 'NOTE': return <FileText className="h-4 w-4 text-sky-500" />
+            case 'APPOINTMENT_RESCHEDULED': return <CalendarCheck className="h-4 w-4 text-green-500" />
             case 'INBOUND_MESSAGE': return <MessageSquare className="h-4 w-4 text-emerald-500" />
             case 'LANCIO_INTAKE': return <CalendarCheck className="h-4 w-4 text-amber-500" />
             case 'appointment_forced': return <ShieldAlert className="h-4 w-4 text-amber-500" />
@@ -513,7 +517,8 @@ export function ContactDrawer({
 
                                             <div className="bg-ash-50 border border-ash-100 rounded-lg p-3 hover:shadow-sm transition-shadow">
                                                 <div className="flex flex-col gap-1 mb-2 border-b border-ash-100 pb-2">
-                                                    <h4 className="text-sm font-bold text-ash-900">{getEventLabel(ev.eventType)}</h4>
+                                                    {/* Per il GDO l'etichetta arriva già neutra dal server (niente bot). */}
+                                                    <h4 className="text-sm font-bold text-ash-900">{ev.label ?? getEventLabel(ev.eventType)}</h4>
                                                     <time className="text-xs text-ash-500 font-mono flex items-center gap-1">
                                                         <Clock className="h-3 w-3" />
                                                         {formatTimestamp(ev.timestamp)}
@@ -534,7 +539,9 @@ export function ContactDrawer({
                                                         <div className="text-xs text-ash-500">Operatore: <span className="font-medium text-ash-700">{ev.userName}</span></div>
                                                     )}
 
-                                                    {ev.metadata?.note && (
+                                                    {ev.testo ? (
+                                                        <div className="text-xs italic text-ash-600 pt-1">{ev.testo}</div>
+                                                    ) : ev.metadata?.note && (
                                                         <div className="text-xs italic text-ash-600 pt-1">
                                                             &quot;{ev.metadata.note}&quot;
                                                         </div>

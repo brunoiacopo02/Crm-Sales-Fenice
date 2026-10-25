@@ -18,10 +18,10 @@ type ReassignResult =
 
 /**
  * Restituisce al pool umano un lead che il bot non ha convertito (mai risposto /
- * chat interrotta senza obiezione ferrea). Riassegna a un GDO umano con lo STESSO
- * round-robin dei lead nuovi AC (pool: role=GDO, isActive, acAutoIntake, isBot=false;
- * ordine: acLastAssignedAt asc, id asc), così i ritorni si intervallano equamente
- * con i nuovi lead. Il lead riparte come nuovo (status=NEW, callCount=0).
+ * chat interrotta senza obiezione ferrea). La chat interrotta va a un GDO della
+ * squadra col flag Ridati (`botReturnIntake`), a turno su
+ * `botReturnLastAssignedAt`; il mai risposto resta parcheggiato (PO 19/10).
+ * Il lead riparte come nuovo (status=NEW, callCount=0).
  *
  * Se non c'è nessun GDO eleggibile: lead lasciato non assegnato (recuperabile da admin).
  */
@@ -152,6 +152,10 @@ export async function reassignBotLeadToHumanPool(
         // due flussi si sposterebbero il turno a vicenda.
         // Senza tetto giornaliero dal 19/10/2026 (PO): i ridati con chat
         // interrotta vanno tutti, a turno, ai GDO del giro.
+        // Dal 25/10/2026 (PO) il giro è tutta la squadra: chi ha il flag Ridati
+        // acceso in /gestione ed è della squadra, cioè ha un nome vero. 108 e
+        // gli account senza nome non ricevono nemmeno col flag acceso; chi è
+        // assente si spegne da /gestione. Stessa regola di `riceveRidati`.
         const eligible = await tx.select({ id: users.id })
             .from(users)
             .where(and(
@@ -160,6 +164,7 @@ export async function reassignBotLeadToHumanPool(
                 eq(users.isActive, true),
                 eq(users.botReturnIntake, true),
                 eq(users.isBot, false),
+                sql`btrim(coalesce(${users.firstName}, '')) <> ''`,
             ))
             .orderBy(asc(sql`coalesce(${users.botReturnLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id))
             .limit(1);

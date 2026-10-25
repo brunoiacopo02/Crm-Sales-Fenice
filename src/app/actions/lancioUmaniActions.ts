@@ -1,6 +1,6 @@
 "use server"
 
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { callLogs, leadEvents, leads, users } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
@@ -140,7 +140,10 @@ export async function getLancioUmani(gdoUserId?: string): Promise<LancioUmaniDat
 
 /**
  * Voce di menu "Test lancio umani" per il GDO: solo se ha almeno un lead del
- * gruppo. Una query sola, chiamata dal layout (non a ogni cambio pagina).
+ * gruppo ancora da lavorare. Dal 24-25/10/2026 il lancio è tolto ai GDO (PO),
+ * quindi la voce sparisce: appuntamenti e scarti del test restano nei numeri
+ * dello staff ma non tengono accesa la voce. Una query sola, chiamata dal
+ * layout (non a ogni cambio pagina).
  */
 export async function hasLancioUmaniLeads(): Promise<boolean> {
     const supabase = await createClient()
@@ -153,6 +156,7 @@ export async function hasLancioUmaniLeads(): Promise<boolean> {
             eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, user.id),
             eq(leads.humanTestCohort, LANCIO_UMANI_COHORT),
+            inArray(leads.status, ['NEW', 'IN_PROGRESS']),
         ))
         .limit(1)
     return !!riga

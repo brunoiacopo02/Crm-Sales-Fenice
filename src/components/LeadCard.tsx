@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil, Star } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil, Star, PhoneCall } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
@@ -10,6 +10,7 @@ import { CompanyBadge } from "./CompanyBadge"
 import { RecallDateTimePicker } from "./DateTimePickers"
 import { getLeadsWithSamePhone } from "@/app/actions/pipelineActions"
 import { updateRecallDetails } from "@/app/actions/recallActions"
+import { tempoDaArrivo } from "@/lib/diretta/arrivo"
 
 type LeadProps = {
     lead: {
@@ -39,11 +40,13 @@ type LeadProps = {
         chiamaPerPrimo?: boolean
         /** Ha chiesto di parlare con una persona: richiesta di contatto ancora aperta. */
         tiHaCercato?: boolean
-        /** Parole del lead nella richiesta (tooltip del badge "Ti ha cercato"). */
+        /** Solo le parole del lead nella richiesta (tooltip del badge "Ti ha cercato"). */
         cercatoMotivo?: string | null
-        /** Categoria leggibile della richiesta (es. "Vuole essere richiamato"). */
-        cercatoCategoria?: string | null
         recallMissedAt?: Date | null
+        /** Ultima assegnazione al GDO che lo ha in mano: "arrivato X fa", calcolato nel browser. */
+        arrivedAt?: Date | string | null
+        /** Lead fresco di oggi mai toccato: in cima alla 1ª chiamata, da chiamare subito. */
+        vergine?: boolean
     }
     onOutcomeClick: (leadId: string) => void
     isRowLayout?: boolean
@@ -115,7 +118,9 @@ type DuplicateInfo = {
     appointmentDate: string | null
     salespersonOutcome: string | null
     discardReason: string | null
-    assignedToName: string
+    assignedToName: string | null
+    /** Numero in mano al bot, visto da un GDO: si dice solo che è in lavorazione. */
+    inLavorazione?: boolean
 }
 
 function describeDuplicate(d: DuplicateInfo): string {
@@ -181,6 +186,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
     // Client-side time for expiry checks (avoids hydration mismatch)
     const [clientNow, setClientNow] = useState(0)
     useEffect(() => { setClientNow(Date.now()) }, [])
+    // "Arrivato X fa" va avanti da solo: un passo al minuto, solo sulle card che lo mostrano.
+    useEffect(() => {
+        if (!lead.arrivedAt) return
+        const t = setInterval(() => setClientNow(Date.now()), 60_000)
+        return () => clearInterval(t)
+    }, [lead.arrivedAt])
+    const arrivoMs = lead.arrivedAt ? new Date(lead.arrivedAt).getTime() : NaN
+    const arrivato = clientNow > 0 && Number.isFinite(arrivoMs) ? tempoDaArrivo(arrivoMs, clientNow) : null
 
     // Status badge config with gradient styling
     let statusText = "Nuovo"
@@ -245,7 +258,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                 <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-500" aria-label="Da chiamare per primo" />
                             )}
                             {lead.name}
-                            {isJustArrived && (
+                            {lead.vergine ? (
+                                <div
+                                    className="flex shrink-0 items-center gap-1 rounded-lg bg-[#FF9330] px-1.5 py-0.5 text-[10px] font-semibold text-[#171717]"
+                                    title="Lead nuovo di oggi, mai chiamato: chiamalo subito."
+                                >
+                                    <PhoneCall className="h-3 w-3" strokeWidth={1.75} /> Nuovo, chiamalo subito
+                                </div>
+                            ) : isJustArrived && (
                                 <span className="shrink-0 text-emerald-500 animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
                                     <Sparkles className="h-4 w-4" />
                                 </span>
@@ -259,7 +279,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             {lead.chiamaPerPrimo && (
                                 <div
                                     className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 shrink-0"
-                                    title="Ha parlato col bot e poi si e' fermato: chiamalo per primo."
+                                    title="Da chiamare per primo."
                                 >
                                     <Star className="h-3 w-3 fill-amber-400 text-amber-500" /> Chiama per primo
                                 </div>
@@ -267,10 +287,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             {lead.tiHaCercato && (
                                 <div
                                     className="flex items-center gap-1 rounded-md border border-brand-orange-300 bg-brand-orange-50 px-1.5 py-0.5 text-[10px] font-bold text-brand-orange-700 shrink-0"
-                                    title={[
-                                        lead.cercatoCategoria ? `Ti ha cercato · ${lead.cercatoCategoria}` : 'Ti ha cercato',
-                                        lead.cercatoMotivo || '',
-                                    ].filter(Boolean).join('\n')}
+                                    title={lead.cercatoMotivo ? `Ti ha cercato\n"${lead.cercatoMotivo}"` : 'Ti ha cercato'}
                                 >
                                     <Phone className="h-3 w-3" /> Ti ha cercato
                                 </div>
@@ -278,7 +295,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                             {lead.confermatoAlBot && (
                                 <div
                                     className="flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 shrink-0"
-                                    title="Aveva gia' detto si' in chat col bot e l'appuntamento non e' mai nato. Chiamalo per primo: il si' c'e' gia'."
+                                    title="Aveva già detto sì e l'appuntamento non è mai nato. Chiamalo per primo: il sì c'è già."
                                 >
                                     <CheckCircle2 className="h-3 w-3" /> Aveva detto sì
                                 </div>
@@ -333,6 +350,14 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                 >
                                     <Copy className="h-3 w-3" />
                                 </button>
+                            </div>
+                        )}
+                        {arrivato && (
+                            <div
+                                className="shrink-0 tabular-nums text-ash-400"
+                                title={new Date(arrivoMs).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
+                            >
+                                arrivato {arrivato}
                             </div>
                         )}
                     </div>
@@ -563,7 +588,9 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                                     {d.funnel && <div className="text-[10px] font-bold uppercase text-ash-400 shrink-0">{d.funnel}</div>}
                                                 </div>
                                                 <div className="mt-0.5 text-xs text-ash-600">
-                                                    In carico a: <span className="font-semibold">{d.assignedToName}</span>
+                                                    {d.inLavorazione
+                                                        ? 'In lavorazione'
+                                                        : <>In carico a: <span className="font-semibold">{d.assignedToName}</span></>}
                                                 </div>
                                                 <div className="text-xs text-ash-500">{describeDuplicate(d)}</div>
                                             </div>
