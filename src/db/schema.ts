@@ -1918,6 +1918,10 @@ export const dailyQuotes = pgTable('dailyQuotes', {
     roles: text('roles').array().default(sql`array['GDO','CONFERME','VENDITORE','ADMIN','MANAGER']`).notNull(),
     suggestedReflection: text('suggestedReflection'),
     reflectionSource: text('reflectionSource'),
+    // migr. 0046: tecnica e uso del consiglio di vendita, testo originale della citazione
+    technique: text('technique'),
+    usage: text('usage'),
+    originalText: text('originalText'),
     verified: boolean('verified').default(false).notNull(),
     isActive: boolean('isActive').default(true).notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),

@@ -5,6 +5,8 @@ import { getVenditoreAppointments } from "@/app/actions/venditoreActions"
 import { OVERDUE_GRACE_HOURS } from "@/lib/venditore/constants"
 import { OutcomeGate } from "@/components/venditore/OutcomeGate"
 import { isInCallNowCycle } from "@/lib/lancio/callNow"
+import { SafeWrapper } from "@/components/SafeWrapper"
+import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 
 export default async function VenditorePage() {
     const supabase = await createClient();
@@ -61,6 +63,11 @@ export default async function VenditorePage() {
                     </div>
                 </div>
             </div>
+
+            {/* Citazione del giorno e consiglio di vendita (PO 25/10/2026) */}
+            {session.user.role === 'VENDITORE' && (
+                <SafeWrapper><DailyQuoteSlotServer role="VENDITORE" className="max-w-7xl mx-auto" /></SafeWrapper>
+            )}
 
             <VenditoreDashboardClient sellerId={session.user.id} />
         </div>

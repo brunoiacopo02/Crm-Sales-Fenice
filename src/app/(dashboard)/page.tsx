@@ -5,6 +5,7 @@ import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
 import { SafeWrapper } from "@/components/SafeWrapper"
 import { DirettaHome } from "@/components/diretta/DirettaHome"
+import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import { direttaAccesa, leggiIo } from "@/lib/diretta/io"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
@@ -98,6 +99,9 @@ export default async function DashboardPage() {
                     Benvenuto, <span className="font-semibold text-brand-orange">{session?.user?.name}</span>
                 </div>
             </div>
+
+            {/* Citazione del giorno e consiglio di vendita (PO 25/10/2026) */}
+            <SafeWrapper><DailyQuoteSlotServer role={session?.user?.role} /></SafeWrapper>
 
             <div className="sticky top-0 z-30 bg-gray-50 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-1 pb-2 shadow-md">
                 <SafeWrapper><GdoDailyObjectives gdoUserId={session!.user.id} /></SafeWrapper>

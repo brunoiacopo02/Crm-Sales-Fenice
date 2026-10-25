@@ -95,6 +95,9 @@ function prevWorkingDay(day: DayStr, closed?: ReadonlySet<string>): DayStr {
     return d
 }
 
+/** Chiave appSettings delle chiusure dell'ufficio (es. periodo natalizio), JSON array di date. */
+export const QUOTES_CLOSED_DAYS_KEY = 'quotes_closed_days'
+
 /** Chiusure dell'ufficio salvate come JSON (array di date); il resto si scarta. */
 export function parseClosedDays(raw: string | null | undefined): DayStr[] {
     if (!raw) return []
