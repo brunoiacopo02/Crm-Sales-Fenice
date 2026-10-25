@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { updateGdoBaseSalary, addGdoCoins } from '@/app/actions/managerRpgActions';
 import { createBossBattle } from '@/app/actions/bossBattleActions';
 import { createSeasonalEvent, deactivateSeasonalEvent } from '@/app/actions/seasonalEventActions';
 import {
-    Gamepad2, Coins, TrendingUp, Eye, CheckCircle, Flame,
+    Gamepad2, Coins, Eye, CheckCircle, Flame,
     Swords, Sparkles, Users, Target, Trophy, Calendar,
     Shield, Zap, Crown, ChevronDown, ChevronUp, X
 } from 'lucide-react';
@@ -61,16 +60,9 @@ interface Props {
     activeEvent: ActiveEvent | null;
 }
 
-type DialogAction = 'salary' | 'coins' | 'boss' | 'event';
-
 export default function ManagerRpgClient({ initialProfiles, teamOverview, managerId, activeBoss, activeEvent }: Props) {
     const router = useRouter();
     const [isProcessing, setIsProcessing] = useState(false);
-    const [activeDialog, setActiveDialog] = useState<DialogAction | null>(null);
-
-    // Salary/coins dialog
-    const [dialogTarget, setDialogTarget] = useState<{ userId: string; name: string; currentValue: number } | null>(null);
-    const [inputValue, setInputValue] = useState(0);
 
     // Boss battle form
     const [bossForm, setBossForm] = useState({
@@ -95,32 +87,6 @@ export default function ManagerRpgClient({ initialProfiles, teamOverview, manage
 
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
     const [expandedSection, setExpandedSection] = useState<'boss' | 'event' | null>(null);
-
-    const openSalaryCoins = (userId: string, name: string, action: 'salary' | 'coins', currentValue: number) => {
-        setDialogTarget({ userId, name, currentValue });
-        setInputValue(action === 'salary' ? currentValue : 0);
-        setActiveDialog(action);
-    };
-
-    const handleSaveSalaryCoins = async () => {
-        if (!dialogTarget || !activeDialog) return;
-        setIsProcessing(true);
-        try {
-            if (activeDialog === 'salary') {
-                await updateGdoBaseSalary(dialogTarget.userId, inputValue);
-            } else if (activeDialog === 'coins') {
-                await addGdoCoins(dialogTarget.userId, inputValue);
-            }
-            setActiveDialog(null);
-            setDialogTarget(null);
-            router.refresh();
-        } catch (e) {
-            console.error(e);
-            setFeedback({ type: 'error', msg: 'Errore durante il salvataggio.' });
-        } finally {
-            setIsProcessing(false);
-        }
-    };
 
     const handleCreateBoss = async () => {
         if (!bossForm.title || !bossForm.endTime) {
@@ -677,20 +643,6 @@ export default function ManagerRpgClient({ initialProfiles, teamOverview, manage
                                                 >
                                                     <Eye className="w-4 h-4" />
                                                 </Link>
-                                                <button
-                                                    onClick={() => openSalaryCoins(p.id, p.displayName || p.name || 'Operatore', 'salary', p.baseSalaryEur)}
-                                                    className="p-2 bg-white border border-ash-200/60 rounded-lg text-ash-600 hover:bg-ash-100 hover:text-ash-800 transition-all shadow-soft hover:shadow-card"
-                                                    title="Aggiorna Stipendio Base"
-                                                >
-                                                    <TrendingUp className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => openSalaryCoins(p.id, p.displayName || p.name || 'Operatore', 'coins', p.walletCoins ?? p.coins ?? 0)}
-                                                    className="p-2 bg-gold-50 border border-gold-200/60 rounded-lg text-gold-700 hover:bg-gold-100 transition-all shadow-soft hover:shadow-card"
-                                                    title="Invia Fenice Coins Extra"
-                                                >
-                                                    <Coins className="w-4 h-4" />
-                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -701,53 +653,6 @@ export default function ManagerRpgClient({ initialProfiles, teamOverview, manage
                 </div>
             </div>
 
-            {/* ===== SALARY / COINS MODAL ===== */}
-            {activeDialog && (activeDialog === 'salary' || activeDialog === 'coins') && dialogTarget && (
-                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in">
-                    <div className="bg-white p-6 rounded-2xl shadow-elevated w-full max-w-sm border border-ash-200/60">
-                        <div className="flex items-center gap-3 mb-4">
-                            {activeDialog === 'coins' ? <Coins className="w-6 h-6 text-gold-500" /> : <TrendingUp className="w-6 h-6 text-ash-700" />}
-                            <h3 className="text-lg font-bold text-ash-800">
-                                {activeDialog === 'coins' ? 'Invia Coins a' : 'Modifica Salario Base per'} {dialogTarget.name}
-                            </h3>
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-xs font-semibold text-ash-500 uppercase tracking-wide mb-2">
-                                {activeDialog === 'coins' ? 'Quantita\' di Coins da Regalare (+)' : 'Nuovo Stipendio Lordo Mese (€)'}
-                            </label>
-                            <input
-                                type="number"
-                                className="w-full border-2 border-ash-200 focus:border-brand-orange rounded-xl px-4 py-3 font-bold text-ash-800 outline-none transition-all"
-                                value={inputValue}
-                                onChange={(e) => setInputValue(Number(e.target.value))}
-                            />
-                            {activeDialog === 'coins' && (
-                                <div className="text-xs text-ash-400 mt-2">
-                                    I Coins saranno sommati a quelli gia' posseduti ({dialogTarget.currentValue}).
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex gap-3 justify-end">
-                            <button
-                                onClick={() => { setActiveDialog(null); setDialogTarget(null); }}
-                                className="btn-ghost px-4 py-2"
-                            >
-                                Annulla
-                            </button>
-                            <button
-                                onClick={handleSaveSalaryCoins}
-                                disabled={isProcessing}
-                                className={`px-4 py-2 font-bold text-white rounded-lg shadow-card transition-all ${activeDialog === 'coins' ? 'bg-gradient-to-r from-gold-400 to-gold-500 hover:from-gold-500 hover:to-gold-600' : 'bg-brand-charcoal hover:bg-ash-800'
-                                    } disabled:opacity-50`}
-                            >
-                                {isProcessing ? 'Salvataggio...' : 'Conferma'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

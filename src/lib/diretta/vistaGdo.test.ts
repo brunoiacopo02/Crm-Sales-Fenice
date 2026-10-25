@@ -1,9 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    paroleDelLead, notaPerGdo, eventoTimelinePerGdo, assegnatarioPerGdo, notificaTiHaCercato,
+    paroleDelLead, eventoTimelinePerGdo, assegnatarioPerGdo, notificaTiHaCercato,
     PAROLE_VIETATE,
 } from './vistaGdo'
+import * as vistaGdo from './vistaGdo'
 
 const io = 'gdo-105'
 const bot = { userId: 'bot-201', userIsBot: true }
@@ -32,27 +33,24 @@ test('parole del lead: niente parole, niente testo', () => {
     assert.equal(paroleDelLead('Parole del lead: ""'), null)
 })
 
-// ------------------------------------------------------------- note
+// ------------------------------------------------------------- note del bot
 
-test('nota: tiene l etichetta del motivo e le parole del lead', () => {
-    const n = notaPerGdo('SPOSTAMENTO CHIESTO — il lead ha chiesto di spostare. Parole del lead: "Per le 16?".')
-    assert.equal(n, 'Spostamento chiesto: "Per le 16?"')
+const baseNota = { timestamp: '2026-10-26T13:00:00Z', fromSection: null, toSection: null }
+
+test('note del bot: al GDO non arriva nessuna nota, nemmeno ridotta o neutra (PO 25/10 mattina)', () => {
+    for (const note of [
+        'IL BOT HA RIPRESO LA CHAT — il lead ha riscritto dopo che ve lo avevamo restituito come NON_RISPOSTO. Non chiamatelo a mano finché non vi arriva un nuovo esito dal bot.',
+        'SPOSTAMENTO CHIESTO — il lead ha chiesto di spostare. Parole del lead: "Per le 16?".',
+        'DISDETTA — Parole del lead: "non vengo".',
+        'CHAT INTERROTTA — si è fermato. Parole del lead: "ci penso".',
+    ]) {
+        assert.equal(eventoTimelinePerGdo({ ...baseNota, eventType: 'BOT_NOTE', userId: 'bot-201', userIsBot: true, metadata: { note } }, io), null, note)
+    }
 })
 
-test('nota: un motivo che nomina la chat non passa, restano solo le parole', () => {
-    const n = notaPerGdo('CHAT INTERROTTA — si è fermato. Parole del lead: "ci penso".')
-    assert.equal(n, '"ci penso"')
-})
-
-test('nota: la ripresa della conversazione diventa un avviso neutro', () => {
-    const n = notaPerGdo('IL BOT HA RIPRESO LA CHAT — il lead ha riscritto dopo che ve lo avevamo restituito come INTERROTTO. Non chiamatelo a mano finché non vi arriva un nuovo esito dal bot.')
-    assert.ok(n)
-    assert.ok(pulito(n), n!)
-})
-
-test('nota: senza parole del lead e senza un avviso noto non si mostra', () => {
-    assert.equal(notaPerGdo('Lancio Web Dev AI: congedo del bot per errore'), null)
-    assert.equal(notaPerGdo(''), null)
+test('note del bot: non esiste più un avviso neutro da mostrare al posto della nota', () => {
+    assert.equal('AVVISO_HA_RISCRITTO' in vistaGdo, false)
+    assert.equal('notaPerGdo' in vistaGdo, false)
 })
 
 // ------------------------------------------------------------- timeline
@@ -91,9 +89,9 @@ test('timeline: un tipo sconosciuto non diventa "Evento Sconosciuto", sparisce',
     assert.equal(eventoTimelinePerGdo({ ...base, eventType: 'conferme_outcome_set', ...umano, metadata: null }, io), null)
 })
 
-test('timeline: la nota del bot diventa "Nota" con le sole parole del lead', () => {
+test('timeline: la nota del bot sparisce', () => {
     const v = eventoTimelinePerGdo({ ...base, eventType: 'BOT_NOTE', ...bot, metadata: { note: 'DISDETTA — Parole del lead: "non vengo".' } }, io)
-    assert.deepEqual(v, { tipo: 'NOTE', etichetta: 'Nota', testo: 'Disdetta: "non vengo"', operatore: null, fromSection: null, toSection: null })
+    assert.equal(v, null)
 })
 
 test('timeline: la richiesta di contatto diventa "Ti ha cercato" con le sole parole del lead', () => {

@@ -2,10 +2,13 @@
  * Go-live Diretta (PO 25/10/2026): chi riceve i lead.
  *
  *   - ridati dal bot (chat interrotta): tutta la squadra, tranne Beatrice (112)
- *     e Christel (114) che sono in malattia;
+ *     e Christel (114) che sono in malattia e Lorenzo (118);
  *   - vergini (lead freschi da ActiveCampaign): 10 al giorno a testa, tranne
  *     Lorenzo (118), Beatrice e Christel. Oltre i 10 i lead vanno al bot, come
  *     prima (la catena sta nel webhook AC, `ordineRipiegoFreschi`).
+ *
+ * Lorenzo non riceve lead nuovi finché Bruno non lo accende da /gestione (PO
+ * 25/10 mattina): i suoi lead e i suoi tetti li sistema lead-lorenzo.ts.
  *
  * Scrive i flag che /gestione già governa: Freschi (`acAutoIntake`), Ridati
  * (`botReturnIntake`) e Tetto/gg (`dailyFreshCap`). Dopo il go-live assenze e
@@ -17,7 +20,7 @@
  * rilanciato dopo `--esegui` non trova più niente da cambiare.
  *
  *   node --import tsx --env-file=.env.local scripts/diretta/lead-instradamento.ts [--esegui]
- *        [--ridati-esclusi=112,114] [--vergini-esclusi=112,114,118] [--tetto=10]
+ *        [--ridati-esclusi=112,114,118] [--vergini-esclusi=112,114,118] [--tetto=10]
  *
  * Ordine al go-live: prima account-attiva.ts (107 e 116 accesi), poi questo.
  * Al contrario funziona lo stesso, ma un account spento non riceve niente.

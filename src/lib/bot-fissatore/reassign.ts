@@ -1,9 +1,10 @@
 import { db } from '@/db';
 import { leads, users, leadEvents } from '@/db/schema';
-import { and, eq, asc, sql } from 'drizzle-orm';
+import { and, eq, asc, isNull, or, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { isLeadLocked } from './contactRequests';
 import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
+import { dayBoundsRome } from '@/lib/dateUtils';
 import { EVENTO_RIDATO_PARCHEGGIATO } from './iaVocale';
 
 const FENICE = 'fenice';
@@ -19,8 +20,9 @@ type ReassignResult =
 /**
  * Restituisce al pool umano un lead che il bot non ha convertito (mai risposto /
  * chat interrotta senza obiezione ferrea). La chat interrotta va a un GDO della
- * squadra col flag Ridati (`botReturnIntake`), a turno su
- * `botReturnLastAssignedAt`; il mai risposto resta parcheggiato (PO 19/10).
+ * squadra col flag Ridati (`botReturnIntake`) e sotto il suo tetto giornaliero
+ * se ne ha uno (`dailyReturnCap`), a turno su `botReturnLastAssignedAt`; il mai
+ * risposto resta parcheggiato (PO 19/10).
  * Il lead riparte come nuovo (status=NEW, callCount=0).
  *
  * Se non c'è nessun GDO eleggibile: lead lasciato non assegnato (recuperabile da admin).
@@ -156,6 +158,14 @@ export async function reassignBotLeadToHumanPool(
         // acceso in /gestione ed è della squadra, cioè ha un nome vero. 108 e
         // gli account senza nome non ricevono nemmeno col flag acceso; chi è
         // assente si spegne da /gestione. Stessa regola di `riceveRidati`.
+        //
+        // Tetto per GDO facoltativo (`dailyReturnCap`, /gestione, PO 25/10
+        // mattina: Lorenzo a 30 al giorno quando Bruno lo accende). Si contano
+        // i ridati ricevuti oggi, giorno di Roma; chi è a tetto esce dal giro
+        // fino a domani. Senza tetto (null) il giro è quello di sempre. Il
+        // conteggio passa dall'indice (companyId, userId, eventType, timestamp).
+        // Stessa regola di `sottoTetto` in instradamento.ts.
+        const inizioGiorno = dayBoundsRome(now).start;
         const eligible = await tx.select({ id: users.id })
             .from(users)
             .where(and(
@@ -165,6 +175,16 @@ export async function reassignBotLeadToHumanPool(
                 eq(users.botReturnIntake, true),
                 eq(users.isBot, false),
                 sql`btrim(coalesce(${users.firstName}, '')) <> ''`,
+                or(
+                    isNull(users.dailyReturnCap),
+                    sql`(
+                        select count(*) from ${leadEvents} e
+                        where e."companyId" = ${FENICE}
+                          and e."userId" = ${users.id}
+                          and e."eventType" = 'REASSIGNED_FROM_BOT'
+                          and e."timestamp" >= ${inizioGiorno}
+                    ) < ${users.dailyReturnCap}`,
+                ),
             ))
             .orderBy(asc(sql`coalesce(${users.botReturnLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id))
             .limit(1);

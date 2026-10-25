@@ -111,6 +111,11 @@ export const users = pgTable('users', {
     // Oltre il tetto i lead vanno alle scorte. null = nessun tetto.
     dailyFreshCap: integer('dailyFreshCap'),
 
+    // Tetto giornaliero di RIDATI dal bot per questo GDO (giorno solare di Roma,
+    // migr. 0049, PO 25/10/2026). A tetto pieno esce dal giro dei ridati fino a
+    // domani. null = nessun tetto, come per tutti dal 19/10.
+    dailyReturnCap: integer('dailyReturnCap'),
+
     // Statistiche GDO: il TL/manager sceglie quali GDO contano nelle medie
     // per-GDO (App/gg, alert, scorte). Account isActive ma non operativi
     // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.

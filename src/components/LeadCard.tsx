@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, memo } from "react"
-import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil, Star, PhoneCall } from "lucide-react"
+import { Phone, Mail, Calendar as CalendarIcon, Ban, Clock, CheckCircle2, MoreVertical, Copy, AlertCircle, AlertTriangle, Zap, FileText, X, MessageSquare, StickyNote, Sparkles, Users, Loader2, PhoneMissed, Pencil, Star } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { GdoQuickActions } from "./GdoQuickActions"
 import { ScriptWidget } from "./ScriptWidget"
@@ -45,7 +45,7 @@ type LeadProps = {
         recallMissedAt?: Date | null
         /** Ultima assegnazione al GDO che lo ha in mano: "arrivato X fa", calcolato nel browser. */
         arrivedAt?: Date | string | null
-        /** Lead fresco di oggi mai toccato: in cima alla 1ª chiamata, da chiamare subito. */
+        /** Lead fresco di oggi mai toccato: in cima alla 1ª chiamata con la riga "Appena arrivato: chiamalo subito". */
         vergine?: boolean
     }
     onOutcomeClick: (leadId: string) => void
@@ -252,20 +252,20 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
 
                 {/* 1. Nome & Contatti */}
                 <div className="flex-1 min-w-0 sm:min-w-[200px] flex flex-col justify-center">
+                    {/* Vergine del giorno (PO 25/10 mattina): una riga sobria al posto
+                        del vecchio badge; il lead sta già in cima alla 1ª chiamata. */}
+                    {lead.vergine && (
+                        <div className="mb-1 text-[13px] font-medium leading-tight text-ash-800">
+                            Appena arrivato: chiamalo subito
+                        </div>
+                    )}
                     <div className="font-bold text-ash-900 text-[15px] leading-tight flex items-center gap-2">
                         <div className="flex items-center gap-2">
                             {lead.chiamaPerPrimo && (
                                 <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-500" aria-label="Da chiamare per primo" />
                             )}
                             {lead.name}
-                            {lead.vergine ? (
-                                <div
-                                    className="flex shrink-0 items-center gap-1 rounded-lg bg-[#FF9330] px-1.5 py-0.5 text-[10px] font-semibold text-[#171717]"
-                                    title="Lead nuovo di oggi, mai chiamato: chiamalo subito."
-                                >
-                                    <PhoneCall className="h-3 w-3" strokeWidth={1.75} /> Nuovo, chiamalo subito
-                                </div>
-                            ) : isJustArrived && (
+                            {!lead.vergine && isJustArrived && (
                                 <span className="shrink-0 text-emerald-500 animate-pulse" title="Appena arrivato (meno di 1 ora fa)">
                                     <Sparkles className="h-4 w-4" />
                                 </span>

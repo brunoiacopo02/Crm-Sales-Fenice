@@ -12,6 +12,11 @@
  *   RIDATI   (`botReturnIntake`)     lead che il bot restituisce
  *   SCORTA   (`freshOverflowScorta`) i freschi in eccedenza oltre il tetto
  *
+ * E due tetti giornalieri per GDO, vuoti = nessun tetto:
+ *   Tetto freschi (`dailyFreshCap`)  quanti freschi al giorno
+ *   Tetto ridati  (`dailyReturnCap`) quanti ridati al giorno (dal 25/10/2026,
+ *                                    per Lorenzo: 30 quando Bruno lo accende)
+ *
  * NOTA SULLA PASSWORD: la pagina ha un blocco a password lato client, chiesto
  * dal PO. È un deterrente contro il collega curioso, NON una protezione: chi
  * apre gli strumenti sviluppatore la legge. La protezione vera sono queste
@@ -51,12 +56,15 @@ export interface GdoPoolRow {
     ridati: boolean;
     scorta: boolean;
     dailyFreshCap: number | null;
+    dailyReturnCap: number | null;
     /** Lead mai chiamati in carico: è la coda di prima chiamata, la mole vera. */
     maiChiamati: number;
     /** Lead già toccati e ancora aperti. */
     inLavorazione: number;
     /** Lead freschi presi oggi: serve a vedere il tetto mentre si riempie. */
     freschiOggi: number;
+    /** Ridati dal bot ricevuti oggi: è quello che conta il tetto dei ridati. */
+    ridatiOggi: number;
 }
 
 export async function listGdoPools(): Promise<GdoPoolRow[]> {
@@ -80,6 +88,19 @@ export async function listGdoPools(): Promise<GdoPoolRow[]> {
         )}
     )`;
 
+    // Ridati ricevuti oggi: stessa definizione del tetto in reassign.ts (eventi
+    // REASSIGNED_FROM_BOT a lui dalla mezzanotte di Roma). Il WHERE passa da
+    // `and(...)` per lo stesso motivo di `contaLead`.
+    const ridatiOggi = sql<number>`(
+        SELECT count(*)::int FROM ${leadEvents}
+        WHERE ${and(
+            eq(leadEvents.companyId, ctx.companyId),
+            eq(leadEvents.userId, users.id),
+            eq(leadEvents.eventType, "REASSIGNED_FROM_BOT"),
+            sql`${leadEvents.timestamp} >= (to_char(now() AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'`,
+        )}
+    )`;
+
     const rows = await db.select({
         id: users.id,
         gdoCode: users.gdoCode,
@@ -92,6 +113,8 @@ export async function listGdoPools(): Promise<GdoPoolRow[]> {
         ridati: users.botReturnIntake,
         scorta: users.freshOverflowScorta,
         dailyFreshCap: users.dailyFreshCap,
+        dailyReturnCap: users.dailyReturnCap,
+        ridatiOggi,
         // Gli scarti mai chiamati di un'infornata anomala non sono coda di
         // prima chiamata: per decisione PO non li lavora nessun umano, e con
         // loro dentro la "mole vera" del bot diceva ~7.000.
@@ -157,6 +180,29 @@ export async function setDailyFreshCap(
         return { success: true };
     } catch (e) {
         console.error("[gestione] setDailyFreshCap", e);
+        return { success: false, error: "Non sono riuscito a salvare. Riprova." };
+    }
+}
+
+/** Tetto giornaliero dei ridati dal bot (vuoto = nessun tetto). */
+export async function setDailyReturnCap(
+    gdoUserId: string,
+    cap: number | null,
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { ctx } = await requireAdmin();
+        if (cap !== null && (!Number.isInteger(cap) || cap < 0 || cap > 1000)) {
+            return { success: false, error: "Il tetto deve essere un numero fra 0 e 1000, oppure vuoto." };
+        }
+        await db.update(users).set({ dailyReturnCap: cap }).where(and(
+            eq(users.companyId, ctx.companyId),
+            eq(users.id, gdoUserId),
+            eq(users.role, "GDO"),
+        ));
+        revalidatePath("/gestione");
+        return { success: true };
+    } catch (e) {
+        console.error("[gestione] setDailyReturnCap", e);
         return { success: false, error: "Non sono riuscito a salvare. Riprova." };
     }
 }

@@ -35,7 +35,7 @@ export default async function TeamPage() {
                         Gestione Team GDO
                     </h1>
                     <p className="text-sm text-gray-500 mt-1">
-                        Amministrazione account operatori, generazione credenziali e modifica profili (Display Name, Avatar, Status).
+                        Amministrazione account operatori e modifica profili (Display Name, Avatar, Status).
                     </p>
                 </div>
                 <SafeWrapper>

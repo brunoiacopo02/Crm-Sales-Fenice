@@ -24,12 +24,26 @@ test('ora di punta: venerdì 23/10/2026 (ora legale) 18-19 di Roma = 16-17 UTC',
     assert.equal(w.start.toISOString(), '2026-10-23T16:00:00.000Z')
 })
 
-test('sabato: punta 11-12 e turno 10-16:30; domenica niente', () => {
+test('sabato: punta 12:30-13:30 e turno 10-16:30; domenica niente', () => {
     const sat = new Date('2026-10-31T10:00:00Z')
     assert.equal(isSaturdayRome(sat), true)
-    assert.equal(peakWindow(sat, DEFAULT_TARGETS)!.start.toISOString(), '2026-10-31T10:00:00.000Z')
+    // 31/10 è ora solare (+1): 12:30 di Roma = 11:30 UTC
+    const w = peakWindow(sat, DEFAULT_TARGETS)!
+    assert.equal(w.start.toISOString(), '2026-10-31T11:30:00.000Z')
+    assert.equal(w.end.toISOString(), '2026-10-31T12:30:00.000Z')
     assert.equal(shiftWindow(sat, DEFAULT_TARGETS)!.end.toISOString(), '2026-10-31T15:30:00.000Z')
     assert.equal(peakWindow(new Date('2026-11-01T10:00:00Z'), DEFAULT_TARGETS), null)
+})
+
+test('sabato: due pause, 12:00-12:15 e 14:15-14:30, dentro il turno e fuori dalla punta', () => {
+    assert.deepEqual(DEFAULT_TARGETS.pauseSabato, [
+        { start: '12:00', end: '12:15' },
+        { start: '14:15', end: '14:30' },
+    ])
+    for (const p of DEFAULT_TARGETS.pauseSabato) {
+        assert.ok(p.start >= DEFAULT_TARGETS.turnoSabato.start && p.end <= DEFAULT_TARGETS.turnoSabato.end, `${p.start} nel turno`)
+        assert.ok(p.end <= DEFAULT_TARGETS.puntaSabato.start || p.start >= DEFAULT_TARGETS.puntaSabato.end, `${p.start} fuori dalla punta`)
+    }
 })
 
 test('euro presenze: €12 dalla 5ª', () => {

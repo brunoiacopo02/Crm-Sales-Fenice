@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Users, Zap, RotateCcw, Package, Power, ArrowRightLeft } from "lucide-react";
 import {
-    setGdoPool, setDailyFreshCap, setGdoActive, spostaLeadAperti,
+    setGdoPool, setDailyFreshCap, setDailyReturnCap, setGdoActive, spostaLeadAperti,
     type GdoPoolRow, type PoolKind,
 } from "@/app/actions/gestionePoolActions";
 
@@ -76,7 +76,7 @@ const POOL_META: Record<PoolKind, { etichetta: string; icona: typeof Zap; spiega
     ridati: {
         etichetta: "Ridati",
         icona: RotateCcw,
-        spiega: "riceve i lead che il bot restituisce (mai risposto o chat interrotta)",
+        spiega: "riceve i lead che il bot restituisce (chat interrotta), fino al tetto ridati se c'è",
         tono: "bg-sky-50 text-sky-700 border-sky-200",
     },
     scorta: {
@@ -114,6 +114,7 @@ function Pannello({ initialGdos }: { initialGdos: GdoPoolRow[] }) {
                 </h1>
                 <p className="mt-1 text-sm text-ash-500">
                     Chi riceve quali lead. I tre pool sono indipendenti: un GDO può stare in più di uno.
+                    I tetti valgono al giorno: vuoto vuol dire nessun tetto.
                 </p>
             </header>
 
@@ -153,8 +154,10 @@ function Pannello({ initialGdos }: { initialGdos: GdoPoolRow[] }) {
                             <th className="px-3 py-3 text-center font-semibold">Freschi</th>
                             <th className="px-3 py-3 text-center font-semibold">Ridati</th>
                             <th className="px-3 py-3 text-center font-semibold">Scorta</th>
-                            <th className="px-3 py-3 text-center font-semibold">Tetto/gg</th>
-                            <th className="px-3 py-3 text-right font-semibold">Oggi</th>
+                            <th className="px-3 py-3 text-center font-semibold">Tetto freschi</th>
+                            <th className="px-3 py-3 text-center font-semibold">Tetto ridati</th>
+                            <th className="px-3 py-3 text-right font-semibold">Freschi oggi</th>
+                            <th className="px-3 py-3 text-right font-semibold">Ridati oggi</th>
                             <th className="px-3 py-3 text-right font-semibold">1ª chiamata</th>
                             <th className="px-3 py-3 text-right font-semibold">In lavoraz.</th>
                             <th className="px-3 py-3 text-center font-semibold">Azioni</th>
@@ -202,15 +205,38 @@ function Pannello({ initialGdos }: { initialGdos: GdoPoolRow[] }) {
                                             const grezzo = e.target.value.trim();
                                             const nuovo = grezzo === "" ? null : Number(grezzo);
                                             if (nuovo === (g.dailyFreshCap ?? null)) return;
-                                            esegui(() => setDailyFreshCap(g.id, nuovo), `${nome(g)}: tetto aggiornato.`);
+                                            esegui(() => setDailyFreshCap(g.id, nuovo), `${nome(g)}: tetto dei freschi aggiornato.`);
                                         }}
                                         className="w-16 rounded border border-ash-200 px-2 py-1 text-center text-sm outline-none focus:border-brand-orange disabled:bg-ash-50"
-                                        aria-label={`${nome(g)} — tetto giornaliero`}
+                                        aria-label={`${nome(g)} — tetto giornaliero dei freschi`}
+                                    />
+                                </td>
+                                <td className="px-3 py-3 text-center">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={1000}
+                                        defaultValue={g.dailyReturnCap ?? ""}
+                                        disabled={inCorso || !g.isActive}
+                                        placeholder="—"
+                                        onBlur={(e) => {
+                                            const grezzo = e.target.value.trim();
+                                            const nuovo = grezzo === "" ? null : Number(grezzo);
+                                            if (nuovo === (g.dailyReturnCap ?? null)) return;
+                                            esegui(() => setDailyReturnCap(g.id, nuovo), `${nome(g)}: tetto dei ridati aggiornato.`);
+                                        }}
+                                        className="w-16 rounded border border-ash-200 px-2 py-1 text-center text-sm outline-none focus:border-brand-orange disabled:bg-ash-50"
+                                        aria-label={`${nome(g)} — tetto giornaliero dei ridati`}
                                     />
                                 </td>
                                 <td className="px-3 py-3 text-right tabular-nums">
                                     <span className={g.dailyFreshCap != null && g.freschiOggi >= g.dailyFreshCap ? "font-semibold text-amber-600" : ""}>
                                         {g.freschiOggi}
+                                    </span>
+                                </td>
+                                <td className="px-3 py-3 text-right tabular-nums">
+                                    <span className={g.dailyReturnCap != null && g.ridatiOggi >= g.dailyReturnCap ? "font-semibold text-amber-600" : ""}>
+                                        {g.ridatiOggi}
                                     </span>
                                 </td>
                                 <td className="px-3 py-3 text-right tabular-nums font-medium">{g.maiChiamati}</td>

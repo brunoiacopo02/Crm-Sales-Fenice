@@ -19,6 +19,7 @@ import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { getLeadRouting, finestraRientro, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
 import { ordineRipiegoFreschi, type LivelloFreschi } from "@/lib/diretta/instradamento";
+import { inviaNotificaAppenaArrivato } from "@/lib/diretta/notificaArrivoDb";
 
 /**
  * Quanti lead sono gia' andati a bot 2 oggi (giorno civile di Roma).
@@ -1548,27 +1549,43 @@ export async function POST(req: NextRequest) {
             companyId: FENICE_COMPANY,
         });
 
-        // Notifica al GDO: lead caldo appena arrivato, chiamalo subito.
-        // Si aggancia al sistema notifications → useRealtimeNotifications
-        // le porta in UI live via Supabase realtime.
-        const warningSuffix = phoneSuspicious ? ' ⚠️ verifica il numero' : '';
-        await db.insert(notifications).values({
-            id: crypto.randomUUID(),
-            recipientUserId: assignedGdoId,
-            type: 'ac_lead_assigned',
-            title: '🔥 Nuovo lead caldo!',
-            body: `${fullName} · ${funnel} · ${phoneFinal}${warningSuffix} — chiama ora!`,
-            metadata: {
+        // Notifica dell'arrivo, sul sistema di sempre (notifications → broadcast
+        // → campanella e avviso nella Topbar).
+        //  - GDO umano (PO 25/10/2026 mattina): il lead è un vergine del giorno e
+        //    sta in cima alla sua 1ª chiamata; la notifica glielo dice anche se sta
+        //    lavorando seconde o terze chiamate, e cliccandola apre il lead. Si
+        //    scrive dopo la risposta (after) e una volta sola per lead e GDO.
+        //  - Venditore della pipeline autonoma: la notifica di sempre.
+        //  - Bot: nessuna. Non legge notifiche, e ne riceveva un paio di
+        //    centinaia al giorno.
+        if (txResult.divertedToSales) {
+            const warningSuffix = phoneSuspicious ? ' ⚠️ verifica il numero' : '';
+            await db.insert(notifications).values({
+                id: crypto.randomUUID(),
+                recipientUserId: assignedGdoId,
+                type: 'ac_lead_assigned',
+                title: '🔥 Nuovo lead caldo!',
+                body: `${fullName} · ${funnel} · ${phoneFinal}${warningSuffix} — chiama ora!`,
+                metadata: {
+                    leadId: newLeadId,
+                    acContactId: contactId,
+                    funnel,
+                    name: fullName,
+                    phone: phoneFinal,
+                    email,
+                    phoneSuspicious,
+                },
+                companyId: FENICE_COMPANY,
+            });
+        } else if (!txResult.assignedGdoIsBot) {
+            after(() => inviaNotificaAppenaArrivato({
                 leadId: newLeadId,
-                acContactId: contactId,
+                gdoId: assignedGdoId,
+                nome: fullName,
                 funnel,
-                name: fullName,
-                phone: phoneFinal,
-                email,
-                phoneSuspicious,
-            },
-            companyId: FENICE_COMPANY,
-        });
+                companyId: FENICE_COMPANY,
+            }));
+        }
 
         return NextResponse.json({
             success: true,
