@@ -82,9 +82,13 @@ test('tempi: un GDO medio arriva al corso in 4-5 mesi, un campione in meno di du
     const campione = guadagnoGdo(SCENARI_GDO[SCENARI_GDO.length - 1], DEFAULT_ECONOMY_RULES, DEFAULT_TARGETS).piume.totale
     assert.ok(mesi(medio) > 4 && mesi(medio) < 5, `medio ${mesi(medio).toFixed(2)}`)
     assert.ok(mesi(campione) < 2, `campione ${mesi(campione).toFixed(2)}`)
-    // Le Conferme: la brava ci mette quanto un GDO al massimo del patto (circa tre mesi).
+    // Le Conferme, con gli obiettivi alleggeriti da Bruno il 25/10 (presenze 14/20,
+    // chiusure 4/6): la brava ci mette poco meno di un GDO al massimo del patto,
+    // la media poco meno di un GDO medio.
     const brava = guadagnoConferme(SCENARI_CONFERME[1], DEFAULT_ECONOMY_RULES).piume.totale
-    assert.ok(mesi(brava) >= 2.8 && mesi(brava) <= 3.3, `Conferma brava ${mesi(brava).toFixed(2)}`)
+    const mediaConf = guadagnoConferme(SCENARI_CONFERME[0], DEFAULT_ECONOMY_RULES).piume.totale
+    assert.ok(mesi(brava) >= 2.5 && mesi(brava) <= 3.2, `Conferma brava ${mesi(brava).toFixed(2)}`)
+    assert.ok(mesi(mediaConf) >= 3.5 && mesi(mediaConf) <= 4.5, `Conferma media ${mesi(mediaConf).toFixed(2)}`)
 })
 
 test('immagini profilo: il file esiste in public/diretta/premi', () => {

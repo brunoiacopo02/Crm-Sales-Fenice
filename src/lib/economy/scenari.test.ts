@@ -42,9 +42,10 @@ test('al massimo del patto una settimana vale circa 640 Scintille e 13,5 Piume',
 })
 
 test('Conferme: le Scintille vengono soprattutto dalle presenze, non dalla sola conferma', () => {
+    // Valori del 25/10 sera: 4 alla conferma, 22 alla presenza (18 in più), 8 in più con un'ora d'anticipo.
     const g = guadagnoConferme({ nome: 'x', conferme: 20, presenze: 18, inTempo: 0.5, chiusure: 6 }, DEFAULT_ECONOMY_RULES)
-    assert.equal(g.scintille.conferme, 60)
-    assert.equal(g.scintille.presenze, 18 * 17)
-    assert.equal(g.scintille.inTempo, 18 * 0.5 * 6)
+    assert.equal(g.scintille.conferme, 80)
+    assert.equal(g.scintille.presenze, 18 * 18)
+    assert.equal(g.scintille.inTempo, 18 * 0.5 * 8)
     assert.ok(g.scintille.presenze > 4 * g.scintille.conferme)
 })

@@ -104,10 +104,10 @@ export const DEFAULT_ECONOMY_RULES: EconomyRules = {
         minFissatiPunta: 1,
     },
     conferme: {
-        scintille: { conferma: 3, presenza: 20, inTempo: 6, inTempoMinuti: 60, tettoConfermeGiorno: 12 },
+        scintille: { conferma: 4, presenza: 22, inTempo: 8, inTempoMinuti: 60, tettoConfermeGiorno: 14 },
         obiettivi: {
-            presenze: { soglie: [16, 22], piume: [3, 4] },
-            chiusure: { soglie: [5, 7], piume: [4, 5] },
+            presenze: { soglie: [14, 20], piume: [3, 4] },
+            chiusure: { soglie: [4, 6], piume: [4, 5] },
         },
         perPersona: {},
     },
@@ -527,6 +527,79 @@ export function pianoStadi(rows: LedgerRow[], prefisso: string, leadId: string, 
     return pianoGradini(rows, g => stadioIdemKey(prefisso, leadId, g), stadio, importi)
 }
 
+// ── Presenza e chiusura verificate (collaudo del 25/10/2026) ────────────
+//
+// Il server accetta "Presenziato" e "Chiuso" anche prima dell'ora
+// dell'appuntamento, e il latch presentedAt prende la data dell'appuntamento
+// e non si toglie più. Le monete invece pagano una presenza o una chiusura
+// solo se qualcuno l'ha registrata all'ora dell'appuntamento o dopo, e solo
+// quando quell'ora è passata: prima nessuno può sapere se il lead si
+// presenterà, e un esito scritto in anticipo non è un risultato verificato.
+// Se poi arriva un esito vero (il venditore dopo la call), paga quello.
+
+/** Un esito del venditore registrato sul lead: quando è stato scritto e cosa dice. */
+export interface RegistrazioneEsito {
+    at: Date
+    /** 'Chiuso', 'Non chiuso', 'Lead non presenziato'... null = non dice niente di presenza o chiusura. */
+    esito: string | null
+}
+
+/** Gli esiti che dicono che il lead si è presentato. */
+export const ESITI_PRESENZA: readonly string[] = ['Chiuso', 'Non chiuso']
+
+/** Famiglie della riconciliazione col foglio (src/lib/riconciliazione) e l'esito che scrivono. */
+const ESITO_RICONCILIAZIONE: Record<string, string> = {
+    'esito-mancante': 'Chiuso',
+    'lead-scartato': 'Chiuso',
+    'solo-crm': 'Non chiuso',
+}
+
+/**
+ * Le registrazioni dagli eventi del lead: 'salesperson_outcome_set' (Conferme
+ * dallo Storico e venditori, `metadata.outcome`) e 'RECONCILED' (chiusure
+ * applicate dal foglio, fatte sempre a cose avvenute; l'annullamento della
+ * run non registra niente: lo stato del lead torna com'era).
+ */
+export function registrazioniDaEventi(eventi: readonly { eventType: string; timestamp: Date; metadata: unknown }[]): RegistrazioneEsito[] {
+    const out: RegistrazioneEsito[] = []
+    for (const e of eventi) {
+        const m = (e.metadata && typeof e.metadata === 'object' ? e.metadata : {}) as Record<string, unknown>
+        if (e.eventType === 'salesperson_outcome_set') {
+            out.push({ at: e.timestamp, esito: typeof m.outcome === 'string' ? m.outcome : null })
+        } else if (e.eventType === 'RECONCILED' && m.undo !== true && typeof m.family === 'string') {
+            const esito = ESITO_RICONCILIAZIONE[m.family]
+            if (esito) out.push({ at: e.timestamp, esito })
+        }
+    }
+    return out
+}
+
+/** Tipi di evento da leggere per registrazioniDaEventi. */
+export const EVENTI_REGISTRAZIONE = ['salesperson_outcome_set', 'RECONCILED'] as const
+
+/**
+ * Presenza e chiusura del lead valgono per l'economia solo se l'appuntamento
+ * è passato e una registrazione dell'esito è arrivata a quell'ora o dopo.
+ * L'ora di riferimento è presentedAt (il latch: l'ora dell'appuntamento alla
+ * prima presenza), altrimenti l'appuntamento; senza nessuna delle due non c'è
+ * un "prima" da cui guardarsi.
+ */
+export function esitiVerificati(
+    s: { presentedAt: Date | null; appointmentDate: Date | null; salespersonOutcome: string | null },
+    registrazioni: readonly RegistrazioneEsito[],
+    now: Date,
+): { presenza: boolean; chiusura: boolean } {
+    const ora = s.presentedAt ?? s.appointmentDate
+    const passata = !ora || ora.getTime() <= now.getTime()
+    const dopo = (r: RegistrazioneEsito) => !ora || r.at.getTime() >= ora.getTime()
+    return {
+        presenza: !!s.presentedAt && passata
+            && registrazioni.some(r => !!r.esito && ESITI_PRESENZA.includes(r.esito) && dopo(r)),
+        chiusura: s.salespersonOutcome === 'Chiuso' && passata
+            && registrazioni.some(r => r.esito === 'Chiuso' && dopo(r)),
+    }
+}
+
 // ── Piume del GDO ───────────────────────────────────────────────────────
 
 export interface StatoPiumeLead {
@@ -537,21 +610,35 @@ export interface StatoPiumeLead {
     presentedAt: Date | null
     appointmentDate: Date | null
     salespersonOutcome: string | null
+    /** Presenza registrata a appuntamento passato (esitiVerificati): obbligatorio, così nessuna lettura lo dimentica. */
+    presenzaVerificata: boolean
+    /** Chiusura registrata a appuntamento passato (esitiVerificati). */
+    chiusuraVerificata: boolean
 }
 
 /**
  * Quali risultati del lead valgono per il suo GDO, dato lo stato attuale.
  * Tutti richiedono una conferma fatta da una persona: le Piume premiano
- * risultati verificati da Conferme e venditori, non dal bot. Gli esiti di
- * prima dell'avvio dell'economia non pagano.
+ * risultati verificati da Conferme e venditori, non dal bot. Presenza e
+ * chiusura richiedono anche la verifica (esitiVerificati): un "Presenziato"
+ * scritto prima dell'ora dell'appuntamento non paga.
+ *
+ * Avvio dell'economia (26/10): conta sia il fatto sia la sua registrazione.
+ * La conferma guarda quando è stata scritta; presenza e chiusura guardano
+ * l'ora dell'appuntamento, e la verifica chiede che la registrazione sia
+ * arrivata dopo, quindi anche lei dal 26/10. Così un esito scritto prima
+ * dell'avvio non paga (anche se l'appuntamento è dopo) e un appuntamento di
+ * prima dell'avvio registrato in ritardo resta del periodo vecchio, come per
+ * il bonus delle presenze e la classifica, che contano per settimana
+ * dell'appuntamento.
  */
 export function piumeDovute(s: StatoPiumeLead, inizio: Date): { conferma: boolean; presenza: boolean; chiusura: boolean } {
     const confermato = s.confirmationsOutcome === 'confermato' && s.confermatoDaPersona
     const dopoInizio = (d: Date | null) => !!d && d.getTime() >= inizio.getTime()
     return {
         conferma: confermato && dopoInizio(s.confirmationsTimestamp),
-        presenza: confermato && dopoInizio(s.presentedAt),
-        chiusura: confermato && s.salespersonOutcome === 'Chiuso' && dopoInizio(s.presentedAt ?? s.appointmentDate),
+        presenza: confermato && s.presenzaVerificata && dopoInizio(s.presentedAt),
+        chiusura: confermato && s.chiusuraVerificata && s.salespersonOutcome === 'Chiuso' && dopoInizio(s.presentedAt ?? s.appointmentDate),
     }
 }
 
@@ -614,6 +701,11 @@ export interface StatoConfermeLead {
     presentedAt: Date | null
 }
 
+/** Lo stato delle Conferme con la verifica della presenza (esitiVerificati), per gli stadi. */
+export interface StatoConfermeVerificato extends StatoConfermeLead {
+    presenzaVerificata: boolean
+}
+
 /**
  * La conferma conta per le Conferme solo se è arrivata PRIMA dell'ora
  * dell'appuntamento: una conferma registrata a call iniziata (il lead è già
@@ -633,16 +725,17 @@ export function confermaInTempo(s: Pick<StatoConfermeLead, 'confirmationsTimesta
 
 /**
  * Stadio del lead per le Scintille di chi l'ha confermato. La presenza vale
- * dall'avvio dell'economia; la sola conferma solo se fatta dall'avvio in poi.
- * `giaRegistrata` = la conferma ha già il suo accredito attivo (era utile
- * quando è stata fatta): un salvataggio successivo a call iniziata, per
+ * dall'avvio dell'economia e solo se verificata (registrata a appuntamento
+ * passato, vedi esitiVerificati); la sola conferma solo se fatta dall'avvio
+ * in poi. `giaRegistrata` = la conferma ha già il suo accredito attivo (era
+ * utile quando è stata fatta): un salvataggio successivo a call iniziata, per
  * esempio per cambiare venditore, sposta confirmationsTimestamp ma non la
  * rende meno vera.
  */
-export function stadioConferme(s: StatoConfermeLead, inizio: Date, giaRegistrata = false): StadioConferme {
+export function stadioConferme(s: StatoConfermeVerificato, inizio: Date, giaRegistrata = false): StadioConferme {
     if (s.confirmationsOutcome !== 'confermato') return 0
     if (!giaRegistrata && !confermaUtile(s)) return 0
-    if (s.presentedAt && s.presentedAt.getTime() >= inizio.getTime()) return 2
+    if (s.presentedAt && s.presenzaVerificata && s.presentedAt.getTime() >= inizio.getTime()) return 2
     if (giaRegistrata || (s.confirmationsTimestamp && s.confirmationsTimestamp.getTime() >= inizio.getTime())) return 1
     return 0
 }
@@ -710,6 +803,9 @@ export interface LeadObiettivo {
     autoreEsito: string | null
     presentedAt: Date | null
     chiusoAt: Date | null
+    /** Presenza e chiusura registrate a appuntamento passato (esitiVerificati). */
+    presenzaVerificata: boolean
+    chiusuraVerificata: boolean
 }
 
 export function contaObiettivi(rows: readonly LeadObiettivo[], userId: string, start: Date, end: Date): Record<TipoObiettivo, number> {
@@ -718,8 +814,8 @@ export function contaObiettivi(rows: readonly LeadObiettivo[], userId: string, s
     let chiusure = 0
     for (const r of rows) {
         if (r.titolare !== userId || !r.confermaUtile || r.autoreEsito === userId) continue
-        if (dentro(r.presentedAt)) presenze++
-        if (dentro(r.chiusoAt)) chiusure++
+        if (r.presenzaVerificata && dentro(r.presentedAt)) presenze++
+        if (r.chiusuraVerificata && dentro(r.chiusoAt)) chiusure++
     }
     return { presenze, chiusure }
 }

@@ -11,7 +11,7 @@
 
 import { randomInt, randomUUID } from 'crypto'
 import { after } from 'next/server'
-import { and, desc, eq, gte, inArray, isNotNull, like, lt, or } from 'drizzle-orm'
+import { and, eq, gte, inArray, isNotNull, like, lt, or } from 'drizzle-orm'
 import { db } from '@/db'
 import { appSettings, callLogs, currencyLedger, leadEvents, leads, teamChestAwards, teamChests, users } from '@/db/schema'
 import { dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils'
@@ -30,6 +30,7 @@ import {
     isPersonaleUmano, puoAccreditarePiume, isConfermePersona,
     stadioConferme, importiConferme, confermaInTempo, confermaUtile, confermaRegistrata, titolareConferma, sottoTettoConferme,
     obiettiviPersona, pianoObiettivo, contaObiettivi,
+    esitiVerificati, registrazioniDaEventi, EVENTI_REGISTRAZIONE,
     forzieriRaggiunti, tierForziere, contenutoForziere, destinatariForziere, chestIdemKey,
     type EconomyRules, type EventoCiclo, type FissatoReward, type ChestTier, type LedgerRow, type LeadObiettivo, type TipoObiettivo,
     type Obiettivo,
@@ -288,10 +289,14 @@ const coppia = (userId: string, lunedi: string) => `${userId}|${lunedi}`
  *    venditori, manager, admin: ruolo letto dal DB) e che a confermare sia
  *    stata una persona, non il bot. Gli storni valgono sempre.
  * 2. Scintille di chi ha confermato il lead (solo ruolo CONFERME, dal DB):
- *    3 alla conferma fatta prima dell'appuntamento, 20 in tutto se il lead si
- *    presenta, 26 se la conferma era arrivata con almeno un'ora d'anticipo.
- *    Le conferme pagate al giorno hanno un tetto; la presenza scritta da chi ha
- *    confermato non paga.
+ *    con i default 4 alla conferma fatta prima dell'appuntamento, 22 in tutto
+ *    se il lead si presenta, 30 se la conferma era arrivata con almeno un'ora
+ *    d'anticipo. Le conferme pagate al giorno hanno un tetto; la presenza
+ *    scritta da chi ha confermato non paga.
+ *
+ * Presenza e chiusura contano solo se un esito le ha registrate a
+ * appuntamento passato (esitiVerificati in ./rules): un "Presenziato" scritto
+ * in anticipo non paga, l'esito vero del venditore dopo la call sì.
  *
  * Prova con prova (src/lib/prova): gli accrediti di 1. e 2. richiedono che
  * lead e destinatario stiano dalla stessa parte, e per le Piume del GDO anche
@@ -325,6 +330,13 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
             idemKey: currencyLedger.idemKey, amount: currencyLedger.amount, userId: currencyLedger.userId, createdAt: currencyLedger.createdAt,
         }).from(currencyLedger).where(eq(currencyLedger.leadId, leadId))
 
+        // Esiti del venditore registrati sul lead: presenza e chiusura pagano solo
+        // se scritte a appuntamento passato (esitiVerificati, collaudo del 25/10).
+        const eventiEsito = await tx.select({
+            eventType: leadEvents.eventType, timestamp: leadEvents.timestamp, metadata: leadEvents.metadata, userId: leadEvents.userId,
+        }).from(leadEvents).where(and(eq(leadEvents.leadId, leadId), inArray(leadEvents.eventType, [...EVENTI_REGISTRAZIONE])))
+        const verificati = esitiVerificati(lead, registrazioniDaEventi(eventiEsito), new Date())
+
         const registrata = confermaRegistrata(righe, leadId)
         const titolare = titolareConferma(righe, leadId, lead.confirmationsUserId)
         const ids = [...new Set([lead.confirmationsUserId, lead.assignedToId, actorUserId, titolare].filter((x): x is string => !!x))]
@@ -343,6 +355,8 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
             presentedAt: lead.presentedAt,
             appointmentDate: lead.appointmentDate,
             salespersonOutcome: lead.salespersonOutcome,
+            presenzaVerificata: verificati.presenza,
+            chiusuraVerificata: verificati.chiusura,
         }, inizio)
         const destinatario = persona(lead.assignedToId)
         const autore = persona(actorUserId)
@@ -366,13 +380,14 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
             confirmationsTimestamp: lead.confirmationsTimestamp,
             appointmentDate: lead.appointmentDate,
             presentedAt: lead.presentedAt,
+            presenzaVerificata: verificati.presenza,
         }
         let stadioConf = stadioConferme(statoConferme, inizio, !!registrata)
         const chiConferma = persona(titolare)
         if (stadioConf === 2 && titolare) {
             // La presenza la scrive il venditore: se l'ultimo esito l'ha scritto
             // chi ha confermato, per le sue Scintille il lead resta confermato.
-            if ((await autoreUltimoEsito(tx, leadId)) === titolare) stadioConf = 1
+            if (autoreUltimoEsito(eventiEsito) === titolare) stadioConf = 1
         }
         // L'anticipo si misura sulla prima conferma pagata, se c'è: un salvataggio
         // successivo (cambio di venditore) non lo cancella.
@@ -424,12 +439,14 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
     return daRiallineare
 }
 
-/** Chi ha scritto l'ultimo esito del venditore sul lead (null se nessuno). */
-async function autoreUltimoEsito(tx: Tx, leadId: string): Promise<string | null> {
-    const [e] = await tx.select({ userId: leadEvents.userId }).from(leadEvents)
-        .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.eventType, 'salesperson_outcome_set')))
-        .orderBy(desc(leadEvents.timestamp)).limit(1)
-    return e?.userId ?? null
+/** Chi ha scritto l'ultimo esito del venditore sul lead (null se nessuno), dagli eventi già letti. */
+function autoreUltimoEsito(eventi: readonly { eventType: string; timestamp: Date; userId: string | null }[]): string | null {
+    let ultimo: { timestamp: Date; userId: string | null } | null = null
+    for (const e of eventi) {
+        if (e.eventType !== 'salesperson_outcome_set') continue
+        if (!ultimo || e.timestamp.getTime() > ultimo.timestamp.getTime()) ultimo = e
+    }
+    return ultimo?.userId ?? null
 }
 
 async function riallineaCoppie(coppie: DaRiallineare, rules: EconomyRules): Promise<void> {
@@ -555,27 +572,32 @@ async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end:
     ))
     if (candidati.length === 0) return []
     const ids = candidati.map(c => c.id)
-    const [registro, autori] = await Promise.all([
+    const [registro, eventi] = await Promise.all([
         tx.select({ idemKey: currencyLedger.idemKey, amount: currencyLedger.amount, userId: currencyLedger.userId, leadId: currencyLedger.leadId })
             .from(currencyLedger).where(and(
                 inArray(currencyLedger.leadId, ids),
                 or(like(currencyLedger.idemKey, `${PREFISSO_STADI.conferme}:%`), like(currencyLedger.idemKey, `storno:${PREFISSO_STADI.conferme}:%`)),
             )),
-        tx.selectDistinctOn([leadEvents.leadId], { leadId: leadEvents.leadId, userId: leadEvents.userId })
+        // Esiti registrati: l'ultimo autore (chi conferma non si premia da solo)
+        // e la verifica di presenza e chiusura (esitiVerificati).
+        tx.select({ leadId: leadEvents.leadId, eventType: leadEvents.eventType, timestamp: leadEvents.timestamp, metadata: leadEvents.metadata, userId: leadEvents.userId })
             .from(leadEvents)
-            .where(and(inArray(leadEvents.leadId, ids), eq(leadEvents.eventType, 'salesperson_outcome_set')))
-            .orderBy(leadEvents.leadId, desc(leadEvents.timestamp)),
+            .where(and(inArray(leadEvents.leadId, ids), inArray(leadEvents.eventType, [...EVENTI_REGISTRAZIONE]))),
     ])
-    const autorePer = new Map(autori.map(a => [a.leadId, a.userId]))
+    const adesso = new Date()
     return candidati.map(c => {
         const delLead = registro.filter(r => r.leadId === c.id)
+        const suoi = eventi.filter(e => e.leadId === c.id)
+        const verificati = esitiVerificati(c, registrazioniDaEventi(suoi), adesso)
         return {
             titolare: titolareConferma(delLead, c.id, c.confirmationsUserId),
             // Utile se fatta prima dell'appuntamento, o già pagata quando lo era.
             confermaUtile: confermaUtile(c) || !!confermaRegistrata(delLead, c.id),
-            autoreEsito: autorePer.get(c.id) ?? null,
+            autoreEsito: autoreUltimoEsito(suoi),
             presentedAt: c.presentedAt,
             chiusoAt: c.salespersonOutcome === 'Chiuso' ? c.salespersonOutcomeAt : null,
+            presenzaVerificata: verificati.presenza,
+            chiusuraVerificata: verificati.chiusura,
         }
     })
 }

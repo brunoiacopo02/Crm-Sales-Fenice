@@ -11,6 +11,7 @@ import {
     forzieriRaggiunti, tierForziere,
     contenutoForziere, destinatariForziere, chestIdemKey,
     confermeNonHannoToccato, isPersonaleUmano, puoAccreditarePiume, fissatoPremiabile,
+    esitiVerificati, registrazioniDaEventi, EVENTI_REGISTRAZIONE,
     type EventoCiclo, type LedgerRow, type LeadObiettivo,
 } from './rules'
 import { DEFAULT_TARGETS, isTeamMember } from '@/lib/diretta/config'
@@ -82,8 +83,9 @@ test('default dell\'economia v2 (25/10/2026 sera)', () => {
     assert.deepEqual(d.forzieri.leggendario, { probPiuma: 0.2, piume: 1, scintille: [30, 80] })
     assert.equal(d.forzieri.minFissatiGiorno, 1)
     assert.equal(d.forzieri.minFissatiPunta, 1)
-    assert.deepEqual(d.conferme.scintille, { conferma: 3, presenza: 20, inTempo: 6, inTempoMinuti: 60, tettoConfermeGiorno: 12 })
-    assert.deepEqual(d.conferme.obiettivi, { presenze: { soglie: [16, 22], piume: [3, 4] }, chiusure: { soglie: [5, 7], piume: [4, 5] } })
+    // Conferme, valori di Bruno del 25/10 sera: 4 alla conferma, 22 alla presenza, 30 con un'ora d'anticipo, tetto 14.
+    assert.deepEqual(d.conferme.scintille, { conferma: 4, presenza: 22, inTempo: 8, inTempoMinuti: 60, tettoConfermeGiorno: 14 })
+    assert.deepEqual(d.conferme.obiettivi, { presenze: { soglie: [14, 20], piume: [3, 4] }, chiusure: { soglie: [4, 6], piume: [4, 5] } })
     assert.deepEqual(d.classifica, { premiEuro: [50, 25, 10], minPresenze: 1 })
 })
 
@@ -299,6 +301,8 @@ test('rewardFissato: compatibile con reward_earned (xp 0, coinsGained = Scintill
 // ── Piume del GDO: vale lo stadio più alto ──────────────────────────────
 
 const INIZIO = inizioEconomia(DEFAULT_ECONOMY_RULES)
+// Presenza e chiusura verificate (registrate a appuntamento passato): i casi
+// in cui non lo sono stanno nei test di esitiVerificati più sotto.
 const base = {
     confirmationsOutcome: 'confermato' as string | null,
     confermatoDaPersona: true,
@@ -306,6 +310,8 @@ const base = {
     presentedAt: null as Date | null,
     appointmentDate: giorno('2026-10-27T16:00:00Z') as Date | null,
     salespersonOutcome: null as string | null,
+    presenzaVerificata: true,
+    chiusuraVerificata: true,
 }
 const PG = PREFISSO_STADI.gdo
 const kG = (gradino: number, gen = 1) => stadioIdemKey(PG, LEAD, gradino, gen)
@@ -336,6 +342,78 @@ test('stadio del GDO: gli esiti di prima dell\'avvio non pagano, la presenza dop
     assert.equal(stadioGdo(vecchio, INIZIO), 0)
     // Confermato sabato, presentato martedì: vale la presenza.
     assert.equal(stadioGdo({ ...base, confirmationsTimestamp: giorno('2026-10-24T15:00:00Z'), presentedAt: giorno('2026-10-27T16:00:00Z') }, INIZIO), 2)
+})
+
+// ── Presenza e chiusura registrate prima dell'appuntamento (collaudo 25/10) ──
+
+const APP = giorno('2026-10-28T14:00:00Z')            // mercoledì 28/10 alle 15:00 di Roma
+const PRIMA = giorno('2026-10-25T14:10:00Z')          // registrato domenica, prima dell'appuntamento
+const DOPO = giorno('2026-10-28T15:30:00Z')           // registrato dal venditore dopo la call
+const statoLatch = { presentedAt: APP, appointmentDate: APP, salespersonOutcome: 'Non chiuso' as string | null }
+
+test('esitiVerificati: un Presenziato scritto prima dell\'ora dell\'appuntamento non è una presenza verificata', () => {
+    const presto = [{ at: PRIMA, esito: 'Non chiuso' }]
+    // Prima dell'appuntamento: niente, ovviamente.
+    assert.deepEqual(esitiVerificati(statoLatch, presto, PRIMA), { presenza: false, chiusura: false })
+    // Anche dopo l'appuntamento, se l'unica registrazione è quella in anticipo: niente.
+    assert.deepEqual(esitiVerificati(statoLatch, presto, DOPO), { presenza: false, chiusura: false })
+    // Arriva l'esito del venditore dopo la call: la presenza è verificata.
+    assert.deepEqual(esitiVerificati(statoLatch, [...presto, { at: DOPO, esito: 'Non chiuso' }], DOPO), { presenza: true, chiusura: false })
+    // Il venditore dice che non si è presentato: il latch resta, ma per le monete non è una presenza.
+    assert.deepEqual(esitiVerificati(statoLatch, [...presto, { at: DOPO, esito: 'Lead non presenziato' }], DOPO), { presenza: false, chiusura: false })
+    // Registrato a call iniziata (all'ora esatta o dopo): vale.
+    assert.deepEqual(esitiVerificati(statoLatch, [{ at: APP, esito: 'Non chiuso' }], DOPO), { presenza: true, chiusura: false })
+})
+
+test('esitiVerificati: la chiusura vale solo se registrata come Chiuso a appuntamento passato', () => {
+    const chiuso = { ...statoLatch, salespersonOutcome: 'Chiuso' }
+    assert.deepEqual(esitiVerificati(chiuso, [{ at: PRIMA, esito: 'Chiuso' }], DOPO), { presenza: false, chiusura: false })
+    assert.deepEqual(esitiVerificati(chiuso, [{ at: DOPO, esito: 'Chiuso' }], DOPO), { presenza: true, chiusura: true })
+    // Registrata dopo, ma l'appuntamento non è ancora passato (orologio indietro): aspetta.
+    assert.deepEqual(esitiVerificati(chiuso, [{ at: DOPO, esito: 'Chiuso' }], PRIMA), { presenza: false, chiusura: false })
+    // Chiuso registrato dopo, poi tolto: il lead non è più Chiuso.
+    assert.deepEqual(esitiVerificati({ ...chiuso, salespersonOutcome: 'Non chiuso' }, [{ at: DOPO, esito: 'Chiuso' }], DOPO), { presenza: true, chiusura: false })
+    // Senza latch nessuna presenza, qualunque cosa dicano gli eventi.
+    assert.deepEqual(esitiVerificati({ ...statoLatch, presentedAt: null }, [{ at: DOPO, esito: 'Non chiuso' }], DOPO).presenza, false)
+})
+
+test('registrazioniDaEventi: esiti del venditore e riconciliazione col foglio, mai l\'annullamento', () => {
+    const r = registrazioniDaEventi([
+        { eventType: 'salesperson_outcome_set', timestamp: DOPO, metadata: { outcome: 'Chiuso', notes: '' } },
+        { eventType: 'salesperson_outcome_set', timestamp: PRIMA, metadata: null },
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'esito-mancante', runId: 'r1' } },
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'solo-crm' } },
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'importo' } },
+        { eventType: 'RECONCILED', timestamp: DOPO, metadata: { family: 'esito-mancante', undo: true } },
+        { eventType: 'CALL_LOGGED', timestamp: DOPO, metadata: { outcome: 'Chiuso' } },
+    ])
+    assert.deepEqual(r.map(x => x.esito), ['Chiuso', null, 'Chiuso', 'Non chiuso'])
+    assert.deepEqual([...EVENTI_REGISTRAZIONE].sort(), ['RECONCILED', 'salesperson_outcome_set'])
+})
+
+test('Piume del GDO e Scintille delle Conferme: niente per una presenza o chiusura non verificata', () => {
+    const presente = { ...base, presentedAt: APP, appointmentDate: APP, salespersonOutcome: 'Chiuso' }
+    assert.equal(stadioGdo(presente, INIZIO), 3)
+    assert.equal(stadioGdo({ ...presente, chiusuraVerificata: false }, INIZIO), 2)
+    // Registrato tutto in anticipo: resta la sola conferma.
+    assert.equal(stadioGdo({ ...presente, presenzaVerificata: false, chiusuraVerificata: false }, INIZIO), 1)
+    assert.deepEqual(piumeDovute({ ...presente, presenzaVerificata: false, chiusuraVerificata: false }, INIZIO), { conferma: true, presenza: false, chiusura: false })
+    const confPresente = { ...conf, appointmentDate: APP, presentedAt: APP }
+    assert.equal(stadioConferme(confPresente, INIZIO), 2)
+    assert.equal(stadioConferme({ ...confPresente, presenzaVerificata: false }, INIZIO), 1)
+})
+
+test('avvio dell\'economia: un esito scritto il 25/10 per un appuntamento del 26/10 non paga finché non arriva un esito vero', () => {
+    // Domenica 25/10: conferma e "Chiuso" scritti in anticipo per lunedì 26/10 alle 11.
+    const lunedi = giorno('2026-10-26T10:00:00Z')
+    const s = {
+        ...base, confirmationsTimestamp: giorno('2026-10-25T14:00:00Z'), presentedAt: lunedi, appointmentDate: lunedi, salespersonOutcome: 'Chiuso',
+    }
+    const presto = esitiVerificati(s, [{ at: giorno('2026-10-25T14:05:00Z'), esito: 'Chiuso' }], giorno('2026-10-26T12:00:00Z'))
+    assert.equal(stadioGdo({ ...s, presenzaVerificata: presto.presenza, chiusuraVerificata: presto.chiusura }, INIZIO), 0)
+    // Lunedì il venditore registra l'esito dopo la call: presenza e chiusura dal 26/10, la conferma del 25/10 resta fuori.
+    const vero = esitiVerificati(s, [{ at: giorno('2026-10-26T11:30:00Z'), esito: 'Chiuso' }], giorno('2026-10-26T12:00:00Z'))
+    assert.deepEqual(piumeDovute({ ...s, presenzaVerificata: vero.presenza, chiusuraVerificata: vero.chiusura }, INIZIO), { conferma: false, presenza: true, chiusura: true })
 })
 
 test('importi dai valori: il primo gradino vale lo stadio 1, poi le differenze', () => {
@@ -421,6 +499,7 @@ const conf = {
     confirmationsTimestamp: giorno('2026-10-27T10:00:00Z') as Date | null,   // 11:00 di Roma
     appointmentDate: giorno('2026-10-27T16:00:00Z') as Date | null,         // 17:00 di Roma
     presentedAt: null as Date | null,
+    presenzaVerificata: true,
 }
 
 test('Conferme: la conferma conta solo se arriva prima dell\'appuntamento', () => {
@@ -442,15 +521,15 @@ test('Conferme: stadi 1 (confermato) e 2 (presentato), dall\'avvio', () => {
     assert.equal(stadioConferme({ ...prima, presentedAt: giorno('2026-10-27T16:00:00Z') }, INIZIO), 2)
 })
 
-test('Conferme: 3 Scintille alla conferma, 20 in tutto alla presenza, 26 se confermato con un\'ora d\'anticipo', () => {
+test('Conferme: 4 Scintille alla conferma, 22 in tutto alla presenza, 30 se confermato con un\'ora d\'anticipo', () => {
     assert.equal(confermaInTempo(conf, 60), true)                                                                    // 6 ore prima
     assert.equal(confermaInTempo({ ...conf, confirmationsTimestamp: giorno('2026-10-27T15:30:00Z') }, 60), false)   // 30 minuti prima
     assert.equal(confermaInTempo({ ...conf, confirmationsTimestamp: giorno('2026-10-27T15:00:00Z') }, 60), true)    // un'ora esatta
-    assert.deepEqual(importiConferme(DEFAULT_ECONOMY_RULES, false), [3, 17])
-    assert.deepEqual(importiConferme(DEFAULT_ECONOMY_RULES, true), [3, 23])
-    assert.equal(somma(pianoStadi([], PC, LEAD, 2, importiConferme(DEFAULT_ECONOMY_RULES, true))), 26)
-    assert.equal(somma(pianoStadi([], PC, LEAD, 2, importiConferme(DEFAULT_ECONOMY_RULES, false))), 20)
-    assert.deepEqual(pianoStadi([], PC, LEAD, 1, importiConferme(DEFAULT_ECONOMY_RULES, true)).accredita, [{ gradino: 1, amount: 3, idemKey: kC(1) }])
+    assert.deepEqual(importiConferme(DEFAULT_ECONOMY_RULES, false), [4, 18])
+    assert.deepEqual(importiConferme(DEFAULT_ECONOMY_RULES, true), [4, 26])
+    assert.equal(somma(pianoStadi([], PC, LEAD, 2, importiConferme(DEFAULT_ECONOMY_RULES, true))), 30)
+    assert.equal(somma(pianoStadi([], PC, LEAD, 2, importiConferme(DEFAULT_ECONOMY_RULES, false))), 22)
+    assert.deepEqual(pianoStadi([], PC, LEAD, 1, importiConferme(DEFAULT_ECONOMY_RULES, true)).accredita, [{ gradino: 1, amount: 4, idemKey: kC(1) }])
 })
 
 test('Conferme: chi tiene la conferma è chi ha il primo gradino attivo, non l\'ultimo che ha confermato', () => {
@@ -465,8 +544,8 @@ test('Conferme: chi tiene la conferma è chi ha il primo gradino attivo, non l\'
 })
 
 test('Conferme: tetto delle conferme pagate al giorno e ruolo letto dal DB', () => {
-    assert.equal(sottoTettoConferme(11, DEFAULT_ECONOMY_RULES), true)
-    assert.equal(sottoTettoConferme(12, DEFAULT_ECONOMY_RULES), false)
+    assert.equal(sottoTettoConferme(13, DEFAULT_ECONOMY_RULES), true)
+    assert.equal(sottoTettoConferme(14, DEFAULT_ECONOMY_RULES), false)
     assert.equal(isConfermePersona({ role: 'CONFERME', isActive: true, isBot: false }), true)
     assert.equal(isConfermePersona({ role: 'CONFERME', isActive: false, isBot: false }), false)
     assert.equal(isConfermePersona({ role: 'GDO', isActive: true, isBot: false }), false)
@@ -480,7 +559,8 @@ const LUNEDI = '2026-10-26'
 const SETT_START = giorno('2026-10-25T23:00:00Z')
 const SETT_END = giorno('2026-11-01T23:00:00Z')
 const lo = (p: Partial<LeadObiettivo>): LeadObiettivo => ({
-    titolare: 'andrea', confermaUtile: true, autoreEsito: 'venditore', presentedAt: giorno('2026-10-27T16:00:00Z'), chiusoAt: null, ...p,
+    titolare: 'andrea', confermaUtile: true, autoreEsito: 'venditore', presentedAt: giorno('2026-10-27T16:00:00Z'), chiusoAt: null,
+    presenzaVerificata: true, chiusuraVerificata: true, ...p,
 })
 
 test('obiettivi: contano solo i lead tenuti dalla persona, confermati in tempo utile, con esito scritto da altri', () => {
@@ -492,33 +572,39 @@ test('obiettivi: contano solo i lead tenuti dalla persona, confermati in tempo u
         lo({ autoreEsito: 'andrea', chiusoAt: giorno('2026-10-28T10:00:00Z') }),        // esito scritto da lei
         lo({ presentedAt: giorno('2026-10-20T16:00:00Z') }),                             // settimana prima
         lo({ presentedAt: giorno('2026-10-20T16:00:00Z'), chiusoAt: giorno('2026-10-27T10:00:00Z') }),   // presenza prima, chiusura in settimana
+        // Registrati prima dell'ora dell'appuntamento: non contano.
+        lo({ presenzaVerificata: false }),
+        lo({ presenzaVerificata: false, chiusuraVerificata: false, chiusoAt: giorno('2026-10-28T10:00:00Z') }),
     ]
     assert.deepEqual(contaObiettivi(righe, 'andrea', SETT_START, SETT_END), { presenze: 2, chiusure: 2 })
 })
 
-test('obiettivi: scalini 16/22 presenze e 5/7 chiusure, Piume 3+4 e 4+5', () => {
+test('obiettivi: scalini 14/20 presenze e 4/6 chiusure, Piume 3+4 e 4+5', () => {
     const o = obiettiviPersona(DEFAULT_ECONOMY_RULES, 'andrea')
-    assert.deepEqual(o.presenze, { soglie: [16, 22], piume: [3, 4] })
-    assert.deepEqual(pianoObiettivo([], 'presenze', 'andrea', LUNEDI, 15, o.presenze).accredita, [])
-    assert.deepEqual(pianoObiettivo([], 'presenze', 'andrea', LUNEDI, 16, o.presenze).accredita.map(a => [a.gradino, a.amount]), [[1, 3]])
-    assert.deepEqual(pianoObiettivo([], 'chiusure', 'andrea', LUNEDI, 7, o.chiusure).accredita.map(a => [a.gradino, a.amount]), [[1, 4], [2, 5]])
+    assert.deepEqual(o.presenze, { soglie: [14, 20], piume: [3, 4] })
+    assert.deepEqual(o.chiusure, { soglie: [4, 6], piume: [4, 5] })
+    assert.deepEqual(pianoObiettivo([], 'presenze', 'andrea', LUNEDI, 13, o.presenze).accredita, [])
+    assert.deepEqual(pianoObiettivo([], 'presenze', 'andrea', LUNEDI, 14, o.presenze).accredita.map(a => [a.gradino, a.amount]), [[1, 3]])
+    assert.deepEqual(pianoObiettivo([], 'presenze', 'andrea', LUNEDI, 20, o.presenze).accredita.map(a => [a.gradino, a.amount]), [[1, 3], [2, 4]])
+    assert.deepEqual(pianoObiettivo([], 'chiusure', 'andrea', LUNEDI, 3, o.chiusure).accredita, [])
+    assert.deepEqual(pianoObiettivo([], 'chiusure', 'andrea', LUNEDI, 6, o.chiusure).accredita.map(a => [a.gradino, a.amount]), [[1, 4], [2, 5]])
     assert.equal(obiettivoIdemKey('chiusure', 'andrea', LUNEDI, 2), `P:obiettivo:chiusure:andrea:${LUNEDI}:2`)
     // Una chiusura tolta riporta sotto la soglia: lo scalino si storna.
     const presi: LedgerRow[] = [
         { idemKey: obiettivoIdemKey('chiusure', 'andrea', LUNEDI, 1), amount: 4 },
         { idemKey: obiettivoIdemKey('chiusure', 'andrea', LUNEDI, 2), amount: 5 },
     ]
-    assert.deepEqual(pianoObiettivo(presi, 'chiusure', 'andrea', LUNEDI, 6, o.chiusure).storna, [obiettivoIdemKey('chiusure', 'andrea', LUNEDI, 2)])
+    assert.deepEqual(pianoObiettivo(presi, 'chiusure', 'andrea', LUNEDI, 5, o.chiusure).storna, [obiettivoIdemKey('chiusure', 'andrea', LUNEDI, 2)])
     // Settimane e persone diverse non si toccano.
-    assert.equal(pianoObiettivo(presi, 'chiusure', 'andrea', '2026-11-02', 7, o.chiusure).accredita.length, 2)
-    assert.equal(pianoObiettivo(presi, 'chiusure', 'alberto', LUNEDI, 7, o.chiusure).accredita.length, 2)
+    assert.equal(pianoObiettivo(presi, 'chiusure', 'andrea', '2026-11-02', 6, o.chiusure).accredita.length, 2)
+    assert.equal(pianoObiettivo(presi, 'chiusure', 'alberto', LUNEDI, 6, o.chiusure).accredita.length, 2)
 })
 
 test('obiettivi: soglie per persona (chi fa le Conferme a metà tempo)', () => {
     const r = parseEconomyRules(JSON.stringify({ conferme: { perPersona: { andrea: { presenze: [10, 14] } } } }))
     assert.deepEqual(obiettiviPersona(r, 'andrea').presenze.soglie, [10, 14])
-    assert.deepEqual(obiettiviPersona(r, 'andrea').chiusure.soglie, [5, 7])
-    assert.deepEqual(obiettiviPersona(r, 'alberto').presenze.soglie, [16, 22])
+    assert.deepEqual(obiettiviPersona(r, 'andrea').chiusure.soglie, [4, 6])
+    assert.deepEqual(obiettiviPersona(r, 'alberto').presenze.soglie, [14, 20])
 })
 
 test('classifica: 50, 25 e 10 euro ai primi tre, niente agli altri', () => {
@@ -615,7 +701,7 @@ test('doppio click e gara: lo stesso fissato ha sempre la stessa chiave, quindi 
     const dopoPrimo: LedgerRow[] = pianoStadi([], PG, LEAD, 3, IMPORTI_GDO).accredita.map(a => ({ idemKey: a.idemKey, amount: a.amount }))
     assert.deepEqual(pianoStadi(dopoPrimo, PG, LEAD, 3, IMPORTI_GDO), { accredita: [], storna: [] })
     // Le Scintille delle Conferme: idem.
-    const conf1: LedgerRow[] = [{ idemKey: kC(1), amount: 3 }]
+    const conf1: LedgerRow[] = [{ idemKey: kC(1), amount: 4 }]
     assert.deepEqual(pianoStadi(conf1, PC, LEAD, 1, importiConferme(DEFAULT_ECONOMY_RULES, true)), { accredita: [], storna: [] })
 })
 
