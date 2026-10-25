@@ -2,7 +2,21 @@ import { Trophy } from "lucide-react"
 
 export default function ClassificaLoading() {
     return (
-        <div className="flex-1 bg-ash-50 flex flex-col min-h-screen">
+        <>
+        {/* Con la Diretta accesa (data-ui sul div radice del layout) il caricamento
+            è già scuro, senza il vecchio titolo "Classifica GDO". */}
+        <div className="hidden [[data-ui=diretta]_&]:block -m-3 min-h-[calc(100%+1.5rem)] bg-[var(--d-bg)] px-4 py-6 sm:-m-6 sm:min-h-[calc(100%+3rem)] sm:px-8 sm:py-8" aria-busy="true">
+            <div className="mx-auto w-full max-w-6xl">
+                <div className="h-9 w-48 rounded-[8px] bg-[var(--d-surface)]" />
+                <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+                    <div className="h-72 rounded-[16px] bg-[var(--d-surface)]" />
+                    <div className="flex flex-col gap-3">
+                        {[1, 2, 3].map(i => <div key={i} className="h-16 rounded-[8px] bg-[var(--d-surface)]" />)}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div className="[[data-ui=diretta]_&]:hidden flex-1 bg-ash-50 flex flex-col min-h-screen">
             <div className="bg-brand-charcoal text-white pt-8 pb-20 px-8">
                 <div className="flex items-center gap-3">
                     <div className="p-3 bg-white/10 rounded-xl">
@@ -35,5 +49,6 @@ export default function ClassificaLoading() {
                 </div>
             </div>
         </div>
+        </>
     )
 }
