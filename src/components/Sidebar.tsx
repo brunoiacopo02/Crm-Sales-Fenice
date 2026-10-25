@@ -194,8 +194,6 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                     { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
                     { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
                     { name: "Richiami", href: "/richiami", icon: Calendar },
-                    { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
-                    { name: "Note GDO", href: "/note-gdo", icon: FileText },
                 ],
             },
             {
@@ -245,8 +243,6 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                         { name: "KPI GDO", href: "/kpi-gdo", icon: LayoutDashboard },
                         { name: "Performance GDO", href: "/manager-gdo-performance", icon: Trophy },
                         { name: "Operativa Team", href: "/operativa-team", icon: LayoutDashboard },
-                        { name: "Note GDO", href: "/note-gdo", icon: FileText },
-                        { name: "Monitor Pause", href: "/monitor-pause", icon: Clock },
                         { name: "Statistiche Fissatore", href: "/statistiche-fissatore", icon: Activity },
                         // Coda di smistamento, non una vista di lettura: solo ADMIN.
                         ...(role === "ADMIN" ? [{ name: "Richieste di Contatto", href: "/richieste-contatto", icon: PhoneIncoming, badge: contactPending }] : []),
@@ -260,7 +256,6 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                         { name: "Monitor Vendite", href: "/monitor-vendite", icon: ClipboardList },
                         { name: "Calendari Venditori", href: "/calendari-venditori", icon: CalendarClock },
                         { name: "Portafoglio Clienti", href: "/portafoglio-clienti", icon: Briefcase },
-                        { name: "Pipeline venditore", href: "/pipeline-venditore", icon: PhoneCall },
                     ],
                 },
                 {
@@ -307,8 +302,6 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                             { name: "Rinascita: centro di controllo", href: "/admin/diretta", icon: Target },
                             { name: "Rinascita: Conferme", href: "/admin/diretta/conferme", icon: Target },
                         ] : []),
-                        { name: "Monitor RPG GDO", href: "/manager-rpg-monitor", icon: Gamepad2 },
-                        { name: "Gestione Store", href: "/team/store", icon: Store },
                     ],
                 },
                 {
