@@ -27,6 +27,12 @@ test('come funziona, GDO: serie con le tappe e i tre potenziamenti', () => {
     assert.match(t, /Scudo della serie: .*al massimo 2 al mese/)
 })
 
+test('come funziona, CONFERME: la conferma vale anche dopo l\'ora dell\'appuntamento (PO 25/10)', () => {
+    const t = testo('CONFERME')
+    assert.match(t, /4 Scintille quando confermi un lead, anche se lo confermi dopo l'ora del suo appuntamento\./)
+    assert.doesNotMatch(t, /prima del suo appuntamento/)
+})
+
 test('come funziona: la postazione per tutti, la serie solo ai GDO', () => {
     assert.match(testo('GDO'), /La tua postazione/)
     assert.match(testo('CONFERME'), /La tua postazione/)

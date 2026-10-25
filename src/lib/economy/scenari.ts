@@ -119,7 +119,7 @@ export function guadagnoGdo(s: ScenarioGdo, r: EconomyRules, t: Pick<Gamificatio
 
 export interface ScenarioConferme {
     nome: string
-    /** Conferme fatte prima dell'appuntamento, a settimana. */
+    /** Conferme fatte (anche dopo l'ora dell'appuntamento), a settimana. */
     conferme: number
     /** Presenze di quei lead, a settimana. */
     presenze: number

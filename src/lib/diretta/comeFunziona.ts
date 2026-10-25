@@ -47,7 +47,7 @@ export function comeFunziona(ruolo: string, r: EconomyRules, t: GamificationTarg
             {
                 titolo: 'Scintille: lead per lead',
                 righe: [
-                    `${scintille(sc.conferma)} quando confermi un lead prima del suo appuntamento.`,
+                    `${scintille(sc.conferma)} quando confermi un lead, anche se lo confermi dopo l'ora del suo appuntamento.`,
                     `Se poi la persona si presenta, il lead vale ${scintille(sc.presenza)} in tutto; ${scintille(sc.presenza + sc.inTempo)} se avevi confermato almeno ${numeroIt(sc.inTempoMinuti)} minuti prima.`,
                     `Si pagano al massimo ${numeroIt(sc.tettoConfermeGiorno)} conferme al giorno.`,
                 ],

@@ -548,14 +548,33 @@ const conf = {
     presenzaVerificata: true,
 }
 
-test('Conferme: la conferma conta solo se arriva prima dell\'appuntamento', () => {
+test('Conferme: la conferma conta anche se arriva dopo l\'ora dell\'appuntamento (PO 25/10)', () => {
     assert.equal(confermaUtile(conf), true)
-    // Registrata a call iniziata (il lead è già davanti al venditore): non è lavoro di conferma.
-    assert.equal(confermaUtile({ ...conf, confirmationsTimestamp: giorno('2026-10-27T16:05:00Z') }), false)
-    assert.equal(confermaUtile({ ...conf, confirmationsTimestamp: giorno('2026-10-27T16:00:00Z') }), false)
+    // Appuntamento alle 17, confermato alle 17:05 (il lead non aveva visto il video): conta.
+    assert.equal(confermaUtile({ ...conf, confirmationsTimestamp: giorno('2026-10-27T16:05:00Z') }), true)
+    assert.equal(confermaUtile({ ...conf, confirmationsTimestamp: giorno('2026-10-27T16:00:00Z') }), true)
+    // Restano: esito "confermato", ora della conferma, un appuntamento.
     assert.equal(confermaUtile({ ...conf, confirmationsOutcome: 'scartato' }), false)
+    assert.equal(confermaUtile({ ...conf, confirmationsTimestamp: null }), false)
     assert.equal(confermaUtile({ ...conf, appointmentDate: null }), false)
-    assert.equal(stadioConferme({ ...conf, confirmationsTimestamp: giorno('2026-10-27T16:05:00Z'), presentedAt: giorno('2026-10-27T16:00:00Z') }, INIZIO), 0)
+    const tardi = { ...conf, confirmationsTimestamp: giorno('2026-10-27T16:05:00Z') }
+    assert.equal(stadioConferme(tardi, INIZIO), 1)
+    assert.equal(stadioConferme({ ...tardi, presentedAt: giorno('2026-10-27T16:00:00Z') }, INIZIO), 2)
+    // Il bonus "in tempo" resta solo a chi conferma con anticipo.
+    assert.equal(confermaInTempo(tardi, 60), false)
+    assert.deepEqual(pianoStadi([], PC, LEAD, 2, importiConferme(DEFAULT_ECONOMY_RULES, confermaInTempo(tardi, 60))).accredita.map(a => a.amount), [4, 18])
+})
+
+test('Conferme: confermata tardi, appuntamento spostato e riconfermato: un solo accredito', () => {
+    // Prima conferma dopo l'ora: si paga il gradino 1 con la chiave del lead.
+    const tardi = { ...conf, confirmationsTimestamp: giorno('2026-10-27T16:05:00Z') }
+    const primo = pianoStadi([], PC, LEAD, stadioConferme(tardi, INIZIO), importiConferme(DEFAULT_ECONOMY_RULES, false))
+    assert.deepEqual(primo.accredita, [{ gradino: 1, amount: 4, idemKey: kC(1) }])
+    const rows: LedgerRow[] = primo.accredita.map(a => ({ idemKey: a.idemKey, amount: a.amount, userId: 'andrea' }))
+    // Spostato a giovedì e riconfermato (anche da un collega): stessa chiave, niente di nuovo, il premio resta a chi l'aveva.
+    const riconfermata = { ...conf, appointmentDate: giorno('2026-10-29T16:00:00Z'), confirmationsTimestamp: giorno('2026-10-28T10:00:00Z') }
+    assert.deepEqual(pianoStadi(rows, PC, LEAD, stadioConferme(riconfermata, INIZIO, true), importiConferme(DEFAULT_ECONOMY_RULES, false)), { accredita: [], storna: [] })
+    assert.equal(titolareConferma(rows, LEAD, 'alberto'), 'andrea')
 })
 
 test('Conferme: stadi 1 (confermato) e 2 (presentato), dall\'avvio', () => {
@@ -609,12 +628,12 @@ const lo = (p: Partial<LeadObiettivo>): LeadObiettivo => ({
     presenzaVerificata: true, chiusuraVerificata: true, ...p,
 })
 
-test('obiettivi: contano solo i lead tenuti dalla persona, confermati in tempo utile, con esito scritto da altri', () => {
+test('obiettivi: contano solo i lead tenuti dalla persona, confermati, con esito scritto da altri', () => {
     const righe = [
         lo({}),
         lo({ chiusoAt: giorno('2026-10-28T10:00:00Z') }),
         lo({ titolare: 'alberto' }),                                                     // di un collega
-        lo({ confermaUtile: false }),                                                    // confermato a call iniziata
+        lo({ confermaUtile: false }),                                                    // conferma non valida
         lo({ autoreEsito: 'andrea', chiusoAt: giorno('2026-10-28T10:00:00Z') }),        // esito scritto da lei
         lo({ presentedAt: giorno('2026-10-20T16:00:00Z') }),                             // settimana prima
         lo({ presentedAt: giorno('2026-10-20T16:00:00Z'), chiusoAt: giorno('2026-10-27T10:00:00Z') }),   // presenza prima, chiusura in settimana
@@ -768,7 +787,7 @@ test('storni: annullamento, conferma cambiata, presenza o chiusura tolte', () =>
 test('Conferme: una conferma già pagata resta valida anche se poi viene risalvata a call iniziata', () => {
     // Confermata alle 11, risalvata alle 17:05 per cambiare venditore: il timestamp si sposta.
     const risalvata = { ...conf, confirmationsTimestamp: giorno('2026-10-27T16:05:00Z') }
-    assert.equal(stadioConferme(risalvata, INIZIO), 0)
+    assert.equal(stadioConferme(risalvata, INIZIO), 1)
     assert.equal(stadioConferme(risalvata, INIZIO, true), 1)
     assert.equal(stadioConferme({ ...risalvata, presentedAt: giorno('2026-10-27T16:00:00Z') }, INIZIO, true), 2)
     // Ma se la conferma non c'è più (scartato), niente.

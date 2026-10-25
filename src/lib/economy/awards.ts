@@ -345,7 +345,7 @@ const coppia = (userId: string, lunedi: string) => `${userId}|${lunedi}`
  *    venditori, manager, admin: ruolo letto dal DB) e che a confermare sia
  *    stata una persona, non il bot. Gli storni valgono sempre.
  * 2. Scintille di chi ha confermato il lead (solo ruolo CONFERME, dal DB):
- *    con i default 4 alla conferma fatta prima dell'appuntamento, 22 in tutto
+ *    con i default 4 alla conferma (anche dopo l'ora dell'appuntamento), 22 in tutto
  *    se il lead si presenta, 30 se la conferma era arrivata con almeno un'ora
  *    d'anticipo. Le conferme pagate al giorno hanno un tetto; la presenza
  *    scritta da chi ha confermato non paga.
@@ -678,7 +678,7 @@ export async function riallineaObiettiviConferme(userId: string, lunedi: string,
  * settimana: confermati da lei o tenuti da lei sul registro, con presenza o
  * chiusura nella settimana, e della sua stessa parte (l'account di prova
  * conta solo i lead di prova, gli altri solo quelli veri). Il filtro vero
- * (titolare, conferma prima dell'appuntamento, esito scritto da altri) lo fa
+ * (titolare, conferma valida, esito scritto da altri) lo fa
  * contaObiettivi.
  */
 async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end: Date): Promise<LeadObiettivo[]> {
@@ -727,7 +727,7 @@ async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end:
         const verificati = esitiVerificati(c, registrazioniDaEventi(suoi), adesso)
         return {
             titolare: titolareConferma(delLead, c.id, c.confirmationsUserId),
-            // Utile se fatta prima dell'appuntamento, o già pagata quando lo era.
+            // Utile se confermata (a qualunque ora), o già pagata.
             confermaUtile: confermaUtile(c) || !!confermaRegistrata(delLead, c.id),
             autoreEsito: autoreUltimoEsito(suoi),
             presentedAt: c.presentedAt,

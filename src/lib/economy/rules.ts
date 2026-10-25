@@ -27,7 +27,7 @@ export type ChestKind = 'giorno_1' | 'giorno_2' | 'punta_1' | 'punta_2'
 
 /** Stadio di un lead per le Piume del GDO: 0 nessuno, 1 confermato, 2 presentato, 3 chiuso. */
 export type StadioGdo = 0 | 1 | 2 | 3
-/** Stadio di un lead per le Scintille delle Conferme: 0 nessuno, 1 confermato in tempo utile, 2 presentato. */
+/** Stadio di un lead per le Scintille delle Conferme: 0 nessuno, 1 confermato, 2 presentato. */
 export type StadioConferme = 0 | 1 | 2
 export type TipoObiettivo = 'presenze' | 'chiusure'
 
@@ -76,7 +76,7 @@ export interface EconomyRules {
     conferme: {
         /** Scintille per lead, a stadi come le Piume del GDO (vale lo stadio più alto). */
         scintille: {
-            conferma: number           // stadio 1: confermato prima dell'ora dell'appuntamento
+            conferma: number           // stadio 1: confermato (anche dopo l'ora dell'appuntamento, PO 25/10)
             presenza: number           // stadio 2: il lead si è presentato (valore totale del lead)
             inTempo: number            // in più sulla presenza se la conferma è arrivata con anticipo
             inTempoMinuti: number      // anticipo minimo sull'ora dell'appuntamento
@@ -754,14 +754,14 @@ export interface StatoConfermeVerificato extends StatoConfermeLead {
 }
 
 /**
- * La conferma conta per le Conferme solo se è arrivata PRIMA dell'ora
- * dell'appuntamento: una conferma registrata a call iniziata (il lead è già
- * davanti al venditore) serve al conteggio delle presenze del GDO, ma non è
- * lavoro di conferma e non paga.
+ * La conferma conta per le Conferme se l'esito è "confermato", con la sua ora
+ * e un appuntamento. Vale anche se arriva DOPO l'ora dell'appuntamento (PO
+ * 25/10/2026): molti spostano la call, o la confermano a call appena
+ * iniziata perché il lead non aveva visto il video. L'anticipo resta premiato
+ * a parte (confermaInTempo).
  */
 export function confermaUtile(s: StatoConfermeLead): boolean {
     return s.confirmationsOutcome === 'confermato' && !!s.confirmationsTimestamp && !!s.appointmentDate
-        && s.confirmationsTimestamp.getTime() < s.appointmentDate.getTime()
 }
 
 /** Conferma arrivata con almeno `minuti` di anticipo sull'appuntamento. */
@@ -774,10 +774,10 @@ export function confermaInTempo(s: Pick<StatoConfermeLead, 'confirmationsTimesta
  * Stadio del lead per le Scintille di chi l'ha confermato. La presenza vale
  * dall'avvio dell'economia e solo se verificata (registrata a appuntamento
  * passato, vedi esitiVerificati); la sola conferma solo se fatta dall'avvio
- * in poi. `giaRegistrata` = la conferma ha già il suo accredito attivo (era
- * utile quando è stata fatta): un salvataggio successivo a call iniziata, per
- * esempio per cambiare venditore, sposta confirmationsTimestamp ma non la
- * rende meno vera.
+ * in poi. `giaRegistrata` = la conferma ha già il suo accredito attivo: un
+ * salvataggio successivo, per esempio per cambiare venditore, sposta
+ * confirmationsTimestamp ma la conferma resta quella già pagata (stessa
+ * chiave sul registro, nessun secondo accredito).
  */
 export function stadioConferme(s: StatoConfermeVerificato, inizio: Date, giaRegistrata = false): StadioConferme {
     if (s.confirmationsOutcome !== 'confermato') return 0
@@ -839,8 +839,8 @@ export function pianoObiettivo(rows: LedgerRow[], tipo: TipoObiettivo, userId: s
 
 /**
  * Lead che contano per gli obiettivi di una Conferma in una settimana. Contano
- * solo i lead che tiene lei (titolareConferma), confermati prima
- * dell'appuntamento, e solo se presenza o chiusura le ha scritte qualcun
+ * solo i lead che tiene lei (titolareConferma), confermati (anche dopo l'ora
+ * dell'appuntamento), e solo se presenza o chiusura le ha scritte qualcun
  * altro: chi conferma non si premia registrando da sé l'esito del venditore.
  */
 export interface LeadObiettivo {
