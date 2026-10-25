@@ -25,6 +25,7 @@ import {
     aggregateConfermeDiretta, conteggiSquadra, direttaBounds,
     type ConfermeDirettaNumeri, type ConfermeLeadRow,
 } from "@/lib/conferme/direttaStats"
+import { progressoObiettiviConferme, type ProgressoObiettivi } from "@/lib/economy/awards"
 
 const CACHE_SECONDI = 20
 
@@ -79,6 +80,8 @@ const loadConfermeRows = unstable_cache(
 
 export type ConfermeDirettaStats = ConfermeDirettaNumeri & {
     saldo: { scintille: number; piume: number }
+    /** Obiettivi settimanali che danno Piume (solo per chi ha il ruolo CONFERME nel DB). */
+    obiettiviSettimana: ProgressoObiettivi | null
 }
 
 /** Numeri della colonna arancione per chi guarda: i suoi di oggi, gli obiettivi, la squadra e il saldo. */
@@ -95,13 +98,22 @@ export async function getConfermeDirettaStats(): Promise<ConfermeDirettaStats> {
 
     const [rows, saldoRows] = await Promise.all([
         loadConfermeRows(companyIds, bounds.since),
-        db.select({ scintille: users.scintille, piume: users.piume })
+        db.select({ scintille: users.scintille, piume: users.piume, role: users.role })
             .from(users).where(eq(users.id, ctx.userId)).limit(1),
     ])
+    // Obiettivi della settimana: gli stessi conteggi che decidono le Piume
+    // (src/lib/economy/awards.ts). Un errore non toglie il resto della colonna.
+    const obiettiviSettimana = saldoRows[0]?.role === 'CONFERME'
+        ? await progressoObiettiviConferme(ctx.userId, now).catch((e: unknown) => {
+            console.error('[conferme diretta] obiettivi', e)
+            return null
+        })
+        : null
 
     return {
         ...aggregateConfermeDiretta(rows, { userId: ctx.userId, bounds, cfg }),
         saldo: { scintille: saldoRows[0]?.scintille ?? 0, piume: saldoRows[0]?.piume ?? 0 },
+        obiettiviSettimana,
     }
 }
 

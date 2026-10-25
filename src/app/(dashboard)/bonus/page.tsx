@@ -1,117 +1,74 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { and, eq } from "drizzle-orm"
-import { Headphones, PhoneCall, Briefcase, Target } from "lucide-react"
+import { eq } from "drizzle-orm"
+import { Headphones, PhoneCall, Briefcase, Trophy } from "lucide-react"
 import { db } from "@/db"
-import { monthlyLeadTargets } from "@/db/schema"
+import { appSettings } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
-import { currentTenant } from "@/lib/tenancy"
-import { currentYearMonthRome } from "@/lib/workingDaysUtils"
-import { calcolaSoglieBonus, ANCORA_FATTURATO_EUR, ANCORA_MESE, BONUS_GDO } from "@/lib/bonus/soglie"
+import { BONUS_GDO } from "@/lib/bonus/soglie"
+import { CONFERME_BONUS_KEY, parseConfermeBonus } from "@/lib/conferme/bonus"
+import { readEconomyRules } from "@/lib/economy/awards"
 import { isBonusUnlocked } from "@/app/actions/bonusPinActions"
 import BonusLock from "./BonusLock"
 
 export const dynamic = "force-dynamic"
 
-const MONTH_RE = /^\d{4}-\d{2}$/
+const eur = (n: number) => n.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 })
 
-function shiftMonth(ym: string, delta: number): string {
-    const [y, m] = ym.split("-").map(Number)
-    const d = new Date(Date.UTC(y, m - 1 + delta, 1))
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
-}
-
-/** Dal mese dell'ancora fino al mese prossimo (le soglie si preparano prima di comunicarle). */
-function monthOptions(current: string): string[] {
-    const out: string[] = []
-    for (let ym = shiftMonth(current, 1); ym >= ANCORA_MESE; ym = shiftMonth(ym, -1)) out.push(ym)
-    return out
-}
-
-const eur = (n: number) => n.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })
-const monthLabel = (ym: string) => {
-    const [y, m] = ym.split("-").map(Number)
-    const s = new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString("it-IT", { month: "long", year: "numeric", timeZone: "UTC" })
-    return s.charAt(0).toUpperCase() + s.slice(1)
-}
-
-export default async function BonusPage({ searchParams }: { searchParams: Promise<{ mese?: string }> }) {
+/**
+ * Regole dei bonus da comunicare (PO 25/10/2026): soglie fisse, settimana da
+ * lunedì a sabato. GDO e classifica dalla configurazione della Diretta e
+ * dell'economia, Conferme da /admin/diretta/conferme. Chi ha maturato cosa,
+ * settimana per settimana, sta in /admin/diretta/premi-settimana.
+ */
+export default async function BonusPage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || user.user_metadata?.role !== "ADMIN") redirect("/unauthorized")
     if (!(await isBonusUnlocked())) return <BonusLock />
 
-    const current = currentYearMonthRome()
-    const months = monthOptions(current)
-    const raw = (await searchParams).mese
-    const mese = raw && MONTH_RE.test(raw) && months.includes(raw) ? raw : current
-
-    const ctx = await currentTenant()
-    const [cfg] = await db.select({ obiettivo: monthlyLeadTargets.targetFatturatoMonthly })
-        .from(monthlyLeadTargets)
-        .where(and(eq(monthlyLeadTargets.companyId, ctx.companyId), eq(monthlyLeadTargets.yearMonth, mese)))
-    const obiettivo = cfg?.obiettivo ?? 0
-    const soglie = calcolaSoglieBonus(obiettivo)
+    const [economia, confermeRow] = await Promise.all([
+        readEconomyRules(),
+        db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, CONFERME_BONUS_KEY)).limit(1),
+    ])
+    const conferme = parseConfermeBonus(confermeRow[0]?.value)
+    const [primo, secondo, terzo] = economia.classifica.premiEuro
+    const unita = conferme.unita === "chiusure" ? { una: "chiusura", tante: "chiusure" } : { una: "presenza", tante: "presenze" }
+    const periodo = conferme.periodo === "settimana" ? "della settimana" : "del mese"
 
     return (
         <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-bold text-brand-charcoal">Bonus</h1>
-                    <p className="mt-1 text-sm text-ash-500">
-                        La soglia delle Conferme si ricalcola dall&apos;obiettivo di fatturato del mese; quella dei GDO è fissa.
-                    </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    {months.map(ym => (
-                        <Link
-                            key={ym}
-                            href={`/bonus?mese=${ym}`}
-                            className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${ym === mese
-                                ? "border-brand-orange bg-brand-orange text-brand-charcoal"
-                                : "border-ash-200 bg-white text-ash-600 hover:border-brand-orange"}`}
-                        >
-                            {monthLabel(ym)}
-                        </Link>
-                    ))}
-                </div>
+            <div>
+                <h1 className="text-2xl font-bold text-brand-charcoal">Bonus</h1>
+                <p className="mt-1 text-sm text-ash-500">
+                    Soglie fisse, la settimana va da lunedì a sabato. Importi lordi.
+                    Chi ha maturato cosa si registra a settimana chiusa in{" "}
+                    <Link href="/admin/diretta/premi-settimana" className="font-semibold text-brand-orange underline">Premi della settimana</Link>.
+                </p>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-2xl border border-ash-200/60 bg-white p-5 shadow-soft sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
-                        <Target className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-ash-500">Obiettivo di fatturato · {monthLabel(mese)}</div>
-                        <div className="text-2xl font-bold text-brand-charcoal">{obiettivo > 0 ? eur(obiettivo) : "Non impostato"}</div>
-                    </div>
-                </div>
-                <div className="text-sm text-ash-500 sm:text-right">
-                    {soglie
-                        ? <>Rispetto all&apos;ancora di ottobre 2026 ({eur(ANCORA_FATTURATO_EUR)}): <span className="font-semibold text-brand-charcoal">×{soglie.fattore.toLocaleString("it-IT", { maximumFractionDigits: 2 })}</span></>
-                        : <>Impostalo in <Link href="/panoramica-generale" className="font-semibold text-brand-orange underline">Sales Manager → Numeri mensili</Link>: le soglie compaiono qui da sole.</>}
-                </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-                {/* GDO: soglia fissa a 4 per decisione del 25/10/2026 (src/lib/bonus/soglie.ts),
-                    quindi la card si mostra anche senza obiettivo di fatturato. */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <BonusCard
                     icon={<PhoneCall className="h-5 w-5" />}
                     titolo="GDO"
                     valore={`${BONUS_GDO.soglia} presenze`}
-                    sotto="a settimana, per persona, soglia fissa"
-                    testo={`Dalla ${BONUS_GDO.soglia + 1}ª presenza della settimana in poi prendi ${eur(BONUS_GDO.euro)} per ogni presenza, senza tetto. Contano solo gli appuntamenti confermati dalle Conferme e presentati. La soglia non dipende dall'obiettivo di fatturato.`}
+                    sotto="a settimana, per persona"
+                    testo={`Dalla ${BONUS_GDO.soglia + 1}ª presenza della settimana in poi prendi ${eur(BONUS_GDO.euro)} per ogni presenza, senza tetto. Contano solo gli appuntamenti confermati dalle Conferme e presentati.`}
+                />
+                <BonusCard
+                    icon={<Trophy className="h-5 w-5" />}
+                    titolo="Classifica"
+                    etichetta="Premi"
+                    valore={`${eur(primo)} · ${eur(secondo)} · ${eur(terzo)}`}
+                    sotto="ai primi tre della settimana"
+                    testo="Si guarda chi ha più presenze da lunedì a sabato. A pari presenze vince chi ha più fissati validi, poi l'ordine alfabetico. Si vedono solo i primi tre; il lunedì si riparte da zero."
                 />
                 <BonusCard
                     icon={<Headphones className="h-5 w-5" />}
                     titolo="Conferme"
-                    valore={soglie ? `${soglie.conferme.soglia} chiusure` : "—"}
-                    sotto="a settimana, di squadra"
-                    testo={soglie
-                        ? `Bonus di squadra: dalla ${soglie.conferme.soglia + 1}ª chiusura della settimana in poi ognuno di voi prende ${eur(soglie.conferme.euro)} per ogni chiusura, senza tetto. Contano le chiusure di lead che avete confermato voi.`
-                        : null}
+                    valore={`${conferme.soglia} ${unita.tante}`}
+                    sotto={`${periodo}, di squadra`}
+                    testo={`Bonus di squadra: dalla ${conferme.soglia + 1}ª ${unita.una} ${periodo} in poi ognuno di voi prende ${eur(conferme.euroPerUnita)} per ogni ${unita.una}, senza tetto. Contano i lead che avete confermato voi.`}
                 />
                 <BonusCard
                     icon={<Briefcase className="h-5 w-5" />}
@@ -121,22 +78,17 @@ export default async function BonusPage({ searchParams }: { searchParams: Promis
                     testo="Se almeno l'85% di chi firma nel mese paga entro lo stesso mese, +0,5% di provvigione su quei contratti. Se almeno il 90%, +1%."
                 />
             </div>
-
-            <p className="text-xs leading-relaxed text-ash-500">
-                Conferme: soglia = arrotondamento di (soglia di ottobre 2026 × obiettivo del mese ÷ {eur(ANCORA_FATTURATO_EUR)}).
-                A ottobre 2026 erano 20 chiusure; l&apos;importo ({eur(15)}) non cambia.
-                GDO: soglia fissa a {BONUS_GDO.soglia} presenze dal 26/10/2026, {eur(BONUS_GDO.euro)} per ogni presenza in più.
-            </p>
         </div>
     )
 }
 
-function BonusCard({ icon, titolo, valore, sotto, testo }: {
+function BonusCard({ icon, titolo, etichetta = "Soglia", valore, sotto, testo }: {
     icon: React.ReactNode
     titolo: string
+    etichetta?: string
     valore: string
     sotto: string
-    testo: string | null
+    testo: string
 }) {
     return (
         <div className="flex flex-col rounded-2xl border border-ash-200/60 bg-white p-5 shadow-soft">
@@ -144,12 +96,12 @@ function BonusCard({ icon, titolo, valore, sotto, testo }: {
                 {icon}
                 <span className="text-sm font-bold uppercase tracking-wide text-brand-charcoal">{titolo}</span>
             </div>
-            <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-ash-500">Soglia</div>
+            <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-ash-500">{etichetta}</div>
             <div className="text-2xl font-bold text-brand-charcoal">{valore}</div>
             <div className="text-sm text-ash-500">{sotto}</div>
             <div className="mt-4 rounded-xl bg-ash-50/80 p-3 text-sm leading-relaxed text-ash-700">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ash-500">Da comunicare</div>
-                {testo ?? "Imposta l'obiettivo di fatturato del mese per vedere il bonus."}
+                {testo}
             </div>
         </div>
     )

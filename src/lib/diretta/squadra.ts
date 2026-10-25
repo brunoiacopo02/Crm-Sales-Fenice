@@ -3,6 +3,13 @@
 // (appSettings 'leaderboard_mode') decide anche QUALI dati partono dal server:
 // in 'top3' chi guarda non riceve le presenze degli altri, così la sua
 // posizione non si ricava nemmeno aprendo la rete del browser.
+//
+// Classifica settimanale (seconda tornata del 25/10): settimana lun-sab, si
+// mostrano solo i primi tre con il premio in euro (50, 25, 10 lordi); ordine e
+// premi sono gli stessi che l'admin registra a settimana chiusa
+// (src/lib/economy/premiSettimana.ts).
+
+import { ordinaPerPresenze } from '@/lib/economy/premiSettimana'
 
 export type LeaderboardMode = 'top3' | 'completa' | 'nessuna'
 export const LEADERBOARD_MODE_KEY = 'leaderboard_mode'
@@ -27,14 +34,14 @@ export interface MembroSquadra {
 
 const perNome = (a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome, 'it', { sensitivity: 'base' })
 
-/** Presenze della settimana, a pari presenze i fissati, poi il nome. */
+/** Presenze della settimana, a pari presenze i fissati validi, poi il nome (lo stesso ordine dei premi). */
 export function ordinaClassifica(membri: MembroSquadra[]): MembroSquadra[] {
-    return [...membri].sort((a, b) => (b.presenze - a.presenze) || (b.fissati - a.fissati) || perNome(a, b))
+    return ordinaPerPresenze(membri)
 }
 
-/** Il podio: i primi tre con almeno una presenza. */
-export function primiTre(ordinati: MembroSquadra[]): MembroSquadra[] {
-    return ordinati.filter(x => x.presenze > 0).slice(0, 3)
+/** Il podio: i primi tre con almeno `minPresenze` presenze (una, di default). */
+export function primiTre(ordinati: MembroSquadra[], minPresenze = 1): MembroSquadra[] {
+    return ordinati.filter(x => x.presenze >= minPresenze).slice(0, 3)
 }
 
 /**
@@ -43,10 +50,10 @@ export function primiTre(ordinati: MembroSquadra[]): MembroSquadra[] {
  * Si conta un'unità in più del distacco: a pari presenze l'ordine dipende dai
  * fissati, e la frase deve restare vera qualunque cosa succeda.
  */
-export function mancaPerSalire(ordinati: MembroSquadra[], viewerId: string): number | null {
+export function mancaPerSalire(ordinati: MembroSquadra[], viewerId: string, minPresenze = 1): number | null {
     const idx = ordinati.findIndex(x => x.id === viewerId)
     if (idx <= 0) return null
-    const podio = primiTre(ordinati)
+    const podio = primiTre(ordinati, minPresenze)
     if (podio.length === 0 || podio.some(x => x.id === viewerId)) return null
     return Math.max(1, ordinati[idx - 1].presenze - ordinati[idx].presenze + 1)
 }
@@ -102,10 +109,16 @@ export interface SquadraSnapshot {
     sogliaFenici: number
     mode: LeaderboardMode
     membri: MembroSquadra[]
+    /** Euro lordi al 1°, 2° e 3° della settimana. */
+    premiEuro: [number, number, number]
+    /** Presenze minime per il podio. */
+    minPresenze: number
+    /** Settimana della classifica: lunedì e sabato 'YYYY-MM-DD'. */
+    settimana: { lunedi: string; sabato: string }
 }
 
 export interface PersonaRow { id: string; nome: string; immagine: string | null; cornice: boolean; titolo: string | null; tu: boolean }
-export interface PodioRow extends PersonaRow { posizione: number; presenze: number }
+export interface PodioRow extends PersonaRow { posizione: number; presenze: number; premio: number }
 export interface ClassificaRow extends PodioRow { fissati: number }
 
 /** Quello che arriva al browser di chi guarda. */
@@ -121,6 +134,7 @@ export interface SquadraView {
     classifica: ClassificaRow[]
     fenici: PersonaRow[]
     sonoInSquadra: boolean
+    settimana: { lunedi: string; sabato: string }
 }
 
 export function buildSquadraView(snap: SquadraSnapshot, viewerId: string): SquadraView {
@@ -136,13 +150,17 @@ export function buildSquadraView(snap: SquadraSnapshot, viewerId: string): Squad
         punta: snap.punta,
         sogliaFenici: snap.sogliaFenici,
         primiTre: snap.mode === 'top3'
-            ? primiTre(ordinati).map((x, i) => ({ ...persona(x), posizione: i + 1, presenze: x.presenze }))
+            ? primiTre(ordinati, snap.minPresenze).map((x, i) => ({ ...persona(x), posizione: i + 1, presenze: x.presenze, premio: snap.premiEuro[i] ?? 0 }))
             : [],
-        mancaPerSalire: snap.mode === 'top3' ? mancaPerSalire(ordinati, viewerId) : null,
+        mancaPerSalire: snap.mode === 'top3' ? mancaPerSalire(ordinati, viewerId, snap.minPresenze) : null,
         classifica: snap.mode === 'completa'
-            ? ordinati.map((x, i) => ({ ...persona(x), posizione: i + 1, presenze: x.presenze, fissati: x.fissati }))
+            ? ordinati.map((x, i) => ({
+                ...persona(x), posizione: i + 1, presenze: x.presenze, fissati: x.fissati,
+                premio: i < 3 && x.presenze >= snap.minPresenze ? snap.premiEuro[i] ?? 0 : 0,
+            }))
             : [],
         fenici: feniciDellaSettimana(snap.membri, snap.sogliaFenici).map(persona),
         sonoInSquadra: snap.membri.some(x => x.id === viewerId),
+        settimana: snap.settimana,
     }
 }

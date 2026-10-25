@@ -1,8 +1,8 @@
 "use client"
 
-// Modulo admin del bonus Conferme (PO 25/10/2026). Unità e periodo non sono
-// ancora decisi: l'anteprima mostra dove sarebbe oggi la squadra con ciascuna
-// regola, così la scelta si fa sui numeri veri.
+// Modulo admin del bonus Conferme (PO 25/10/2026: chiusure, settimana, soglia
+// 16, 12 euro a testa). Unità e periodo restano modificabili: l'anteprima
+// mostra dove sarebbe oggi la squadra con ciascuna regola.
 
 import { useMemo, useState } from "react"
 import { saveConfermeBonusSettings, type ConfermeBonusSettings } from "@/app/actions/confermeDirettaActions"
@@ -90,8 +90,8 @@ export function ConfermeBonusForm({ initial }: { initial: ConfermeBonusSettings 
             <div className="rounded-2xl border border-ash-200 bg-white p-5">
                 <h2 className="text-base font-bold text-brand-charcoal">Bonus di squadra</h2>
                 <p className="mt-1 text-sm text-ash-500">
-                    Decisione del 25/10/2026, da confermare: non è ancora deciso se si contano le presenze o le chiusure, né se a settimana o a mese.
-                    Contano solo i lead confermati da un account Conferme.
+                    Deciso il 25/10/2026: chiusure della settimana (lunedì-sabato), soglia di squadra 16, poi 12 euro lordi a testa per ogni chiusura in più.
+                    Contano solo i lead confermati da un account Conferme. I bonus da pagare si registrano a settimana chiusa in Premi della settimana.
                 </p>
 
                 <div className="mt-5 grid gap-5 sm:grid-cols-2">

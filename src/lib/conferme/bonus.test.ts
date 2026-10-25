@@ -8,8 +8,8 @@ const ANDREA = 'u-andrea'
 const ALBERTO = 'u-alberto'
 const AMMESSI = new Set([ANDREA, ALBERTO])
 
-test('default: chiusure, mese, soglia 17, 12 euro, nessun obiettivo', () => {
-    assert.deepEqual(DEFAULT_CONFERME_BONUS, { unita: 'chiusure', periodo: 'mese', soglia: 17, euroPerUnita: 12, obiettivi: {} })
+test('default (PO 25/10/2026): chiusure, settimana, soglia 16, 12 euro a testa, nessun obiettivo', () => {
+    assert.deepEqual(DEFAULT_CONFERME_BONUS, { unita: 'chiusure', periodo: 'settimana', soglia: 16, euroPerUnita: 12, obiettivi: {} })
 })
 
 test('parseConfermeBonus: vuoto o rotto = default', () => {
@@ -23,8 +23,8 @@ test('parseConfermeBonus: vuoto o rotto = default', () => {
 test('parseConfermeBonus: un campo rotto prende il default, gli altri restano', () => {
     const cfg = parseConfermeBonus(JSON.stringify({ unita: 'presenze', periodo: 'anno', soglia: -3, euroPerUnita: 15 }))
     assert.equal(cfg.unita, 'presenze')
-    assert.equal(cfg.periodo, 'mese')
-    assert.equal(cfg.soglia, 17)
+    assert.equal(cfg.periodo, 'settimana')
+    assert.equal(cfg.soglia, 16)
     assert.equal(cfg.euroPerUnita, 15)
 })
 

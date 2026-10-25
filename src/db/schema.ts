@@ -1936,3 +1936,17 @@ export const dailyQuoteSchedule = pgTable('dailyQuoteSchedule', {
     approvedBy: text('approvedBy'),
     approvedAt: timestamp('approvedAt', { withTimezone: true, mode: 'date' }),
 }, (t) => [primaryKey({ columns: [t.day, t.kind] })]);
+
+// Premi in euro della settimana lun-sab (migr. 0049, PO 25/10/2026): classifica
+// dei primi tre, bonus presenze dei GDO e bonus di squadra delle Conferme,
+// calcolati e registrati dall'admin a settimana chiusa
+// (/admin/diretta/premi-settimana). `snapshot` è PremiSettimana di
+// src/lib/economy/premiSettimana.ts: chi, quanto e su quali numeri.
+export const weeklyPrizeRuns = pgTable('weeklyPrizeRuns', {
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    weekStart: date('weekStart').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    totalEur: numeric('totalEur', { precision: 10, scale: 2 }).notNull(),
+    computedAt: timestamp('computedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    computedBy: text('computedBy').references(() => users.id),
+}, (t) => [primaryKey({ columns: [t.companyId, t.weekStart] })]);

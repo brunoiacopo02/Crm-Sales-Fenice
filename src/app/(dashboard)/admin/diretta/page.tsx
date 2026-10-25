@@ -33,6 +33,16 @@ export default async function DirettaAdminPage() {
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-ash-400" aria-hidden="true" />
             </Link>
+            <Link
+                href="/admin/diretta/premi-settimana"
+                className="flex items-center justify-between gap-4 rounded-2xl border border-ash-200 bg-white p-5 transition-colors hover:border-ash-400"
+            >
+                <div>
+                    <div className="text-base font-semibold text-brand-charcoal">Premi della settimana</div>
+                    <div className="mt-1 text-sm text-ash-500">Classifica dei primi tre, bonus presenze dei GDO e bonus Conferme: chi pagare, settimana per settimana.</div>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-ash-400" aria-hidden="true" />
+            </Link>
             <DirettaAdminClient flags={stato.flags} obiettivi={stato.obiettivi} />
         </div>
     )

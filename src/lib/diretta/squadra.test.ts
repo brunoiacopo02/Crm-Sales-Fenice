@@ -85,11 +85,15 @@ const snap = (mode: 'top3' | 'completa' | 'nessuna'): SquadraSnapshot => ({
     sogliaFenici: 4,
     mode,
     membri: [m('a', 'Anthony', 6, 20), m('z', 'Zora', 5, 18), m('r', 'Riccardo', 2, 9), m('n', 'Noemi', 1, 4), m('l', 'Lorenzo', 0, 0)],
+    premiEuro: [50, 25, 10],
+    minPresenze: 1,
+    settimana: { lunedi: '2026-10-26', sabato: '2026-10-31' },
 })
 
 test('vista top3: podio, distanza di chi guarda, nessun numero degli altri', () => {
     const v = buildSquadraView(snap('top3'), 'n')
-    assert.deepEqual(v.primiTre.map(x => [x.posizione, x.nome, x.presenze]), [[1, 'Anthony', 6], [2, 'Zora', 5], [3, 'Riccardo', 2]])
+    assert.deepEqual(v.primiTre.map(x => [x.posizione, x.nome, x.presenze, x.premio]), [[1, 'Anthony', 6, 50], [2, 'Zora', 5, 25], [3, 'Riccardo', 2, 10]])
+    assert.deepEqual(v.settimana, { lunedi: '2026-10-26', sabato: '2026-10-31' })
     assert.equal(v.mancaPerSalire, 2)
     assert.deepEqual(v.classifica, [])
     assert.deepEqual(v.fenici.map(x => x.nome), ['Anthony', 'Zora'])
@@ -114,4 +118,21 @@ test('vista completa e nessuna', () => {
     assert.deepEqual(n.fenici.map(x => x.nome), ['Anthony', 'Zora'])
     // chi non è in squadra (Conferme) vede tutto tranne la sua distanza
     assert.equal(buildSquadraView(snap('top3'), 'conferme-1').sonoInSquadra, false)
+})
+
+test('podio: a pari presenze i fissati validi, poi il nome; i premi seguono la posizione', () => {
+    const s = snap('top3')
+    s.membri = [m('a', 'Zora', 4, 10), m('b', 'Anthony', 4, 10), m('c', 'Riccardo', 4, 12), m('d', 'Noemi', 0, 30)]
+    const v = buildSquadraView(s, 'd')
+    assert.deepEqual(v.primiTre.map(x => [x.nome, x.premio]), [['Riccardo', 50], ['Anthony', 25], ['Zora', 10]])
+    // chi non ha presenze non sale sul podio, anche con tanti fissati
+    assert.equal(v.primiTre.some(x => x.nome === 'Noemi'), false)
+    // con la soglia del podio a 5 presenze resta vuoto
+    assert.deepEqual(buildSquadraView({ ...s, minPresenze: 5 }, 'd').primiTre, [])
+})
+
+test('podio con meno di tre persone con presenze: solo loro, premi dal primo', () => {
+    const s = snap('top3')
+    s.membri = [m('a', 'Anthony', 2, 3), m('b', 'Zora', 0, 9)]
+    assert.deepEqual(buildSquadraView(s, 'b').primiTre.map(x => [x.nome, x.premio]), [['Anthony', 50]])
 })

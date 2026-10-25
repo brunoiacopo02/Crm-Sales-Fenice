@@ -109,6 +109,8 @@ Noemi e Lavinia tornano a fissare lunedì e Bruno vuole che tutti percepiscano u
 
 ## Economia
 
+> Valori e premi aggiornati il 25/10 sera dall'**economia v2** (Piume a stadio più alto, premi delle Conferme, catalogo ricalibrato, classifica con premi in euro): vedi `2026-10-25-economia-v2-margini.md`. Dove i due testi non coincidono vale la v2.
+
 - **Azzeramento**: tutti i saldi a zero. Nessun benvenuto, salvo **200 Scintille a Riccardo (119) e Zora (106)**. I vecchi articoli del negozio si disattivano (mai cancellati).
 - **Scintille (ritmo)**:
   - 10 per ogni fissato, una volta per lead ogni 30 giorni, al massimo 15 pagati al giorno;

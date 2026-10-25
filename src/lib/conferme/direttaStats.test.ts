@@ -62,7 +62,9 @@ test('squadra a chiusure del mese: conta tutti gli account e applica soglia ed e
     for (let i = 0; i < 20; i++) rows.push(row(`c${i}`, i % 2 ? ANDREA : ALBERTO, { chiusoAt: ms('2026-10-10T10:00:00Z') }))
     rows.push(row('fuori', ANDREA, { chiusoAt: ms('2026-09-30T21:59:00Z') }))     // 30/9 alle 23:59 di Roma: settembre
     rows.push(row('pres', ANDREA, { presentedAt: ms('2026-10-10T10:00:00Z') }))   // presenza: non è una chiusura
-    const n = aggregateConfermeDiretta(rows, { userId: ANDREA, bounds: direttaBounds(NOW, 'mese'), cfg: DEFAULT_CONFERME_BONUS })
+    // Regola esplicita (a mese, soglia 17): il default dal 25/10 è a settimana con soglia 16.
+    const cfg: ConfermeBonusConfig = { ...DEFAULT_CONFERME_BONUS, periodo: 'mese', soglia: 17 }
+    const n = aggregateConfermeDiretta(rows, { userId: ANDREA, bounds: direttaBounds(NOW, 'mese'), cfg })
     assert.equal(n.squadra.conteggio, 20)
     assert.equal(n.squadra.oltre, 3)
     assert.equal(n.squadra.euro, 36)

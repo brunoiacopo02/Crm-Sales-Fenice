@@ -1,8 +1,9 @@
 "use client"
 
 // Colonna arancione delle Conferme nella Diretta (PO 25/10/2026): i numeri del
-// giorno di chi guarda, gli obiettivi individuali se impostati, la squadra verso
-// la soglia del bonus e il saldo Scintille e Piume. Sull'arancione il testo è nero.
+// giorno di chi guarda, gli obiettivi individuali se impostati, gli obiettivi
+// della settimana che danno Piume, la squadra verso la soglia del bonus e il
+// saldo Scintille e Piume. Sull'arancione il testo è nero.
 //
 // Aggiornamento: al montaggio, poi ogni 30 secondi solo a scheda visibile (al
 // ritorno sulla scheda, se l'ultimo giro è più vecchio di 20 secondi). I numeri
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { getConfermeDirettaStats, type ConfermeDirettaStats } from "@/app/actions/confermeDirettaActions"
 import { CONFERMATO_EVENT, confermeOggiConOttimistiche } from "@/lib/conferme/direttaStats"
 import { formatEuro } from "./ui"
+import type { Obiettivo } from "@/lib/economy/rules"
 
 const POLL_MS = 30_000
 const MIN_GAP_MS = 20_000
@@ -40,6 +42,12 @@ function Riga({ label, value }: { label: string; value: string }) {
             <dd className="text-xl font-semibold">{value}</dd>
         </div>
     )
+}
+
+/** "12 su 16" verso il primo scalino, poi verso il secondo; oltre il secondo solo il numero. */
+function valoreObiettivo(v: number, o: Obiettivo): string {
+    if (v >= o.soglie[1]) return `${v}, fatto`
+    return `${v} su ${v >= o.soglie[0] ? o.soglie[1] : o.soglie[0]}`
 }
 
 function Blocchi({ pieni, totale }: { pieni: number; totale: number }) {
@@ -167,6 +175,21 @@ export function ConfermeDirettaColumn() {
                 <Riga label="Chiusure di oggi" value={String(personali.chiusureOggi)} />
                 {righeObiettivi.map(r => <Riga key={r.label} label={r.label} value={r.value} />)}
             </dl>
+
+            {stats.obiettiviSettimana && (
+                <section aria-label="Obiettivi della settimana">
+                    <h2 className="text-base font-medium">Obiettivi della settimana</h2>
+                    <dl className="mt-1">
+                        <Riga label="Presenze" value={valoreObiettivo(stats.obiettiviSettimana.valori.presenze, stats.obiettiviSettimana.obiettivi.presenze)} />
+                        <Riga label="Chiusure" value={valoreObiettivo(stats.obiettiviSettimana.valori.chiusure, stats.obiettiviSettimana.obiettivi.chiusure)} />
+                    </dl>
+                    <div className="mt-1 text-[13px] leading-relaxed">
+                        {stats.obiettiviSettimana.obiettivi.presenze.soglie[0]} presenze valgono {stats.obiettiviSettimana.obiettivi.presenze.piume[0]} Piume, {stats.obiettiviSettimana.obiettivi.presenze.soglie[1]} altre {stats.obiettiviSettimana.obiettivi.presenze.piume[1]}.
+                        {' '}{stats.obiettiviSettimana.obiettivi.chiusure.soglie[0]} chiusure valgono {stats.obiettiviSettimana.obiettivi.chiusure.piume[0]} Piume, {stats.obiettiviSettimana.obiettivi.chiusure.soglie[1]} altre {stats.obiettiviSettimana.obiettivi.chiusure.piume[1]}.
+                        {' '}Contano i lead che hai confermato prima dell&apos;appuntamento.
+                    </div>
+                </section>
+            )}
 
             <div className="h-0.5 bg-[var(--d-orange-ink)] opacity-20" />
 
