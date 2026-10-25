@@ -13,7 +13,6 @@ import { dayBoundsRome } from "@/lib/dateUtils"
 import { eq, and, ne, isNull, isNotNull, inArray, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
-import { subDays } from "date-fns"
 import { after } from "next/server"
 import { awardFissato, evaluateTeamChests, reverseFissato, riallineaScaliniDopoUscita } from "@/lib/economy/awards"
 import { confermeNonHannoToccato, fissatoPremiabile, type FissatoReward } from "@/lib/economy/rules"
@@ -22,36 +21,50 @@ import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
+import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
 
-// Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
-async function checkFourthCallEligibility(gdoId: string, companyId: string): Promise<boolean> {
-    const sevenDaysAgo = subDays(new Date(), 7)
+/**
+ * La quarta chiamata ("4ª Recupero") si vede solo a chi fissa poco: regola e
+ * soglia in @/lib/diretta/quartaChiamata (PO 25/10/2026). I due numeri sono
+ * quelli di "I miei risultati" (getAdvancedKpi filtrato sul GDO), letti qui
+ * con due conteggi invece di caricare tutti i lead della company:
+ *  - lead chiamati = lead distinti con una chiamata del GDO nella finestra,
+ *    fra i lead oggi assegnati a lui e che contano nei KPI;
+ *  - appuntamenti = lead assegnati a lui con data di fissaggio
+ *    (appointmentCreatedAt, o appointmentDate per i vecchi) nella finestra.
+ * Vale per la Diretta e per la veste di sempre: la pipeline è la stessa.
+ */
+async function checkFourthCallEligibility(gdoId: string, companyId: string, now: Date): Promise<boolean> {
+    const { start, end } = finestraFissaggioQuarta(now)
 
-    const recentLogs = await db.select({
-        leadId: callLogs.leadId,
-        outcome: callLogs.outcome
-    })
+    const [chiamati] = await db.select({ n: sql<number>`count(distinct ${callLogs.leadId})::int` })
         .from(callLogs)
-        .where(
-            and(
-                eq(callLogs.companyId, companyId),
-                eq(callLogs.userId, gdoId),
-                gte(callLogs.createdAt, sevenDaysAgo)
-            )
-        )
+        .innerJoin(leads, eq(leads.id, callLogs.leadId))
+        .where(and(
+            eq(callLogs.companyId, companyId),
+            eq(callLogs.userId, gdoId),
+            gte(callLogs.createdAt, start),
+            lte(callLogs.createdAt, end),
+            eq(leads.assignedToId, gdoId),
+            contaNeiKpiSql(),
+        ))
+    const leadChiamati = Number(chiamati?.n ?? 0)
+    // Sotto il minimo la sezione non c'è comunque: risparmiamo il secondo conteggio.
+    if (leadChiamati < MIN_LEAD_CHIAMATI_QUARTA) return false
 
+    const dataFissaggio = sql`coalesce(${leads.appointmentCreatedAt}, ${leads.appointmentDate})`
+    const [fissati] = await db.select({ n: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, companyId),
+            eq(leads.assignedToId, gdoId),
+            contaNeiKpiSql(),
+            isNotNull(leads.appointmentDate),
+            gte(dataFissaggio, start),
+            lte(dataFissaggio, end),
+        ))
 
-    if (recentLogs.length === 0) return false // Nessuna chiamata -> nessuna quarta chiamata attivata per default
-
-    // Tasso fissaggio: Appuntamenti / Contacted Leads (dove Contacted = almeno 1 log).
-    // Usiamo lo stesso approccio di KpiAdvancedActions: 
-    const uniqueContacted = new Set(recentLogs.map(l => l.leadId)).size
-    const appointments = recentLogs.filter(l => l.outcome === 'APPUNTAMENTO').length
-
-    if (uniqueContacted === 0) return false
-
-    const apptRate = Math.round((appointments / uniqueContacted) * 100)
-    return apptRate < 14
+    return mostraQuartaChiamata({ leadChiamati, appuntamenti: Number(fissati?.n ?? 0) })
 }
 
 export async function getPipelineLeads() {
@@ -230,10 +243,9 @@ export async function getPipelineLeads() {
     let fourthCallLeads: any[] = []
 
     if (isGdo) {
-        isFourthCallActive = await checkFourthCallEligibility(userId, ctx.companyId)
+        isFourthCallActive = await checkFourthCallEligibility(userId, ctx.companyId, now)
 
         if (isFourthCallActive) {
-            const thirtyDaysAgo = subDays(now, 30)
 
             const fourthCallConditions = [
                 eq(leads.companyId, ctx.companyId),
@@ -249,7 +261,9 @@ export async function getPipelineLeads() {
                     eq(leads.discardReason, "irreperibile (3 tentativi vuoti)"),
                     eq(leads.discardReason, "irriperebile (3 tentativi vuoti)"),
                 ),
-                gte(leads.updatedAt, thirtyDaysAgo)
+                // Ultimi 30 giorni come sempre, ma mai prima della ripartenza
+                // del 26/10/2026: si riparte da 0 (PO 25/10/2026).
+                gte(leads.updatedAt, scartiDalQuarta(now))
             ]
             if (isGdo) fourthCallConditions.push(eq(leads.assignedToId, userId))
 
