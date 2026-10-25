@@ -1,0 +1,19 @@
+/* Conferme in Diretta (PO 25/10/2026): la pagina /conferme occupa tutta l'area
+   di main, a filo e su fondo scuro. Vale solo con l'interruttore acceso
+   ([data-ui="diretta"] sul contenitore del layout) e solo quando dentro main
+   c'è la pagina Conferme (.d-conferme): le altre pagine restano come sono.
+   Specificità più alta di [data-theme="andrea"] main, che mette l'avorio. */
+[data-ui="diretta"] main:has(.d-conferme) {
+  padding: 0;
+  background: var(--d-bg);
+}
+
+/* Il tema personale di Andrea mette i titoli in serif, con peso e spaziatura
+   suoi, in regole fuori dai layer che battono le classi Tailwind. Nella Diretta
+   i titoli restano in Poppins e revert-layer ridà la parola alle classi del
+   componente (font-medium, font-semibold). */
+[data-ui="diretta"] .d-conferme :is(h1, h2, h3, h4) {
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: revert-layer;
+  letter-spacing: revert-layer;
+}
