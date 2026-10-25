@@ -157,15 +157,22 @@ export function ultimiPerLead<T extends { leadId: string }>(righeDalPiuRecente: 
     return out
 }
 
-export interface Casella { n: number; euro: boolean; piena: boolean }
+export interface Casella { n: number; euro: boolean; piena: boolean; obiettivo: boolean; aperta: boolean }
 
-/** Binario delle presenze: almeno l'obiettivo (7), dalla soglia in poi le caselle valgono euro. */
+/**
+ * Binario delle presenze: almeno l'obiettivo (7), dalla soglia in poi le
+ * caselle valgono euro. In fondo c'è sempre una casella aperta, la prossima
+ * presenza: l'obiettivo non è un tetto (collaudo del 25/10/2026). `obiettivo`
+ * segna la casella dell'obiettivo.
+ */
 export function binarioPresenze(presenze: number, t: GamificationTargets): Casella[] {
-    const totale = Math.max(t.presenzeObiettivo, presenze)
+    const totale = Math.max(t.presenzeObiettivo, presenze) + 1
     return Array.from({ length: totale }, (_, i) => ({
         n: i + 1,
         euro: i + 1 > t.presenzeSogliaEuro,
         piena: i < presenze,
+        obiettivo: i + 1 === t.presenzeObiettivo,
+        aperta: i === totale - 1,
     }))
 }
 

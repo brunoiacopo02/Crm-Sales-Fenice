@@ -3,7 +3,7 @@
 // creature, avventura, scambi né profilo dei giochi.
 
 import {
-    Calendar, CalendarClock, Clock, Coins, Gauge, Gift, LayoutDashboard, Phone, Quote, Store, Target, User, Users,
+    Calendar, CalendarClock, Coins, Gauge, Gift, LayoutDashboard, Phone, Quote, Store, Target, User, Users,
     type LucideIcon,
 } from "lucide-react"
 
@@ -20,11 +20,10 @@ export const MENU_GDO_DIRETTA: VoceMenu[] = [
 
 /**
  * Voci in più del menu a scomparsa. Nella barra in alto il profilo si apre
- * dall'avatar e lo storico delle pause dal profilo.
+ * dall'avatar. La pausa nella Diretta non c'è più (PO 25/10/2026).
  */
 export const MENU_GDO_DIRETTA_PERSONALE: VoceMenu[] = [
     { name: "Il mio profilo", href: "/profilo", icon: User },
-    { name: "Storico pause", href: "/storico-pause", icon: Clock },
 ]
 
 // ── Admin ────────────────────────────────────────────────────────────────

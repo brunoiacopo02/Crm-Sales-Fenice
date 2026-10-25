@@ -10,18 +10,18 @@ import { MENU_GDO_DIRETTA, MENU_GDO_DIRETTA_PERSONALE } from '@/components/diret
 const SRC = join(process.cwd(), 'src')
 const leggi = (f: string) => readFileSync(join(SRC, f), 'utf8')
 
-test('menu Diretta del GDO: profilo e storico pause raggiungibili', () => {
+test('menu Diretta del GDO: profilo raggiungibile, pausa tolta, si può uscire', () => {
     const tutte = [...MENU_GDO_DIRETTA, ...MENU_GDO_DIRETTA_PERSONALE].map(v => v.href)
     assert.ok(tutte.includes('/profilo'))
-    assert.ok(tutte.includes('/storico-pause'))
+    assert.ok(!tutte.includes('/storico-pause'))
+    // senza sidebar il GDO esce dal pulsante nella barra in alto
+    assert.match(leggi('components/Topbar.tsx'), /aria-label="Esci"/)
     assert.equal(new Set(tutte).size, tutte.length)
     // la barra in alto resta di sei voci: il profilo ci arriva dall'avatar
     assert.equal(MENU_GDO_DIRETTA.length, 6)
     assert.match(leggi('components/Topbar.tsx'), /href="\/profilo"/)
     // il menu a scomparsa mostra anche le voci personali
     assert.match(leggi('components/Sidebar.tsx'), /MENU_GDO_DIRETTA_PERSONALE/)
-    // dal profilo Diretta il GDO apre lo storico delle pause
-    assert.match(leggi('components/diretta/negozio/ProfiloDiretta.tsx'), /href="\/storico-pause"/)
 })
 
 test('bonus e obiettivi delle Conferme: collegati da /admin/diretta e dalla Sidebar admin', () => {

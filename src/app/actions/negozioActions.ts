@@ -23,6 +23,7 @@ import { readEconomyRules } from "@/lib/economy/awards"
 import { readGamificationTargets } from "@/lib/diretta/settings"
 import { shiftWindow } from "@/lib/diretta/config"
 import { dayBoundsRome } from "@/lib/dateUtils"
+import { comeFunziona, type BloccoSpiegazione } from "@/lib/diretta/comeFunziona"
 import { DIRETTA_FLAG_KEYS, personName } from "@/lib/diretta/config"
 import {
     canTransition, checkPurchase, isDigitale, messaggioErrore, nomeValuta, ownedItemIds, statoIniziale,
@@ -73,6 +74,8 @@ export interface NegozioView {
     acquisti: NegozioAcquisto[]
     /** Fine del booster in corso (ISO), null se non ce n'è uno attivo. */
     boosterFino: string | null
+    /** Come si guadagna e come si compra, con i numeri delle regole salvate. */
+    comeFunziona: BloccoSpiegazione[]
 }
 
 const asCurrency = (c: string): 'S' | 'P' => (c === 'P' ? 'P' : 'S')
@@ -117,6 +120,7 @@ export async function getNegozioView(): Promise<NegozioView> {
         eq(currencyLedger.userId, me.id), gte(currencyLedger.createdAt, start), lt(currencyLedger.createdAt, end),
     )) : []
     const booster = boosterAttivo(righeOggi, adesso)
+    const [regole, obiettivi] = await Promise.all([readEconomyRules(), readGamificationTargets()])
     return {
         nome: personName(me),
         ruolo: me.role,
@@ -134,6 +138,7 @@ export async function getNegozioView(): Promise<NegozioView> {
             createdAt: p.createdAt.toISOString(), handledAt: p.handledAt ? p.handledAt.toISOString() : null,
         })),
         boosterFino: booster ? booster.fino.toISOString() : null,
+        comeFunziona: comeFunziona(me.role, regole, obiettivi),
     }
 }
 

@@ -247,6 +247,27 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                 </div>
             </header>
 
+            {/* Collaudo del 25/10/2026: senza spiegazione il negozio non si capiva. */}
+            <details className="group rounded-[16px] bg-[var(--d-surface)] p-5 sm:p-6" open={saldo.scintille === 0 && saldo.piume === 0}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-lg font-semibold">
+                    Come funziona
+                    <span className="text-sm font-medium text-[var(--d-muted)] group-open:hidden">Apri</span>
+                    <span className="hidden text-sm font-medium text-[var(--d-muted)] group-open:inline">Chiudi</span>
+                </summary>
+                <div className="mt-4 grid gap-x-8 gap-y-5 md:grid-cols-2">
+                    {view.comeFunziona.map(b => (
+                        <div key={b.titolo}>
+                            <h3 className="text-[15px] font-semibold">{b.titolo}</h3>
+                            <ul className="mt-1.5 flex flex-col gap-1.5">
+                                {b.righe.map(r => (
+                                    <li key={r} className="text-sm leading-relaxed text-[var(--d-muted)]">{r}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+            </details>
+
             {view.articoli.length === 0 && (
                 <div className="text-[15px] text-[var(--d-muted)]">Il catalogo arriva a breve: i premi compaiono qui appena sono pronti.</div>
             )}

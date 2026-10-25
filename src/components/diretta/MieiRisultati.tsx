@@ -19,6 +19,14 @@ export interface ObiettiviSettimana {
     weeklyRevenueEur: number
 }
 
+/** Numeri della home Diretta: fissati di oggi sul primo scalino, presenze sull'obiettivo. */
+export interface NumeriDiretta {
+    fissatiOggi: number
+    scalino: number
+    presenze: number
+    presenzeObiettivo: number
+}
+
 const conTarget = (n: number, target: number | null) => (target && target > 0 ? `${numeroIt(n)} su ${numeroIt(target)}` : numeroIt(n))
 const parola = (n: number, una: string, tante: string) => (n === 1 ? una : tante)
 
@@ -26,7 +34,8 @@ function link(periodo: string, turno: boolean): string {
     return `/kpi-gdo?periodo=${periodo}${turno ? '&turno=1' : ''}`
 }
 
-export function MieiRisultati({ periodo, turno, numeri, andamento, obiettivi, tentativi }: {
+export function MieiRisultati({ periodo, turno, numeri, andamento, obiettivi, diretta = null, tentativi }: {
+    diretta?: NumeriDiretta | null
     periodo: Periodo
     turno: boolean
     /** null = non si è potuto leggere: la sezione lo dice, le altre restano. */
@@ -102,8 +111,22 @@ export function MieiRisultati({ periodo, turno, numeri, andamento, obiettivi, te
                 <Sezione titolo="Questa settimana">
                     {obiettivi ? (
                         <div>
-                            <Riga etichetta="Appuntamenti di oggi" valore={conTarget(obiettivi.todayAppointments, obiettivi.dailyApptTarget)} forte />
-                            <Riga etichetta="Confermati dalle Conferme" nota="da lunedì" valore={conTarget(obiettivi.weeklyConfirmed, obiettivi.weeklyConfirmedTarget)} />
+                            {diretta ? (
+                                <>
+                                    <Riga etichetta="Appuntamenti di oggi" valore={`${numeroIt(diretta.fissatiOggi)} su ${numeroIt(diretta.scalino)}`} forte />
+                                    <Riga
+                                        etichetta="Presenze"
+                                        nota={diretta.presenze >= diretta.presenzeObiettivo ? 'da lunedì, obiettivo raggiunto: si può andare oltre' : 'da lunedì, si può andare oltre'}
+                                        valore={`${numeroIt(diretta.presenze)}, obiettivo ${numeroIt(diretta.presenzeObiettivo)}`}
+                                    />
+                                    <Riga etichetta="Confermati dalle Conferme" nota="da lunedì" valore={numeroIt(obiettivi.weeklyConfirmed)} />
+                                </>
+                            ) : (
+                                <>
+                                    <Riga etichetta="Appuntamenti di oggi" valore={conTarget(obiettivi.todayAppointments, obiettivi.dailyApptTarget)} forte />
+                                    <Riga etichetta="Confermati dalle Conferme" nota="da lunedì" valore={conTarget(obiettivi.weeklyConfirmed, obiettivi.weeklyConfirmedTarget)} />
+                                </>
+                            )}
                             <Riga etichetta="Contratti firmati" nota="tuoi lead chiusi dai venditori, da lunedì" valore={numeroIt(obiettivi.weeklyClosedCount)} />
                             <Riga etichetta="Fatturato dei tuoi lead" valore={euroIt(Math.round(obiettivi.weeklyRevenueEur))} />
                         </div>

@@ -6,6 +6,7 @@ import { isDirettaOn } from "@/lib/diretta/settings"
 import { numeriPeriodo, periodoRisultati, righeAndamento } from "@/lib/diretta/risultati"
 import { MieiRisultati } from "@/components/diretta/MieiRisultati"
 import { VesteAllineata } from "@/components/diretta/VesteAllineata"
+import { leggiMia, leggiObiettivi } from "@/lib/diretta/live"
 
 const KpiGdoBoard = dynamic(() => import("@/components/KpiGdoBoard").then(mod => mod.KpiGdoBoard), { loading: () => <div className="flex items-center justify-center min-h-[400px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" /></div> })
 
@@ -27,6 +28,12 @@ export default async function KpiGdoPage({ searchParams }: { searchParams: Promi
         const turno = sp.turno === '1'
         const periodo = periodoRisultati(sp.periodo, new Date())
         const io = session.user.id
+        // Obiettivi della Diretta (collaudo del 25/10/2026): appuntamenti di oggi
+        // sul primo scalino e presenze della settimana sull'obiettivo, gli
+        // stessi numeri della home. Prima c'erano i vecchi target dell'utente.
+        const diretta = await leggiObiettivi()
+            .then(async o => ({ obiettivi: o, mia: await leggiMia(io, 'fenice', o) }))
+            .catch((e: unknown) => { console.error('[kpi-gdo Diretta] leggiMia', e); return null })
         const [kpi, obiettivi, tentativi] = await Promise.all([
             getAdvancedKpi({
                 startDate: periodo.start,
@@ -48,6 +55,12 @@ export default async function KpiGdoPage({ searchParams }: { searchParams: Promi
                     numeri={kpi ? numeriPeriodo(kpi.gdoStats) : null}
                     andamento={kpi ? righeAndamento(kpi.chartData, periodo.granularita) : null}
                     obiettivi={obiettivi}
+                    diretta={diretta ? {
+                        fissatiOggi: diretta.mia.fissatiOggi,
+                        scalino: diretta.obiettivi.personale[0],
+                        presenze: diretta.mia.presenzeSettimana,
+                        presenzeObiettivo: diretta.obiettivi.presenzeObiettivo,
+                    } : null}
                     tentativi={tentativi}
                 />
             </>

@@ -129,10 +129,15 @@ test('cronaca: un lead una volta sola, al massimo N', () => {
 
 test('binario presenze: 7 caselle, euro dalla quinta, si allunga oltre', () => {
     const b = binarioPresenze(3, DEFAULT_TARGETS)
-    assert.equal(b.length, 7)
-    assert.deepEqual(b.map(c => c.euro), [false, false, false, false, true, true, true])
-    assert.deepEqual(b.map(c => c.piena), [true, true, true, false, false, false, false])
-    assert.equal(binarioPresenze(9, DEFAULT_TARGETS).length, 9)
+    // 7 dell'obiettivo più la casella aperta: l'obiettivo non è un tetto
+    assert.equal(b.length, 8)
+    assert.deepEqual(b.map(c => c.euro), [false, false, false, false, true, true, true, true])
+    assert.deepEqual(b.map(c => c.piena), [true, true, true, false, false, false, false, false])
+    assert.deepEqual(b.map(c => c.obiettivo), [false, false, false, false, false, false, true, false])
+    assert.equal(b.at(-1)?.aperta, true)
+    const oltre = binarioPresenze(9, DEFAULT_TARGETS)
+    assert.equal(oltre.length, 10)
+    assert.equal(oltre.filter(c => c.piena).length, 9)
 })
 
 test('settimane: chiave al lunedì, somme e distinti', () => {

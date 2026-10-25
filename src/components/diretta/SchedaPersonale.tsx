@@ -23,19 +23,32 @@ export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; ob
 
             <div className="mt-5 flex items-baseline justify-between gap-3 text-[14px]">
                 <span>Presenze</span>
-                <span className="tabular-nums"><span className="text-[20px] font-semibold">{presenze}</span> su {obiettivi.presenzeObiettivo}</span>
+                <span className="tabular-nums">
+                    <span className="text-[20px] font-semibold">{presenze}</span>
+                    <span className="text-[#BFBFBF]">, obiettivo {obiettivi.presenzeObiettivo}</span>
+                </span>
             </div>
-            <div className="mt-2 grid grid-cols-7 gap-1.5" aria-label={`${presenze} presenze su ${obiettivi.presenzeObiettivo}`}>
+            {/* L'obiettivo non è un tetto: la casella col + è sempre la prossima presenza. */}
+            <div className="mt-2 grid grid-cols-8 gap-1.5" aria-label={`${presenze} presenze, obiettivo ${obiettivi.presenzeObiettivo}, si può andare oltre`}>
                 {caselle.map(c => (
                     <div
                         key={c.n}
-                        className={`flex h-9 items-center justify-center rounded-lg text-[12px] font-medium tabular-nums ${c.piena
-                            ? (c.euro ? 'bg-[#FF9330] text-[#171717]' : 'bg-[#8C8C8C] text-[#171717]')
-                            : (c.euro ? 'border-2 border-[#3D3D3D] text-[#BFBFBF]' : 'border-2 border-[#3D3D3D]')}`}
+                        title={c.obiettivo ? 'Obiettivo' : undefined}
+                        className={`relative flex h-9 items-center justify-center rounded-lg text-[12px] font-medium tabular-nums ${c.aperta
+                            ? 'border-2 border-dashed border-[#8C8C8C] text-[#F2F2F2]'
+                            : c.piena
+                                ? (c.euro ? 'bg-[#FF9330] text-[#171717]' : 'bg-[#8C8C8C] text-[#171717]')
+                                : (c.euro ? 'border-2 border-[#3D3D3D] text-[#BFBFBF]' : 'border-2 border-[#3D3D3D]')}`}
                     >
-                        {c.euro ? euro(obiettivi.euroPerPresenza) : ''}
+                        {c.aperta ? '+' : c.euro ? '€' : ''}
+                        {c.obiettivo && <span aria-hidden="true" className="absolute -bottom-2 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[#F2F2F2]" />}
                     </div>
                 ))}
+            </div>
+            <div className="mt-3 text-[12px] text-[#BFBFBF]">
+                {presenze >= obiettivi.presenzeObiettivo
+                    ? `Obiettivo raggiunto. Si continua: ogni presenza in più vale ${euro(obiettivi.euroPerPresenza)}.`
+                    : `Il punto segna l'obiettivo, non il massimo: si può andare oltre.`}
             </div>
 
             <div className="mt-5 flex items-end justify-between gap-3">

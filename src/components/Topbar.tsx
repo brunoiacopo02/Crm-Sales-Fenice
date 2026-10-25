@@ -3,7 +3,7 @@ import { useAuth } from "@/components/AuthProvider"
 import { useSidebar } from "@/components/providers/SidebarProvider"
 import Image from "next/image"
 import Link from "next/link"
-import { Search, Bell, X, Phone, User, Trophy, Menu, Sparkles, Feather } from "lucide-react"
+import { Search, Bell, X, Phone, User, Trophy, Menu, Sparkles, Feather, LogOut } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { searchLeads, SearchResult } from "@/app/actions/searchActions"
 import { usePathname, useRouter } from "next/navigation"
@@ -15,6 +15,7 @@ const ContactDrawer = dynamic(
   { ssr: false, loading: () => <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
 )
 import { PauseTimer } from "./PauseTimer"
+import { createClient } from "@/utils/supabase/client"
 import { getUnreadNotifications, markNotificationsAsRead, markAllNotificationsAsRead } from "@/app/actions/notificationActions"
 import { getUserWalletCoins, getUserLevelProgress } from "@/app/actions/sprintActions"
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
@@ -115,6 +116,14 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
         window.addEventListener('reward_earned', handler)
         return () => window.removeEventListener('reward_earned', handler)
     }, [session?.user?.id, diretta])
+
+    // Uscita solo da questo browser (scope local): l'account condiviso delle
+    // Conferme non si scollega sugli altri computer.
+    const esci = async () => {
+        await fetch('/api/company/select', { method: 'DELETE' }).catch(() => { })
+        await createClient().auth.signOut({ scope: 'local' }).catch(() => { })
+        window.location.href = '/login'
+    }
 
     // ── Diretta: saldo Scintille e Piume, richiami del menu, orologio ──
     const direttaGdo = diretta && ruolo === 'GDO'
@@ -450,11 +459,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     )}
                 </div>
 
-                {direttaGdo && (
-                    <div className="shrink-0">
-                        <PauseTimer variant="diretta" />
-                    </div>
-                )}
+                {/* Pausa tolta dalla Diretta (PO 25/10/2026): non serve più. */}
 
                 <div className="relative shrink-0" ref={notifRef}>
                     <button
@@ -557,6 +562,19 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                             </div>
                         )}
                     </Link>
+                )}
+
+                {/* Il GDO nella Diretta non ha la sidebar: senza questo non si esce (collaudo 25/10/2026). */}
+                {direttaGdo && (
+                    <button
+                        type="button"
+                        onClick={esci}
+                        aria-label="Esci"
+                        title="Esci"
+                        className="shrink-0 rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]"
+                    >
+                        <LogOut className="h-5 w-5" strokeWidth={1.5} />
+                    </button>
                 )}
 
                 <ContactDrawer

@@ -73,7 +73,8 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
         // Azzera la selezione azienda (cookie HttpOnly) per non farla ereditare
         // al prossimo login sullo stesso browser.
         await fetch('/api/company/select', { method: 'DELETE' }).catch(() => { })
-        await supabase.auth.signOut()
+        // Solo questo browser: l'account condiviso delle Conferme resta aperto altrove.
+        await supabase.auth.signOut({ scope: 'local' })
         window.location.href = "/login"
     }
 
