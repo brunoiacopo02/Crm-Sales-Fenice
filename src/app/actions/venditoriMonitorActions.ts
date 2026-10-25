@@ -277,6 +277,7 @@ export async function getVenditoriMonitor(filters: {
         gdoCode: users.gdoCode,
         gdoDisplayName: users.displayName,
         gdoName: users.name,
+        gdoFirstName: users.firstName,
     }).from(leads)
       .leftJoin(users, eq(users.id, leads.assignedToId))
       .where(and(
@@ -303,9 +304,12 @@ export async function getVenditoriMonitor(filters: {
         confirmationsOutcome: r.confirmationsOutcome ?? null,
         salespersonOutcome: r.salespersonOutcome ?? null,
         appointmentNote: r.appointmentNote ?? null,
-        gdoName: r.gdoCode
-            ? `GDO ${r.gdoCode}${r.gdoDisplayName || r.gdoName ? ` · ${r.gdoDisplayName || r.gdoName}` : ''}`
-            : (r.gdoDisplayName || r.gdoName || null),
+        // Nome vero prima del codice (PO 25/10/2026): "Anthony (105)".
+        gdoName: r.gdoFirstName?.trim()
+            ? `${r.gdoFirstName.trim()}${r.gdoCode ? ` (${r.gdoCode})` : ''}`
+            : r.gdoCode
+                ? `GDO ${r.gdoCode}${r.gdoDisplayName || r.gdoName ? ` · ${r.gdoDisplayName || r.gdoName}` : ''}`
+                : (r.gdoDisplayName || r.gdoName || null),
     }))
 
     // Follow-up aperti: verità in salesAttempts.nextFollowUpDate (il nuovo

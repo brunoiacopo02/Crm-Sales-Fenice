@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { db } from "@/db"
 import { leads, users, assignmentSettings, importLogs } from "@/db/schema"
 import { and, eq, or, sql } from "drizzle-orm"
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import crypto from "crypto"
 import { logLeadEvent } from "@/lib/eventLogger"
 import { previewLeadDistribution } from "@/lib/distributionUtils"
@@ -33,7 +34,9 @@ export async function getActiveGdosForImport() {
     return (await db.select({
         id: users.id,
         name: users.name,
-        displayName: users.displayName,
+        // Nome vero prima del codice (PO 25/10/2026): l'etichetta resta in
+        // displayName per chi la mostra già.
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
         gdoCode: users.gdoCode,
         isActive: users.isActive
     })

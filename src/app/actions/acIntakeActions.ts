@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
 import { eq, and, desc, isNull, gte, count, notLike, sql } from "drizzle-orm";
+import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
 import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { createClient } from "@/utils/supabase/server";
@@ -42,7 +43,8 @@ export async function listGdosForAcIntake(): Promise<GdoAcIntakeRow[]> {
         id: users.id,
         gdoCode: users.gdoCode,
         name: users.name,
-        displayName: users.displayName,
+        // Nome vero accanto al codice (PO 25/10/2026).
+        displayName: nomeVeroOppure(users.firstName, users.displayName),
         isActive: users.isActive,
         acAutoIntake: users.acAutoIntake,
         acLastAssignedAt: users.acLastAssignedAt,
