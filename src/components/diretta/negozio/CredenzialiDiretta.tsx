@@ -2,7 +2,8 @@
 
 // "Le tue credenziali" nel profilo del GDO (PO 25/10/2026): email e password
 // di accesso cambiate da qui, senza mail di conferma, dando la password
-// attuale. L'admin le può sempre reimpostare da Accessi del team.
+// attuale. L'admin le può sempre reimpostare da Accessi del team (lo si dice
+// a voce, non nella schermata).
 
 import { useEffect, useState, useTransition } from "react"
 import { cambiaMieCredenziali, getMieCredenziali } from "@/app/actions/credenzialiActions"
@@ -76,7 +77,6 @@ export function CredenzialiDiretta() {
                         <button type="button" className={btn.primario} disabled={pending || !attuale} onClick={salva}>
                             {pending ? "Un attimo" : "Salva"}
                         </button>
-                        <div className="text-[13px] text-[var(--d-muted)]">È un account aziendale: l&apos;amministrazione può sempre reimpostarlo.</div>
                     </div>
                 </div>
             )}
