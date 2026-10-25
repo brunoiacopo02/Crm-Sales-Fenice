@@ -12,12 +12,50 @@ interface Props {
     value: string | string[] | null;
     onChange: (field: GdoSurveyField, next: string | string[]) => void;
     disabled?: boolean;
+    /** 'diretta' = veste scura del GDO (collaudo del 25/10/2026): stesse domande, stesse risposte. */
+    variant?: "diretta";
 }
 
-export function GdoSurveyInline({ field, value, onChange, disabled }: Props) {
+export function GdoSurveyInline({ field, value, onChange, disabled, variant }: Props) {
     const label = GDO_FIELD_LABELS[field];
     const opts = GDO_FIELD_OPTIONS[field];
     const multi = GDO_FIELD_MULTI[field];
+
+    if (variant === "diretta") {
+        const selected: string[] = multi
+            ? (Array.isArray(value) ? value : [])
+            : (typeof value === "string" ? [value] : []);
+        const scegli = (v: string) => {
+            if (disabled) return;
+            if (multi) onChange(field, selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+            else onChange(field, v);
+        };
+        return (
+            <div className="mt-3 rounded-lg bg-[#2E2E2E] p-3">
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <div className="text-[14px] font-semibold text-[#F2F2F2]">{label}</div>
+                    {multi && <div className="text-[12px] text-[#BFBFBF]">Puoi selezionare più opzioni</div>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {opts.map((o) => {
+                        const on = selected.includes(o.value);
+                        return (
+                            <button
+                                key={o.value}
+                                type="button"
+                                onClick={() => scegli(o.value)}
+                                disabled={disabled}
+                                aria-pressed={on}
+                                className={`rounded-lg border-2 px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50 ${on ? "border-[#FF9330] bg-[#FF9330] text-[#171717]" : "border-[#3D3D3D] text-[#F2F2F2] hover:border-[#8C8C8C]"}`}
+                            >
+                                {o.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
 
     if (multi) {
         const selected: string[] = Array.isArray(value) ? value : [];

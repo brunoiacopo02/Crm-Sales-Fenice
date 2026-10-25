@@ -17,8 +17,12 @@ type AgendaButtonProps = {
     leadPhone: string
     agendaSentAt?: Date | null
     agendaStatus?: string | null
-    /** 'diretta' = bottone a icona della card Diretta (collaudo 25/10/2026); la finestra resta la stessa. */
-    variant?: 'diretta'
+    /**
+     * Veste Diretta (collaudo 25/10/2026): 'diretta' = bottone a icona della
+     * card, 'diretta-testo' = bottone con la scritta (barra dello script). In
+     * entrambe la finestra è scura; domande, invio e messaggi sono gli stessi.
+     */
+    variant?: 'diretta' | 'diretta-testo'
 }
 
 export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agendaStatus, variant }: AgendaButtonProps) {
@@ -166,6 +170,11 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
     const direttaClass = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 transition-colors disabled:cursor-not-allowed ${isLocked || isFailed
         ? 'border-[#FF9330] text-[#FF9330]'
         : 'border-[#3D3D3D] text-[#F2F2F2] hover:border-[#8C8C8C]'}`
+    const direttaTestoClass = `inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border-2 px-3 text-[13px] font-medium transition-colors disabled:cursor-not-allowed ${isLocked || isFailed
+        ? 'border-[#FF9330] text-[#FF9330]'
+        : 'border-[#3D3D3D] text-[#F2F2F2] hover:border-[#8C8C8C]'}`
+    const diretta = variant === 'diretta' || variant === 'diretta-testo'
+    const etichetta = isSerenamente ? 'Agenda' : buttonLabel
 
     return (
         <>
@@ -173,9 +182,9 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                 type="button"
                 onClick={isSerenamente ? handleDirectSend : handleOpen}
                 disabled={(isSerenamente && loading) || isLocked}
-                className={variant === 'diretta' ? direttaClass : `flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${buttonClass}`}
+                className={variant === 'diretta' ? direttaClass : variant === 'diretta-testo' ? direttaTestoClass : `flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${buttonClass}`}
                 title={buttonTitle}
-                aria-label={variant === 'diretta' ? (isSerenamente ? 'Agenda' : buttonLabel) : undefined}
+                aria-label={variant === 'diretta' ? etichetta : undefined}
             >
                 {isSerenamente && loading
                     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -184,10 +193,35 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                             : alreadySent ? <CheckCircle2 className="w-3.5 h-3.5" />
                                 : <Send className="w-3.5 h-3.5" />
                 }
-                {variant !== 'diretta' && (isSerenamente ? 'Agenda' : buttonLabel)}
+                {variant !== 'diretta' && etichetta}
             </button>
 
-            {showModal && (
+            {showModal && diretta && (
+                <AgendaModalDiretta
+                    leadName={leadName}
+                    leadPhone={leadPhone}
+                    agendaSentAt={agendaSentAt ?? null}
+                    alreadySent={alreadySent}
+                    isFailed={isFailed}
+                    lavora={lavora}
+                    setLavora={setLavora}
+                    haFamiglia={haFamiglia}
+                    setHaFamiglia={setHaFamiglia}
+                    offertaDelMese={offertaDelMese}
+                    toggleOffertaDelMese={toggleOffertaDelMese}
+                    loading={loading}
+                    successMsg={successMsg}
+                    errorMsg={errorMsg}
+                    videoGiaInviato={videoGiaInviato}
+                    sentNowStatus={sentNowStatus}
+                    canSubmit={canSubmit}
+                    onClose={handleClose}
+                    onDismiss={() => setShowModal(false)}
+                    onSubmit={handleSubmit}
+                />
+            )}
+
+            {showModal && !diretta && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={handleClose}>
                     <div className="absolute inset-0 bg-black/50" />
                     <div
@@ -410,5 +444,234 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                 </div>
             )}
         </>
+    )
+}
+
+// ── Finestra dell'agenda nella veste Diretta (collaudo del 25/10/2026) ──────
+// Stesse domande, stessi testi, stessi gestori della finestra di sempre (gli
+// stati vivono in AgendaButton). I colori sono scritti per esteso perché la
+// classe .fixed, nella Diretta, rimette la palette chiara del tema.
+
+function SceltaDiretta({ attiva, onClick, disabled, children }: { attiva: boolean; onClick: () => void; disabled: boolean; children: React.ReactNode }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-pressed={attiva}
+            className={`min-h-11 rounded-lg border-2 px-3 py-2.5 text-[14px] font-medium transition-colors disabled:opacity-50 ${attiva
+                ? 'border-[#FF9330] bg-[#FF9330] text-[#171717]'
+                : 'border-[#3D3D3D] text-[#F2F2F2] hover:border-[#8C8C8C]'}`}
+        >
+            {children}
+        </button>
+    )
+}
+
+function AgendaModalDiretta(p: {
+    leadName: string
+    leadPhone: string
+    agendaSentAt: Date | null
+    alreadySent: boolean
+    isFailed: boolean
+    lavora: boolean | null
+    setLavora: (v: boolean) => void
+    haFamiglia: boolean | null
+    setHaFamiglia: (v: boolean) => void
+    offertaDelMese: boolean
+    toggleOffertaDelMese: () => void
+    loading: boolean
+    successMsg: string | null
+    errorMsg: string | null
+    videoGiaInviato: boolean
+    sentNowStatus: AgendaStatus | null
+    canSubmit: boolean
+    onClose: () => void
+    onDismiss: () => void
+    onSubmit: () => void
+}) {
+    const { loading, offertaDelMese } = p
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); p.onClose() }}>
+            <div className="absolute inset-0 bg-black/70" />
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={p.alreadySent ? 'Reinvia Agenda' : 'Invia Agenda'}
+                className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl border-2 border-[#262626] bg-[#171717] font-[family-name:var(--font-poppins)] text-[#F2F2F2] tabular-nums [color-scheme:dark]"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Intestazione */}
+                <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+                    <div className="min-w-0">
+                        <div className="text-[18px] font-semibold leading-tight">
+                            {p.alreadySent ? 'Reinvia Agenda' : 'Invia Agenda'}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 text-[13px] text-[#BFBFBF]">
+                            <div className="min-w-0 truncate">{p.leadName}</div>
+                            <div className="whitespace-nowrap">{p.leadPhone}</div>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={p.onClose}
+                        disabled={loading}
+                        aria-label="Chiudi"
+                        className="rounded-lg p-1.5 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] disabled:opacity-50"
+                    >
+                        <X className="h-5 w-5" strokeWidth={1.5} />
+                    </button>
+                </div>
+
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-5 pt-1">
+                    {p.isFailed && !p.successMsg && (
+                        <div className="flex items-start gap-2 rounded-lg border-2 border-[#FF9330] px-3 py-2.5 text-[13px] text-[#F2F2F2]">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#FF9330]" strokeWidth={1.75} aria-hidden="true" />
+                            <div>L&apos;ultimo invio a questo lead non è andato a buon fine. Verifica che il numero sia corretto e attivo su WhatsApp.</div>
+                        </div>
+                    )}
+
+                    {p.alreadySent && !p.isFailed && !p.successMsg && (
+                        <div className="flex items-start gap-2 rounded-lg bg-[#262626] px-3 py-2.5 text-[13px] text-[#BFBFBF]">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#FF9330]" strokeWidth={1.75} aria-hidden="true" />
+                            <div>
+                                Agenda già inviata il <strong className="font-semibold text-[#F2F2F2]">{p.agendaSentAt ? dataOraRoma(new Date(p.agendaSentAt)) : 'adesso'}</strong>. Procedi solo se il lead non l&apos;ha ricevuta.
+                            </div>
+                        </div>
+                    )}
+
+                    {!p.successMsg && (
+                        <>
+                            {/* Offerta del mese: in cima, come nella finestra di sempre */}
+                            <button
+                                type="button"
+                                onClick={p.toggleOffertaDelMese}
+                                disabled={loading}
+                                aria-pressed={offertaDelMese}
+                                className={`flex w-full items-center justify-between gap-3 rounded-lg border-2 px-4 py-3 text-left transition-colors disabled:opacity-50 ${offertaDelMese
+                                    ? 'border-[#FF9330] bg-[#FF9330] text-[#171717]'
+                                    : 'border-[#3D3D3D] text-[#F2F2F2] hover:border-[#8C8C8C]'}`}
+                            >
+                                <div className="flex min-w-0 items-start gap-2">
+                                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                                    <div className="min-w-0">
+                                        <div className="text-[14px] font-semibold">Offerta del mese</div>
+                                        <div className={`text-[12px] ${offertaDelMese ? 'text-[#171717]' : 'text-[#BFBFBF]'}`}>
+                                            {offertaDelMese
+                                                ? 'Attiva: il lead riceve il video dell\'offerta, le domande sotto non servono'
+                                                : 'Tocca per mandare il video dell\'offerta al posto di quello lavora/famiglia'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className={`shrink-0 rounded-md px-2 py-1 text-[12px] font-semibold ${offertaDelMese ? 'bg-[#171717] text-[#FF9330]' : 'bg-[#262626] text-[#BFBFBF]'}`}>
+                                    {offertaDelMese ? 'ON' : 'OFF'}
+                                </div>
+                            </button>
+
+                            <div className={offertaDelMese ? 'opacity-40' : ''}>
+                                <div className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-[#BFBFBF]">
+                                    <Briefcase className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" /> Il lead lavora?
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <SceltaDiretta attiva={p.lavora === true} onClick={() => p.setLavora(true)} disabled={loading || offertaDelMese}>Sì, lavora</SceltaDiretta>
+                                    <SceltaDiretta attiva={p.lavora === false} onClick={() => p.setLavora(false)} disabled={loading || offertaDelMese}>No, non lavora</SceltaDiretta>
+                                </div>
+                            </div>
+
+                            <div className={offertaDelMese ? 'opacity-40' : ''}>
+                                <div className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-[#BFBFBF]">
+                                    <Users className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" /> Situazione familiare
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <SceltaDiretta attiva={p.haFamiglia === true} onClick={() => p.setHaFamiglia(true)} disabled={loading || offertaDelMese}>Ha famiglia</SceltaDiretta>
+                                    <SceltaDiretta attiva={p.haFamiglia === false} onClick={() => p.setHaFamiglia(false)} disabled={loading || offertaDelMese}>Non ha figli</SceltaDiretta>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-2 rounded-lg bg-[#262626] px-3 py-2.5">
+                                <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#BFBFBF]" strokeWidth={1.75} aria-hidden="true" />
+                                <div className="text-[13px] leading-relaxed text-[#BFBFBF]">
+                                    <strong className="font-semibold text-[#F2F2F2]">Prima di chiudere la chiamata</strong>, fatti rispondere al messaggio dal lead:
+                                    senza una sua risposta il video di preparazione non gli arriva.
+                                </div>
+                            </div>
+
+                            {p.errorMsg && (
+                                <div role="alert" className="rounded-lg border-2 border-[#FF9330] px-3 py-2.5 text-[13px] text-[#F2F2F2]">
+                                    {p.errorMsg}
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {p.successMsg && p.videoGiaInviato && (
+                        <div className="flex flex-col items-center gap-3 py-4 text-center">
+                            <AlertTriangle className="h-10 w-10 text-[#FF9330]" strokeWidth={1.5} aria-hidden="true" />
+                            <div className="text-[15px] font-semibold">
+                                Il lead ha già ricevuto il video precedente
+                            </div>
+                            <div className="px-2 text-[13px] leading-relaxed text-[#BFBFBF]">
+                                Aveva già risposto al messaggio, quindi il video della variante precedente
+                                gli è arrivato e <strong className="font-semibold text-[#F2F2F2]">non è più recuperabile</strong>. Da qui in avanti
+                                riceverà quello corretto, ma il video sbagliato l&apos;ha visto:
+                                <strong className="font-semibold text-[#F2F2F2]"> diglielo tu ora che sei in chiamata.</strong>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={p.onDismiss}
+                                className="mt-1 rounded-lg bg-[#F2F2F2] px-5 py-2 text-[14px] font-semibold text-[#171717]"
+                            >
+                                Ho capito
+                            </button>
+                        </div>
+                    )}
+
+                    {p.successMsg && !p.videoGiaInviato && (
+                        <div className="flex flex-col items-center gap-3 py-6 text-center">
+                            {p.sentNowStatus === 'inviato'
+                                ? <AlertTriangle className="h-10 w-10 text-[#FF9330]" strokeWidth={1.5} aria-hidden="true" />
+                                : <CheckCircle2 className="h-10 w-10 text-[#31BC00]" strokeWidth={1.5} aria-hidden="true" />}
+                            <div className="text-[15px] font-semibold">{p.successMsg}</div>
+                            <div className="px-3 text-[13px] text-[#BFBFBF]">
+                                {p.sentNowStatus === 'inviato'
+                                    ? "Il telefono del lead risulta spento o offline: il messaggio gli arriverà appena si ricollega. Non reinviare."
+                                    : "Il lead riceverà il messaggio via WhatsApp."}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {!p.successMsg && (
+                    <div className="flex flex-wrap justify-end gap-2 border-t-2 border-[#262626] px-5 py-3">
+                        <button
+                            type="button"
+                            onClick={p.onClose}
+                            disabled={loading}
+                            className="rounded-lg px-4 py-2 text-[14px] font-medium text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] disabled:opacity-50"
+                        >
+                            Annulla
+                        </button>
+                        <button
+                            type="button"
+                            onClick={p.onSubmit}
+                            disabled={!p.canSubmit}
+                            className="inline-flex items-center gap-2 rounded-lg bg-[#FF9330] px-5 py-2 text-[14px] font-semibold text-[#171717] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            {loading ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Invio...
+                                </>
+                            ) : (
+                                <>
+                                    <Send className="h-4 w-4" strokeWidth={1.75} />
+                                    {p.alreadySent ? 'Reinvia' : 'Invia Agenda'}
+                                </>
+                            )}
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
     )
 }
