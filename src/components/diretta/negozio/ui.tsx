@@ -14,10 +14,14 @@ export const btn = {
     linea: 'inline-flex h-10 items-center justify-center rounded-[8px] border-2 border-[var(--d-line)] px-4 text-sm font-medium text-[var(--d-text)] transition-colors hover:border-[var(--d-muted)] disabled:cursor-not-allowed disabled:opacity-60',
 } as const
 
-/** Pagina a tutta superficie scura: copre anche il padding del <main> del layout. */
+/**
+ * Pagina a tutta superficie scura: copre anche il padding del <main> del layout.
+ * Poppins esplicito: nella cornice dell'admin il <main> tiene il carattere
+ * delle pagine vecchie.
+ */
 export function PaginaDiretta({ children }: { children: ReactNode }) {
     return (
-        <div className="-m-3 min-h-[calc(100%+1.5rem)] bg-[var(--d-bg)] px-4 py-6 text-[var(--d-text)] sm:-m-6 sm:min-h-[calc(100%+3rem)] sm:px-8 sm:py-8">
+        <div className="-m-3 min-h-[calc(100%+1.5rem)] bg-[var(--d-bg)] px-4 py-6 font-[family-name:var(--font-poppins)] text-[var(--d-text)] tabular-nums sm:-m-6 sm:min-h-[calc(100%+3rem)] sm:px-8 sm:py-8">
             <div className="mx-auto w-full max-w-6xl">{children}</div>
         </div>
     )

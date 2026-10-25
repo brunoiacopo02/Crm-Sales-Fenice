@@ -4,11 +4,14 @@
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import { appSettings } from '@/db/schema'
-import { DIRETTA_FLAG_KEYS, GAMIFICATION_SETTINGS_KEY, parseTargets, type GamificationTargets } from './config'
+import {
+    DIRETTA_FLAG_KEYS, GAMIFICATION_SETTINGS_KEY, RUOLI_DIRETTA, chiaveInterruttore, parseTargets,
+    type GamificationTargets, type RuoloDiretta,
+} from './config'
 
-/** true se la UI Diretta è accesa per quel ruolo. Spenta di default e per ogni errore. */
+/** true se la UI Diretta è accesa per quel ruolo (GDO, Conferme, admin). Spenta di default e per ogni errore. */
 export async function isDirettaOn(role: string | null | undefined): Promise<boolean> {
-    const key = role === 'GDO' ? DIRETTA_FLAG_KEYS.GDO : role === 'CONFERME' ? DIRETTA_FLAG_KEYS.CONFERME : null
+    const key = chiaveInterruttore(role)
     if (!key) return false
     try {
         const [row] = await db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).limit(1)
@@ -18,14 +21,15 @@ export async function isDirettaOn(role: string | null | undefined): Promise<bool
     }
 }
 
-export async function readDirettaFlags(): Promise<{ GDO: boolean; CONFERME: boolean }> {
+export async function readDirettaFlags(): Promise<Record<RuoloDiretta, boolean>> {
+    const spenti = { GDO: false, CONFERME: false, ADMIN: false }
     try {
         const rows = await db.select().from(appSettings)
-            .where(inArray(appSettings.key, [DIRETTA_FLAG_KEYS.GDO, DIRETTA_FLAG_KEYS.CONFERME]))
-        const on = (k: string) => rows.find(r => r.key === k)?.value === 'on'
-        return { GDO: on(DIRETTA_FLAG_KEYS.GDO), CONFERME: on(DIRETTA_FLAG_KEYS.CONFERME) }
+            .where(inArray(appSettings.key, RUOLI_DIRETTA.map(r => DIRETTA_FLAG_KEYS[r])))
+        const on = (r: RuoloDiretta) => rows.find(x => x.key === DIRETTA_FLAG_KEYS[r])?.value === 'on'
+        return { GDO: on('GDO'), CONFERME: on('CONFERME'), ADMIN: on('ADMIN') }
     } catch {
-        return { GDO: false, CONFERME: false }
+        return spenti
     }
 }
 

@@ -9,7 +9,17 @@ export const GAMIFICATION_SETTINGS_KEY = 'gamification_targets'
 export const DIRETTA_FLAG_KEYS = {
     GDO: 'gdo_ui_diretta',
     CONFERME: 'conferme_ui_diretta',
+    // Veste dell'admin: cornice scura e centro di controllo (PO 25/10/2026).
+    ADMIN: 'admin_ui_diretta',
 } as const
+
+export type RuoloDiretta = keyof typeof DIRETTA_FLAG_KEYS
+export const RUOLI_DIRETTA = Object.keys(DIRETTA_FLAG_KEYS) as RuoloDiretta[]
+
+/** Chiave dell'interruttore per il ruolo; null per chi non ha la Diretta (venditori, manager, TL). */
+export function chiaveInterruttore(role: string | null | undefined): string | null {
+    return role === 'GDO' || role === 'CONFERME' || role === 'ADMIN' ? DIRETTA_FLAG_KEYS[role] : null
+}
 
 export interface Fascia { start: string; end: string }   // 'HH:MM' ora di Roma, end esclusa
 

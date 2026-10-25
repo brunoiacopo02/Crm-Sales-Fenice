@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Building2, Layers, ArrowLeftRight, Loader2 } from 'lucide-react'
+import { ChevronDown, Building2, Layers, ArrowLeftRight, Loader2, Check } from 'lucide-react'
 import { getCompanySwitchSummary, type CompanySwitchSummary } from '@/app/actions/companySummaryActions'
 
 // Sentinella "Tutte le aziende". Duplicata client-side per non importare
@@ -46,8 +46,11 @@ export function CompanyPicker({ companies }: { companies: Company[] }) {
   )
 }
 
-/** Dropdown in topbar. Mostra il badge azienda; se canSwitch, permette il cambio. */
-export function SalesCompanySwitcher() {
+/**
+ * Dropdown in topbar. Mostra il badge azienda; se canSwitch, permette il cambio.
+ * `variant="diretta"`: la stessa cosa nella barra scura dell'admin (PO 25/10/2026).
+ */
+export function SalesCompanySwitcher({ variant = 'classic' }: { variant?: 'classic' | 'diretta' } = {}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -93,6 +96,23 @@ export function SalesCompanySwitcher() {
     }
     router.refresh()
     window.location.reload()
+  }
+
+  if (variant === 'diretta') {
+    return (
+      <SwitcherDiretta
+        active={active}
+        label={label}
+        isAll={isAll}
+        canSwitch={canSwitch}
+        companies={companies}
+        busy={busy}
+        open={open}
+        setOpen={setOpen}
+        pick={pick}
+        summaryOf={summaryOf}
+      />
+    )
   }
 
   // Badge statico se non può cambiare (utente mono-azienda).
@@ -181,6 +201,90 @@ export function SalesCompanySwitcher() {
                   </span>
                 )}
                 {c.id === active && <span>✓</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Selettore nella barra scura della Diretta (admin): stessi dati e stessa
+ * scelta del classico, con i colori del brand e senza badge colorati.
+ */
+function SwitcherDiretta({ active, label, isAll, canSwitch, companies, busy, open, setOpen, pick, summaryOf }: {
+  active: string | null
+  label: string
+  isAll: boolean
+  canSwitch: boolean
+  companies: Company[]
+  busy: boolean
+  open: boolean
+  setOpen: (fn: (v: boolean) => boolean) => void
+  pick: (id: string) => void
+  summaryOf: (id: string) => CompanySwitchSummary | undefined
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const fuori = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(() => false)
+    }
+    document.addEventListener('mousedown', fuori)
+    return () => document.removeEventListener('mousedown', fuori)
+  }, [open, setOpen])
+
+  const Icona = isAll ? Layers : Building2
+  if (!canSwitch) {
+    return (
+      <div className="flex h-9 items-center gap-2 rounded-[8px] bg-[#262626] px-3 text-[13px] font-medium text-[#F2F2F2]">
+        <Icona className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
+        <span>{label}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label={`Azienda: ${label}. Cambia azienda`}
+        className="flex h-9 items-center gap-2 rounded-[8px] bg-[#262626] px-3 text-[13px] font-medium text-[#F2F2F2] transition-colors hover:bg-[#2E2E2E]"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" /> : <Icona className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />}
+        <span className="max-w-[9rem] truncate">{label}</span>
+        <ChevronDown className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-[100] mt-2 w-64 overflow-hidden rounded-[16px] border-2 border-[#3D3D3D] bg-[#262626] py-1 text-[#F2F2F2]">
+          {companies.map((c) => {
+            const all = c.id === ALL_COMPANIES
+            const s = all ? undefined : summaryOf(c.id)
+            const attiva = c.id === active
+            const numeri = s ? [s.apptToday > 0 ? `${s.apptToday} appuntamenti oggi` : null, s.richiamiDue > 0 ? `${s.richiamiDue} richiami` : null].filter(Boolean).join(', ') : ''
+            return (
+              <button
+                key={c.id}
+                type="button"
+                disabled={busy}
+                onClick={() => pick(c.id)}
+                aria-current={attiva ? 'true' : undefined}
+                className={`flex w-full items-start gap-2.5 px-4 py-2.5 text-left text-[14px] transition-colors hover:bg-[#2E2E2E] disabled:opacity-60 ${all ? 'border-t-2 border-[#3D3D3D]' : ''}`}
+              >
+                {all
+                  ? <Layers className="mt-0.5 h-4 w-4 shrink-0 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
+                  : <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />}
+                <span className="min-w-0 flex-1">
+                  <span className={`block ${attiva ? 'font-semibold' : ''}`}>{c.display_name}</span>
+                  {numeri && <span className="block text-[12px] tabular-nums text-[#BFBFBF]">{numeri}</span>}
+                </span>
+                {attiva && <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#FF9330]" strokeWidth={1.5} aria-hidden="true" />}
               </button>
             )
           })}

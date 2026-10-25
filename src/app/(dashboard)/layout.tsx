@@ -56,6 +56,10 @@ export default async function DashboardLayout({
     // spegne senza deploy. Con la Diretta le vecchie skin e gli overlay della
     // gamification non si applicano.
     const diretta = await direttaAccesa(session.user.role)
+    // Admin: cornice scura (barra e menu) attorno alle pagine. Le pagine vecchie,
+    // dense di numeri, restano su superficie chiara e col loro carattere; quelle
+    // nuove della Diretta si disegnano scure da sole (PaginaAdmin, PaginaDiretta).
+    const direttaAdmin = diretta && session.user.role === 'ADMIN'
 
     // Barra in alto della Diretta: nome vero, avatar, saldo e orari del turno.
     let direttaIo: DirettaIo | null = null
@@ -116,10 +120,10 @@ export default async function DashboardLayout({
                         confrontano con la loro (VesteAllineata) e, se diverse, ridisegnano tutto. */}
                     <div data-radice-dashboard="" data-company={dataCompany} data-theme={userTheme} data-ui={diretta ? 'diretta' : undefined} className={`flex h-screen overflow-hidden font-sans ${isTheme ? skinCss : 'bg-gray-50'}`}>
                         <Sidebar companyId={dataCompany} salesPipelineEnabled={salesPipelineEnabled} lancioUmaniEnabled={lancioUmaniEnabled} diretta={diretta} ruolo={session.user.role} />
-                        <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''}`}>
+                        <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''} ${direttaAdmin ? 'bg-[#171717]' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
                             <Topbar diretta={diretta} ruolo={session.user.role} io={direttaIo} obiettivi={direttaObiettivi} />
-                            <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'}`}>
+                            <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'} ${direttaAdmin ? 'd-foglio-admin lg:rounded-tl-[16px]' : ''}`}>
                                 <AllCompaniesGate active={isAllCompanies}>
                                     {children}
                                 </AllCompaniesGate>

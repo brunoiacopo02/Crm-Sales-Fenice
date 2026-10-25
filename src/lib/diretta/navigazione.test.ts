@@ -25,6 +25,8 @@ test('menu Diretta del GDO: profilo e storico pause raggiungibili', () => {
 })
 
 test('bonus e obiettivi delle Conferme: collegati da /admin/diretta e dalla Sidebar admin', () => {
-    assert.match(leggi('app/(dashboard)/admin/diretta/page.tsx'), /href="\/admin\/diretta\/conferme"/)
+    // Il centro di controllo disegna le sue sezioni in sezioni.tsx.
+    const centro = leggi('app/(dashboard)/admin/diretta/page.tsx') + leggi('app/(dashboard)/admin/diretta/sezioni.tsx')
+    assert.match(centro, /href="\/admin\/diretta\/conferme"/)
     assert.match(leggi('components/Sidebar.tsx'), /href: "\/admin\/diretta\/conferme"/)
 })

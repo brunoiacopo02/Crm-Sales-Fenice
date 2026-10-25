@@ -1,11 +1,21 @@
 "use client"
 
+// Approvazione di citazioni e consigli di vendita, giorno per giorno (PO 25/10/2026).
+// In cima quanti giorni sono ancora senza riflessione o consiglio approvati,
+// con il filtro "da sistemare"; sotto, per ogni giorno, citazione e consiglio:
+// testo, autore e opera, fonte della traduzione, riflessione suggerita con la
+// sua fonte, campo per modificarla o riscriverla (al massimo 10 righe) e i
+// pulsanti Approva, Togli approvazione e Cambia frase. I giorni approvati si
+// chiudono in una scheda corta, che si riapre con Modifica.
+
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { ExternalLink } from "lucide-react"
 import { approveQuoteDay, assignQuoteToDay, listQuoteChoices, unapproveQuoteDay } from "@/app/actions/quoteActions"
 import { countLines, REFLECTION_MAX_LINES } from "@/lib/quotes/display"
 import type { ActionResult, AdminCalendarDay, AdminDayEntry, AdminQuote, QuoteChoice } from "@/lib/quotes/adminTypes"
+import { giornoDaSistemare, giorniTesto, maiuscola, riepilogoCalendario, statoVoce, statoVoceTesto } from "@/lib/diretta/centro"
+import { bottone } from "@/components/diretta/admin/ui"
 
 type Kind = "citazione" | "vendita"
 type LoadChoices = (kind: Kind) => Promise<QuoteChoice[] | string>
@@ -17,14 +27,15 @@ const USAGE_LABEL: Record<string, string> = {
 }
 
 const shortDate = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
 
-const BTN_PRIMARY = "rounded-lg bg-[#FF9330] px-3 py-1.5 text-sm font-medium text-[#171717] transition-colors hover:bg-[#F28420] disabled:cursor-not-allowed disabled:opacity-50"
-const BTN_SECONDARY = "rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-const BTN_TEXT = "rounded-lg px-2 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+const CAMPO_BASE = "w-full rounded-[8px] border-2 border-[#3D3D3D] bg-[#171717] px-3 text-[14px] text-[#F2F2F2] placeholder:text-[#8C8C8C] [color-scheme:dark] focus:border-[#FF9330] focus:outline-none"
+const CAMPO = `${CAMPO_BASE} py-2 leading-relaxed`
+const CERCA = `${CAMPO_BASE} h-10`
 
 export function CitazioniAdminClient({ days, closedDays }: { days: AdminCalendarDay[]; closedDays: string[] }) {
+    const [soloDaSistemare, setSoloDaSistemare] = useState(false)
+
     // Elenco delle citazioni per il cambio: si carica alla prima richiesta e si
     // butta dopo ogni cambio (i "già in calendario" cambiano).
     const cache = useRef<Partial<Record<Kind, QuoteChoice[]>>>({})
@@ -38,19 +49,64 @@ export function CitazioniAdminClient({ days, closedDays }: { days: AdminCalendar
     }, [])
     const resetChoices = useCallback(() => { cache.current = {} }, [])
 
+    const riepilogo = useMemo(() => riepilogoCalendario(days), [days])
+    const daSistemare = useMemo(() => days.filter(giornoDaSistemare), [days])
+    const mostrati = soloDaSistemare ? daSistemare : days
+
     if (days.length === 0) {
-        return <div className="text-sm text-gray-600">Nessun giorno lavorativo nei prossimi tre mesi.</div>
+        return <div className="mt-8 text-[15px] text-[#BFBFBF]">Nessun giorno lavorativo nei prossimi tre mesi.</div>
     }
 
     return (
-        <div className="space-y-8">
-            {days.map(d => (
-                <section key={d.day} aria-label={d.label} className="space-y-3">
-                    <h2 className="text-base font-semibold text-gray-900">
-                        {capitalize(d.label)}
-                        {d.isToday && <span className="font-normal text-gray-500">, oggi</span>}
+        <div className="mt-8 flex flex-col gap-8">
+            <section aria-label="Da approvare" className="rounded-[16px] bg-[#262626] p-5 sm:p-6">
+                <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
+                    <Conteggio etichetta="Senza riflessione approvata" n={riepilogo.citazioni.length} su={riepilogo.giorni} />
+                    <Conteggio etichetta="Senza consiglio approvato" n={riepilogo.consigli.length} su={riepilogo.giorni} />
+                </div>
+                {daSistemare.length > 0 ? (
+                    <div className="mt-5 border-t-2 border-[#2E2E2E] pt-4">
+                        <div className="text-[14px] text-[#BFBFBF]">
+                            Da sistemare: {giorniTesto(daSistemare.length)}, con una frase da approvare o mancante.
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {daSistemare.map(d => (
+                                <a
+                                    key={d.day}
+                                    href={`#giorno-${d.day}`}
+                                    className="rounded-[8px] border-2 border-[#3D3D3D] px-2.5 py-1 text-[13px] tabular-nums text-[#F2F2F2] transition-colors hover:border-[#BFBFBF]"
+                                >
+                                    {shortDate(d.day)}
+                                </a>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mt-5 border-t-2 border-[#2E2E2E] pt-4 text-[14px] text-[#BFBFBF]">
+                        Tutti i giorni hanno citazione e consiglio approvati.
+                    </div>
+                )}
+                <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Quali giorni mostrare">
+                    <button type="button" aria-pressed={!soloDaSistemare} onClick={() => setSoloDaSistemare(false)} className={bottone(!soloDaSistemare ? "scelto" : "linea", "piccola")}>
+                        Tutti i giorni
+                    </button>
+                    <button type="button" aria-pressed={soloDaSistemare} onClick={() => setSoloDaSistemare(true)} className={bottone(soloDaSistemare ? "scelto" : "linea", "piccola")}>
+                        Solo da sistemare
+                    </button>
+                </div>
+            </section>
+
+            {mostrati.length === 0 && (
+                <div className="text-[15px] text-[#BFBFBF]">Nessun giorno da sistemare.</div>
+            )}
+
+            {mostrati.map(d => (
+                <section key={d.day} id={`giorno-${d.day}`} aria-label={d.label} className="scroll-mt-6">
+                    <h2 className="text-[20px] font-semibold leading-snug">
+                        {maiuscola(d.label)}
+                        {d.isToday && <span className="font-normal text-[#BFBFBF]">, oggi</span>}
                     </h2>
-                    <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="mt-3 grid items-start gap-4 lg:grid-cols-2">
                         {(["citazione", "vendita"] as const).map(kind => (
                             <EntryCard
                                 key={`${kind}-${d[kind].quote?.id ?? "vuoto"}-${d[kind].approved ? 1 : 0}-${d[kind].reflection ?? ""}`}
@@ -64,8 +120,9 @@ export function CitazioniAdminClient({ days, closedDays }: { days: AdminCalendar
                     </div>
                 </section>
             ))}
+
             {closedDays.length > 0 && (
-                <div className="text-sm text-gray-600">
+                <div className="text-[14px] text-[#BFBFBF]">
                     Ufficio chiuso, giorni saltati: {closedDays.map(shortDate).join(", ")}.
                 </div>
             )}
@@ -73,12 +130,16 @@ export function CitazioniAdminClient({ days, closedDays }: { days: AdminCalendar
     )
 }
 
-function statusOf(entry: AdminDayEntry): { text: string; tone: string } {
-    if (!entry.quote) return { text: "Nessuna citazione", tone: "text-gray-500" }
-    if (!entry.approved) return { text: "Da approvare", tone: "text-[#B45309]" }
-    return entry.reflection
-        ? { text: "Approvata, con approfondimento", tone: "text-green-700" }
-        : { text: "Approvata, senza approfondimento", tone: "text-green-700" }
+function Conteggio({ etichetta, n, su }: { etichetta: string; n: number; su: number }) {
+    return (
+        <div className="flex items-baseline justify-between gap-4">
+            <div className="text-[15px]">{etichetta}</div>
+            <div className="shrink-0 tabular-nums">
+                <span className={`text-[28px] font-semibold leading-none ${n > 0 ? "text-[#FF9330]" : ""}`}>{n}</span>
+                <span className="ml-1.5 text-[14px] text-[#BFBFBF]">su {giorniTesto(su)}</span>
+            </div>
+        </div>
+    )
 }
 
 function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
@@ -90,104 +151,157 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
 }) {
     const router = useRouter()
     const q = entry.quote
-    const [text, setText] = useState(entry.reflection ?? q?.suggestedReflection ?? "")
+    const iniziale = entry.reflection ?? q?.suggestedReflection ?? ""
+    const [text, setText] = useState(iniziale)
     const [error, setError] = useState<string | null>(null)
     const [picking, setPicking] = useState(false)
+    const [aperta, setAperta] = useState(!entry.approved)
     const [pending, startTransition] = useTransition()
     const lines = countLines(text)
     const tooLong = lines > REFLECTION_MAX_LINES
-    const status = statusOf(entry)
+    const stato = statoVoce(entry)
+    const nomeTesto = kind === "citazione" ? "riflessione" : "consiglio"
+    const nonSalvato = entry.approved && text.trim() !== (entry.reflection ?? "").trim()
 
     const run = (fn: () => Promise<ActionResult>, after?: () => void) => {
         setError(null)
         startTransition(async () => {
-            const r = await fn()
-            if (!r.ok) {
-                setError(r.error)
-                return
+            try {
+                const r = await fn()
+                if (!r.ok) {
+                    setError(r.error)
+                    return
+                }
+                after?.()
+                router.refresh()
+            } catch {
+                setError("Connessione assente. Riprova tra poco.")
             }
-            after?.()
-            router.refresh()
         })
     }
 
+    const approva = () => run(() => approveQuoteDay(day, kind, text))
+
     return (
-        <article className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4">
-            <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-gray-900">{KIND_LABEL[kind]}</h3>
-                <div className={`text-xs font-medium ${status.tone}`}>{status.text}</div>
+        <article className="flex min-w-0 flex-col gap-4 rounded-[16px] bg-[#262626] p-5">
+            <div className="flex items-baseline justify-between gap-3">
+                <h3 className="text-[15px] font-semibold">{KIND_LABEL[kind]}</h3>
+                <div className={`text-[13px] ${stato === "da_approvare" || stato === "manca" ? "font-semibold text-[#FF9330]" : "text-[#BFBFBF]"}`}>
+                    {statoVoceTesto(stato, kind)}
+                </div>
             </div>
 
             {q ? (
                 <>
                     <QuoteDetails quote={q} kind={kind} />
 
-                    {q.suggestedReflection && (
-                        <div className="space-y-1 border-t border-gray-100 pt-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="text-xs font-medium text-gray-500">
-                                    {kind === "citazione" ? "Bozza di riflessione suggerita" : "Consiglio suggerito"}
+                    {!aperta ? (
+                        <>
+                            {entry.reflection?.trim() ? (
+                                <div className="border-t-2 border-[#2E2E2E] pt-4">
+                                    <div className="text-[13px] text-[#BFBFBF]">{kind === "citazione" ? "Riflessione approvata" : "Consiglio approvato"}</div>
+                                    <div className="mt-1 whitespace-pre-line text-[14px] leading-relaxed">{entry.reflection}</div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    {q.reflectionSource && <SourceLink href={q.reflectionSource} label="Fonte" />}
-                                    <button type="button" className={BTN_TEXT} onClick={() => setText(q.suggestedReflection ?? "")} disabled={pending}>
-                                        Usa la bozza
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="whitespace-pre-line text-sm leading-relaxed text-gray-700">{q.suggestedReflection}</div>
-                        </div>
-                    )}
-
-                    <div className="space-y-1 border-t border-gray-100 pt-3">
-                        <label htmlFor={`txt-${kind}-${day}`} className="text-xs font-medium text-gray-500">
-                            {kind === "citazione" ? "Riflessione da mostrare in Approfondisci" : "Consiglio da mostrare in Approfondisci"}
-                        </label>
-                        <textarea
-                            id={`txt-${kind}-${day}`}
-                            value={text}
-                            onChange={e => setText(e.target.value)}
-                            rows={8}
-                            className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed text-gray-900 focus:border-[#FF9330] focus:outline-none"
-                            placeholder={kind === "citazione" ? "Vuoto: il giorno resta con la sola citazione." : "Vuoto: si vede solo la frase, se c'è."}
-                        />
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className={`text-xs tabular-nums ${tooLong ? "font-medium text-red-600" : "text-gray-500"}`}>
-                                {lines}/{REFLECTION_MAX_LINES} righe
-                            </div>
-                            {kind === "vendita" && !entry.approved && (
-                                <div className="text-xs text-gray-500">
-                                    {q.text.trim() ? "Senza approvazione si vede solo la frase." : "Senza frase: senza approvazione quel giorno non c'è consiglio."}
+                            ) : (
+                                <div className="border-t-2 border-[#2E2E2E] pt-4 text-[14px] text-[#BFBFBF]">
+                                    {kind === "citazione" ? "Si vede solo la citazione, senza Approfondisci." : "Si vede solo la frase, senza consiglio."}
                                 </div>
                             )}
-                        </div>
-                    </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button type="button" className={bottone("linea", "piccola")} disabled={pending} onClick={() => setAperta(true)}>
+                                    Modifica
+                                </button>
+                                <button type="button" className={bottone("linea", "piccola")} disabled={pending} onClick={() => run(() => unapproveQuoteDay(day, kind))}>
+                                    Togli approvazione
+                                </button>
+                                <button type="button" className={`${bottone("testo", "piccola")} ml-auto`} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
+                                    {picking ? "Chiudi la scelta" : "Cambia frase"}
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {q.suggestedReflection && (
+                                <div className="border-t-2 border-[#2E2E2E] pt-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="text-[13px] text-[#BFBFBF]">
+                                            {kind === "citazione" ? "Riflessione suggerita" : "Consiglio suggerito"}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            {q.reflectionSource && <SourceLink href={q.reflectionSource} label="Fonte" />}
+                                            <button
+                                                type="button"
+                                                className={bottone("testo", "piccola")}
+                                                onClick={() => setText(q.suggestedReflection ?? "")}
+                                                disabled={pending || text === q.suggestedReflection}
+                                            >
+                                                Usa questo testo
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="mt-1 whitespace-pre-line text-[14px] leading-relaxed text-[#BFBFBF]">{q.suggestedReflection}</div>
+                                </div>
+                            )}
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" className={BTN_PRIMARY} disabled={pending || tooLong} onClick={() => run(() => approveQuoteDay(day, kind, text))}>
-                            Approva
-                        </button>
-                        <button type="button" className={BTN_SECONDARY} disabled={pending || !entry.approved} onClick={() => run(() => unapproveQuoteDay(day, kind))}>
-                            Rimuovi approvazione
-                        </button>
-                        <button type="button" className={BTN_TEXT} disabled={pending || !text} onClick={() => setText("")}>
-                            Svuota
-                        </button>
-                        <button type="button" className={`${BTN_TEXT} ml-auto`} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
-                            {picking ? "Chiudi la scelta" : "Cambia citazione"}
-                        </button>
-                    </div>
+                            <div className="border-t-2 border-[#2E2E2E] pt-4">
+                                <label htmlFor={`txt-${kind}-${day}`} className="text-[13px] text-[#BFBFBF]">
+                                    {kind === "citazione" ? "Riflessione da mostrare in Approfondisci" : "Consiglio da mostrare in Approfondisci"}
+                                </label>
+                                <textarea
+                                    id={`txt-${kind}-${day}`}
+                                    value={text}
+                                    onChange={e => setText(e.target.value)}
+                                    rows={8}
+                                    className={`${CAMPO} mt-1.5 resize-y`}
+                                    placeholder={kind === "citazione" ? "Vuoto: il giorno resta con la sola citazione." : "Vuoto: si vede solo la frase, se c'è."}
+                                />
+                                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[13px]">
+                                    <div className={`tabular-nums ${tooLong ? "font-semibold text-[#FF9330]" : "text-[#BFBFBF]"}`}>
+                                        {lines} righe su {REFLECTION_MAX_LINES}{tooLong ? ", troppe: va accorciato" : ""}
+                                    </div>
+                                    {nonSalvato && <div className="text-[#BFBFBF]">Modifiche non salvate</div>}
+                                    {kind === "vendita" && !entry.approved && (
+                                        <div className="text-[#BFBFBF]">
+                                            {q.text.trim() ? "Senza approvazione si vede solo la frase." : "Senza frase e senza approvazione quel giorno non c'è consiglio."}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button type="button" className={bottone("primario")} disabled={pending || tooLong} onClick={approva}>
+                                    {text.trim() ? "Approva" : `Approva senza ${nomeTesto}`}
+                                </button>
+                                {entry.approved && (
+                                    <button type="button" className={bottone("linea")} disabled={pending} onClick={() => run(() => unapproveQuoteDay(day, kind))}>
+                                        Togli approvazione
+                                    </button>
+                                )}
+                                {entry.approved && (
+                                    <button type="button" className={bottone("testo")} disabled={pending} onClick={() => { setText(iniziale); setAperta(false) }}>
+                                        Annulla
+                                    </button>
+                                )}
+                                <button type="button" className={bottone("testo")} disabled={pending || !text} onClick={() => setText("")}>
+                                    Svuota
+                                </button>
+                                <button type="button" className={`${bottone("testo")} ml-auto`} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
+                                    {picking ? "Chiudi la scelta" : "Cambia frase"}
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </>
             ) : (
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm text-gray-600">Nessuna citazione assegnata a questo giorno.</div>
-                    <button type="button" className={BTN_SECONDARY} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
-                        {picking ? "Chiudi la scelta" : "Scegli una citazione"}
+                    <div className="text-[14px] text-[#BFBFBF]">Nessuna frase assegnata a questo giorno.</div>
+                    <button type="button" className={bottone("primario", "piccola")} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
+                        {picking ? "Chiudi la scelta" : "Scegli una frase"}
                     </button>
                 </div>
             )}
 
-            {error && <div className="text-sm text-red-600">{error}</div>}
+            {error && <div role="alert" className="text-[14px] font-semibold text-[#FF9330]">{error}</div>}
 
             {picking && (
                 <Picker
@@ -209,7 +323,7 @@ function SourceLink({ href, label }: { href: string; label: string }) {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-gray-700 underline-offset-2 hover:bg-gray-100 hover:underline"
+            className="inline-flex h-9 items-center gap-1 rounded-[8px] px-2.5 text-[14px] text-[#F2F2F2] underline-offset-2 transition-colors hover:bg-[#2E2E2E] hover:underline"
         >
             {label}
             <ExternalLink aria-hidden className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -219,37 +333,40 @@ function SourceLink({ href, label }: { href: string; label: string }) {
 
 function QuoteDetails({ quote, kind }: { quote: AdminQuote; kind: Kind }) {
     const phrase = quote.text.trim()
+    const meta = [
+        quote.theme ? `Tema: ${quote.theme}` : null,
+        quote.occasions.length > 0 ? `Occasioni: ${quote.occasions.join(", ")}` : null,
+        quote.translator ? `Traduzione di ${quote.translator}` : null,
+    ].filter(Boolean)
     return (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
             {phrase ? (
-                <blockquote className="text-[15px] font-medium leading-snug text-gray-900">{phrase}</blockquote>
+                <blockquote className="text-[17px] font-medium leading-snug">{phrase}</blockquote>
             ) : (
-                <div className="text-sm text-gray-500">Senza frase dell&apos;autore.</div>
+                <div className="text-[14px] text-[#BFBFBF]">Senza frase dell&apos;autore.</div>
             )}
-            <div className="text-sm text-gray-700">
+            <div className="text-[14px]">
                 {quote.author}
-                {quote.work && <span className="text-gray-500">, {quote.work}</span>}
-                {quote.reference && <span className="text-gray-500"> ({quote.reference})</span>}
+                {quote.work && <span className="text-[#BFBFBF]">, {quote.work}</span>}
+                {quote.reference && <span className="text-[#BFBFBF]"> ({quote.reference})</span>}
             </div>
             {kind === "vendita" && (quote.technique || quote.usage) && (
-                <div className="text-sm text-gray-700">
+                <div className="text-[14px] text-[#BFBFBF]">
                     {quote.technique && <>Tecnica: {quote.technique}</>}
                     {quote.technique && quote.usage && USAGE_LABEL[quote.usage] && ", "}
                     {quote.usage && USAGE_LABEL[quote.usage]}
                 </div>
             )}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-                {quote.theme && <div>Tema: {quote.theme}</div>}
-                {quote.occasions.length > 0 && <div>Occasioni: {quote.occasions.join(", ")}</div>}
-                {quote.translator && <div>Traduzione di {quote.translator}</div>}
-            </div>
+            {meta.length > 0 && <div className="text-[13px] text-[#BFBFBF]">{meta.join(". ")}.</div>}
             {quote.originalText && (
-                <div className="text-xs leading-relaxed text-gray-500">Originale: {quote.originalText}</div>
+                <div className="text-[13px] leading-relaxed text-[#BFBFBF]">Originale: {quote.originalText}</div>
             )}
-            {quote.translationUrl && (
-                <div className="flex">
-                    <SourceLink href={quote.translationUrl} label={kind === "citazione" ? "Controlla la traduzione" : "Controlla la fonte della frase"} />
+            {quote.translationUrl ? (
+                <div className="-ml-2.5 flex">
+                    <SourceLink href={quote.translationUrl} label={kind === "citazione" ? "Fonte della traduzione" : "Fonte della frase"} />
                 </div>
+            ) : (
+                <div className="text-[13px] text-[#BFBFBF]">{kind === "citazione" ? "Manca il link alla traduzione." : "Manca il link alla fonte."}</div>
             )}
         </div>
     )
@@ -273,7 +390,7 @@ function Picker({ kind, approved, currentId, pending, loadChoices, onChoose }: {
             if (!alive) return
             if (typeof r === "string") setLoadError(r)
             else setItems(r)
-        })
+        }).catch(() => { if (alive) setLoadError("Elenco non disponibile.") })
         return () => { alive = false }
     }, [kind, loadChoices])
 
@@ -286,32 +403,32 @@ function Picker({ kind, approved, currentId, pending, loadChoices, onChoose }: {
     }, [items, query, currentId])
 
     return (
-        <div className="space-y-2 border-t border-gray-100 pt-3">
+        <div className="flex flex-col gap-2 border-t-2 border-[#2E2E2E] pt-4">
             {approved && (
-                <div className="text-xs text-[#B45309]">Il giorno è approvato: cambiando citazione l&apos;approvazione si toglie.</div>
+                <div className="text-[13px] text-[#BFBFBF]">Il giorno è approvato: cambiando frase l&apos;approvazione si toglie.</div>
             )}
             <input
                 type="search"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Cerca per testo, autore, tema"
-                aria-label="Cerca una citazione"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#FF9330] focus:outline-none"
+                aria-label={kind === "citazione" ? "Cerca una citazione" : "Cerca un consiglio"}
+                className={CERCA}
             />
-            {loadError && <div className="text-sm text-red-600">{loadError}</div>}
-            {!items && !loadError && <div className="text-sm text-gray-500">Caricamento…</div>}
-            {items && shown.length === 0 && <div className="text-sm text-gray-500">Nessuna citazione trovata.</div>}
-            <div className="max-h-96 divide-y divide-gray-100 overflow-y-auto">
+            {loadError && <div className="text-[14px] font-semibold text-[#FF9330]">{loadError}</div>}
+            {!items && !loadError && <div className="text-[14px] text-[#BFBFBF]">Caricamento</div>}
+            {items && shown.length === 0 && <div className="text-[14px] text-[#BFBFBF]">Nessuna frase trovata.</div>}
+            <div className="max-h-96 overflow-y-auto">
                 {shown.map(it => (
-                    <div key={it.id} className="flex items-start justify-between gap-3 py-2">
-                        <div className="min-w-0 space-y-0.5">
-                            <div className="line-clamp-2 text-sm text-gray-900">{it.text.trim() || it.technique || "Senza frase"}</div>
-                            <div className="text-xs text-gray-500">
+                    <div key={it.id} className="flex items-start justify-between gap-3 border-t-2 border-[#2E2E2E] py-2.5 first:border-t-0">
+                        <div className="min-w-0">
+                            <div className="line-clamp-2 text-[14px]">{it.text.trim() || it.technique || "Senza frase"}</div>
+                            <div className="text-[13px] text-[#BFBFBF]">
                                 {it.author}{it.theme ? `, ${it.theme}` : ""}
                                 {it.usedOn.length > 0 && `, in calendario il ${it.usedOn.slice(-3).map(shortDate).join(", ")}`}
                             </div>
                         </div>
-                        <button type="button" className={`${BTN_SECONDARY} shrink-0`} disabled={pending} onClick={() => onChoose(it.id)}>
+                        <button type="button" className={bottone("linea", "piccola")} disabled={pending} onClick={() => onChoose(it.id)}>
                             Usa questa
                         </button>
                     </div>
