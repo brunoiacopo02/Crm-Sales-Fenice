@@ -13,13 +13,15 @@ interface Props {
     /** Lista lead correntemente visibili: usata per mostrare il nome se il
      *  timer punta a un lead ancora in vista. */
     visibleLeads?: Array<{ id: string; name?: string | null }>;
+    /** Grafica: 'diretta' = restyle scuro (PO 25/10/2026). La logica non cambia. */
+    variant?: 'classic' | 'diretta';
 }
 
 /** Banner sticky che mostra un timer Conferme attivo quando il lead non e' piu'
  *  raggiungibile dalla board (esitato, snoozato fuori vista, filtro cambiato).
  *  Permette di annullarlo senza loggare la durata, evitando che gonfi le
  *  metriche di tempo medio chiamata. */
-export function ConfermeActiveTimerBanner({ visibleLeads }: Props) {
+export function ConfermeActiveTimerBanner({ visibleLeads, variant = 'classic' }: Props) {
     const [state, setState] = useState<TimerState>({ status: "idle" });
     const [, setTick] = useState(0);
 
@@ -60,6 +62,30 @@ export function ConfermeActiveTimerBanner({ visibleLeads }: Props) {
         // lead "abbandonato" non gonfia il conteggio generale.
         writeTimerState({ status: "idle" });
     };
+
+    if (variant === 'diretta') {
+        // Lead non più in vista: è la cosa da sistemare adesso, quindi arancione.
+        return (
+            <div className={`sticky top-0 z-30 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-2.5 text-sm ${isOrphan ? "bg-[var(--d-orange)] text-[var(--d-orange-ink)]" : "bg-[var(--d-surface)] text-[var(--d-text)]"}`}>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                    <span className="font-semibold">Timer della chiamata {fmtMMSS(elapsed)}</span>
+                    <span className={isOrphan ? "" : "text-[var(--d-muted)]"}>
+                        {matchingLead
+                            ? <>su <span className="font-medium text-[var(--d-text)]">{matchingLead.name || "un lead della board"}</span></>
+                            : <>il lead non è più in vista: fermalo per sbloccare gli altri</>}
+                    </span>
+                </div>
+                <button
+                    onClick={handleCancel}
+                    title="Pulisce il timer senza registrare la durata (non conta nelle statistiche)"
+                    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-2 px-3 text-[13px] font-medium transition-colors ${isOrphan ? "border-[var(--d-orange-ink)] hover:bg-[var(--d-orange-ink)]/10" : "border-[var(--d-line)] hover:bg-[var(--d-surface-2)]"}`}
+                >
+                    <X className="h-3.5 w-3.5" strokeWidth={1.75} /> Annulla timer
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className={`sticky top-0 z-30 mb-2 rounded-xl border px-3 py-2 flex items-center justify-between shadow-soft animate-fade-in ${isOrphan ? "bg-gradient-to-r from-ember-50 to-rose-50 border-ember-300" : "bg-gradient-to-r from-sky-50 to-cyan-50 border-sky-200"}`}>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw, Rocket } from "lucide-react"
+import { Phone, Users, CheckCircle2, XCircle, Clock, Calendar, CheckSquare, MonitorPlay, EyeOff, Undo2, RotateCcw, Rocket, ClipboardList } from "lucide-react"
 import { format } from "date-fns"
 import { CompanyBadge } from "./CompanyBadge"
 import { recordConfermeNoAnswer, undoConfermeNoAnswer, setConfermeSnooze, scheduleConfermeRecall, cancelConfermeRecall } from "@/app/actions/confermeActions"
@@ -10,8 +10,15 @@ import { ConfermeCallTimer } from "@/components/ConfermeCallTimer"
 import { consumeTimerForLead } from "@/lib/confermeCallTimer"
 import { logConfermeCallDuration } from "@/app/actions/confermeAnalyticsActions"
 import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
+import { collegaName, gdoName } from "@/lib/conferme/boardView"
+import { dUi } from "@/components/conferme/diretta/ui"
 
-export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, onRefresh, onRowClick, layoutMode = 'default' }: any) {
+/**
+ * Riga della board Conferme. `variant` 'diretta' = restyle scuro (PO 25/10/2026):
+ * stessi stati, stessi gestori, stesse action; cambia solo il disegno, che sta
+ * in un ramo di render a parte per lasciare identica la grafica classica.
+ */
+export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, onRefresh, onRowClick, layoutMode = 'default', variant = 'classic' }: any) {
     const lead = item.lead
 
     // Client-side time for overdue checks (avoids hydration mismatch)
@@ -58,6 +65,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
 
     /** Apply micro-animation to the row card, then call callback after delay */
     const animateAndRefresh = async (anim: string, durationMs: number) => {
+        // Diretta: niente bagliore (pa-amber-pulse è un box-shadow), solo il piccolo salto.
+        if (variant === 'diretta' && anim === 'pa-amber-pulse') {
+            anim = 'pa-bounce'
+            durationMs = 200
+        }
         if (getAnimationsEnabled() && rowRef.current) {
             rowRef.current.style.animation = `${anim} ${durationMs}ms ease-out`
             await new Promise(r => setTimeout(r, durationMs + 50))
@@ -228,6 +240,270 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
 
     // Determine card accent based on state
     const isSnoozeOverdue = clientNow > 0 && lead.confSnoozeAt && new Date(lead.confSnoozeAt).getTime() <= clientNow && !lead.confirmationsOutcome;
+
+    if (variant === 'diretta') {
+        const ora = (d: string | Date) => new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(d))
+        const esito = (() => {
+            if (!lead.confirmationsOutcome) return null
+            const sales = lead.salespersonOutcome
+            if (sales === 'Chiuso') return 'Chiuso'
+            if (sales === 'Non chiuso') return 'Presenziato'
+            if (sales === 'Lead non presenziato') return 'Sparito'
+            if (lead.confirmationsOutcome === 'confermato') return 'Confermato'
+            if (lead.confirmationsOutcome === 'scartato') return 'Scartato'
+            return null
+        })()
+        // Bordo pieno (mai su un lato solo): arancione per lo snooze scaduto, grigio per il lead in mano a un collega.
+        const stato = isSnoozeOverdue
+            ? 'border-[var(--d-orange)]'
+            : isLocked
+                ? 'border-[var(--d-line)]'
+                : 'border-transparent hover:bg-[var(--d-surface-2)]'
+        const nrFinale = 'inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border-2 border-[var(--d-orange)] bg-transparent px-3 text-[13px] font-medium text-[var(--d-orange)] transition-colors hover:bg-[var(--d-surface-2)] disabled:cursor-not-allowed disabled:opacity-50'
+        const salvaPopover = 'inline-flex h-9 items-center rounded-lg bg-[var(--d-orange)] px-4 text-[13px] font-semibold text-[var(--d-orange-ink)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+
+        return (
+            <div
+                ref={rowRef}
+                onClick={onRowClick}
+                className={`group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-lg border-2 bg-[var(--d-surface)] px-4 py-3 text-sm text-[var(--d-text)] transition-colors ${stato}`}
+            >
+                <div className={`flex gap-x-3 gap-y-3 ${layoutMode === 'snooze' ? 'flex-col' : 'flex-wrap items-start justify-between'}`}>
+
+                    {/* Chi è e a che punto è */}
+                    <div className="pointer-events-none flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <span className={`truncate text-[15px] font-semibold ${layoutMode === 'snooze' ? '' : 'max-w-[240px]'}`}>{lead.name}</span>
+                            {lead.confVslSeen
+                                ? <MonitorPlay className="h-4 w-4 shrink-0 text-[var(--d-faint)]" strokeWidth={1.75} aria-label="Video visto" />
+                                : <EyeOff className="h-4 w-4 shrink-0 text-[var(--d-orange)]" strokeWidth={1.75} aria-label="Video non visto" />}
+                            {lead.botReport && <ClipboardList className="h-4 w-4 shrink-0 text-[var(--d-muted)]" strokeWidth={1.75} aria-label="Con il report del Fissatore" />}
+                        </div>
+                        {esito && <div className="font-medium text-[var(--d-muted)]">{esito}</div>}
+                        {isLeadLancio(lead) && (
+                            <div className="flex items-center gap-1.5 text-[var(--d-muted)]">
+                                <Rocket className="h-3.5 w-3.5" strokeWidth={1.75} /> Lancio
+                            </div>
+                        )}
+                        <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[var(--d-muted)]">
+                            <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />{lead.phone}
+                        </div>
+                        {layoutMode !== 'snooze' && (
+                            <div className="hidden shrink-0 items-center gap-3 sm:flex">
+                                <span className="font-medium">{gdoName(item.gdo)}</span>
+                                {lead.funnel && <span className="max-w-[160px] truncate text-[var(--d-muted)]">{lead.funnel}</span>}
+                            </div>
+                        )}
+                        {layoutMode === 'richiami' && lead.recallDate ? (
+                            <div className="flex shrink-0 items-center gap-1.5 font-medium">
+                                <Calendar className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                Richiamo {new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(lead.recallDate))}
+                            </div>
+                        ) : (
+                            !lead.confirmationsOutcome && callsMade > 0 && layoutMode !== 'richiami' && (
+                                <div className="shrink-0 text-[var(--d-muted)]">{callsMade}ª chiamata a vuoto</div>
+                            )
+                        )}
+                        {!lead.confirmationsOutcome && lead.confSnoozeAt && (
+                            <div className={`flex shrink-0 items-center gap-1.5 font-medium ${isSnoozeOverdue ? 'text-[var(--d-orange)]' : 'text-[var(--d-muted)]'}`}>
+                                <Clock className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                {isSnoozeOverdue ? `Da risentire adesso, era alle ${ora(lead.confSnoozeAt)}` : `Da risentire alle ${ora(lead.confSnoozeAt)}`}
+                            </div>
+                        )}
+                        {isLocked && (
+                            <div className="flex shrink-0 items-center gap-1.5 font-medium text-[var(--d-orange)]">
+                                <Users className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                {lockedByName ? `In lavorazione da ${collegaName(lockedByName)}` : 'In lavorazione da un collega'}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Azioni: stessi gestori della grafica classica */}
+                    <div className={`relative flex shrink-0 flex-wrap items-center gap-2 ${layoutMode === 'snooze' ? 'w-full border-t-2 border-[var(--d-line)] pt-3' : 'justify-end'}`}>
+                        {lead.confirmationsOutcome === "confermato" ? (
+                            <div className="flex items-center gap-1.5 font-medium text-[var(--d-muted)]">
+                                <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} /> Confermato
+                            </div>
+                        ) : lead.confirmationsOutcome === "scartato" ? (
+                            <div className="flex items-center gap-1.5 font-medium text-[var(--d-muted)]">
+                                <XCircle className="h-4 w-4" strokeWidth={1.75} /> Scartato
+                            </div>
+                        ) : null}
+
+                        {!lead.confirmationsOutcome && (
+                            <>
+                                <ConfermeCallTimer leadId={lead.id} disabled={isLocked} variant="diretta" />
+
+                                {lead.confSnoozeAt && (
+                                    <button
+                                        onClick={handleCancelSnooze}
+                                        disabled={isLocked || isCancellingRecall}
+                                        title="Annulla lo snooze e rimetti il lead nella board"
+                                        className={dUi.btn}
+                                    >
+                                        <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} /> {isCancellingRecall ? "..." : "Annulla snooze"}
+                                    </button>
+                                )}
+
+                                {lead.confNeedsReschedule && (
+                                    <button
+                                        onClick={handleCancelParkRecall}
+                                        disabled={isLocked || isCancellingRecall}
+                                        title="Annulla il richiamo e rimetti il lead nella board"
+                                        className={dUi.btn}
+                                    >
+                                        <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} /> {isCancellingRecall ? "..." : "Annulla richiamo"}
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={handleQuickNR}
+                                    disabled={isLocked || actionBusy}
+                                    title={callsMade >= 2 ? "Terza chiamata a vuoto: il lead viene scartato" : "Non risponde"}
+                                    className={callsMade >= 2 ? nrFinale : dUi.btn}
+                                >
+                                    {actionBusy ? '...' : callsMade >= 2 ? '3° NR, scarta' : 'NR'}
+                                </button>
+
+                                {callsMade > 0 && (
+                                    <button
+                                        onClick={handleUndoNR}
+                                        disabled={isLocked || actionBusy}
+                                        title="Annulla l'ultimo NR"
+                                        className={dUi.btn}
+                                    >
+                                        <Undo2 className="h-3.5 w-3.5" strokeWidth={1.75} /> Annulla NR
+                                    </button>
+                                )}
+
+                                <div className="relative">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setShowSnoozePopover(!showSnoozePopover); setShowRecallPopover(false); }}
+                                        disabled={isLocked}
+                                        className={dUi.btn}
+                                    >
+                                        <Clock className="h-3.5 w-3.5" strokeWidth={1.75} /> Risentire dopo
+                                    </button>
+
+                                    {showSnoozePopover && !isLocked && (
+                                        <div onClick={e => e.stopPropagation()} className={`${dUi.popover} w-64`}>
+                                            <h4 className="mb-3 text-[13px] font-semibold">Richiamalo oggi alle</h4>
+                                            <input
+                                                type="time"
+                                                value={snoozeTime}
+                                                onChange={e => setSnoozeTime(e.target.value)}
+                                                className={`${dUi.input} mb-3`}
+                                            />
+                                            <label className="mb-3 flex cursor-pointer items-center gap-2 text-[13px] font-medium">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={snoozeVslSeen}
+                                                    onChange={e => setSnoozeVslSeen(e.target.checked)}
+                                                    className="h-4 w-4 accent-[var(--d-orange)]"
+                                                />
+                                                VSL vista
+                                            </label>
+                                            <textarea
+                                                value={snoozeNotes}
+                                                onChange={e => setSnoozeNotes(e.target.value)}
+                                                placeholder="Nota breve..."
+                                                className={`${dUi.input} mb-3 resize-none`}
+                                                rows={2}
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setShowSnoozePopover(false)} className={dUi.btnText}>Annulla</button>
+                                                <button onClick={handleSaveSnooze} disabled={isSavingSnooze} className={salvaPopover}>
+                                                    {isSavingSnooze ? "..." : "Salva"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="relative">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setShowRecallPopover(!showRecallPopover); setShowSnoozePopover(false); }}
+                                        disabled={isLocked}
+                                        className={dUi.btn}
+                                    >
+                                        <Calendar className="h-3.5 w-3.5" strokeWidth={1.75} /> Programma richiamo
+                                    </button>
+
+                                    {showRecallPopover && !isLocked && (
+                                        <div onClick={e => e.stopPropagation()} className={`${dUi.popover} max-h-[70vh] w-72 overflow-y-auto`}>
+                                            <h4 className="mb-3 text-[13px] font-semibold">Parcheggia il lead</h4>
+                                            <div className="mb-3 grid grid-cols-[3fr_2fr] gap-2">
+                                                <input
+                                                    type="date"
+                                                    value={recallDate}
+                                                    onChange={e => setRecallDate(e.target.value)}
+                                                    aria-label="Giorno del richiamo"
+                                                    className={dUi.input}
+                                                />
+                                                <input
+                                                    type="time"
+                                                    value={recallTime}
+                                                    onChange={e => setRecallTime(e.target.value)}
+                                                    aria-label="Ora del richiamo"
+                                                    className={dUi.input}
+                                                />
+                                            </div>
+                                            <label className="mb-3 flex cursor-pointer items-center gap-2 text-[13px] font-medium">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={vslSeen}
+                                                    onChange={e => setVslSeen(e.target.checked)}
+                                                    className="h-4 w-4 accent-[var(--d-orange)]"
+                                                />
+                                                VSL vista
+                                            </label>
+                                            <textarea
+                                                value={recallNotes}
+                                                onChange={e => setRecallNotes(e.target.value)}
+                                                placeholder="Note di parcheggio, se servono..."
+                                                className={`${dUi.input} mb-3 resize-none`}
+                                                rows={2}
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setShowRecallPopover(false)} className={dUi.btnText}>Annulla</button>
+                                                <button onClick={() => handleSaveRecall()} disabled={isSavingRecall || !recallDate} className={salvaPopover}>
+                                                    {isSavingRecall ? "..." : "Parcheggia"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {lead.confRecallNotes && !lead.confirmationsOutcome && (
+                    <div className="pointer-events-none w-full border-t-2 border-[var(--d-line)] pt-2 text-[13px]">
+                        <span className="font-semibold">Nota: </span>
+                        <span className="whitespace-pre-wrap break-words text-[var(--d-muted)]">{lead.confRecallNotes}</span>
+                    </div>
+                )}
+
+                {item.lastConfermeNote && (
+                    <div className="pointer-events-none flex w-full items-center gap-2 text-[13px]" title={item.lastConfermeNote.text}>
+                        <span className="shrink-0 font-semibold">Conferme</span>
+                        <span className="min-w-0 flex-1 truncate text-[var(--d-muted)]">{item.lastConfermeNote.text}</span>
+                    </div>
+                )}
+
+                {item.lastBotNote && (
+                    <div className="pointer-events-none flex w-full items-center gap-2 text-[13px]" title={item.lastBotNote.text}>
+                        <span className="shrink-0 font-semibold">Fissatore</span>
+                        <span className="min-w-0 flex-1 truncate text-[var(--d-muted)]">{item.lastBotNote.text}</span>
+                        <span className="shrink-0 text-[var(--d-faint)]">{format(new Date(item.lastBotNote.createdAt), "dd/MM HH:mm")}</span>
+                        {item.lastBotNote.isNew && <span className="shrink-0 font-semibold text-[var(--d-orange)]">Nuova</span>}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     const cardClasses = isLocked
         ? 'bg-gradient-to-r from-amber-50/80 to-amber-50/40 border-amber-200/60'
         : isSnoozeOverdue

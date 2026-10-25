@@ -16,14 +16,48 @@ import { forceReasonProblem } from "@/lib/venditore/calendarBooking"
  *
  * Nessun window.confirm: tutto inline, come richiesto dal task.
  */
-export function ForceBookingReason({ message, onConfirm, busy }: {
+export function ForceBookingReason({ message, onConfirm, busy, variant = 'classic' }: {
     message: string
     onConfirm: (reason: string) => void
     busy?: boolean
+    /** Grafica: 'diretta' = restyle scuro delle Conferme (PO 25/10/2026). La logica non cambia. */
+    variant?: 'classic' | 'diretta'
 }) {
     const [reason, setReason] = useState("")
     const trimmed = reason.trim()
     const problem = forceReasonProblem(reason)
+
+    if (variant === 'diretta') {
+        return (
+            <div className="mt-3 rounded-2xl border-2 border-[var(--d-orange)] p-4">
+                <p className="whitespace-pre-wrap text-sm font-medium leading-snug text-[var(--d-text)]">
+                    {message}
+                </p>
+                <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    placeholder="Motivo per fissare comunque (es. cliente disponibile solo a quest'ora)..."
+                    rows={2}
+                    disabled={busy}
+                    autoFocus
+                    className="mt-3 w-full resize-none rounded-lg border-2 border-[var(--d-line)] bg-[var(--d-bg)] px-3 py-2 text-sm text-[var(--d-text)] outline-none transition-colors placeholder:text-[var(--d-faint)] focus:border-[var(--d-orange)] disabled:opacity-60"
+                />
+                {trimmed.length > 0 && problem && (
+                    <div className="mt-1 text-xs text-[var(--d-orange)]">{problem}</div>
+                )}
+                <div className="mt-3 flex justify-end">
+                    <button
+                        type="button"
+                        onClick={() => { if (!problem && !busy) onConfirm(trimmed) }}
+                        disabled={!!problem || busy}
+                        className="inline-flex h-10 items-center rounded-lg bg-[var(--d-orange)] px-4 text-sm font-semibold text-[var(--d-orange-ink)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {busy ? "..." : "Fissa comunque"}
+                    </button>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 mt-3">

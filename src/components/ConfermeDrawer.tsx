@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, Loader2, Rocket } from "lucide-react"
+import { X, Save, Clock, User, Phone, Mail, FileText, CheckCircle, AlertTriangle, Users, Loader2, Rocket, Check, ChevronDown, ChevronRight, Undo2 } from "lucide-react"
 import { SchedaEsitoInline, type SchedaEsitoHandle } from "./conferme/SchedaEsitoInline"
 import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { ConfermeCallTimer } from "./ConfermeCallTimer"
@@ -17,6 +17,9 @@ import { format, formatDistanceToNow } from "date-fns"
 import { it } from "date-fns/locale"
 import type { BotReport } from '@/lib/bot-fissatore/types'
 import { isCallNowHandoff, isLeadLancio, lancioBotRisposte, lancioSceltaLabel } from "@/lib/lancio/conferme"
+import { CONFERMATO_EVENT } from "@/lib/conferme/direttaStats"
+import { collegaName, gdoName } from "@/lib/conferme/boardView"
+import { dUi, dTab } from "@/components/conferme/diretta/ui"
 
 function ConfermeDrawerSkeleton() {
     return (
@@ -54,7 +57,13 @@ function ConfermeDrawerSkeleton() {
     )
 }
 
-export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, initialTab }: any) {
+/**
+ * Drawer del lead Conferme. `variant` 'diretta' = restyle scuro (PO 25/10/2026):
+ * stessi stati, stessi gestori, stesse action e stessa presence; cambia solo il
+ * disegno, in un ramo di render a parte che lascia identica la grafica classica.
+ * Lo script resta il componente di sempre, su un foglio chiaro.
+ */
+export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, initialTab, variant = 'classic' }: any) {
     const lead = item?.lead;
     const gdo = item?.gdo;
 
@@ -426,6 +435,11 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                 return;
             }
             setOutcomeForceMessage(null)
+            // La colonna della Diretta conta subito la conferma: i suoi numeri
+            // lato server hanno una cache di 20 secondi. Senza ascoltatori non fa nulla.
+            if (outcome === "confermato") {
+                window.dispatchEvent(new CustomEvent(CONFERMATO_EVENT, { detail: { leadId: lead.id } }))
+            }
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
@@ -626,6 +640,557 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
         if (apptSlotHour && free.includes(apptSlotHour)) return ` · libero alle ${apptSlotHour}`;
         return " · non disponibile a quest'ora";
     };
+
+    if (variant === 'diretta') {
+        const nome = (lead.name || '').trim();
+        const spazio = nome.lastIndexOf(' ');
+        // Titolo con una sola porzione arancione: il cognome, come nella tavola B.
+        const nomeTesta = spazio > 0 ? nome.slice(0, spazio) : '';
+        const nomeCoda = spazio > 0 ? nome.slice(spazio + 1) : nome;
+        const statoConferma = lead.confNeedsReschedule
+            ? 'Da definire'
+            : lead.confirmationsOutcome === 'confermato' ? 'Confermato'
+            : lead.confirmationsOutcome === 'scartato' ? 'Scartato' : null;
+        const schede: [string, string][] = [['dati', 'Dati'], ['note', 'Note'], ['script', 'Script'], ['esito', 'Esito']];
+        const quando = (d: string | Date) => format(new Date(d), 'dd/MM HH:mm', { locale: it });
+        const nrFatti = [lead.confCall1At, lead.confCall2At, lead.confCall3At].map(Boolean);
+        const nrUltimo = !!lead.confCall2At && !lead.confirmationsOutcome;
+        // Nella <select> niente punto mediano: la stessa etichetta, con la virgola.
+        const venditoreHintD = (id: string) => venditoreHint(id).replace(' · ', ', ');
+        const fid = (k: string) => `conferme-${k}-${lead.id}`;
+
+        return (
+            <div className="fixed inset-0 z-50 flex justify-end">
+                <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Lead ${nome}`}
+                    className="animate-drawer-slide relative z-50 flex h-full w-full flex-col bg-[var(--d-bg)] text-[var(--d-text)] sm:w-[540px]"
+                >
+                    {/* Intestazione */}
+                    <div className="flex shrink-0 items-start justify-between gap-4 border-b-2 border-[var(--d-surface)] p-5 sm:p-6">
+                        <div className="min-w-0">
+                            <h2 className="text-2xl font-semibold leading-tight">
+                                {nomeTesta && <>{nomeTesta} </>}<span className="text-[var(--d-orange)]">{nomeCoda}</span>
+                            </h2>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--d-muted)]">
+                                <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={1.75} /> {lead.phone}</div>
+                                {lead.email && <div className="flex min-w-0 items-center gap-1.5"><Mail className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> <span className="truncate">{lead.email}</span></div>}
+                                {statoConferma && (
+                                    <div className={`font-medium ${statoConferma === 'Da definire' ? 'text-[var(--d-orange)]' : 'text-[var(--d-text)]'}`}>{statoConferma}</div>
+                                )}
+                            </div>
+                        </div>
+                        <button onClick={onClose} className={dUi.btnIcon} aria-label="Chiudi">
+                            <X className="h-5 w-5" strokeWidth={1.75} />
+                        </button>
+                    </div>
+
+                    {/* Azioni rapide: NR, timer, annulla snooze/richiamo */}
+                    <fieldset disabled={isLocked} className="contents">
+                        <div className="flex shrink-0 flex-col gap-3 border-b-2 border-[var(--d-surface)] px-5 py-4 sm:px-6">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={handleQuickNR}
+                                    disabled={isSavingNR || !!lead.confirmationsOutcome}
+                                    title={nrUltimo ? "Terza chiamata a vuoto: il lead viene scartato" : "Non risponde"}
+                                    className={nrUltimo
+                                        ? "inline-flex h-11 shrink-0 items-center gap-2 rounded-lg border-2 border-[var(--d-orange)] px-4 text-sm font-semibold text-[var(--d-orange)] transition-colors hover:bg-[var(--d-surface)] disabled:cursor-not-allowed disabled:opacity-50"
+                                        : dUi.btnLg}
+                                >
+                                    {isSavingNR ? "..." : lead.confCall2At ? "3° NR, scarta" : "NR, non risponde"}
+                                    <span className="flex gap-1" aria-label={`${nrFatti.filter(Boolean).length} chiamate a vuoto su 3`}>
+                                        {nrFatti.map((fatto, i) => (
+                                            <span key={i} className={`h-2 w-2 rounded-[2px] ${fatto ? 'bg-[var(--d-orange)]' : 'bg-[var(--d-line)]'}`} />
+                                        ))}
+                                    </span>
+                                </button>
+
+                                {lastNR && !lead.confirmationsOutcome && (
+                                    <button onClick={handleUndoNR} disabled={isSavingNR} className={dUi.btnLg}>
+                                        <Undo2 className="h-4 w-4" strokeWidth={1.75} /> Annulla NR
+                                    </button>
+                                )}
+
+                                {!lead.confirmationsOutcome && (
+                                    <ConfermeCallTimer leadId={lead.id} disabled={isSavingNR} variant="diretta" />
+                                )}
+                            </div>
+
+                            {!lead.confirmationsOutcome && (lead.confSnoozeAt || lead.confNeedsReschedule) && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {lead.confSnoozeAt && (
+                                        <button onClick={handleCancelSnooze} disabled={isCancellingRecall} className={dUi.btn}>
+                                            {isCancellingRecall ? "..." : "Annulla snooze"}
+                                        </button>
+                                    )}
+                                    {lead.confNeedsReschedule && (
+                                        <button onClick={handleCancelParkRecall} disabled={isCancellingRecall} className={dUi.btn}>
+                                            {isCancellingRecall ? "..." : "Annulla il richiamo e rimetti in board"}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {(lead.confCall1At || lead.confCall2At || lead.confCall3At) && !lead.confirmationsOutcome && (
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[var(--d-muted)]">
+                                    <div>Chiamate a vuoto</div>
+                                    {lead.confCall1At && <div><span className="font-medium text-[var(--d-text)]">1ª</span> {quando(lead.confCall1At)}</div>}
+                                    {lead.confCall2At && <div><span className="font-medium text-[var(--d-text)]">2ª</span> {quando(lead.confCall2At)}</div>}
+                                    {lead.confCall3At && <div className="text-[var(--d-orange)]"><span className="font-medium">3ª</span> {quando(lead.confCall3At)}</div>}
+                                </div>
+                            )}
+                        </div>
+                    </fieldset>
+
+                    {isLocked && (
+                        <div className="flex shrink-0 items-start gap-3 bg-[var(--d-orange)] px-5 py-3 text-sm text-[var(--d-orange-ink)] sm:px-6">
+                            <Users className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={1.75} />
+                            <div>
+                                <div className="font-semibold">Sola lettura</div>
+                                <div>
+                                    {activeUsers.map(u => collegaName(u.user.displayName || u.user.name) || 'Un collega').join(", ")} {activeUsers.length === 1 ? "sta" : "stanno"} lavorando su questo lead: per evitare conflitti non puoi modificarlo.
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Schede */}
+                    <div role="tablist" aria-label="Sezioni del lead" className="flex shrink-0 flex-wrap gap-1 border-b-2 border-[var(--d-surface)] px-5 py-3 sm:px-6">
+                        {schede.map(([key, label]) => (
+                            <button key={key} role="tab" aria-selected={activeTab === key} onClick={() => setActiveTab(key)} className={dTab(activeTab === key)}>
+                                {label}
+                                {key === 'note' && notes.length > 0 && (
+                                    <span className={activeTab === key ? '' : 'text-[var(--d-faint)]'}>{notes.length}</span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+
+                    <fieldset disabled={isLocked} className="contents">
+                        <div className={`flex-1 overflow-y-auto p-5 [color-scheme:dark] sm:p-6 ${isLocked ? "opacity-60" : ""}`}>
+
+                            {activeTab === "dati" && (
+                                <div className="space-y-5">
+                                    {(lead.confirmationsOutcome || lead.salespersonOutcome) && (
+                                        <div className="rounded-2xl bg-[var(--d-surface)] p-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <h3 className="text-sm font-semibold">Stato attuale</h3>
+                                                <button type="button" onClick={(e) => { e.preventDefault(); setActiveTab("esito") }} className={dUi.btnText}>
+                                                    Modifica nella scheda Esito
+                                                </button>
+                                            </div>
+                                            <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                                                <div>
+                                                    <dt className="text-[13px] text-[var(--d-muted)]">Esito della conferma</dt>
+                                                    <dd className="mt-0.5 font-medium">
+                                                        {lead.confirmationsOutcome === 'confermato'
+                                                            ? `Confermato${lead.salespersonAssigned ? `, a ${lead.salespersonAssigned}` : ''}`
+                                                            : lead.confirmationsOutcome === 'scartato' ? 'Scartato' : 'Da lavorare'}
+                                                    </dd>
+                                                    {lead.confirmationsOutcome === 'scartato' && lead.confirmationsDiscardReason && (
+                                                        <dd className="text-[13px] text-[var(--d-muted)]">Motivo: {lead.confirmationsDiscardReason}</dd>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <dt className="text-[13px] text-[var(--d-muted)]">Esito della vendita</dt>
+                                                    <dd className="mt-0.5 font-medium">
+                                                        {lead.salespersonOutcome === 'Chiuso' ? 'Chiuso'
+                                                            : lead.salespersonOutcome === 'Non chiuso' ? 'Presenziato, non chiuso'
+                                                            : lead.salespersonOutcome === 'Lead non presenziato' ? 'Lead non presenziato'
+                                                            : lead.confirmationsOutcome === 'confermato' ? 'In attesa' : 'Nessuno'}
+                                                    </dd>
+                                                    {lead.salespersonOutcome === 'Chiuso' && lead.closeAmountEur != null && (
+                                                        <dd className="text-[13px] text-[var(--d-muted)]">
+                                                            Importo {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(lead.closeAmountEur))}
+                                                        </dd>
+                                                    )}
+                                                </div>
+                                            </dl>
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--d-surface)] px-4 py-3 text-sm">
+                                        <div className="text-[var(--d-muted)]">Fissato da</div>
+                                        <div className="font-semibold">{gdoName(gdo)}</div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label htmlFor={fid('nome')} className={dUi.label}>Nome e cognome</label>
+                                        <input id={fid('nome')} type="text" value={editName} onChange={e => setEditName(e.target.value)} className={dUi.input} />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label htmlFor={fid('email')} className={dUi.label}>Email</label>
+                                        <input id={fid('email')} type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className={dUi.input} placeholder="Nessuna email" />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <div className="space-y-1.5">
+                                            <label htmlFor={fid('data')} className={dUi.label}>
+                                                {lead.confNeedsReschedule ? "Giorno dell'appuntamento originario" : "Giorno dell'appuntamento"}
+                                            </label>
+                                            <input id={fid('data')} type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className={dUi.input} />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label htmlFor={fid('ora')} className={dUi.label}>
+                                                {lead.confNeedsReschedule ? "Ora originaria" : "Ora dell'appuntamento"}
+                                            </label>
+                                            <input id={fid('ora')} type="time" value={editTime} onChange={e => setEditTime(e.target.value)} className={dUi.input} />
+                                        </div>
+                                    </div>
+
+                                    {/* Ore libere del venditore assegnato nel giorno scelto (stessa logica della grafica classica). */}
+                                    {declaredFreeForSelected !== null && (
+                                        freeHoursForSelected && freeHoursForSelected.length > 0 ? (
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <div className="mr-1 text-[13px] font-medium text-[var(--d-muted)]">Ore libere</div>
+                                                {freeHoursForSelected.map(h => (
+                                                    <button key={h} type="button" onClick={() => setEditTime(h)} className={dUi.btn}>
+                                                        {h}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : declaredFreeForSelected.length === 0 ? (
+                                            <div className="text-[13px] text-[var(--d-muted)]">Nessuna ora dichiarata quel giorno: cambia giorno o venditore.</div>
+                                        ) : (
+                                            <div className="text-[13px] text-[var(--d-muted)]">Le ore libere di quel giorno sono già passate: cambia giorno o venditore.</div>
+                                        )
+                                    )}
+
+                                    {lead.confNeedsReschedule && (
+                                        <p className="text-[13px] text-[var(--d-muted)]">
+                                            Questo lead è un richiamo: puoi comunque cambiare giorno e ora dell&apos;appuntamento fissato dal GDO.
+                                        </p>
+                                    )}
+
+                                    <div className="space-y-1.5">
+                                        <label htmlFor={fid('note-gdo')} className={dUi.label}>Note di chi ha fissato</label>
+                                        <textarea id={fid('note-gdo')} rows={4} value={editNoteGdo} onChange={e => setEditNoteGdo(e.target.value)} className={`${dUi.input} resize-none leading-relaxed`} placeholder="Aggiungi una nota..." />
+                                    </div>
+
+                                    {lead.botReport && (() => {
+                                        const r = lead.botReport as BotReport | string;
+                                        if (typeof r === 'string') {
+                                            return (
+                                                <div className="rounded-2xl bg-[var(--d-surface)] p-4 text-sm">
+                                                    <h3 className="font-semibold">Report del Fissatore</h3>
+                                                    <p className="mt-2 whitespace-pre-wrap text-[var(--d-muted)]">{r}</p>
+                                                </div>
+                                            );
+                                        }
+                                        return (
+                                            <div className="space-y-3 rounded-2xl bg-[var(--d-surface)] p-4 text-sm">
+                                                <h3 className="font-semibold">Report del Fissatore</h3>
+                                                {r.summary && <p className="text-[var(--d-muted)]">{r.summary}</p>}
+                                                {r.levaConsigliata && (
+                                                    <p><span className="font-semibold">Leva consigliata: </span>{r.levaConsigliata}</p>
+                                                )}
+                                                {(r.budgetSignal || r.urgency) && (
+                                                    <dl className="grid grid-cols-2 gap-3">
+                                                        {r.budgetSignal && <div><dt className="text-[13px] text-[var(--d-muted)]">Budget</dt><dd className="font-medium">{r.budgetSignal}</dd></div>}
+                                                        {r.urgency && <div><dt className="text-[13px] text-[var(--d-muted)]">Urgenza</dt><dd className="font-medium">{r.urgency}</dd></div>}
+                                                    </dl>
+                                                )}
+                                                {r.painPoints && r.painPoints.length > 0 && (
+                                                    <div>
+                                                        <div className="text-[13px] text-[var(--d-muted)]">Pain point</div>
+                                                        <ul className="mt-1 space-y-1">{r.painPoints.map((p, i) => <li key={i}>{p}</li>)}</ul>
+                                                    </div>
+                                                )}
+                                                {r.objections && r.objections.length > 0 && (
+                                                    <div>
+                                                        <div className="text-[13px] text-[var(--d-muted)]">Obiezioni</div>
+                                                        <ul className="mt-1 space-y-1">{r.objections.map((o, i) => <li key={i}>{o}</li>)}</ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    <div className="border-t-2 border-[var(--d-surface)] pt-5">
+                                        <button onClick={() => handleSaveData()} disabled={savingData} className={`${dUi.btnLight} w-full`}>
+                                            <Save className="h-4 w-4" strokeWidth={1.75} /> {savingData ? "Salvataggio in corso..." : "Salva i dati"}
+                                        </button>
+                                        {savedAt && (
+                                            <div className="mt-2 flex items-center gap-1.5 text-[13px] font-medium"><Check className="h-4 w-4" strokeWidth={1.75} /> Dati salvati.</div>
+                                        )}
+                                        <p className="mt-3 text-center text-xs text-[var(--d-faint)]">Le modifiche restano nel registro delle modifiche.</p>
+                                        {dataForceMessage && (
+                                            <ForceBookingReason
+                                                variant="diretta"
+                                                message={dataForceMessage}
+                                                busy={savingData}
+                                                onConfirm={(reason) => handleSaveData(reason)}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === "note" && (
+                                <div className="flex min-h-full flex-col gap-4">
+                                    {/* Lancio (spec 2026-09-14 §4.5): scelta fatta in chat e risposte di riscaldamento, prima delle note. */}
+                                    {isLeadLancio(lead) && (() => {
+                                        const risposte = lancioBotRisposte(lead.lancioBotInfo)
+                                        const handoff = isCallNowHandoff(lead)
+                                        return (
+                                            <div className="rounded-2xl bg-[var(--d-surface)] p-4 text-sm">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <h3 className="flex items-center gap-1.5 font-semibold"><Rocket className="h-4 w-4" strokeWidth={1.75} /> Dal bot, lancio</h3>
+                                                    {lead.lancioSceltaAt && (
+                                                        <div className="shrink-0 text-[13px] text-[var(--d-faint)]">{format(new Date(lead.lancioSceltaAt), "dd/MM/yy HH:mm")}</div>
+                                                    )}
+                                                </div>
+                                                <p className="mt-2 font-medium">{lancioSceltaLabel(lead.lancioScelta, handoff)}</p>
+                                                {lead.lancioScelta === 'app_mattina' && lead.salespersonAssigned && (
+                                                    <p className="mt-1 text-[13px] text-[var(--d-muted)]">Venditore: {lead.salespersonAssigned}</p>
+                                                )}
+                                                {risposte.length > 0 ? (
+                                                    <ul className="mt-3 space-y-2">
+                                                        {risposte.map((r, i) => (
+                                                            <li key={i} className="text-[var(--d-muted)]">{r}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p className="mt-2 text-[13px] text-[var(--d-muted)]">Nessuna risposta di riscaldamento registrata dal bot.</p>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
+
+                                    {loadingNotes ? (
+                                        <div className="flex items-center justify-center gap-2 py-10 text-sm text-[var(--d-muted)]">
+                                            <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.75} /> Carico le note...
+                                        </div>
+                                    ) : notes.length === 0 ? (
+                                        <div className="py-12 text-center text-sm text-[var(--d-muted)]">Nessuna nota per questo lead.</div>
+                                    ) : (
+                                        notes.map(n => n.source === 'bot' ? (
+                                            <div key={n.id} className="rounded-2xl bg-[var(--d-surface)] p-4 text-sm">
+                                                <div className="mb-2 flex items-start justify-between gap-2">
+                                                    <div className="font-semibold">Fissatore, dalla chat</div>
+                                                    <div className="shrink-0 text-[13px] text-[var(--d-faint)]">{format(new Date(n.createdAt), "dd/MM/yy HH:mm")}</div>
+                                                </div>
+                                                <p className="whitespace-pre-wrap leading-relaxed text-[var(--d-muted)]">{n.text}</p>
+                                                {n.updates.length > 0 && (
+                                                    <div className="mt-3 border-t-2 border-[var(--d-bg)] pt-3">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setExpandedNotes(prev => {
+                                                                const next = new Set(prev)
+                                                                if (next.has(n.id)) next.delete(n.id); else next.add(n.id)
+                                                                return next
+                                                            })}
+                                                            aria-expanded={expandedNotes.has(n.id)}
+                                                            className={dUi.btnText}
+                                                        >
+                                                            {expandedNotes.has(n.id)
+                                                                ? <ChevronDown className="h-4 w-4" strokeWidth={1.75} />
+                                                                : <ChevronRight className="h-4 w-4" strokeWidth={1.75} />}
+                                                            {n.updates.length} {n.updates.length === 1 ? "aggiornamento" : "aggiornamenti"} dal bot
+                                                        </button>
+                                                        {expandedNotes.has(n.id) && (
+                                                            <div className="mt-2 space-y-2">
+                                                                {n.updates.map(u => (
+                                                                    <div key={u.id} className="flex gap-3 text-[13px]">
+                                                                        <div className="shrink-0 text-[var(--d-faint)]">{format(new Date(u.createdAt), "HH:mm")}</div>
+                                                                        <div className="whitespace-pre-wrap leading-relaxed text-[var(--d-muted)]">{u.text}</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div key={n.id} className="rounded-2xl bg-[var(--d-surface)] p-4 text-sm">
+                                                <div className="mb-2 flex items-start justify-between gap-2">
+                                                    <div className="font-semibold">{collegaName(n.authorName) || "Utente"}</div>
+                                                    <div className="shrink-0 text-[13px] text-[var(--d-faint)]">{format(new Date(n.createdAt), "dd/MM/yy HH:mm")}</div>
+                                                </div>
+                                                <p className="whitespace-pre-wrap leading-relaxed text-[var(--d-muted)]">{n.text}</p>
+                                            </div>
+                                        ))
+                                    )}
+
+                                    <div className="sticky -bottom-5 -mx-5 mt-auto border-t-2 border-[var(--d-surface)] bg-[var(--d-bg)] px-5 pb-5 pt-4 sm:-bottom-6 sm:-mx-6 sm:px-6 sm:pb-6">
+                                        <textarea
+                                            value={newNote}
+                                            onChange={e => setNewNote(e.target.value)}
+                                            placeholder="Scrivi una nuova nota..."
+                                            aria-label="Nuova nota"
+                                            className={`${dUi.input} mb-3 resize-none`}
+                                            rows={3}
+                                        />
+                                        <button onClick={handleAddNote} disabled={!newNote.trim()} className={`${dUi.btnLight} w-full`}>
+                                            Aggiungi la nota
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === "script" && (
+                                // Lo script non si tocca: resta il componente di sempre, su un foglio chiaro.
+                                <div className="rounded-2xl bg-[var(--d-light)] p-4 text-[#171717] [color-scheme:light]">
+                                    <ConfermeScriptWidget />
+                                </div>
+                            )}
+
+                            {activeTab === "esito" && (
+                                <div className="space-y-6 pb-8">
+                                    {lead.confirmationsOutcome === "scartato" && (
+                                        <div className="rounded-2xl border-2 border-[var(--d-orange)] p-5">
+                                            <div className="flex items-start gap-3">
+                                                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--d-orange)]" strokeWidth={1.75} />
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="text-sm font-semibold">Lead scartato</h3>
+                                                    <p className="mt-1 text-[13px] text-[var(--d-muted)]">
+                                                        Motivo: <span className="font-medium text-[var(--d-text)]">{lead.confirmationsDiscardReason || "non specificato"}</span>. Se è stato scartato per errore o vuoi recuperarlo, annulla lo scarto e il lead torna da lavorare.
+                                                    </p>
+                                                    <button onClick={handleUndoScarto} disabled={savingUndoScarto} type="button" className={`${dUi.btn} mt-3`}>
+                                                        {savingUndoScarto ? "Annullamento..." : "Annulla lo scarto"}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <section aria-label="Esito della conferma" className="rounded-2xl bg-[var(--d-surface)] p-5">
+                                        <h3 className="text-base font-semibold">Esito della conferma</h3>
+
+                                        <div className="mt-4 space-y-3">
+                                            <label className={`flex cursor-pointer items-center gap-3 rounded-lg border-2 p-4 transition-colors ${outcome === "scartato" ? "border-[var(--d-text)]" : "border-[var(--d-line)] hover:bg-[var(--d-surface-2)]"}`}>
+                                                <input type="radio" name="outcome" value="scartato" checked={outcome === "scartato"} onChange={() => setOutcome("scartato")} className="h-4 w-4 accent-[var(--d-orange)]" />
+                                                <span className="font-medium">Scartato</span>
+                                            </label>
+
+                                            <label className={`flex cursor-pointer items-center gap-3 rounded-lg border-2 p-4 transition-colors ${outcome === "confermato" ? "border-[var(--d-text)]" : "border-[var(--d-line)] hover:bg-[var(--d-surface-2)]"}`}>
+                                                <input type="radio" name="outcome" value="confermato" checked={outcome === "confermato"} onChange={() => setOutcome("confermato")} className="h-4 w-4 accent-[var(--d-orange)]" />
+                                                <span className="font-medium">Confermato e assegnato</span>
+                                            </label>
+
+                                            {outcome === "confermato" && (
+                                                <div className="space-y-2">
+                                                    {lead.reservedSalespersonId && (
+                                                        <div className="rounded-lg border-2 border-[var(--d-orange)] px-3 py-2 text-[13px] font-medium">
+                                                            Da assegnare a {salespeopleList.find(s => s.id === lead.reservedSalespersonId)?.name || "il venditore riservato"}: era suo prima di passare al GDO.
+                                                        </div>
+                                                    )}
+                                                    <label htmlFor={fid('venditore')} className={dUi.label}>Venditore</label>
+                                                    <select id={fid('venditore')} value={salesperson} onChange={e => setSalesperson(e.target.value)} className={dUi.input}>
+                                                        <option value="">Scegli il venditore</option>
+                                                        {salespeopleList.map(s => (
+                                                            <option key={s.id} value={s.id}>{s.name || s.email}{venditoreHintD(s.id)}</option>
+                                                        ))}
+                                                    </select>
+                                                    <p className="text-[13px] text-[var(--d-muted)]">
+                                                        Salvando confermi l&apos;appuntamento: il lead passa al venditore e parte l&apos;invito su Google Calendar.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {outcome && (
+                                            <SchedaEsitoInline
+                                                ref={schedaRef}
+                                                outcome={outcome as "scartato" | "confermato"}
+                                                leadId={lead.id}
+                                                variant="diretta"
+                                            />
+                                        )}
+
+                                        <button onClick={() => handleSaveOutcome()} disabled={savingOutcome || !outcome} className={`${dUi.btnPrimary} mt-5 w-full`}>
+                                            {savingOutcome ? "Salvataggio in corso..." : "Salva l'esito"}
+                                        </button>
+                                        {outcomeForceMessage && (
+                                            <ForceBookingReason
+                                                variant="diretta"
+                                                message={outcomeForceMessage}
+                                                busy={savingOutcome}
+                                                onConfirm={(reason) => handleSaveOutcome(reason)}
+                                            />
+                                        )}
+                                    </section>
+
+                                    {lead.confirmationsOutcome === "confermato" && lead.salespersonAssigned && (
+                                        <section aria-label="Esito dell'appuntamento" className="rounded-2xl border-2 border-[var(--d-line)] p-5">
+                                            <h3 className="text-base font-semibold">Esito dell&apos;appuntamento con {lead.salespersonAssigned}</h3>
+
+                                            <div className="mt-4 space-y-4">
+                                                <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} aria-label="Esito finale" className={dUi.input}>
+                                                    <option value="">Scegli l&apos;esito finale</option>
+                                                    <option value="Chiuso">Vendita chiusa</option>
+                                                    <option value="Non chiuso">Non chiuso</option>
+                                                    <option value="Lead non presenziato">Lead non presenziato</option>
+                                                </select>
+
+                                                {spOutcome === 'Chiuso' && (
+                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                        <div className="space-y-1.5">
+                                                            <label htmlFor={fid('importo')} className={dUi.label}>Importo del contratto (€)</label>
+                                                            <input
+                                                                id={fid('importo')}
+                                                                type="number"
+                                                                inputMode="decimal"
+                                                                step="0.01"
+                                                                min={0}
+                                                                value={spCloseAmount}
+                                                                onChange={e => setSpCloseAmount(e.target.value)}
+                                                                placeholder="Es. 1500"
+                                                                className={dUi.input}
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label htmlFor={fid('chiusura')} className={dUi.label}>Data della chiusura</label>
+                                                            <input
+                                                                id={fid('chiusura')}
+                                                                type="date"
+                                                                value={spClosedAt}
+                                                                onChange={e => setSpClosedAt(e.target.value)}
+                                                                max={new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' })}
+                                                                className={dUi.input}
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1.5 sm:col-span-2">
+                                                            <label htmlFor={fid('prodotto')} className={dUi.label}>Prodotto venduto</label>
+                                                            <select id={fid('prodotto')} value={spCloseProduct} onChange={e => setSpCloseProduct(e.target.value)} className={dUi.input}>
+                                                                <option value="">Scegli il prodotto</option>
+                                                                <option value="advance">Advance</option>
+                                                                <option value="gold">Gold</option>
+                                                                <option value="exclusive">Exclusive</option>
+                                                            </select>
+                                                        </div>
+                                                        <p className="text-xs text-[var(--d-muted)] sm:col-span-2">
+                                                            Importo, data e prodotto sono obbligatori. La data decide in quale settimana la chiusura conta nello storico.
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                <textarea
+                                                    value={spNotes}
+                                                    onChange={e => setSpNotes(e.target.value)}
+                                                    placeholder="Note sull'esito finale, se servono..."
+                                                    aria-label="Note sull'esito finale"
+                                                    className={`${dUi.input} resize-none`}
+                                                    rows={2}
+                                                />
+
+                                                <button onClick={handleSaveSpOutcome} disabled={savingSpOutcome || !spOutcome} className={`${dUi.btnLight} w-full`}>
+                                                    {savingSpOutcome ? "Salvataggio..." : "Registra l'esito finale"}
+                                                </button>
+                                            </div>
+                                        </section>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end">

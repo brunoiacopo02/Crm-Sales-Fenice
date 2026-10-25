@@ -37,7 +37,23 @@ export interface SchedaEsitoHandle {
 interface Props {
     outcome: "" | "scartato" | "confermato";
     leadId: string;
+    /** Grafica: 'diretta' = restyle scuro delle Conferme (PO 25/10/2026). Domande e validazione identiche. */
+    variant?: "classic" | "diretta";
 }
+
+// Classi della grafica Diretta: scelta attiva chiara su fondo scuro, niente verde/rosso.
+const D = {
+    wrap: "mt-4 space-y-4 rounded-2xl bg-[var(--d-bg)] p-4",
+    title: "text-sm font-semibold text-[var(--d-text)]",
+    label: "mb-1.5 text-sm font-medium text-[var(--d-text)]",
+    hint: "text-xs font-normal text-[var(--d-faint)]",
+    req: "text-[var(--d-orange)]",
+    briefing: "space-y-4 rounded-2xl border-2 border-[var(--d-line)] p-4",
+    chip: (on: boolean) => `rounded-lg border-2 px-3 py-1.5 text-[13px] font-medium transition-colors ${on
+        ? "border-[var(--d-text)] bg-[var(--d-text)] text-[var(--d-bg)]"
+        : "border-[var(--d-line)] text-[var(--d-text)] hover:bg-[var(--d-surface-2)]"}`,
+    field: "w-full rounded-lg border-2 border-[var(--d-line)] bg-[var(--d-surface)] px-3 py-2 text-sm text-[var(--d-text)] outline-none transition-colors placeholder:text-[var(--d-faint)] focus:border-[var(--d-orange)]",
+};
 
 // ─── YesNoRow helper ─────────────────────────────────────────────────────────
 
@@ -45,11 +61,28 @@ function YesNoRow({
     label,
     value,
     onChange,
+    diretta = false,
 }: {
     label: string;
     value: boolean | null;
     onChange: (v: boolean) => void;
+    diretta?: boolean;
 }) {
+    if (diretta) {
+        return (
+            <div>
+                <div className={D.label}>{label}</div>
+                <div className="flex gap-2">
+                    <button type="button" onClick={() => onChange(true)} className={`${D.chip(value === true)} min-w-16`}>
+                        Sì
+                    </button>
+                    <button type="button" onClick={() => onChange(false)} className={`${D.chip(value === false)} min-w-16`}>
+                        No
+                    </button>
+                </div>
+            </div>
+        );
+    }
     return (
         <div>
             <div className="mb-1.5 text-sm font-semibold text-ash-800">{label}</div>
@@ -76,7 +109,7 @@ function YesNoRow({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const SchedaEsitoInline = forwardRef<SchedaEsitoHandle, Props>(
-    function SchedaEsitoInline({ outcome, leadId }, ref) {
+    function SchedaEsitoInline({ outcome, leadId, variant = "classic" }, ref) {
         // Parte A
         const [remembersAppt, setRemembersAppt] = useState<boolean | null>(null);
         const [watchedVideo, setWatchedVideo] = useState<boolean | null>(null);
@@ -205,6 +238,120 @@ export const SchedaEsitoInline = forwardRef<SchedaEsitoHandle, Props>(
 
         // Render nothing when no outcome is selected
         if (!outcome) return null;
+
+        if (variant === "diretta") {
+            return (
+                <div className={D.wrap}>
+                    <div className={D.title}>Scheda trattativa</div>
+
+                    <YesNoRow diretta label="Si ricorda dell'appuntamento?" value={remembersAppt} onChange={setRemembersAppt} />
+                    <YesNoRow diretta label="Ha visto il video?" value={watchedVideo} onChange={setWatchedVideo} />
+                    <YesNoRow diretta label="Lavora?" value={works} onChange={setWorks} />
+
+                    {outcome === "scartato" && (
+                        <div>
+                            <div className={D.label}>
+                                Perché no? <span className={D.req}>*</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {CONFERME_DISCARD_REASONS.map((o) => (
+                                    <button key={o.value} type="button" onClick={() => setWhyNot(o.value)} className={D.chip(whyNot === o.value)}>
+                                        {o.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {outcome === "confermato" && (
+                        <div className={D.briefing}>
+                            <div className={D.title}>Briefing per il venditore</div>
+
+                            <div>
+                                <div className={D.label}>
+                                    Riassunto situazione <span className={D.req}>*</span>
+                                </div>
+                                <textarea
+                                    value={summary}
+                                    onChange={(e) => setSummary(e.target.value)}
+                                    rows={3}
+                                    placeholder="Descrivi brevemente la situazione del lead…"
+                                    className={D.field}
+                                />
+                            </div>
+
+                            <div>
+                                <div className={D.label}>
+                                    Pain point <span className={D.req}>*</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {CONFERME_PAIN_POINT_OPTIONS.map((o) => (
+                                        <button key={o.value} type="button" onClick={() => togglePainPoint(o.value)} className={D.chip(painPoints.includes(o.value))}>
+                                            {o.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className={D.label}>
+                                    Urgenza <span className={D.req}>*</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {CONFERME_URGENCY_OPTIONS.map((o) => (
+                                        <button key={o.value} type="button" onClick={() => setUrgency(o.value)} className={D.chip(urgency === o.value)}>
+                                            {o.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className={D.label}>
+                                    Segnale budget <span className={D.hint}>(opzionale)</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {CONFERME_BUDGET_OPTIONS.map((o) => {
+                                        const on = budgetSignal === o.value;
+                                        return (
+                                            <button key={o.value} type="button" onClick={() => setBudgetSignal(on ? null : o.value)} className={D.chip(on)}>
+                                                {o.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className={D.label}>
+                                    Obiezioni <span className={D.hint}>(una per riga)</span>
+                                </div>
+                                <textarea
+                                    value={objections}
+                                    onChange={(e) => setObjections(e.target.value)}
+                                    rows={3}
+                                    placeholder={"Es: Non ha tempo adesso\nAspetta lo stipendio"}
+                                    className={D.field}
+                                />
+                            </div>
+
+                            <div>
+                                <div className={D.label}>
+                                    Leva consigliata al venditore <span className={D.hint}>(opzionale)</span>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={levaConsigliata}
+                                    onChange={(e) => setLevaConsigliata(e.target.value)}
+                                    placeholder="Es: punta sulla velocità di rientro economico"
+                                    className={D.field}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
 
         return (
             <div className="mt-4 rounded-xl border border-ash-200 bg-ash-50/60 p-4 space-y-4 animate-in slide-in-from-top-2">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useSearchParams } from "next/navigation"
-import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, Inbox, Sun, Sunrise, Archive, Rocket } from "lucide-react"
+import { Search, Calendar, Clock, Filter, ChevronRight, CheckCircle2, XCircle, Users, Inbox, Sun, Sunrise, Archive, Rocket, Check, Loader2 } from "lucide-react"
 import { getConfermeAppointments, updateLeadDataConferme, setSalespersonOutcome } from "@/app/actions/confermeActions"
 import { markConfermeAlertHandled } from "@/app/actions/confermeAlertActions"
 import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
@@ -20,13 +20,23 @@ import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
 import { confermeBoardColumn, OGGI_ORE, DOMANI_ORE } from "@/lib/conferme/boardWindow"
 import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeLeadChanges } from "@/lib/confermePresence"
+import {
+    leadsInHour, nrCounts, applyNrFilter, snoozedOf, sortRichiami, filterStorico, storicoCounts,
+    callsMade, gdoName, collegaName, type NrFilterMode,
+} from "@/lib/conferme/boardView"
+import { VenditoriAgendaButton } from "@/components/VenditoriAgendaButton"
+import { dUi, dTab, dChip } from "@/components/conferme/diretta/ui"
 
 type LeadData = any;
 
 type ViewMode = 'oggi' | 'domani' | 'da_definire' | 'storico' | 'table';
-type NrFilterMode = 'tutti' | '0' | '1' | '2' | '3';
 
-export function ConfermeBoard({ currentUser }: { currentUser: any }) {
+/**
+ * Board Conferme. `variant` 'diretta' = restyle scuro (PO 25/10/2026): stessi
+ * dati, stessi filtri (src/lib/conferme/boardView.ts), stessi gestori, stesso
+ * realtime e presence; cambia solo il disegno, in un ramo di render a parte.
+ */
+export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUser: any; variant?: 'classic' | 'diretta' }) {
     const [viewMode, setViewMode] = useState<ViewMode>('oggi')
     const [nrFilter, setNrFilter] = useState<NrFilterMode>('tutti')
     const [selectedHour, setSelectedHour] = useState<string | null>(null)
@@ -283,6 +293,25 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         }
     }
 
+    const openDrawer = (item: LeadData) => {
+        setSelectedLead(item)
+        setDrawerInitialTab(undefined)
+        setIsDrawerOpen(true)
+    }
+
+    // Esito venditore rapido dallo Storico (Chiuso apre la modale: importo, data e prodotto obbligatori).
+    const handleStoricoOutcome = async (leadId: string, version: number, outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato", e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (outcome === 'Chiuso') {
+            const item = storicoData.find(i => i.lead.id === leadId);
+            setCloseModalLead({ id: leadId, version, name: item?.lead.name || 'Lead' });
+            return;
+        }
+        const res = await setSalespersonOutcome(leadId, version, outcome);
+        if (res.success) fetchLeads(false);
+        else alert(res.error === 'CONCURRENCY_ERROR' ? 'Qualcun altro ha modificato questo lead. Ricarica.' : res.error || 'Errore');
+    };
+
     // --- RENDER COMPACT LEAD ROW ---
     const renderRowComponent = (item: LeadData, layoutMode: 'default' | 'snooze' | 'richiami' = 'default') => {
         const lockedByEntry = globalPresence.find(p => p.leadId === item.lead.id && p.user?.id !== currentUser.id)
@@ -295,6 +324,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 isLocked={!!lockedByEntry}
                 lockedByName={lockedByName}
                 layoutMode={layoutMode}
+                variant={variant}
                 onRefresh={() => fetchLeads(false)}
                 onRowClick={() => { setSelectedLead(item); setDrawerInitialTab(undefined); setIsDrawerOpen(true); }}
             />
@@ -321,12 +351,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
             <div className="w-full border-b border-ash-200/40 sticky top-0 bg-white/90 backdrop-blur-sm z-10 pt-3 pb-3 mb-4 shadow-soft">
                 <div className="flex flex-nowrap items-center gap-2 w-full max-w-[1400px] mx-auto px-3 overflow-x-auto pb-1 scrollbar-thin">
                     {activeHours.map((hourParam) => {
-                    const hNum = parseInt(hourParam.split(':')[0], 10);
-                    const leadsForHour = activeLeads.filter(l => {
-                        if (!l.lead.appointmentDate) return false;
-                        const lHour = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
-                        return lHour === hNum && !l.lead.confNeedsReschedule;
-                    });
+                    const leadsForHour = leadsInHour(activeLeads, hourParam);
 
                     const allDone = leadsForHour.length > 0 && leadsForHour.every(l => !!l.lead.confirmationsOutcome);
                     const trafficColor = leadsForHour.length === 0 ? "bg-ash-300" : allDone ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" : "bg-ember-400 shadow-[0_0_6px_rgba(232,82,63,0.4)]";
@@ -348,13 +373,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     }
 
     const renderNRFilters = (leadsForHour: LeadData[]) => {
-        const counts = {
-            'tutti': leadsForHour.length,
-            '0': leadsForHour.filter(l => !l.lead.confCall1At).length,
-            '1': leadsForHour.filter(l => l.lead.confCall1At && !l.lead.confCall2At && !l.lead.confCall3At).length,
-            '2': leadsForHour.filter(l => l.lead.confCall2At && !l.lead.confCall3At).length,
-            '3': leadsForHour.filter(l => l.lead.confCall3At).length,
-        }
+        const counts = nrCounts(leadsForHour)
 
         const filterButton = (key: NrFilterMode, label: string) => (
             <label className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-[13px] font-bold cursor-pointer transition-all duration-200 ${nrFilter === key ? 'bg-gradient-to-b from-ash-700 to-ash-800 text-white border-ash-900 shadow-card' : 'bg-white text-ash-600 border-ash-200 hover:border-brand-orange/30 hover:bg-brand-orange-50/40'}`}>
@@ -377,26 +396,16 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
     const renderSelectedHourLeads = () => {
         if (!selectedHour) return null;
         const activeLeads = viewMode === "oggi" ? oggiLeads : viewMode === "domani" ? domaniLeads : [];
-        const hNum = parseInt(selectedHour.split(':')[0], 10);
-
-        let targetLeads = activeLeads.filter(l => {
-            if (!l.lead.appointmentDate) return false;
-            const lHour = parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(new Date(l.lead.appointmentDate)), 10);
-            return lHour === hNum && !l.lead.confNeedsReschedule;
-        });
+        const hourLeads = leadsInHour(activeLeads, selectedHour);
 
         // Render the pill filters first
-        const filtersJSX = renderNRFilters(targetLeads);
+        const filtersJSX = renderNRFilters(hourLeads);
 
         // Apply filters
-        if (nrFilter === '0') targetLeads = targetLeads.filter(l => !l.lead.confCall1At);
-        if (nrFilter === '1') targetLeads = targetLeads.filter(l => l.lead.confCall1At && !l.lead.confCall2At && !l.lead.confCall3At);
-        if (nrFilter === '2') targetLeads = targetLeads.filter(l => l.lead.confCall2At && !l.lead.confCall3At);
+        const targetLeads = applyNrFilter(hourLeads, nrFilter);
         // Calculate Snoozed logic (Global visibility across the day, regardless of selected hour views)
-        const snoozedLeads = kanbanData.flatList
-            .filter(l => l.lead.confSnoozeAt && !l.lead.confirmationsOutcome)
-            .sort((a,b) => new Date(a.lead.confSnoozeAt).getTime() - new Date(b.lead.confSnoozeAt).getTime());
-            
+        const snoozedLeads = snoozedOf(kanbanData.flatList);
+
         // Snoozed leads now stay in the main view too (F3-017)
         const normalTargetLeads = targetLeads;
 
@@ -453,6 +462,412 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
         push(storicoData);
         return Array.from(seen.values());
     })();
+
+    // Drawer del lead e modale "Chiuso" dallo storico: uguali nelle due grafiche
+    // (il drawer riceve la variante e si disegna da sé).
+    const drawerAndModal = (
+        <>
+            {isDrawerOpen && selectedLead && (
+                <ConfermeDrawer
+                    isOpen={true}
+                    item={selectedLead}
+                    currentUser={currentUser}
+                    initialTab={drawerInitialTab}
+                    variant={variant}
+                    onRefresh={() => fetchLeads(false)}
+                    onClose={() => {
+                        setIsDrawerOpen(false)
+                        setDrawerInitialTab(undefined)
+                        fetchLeads(false)
+                    }}
+                />
+            )}
+
+            <CloseLeadModal
+                open={!!closeModalLead}
+                leadName={closeModalLead?.name}
+                onCancel={() => setCloseModalLead(null)}
+                onSubmit={async ({ closeAmountEur, closedAtDateStr, closeProduct }) => {
+                    if (!closeModalLead) return;
+                    // Costruisci un Date a mezzogiorno Europe/Rome del giorno scelto
+                    // per evitare ambiguità di offset (DST) sui bordi settimana.
+                    const closedAt = new Date(`${closedAtDateStr}T12:00:00`);
+                    const res = await setSalespersonOutcome(
+                        closeModalLead.id,
+                        closeModalLead.version,
+                        'Chiuso',
+                        undefined,
+                        closeAmountEur,
+                        closedAt,
+                        closeProduct,
+                    );
+                    if (res.success) {
+                        setCloseModalLead(null);
+                        fetchLeads(false);
+                    } else {
+                        const msg = res.error === 'CONCURRENCY_ERROR'
+                            ? 'Qualcun altro ha modificato questo lead. Ricarica.'
+                            : res.error === 'CLOSE_AMOUNT_REQUIRED'
+                                ? 'Importo obbligatorio (> 0).'
+                                : res.error === 'CLOSE_DATE_REQUIRED'
+                                    ? 'Data chiusura obbligatoria.'
+                                    : res.error === 'CLOSE_DATE_INVALID'
+                                        ? 'Data chiusura non valida.'
+                                        : res.error === 'CLOSE_PRODUCT_REQUIRED'
+                                            ? 'Prodotto obbligatorio.'
+                                            : (res.error || 'Errore');
+                        throw new Error(msg);
+                    }
+                }}
+            />
+        </>
+    )
+
+    // ─── Grafica Diretta (PO 25/10/2026) ─────────────────────────────────────
+    // Stessi dati e stesse funzioni di smistamento della grafica classica.
+
+    const emptyD = (message: string) => (
+        <div className="rounded-2xl bg-[var(--d-surface)] px-6 py-10 text-center text-sm text-[var(--d-muted)]">{message}</div>
+    )
+
+    const renderHoursD = () => {
+        const activeLeads = viewMode === "oggi" ? oggiLeads : viewMode === "domani" ? domaniLeads : [];
+        const activeHours = viewMode === "oggi" ? oggiHours : viewMode === "domani" ? domaniHours : [];
+        if (activeHours.length === 0) return null;
+        return (
+            <div role="group" aria-label="Fasce orarie" className="mb-4 flex gap-1 overflow-x-auto pb-1 [color-scheme:dark] [scrollbar-width:thin]">
+                {activeHours.map((hourParam) => {
+                    const leadsForHour = leadsInHour(activeLeads, hourParam);
+                    const allDone = leadsForHour.length > 0 && leadsForHour.every(l => !!l.lead.confirmationsOutcome);
+                    const selected = selectedHour === hourParam;
+                    return (
+                        <button
+                            key={hourParam}
+                            onClick={() => { setSelectedHour(hourParam); setNrFilter('tutti'); }}
+                            aria-pressed={selected}
+                            className={dTab(selected)}
+                        >
+                            {hourParam}
+                            {allDone ? (
+                                <Check className="h-4 w-4" strokeWidth={1.75} aria-label="tutti lavorati" />
+                            ) : (
+                                <span className={leadsForHour.length === 0 ? 'opacity-50' : selected ? '' : 'font-semibold text-[var(--d-orange)]'}>
+                                    {leadsForHour.length}
+                                </span>
+                            )}
+                        </button>
+                    )
+                })}
+            </div>
+        )
+    }
+
+    const renderSelectedHourD = () => {
+        if (!selectedHour) return null;
+        const activeLeads = viewMode === "oggi" ? oggiLeads : viewMode === "domani" ? domaniLeads : [];
+        const hourLeads = leadsInHour(activeLeads, selectedHour);
+        const counts = nrCounts(hourLeads);
+        const targetLeads = applyNrFilter(hourLeads, nrFilter);
+        const snoozedLeads = snoozedOf(kanbanData.flatList);
+        const filtri: [NrFilterMode, string][] = [['tutti', 'Tutti'], ['0', '0 chiamate'], ['1', '1 chiamata'], ['2', '2 chiamate'], ['3', '3 chiamate']];
+
+        return (
+            <div className="grid grid-cols-1 items-start gap-6 2xl:grid-cols-3">
+                <div className="flex min-w-0 flex-col 2xl:col-span-2">
+                    <div role="radiogroup" aria-label="Chiamate a vuoto" className="mb-3 flex flex-wrap gap-1">
+                        {filtri.map(([key, label]) => (
+                            <button key={key} role="radio" aria-checked={nrFilter === key} onClick={() => setNrFilter(key)} className={dChip(nrFilter === key)}>
+                                {label} <span className={nrFilter === key ? '' : 'text-[var(--d-faint)]'}>{counts[key]}</span>
+                            </button>
+                        ))}
+                    </div>
+                    {targetLeads.length === 0
+                        ? emptyD('Nessun lead in questa fascia con questo filtro.')
+                        : targetLeads.map(l => renderRowComponent(l, 'default'))}
+                </div>
+
+                <section aria-label="Richiamati in giornata" className="flex min-w-0 flex-col">
+                    <h3 className="text-base font-semibold">Richiamati in giornata</h3>
+                    <p className="mb-3 mt-1 text-[13px] text-[var(--d-muted)]">Lead da risentire più tardi: all&apos;ora scelta parte l&apos;avviso.</p>
+                    {snoozedLeads.length === 0
+                        ? <div className="rounded-lg bg-[var(--d-surface)] px-4 py-6 text-center text-[13px] text-[var(--d-faint)]">Nessun richiamo attivo.</div>
+                        : snoozedLeads.map(l => renderRowComponent(l, 'snooze'))}
+                </section>
+            </div>
+        )
+    }
+
+    const renderRichiamiD = () => {
+        const sortedDaDefinire = sortRichiami(kanbanData.daDefinire);
+        return (
+            <section aria-label="Richiami programmati" className="mx-auto w-full max-w-5xl">
+                <h2 className="text-xl font-semibold">Richiami programmati</h2>
+                <p className="mb-4 mt-1 text-sm text-[var(--d-muted)]">Lead parcheggiati fino al giorno del richiamo.</p>
+                {sortedDaDefinire.length === 0
+                    ? emptyD('La coda dei parcheggiati è vuota.')
+                    : sortedDaDefinire.map(l => renderRowComponent(l, 'richiami'))}
+            </section>
+        )
+    }
+
+    const esitoVenditaD = (outcome: string | null) =>
+        outcome === 'Chiuso' ? 'Chiuso' : outcome === 'Non chiuso' ? 'Presenziato' : 'Sparito'
+
+    const renderStoricoD = () => {
+        const filteredStorico = filterStorico(storicoData, storicoFilter);
+        const { confermati, scartati } = storicoCounts(storicoData);
+        const dateInput = "h-9 rounded-lg border-2 border-[var(--d-line)] bg-[var(--d-bg)] px-2 text-[13px] text-[var(--d-text)] outline-none [color-scheme:dark] focus:border-[var(--d-orange)]";
+        const th = "px-4 py-3 font-medium";
+        const td = "px-4 py-3 align-top";
+        return (
+            <section aria-label="Storico" className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    <div role="radiogroup" aria-label="Esito" className="flex flex-wrap gap-1">
+                        {(['tutti', 'confermati', 'scartati'] as const).map(f => (
+                            <button key={f} role="radio" aria-checked={storicoFilter === f} onClick={() => setStoricoFilter(f)} className={dChip(storicoFilter === f)}>
+                                {f === 'tutti' ? 'Tutti' : f === 'confermati' ? 'Confermati' : 'Scartati'}{' '}
+                                <span className={storicoFilter === f ? '' : 'text-[var(--d-faint)]'}>
+                                    {f === 'tutti' ? storicoData.length : f === 'confermati' ? confermati : scartati}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="ml-auto flex flex-wrap items-center gap-2 text-[13px]">
+                        <span className="text-[var(--d-muted)]">Esito dal</span>
+                        <input type="date" value={storicoDateStart} onChange={e => setStoricoDateStart(e.target.value)} aria-label="Dal giorno" className={dateInput} />
+                        <span className="text-[var(--d-muted)]">al</span>
+                        <input type="date" value={storicoDateEnd} onChange={e => setStoricoDateEnd(e.target.value)} aria-label="Al giorno" className={dateInput} />
+                        <button
+                            onClick={() => {
+                                const d = new Date(); d.setDate(d.getDate() - 7)
+                                setStoricoDateStart(d.toISOString().split('T')[0])
+                                setStoricoDateEnd(new Date().toISOString().split('T')[0])
+                            }}
+                            className={dUi.btn}
+                        >
+                            Ultimi 7 giorni
+                        </button>
+                    </div>
+                </div>
+
+                {filteredStorico.length === 0 ? emptyD('Nessun lead nello storico.') : (
+                    <div className="overflow-x-auto rounded-2xl bg-[var(--d-surface)]">
+                        <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+                            <thead>
+                                <tr className="text-[13px] text-[var(--d-muted)]">
+                                    <th className={th}>Lead</th>
+                                    <th className={th}>Telefono</th>
+                                    <th className={th}>GDO</th>
+                                    <th className={th}>Esito conferma</th>
+                                    <th className={th}>Esito vendita</th>
+                                    <th className={th}>Azioni</th>
+                                    <th className={th}><span className="sr-only">Apri</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredStorico.map((item) => {
+                                    const confermato = item.lead.confirmationsOutcome === 'confermato';
+                                    return (
+                                        <tr key={item.lead.id} onClick={() => openDrawer(item)} className="cursor-pointer border-t-2 border-[var(--d-bg)] transition-colors hover:bg-[var(--d-surface-2)]">
+                                            <td className={td}>
+                                                <div className="font-semibold">{item.lead.name}</div>
+                                                {item.lead.funnel && <div className="text-[13px] text-[var(--d-muted)]">{item.lead.funnel}</div>}
+                                            </td>
+                                            <td className={`${td} whitespace-nowrap text-[var(--d-muted)]`}>{item.lead.phone}</td>
+                                            <td className={td}>{gdoName(item.gdo)}</td>
+                                            <td className={td}>
+                                                {confermato ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center gap-1.5 font-medium"><CheckCircle2 className="h-4 w-4" strokeWidth={1.75} /> Confermato</div>
+                                                        {/* Lancio (spec §4.5): prenotati della mattina già confermati dal bot col venditore. */}
+                                                        {isLeadLancio(item.lead) && (
+                                                            <div
+                                                                className="flex items-center gap-1.5 text-[13px] text-[var(--d-muted)]"
+                                                                title={`Lancio Web Dev AI: ${lancioSceltaLabel(item.lead.lancioScelta, isCallNowHandoff(item.lead))}`}
+                                                            >
+                                                                <Rocket className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                                                Lancio{item.lead.salespersonAssigned ? `, a ${item.lead.salespersonAssigned}` : ''}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center gap-1.5 font-medium"><XCircle className="h-4 w-4" strokeWidth={1.75} /> Scartato</div>
+                                                        {item.lead.confirmationsDiscardReason && (
+                                                            <div className="text-[13px] text-[var(--d-muted)] first-letter:uppercase">{item.lead.confirmationsDiscardReason}</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className={td}>
+                                                {item.lead.salespersonOutcome
+                                                    ? <span className="font-medium">{esitoVenditaD(item.lead.salespersonOutcome)}</span>
+                                                    : confermato ? <span className="text-[var(--d-muted)]">In attesa</span> : null}
+                                            </td>
+                                            <td className={td} onClick={e => e.stopPropagation()}>
+                                                {confermato && !item.lead.salespersonOutcome && (
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <button onClick={(e) => handleStoricoOutcome(item.lead.id, item.lead.version, 'Chiuso', e)} className={dUi.btn}>Chiuso</button>
+                                                        <button onClick={(e) => handleStoricoOutcome(item.lead.id, item.lead.version, 'Non chiuso', e)} className={dUi.btn}>Presenziato</button>
+                                                        <button onClick={(e) => handleStoricoOutcome(item.lead.id, item.lead.version, 'Lead non presenziato', e)} className={dUi.btn}>Sparito</button>
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className={`${td} text-right align-middle`}>
+                                                <ChevronRight className="ml-auto h-4 w-4 text-[var(--d-faint)]" strokeWidth={1.75} />
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+        )
+    }
+
+    const renderTableD = () => {
+        const presets: [string, string][] = [['today', 'Oggi'], ['tomorrow', 'Domani'], ['7days', 'Ultimi 7 giorni'], ['all', 'Tutti']];
+        const th = "px-4 py-3 font-medium";
+        const td = "px-4 py-3 align-top";
+        return (
+            <section aria-label="Vista globale" className="flex flex-col gap-4">
+                <div role="radiogroup" aria-label="Periodo" className="flex flex-wrap gap-1">
+                    {presets.map(([key, label]) => (
+                        <button key={key} role="radio" aria-checked={datePreset === key} onClick={() => handleDatePreset(key)} className={dChip(datePreset === key)}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+                {tableData.length === 0 ? emptyD('Nessun appuntamento trovato.') : (
+                    <div className="overflow-x-auto rounded-2xl bg-[var(--d-surface)]">
+                        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                            <thead>
+                                <tr className="text-[13px] text-[var(--d-muted)]">
+                                    <th className={th}>Data e ora</th>
+                                    <th className={th}>Lead</th>
+                                    <th className={th}>GDO</th>
+                                    <th className={th}>Stato</th>
+                                    <th className={th}><span className="sr-only">Apri</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {tableData.map((item) => {
+                                    const p = globalPresence.find(p => p.leadId === item.lead.id);
+                                    const who = p ? (collegaName(p.user?.displayName || p.user?.name) || 'un collega') : null;
+                                    const nr = callsMade(item.lead);
+                                    return (
+                                        <tr key={item.lead.id} onClick={() => openDrawer(item)} className="cursor-pointer border-t-2 border-[var(--d-bg)] transition-colors hover:bg-[var(--d-surface-2)]">
+                                            <td className={td}>
+                                                {item.lead.confNeedsReschedule ? (
+                                                    <span className="font-medium text-[var(--d-orange)]">Da definire</span>
+                                                ) : (
+                                                    <>
+                                                        <div className="font-semibold">{item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "dd MMM yyyy", { locale: it }) : "N/D"}</div>
+                                                        <div className="text-[var(--d-muted)]">{item.lead.appointmentDate ? format(new Date(item.lead.appointmentDate), "HH:mm") : "N/D"}</div>
+                                                    </>
+                                                )}
+                                            </td>
+                                            <td className={td}>
+                                                <div className="font-semibold">{item.lead.name}</div>
+                                                <div className="text-[13px] text-[var(--d-muted)]">{item.lead.phone}</div>
+                                            </td>
+                                            <td className={td}>
+                                                <div>{gdoName(item.gdo)}</div>
+                                                {item.lead.funnel && <div className="max-w-[160px] truncate text-[13px] text-[var(--d-muted)]">{item.lead.funnel}</div>}
+                                            </td>
+                                            <td className={td}>
+                                                <div className="flex flex-col gap-1">
+                                                    {who && <div className="text-[13px] font-medium text-[var(--d-orange)]">In uso da {who}</div>}
+                                                    <div className="font-medium">
+                                                        {item.lead.confirmationsOutcome === "confermato" ? "Confermato" : item.lead.confirmationsOutcome === "scartato" ? "Scartato" : "Da lavorare"}
+                                                    </div>
+                                                    {!item.lead.confirmationsOutcome && nr > 0 && (
+                                                        <div className="text-[13px] text-[var(--d-muted)]">{nr} {nr === 1 ? 'chiamata' : 'chiamate'} a vuoto</div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className={`${td} text-right align-middle`}>
+                                                <ChevronRight className="ml-auto h-4 w-4 text-[var(--d-faint)]" strokeWidth={1.75} />
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+        )
+    }
+
+    const renderDiretta = () => (
+        <div className="relative flex min-h-[500px] flex-col text-[var(--d-text)]">
+            <div className="sticky top-11 z-20 -mx-4 mb-4 flex flex-wrap items-center gap-3 bg-[var(--d-bg)] px-4 py-3 sm:-mx-8 sm:px-8">
+                <div role="tablist" aria-label="Viste della board" className="flex flex-wrap gap-1">
+                    <button role="tab" aria-selected={viewMode === 'oggi'} onClick={() => setViewMode('oggi')} className={dTab(viewMode === 'oggi')}>
+                        Oggi <span className={viewMode === 'oggi' ? '' : 'text-[var(--d-faint)]'}>{oggiLeads.length}</span>
+                    </button>
+                    <button role="tab" aria-selected={viewMode === 'domani'} onClick={() => setViewMode('domani')} className={dTab(viewMode === 'domani')}>
+                        Domani mattina <span className={viewMode === 'domani' ? '' : 'text-[var(--d-faint)]'}>{domaniLeads.length}</span>
+                    </button>
+                    <button role="tab" aria-selected={viewMode === 'da_definire'} onClick={() => setViewMode('da_definire')} className={dTab(viewMode === 'da_definire')}>
+                        Richiami <span className={viewMode === 'da_definire' ? '' : 'text-[var(--d-faint)]'}>{kanbanData.daDefinire.length}</span>
+                    </button>
+                    <button role="tab" aria-selected={viewMode === 'storico'} onClick={() => setViewMode('storico')} className={dTab(viewMode === 'storico')}>
+                        Storico
+                    </button>
+                </div>
+
+                <div className="ml-auto flex w-full flex-wrap items-center gap-2 lg:w-auto">
+                    <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border-2 border-[var(--d-line)] bg-[var(--d-bg)] px-3 transition-colors focus-within:border-[var(--d-orange)] lg:w-72 lg:flex-none">
+                        <Search className="h-4 w-4 shrink-0 text-[var(--d-faint)]" strokeWidth={1.75} />
+                        <input
+                            type="text"
+                            placeholder="Cerca per nome, email o telefono"
+                            aria-label="Cerca un lead"
+                            className="w-full min-w-0 bg-transparent text-sm text-[var(--d-text)] outline-none placeholder:text-[var(--d-faint)]"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </label>
+                    <button onClick={() => setViewMode('table')} aria-pressed={viewMode === 'table'} className={dTab(viewMode === 'table')}>
+                        Vista globale
+                    </button>
+                    <VenditoriAgendaButton variant="diretta" />
+                </div>
+            </div>
+
+            <ConfermeActiveTimerBanner visibleLeads={visibleLeadsForBanner} variant="diretta" />
+
+            <div className="flex-1 pb-40">
+                {loading ? (
+                    <div className="flex items-center justify-center gap-2 py-20 text-sm text-[var(--d-muted)]">
+                        <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.75} /> Caricamento...
+                    </div>
+                ) : (
+                    <>
+                        {(viewMode === 'oggi' || viewMode === 'domani') && (
+                            <>
+                                {renderHoursD()}
+                                {renderSelectedHourD()}
+                            </>
+                        )}
+                        {viewMode === 'da_definire' && renderRichiamiD()}
+                        {viewMode === 'storico' && renderStoricoD()}
+                        {viewMode === 'table' && renderTableD()}
+                    </>
+                )}
+            </div>
+
+            {drawerAndModal}
+        </div>
+    )
+
+    if (variant === 'diretta') {
+        return renderDiretta()
+    }
 
     return (
         <div className="flex flex-col min-h-[500px] relative">
@@ -532,11 +947,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         )}
 
                         {viewMode === 'da_definire' && (() => {
-                            const sortedDaDefinire = [...kanbanData.daDefinire].sort((a, b) => {
-                                if (!a.lead.recallDate) return 1;
-                                if (!b.lead.recallDate) return -1;
-                                return new Date(a.lead.recallDate).getTime() - new Date(b.lead.recallDate).getTime();
-                            });
+                            const sortedDaDefinire = sortRichiami(kanbanData.daDefinire);
 
                             return (
                                 <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-12 animate-fade-in">
@@ -560,24 +971,10 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                         })()}
 
                         {viewMode === 'storico' && (() => {
-                            const filteredStorico = storicoFilter === 'tutti' ? storicoData
-                                : storicoFilter === 'confermati' ? storicoData.filter(i => i.lead.confirmationsOutcome === 'confermato')
-                                : storicoData.filter(i => i.lead.confirmationsOutcome === 'scartato');
-                            const confCount = storicoData.filter(i => i.lead.confirmationsOutcome === 'confermato').length;
-                            const scarCount = storicoData.filter(i => i.lead.confirmationsOutcome === 'scartato').length;
+                            const filteredStorico = filterStorico(storicoData, storicoFilter);
+                            const { confermati: confCount, scartati: scarCount } = storicoCounts(storicoData);
 
-                            const handleSetOutcome = async (leadId: string, version: number, outcome: "Chiuso" | "Non chiuso" | "Lead non presenziato", e: React.MouseEvent) => {
-                                e.stopPropagation();
-                                if (outcome === 'Chiuso') {
-                                    // Apri modal: importo e data sono obbligatori per Chiuso.
-                                    const item = filteredStorico.find(i => i.lead.id === leadId);
-                                    setCloseModalLead({ id: leadId, version, name: item?.lead.name || 'Lead' });
-                                    return;
-                                }
-                                const res = await setSalespersonOutcome(leadId, version, outcome);
-                                if (res.success) fetchLeads(false);
-                                else alert(res.error === 'CONCURRENCY_ERROR' ? 'Qualcun altro ha modificato questo lead. Ricarica.' : res.error || 'Errore');
-                            };
+                            const handleSetOutcome = handleStoricoOutcome;
 
                             return (
                             <div className="flex flex-col h-full bg-white rounded-2xl border border-ash-200/60 shadow-card overflow-hidden mb-8 max-w-[1400px] mx-auto w-full animate-fade-in">
@@ -870,58 +1267,7 @@ export function ConfermeBoard({ currentUser }: { currentUser: any }) {
                 )}
             </div>
 
-            {isDrawerOpen && selectedLead && (
-                <ConfermeDrawer
-                    isOpen={true}
-                    item={selectedLead}
-                    currentUser={currentUser}
-                    initialTab={drawerInitialTab}
-                    onRefresh={() => fetchLeads(false)}
-                    onClose={() => {
-                        setIsDrawerOpen(false)
-                        setDrawerInitialTab(undefined)
-                        fetchLeads(false)
-                    }}
-                />
-            )}
-
-            <CloseLeadModal
-                open={!!closeModalLead}
-                leadName={closeModalLead?.name}
-                onCancel={() => setCloseModalLead(null)}
-                onSubmit={async ({ closeAmountEur, closedAtDateStr, closeProduct }) => {
-                    if (!closeModalLead) return;
-                    // Costruisci un Date a mezzogiorno Europe/Rome del giorno scelto
-                    // per evitare ambiguità di offset (DST) sui bordi settimana.
-                    const closedAt = new Date(`${closedAtDateStr}T12:00:00`);
-                    const res = await setSalespersonOutcome(
-                        closeModalLead.id,
-                        closeModalLead.version,
-                        'Chiuso',
-                        undefined,
-                        closeAmountEur,
-                        closedAt,
-                        closeProduct,
-                    );
-                    if (res.success) {
-                        setCloseModalLead(null);
-                        fetchLeads(false);
-                    } else {
-                        const msg = res.error === 'CONCURRENCY_ERROR'
-                            ? 'Qualcun altro ha modificato questo lead. Ricarica.'
-                            : res.error === 'CLOSE_AMOUNT_REQUIRED'
-                                ? 'Importo obbligatorio (> 0).'
-                                : res.error === 'CLOSE_DATE_REQUIRED'
-                                    ? 'Data chiusura obbligatoria.'
-                                    : res.error === 'CLOSE_DATE_INVALID'
-                                        ? 'Data chiusura non valida.'
-                                        : res.error === 'CLOSE_PRODUCT_REQUIRED'
-                                            ? 'Prodotto obbligatorio.'
-                                            : (res.error || 'Errore');
-                        throw new Error(msg);
-                    }
-                }}
-            />
+            {drawerAndModal}
         </div>
     )
 }

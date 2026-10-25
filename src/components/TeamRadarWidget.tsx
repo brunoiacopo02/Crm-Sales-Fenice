@@ -6,10 +6,13 @@ import { sendInternalAlert } from "@/app/actions/alertActions"
 import { getConfermeHeartbeats, type ConfermeHeartbeat } from "@/app/actions/presenceActions"
 import { Users, Send, AlertTriangle, MessageSquarePlus } from "lucide-react"
 import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeConnection } from "@/lib/confermePresence"
+import { collegaName } from "@/lib/conferme/boardView"
+import { dUi } from "@/components/conferme/diretta/ui"
 
 const HEARTBEAT_POLL_MS = 30_000
 
-export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
+/** `variant` 'diretta' = restyle scuro delle Conferme (PO 25/10/2026): stessa presence, stessi avvisi. */
+export function TeamRadarWidget({ currentUser, variant = 'classic' }: { currentUser: any; variant?: 'classic' | 'diretta' }) {
     const [activeUsers, setActiveUsers] = useState<any[]>([])
     const [heartbeats, setHeartbeats] = useState<ConfermeHeartbeat[]>([])
     const [connected, setConnected] = useState(false)
@@ -90,6 +93,76 @@ export function TeamRadarWidget({ currentUser }: { currentUser: any }) {
     }
 
     if (!currentUser) return null
+
+    if (variant === 'diretta') {
+        const nomeDi = (p: any) => collegaName(p.user.displayName || p.user.name) || 'Collega'
+        return (
+            <div className="sticky top-0 z-40 flex min-h-11 items-center gap-4 border-b-2 border-[var(--d-surface)] bg-[var(--d-bg)] px-4 py-1.5 text-[13px] text-[var(--d-text)] sm:px-8">
+                <div
+                    className="flex shrink-0 items-center gap-2 font-medium"
+                    title={connected ? "Collegamento in tempo reale attivo" : "Collegamento in tempo reale perso: i colleghi potrebbero non essere aggiornati. Ricarica la pagina se continua."}
+                >
+                    <Users className="h-4 w-4" strokeWidth={1.75} />
+                    Colleghi online
+                    {!connected && <span className="text-[var(--d-orange)]">collegamento perso</span>}
+                </div>
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+                    {mergedUsers.length === 0 ? (
+                        <div className="text-[var(--d-faint)]">Nessun altro collega online.</div>
+                    ) : (
+                        mergedUsers.map((p) => (
+                            <div key={p.user.id} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--d-surface)] py-0.5 pl-3 pr-0.5">
+                                <span className="font-medium">{nomeDi(p)}</span>
+                                {p.leadId && <span className="text-[var(--d-muted)]">su un lead</span>}
+                                <button
+                                    onClick={() => setSelectedUser(p)}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--d-muted)] transition-colors hover:bg-[var(--d-surface-2)] hover:text-[var(--d-text)]"
+                                    title="Invia un avviso"
+                                    aria-label={`Invia un avviso a ${nomeDi(p)}`}
+                                >
+                                    <MessageSquarePlus className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                {selectedUser && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
+                        <div role="dialog" aria-modal="true" aria-label="Avviso a un collega" className="w-full max-w-sm rounded-2xl bg-[var(--d-surface)] p-6 text-[var(--d-text)]">
+                            <h4 className="text-lg font-semibold">Avviso a {nomeDi(selectedUser)}</h4>
+                            <p className="mt-1 text-[13px] text-[var(--d-muted)]">
+                                Il messaggio blocca lo schermo del collega. Usalo solo per le urgenze.
+                            </p>
+                            <textarea
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                placeholder="Es: Fermati con Rossi Mario..."
+                                className={`${dUi.input} mt-4 h-24 resize-none`}
+                            />
+                            <div className="mt-4 flex justify-end gap-2">
+                                <button
+                                    onClick={() => { setSelectedUser(null); setMessage(""); }}
+                                    disabled={isSending}
+                                    className={dUi.btnText}
+                                >
+                                    Annulla
+                                </button>
+                                <button
+                                    onClick={handleSend}
+                                    disabled={isSending || !message.trim()}
+                                    className={dUi.btnPrimary}
+                                >
+                                    <Send className="h-4 w-4" strokeWidth={1.75} />
+                                    {isSending ? "Invio..." : "Invia avviso"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
 
     return (
         <div className="bg-white border-b border-ash-200 shadow-sm sticky top-0 z-40 px-4 h-10 flex items-center justify-between">
