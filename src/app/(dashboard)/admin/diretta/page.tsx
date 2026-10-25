@@ -1,39 +1,69 @@
-import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ChevronRight } from "lucide-react"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { getDirettaAdmin } from "@/app/actions/direttaActions"
-import { DirettaAdminClient } from "./DirettaAdminClient"
+import { getCentroDiretta } from "@/app/actions/centroDirettaActions"
+import { getQuoteCalendar } from "@/app/actions/quoteActions"
+import { getConfermeBonusSettings } from "@/app/actions/confermeDirettaActions"
+import { maiuscola } from "@/lib/diretta/centro"
+import { PaginaAdmin, Sezione, TitoloAdmin, oraDi } from "@/components/diretta/admin/ui"
+import { InterruttoriDiretta } from "./InterruttoriDiretta"
+import { AggiornaCentro } from "./AggiornaCentro"
+import {
+    LinkPremiSettimana, SezioneBonusConferme, SezioneCitazioni, SezioneControlli, SezioneNegozio,
+    SezioneObiettivi, SezioneOggi, SezioneRegistro,
+} from "./sezioni"
 
 export const dynamic = "force-dynamic"
 
-// Pagina admin della Diretta (PO 25/10/2026): interruttori per ruolo e
-// obiettivi della nuova gamification. Solo ADMIN, letto dalla tabella users.
-export default async function DirettaAdminPage() {
+// Centro di controllo della Diretta (PO 25/10/2026): in un colpo d'occhio
+// interruttori e obiettivi, la giornata della squadra, citazioni da approvare,
+// richieste del negozio, bonus Conferme, registro delle monete e controlli
+// anti-imbroglio, con i link alle pagine di dettaglio. Solo ADMIN, letto
+// dalla tabella users; ogni action lo ricontrolla.
+export default async function CentroDirettaPage() {
     if (!(await conRuoloDb(["ADMIN"]))) redirect("/unauthorized")
 
-    const stato = await getDirettaAdmin()
-    if (!stato) redirect("/unauthorized")
+    const [stato, centro, calendario, bonus] = await Promise.all([
+        getDirettaAdmin(),
+        getCentroDiretta(),
+        getQuoteCalendar(14).catch(() => ({ ok: false as const, error: "Calendario non disponibile." })),
+        getConfermeBonusSettings().catch((e: unknown) => {
+            console.error("[centro diretta] bonus Conferme", e)
+            return null
+        }),
+    ])
+    if (!stato || !centro) redirect("/unauthorized")
+
+    const adesso = new Date(centro.calcolatoAlle)
+    const giornoLungo = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", weekday: "long", day: "numeric", month: "long" }).format(adesso)
 
     return (
-        <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6">
-            <div>
-                <h1 className="text-2xl font-semibold text-brand-charcoal">Diretta</h1>
-                <p className="mt-1 text-sm text-ash-500">
-                    Interruttori della nuova grafica e obiettivi della gamification. Le modifiche arrivano a tutti entro un minuto.
-                </p>
-            </div>
-            <Link
-                href="/admin/diretta/conferme"
-                className="flex items-center justify-between gap-4 rounded-2xl border border-ash-200 bg-white p-5 transition-colors hover:border-ash-400"
-            >
-                <div>
-                    <div className="text-base font-semibold text-brand-charcoal">Conferme: bonus e obiettivi</div>
-                    <div className="mt-1 text-sm text-ash-500">Bonus di squadra e obiettivi individuali della colonna arancione delle Conferme.</div>
+        <PaginaAdmin larga>
+            <AggiornaCentro />
+            <TitoloAdmin
+                prima="Centro di"
+                accento="controllo"
+                sotto={<>{maiuscola(giornoLungo)}, aggiornato alle {oraDi(centro.calcolatoAlle)}.</>}
+            />
+
+            <div className="mt-8 grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+                <div className="flex min-w-0 flex-col gap-4">
+                    <SezioneOggi centro={centro} />
+                    <SezioneControlli controlli={centro.controlli} oggi={centro.giorno} />
+                    <SezioneRegistro registro={centro.registro} oggi={centro.giorno} />
+                    <SezioneObiettivi o={stato.obiettivi} />
                 </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-ash-400" aria-hidden="true" />
-            </Link>
-            <DirettaAdminClient flags={stato.flags} obiettivi={stato.obiettivi} />
-        </div>
+
+                <div className="flex min-w-0 flex-col gap-4">
+                    <Sezione titolo="Interruttori">
+                        <InterruttoriDiretta flags={stato.flags} />
+                    </Sezione>
+                    <SezioneNegozio negozio={centro.negozio} oggi={centro.giorno} />
+                    <SezioneCitazioni calendario={calendario} />
+                    <LinkPremiSettimana />
+                    <SezioneBonusConferme bonus={bonus} adesso={adesso} />
+                </div>
+            </div>
+        </PaginaAdmin>
     )
 }

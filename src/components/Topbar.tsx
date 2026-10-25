@@ -116,6 +116,9 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
 
     // ── Diretta: saldo Scintille e Piume, richiami del menu, orologio ──
     const direttaGdo = diretta && ruolo === 'GDO'
+    // L'admin ha la cornice della Diretta ma non guadagna monete: niente saldo.
+    const direttaAdmin = diretta && ruolo === 'ADMIN'
+    const conSaldo = diretta && !direttaAdmin
     const [saldo, setSaldo] = useState<{ scintille: number; piume: number } | null>(io ? { scintille: io.scintille, piume: io.piume } : null)
     const saldoPrima = useRef(saldo)
     const [guadagno, setGuadagno] = useState<{ testo: string; chiave: number } | null>(null)
@@ -151,7 +154,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
     // Dopo un appuntamento il premio lo scrive il server: si rilegge il saldo.
     // Sulle notifiche (conferme, presenze) al massimo una lettura ogni 10 s.
     useEffect(() => {
-        if (!diretta) return
+        if (!conSaldo) return
         let ultima = 0
         let attesa: ReturnType<typeof setTimeout> | null = null
         const rileggi = () => {
@@ -170,7 +173,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
             window.removeEventListener(DIRETTA_APPUNTAMENTO, suAppuntamento)
             window.removeEventListener('realtime_update', suNotifica)
         }
-    }, [diretta])
+    }, [conSaldo])
 
     // Richiami scaduti per la voce di menu, a ogni cambio pagina.
     useEffect(() => {
@@ -230,6 +233,9 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
             // "Chiamami adesso": chi la riceve è il venditore di turno e il
             // lead si lavora nella sua tab Lancio, non nel drawer della ricerca.
             router.push('/venditore?view=lancio')
+        } else if (notif.type === 'negozio_richiesta') {
+            // Richiesta dal negozio della Diretta: si consegna o si annulla lì.
+            router.push('/admin/premi')
         } else if (notif.type === 'appointment_confirmed' || notif.type === 'sales_outcome_set' || notif.type === 'appointment_assigned' || notif.type === 'bot_contatto_umano' || notif.type === 'contatto_umano_assegnato' || notif.type === 'appointment_rescheduled_by_sales') {
             // `contatto_umano_assegnato` era l'unico tipo che notificava e basta: il GDO
             // leggeva "Chiamalo tu", cliccava e non succedeva niente (11/09).
@@ -298,7 +304,11 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
     //   (120rem); la ricerca larga da 2240 (140rem), sotto è a comparsa.
     // Tutto è shrink-0 tranne lo spazio vuoto e il nome accanto all'avatar: se
     // un numero cresce si stringono quelli (il nome si tronca), mai il menu.
-    if (diretta && (ruolo === 'GDO' || ruolo === 'CONFERME')) {
+    //
+    // L'admin (interruttore admin_ui_diretta) ha la stessa barra con la sidebar
+    // fissa come le Conferme: niente saldo, niente pausa, il selettore delle
+    // aziende al posto della ricerca e l'avatar senza link al profilo dei giochi.
+    if (diretta && (ruolo === 'GDO' || ruolo === 'CONFERME' || ruolo === 'ADMIN')) {
         const nonLette = notifications.filter(n => n.status === 'unread').length
         const nome = io?.nomeVero ?? io?.nome ?? session?.user?.name ?? ''
         const iniziale = io?.iniziale ?? (nome.charAt(0).toUpperCase() || 'F')
@@ -414,6 +424,12 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     </div>
                 )}
 
+                {direttaAdmin && (
+                    <div className="shrink-0">
+                        <SalesCompanySwitcher variant="diretta" />
+                    </div>
+                )}
+
                 <div className="hidden shrink-0 whitespace-nowrap text-[14px] tabular-nums text-[#BFBFBF] md:block">
                     {adesso && (
                         <>
@@ -480,40 +496,56 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                     )}
                 </div>
 
-                <div className="relative flex shrink-0 items-center gap-3 whitespace-nowrap rounded-lg bg-[#262626] px-3 py-1.5 text-[13px] tabular-nums" title="Il tuo saldo di Scintille e Piume">
-                    <div className="flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
-                        <span className="font-semibold">{saldo?.scintille ?? 0}</span>
-                        <span className={etichettaSaldo}>Scintille</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <Feather className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
-                        <span className="font-semibold">{saldo?.piume ?? 0}</span>
-                        <span className={etichettaSaldo}>Piume</span>
-                    </div>
-                    {guadagno && (
-                        <div key={guadagno.chiave} aria-live="polite" className="d-svanisce pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap rounded-lg bg-[#FF9330] px-2.5 py-1 text-[12px] font-semibold text-[#171717]">
-                            {guadagno.testo}
+                {conSaldo && (
+                    <div className="relative flex shrink-0 items-center gap-3 whitespace-nowrap rounded-lg bg-[#262626] px-3 py-1.5 text-[13px] tabular-nums" title="Il tuo saldo di Scintille e Piume">
+                        <div className="flex items-center gap-1.5">
+                            <Sparkles className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
+                            <span className="font-semibold">{saldo?.scintille ?? 0}</span>
+                            <span className={etichettaSaldo}>Scintille</span>
                         </div>
-                    )}
-                </div>
+                        <div className="flex items-center gap-1.5">
+                            <Feather className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
+                            <span className="font-semibold">{saldo?.piume ?? 0}</span>
+                            <span className={etichettaSaldo}>Piume</span>
+                        </div>
+                        {guadagno && (
+                            <div key={guadagno.chiave} aria-live="polite" className="d-svanisce pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap rounded-lg bg-[#FF9330] px-2.5 py-1 text-[12px] font-semibold text-[#171717]">
+                                {guadagno.testo}
+                            </div>
+                        )}
+                    </div>
+                )}
 
-                <Link
-                    href="/profilo"
-                    aria-label={nome ? `Il tuo profilo, ${nome}` : 'Il tuo profilo'}
-                    aria-current={pathname === '/profilo' ? 'page' : undefined}
-                    className="flex min-w-0 items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80"
-                >
-                    <span className={`${facoltativo} max-w-[10rem] truncate text-[14px] text-[#F2F2F2]`}>{nome}</span>
-                    {io?.immagine ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={io.immagine} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
-                    ) : (
-                        <div aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F2F2F2] text-[14px] font-semibold text-[#171717]">
-                            {iniziale}
-                        </div>
-                    )}
-                </Link>
+                {direttaAdmin ? (
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <span className={`${facoltativo} max-w-[10rem] truncate text-[14px] text-[#F2F2F2]`}>{nome}</span>
+                        {io?.immagine ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={io.immagine} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+                        ) : (
+                            <div aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F2F2F2] text-[14px] font-semibold text-[#171717]">
+                                {iniziale}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <Link
+                        href="/profilo"
+                        aria-label={nome ? `Il tuo profilo, ${nome}` : 'Il tuo profilo'}
+                        aria-current={pathname === '/profilo' ? 'page' : undefined}
+                        className="flex min-w-0 items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80"
+                    >
+                        <span className={`${facoltativo} max-w-[10rem] truncate text-[14px] text-[#F2F2F2]`}>{nome}</span>
+                        {io?.immagine ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={io.immagine} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+                        ) : (
+                            <div aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F2F2F2] text-[14px] font-semibold text-[#171717]">
+                                {iniziale}
+                            </div>
+                        )}
+                    </Link>
+                )}
 
                 <ContactDrawer
                     isOpen={isDrawerOpen}

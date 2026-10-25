@@ -27,6 +27,9 @@ const REPORTING_ALLOWLIST = [
   // in riconciliazioneActions.ts), è quindi un report di sola lettura anche
   // quando l'admin è su "Tutte le aziende".
   '/riconciliazione',
+  // Pagine admin della Diretta (centro di controllo, obiettivi, citazioni,
+  // premi): impostazioni e numeri di Fenice, nessun lead da lavorare.
+  '/admin',
 ]
 
 export function AllCompaniesGate({

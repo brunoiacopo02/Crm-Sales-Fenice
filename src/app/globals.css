@@ -2497,3 +2497,14 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 [data-ui="diretta"] .d-traccia { animation: d-traccia 700ms ease-out both; }
 [data-ui="diretta"] .d-svanisce { animation: d-svanisce 1800ms ease-out; }
 [data-ui="diretta"] .d-punta-pop { outline: 3px solid transparent; outline-offset: 2px; animation: d-punta 1200ms ease-out; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Cornice Diretta dell'admin (ramo admin, PO 25/10/2026): barra e menu scuri,
+   le pagine vecchie restano sulla loro superficie chiara col carattere e le
+   cifre di sempre, cioè quelli del body (la stessa espressione del preflight
+   di Tailwind). Le pagine nuove (PaginaAdmin, PaginaDiretta) rimettono Poppins.
+   ─────────────────────────────────────────────────────────────────────────── */
+[data-ui="diretta"] main.d-foglio-admin {
+  font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+  font-variant-numeric: normal;
+}

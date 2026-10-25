@@ -17,7 +17,7 @@ import {
 } from '@/lib/diretta/live'
 import { leggiFissati } from '@/lib/diretta/fissatiDb'
 import { giornoLavorativoPrecedente } from '@/lib/diretta/home'
-import { DIRETTA_FLAG_KEYS, GAMIFICATION_SETTINGS_KEY, type GamificationTargets } from '@/lib/diretta/config'
+import { DIRETTA_FLAG_KEYS, GAMIFICATION_SETTINGS_KEY, RUOLI_DIRETTA, type GamificationTargets, type RuoloDiretta } from '@/lib/diretta/config'
 import { readDirettaFlags, readGamificationTargets, writeSetting } from '@/lib/diretta/settings'
 import { validaObiettivi } from '@/lib/diretta/validaObiettivi'
 
@@ -105,21 +105,23 @@ function soloAdmin() {
     return conRuoloDb(['ADMIN'])
 }
 
-export async function getDirettaAdmin(): Promise<{ flags: { GDO: boolean; CONFERME: boolean }; obiettivi: GamificationTargets } | null> {
+export async function getDirettaAdmin(): Promise<{ flags: Record<RuoloDiretta, boolean>; obiettivi: GamificationTargets } | null> {
     if (!(await soloAdmin())) return null
     const [flags, obiettivi] = await Promise.all([readDirettaFlags(), readGamificationTargets()])
     return { flags, obiettivi }
 }
 
 /**
- * Accende o spegne la Diretta per un ruolo. Chi ha il CRM aperto passa alla
- * veste nuova al primo aggiornamento della pagina; le pagine che cambiano con
- * l'interruttore riallineano da sole la cornice (VesteAllineata).
+ * Accende o spegne la Diretta per un ruolo (GDO, Conferme o admin). Chi ha il
+ * CRM aperto passa alla veste nuova al primo aggiornamento della pagina; le
+ * pagine che cambiano con l'interruttore riallineano da sole la cornice
+ * (VesteAllineata).
  */
-export async function setDirettaFlag(ruolo: 'GDO' | 'CONFERME', acceso: boolean): Promise<{ success: boolean; error?: string }> {
+export async function setDirettaFlag(ruolo: RuoloDiretta, acceso: boolean): Promise<{ success: boolean; error?: string }> {
     const admin = await soloAdmin()
     if (!admin) return { success: false, error: 'Solo un ADMIN può cambiare gli interruttori.' }
-    if (ruolo !== 'GDO' && ruolo !== 'CONFERME') return { success: false, error: 'Ruolo non valido.' }
+    if (!RUOLI_DIRETTA.includes(ruolo)) return { success: false, error: 'Ruolo non valido.' }
+    if (typeof acceso !== 'boolean') return { success: false, error: 'Valore non valido.' }
     await writeSetting(DIRETTA_FLAG_KEYS[ruolo], acceso ? 'on' : 'off', admin.id)
     revalidatePath('/admin/diretta')
     return { success: true }
@@ -135,5 +137,6 @@ export async function saveDirettaObiettivi(input: unknown): Promise<{ success: b
     updateTag(TAG_DIRETTA_SQUADRA)
     updateTag(TAG_DIRETTA_OBIETTIVI)
     revalidatePath('/admin/diretta')
+    revalidatePath('/admin/diretta/obiettivi')
     return { success: true }
 }

@@ -31,6 +31,10 @@ const FILE_ADMIN = [
     'app/(dashboard)/admin/diretta/conferme/page.tsx',
     'app/(dashboard)/admin/premi/page.tsx',
     'app/(dashboard)/admin/citazioni/page.tsx',
+    // Centro di controllo dell'admin (ramo admin, 25/10/2026).
+    'app/actions/centroDirettaActions.ts',
+    'app/(dashboard)/admin/diretta/obiettivi/page.tsx',
+    'app/(dashboard)/admin/diretta/registro/page.tsx',
 ]
 
 test('le action e le pagine admin della Diretta non leggono il ruolo dai metadati', () => {
