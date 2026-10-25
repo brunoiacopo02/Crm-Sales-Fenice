@@ -5,6 +5,7 @@ import { actionChests, coinTransactions, users } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 // GDO chest definitions (individual)
 const GDO_CHEST_TYPES = [
@@ -145,6 +146,10 @@ export async function incrementChestProgress(userId: string, metric: string, amo
  * Open a ready chest. Drops creature + coins, then resets for next cycle.
  */
 export async function openChest(userId: string, chestId: string) {
+    // Bauli a progressi spenti dal restyle "Diretta" (PO 25/10/2026): un baule
+    // rimasto pronto non accredita più monete né creature (src/lib/economy/legacy.ts).
+    // I forzieri nuovi sono quelli di squadra (src/app/actions/economyActions.ts).
+    if (VECCHIA_ECONOMIA_CONGELATA) return { success: false, error: 'Baule non più attivo', rewardCoins: 0, creature: null };
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);

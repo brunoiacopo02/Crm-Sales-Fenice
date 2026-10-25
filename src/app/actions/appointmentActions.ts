@@ -14,6 +14,7 @@ import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
 import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
+import { reverseFissato, syncLeadPiume } from "@/lib/economy/awards";
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -246,6 +247,15 @@ export async function cancelLeadAppointment(leadId: string): Promise<{ success: 
             metadata: { previousState, cancelledBy: role },
             companyId: ctx.companyId,
         });
+
+        // Nuova economia (PO 25/10/2026): un appuntamento annullato non vale.
+        // Tornano indietro le Scintille del fissato di questo ciclo e le Piume
+        // di conferma, presenza e chiusura del GDO (l'update qui sopra ha
+        // azzerato conferma, esito e latch presentedAt).
+        await reverseFissato(leadId, lead.appointmentCreatedAt, 'appuntamento annullato')
+            .catch((e: unknown) => console.error('Economia storno fissato (annullamento) err:', e));
+        await syncLeadPiume(leadId, user.id)
+            .catch((e: unknown) => console.error('Economia Piume (annullamento) err:', e));
 
         // L'update qui sopra ha azzerato `salespersonUserId`: se quel venditore
         // aveva un blocco follow-up su questo lead, resterebbe appeso al suo

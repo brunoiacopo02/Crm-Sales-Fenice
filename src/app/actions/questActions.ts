@@ -7,6 +7,7 @@ import { updateStreak } from "@/app/actions/streakActions";
 import { getStreakMultiplier } from "@/lib/streakUtils";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 // --- Helpers ---
 
@@ -436,6 +437,9 @@ export async function checkQuestProgress(userId: string): Promise<{
  * Called after checkQuestProgress detects a newly completed quest.
  */
 export async function completeQuest(userId: string, questProgressId: string): Promise<{ success: boolean; error?: string }> {
+    // Quest spente dal restyle "Diretta" (PO 25/10/2026): niente monete, XP né
+    // streak (updateStreak passa solo da qui). Vedi src/lib/economy/legacy.ts.
+    if (VECCHIA_ECONOMIA_CONGELATA) return { success: false, error: "Le quest non sono più attive" };
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);

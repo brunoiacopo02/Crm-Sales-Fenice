@@ -6,6 +6,7 @@ import { eq, and, gte, isNotNull, isNull, sql, count, countDistinct, inArray, or
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 /**
  * Measure a lifetime metric for a user.
@@ -254,6 +255,9 @@ export async function checkAchievements(userId: string): Promise<{
     }>;
     error?: string;
 }> {
+    // Badge con monete spenti dal restyle "Diretta" (PO 25/10/2026): niente
+    // nuovi sblocchi, monete o notifiche. Vedi src/lib/economy/legacy.ts.
+    if (VECCHIA_ECONOMIA_CONGELATA) return { success: true, newlyUnlocked: [] };
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);

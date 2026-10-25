@@ -7,7 +7,7 @@ import { monthlyLeadTargets } from "@/db/schema"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant } from "@/lib/tenancy"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
-import { calcolaSoglieBonus, ANCORA_FATTURATO_EUR, ANCORA_MESE } from "@/lib/bonus/soglie"
+import { calcolaSoglieBonus, ANCORA_FATTURATO_EUR, ANCORA_MESE, BONUS_GDO } from "@/lib/bonus/soglie"
 import { isBonusUnlocked } from "@/app/actions/bonusPinActions"
 import BonusLock from "./BonusLock"
 
@@ -59,7 +59,7 @@ export default async function BonusPage({ searchParams }: { searchParams: Promis
                 <div className="min-w-0">
                     <h1 className="text-2xl font-bold text-brand-charcoal">Bonus</h1>
                     <p className="mt-1 text-sm text-ash-500">
-                        Le soglie di GDO e Conferme si ricalcolano dall&apos;obiettivo di fatturato del mese.
+                        La soglia delle Conferme si ricalcola dall&apos;obiettivo di fatturato del mese; quella dei GDO è fissa.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -95,14 +95,14 @@ export default async function BonusPage({ searchParams }: { searchParams: Promis
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
+                {/* GDO: soglia fissa a 4 per decisione del 25/10/2026 (src/lib/bonus/soglie.ts),
+                    quindi la card si mostra anche senza obiettivo di fatturato. */}
                 <BonusCard
                     icon={<PhoneCall className="h-5 w-5" />}
                     titolo="GDO"
-                    valore={soglie ? `${soglie.gdo.soglia} presenze` : "—"}
-                    sotto="a settimana, per persona"
-                    testo={soglie
-                        ? `Dalla ${soglie.gdo.soglia + 1}ª presenza della settimana in poi prendi ${eur(soglie.gdo.euro)} per ogni presenza, senza tetto. Contano solo gli appuntamenti confermati dalle Conferme e presentati.`
-                        : null}
+                    valore={`${BONUS_GDO.soglia} presenze`}
+                    sotto="a settimana, per persona, soglia fissa"
+                    testo={`Dalla ${BONUS_GDO.soglia + 1}ª presenza della settimana in poi prendi ${eur(BONUS_GDO.euro)} per ogni presenza, senza tetto. Contano solo gli appuntamenti confermati dalle Conferme e presentati. La soglia non dipende dall'obiettivo di fatturato.`}
                 />
                 <BonusCard
                     icon={<Headphones className="h-5 w-5" />}
@@ -123,8 +123,9 @@ export default async function BonusPage({ searchParams }: { searchParams: Promis
             </div>
 
             <p className="text-xs leading-relaxed text-ash-500">
-                Formula: soglia = arrotondamento di (soglia di ottobre 2026 × obiettivo del mese ÷ {eur(ANCORA_FATTURATO_EUR)}).
-                A ottobre 2026 GDO 5 e Conferme 20; gli importi ({eur(12)} e {eur(15)}) non cambiano.
+                Conferme: soglia = arrotondamento di (soglia di ottobre 2026 × obiettivo del mese ÷ {eur(ANCORA_FATTURATO_EUR)}).
+                A ottobre 2026 erano 20 chiusure; l&apos;importo ({eur(15)}) non cambia.
+                GDO: soglia fissa a {BONUS_GDO.soglia} presenze dal 26/10/2026, {eur(BONUS_GDO.euro)} per ogni presenza in più.
             </p>
         </div>
     )

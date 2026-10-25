@@ -7,10 +7,8 @@ import { eq, ne, desc, and, or, like, between, isNull, isNotNull, asc, gte, lte,
 import crypto from "crypto"
 import { createGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { addHours } from "date-fns"
-import { awardXpAndCoins } from "@/lib/gamificationEngine"
-import { incrementChestProgress } from "@/app/actions/chestActions"
-import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
-import { maybeDropCreature } from "@/app/actions/creatureActions"
+import { syncLeadPiume } from "@/lib/economy/awards"
+import type { RewardEarnedDetail } from "@/lib/animationUtils"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { notifyAppointmentToBot, notifyCallAttemptToBot } from "@/lib/agendaBot"
 import { after } from "next/server"
@@ -892,23 +890,15 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             await releaseFollowUpBlock(db, { leadId, salesUserId: oldLead.salespersonUserId })
         }
 
-        // Gamification: award XP/coins to Conferme worker on confirmation.
-        // Unified per-user gamification — every Conferme has their own chest/adventure/creatures.
-        let rewardData = null;
-        if (outcome === "confermato") {
-            rewardData = await awardXpAndCoins(session.user.id, "CONFERMATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine CONFERMATO err:", e); return null; });
-
-            // Individual progress for the Conferme user
-            incrementChestProgress(session.user.id, 'conferme', 1).catch(e => console.error("Chest conferme err:", e));
-            attackBoss(session.user.id, 'conferma').catch(e => console.error("Adventure conferma err:", e));
-            checkAndAdvanceStage(session.user.id).catch(e => console.error("Adventure stage check conferma err:", e));
-            maybeDropCreature(session.user.id).catch(e => console.error("Creature drop conferma (conferme user) err:", e));
-
-            // Also credit the originating GDO with a creature drop chance (their lead got confirmed)
-            if (oldLead.assignedToId && oldLead.assignedToId !== session.user.id) {
-                maybeDropCreature(oldLead.assignedToId).catch(e => console.error("Creature drop conferma (gdo) err:", e));
-            }
-        }
+        // Nuova economia (PO 25/10/2026): la Piuma della conferma va al GDO
+        // assegnatario e torna indietro se la conferma cambia (scartato); la
+        // riassegnazione a un altro venditore azzera l'esito, e con lui la
+        // Piuma della chiusura. Forzieri, boss, creature e XP delle Conferme
+        // sono spenti: alle Conferme da qui non arriva più niente.
+        await syncLeadPiume(leadId, session.user.id)
+            .catch((e: unknown) => console.error("Economia Piume (conferma) err:", e))
+        // Sempre null: resta nel tipo di ritorno perché ConfermeDrawer lo legge.
+        const rewardData = null as RewardEarnedDetail | null;
 
         // Notifiche Live (Pilota E2E)
         if (outcome === "confermato" && salespersonAssigned) {
@@ -1024,45 +1014,10 @@ export async function setSalespersonOutcome(
         if (!oldLead) return { success: false, error: "Lead not found" }
         if (oldLead.version !== currentVersion) return { success: false, error: `CONCURRENCY_ERROR` }
 
-        // Gamification: reward only on first outcome set (idempotent).
-        // Both the GDO (lead owner) AND the Conferme user get individual progress for their work.
-        let rewardData = null;
-        if (!oldLead.salespersonOutcome && oldLead.assignedToId) {
-            const isConfermeRole = session.user.role === 'CONFERME';
-            if (outcome === 'Chiuso') {
-                rewardData = await awardXpAndCoins(oldLead.assignedToId, "CHIUSO", leadId, ctx.companyId).catch(e => { console.error("GameEngine CHIUSO err:", e); return null; });
-
-                // Individual progress for the GDO (lead owner)
-                incrementChestProgress(oldLead.assignedToId, 'chiusure', 1).catch(e => console.error("Chest chiusure GDO err:", e));
-                attackBoss(oldLead.assignedToId, 'chiusura').catch(e => console.error("Adventure chiusura err:", e));
-                checkAndAdvanceStage(oldLead.assignedToId).catch(e => console.error("Adventure stage check chiusura err:", e));
-                maybeDropCreature(oldLead.assignedToId).catch(e => console.error("Creature drop chiusura err:", e));
-
-                // Individual progress for the Conferme user who logged the close
-                if (isConfermeRole && session.user.id !== oldLead.assignedToId) {
-                    incrementChestProgress(session.user.id, 'chiusure', 1).catch(e => console.error("Chest chiusure CONFERME err:", e));
-                    attackBoss(session.user.id, 'chiusura').catch(e => console.error("Adventure chiusura CONFERME err:", e));
-                    checkAndAdvanceStage(session.user.id).catch(e => console.error("Adventure stage check chiusura CONFERME err:", e));
-                    maybeDropCreature(session.user.id).catch(e => console.error("Creature drop chiusura CONFERME err:", e));
-                }
-            } else if (outcome === 'Non chiuso') {
-                rewardData = await awardXpAndCoins(oldLead.assignedToId, "PRESENZIATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine PRESENZIATO err:", e); return null; });
-
-                // Individual progress for the GDO
-                incrementChestProgress(oldLead.assignedToId, 'presenze', 1).catch(e => console.error("Chest presenze GDO err:", e));
-                attackBoss(oldLead.assignedToId, 'presenza').catch(e => console.error("Adventure presenza err:", e));
-                checkAndAdvanceStage(oldLead.assignedToId).catch(e => console.error("Adventure stage check presenza err:", e));
-                maybeDropCreature(oldLead.assignedToId).catch(e => console.error("Creature drop presenza err:", e));
-
-                // Individual progress for the Conferme user
-                if (isConfermeRole && session.user.id !== oldLead.assignedToId) {
-                    incrementChestProgress(session.user.id, 'presenze', 1).catch(e => console.error("Chest presenze CONFERME err:", e));
-                    attackBoss(session.user.id, 'presenza').catch(e => console.error("Adventure presenza CONFERME err:", e));
-                    checkAndAdvanceStage(session.user.id).catch(e => console.error("Adventure stage check presenza CONFERME err:", e));
-                    maybeDropCreature(session.user.id).catch(e => console.error("Creature drop presenza CONFERME err:", e));
-                }
-            }
-        }
+        // Nessun premio della vecchia gamification (XP, monete, forzieri, boss,
+        // creature): le Piume della presenza e della chiusura si allineano dopo
+        // l'update, più sotto. rewardData resta null, nel tipo per ConfermeDrawer.
+        const rewardData = null as RewardEarnedDetail | null;
 
         // closeAmountEur: only written when outcome === 'Chiuso' and a valid positive number is provided.
         // Uses a conditional spread so Drizzle gets a properly-typed partial update object
@@ -1155,6 +1110,13 @@ export async function setSalespersonOutcome(
             metadata: { outcome, notes, closeProduct: closeProductPatch.closeProduct ?? null },
             companyId: ctx.companyId,
         })
+
+        // Nuova economia (PO 25/10/2026): qui nasce il latch presentedAt dal
+        // percorso Conferme. Piume al GDO assegnatario per la presenza (2, o 4
+        // dalla 5ª della settimana) e per la chiusura (5); un esito successivo
+        // che toglie la chiusura le storna.
+        await syncLeadPiume(leadId, session.user.id)
+            .catch((e: unknown) => console.error("Economia Piume (esito venditore, Conferme) err:", e))
 
         return { success: true, rewardData }
     } catch (error: any) {
@@ -1260,6 +1222,13 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
                 : { fieldUpdated: Object.keys(toUpdate).find(k => k.startsWith('confCall')) },
             companyId: ctx.companyId,
         });
+
+        // Auto-scarto di un lead che era confermato: la Piuma della conferma
+        // torna indietro al GDO (nuova economia, PO 25/10/2026).
+        if (isAutoDiscard && oldLead.confirmationsOutcome === 'confermato') {
+            await syncLeadPiume(leadId, session.user.id)
+                .catch((e: unknown) => console.error("Economia Piume (auto-scarto) err:", e));
+        }
 
         // Dentro after(): la scrittura DB e il ritorno alla UI avvengono subito,
         // l'HTTP prosegue dopo la risposta. Una Conferma clicca NR di corsa su

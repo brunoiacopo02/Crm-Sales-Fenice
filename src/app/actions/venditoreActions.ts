@@ -18,6 +18,7 @@ import { resolveLatePenalties } from "@/lib/venditore/latePenaltiesRunner";
 import { syncFollowUpBlock, releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks";
 import { isLancioLiberoLead } from "@/lib/lancio/liberi";
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
+import { syncLeadPiume } from "@/lib/economy/awards";
 // Gamification disabled for VENDITORE role — import removed
 
 async function resolveIsStaff() {
@@ -433,6 +434,13 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
     if (!txResult.success) {
         return { success: false, error: txResult.error }
     }
+
+    // Nuova economia (PO 25/10/2026): qui nasce il latch presentedAt dal
+    // percorso dei venditori. Piume al GDO assegnatario per la presenza e per
+    // la chiusura; se l'esito cambia (es. da Chiuso a Non chiuso) si stornano.
+    // Il venditore non guadagna niente.
+    await syncLeadPiume(leadId, session.user.id)
+        .catch((e: unknown) => console.error('Economia Piume (esito venditore) err:', e));
 
     // Malus ritardi: l'esito è arrivato, chiudo i ritardi ancora aperti sul lead.
     // La penale già maturata resta (è il ritardo, non l'assenza di esito), ma da
@@ -889,6 +897,11 @@ export async function clearVenditoreOutcome(leadId: string, currentVersion?: num
     if (!txResult.success) {
         return { success: false, error: txResult.error };
     }
+
+    // Esito rimosso: la Piuma della chiusura torna indietro, e anche quella
+    // della presenza se il latch è stato azzerato (nuova economia, PO 25/10/2026).
+    await syncLeadPiume(leadId, userId)
+        .catch((e: unknown) => console.error('Economia Piume (esito rimosso) err:', e));
 
     // Esito rimosso = chiusure, presenze e fatturato cambiano: stessa
     // invalidazione di saveVenditoreOutcome.

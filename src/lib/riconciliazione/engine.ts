@@ -22,6 +22,7 @@ import type { ConfrontoResult, ApplyResult, AnnullaRunResult, RiconciliazioneRun
 import { resolveAttemptWrite } from '@/lib/venditorePerformance/guard';
 import { logLeadEvent } from '@/lib/eventLogger';
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
+import { syncPiumeForLeads } from '@/lib/economy/awards';
 
 export const COMPANY_ID = 'fenice'; // il foglio non contiene Serenamente
 
@@ -690,6 +691,11 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
 
     await notificaMarketing(touched, adminUserId);
 
+    // Nuova economia (PO 25/10/2026): una chiusura applicata dal foglio (con il
+    // suo latch presentedAt) dà le Piume al GDO del lead, una tolta le storna.
+    // Fuori dalla transazione come gli altri effetti: non blocca la run.
+    await syncPiumeForLeads(touched.map(t => t.leadId), adminUserId);
+
     return { success: true, runId, applied: touched.length };
 }
 
@@ -992,6 +998,9 @@ export async function annullaRunCome(adminUserId: string, runId: string): Promis
     }
 
     await notificaMarketing(touched, adminUserId);
+
+    // Annullata la run, le Piume tornano a riflettere lo stato ripristinato.
+    await syncPiumeForLeads(touched.map(t => t.leadId), adminUserId);
 
     return { success: true, reverted: touched.length };
 }

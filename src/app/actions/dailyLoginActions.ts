@@ -5,6 +5,7 @@ import { users, coinTransactions } from "@/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { getStreakMultiplier } from "@/lib/streakUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 // --- Constants ---
 
@@ -65,6 +66,11 @@ export async function checkDailyLoginStatus(userId: string): Promise<{
     allPriorDaysClaimed: boolean;
     consecutiveDaysClaimed: number;
 }> {
+    // Premio di accesso spento dal restyle "Diretta" (PO 25/10/2026): risulta
+    // già riscosso, così la vecchia modale non si apre (src/lib/economy/legacy.ts).
+    if (VECCHIA_ECONOMIA_CONGELATA) {
+        return { alreadyClaimed: true, streakCount: 0, bonusCoins: 0, userName: '', calendar: [], allPriorDaysClaimed: false, consecutiveDaysClaimed: 0 };
+    }
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
@@ -203,6 +209,9 @@ export async function claimDailyLogin(userId: string): Promise<{
     multiplier: number;
     weeklyBonusTitle: boolean;
 }> {
+    if (VECCHIA_ECONOMIA_CONGELATA) {
+        return { success: false, coinsAwarded: 0, streakCount: 0, multiplier: 1, weeklyBonusTitle: false };
+    }
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);

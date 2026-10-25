@@ -652,13 +652,17 @@ export default function ProfileClient({ profileData, achievements = [], titleDat
                             )}
                         </div>
 
-                        {/* Weekly Bonus Widget */}
+                        {/* Weekly Bonus Widget. Ai GDO non si mostra più: il bonus
+                            bisettimanale 18/22 (€270/€540) è finito il 25/10/2026, dal 26/10
+                            vale €12 dalla 5ª presenza della settimana (PO 25/10/2026). */}
+                        {role !== 'GDO' && (
                         <div className="animate-fade-in" style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}>
                             <h3 className="text-sm font-bold text-[var(--color-gaming-text)] uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
                                 <Target className="w-4 h-4 text-brand-orange" /> Obiettivo in Corso
                             </h3>
                             <SafeWrapper><WeeklyBonusWidget userId={profileData.id} role={role} /></SafeWrapper>
                         </div>
+                        )}
 
                         {/* Roadmap / Prossimi Traguardi — gaming dark */}
                         <div className="border border-[var(--color-gaming-gold)]/20 bg-gradient-to-br from-[var(--color-gaming-gold)]/8 to-[var(--color-gaming-bg-card)] rounded-2xl shadow-gaming-card p-5 animate-fade-in" style={{ animationDelay: '120ms', animationFillMode: 'backwards' }}>

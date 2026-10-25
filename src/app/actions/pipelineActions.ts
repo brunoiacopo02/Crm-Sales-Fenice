@@ -14,14 +14,9 @@ import { eq, and, ne, isNull, isNotNull, inArray, lt, or, lte, desc, gte, sql } 
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
 import { subDays } from "date-fns"
-import { evaluateTeamGoals } from "@/app/actions/teamGoalActions"
-import { awardXpAndCoins } from "@/lib/gamificationEngine"
-import { triggerLootDrop } from "@/app/actions/lootDropActions"
-import { contributeToBoss } from "@/app/actions/bossBattleActions"
-import { incrementChestProgress } from "@/app/actions/chestActions"
-import { attackBoss, checkAndAdvanceStage } from "@/app/actions/adventureActions"
-import { maybeDropCreature } from "@/app/actions/creatureActions"
-import { incrementDuelScore } from "@/app/actions/duelActions"
+import { after } from "next/server"
+import { awardFissato, evaluateTeamChests, reverseFissato } from "@/lib/economy/awards"
+import { confermeNonHannoToccato, fissatoPremiabile, type FissatoReward } from "@/lib/economy/rules"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
@@ -530,6 +525,7 @@ export async function updateLeadOutcome(
     let effectiveUserId: string | undefined
     let isBotActor = false
     let actorRole: string | undefined
+    let sessionUserId: string | undefined
 
     if (serviceCtx) {
         // Service account (bot fissatore): nessuna sessione Supabase, tenant esplicito.
@@ -541,7 +537,8 @@ export async function updateLeadOutcome(
         const supabase = await createClient();
         const { data: { user: supabaseUser } } = await supabase.auth.getUser();
         const session = supabaseUser ? { user: { id: supabaseUser.id, role: supabaseUser.user_metadata?.role, email: supabaseUser.email, name: supabaseUser.user_metadata?.name } } : null;
-        effectiveUserId = userId || session?.user?.id
+        sessionUserId = session?.user?.id
+        effectiveUserId = userId || sessionUserId
 
         const tenant = await currentTenant()
         assertSalesArea(tenant)
@@ -550,7 +547,7 @@ export async function updateLeadOutcome(
         // diretta: currentTenant applica `meta.role ?? 'GDO'`, che e' la
         // convenzione di tutto il CRM. Letto crudo, un GDO con i metadata
         // incompleti risulterebbe senza ruolo e smetterebbe in silenzio di
-        // guadagnare forzieri, boss, duelli e creature.
+        // guadagnare le Scintille del fissato.
         actorRole = tenant.role
     }
 
@@ -694,20 +691,17 @@ export async function updateLeadOutcome(
         return { success: false, error: 'CONCURRENCY_ERROR' }
     }
 
-    // Team Goal trigger evaluation logic
-    let rewardData = null;
-
-    // Fenice Universe: chest progress for every call (chiamate) + boss attack
-    // La gamification e' l'economia dei GDO. Un venditore che lavora la sua
-    // pipeline registra gli stessi esiti, ma non entra in forzieri, boss e duelli:
-    // falserebbe classifiche costruite su un'altra gara.
-    if (effectiveUserId && !isBotActor && actorRole === 'GDO') {
-        incrementChestProgress(effectiveUserId, 'chiamate', 1).catch(e => console.error("Chest chiamate err:", e));
-        attackBoss(effectiveUserId, 'chiamata').catch(e => console.error("Adventure chiamata err:", e));
-        checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check err:", e));
-        maybeDropCreature(effectiveUserId).catch(e => console.error("Creature drop err:", e));
-        incrementDuelScore(effectiveUserId, 'chiamate', 1).catch(e => console.error("Duel score chiamate err:", e));
-    }
+    // Nuova economia (PO 25/10/2026). Le vecchie ricompense (forzieri a
+    // progressi, boss, avventura, creature, duelli, loot, obiettivi di squadra,
+    // XP e monete) non si chiamano più: walletCoins resta congelato com'è.
+    // Le Scintille vanno solo al GDO della squadra che ha fissato di persona:
+    // niente bot (201) né IA vocale (108), che passano dal serviceCtx e non
+    // hanno comunque un nome in squadra; niente premi se il client ha passato
+    // un `userId` diverso da chi è in sessione; niente per le chiamate grezze.
+    const premiabile = fissatoPremiabile({
+        serviceCtx: !!serviceCtx, isBot: isBotActor, actorRole, sessionUserId, effectiveUserId,
+    })
+    let rewardData: FissatoReward | null = null
 
     if (outcome === 'APPUNTAMENTO') {
         // Traccia il reset dello scarto Conferme nella timeline del lead.
@@ -748,35 +742,30 @@ export async function updateLeadOutcome(
             });
         }
 
-        // Gamification: award XP for appointment set (tenant attribution)
-        // Stesso gate del blocco "ogni chiamata" qui sopra: l'economia e' dei
-        // GDO. Un venditore che si fissa un appuntamento dalla sua pipeline
-        // registra lo stesso esito, ma non entra in XP, coins, forzieri, boss,
-        // duelli, obiettivi di squadra e loot: sono classifiche di un'altra gara.
-        if (effectiveUserId && !isBotActor && actorRole === 'GDO') {
-            rewardData = await awardXpAndCoins(effectiveUserId, "FISSATO", leadId, ctx.companyId).catch(e => { console.error("GameEngine FISSATO err:", e); return null; });
-
-            // Fenice Universe: chest progress for fissaggi + boss attack
-            incrementChestProgress(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Chest fissaggi err:", e));
-            attackBoss(effectiveUserId, 'fissaggio').catch(e => console.error("Adventure fissaggio err:", e));
-            checkAndAdvanceStage(effectiveUserId).catch(e => console.error("Adventure stage check fissaggio err:", e));
-            incrementDuelScore(effectiveUserId, 'fissaggi', 1).catch(e => console.error("Duel score fissaggi err:", e));
+        // Scintille del fissato e scalini personali: stanno nella risposta, la
+        // UI le mostra subito. Restituisce null per chi non è in squadra.
+        // I forzieri di squadra si valutano dopo la risposta, senza rallentarla.
+        if (premiabile && sessionUserId) {
+            rewardData = await awardFissato({ userId: sessionUserId, leadId, companyId: ctx.companyId, at: now })
+                .catch((e: unknown) => { console.error("Economia fissato err:", e); return null })
+            if (rewardData) {
+                const companyId = ctx.companyId
+                const valutaForzieri = () => evaluateTeamChests({ companyId, at: now })
+                    .catch((e: unknown) => console.error("Economia forzieri err:", e))
+                try {
+                    after(valutaForzieri)
+                } catch {
+                    await valutaForzieri()
+                }
+            }
         }
-        if (!isBotActor && actorRole === 'GDO') {
-            await evaluateTeamGoals(leadId).catch((e: any) => {
-                console.error("Team goal evaluation failed:", e)
-            })
-        }
-        // Loot drop milestone check (every 10 appointments)
-        if (effectiveUserId && !isBotActor && actorRole === 'GDO') {
-            await triggerLootDrop(effectiveUserId).catch((e: any) => {
-                console.error("Loot drop trigger failed:", e)
-            })
-            // Boss battle contribution (fire-and-forget)
-            contributeToBoss(effectiveUserId).catch((e: any) => {
-                console.error("Boss battle contribution failed:", e)
-            })
-        }
+    } else if (lead.status === 'APPOINTMENT' && !isBotActor && confermeNonHannoToccato(lead)) {
+        // Appuntamento tolto con un altro esito prima che le Conferme lo
+        // vedessero: le Scintille del fissato tornano indietro, così fissare e
+        // togliere subito non rende niente. Se poi lo rifissa, il lead paga di
+        // nuovo una volta sola.
+        await reverseFissato(leadId, lead.appointmentCreatedAt, 'appuntamento tolto con un altro esito')
+            .catch((e: unknown) => console.error("Economia storno fissato err:", e))
     }
 
     // Marketing: il lead e' morto qui. Copre i tre casi che passano da questa

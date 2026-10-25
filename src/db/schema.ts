@@ -1839,7 +1839,11 @@ export const currencyLedger = pgTable('currencyLedger', {
     metadata: jsonb('metadata'),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
-}, (t) => [index('currency_ledger_user_created_idx').on(t.userId, t.createdAt)]);
+}, (t) => [
+    index('currency_ledger_user_created_idx').on(t.userId, t.createdAt),
+    // migr. 0046: righe di un lead (Piume da allineare, regola dei 30 giorni del fissato).
+    index('currency_ledger_lead_idx').on(t.leadId),
+]);
 
 // Forzieri di squadra: uno per scalino al giorno ('giorno_1', 'giorno_2',
 // 'punta_1', 'punta_2'), creato una volta sola.
@@ -1861,7 +1865,11 @@ export const teamChestAwards = pgTable('teamChestAwards', {
     amount: integer('amount').notNull(),
     openedAt: timestamp('openedAt', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
-}, (t) => [unique().on(t.chestId, t.userId)]);
+}, (t) => [
+    unique().on(t.chestId, t.userId),
+    // migr. 0046: forzieri di una persona (i suoi ancora chiusi).
+    index('team_chest_awards_user_idx').on(t.userId, t.createdAt),
+]);
 
 // Negozio nuovo (i vecchi shopItems restano come storico).
 export const rewardItems = pgTable('rewardItems', {

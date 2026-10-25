@@ -9,20 +9,10 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 // Codici GDO richiesti da specifiche
 const GDO_CODES = [105, 113, 114, 115, 116, 117, 118, 119]
 
-/**
- * Account, nomi, stato e target li cambiano solo ADMIN e MANAGER: le uniche
- * chiamate vengono da /team (TeamManagementClient), che è già riservata a
- * loro. Fino al 25/10/2026 le action non controllavano il ruolo e un GDO
- * poteva chiamarle a mano (audit Diretta).
- */
-function soloGestori(ctx: { role: string }) {
-    if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER') throw new Error('Non autorizzato')
-}
-
 export async function seedGdoAccounts() {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    soloGestori(ctx)
+    await requireTeamEditor(ctx.userId)
     // 1. Controlla quali esistono già per evitare duplicati ciecamente
     const existingUsers = await db.select({ gdoCode: users.gdoCode }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
     const existingCodes = new Set(existingUsers.map(u => u.gdoCode).filter(Boolean))
@@ -100,14 +90,31 @@ export async function getTeamAccounts() {
 
 }
 
+/**
+ * Profili e obiettivi del team li modificano solo ADMIN e MANAGER, le stesse
+ * persone a cui /team è aperta. Il ruolo si legge dal DB e non dai metadata
+ * della sessione, che l'utente può cambiarsi da solo. Fino al 25/10/2026
+ * queste action non controllavano nessun ruolo e updateGdoProfile scriveva
+ * qualunque campo arrivasse dal client, compresi saldi e ruolo (anti-imbroglio
+ * della nuova economia).
+ */
+async function requireTeamEditor(userId: string) {
+    const [me] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1)
+    if (!me || (me.role !== 'ADMIN' && me.role !== 'MANAGER')) throw new Error("Unauthorized")
+}
+
 export async function updateGdoProfile(userId: string, data: { displayName?: string, avatarUrl?: string, isActive?: boolean }) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    soloGestori(ctx)
+    await requireTeamEditor(ctx.userId)
+    // Solo i campi previsti: il resto del payload si ignora.
+    const patch: { displayName?: string, avatarUrl?: string, isActive?: boolean } = {}
+    if (typeof data?.displayName === 'string') patch.displayName = data.displayName
+    if (typeof data?.avatarUrl === 'string') patch.avatarUrl = data.avatarUrl
+    if (typeof data?.isActive === 'boolean') patch.isActive = data.isActive
+    if (Object.keys(patch).length === 0) return { success: true }
     await db.update(users)
-        .set({
-            ...data,
-        })
+        .set(patch)
         .where(and(eq(users.id, userId), eq(users.companyId, ctx.companyId)))
 
 
@@ -117,7 +124,7 @@ export async function updateGdoProfile(userId: string, data: { displayName?: str
 export async function updateGdoTargets(dailyApptTarget: number, weeklyConfirmedTarget: number, scope: 'ALL' | string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    soloGestori(ctx)
+    await requireTeamEditor(ctx.userId)
     if (scope === 'ALL') {
         await db.update(users)
             .set({ dailyApptTarget, weeklyConfirmedTarget })
@@ -135,7 +142,7 @@ export async function updateGdoTargets(dailyApptTarget: number, weeklyConfirmedT
 export async function updateConfermeTargets(confermeTargetTier1: number, confermeTargetTier2: number, confermeExtraTier1: number, confermeExtraTier2: number, scope: 'ALL' | string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    soloGestori(ctx)
+    await requireTeamEditor(ctx.userId)
     if (scope === 'ALL') {
         await db.update(users)
             .set({ confermeTargetTier1, confermeTargetTier2, confermeExtraTier1, confermeExtraTier2 })
