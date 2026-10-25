@@ -20,7 +20,7 @@ export default async function ObiettiviDirettaPage() {
             <TitoloAdmin
                 prima="Gli"
                 accento="obiettivi"
-                dopo="della Diretta"
+                dopo="della Rinascita"
                 sotto="Le modifiche arrivano a GDO e Conferme entro un minuto."
             />
             <div className="mt-8">

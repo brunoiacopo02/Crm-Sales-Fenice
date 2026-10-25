@@ -30,15 +30,15 @@ export function InterruttoriDiretta({ flags }: { flags: Record<RuoloDiretta, boo
     const cambia = (ruolo: RuoloDiretta, chi: string) => {
         const acceso = !stato[ruolo]
         const avviso = ruolo === 'ADMIN'
-            ? `${acceso ? 'Accendere' : 'Spegnere'} la Diretta per l'admin? Cornice e menu cambiano subito.`
-            : `${acceso ? 'Accendere' : 'Spegnere'} la Diretta per ${chi}? Chi ha il CRM aperto la vede cambiare al primo aggiornamento della pagina.`
+            ? `${acceso ? 'Accendere' : 'Spegnere'} la Rinascita per l'admin? Cornice e menu cambiano subito.`
+            : `${acceso ? 'Accendere' : 'Spegnere'} la Rinascita per ${chi}? Chi ha il CRM aperto la vede cambiare al primo aggiornamento della pagina.`
         if (!window.confirm(avviso)) return
         avvia(async () => {
             try {
                 const r = await setDirettaFlag(ruolo, acceso)
                 if (r.success) {
                     setStato(s => ({ ...s, [ruolo]: acceso }))
-                    setMessaggio({ ok: true, testo: `Diretta ${acceso ? 'accesa' : 'spenta'} per ${chi}.` })
+                    setMessaggio({ ok: true, testo: `Rinascita ${acceso ? 'accesa' : 'spenta'} per ${chi}.` })
                     router.refresh()
                 } else {
                     setMessaggio({ ok: false, testo: r.error || 'Non salvato.' })
@@ -63,7 +63,7 @@ export function InterruttoriDiretta({ flags }: { flags: Record<RuoloDiretta, boo
                         type="button"
                         disabled={inCorso}
                         onClick={() => cambia(ruolo, chi)}
-                        aria-label={`${stato[ruolo] ? 'Spegni' : 'Accendi'} la Diretta per ${chi}`}
+                        aria-label={`${stato[ruolo] ? 'Spegni' : 'Accendi'} la Rinascita per ${chi}`}
                         className={bottone(stato[ruolo] ? 'linea' : 'primario', 'piccola')}
                     >
                         {stato[ruolo] ? 'Spegni' : 'Accendi'}

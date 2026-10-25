@@ -16,7 +16,6 @@ import { useRouter } from "next/navigation"
 import Papa from "papaparse"
 import { AddLeadModal } from "@/components/AddLeadModal"
 import { LeadRedistributionCard } from "@/components/LeadRedistributionCard"
-import { LaunchPoolCard } from "@/components/LaunchPoolCard"
 import { BlackSummerPoolCard } from "@/components/BlackSummerPoolCard"
 import { DatabasePoolSection } from "@/components/DatabasePoolSection"
 
@@ -537,7 +536,6 @@ export function ImportClient() {
             </div>
 
             <LeadRedistributionCard />
-            <LaunchPoolCard />
             <BlackSummerPoolCard />
             <DatabasePoolSection />
         </div>

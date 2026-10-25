@@ -9,8 +9,12 @@ test('GDO e Conferme vedono solo Fenice: niente scelta, niente banner, niente le
     assert.deepEqual(aziendeEffettive('CONFERME', entrambe), ['fenice'])
 })
 
-test('admin, manager e venditori restano come prima', () => {
-    for (const ruolo of ['ADMIN', 'MANAGER', 'VENDITORE', 'TL']) {
+test('anche l admin lavora solo su Fenice: niente scelta dopo il login, niente switcher', () => {
+    assert.deepEqual(aziendeEffettive('ADMIN', entrambe), ['fenice'])
+})
+
+test('manager e venditori restano come prima', () => {
+    for (const ruolo of ['MANAGER', 'VENDITORE', 'TL']) {
         assert.deepEqual(aziendeEffettive(ruolo, entrambe), entrambe, ruolo)
     }
 })
