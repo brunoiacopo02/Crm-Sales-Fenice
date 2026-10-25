@@ -183,7 +183,7 @@ async function main() {
     const migrated = await hasMigration0046()
     if (!migrated) {
         console.log('\nATTENZIONE: migrazione 0046 non applicata (colonne technique, usage, originalText).')
-        if (args.apply) throw new Error('Applicare drizzle/migrations/0046_citazioni_tecnica.sql prima di --apply.')
+        if (args.apply) throw new Error('Applicare drizzle/migrations/0048_citazioni_tecnica.sql prima di --apply.')
     }
     const existing = await readExistingQuotes(migrated)
     const existingById = new Map(existing.map(q => [q.id, q]))
