@@ -98,12 +98,19 @@ test('menu admin Rinascita: il gruppo della pagina corrente è quello della voce
 
 // ── Controlli statici ───────────────────────────────────────────────────
 
-test('cornice: il layout dà all\'admin la veste Diretta con le pagine vecchie su superficie chiara', () => {
+test('cornice: il layout dà all\'admin la veste Diretta, pagine vecchie comprese', () => {
     const layout = leggi('app/(dashboard)/layout.tsx')
     assert.match(layout, /const direttaAdmin = diretta && session\.user\.role === 'ADMIN'/)
-    // il <main> dell'admin resta chiaro e col carattere di sempre
+    // il <main> dell'admin ha la classe che accende la rimappa scura
     assert.match(layout, /direttaAdmin \? 'd-foglio-admin lg:rounded-tl-\[16px\]'/)
-    assert.match(leggi('app/globals.css'), /\[data-ui="diretta"\] main\.d-foglio-admin \{[^}]*font-family: var\(--default-font-family/)
+    const css = leggi('app/globals.css')
+    // pagine vecchie scure (PO 25/10/2026 sera): carattere Poppins, fondo scuro,
+    // bianco del tema rimappato sulla superficie; le pagine nuove tengono i loro colori
+    assert.match(css, /\[data-ui="diretta"\] main\.d-foglio-admin \{[^}]*font-family: var\(--font-poppins\)/)
+    assert.match(css, /\[data-ui="diretta"\] main\.d-foglio-admin \{[^}]*color-scheme: dark;[^}]*background-color: #171717/)
+    assert.match(css, /\[data-ui="diretta"\] main\.d-foglio-admin \{[^}]*--color-white: #262626;/)
+    assert.match(css, /\[data-ui="diretta"\] main\.d-foglio-admin \.d-pagina-nuova,[^{]*\{[^}]*--color-white: var\(--d-a-white\);/)
+    assert.match(leggi('components/diretta/admin/ui.tsx'), /className="d-pagina-nuova /)
     const topbar = leggi('components/Topbar.tsx')
     assert.match(topbar, /ruolo === 'GDO' \|\| ruolo === 'CONFERME' \|\| ruolo === 'ADMIN'/)
     // l'admin non sceglie più l'azienda: niente switcher nella barra scura

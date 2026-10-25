@@ -182,9 +182,9 @@ export function DiscardedBoard({ initialData }: DiscardedBoardProps) {
                     </div>
                 )}
 
-                <div className="flex flex-col gap-1">
+                <div className="flex min-w-0 max-w-full flex-col gap-1">
                     <label className="text-xs text-ash-500 font-medium">Motivo (Tag)</label>
-                    <select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)} className="px-3 py-1.5 text-sm border border-ash-300 rounded-md bg-white text-ash-700">
+                    <select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)} className="max-w-full px-3 py-1.5 text-sm border border-ash-300 rounded-md bg-white text-ash-700">
                         <option value="ALL">Tutti</option>
                         {reasons.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>

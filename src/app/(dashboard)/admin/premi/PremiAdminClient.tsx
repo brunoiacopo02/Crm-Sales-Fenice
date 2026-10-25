@@ -28,7 +28,7 @@ const MODALITA: { value: LeaderboardMode; titolo: string; testo: string }[] = [
 ]
 
 const btnArancio = 'inline-flex h-9 items-center justify-center rounded-[8px] bg-[#FF9330] px-3 text-sm font-semibold text-[#171717] transition-colors hover:bg-[#FFA552] disabled:opacity-60'
-const btnLinea = 'inline-flex h-9 items-center justify-center rounded-[8px] border-2 border-[#D9D9D9] bg-white px-3 text-sm font-medium text-[#171717] transition-colors hover:border-[#171717] disabled:opacity-60'
+const btnLinea = 'inline-flex h-9 items-center justify-center rounded-[8px] border-2 border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-900 transition-colors hover:border-neutral-900 disabled:opacity-60'
 
 export function PremiAdminClient({ richieste, modalita }: {
     richieste: { daGestire: RichiestaPremio[]; recenti: RichiestaPremio[]; catalogo: ArticoloAdmin[] }
@@ -78,12 +78,12 @@ export function PremiAdminClient({ richieste, modalita }: {
     const righe = tab === 'da_gestire' ? richieste.daGestire : richieste.recenti
 
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 font-[family-name:var(--font-poppins)] text-[#171717]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 font-[family-name:var(--font-poppins)] text-neutral-900">
             <header>
                 <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em]">
                     Premi del <span className="text-[#FF9330]">negozio</span>
                 </h1>
-                <div className="mt-1 max-w-2xl text-[15px] leading-relaxed text-[#3D3D3D]">
+                <div className="mt-1 max-w-2xl text-[15px] leading-relaxed text-neutral-700">
                     Le richieste di GDO e Conferme. Consegnato chiude la richiesta; Annulla rimborsa il saldo una volta sola.
                     Immagini e personalizzazioni sono attive subito e non passano da qui, ma si possono annullare dallo storico.
                 </div>
@@ -101,7 +101,7 @@ export function PremiAdminClient({ richieste, modalita }: {
                         role="tab"
                         aria-selected={tab === k}
                         onClick={() => setTab(k)}
-                        className={`h-10 rounded-[8px] px-4 text-sm ${tab === k ? 'bg-[#171717] font-semibold text-white' : 'font-medium text-[#3D3D3D] hover:bg-[#F2F2F2]'}`}
+                        className={`h-10 rounded-[8px] px-4 text-sm ${tab === k ? 'bg-neutral-900 font-semibold text-white' : 'font-medium text-neutral-700 hover:bg-neutral-100'}`}
                     >
                         {label}
                     </button>
@@ -111,31 +111,31 @@ export function PremiAdminClient({ richieste, modalita }: {
             {tab !== 'catalogo' && (
                 <section aria-label={tab === 'da_gestire' ? 'Richieste da gestire' : 'Storico'} className="rounded-[16px] bg-white">
                     {righe.length === 0 ? (
-                        <div className="p-6 text-[15px] text-[#3D3D3D]">
+                        <div className="p-6 text-[15px] text-neutral-700">
                             {tab === 'da_gestire' ? 'Nessuna richiesta da gestire.' : 'Ancora nessuna richiesta gestita.'}
                         </div>
                     ) : (
-                        <div className="divide-y-2 divide-[#F2F2F2]">
+                        <div className="divide-y-2 divide-neutral-100">
                             {righe.map(r => (
                                 <div key={r.id} className="px-5 py-4">
                                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                                        <div className="w-32 shrink-0 text-sm tabular-nums text-[#3D3D3D]">{dataOra(r.createdAt)}</div>
+                                        <div className="w-32 shrink-0 text-sm tabular-nums text-neutral-700">{dataOra(r.createdAt)}</div>
                                         <div className="w-40 shrink-0">
                                             <div className="font-medium">{r.persona}</div>
-                                            <div className="text-xs text-[#595959]">{r.ruolo === 'CONFERME' ? 'Conferme' : 'GDO'}</div>
+                                            <div className="text-xs text-neutral-600">{r.ruolo === 'CONFERME' ? 'Conferme' : 'GDO'}</div>
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="font-medium">{r.itemNome}</div>
-                                            <div className="text-xs text-[#595959]">
+                                            <div className="text-xs text-neutral-600">
                                                 {TIPO[r.kind] ?? r.kind}{r.giftTo ? `, regalo per ${r.giftTo}` : ''}
                                             </div>
                                         </div>
                                         <div className="w-32 shrink-0 text-right text-sm font-semibold tabular-nums">{prezzoTesto(r.currency, r.price)}</div>
                                         <div className="flex w-full flex-wrap justify-end gap-2 lg:w-[320px]">
-                                            {r.status === 'annullato' && <div className="text-sm text-[#595959]">{STATO_TESTO.annullato}</div>}
+                                            {r.status === 'annullato' && <div className="text-sm text-neutral-600">{STATO_TESTO.annullato}</div>}
                                             {r.status === 'consegnato' && annulla !== r.id && (
                                                 <>
-                                                    <div className="self-center text-sm text-[#595959]">Consegnato{r.handledAt ? ` il ${dataOra(r.handledAt)}` : ''}</div>
+                                                    <div className="self-center text-sm text-neutral-600">Consegnato{r.handledAt ? ` il ${dataOra(r.handledAt)}` : ''}</div>
                                                     <button type="button" className={btnLinea} disabled={inCorso !== null} onClick={() => setAnnulla(r.id)}>
                                                         Annulla e rimborsa
                                                     </button>
@@ -177,13 +177,13 @@ export function PremiAdminClient({ richieste, modalita }: {
             {tab === 'catalogo' && (
                 <section aria-label="Catalogo" className="overflow-x-auto rounded-[16px] bg-white">
                     {richieste.catalogo.length === 0 ? (
-                        <div className="p-6 text-[15px] text-[#3D3D3D]">
+                        <div className="p-6 text-[15px] text-neutral-700">
                             Il catalogo è vuoto: si carica con scripts/diretta/negozio-catalogo.ts --apply.
                         </div>
                     ) : (
                         <table className="w-full min-w-[640px] text-sm">
                             <thead>
-                                <tr className="text-left text-[#595959]">
+                                <tr className="text-left text-neutral-600">
                                     <th className="px-5 py-3 font-medium">Articolo</th>
                                     <th className="px-3 py-3 font-medium">Tipo</th>
                                     <th className="px-3 py-3 text-right font-medium">Prezzo</th>
@@ -193,12 +193,12 @@ export function PremiAdminClient({ richieste, modalita }: {
                             </thead>
                             <tbody>
                                 {richieste.catalogo.map(a => (
-                                    <tr key={a.id} className="border-t-2 border-[#F2F2F2]">
+                                    <tr key={a.id} className="border-t-2 border-neutral-100">
                                         <td className="px-5 py-3 font-medium">{a.name}</td>
-                                        <td className="px-3 py-3 text-[#3D3D3D]">{TIPO[a.kind] ?? a.kind}</td>
+                                        <td className="px-3 py-3 text-neutral-700">{TIPO[a.kind] ?? a.kind}</td>
                                         <td className="px-3 py-3 text-right tabular-nums">{numero(a.price)} {a.currency === 'P' ? 'Piume' : 'Scintille'}</td>
-                                        <td className="px-3 py-3 text-[#3D3D3D]">{a.giftable ? 'Sì' : 'No'}</td>
-                                        <td className="px-5 py-3 text-[#3D3D3D]">{a.isActive ? 'In vendita' : 'Spento'}</td>
+                                        <td className="px-3 py-3 text-neutral-700">{a.giftable ? 'Sì' : 'No'}</td>
+                                        <td className="px-5 py-3 text-neutral-700">{a.isActive ? 'In vendita' : 'Spento'}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -209,10 +209,10 @@ export function PremiAdminClient({ richieste, modalita }: {
 
             <section aria-label="Pagina Squadra" className="rounded-[16px] bg-white p-5 sm:p-6">
                 <h2 className="text-lg font-semibold">Pagina Squadra</h2>
-                <div className="mt-1 text-sm text-[#3D3D3D]">Come si vede la classifica della settimana a GDO e Conferme con la Rinascita accesa.</div>
+                <div className="mt-1 text-sm text-neutral-700">Come si vede la classifica della settimana a GDO e Conferme con la Rinascita accesa.</div>
                 <div className="mt-4 flex flex-col gap-2">
                     {MODALITA.map(m => (
-                        <label key={m.value} className={`flex cursor-pointer items-start gap-3 rounded-[8px] border-2 px-4 py-3 ${mode === m.value ? 'border-[#171717]' : 'border-[#F2F2F2] hover:border-[#D9D9D9]'}`}>
+                        <label key={m.value} className={`flex cursor-pointer items-start gap-3 rounded-[8px] border-2 px-4 py-3 ${mode === m.value ? 'border-neutral-900' : 'border-neutral-100 hover:border-neutral-300'}`}>
                             <input
                                 type="radio"
                                 name="leaderboard_mode"
@@ -222,12 +222,12 @@ export function PremiAdminClient({ richieste, modalita }: {
                             />
                             <span className="block">
                                 <span className="block font-medium">{m.titolo}</span>
-                                <span className="block text-sm text-[#3D3D3D]">{m.testo}</span>
+                                <span className="block text-sm text-neutral-700">{m.testo}</span>
                             </span>
                         </label>
                     ))}
                 </div>
-                {modeMsg && <div role="status" className="mt-3 text-sm text-[#3D3D3D]">{modeMsg}</div>}
+                {modeMsg && <div role="status" className="mt-3 text-sm text-neutral-700">{modeMsg}</div>}
             </section>
         </div>
     )

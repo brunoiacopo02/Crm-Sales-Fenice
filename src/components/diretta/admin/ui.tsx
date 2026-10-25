@@ -30,10 +30,14 @@ export function bottone(tipo: keyof typeof TIPI_BOTTONE, misura: 'normale' | 'pi
     return `${BOTTONE} ${TIPI_BOTTONE[tipo]} ${misura === 'piccola' ? 'h-9 px-3' : 'h-10 px-4'}`
 }
 
-/** Pagina a tutta superficie scura: copre il padding del <main> del layout. */
+/**
+ * Pagina a tutta superficie scura: copre il padding del <main> del layout.
+ * d-pagina-nuova: qui dentro non vale la rimappa scura delle pagine vecchie
+ * (globals.css), i colori sono quelli scritti nella pagina.
+ */
 export function PaginaAdmin({ children, larga = false }: { children: ReactNode; larga?: boolean }) {
     return (
-        <div className="-m-3 min-h-[calc(100%+1.5rem)] bg-[#171717] px-4 py-6 font-[family-name:var(--font-poppins)] text-[#F2F2F2] tabular-nums sm:-m-6 sm:min-h-[calc(100%+3rem)] sm:px-8 sm:py-8">
+        <div className="d-pagina-nuova -m-3 min-h-[calc(100%+1.5rem)] bg-[#171717] px-4 py-6 font-[family-name:var(--font-poppins)] text-[#F2F2F2] tabular-nums sm:-m-6 sm:min-h-[calc(100%+3rem)] sm:px-8 sm:py-8">
             <div className={`mx-auto w-full ${larga ? 'max-w-[90rem]' : 'max-w-6xl'}`}>{children}</div>
         </div>
     )
