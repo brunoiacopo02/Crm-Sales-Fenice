@@ -11,17 +11,22 @@ const EditAppointmentModal = dynamic(
 import { updateGdoAppointment } from "@/app/actions/appointmentActions"
 import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 import { useRouter } from "next/navigation"
+import { funnelLeggibile } from "@/lib/diretta/funnel"
+import { dataBreveRoma, dataOraBreveRoma } from "@/lib/diretta/formato"
 
 type LeadList = any[]
 
 export function AppointmentBoard({
     upcoming,
     past,
-    inRifissaggio = []
+    inRifissaggio = [],
+    variant,
 }: {
     upcoming: LeadList
     past: LeadList
     inRifissaggio?: LeadList
+    /** 'diretta' = veste scura del GDO (collaudo del 25/10/2026): stessi dati, stesse azioni. */
+    variant?: 'diretta'
 }) {
     const [activeTab, setActiveTab] = useState<'upcoming' | 'past' | 'rifissaggio'>('upcoming')
     const [editingLead, setEditingLead] = useState<any>(null)
@@ -31,6 +36,204 @@ export function AppointmentBoard({
     const sortedUpcoming = [...upcoming].sort((a,b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime())
     const sortedPast = [...past].sort((a,b) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime()) // Past descending
     const currentList = activeTab === 'upcoming' ? sortedUpcoming : activeTab === 'past' ? sortedPast : inRifissaggio
+
+    const salvaModifica = async (dateStr: string, timeStr: string, noteStr: string) => {
+        if (!editingLead) return
+        const newDate = new Date(`${dateStr}T${timeStr}:00`)
+        const result = await updateGdoAppointment(editingLead.id, newDate, noteStr, editingLead.version)
+        if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
+            alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
+            router.refresh()
+            return
+        }
+        setEditingLead(null)
+        router.refresh()
+    }
+
+    // ── Veste Diretta: card scure a righe che vanno a capo (niente colonne
+    // fisse: a 390 px restano dentro lo schermo e l'email si legge intera).
+    // Stessi dati, stessi ritorni da Conferme e venditore, stessa modifica.
+    if (variant === 'diretta') {
+        const tabs = [
+            { key: 'upcoming' as const, label: 'In programma', count: upcoming.length },
+            { key: 'rifissaggio' as const, label: 'Da rifissare', count: inRifissaggio.length },
+            { key: 'past' as const, label: 'Archivio', count: past.length },
+        ]
+        const quando = (iso: string | Date | null | undefined) => iso ? dataOraBreveRoma(new Date(iso)) : 'N/D'
+        const chip = "inline-flex max-w-full flex-col items-start gap-0.5 rounded-lg border px-2.5 py-1.5 text-[13px] font-medium text-[var(--d-text)]"
+        const pallino = (colore: string) => <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: colore }} aria-hidden="true" />
+        const notaChip = (testo: string) => <div className="max-w-full break-words pl-3.5 font-normal text-[var(--d-muted)]">“{testo}”</div>
+
+        const cardDiretta = (lead: any, tipo: 'upcoming' | 'past' | 'rifissaggio') => {
+            const isUpcoming = tipo === 'upcoming'
+            const isRifissaggio = tipo === 'rifissaggio'
+            const funnel = funnelLeggibile(lead.funnel)
+            const conEsiti = (lead.confirmationsOutcome && !isSelfBooked(lead.confirmationsOutcome)) || lead.salespersonOutcome || isRifissaggio || lead.confSnoozeAt
+            const etichettaModifica = isRifissaggio ? 'Rifissa' : 'Modifica'
+            return (
+                <div key={lead.id} className="flex min-w-0 flex-col gap-2.5 rounded-2xl border-2 border-transparent bg-[var(--d-surface)] px-4 py-3 text-[var(--d-text)] transition-colors hover:border-[var(--d-line)] sm:px-5">
+                    {/* Riga 1: nome, quando, modifica */}
+                    <div className="flex min-w-0 items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                            <div className="truncate text-[16px] font-semibold leading-tight" title={lead.name}>{lead.name}</div>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
+                                {isRifissaggio ? (
+                                    <div className="inline-flex items-center gap-1.5 font-semibold text-[var(--d-orange)]">
+                                        <RefreshCcw className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                                        Da rifissare{lead.recallDate ? ` (era ${quando(lead.recallDate)})` : ''}
+                                    </div>
+                                ) : (
+                                    <div className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${isUpcoming ? 'text-[var(--d-text)]' : 'text-[var(--d-muted)]'}`}>
+                                        <CalendarCheck className={`h-4 w-4 shrink-0 ${isUpcoming ? 'text-[var(--d-orange)]' : ''}`} strokeWidth={1.75} aria-hidden="true" />
+                                        {quando(lead.appointmentDate)}
+                                    </div>
+                                )}
+                                <div className="inline-flex items-center gap-1 text-[13px] text-[var(--d-faint)]">
+                                    <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                                    Fissato il {lead.appointmentCreatedAt ? dataBreveRoma(new Date(lead.appointmentCreatedAt)) : 'N/D'}
+                                </div>
+                            </div>
+                        </div>
+                        {(isUpcoming || isRifissaggio) && (
+                            <button
+                                type="button"
+                                onClick={() => setEditingLead(lead)}
+                                aria-label={`${etichettaModifica}: orario o note dell'appuntamento`}
+                                title="Modifica orario o note dell'appuntamento"
+                                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border-2 border-[var(--d-line)] px-2.5 text-[13px] font-medium text-[var(--d-text)] transition-colors hover:border-[var(--d-muted)] sm:px-3"
+                            >
+                                <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                                <div className="hidden sm:block">{etichettaModifica}</div>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Riga 2: contatti e funnel, vanno a capo invece di tagliarsi */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-[var(--d-muted)]">
+                        <div className="inline-flex items-center gap-1.5 tabular-nums">
+                            <Phone className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                            {lead.phone}
+                        </div>
+                        {lead.email && (
+                            <div className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                                <Mail className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                                <div className="min-w-0 break-all">{lead.email}</div>
+                            </div>
+                        )}
+                        {funnel && (
+                            <div className="inline-flex min-w-0 max-w-full items-center rounded-lg border border-[var(--d-line)] px-2 py-0.5 text-[12px] font-medium text-[var(--d-text)]">
+                                <div className="truncate">{funnel}</div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Nota dell'appuntamento */}
+                    {lead.appointmentNote && (
+                        <div className="break-words text-[14px] text-[var(--d-muted)]">“{lead.appointmentNote}”</div>
+                    )}
+
+                    {/* Ritorno da Conferme e venditore, come nella pagina di sempre */}
+                    {conEsiti && (
+                        <div className="flex min-w-0 flex-wrap items-start gap-2 border-t border-[var(--d-line)] pt-2.5">
+                            {isRifissaggio && (
+                                <div className={`${chip} border-[var(--d-line)]`}>
+                                    <div className="flex items-center gap-1.5">{pallino('var(--d-orange)')}Conferme: appuntamento da rifissare</div>
+                                    {lead.confRecallNotes && notaChip(lead.confRecallNotes)}
+                                </div>
+                            )}
+                            {!isRifissaggio && lead.confSnoozeAt && (
+                                <div className={`${chip} border-[var(--d-line)]`}>
+                                    <div className="flex items-center gap-1.5">
+                                        <BellRing className="h-3.5 w-3.5 shrink-0 text-[var(--d-orange)]" strokeWidth={1.75} aria-hidden="true" />
+                                        Conferme: da risentire il {quando(lead.confSnoozeAt)}
+                                    </div>
+                                </div>
+                            )}
+                            {lead.confirmationsOutcome === 'confermato' && (
+                                <div className={`${chip} border-[var(--d-line)]`}>
+                                    <div className="flex items-center gap-1.5">{pallino('var(--d-ok)')}Conferme: confermato</div>
+                                </div>
+                            )}
+                            {lead.confirmationsOutcome === 'scartato' && (
+                                <div className={`${chip} border-[var(--d-line)]`}>
+                                    <div className="flex items-center gap-1.5">{pallino('var(--d-ko)')}Conferme: scartato</div>
+                                    {lead.confirmationsDiscardReason && notaChip(lead.confirmationsDiscardReason)}
+                                </div>
+                            )}
+                            {lead.salespersonOutcome === 'Chiuso' && (
+                                <div className={`${chip} border-[var(--d-orange)]`}>
+                                    <div className="flex items-center gap-1.5">{pallino('var(--d-orange)')}Esito finale: chiuso</div>
+                                    {lead.salespersonOutcomeNotes && notaChip(lead.salespersonOutcomeNotes)}
+                                </div>
+                            )}
+                            {lead.salespersonOutcome === 'Non chiuso' && (
+                                <div className={`${chip} border-[var(--d-line)]`}>
+                                    <div className="flex items-center gap-1.5">{pallino('var(--d-faint)')}Esito finale: non chiuso</div>
+                                    {lead.salespersonOutcomeNotes && notaChip(lead.salespersonOutcomeNotes)}
+                                </div>
+                            )}
+                            {lead.salespersonOutcome === 'Lead non presenziato' && (
+                                <div className={`${chip} border-[var(--d-line)]`}>
+                                    <div className="flex items-center gap-1.5">{pallino('var(--d-ko)')}Esito finale: non si è presentato</div>
+                                    {lead.salespersonOutcomeNotes && notaChip(lead.salespersonOutcomeNotes)}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        const vuoto = activeTab === 'upcoming'
+            ? { titolo: 'Nessun appuntamento in programma', testo: 'Continua a chiamare lead per fissare appuntamenti.' }
+            : activeTab === 'rifissaggio'
+                ? { titolo: 'Nessun appuntamento da rifissare', testo: 'Quando le Conferme parcheggiano un tuo appuntamento da rifissare, lo trovi qui.' }
+                : { titolo: 'Nessun appuntamento passato', testo: 'Gli appuntamenti scorsi appariranno qui.' }
+
+        return (
+            <div className="d-board mx-auto flex w-full min-w-0 max-w-5xl flex-col">
+                <div role="tablist" aria-label="Appuntamenti" className="flex shrink-0 gap-1 overflow-x-auto pb-3">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            role="tab"
+                            aria-selected={activeTab === tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-2.5 text-[14px] transition-colors ${activeTab === tab.key
+                                ? 'bg-[var(--d-text)] font-semibold text-[var(--d-bg)]'
+                                : 'text-[var(--d-muted)] hover:text-[var(--d-text)]'}`}
+                        >
+                            {tab.label} <span className="tabular-nums">{tab.count}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex flex-col gap-2.5 pb-24">
+                    {currentList.map(lead => cardDiretta(lead, activeTab))}
+                    {currentList.length === 0 && (
+                        <div className="rounded-2xl border-2 border-[var(--d-surface)] px-6 py-12 text-center">
+                            <div className="text-[16px] font-semibold text-[var(--d-text)]">{vuoto.titolo}</div>
+                            <div className="mt-1 text-[14px] text-[var(--d-muted)]">{vuoto.testo}</div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Il modale resta chiaro: senza questo contenitore erediterebbe
+                    il testo chiaro della pagina scura e diventerebbe illeggibile. */}
+                <div className="text-ash-900 [color-scheme:light]">
+                    <EditAppointmentModal
+                        isOpen={!!editingLead}
+                        onClose={() => setEditingLead(null)}
+                        leadName={editingLead?.name || ""}
+                        initialDate={editingLead?.appointmentDate || null}
+                        initialNote={editingLead?.appointmentNote || ""}
+                        onSave={salvaModifica}
+                    />
+                </div>
+            </div>
+        )
+    }
 
     const renderCard = (lead: any, variant: 'upcoming' | 'past' | 'rifissaggio') => {
         const isUpcoming = variant === 'upcoming'
@@ -255,18 +458,7 @@ export function AppointmentBoard({
                 leadName={editingLead?.name || ""}
                 initialDate={editingLead?.appointmentDate || null}
                 initialNote={editingLead?.appointmentNote || ""}
-                onSave={async (dateStr, timeStr, noteStr) => {
-                    if (!editingLead) return
-                    const newDate = new Date(`${dateStr}T${timeStr}:00`)
-                    const result = await updateGdoAppointment(editingLead.id, newDate, noteStr, editingLead.version)
-                    if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
-                        alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
-                        router.refresh()
-                        return
-                    }
-                    setEditingLead(null)
-                    router.refresh()
-                }}
+                onSave={salvaModifica}
             />
         </div>
     )
