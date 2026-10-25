@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getUserCreatures } from "@/app/actions/creatureActions";
 import { getAllOffers, getGdoUsersForTrading } from "@/app/actions/tradingActions";
 import dynamic from "next/dynamic";
+import { isDirettaOn } from "@/lib/diretta/settings";
 
 const TradingClient = dynamic(() => import("./TradingClient"), { loading: () => <div className="animate-pulse space-y-4"><div className="h-10 bg-ash-200 rounded-lg w-1/3" /><div className="grid grid-cols-2 gap-4"><div className="h-64 bg-ash-100 rounded-xl" /><div className="h-64 bg-ash-100 rounded-xl" /></div></div> });
 
@@ -13,6 +14,8 @@ export default async function TradingPage() {
 
     const role = user.user_metadata?.role;
     if (role !== "GDO") redirect("/");
+    // Con la Diretta gli scambi non esistono più: si torna alla home.
+    if (await isDirettaOn(role)) redirect("/");
 
     const [myCreatures, offers, gdoUsers] = await Promise.all([
         getUserCreatures(user.id),

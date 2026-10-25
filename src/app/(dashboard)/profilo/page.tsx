@@ -14,6 +14,10 @@ import { getAllOffers, getGdoUsersForTrading } from '@/app/actions/tradingAction
 import { redirect } from 'next/navigation';
 import { createClient } from "@/utils/supabase/server"
 import dynamic from 'next/dynamic';
+import { isDirettaOn } from '@/lib/diretta/settings';
+import { getNegozioView } from '@/app/actions/negozioActions';
+import { ProfiloDiretta } from '@/components/diretta/negozio/ProfiloDiretta';
+import { PaginaDiretta } from '@/components/diretta/negozio/ui';
 
 const ProfileClient = dynamic(() => import('./ProfileClient'), { loading: () => <div className="animate-pulse space-y-4"><div className="h-48 bg-ash-100 rounded-xl" /><div className="grid grid-cols-2 gap-4"><div className="h-32 bg-ash-100 rounded-xl" /><div className="h-32 bg-ash-100 rounded-xl" /></div><div className="h-64 bg-ash-100 rounded-xl" /></div> });
 
@@ -26,6 +30,17 @@ export default async function ProfiloPage() {
     }
 
     const role = supabaseUser.user_metadata?.role;
+
+    // Diretta accesa: profilo semplice (nome, immagine, saldo, storico del
+    // negozio), senza creature, avventura, scambi e quest.
+    if (await isDirettaOn(role)) {
+        const view = await getNegozioView();
+        return (
+            <PaginaDiretta>
+                <ProfiloDiretta view={view} />
+            </PaginaDiretta>
+        );
+    }
     // Unified gamification: CONFERME now uses individual progress like GDO/VENDITORE.
     // isTeam is kept as a prop for legacy components but never true in the unified model.
     const isTeam = false;
