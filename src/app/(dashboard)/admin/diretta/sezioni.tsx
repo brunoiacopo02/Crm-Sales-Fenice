@@ -17,9 +17,9 @@ import {
     statoLeadTesto, statoVoce, statoVoceTesto, type StatoVoce, type Valuta,
 } from "@/lib/diretta/centro"
 import { BarraScalini, NonDisponibile, Riga, Sezione, Vuoto, oraDi, quando } from "@/components/diretta/admin/ui"
+import { numeroIt } from "@/lib/diretta/formato"
 
-const NUM = new Intl.NumberFormat('it-IT')
-const numero = (n: number) => NUM.format(n)
+const numero = (n: number) => numeroIt(n)
 const prezzo = (currency: string, n: number) => `${numero(n)} ${nomeValuta(currency, n)}`
 
 /** Sottotitolo dentro una sezione. */

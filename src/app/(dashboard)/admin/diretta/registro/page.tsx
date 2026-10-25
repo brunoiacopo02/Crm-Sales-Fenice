@@ -5,11 +5,12 @@ import { getRegistroDettaglio } from "@/app/actions/centroDirettaActions"
 import { causaleTesto, importoConSegno } from "@/lib/diretta/centro"
 import { nomeValuta } from "@/lib/diretta/negozio"
 import { toRomeDateStr } from "@/lib/dateUtils"
+import { numeroIt } from "@/lib/diretta/formato"
 import { Indietro, PaginaAdmin, TitoloAdmin, Vuoto, bottone, quando } from "@/components/diretta/admin/ui"
 
 export const dynamic = "force-dynamic"
 
-const NUM = new Intl.NumberFormat("it-IT")
+const NUM = { format: (n: number) => numeroIt(n) }
 const campo = "h-10 rounded-[8px] border-2 border-[#3D3D3D] bg-[#171717] px-3 text-[14px] text-[#F2F2F2] [color-scheme:dark] focus:border-[#FF9330] focus:outline-none"
 
 // Registro delle monete (PO 25/10/2026): gli ultimi movimenti di Scintille e

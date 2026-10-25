@@ -4,6 +4,8 @@
 // per ciò che conta adesso, con il testo nero sopra. Raggi 8 e 16, niente
 // ombre, gradienti, pillole, maiuscolo spaziato o monospace.
 
+import { euroIt } from "@/lib/diretta/formato"
+
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--d-orange)]'
 
 export const dUi = {
@@ -44,7 +46,5 @@ export function dChip(active: boolean): string {
 
 /** Euro in italiano, il simbolo dopo il numero. */
 export function formatEuro(n: number): string {
-    return new Intl.NumberFormat('it-IT', {
-        style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
-    }).format(n)
+    return euroIt(n)
 }

@@ -4,6 +4,7 @@
 // (centroDirettaActions), qui si contano e si mettono in parole.
 
 import { fissatoValido } from './fissati'
+import { euroIt, numeroConSegno } from './formato'
 
 export type Valuta = 'S' | 'P'
 
@@ -273,18 +274,12 @@ export function giorniTesto(n: number): string {
     return n === 1 ? '1 giorno' : `${n} giorni`
 }
 
-const NUM = new Intl.NumberFormat('it-IT')
-
-/** Importo del registro col segno: "+10", "-2". */
+/** Importo del registro col segno: "+10", "-2". Scritto a mano, vedi ./formato. */
 export function importoConSegno(n: number): string {
-    return n > 0 ? `+${NUM.format(n)}` : NUM.format(n)
+    return numeroConSegno(n)
 }
 
 /** Euro alla maniera italiana, con i centesimi solo se ci sono: 12 €, 12,50 €. */
 export function euroTesto(n: number): string {
-    const intero = Number.isInteger(n)
-    return new Intl.NumberFormat('it-IT', {
-        style: 'currency', currency: 'EUR',
-        minimumFractionDigits: intero ? 0 : 2, maximumFractionDigits: intero ? 0 : 2,
-    }).format(n)
+    return euroIt(n)
 }

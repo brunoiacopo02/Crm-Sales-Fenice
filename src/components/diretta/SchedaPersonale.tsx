@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react"
 import type { GamificationTargets } from "@/lib/diretta/config"
 import type { DirettaMia } from "@/lib/diretta/live"
 import { binarioPresenze, chiaveSettimana, etichettaSettimana, euro } from "@/lib/diretta/home"
+import { numeroIt } from "@/lib/diretta/formato"
 
 export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; obiettivi: GamificationTargets }) {
     const presenze = mia?.presenzeSettimana ?? 0
@@ -99,10 +100,10 @@ function Saldo({ etichetta, valore }: { etichetta: string; valore: number | null
     return (
         <div className="relative rounded-lg bg-[#2E2E2E] px-3 py-2.5">
             <div className="text-[13px] text-[#BFBFBF]">{etichetta}</div>
-            <div className="text-[20px] font-semibold tabular-nums">{valore ?? ''}</div>
+            <div className="text-[20px] font-semibold tabular-nums">{valore === null ? '' : numeroIt(valore)}</div>
             {guadagno && (
                 <div key={guadagno.chiave} aria-hidden="true" className="d-svanisce absolute right-3 top-2 text-[14px] font-semibold text-[#FF9330]">
-                    +{guadagno.n}
+                    +{numeroIt(guadagno.n)}
                 </div>
             )}
         </div>

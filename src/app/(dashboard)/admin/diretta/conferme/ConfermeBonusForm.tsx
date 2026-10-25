@@ -7,6 +7,7 @@
 import { useMemo, useState } from "react"
 import { saveConfermeBonusSettings, type ConfermeBonusSettings } from "@/app/actions/confermeDirettaActions"
 import { progressoSquadra, type BonusPeriodo, type BonusUnita, type ObiettiviConferme } from "@/lib/conferme/bonus"
+import { euroIt } from "@/lib/diretta/formato"
 
 type ObiettiviForm = Record<string, { confermeGiorno: string; presenzeSettimana: string; chiusureMese: string }>
 
@@ -17,7 +18,7 @@ const COLONNE: Record<(typeof KEYS)[number], string> = {
     chiusureMese: 'Chiusure al mese',
 }
 
-const eur = (n: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n)
+const eur = (n: number) => euroIt(n)
 
 function toForm(obiettivi: Record<string, ObiettiviConferme>, accountIds: string[]): ObiettiviForm {
     const out: ObiettiviForm = {}

@@ -11,6 +11,7 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import { ChevronRight } from "lucide-react"
 import { toRomeDateStr } from "@/lib/dateUtils"
+import { dataOraBreveRoma, oraRoma } from "@/lib/diretta/formato"
 
 const BOTTONE = 'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[8px] text-[14px] transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 const TIPI_BOTTONE = {
@@ -129,11 +130,10 @@ export function BarraScalini({ valore, scalini, etichetta }: { valore: number; s
     )
 }
 
-// Date e ore assolute con fuso esplicito: stesso testo sul server e nel browser.
-const ORA = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false })
-const GIORNO_ORA = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
-export const oraDi = (iso: string) => ORA.format(new Date(iso))
-export const giornoOraDi = (iso: string) => GIORNO_ORA.format(new Date(iso))
+// Date e ore assolute in ora di Roma, scritte a mano (src/lib/diretta/formato.ts):
+// stesso testo sul server e nel browser.
+export const oraDi = (iso: string) => oraRoma(new Date(iso))
+export const giornoOraDi = (iso: string) => dataOraBreveRoma(new Date(iso))
 
 /** Ora se è di oggi (giorno di Roma, YYYY-MM-DD), altrimenti giorno e ora. */
 export function quando(iso: string, oggi: string): string {

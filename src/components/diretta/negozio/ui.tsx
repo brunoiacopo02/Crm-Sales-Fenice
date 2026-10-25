@@ -4,6 +4,7 @@
 
 import type { ReactNode } from "react"
 import { nomeValuta } from "@/lib/diretta/negozio"
+import { dataBreveRoma, dataOraBreveRoma, numeroIt } from "@/lib/diretta/formato"
 
 export const btn = {
     // Azione che conta adesso: arancione, testo nero.
@@ -65,16 +66,14 @@ export function AvatarDiretta({ nome, immagine, cornice = false, size = 40 }: { 
     )
 }
 
-const NUM = new Intl.NumberFormat('it-IT')
-export const numero = (n: number) => NUM.format(n)
+// Numeri e date scritti a mano (src/lib/diretta/formato.ts): stesso testo sul
+// server e nel browser, niente errori di idratazione.
+export const numero = (n: number) => numeroIt(n)
 
 export const prezzoTesto = (currency: string, n: number) => `${numero(n)} ${nomeValuta(currency, n)}`
 
-// Date assolute con fuso esplicito: stesso testo sul server e nel browser.
-const DATA = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: 'numeric', month: 'short' })
-const DATA_ORA = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-export const dataBreve = (iso: string) => DATA.format(new Date(iso))
-export const dataOra = (iso: string) => DATA_ORA.format(new Date(iso))
+export const dataBreve = (iso: string) => dataBreveRoma(new Date(iso))
+export const dataOra = (iso: string) => dataOraBreveRoma(new Date(iso))
 
 export const STATO_TESTO: Record<string, string> = {
     richiesto: 'In attesa',

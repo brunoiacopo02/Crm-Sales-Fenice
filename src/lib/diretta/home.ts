@@ -6,6 +6,7 @@
 
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
 import { fasciaBounds, shiftWindow, type GamificationTargets } from './config'
+import { euroIt, meseLungo } from './formato'
 
 const GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato']
 
@@ -238,14 +239,14 @@ export function tipoMomento(n: number, scalini: [number, number]): 'pieno' | 'sc
     return 'semplice'
 }
 
-/** Euro senza decimali alla maniera italiana: 24 €. */
+/** Euro senza decimali alla maniera italiana: 24 €, 1.200 €. Scritto a mano (./formato). */
 export function euro(n: number): string {
-    return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
+    return euroIt(Math.round(n))
 }
 
 /** Settimana in chiaro dal lunedì YYYY-MM-DD: "settimana del 12 ottobre". */
 export function etichettaSettimana(lunedi: string): string {
     const giorno = Number(lunedi.slice(8, 10))
-    const mese = new Intl.DateTimeFormat('it-IT', { timeZone: 'UTC', month: 'long' }).format(new Date(`${lunedi}T12:00:00Z`))
+    const mese = meseLungo(Number(lunedi.slice(5, 7)))
     return `settimana del${giorno === 1 || giorno === 8 || giorno === 11 ? "l'" : ' '}${giorno} ${mese}`
 }

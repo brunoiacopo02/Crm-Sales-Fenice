@@ -10,11 +10,13 @@ import { useEffect, useRef, useState } from "react"
 import { getSquadraView } from "@/app/actions/squadraActions"
 import { blocchiSquadra, fasePunta, fraseScalini, type PuntaSnapshot, type SquadraView } from "@/lib/diretta/squadra"
 import { AvatarDiretta, TitoloDiretta } from "./ui"
+import { euroIt, giornoMeseLungo, oraRoma } from "@/lib/diretta/formato"
 
 const AGGIORNA_MS = 30_000
-const ORA = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' })
-const EURO = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const GIORNO = (iso: string) => new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`))
+// Ore, euro e giorni scritti a mano (src/lib/diretta/formato.ts): stesso testo sul server e nel browser.
+const ORA = { format: (d: Date) => oraRoma(d) }
+const EURO = { format: (n: number) => euroIt(n) }
+const GIORNO = (iso: string) => giornoMeseLungo(iso)
 
 function Blocchi({ valore, scalini, tono }: { valore: number; scalini: [number, number]; tono: 'su-arancione' | 'su-scuro' }) {
     const { blocchi, primoScalinoIndex } = blocchiSquadra(valore, scalini)

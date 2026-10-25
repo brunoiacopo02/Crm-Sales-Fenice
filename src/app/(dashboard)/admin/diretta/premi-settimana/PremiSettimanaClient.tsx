@@ -8,6 +8,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { calcolaPremiSettimanaAdmin, type SettimanaPremi } from "@/app/actions/premiSettimanaActions"
 import { euroPerPersona, type PremiSettimana } from "@/lib/economy/premiSettimana"
+import { euroIt } from "@/lib/diretta/formato"
 
 interface Regole {
     classifica: [number, number, number]
@@ -17,7 +18,7 @@ interface Regole {
     conferme: { unita: 'presenze' | 'chiusure'; periodo: 'settimana' | 'mese'; soglia: number; euro: number }
 }
 
-const eur = (n: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n)
+const eur = (n: number) => euroIt(n)
 const giornoMese = (iso: string) => new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(new Date(`${iso}T12:00:00Z`))
 const quando = (iso: string) => new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(iso))
 

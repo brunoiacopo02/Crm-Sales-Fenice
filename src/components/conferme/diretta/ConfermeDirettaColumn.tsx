@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { getConfermeDirettaStats, type ConfermeDirettaStats } from "@/app/actions/confermeDirettaActions"
 import { CONFERMATO_EVENT, confermeOggiConOttimistiche } from "@/lib/conferme/direttaStats"
 import { formatEuro } from "./ui"
+import { numeroIt } from "@/lib/diretta/formato"
 import type { Obiettivo } from "@/lib/economy/rules"
 
 const POLL_MS = 30_000
@@ -209,8 +210,8 @@ export function ConfermeDirettaColumn() {
             <div className="h-0.5 bg-[var(--d-orange-ink)] opacity-20" />
 
             <dl aria-label="Il tuo saldo">
-                <Riga label="Scintille" value={saldo.scintille.toLocaleString('it-IT')} />
-                <Riga label="Piume" value={saldo.piume.toLocaleString('it-IT')} />
+                <Riga label="Scintille" value={numeroIt(saldo.scintille)} />
+                <Riga label="Piume" value={numeroIt(saldo.piume)} />
             </dl>
         </aside>
     )
