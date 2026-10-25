@@ -7,31 +7,20 @@ import {
     salesLeadSurveys,
     leads,
     users,
-    coinTransactions,
     notifications,
 } from "@/db/schema";
 import { createClient } from "@/utils/supabase/server";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import crypto from "crypto";
-import { checkAchievements } from "@/app/actions/achievementActions";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isConfermeTl } from "@/lib/confermeTl";
+// Le costanti di monete e XP di @/lib/surveys/rewards non si usano più: dal
+// restyle "Diretta" (PO 25/10/2026) i sondaggi non pagano e non penalizzano.
 import {
-    GDO_SURVEY_COMPLETE_COINS,
-    GDO_SURVEY_COMPLETE_XP,
-    GDO_SURVEY_PARTIAL_COINS,
-    GDO_SURVEY_PARTIAL_XP,
-    CONFERME_SURVEY_COMPLETE_COINS,
-    CONFERME_SURVEY_COMPLETE_XP,
     MIN_FILL_DURATION_MS,
     CLUSTER_WINDOW_MS,
     CLUSTER_COUNT_THRESHOLD,
     MONOTONOUS_CONSECUTIVE,
-    INVALIDATION_PENALTY_COINS,
-    COIN_REASON_GDO_SURVEY,
-    COIN_REASON_GDO_SURVEY_PARTIAL,
-    COIN_REASON_CONFERME_SURVEY,
-    COIN_REASON_SURVEY_INVALIDATED,
 } from "@/lib/surveys/rewards";
 import {
     EXCLUDED_FUNNEL,
@@ -230,48 +219,10 @@ export async function saveGdoSurvey(
             }).where(and(eq(gdoLeadSurveys.leadId, leadId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
         }
 
-        // Grant rewards only on non-suspicious saves.
-        let rewardCoins = 0;
-        let rewardXp = 0;
-        if (!suspicious) {
-            if (completed) {
-                rewardCoins = GDO_SURVEY_COMPLETE_COINS;
-                rewardXp = GDO_SURVEY_COMPLETE_XP;
-                await db.update(users)
-                    .set({
-                        walletCoins: sql`${users.walletCoins} + ${rewardCoins}`,
-                        experience: sql`${users.experience} + ${rewardXp}`,
-                    })
-                    .where(and(eq(users.id, session.id), eq(users.companyId, ctx.companyId)));
-                await db.insert(coinTransactions).values({
-                    id: crypto.randomUUID(),
-                    userId: session.id,
-                    companyId: ctx.companyId,
-                    amount: rewardCoins,
-                    reason: COIN_REASON_GDO_SURVEY,
-                });
-                // Fire-and-forget achievement check
-                checkAchievements(session.id).catch(() => { /* best-effort */ });
-            } else if (payload.earlyExitReason) {
-                rewardCoins = GDO_SURVEY_PARTIAL_COINS;
-                rewardXp = GDO_SURVEY_PARTIAL_XP;
-                await db.update(users)
-                    .set({
-                        walletCoins: sql`${users.walletCoins} + ${rewardCoins}`,
-                        experience: sql`${users.experience} + ${rewardXp}`,
-                    })
-                    .where(and(eq(users.id, session.id), eq(users.companyId, ctx.companyId)));
-                await db.insert(coinTransactions).values({
-                    id: crypto.randomUUID(),
-                    userId: session.id,
-                    companyId: ctx.companyId,
-                    amount: rewardCoins,
-                    reason: COIN_REASON_GDO_SURVEY_PARTIAL,
-                });
-            }
-        }
-
-        return { success: true, suspicious, rewards: { coins: rewardCoins, xp: rewardXp } };
+        // Nessuna moneta né XP per il sondaggio (restyle "Diretta", PO
+        // 25/10/2026): la vecchia economia è congelata e la nuova premia solo
+        // risultati, non attività. `rewards` resta a zero per i client.
+        return { success: true, suspicious, rewards: { coins: 0, xp: 0 } };
     } catch (e) {
         console.error("saveGdoSurvey error:", e);
         return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -380,28 +331,8 @@ export async function saveConfermeSurvey(
             }).where(and(eq(confermeLeadSurveys.leadId, leadId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
         }
 
-        let rewardCoins = 0;
-        let rewardXp = 0;
-        if (!suspicious) {
-            rewardCoins = CONFERME_SURVEY_COMPLETE_COINS;
-            rewardXp = CONFERME_SURVEY_COMPLETE_XP;
-            await db.update(users)
-                .set({
-                    walletCoins: sql`${users.walletCoins} + ${rewardCoins}`,
-                    experience: sql`${users.experience} + ${rewardXp}`,
-                })
-                .where(and(eq(users.id, session.id), eq(users.companyId, ctx.companyId)));
-            await db.insert(coinTransactions).values({
-                id: crypto.randomUUID(),
-                userId: session.id,
-                companyId: ctx.companyId,
-                amount: rewardCoins,
-                reason: COIN_REASON_CONFERME_SURVEY,
-            });
-            checkAchievements(session.id).catch(() => { /* best-effort */ });
-        }
-
-        return { success: true, suspicious, rewards: { coins: rewardCoins, xp: rewardXp } };
+        // Nessuna moneta né XP per la scheda (restyle "Diretta", PO 25/10/2026).
+        return { success: true, suspicious, rewards: { coins: 0, xp: 0 } };
     } catch (e) {
         console.error("saveConfermeSurvey error:", e);
         return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -509,24 +440,15 @@ export async function invalidateGdoSurvey(surveyId: string): Promise<{ success: 
             invalidatedBy: session.id,
             invalidatedAt: new Date(),
         }).where(and(eq(gdoLeadSurveys.id, surveyId), eq(gdoLeadSurveys.companyId, ctx.companyId)));
-        // Apply penalty
-        await db.update(users)
-            .set({ walletCoins: sql`${users.walletCoins} + ${INVALIDATION_PENALTY_COINS}` })
-            .where(and(eq(users.id, row.gdoUserId), eq(users.companyId, ctx.companyId)));
-        await db.insert(coinTransactions).values({
-            id: crypto.randomUUID(),
-            userId: row.gdoUserId,
-            companyId: ctx.companyId,
-            amount: INVALIDATION_PENALTY_COINS,
-            reason: COIN_REASON_SURVEY_INVALIDATED,
-        });
+        // Niente penalità in monete: la vecchia economia è congelata dal
+        // restyle "Diretta" (PO 25/10/2026). L'invalidazione resta e si avvisa.
         await db.insert(notifications).values({
             id: crypto.randomUUID(),
             recipientUserId: row.gdoUserId,
             companyId: ctx.companyId,
             type: "survey_invalidated",
             title: "Sondaggio invalidato",
-            body: `Un Manager ha invalidato un tuo sondaggio (ID: ${surveyId}). Penalità: ${INVALIDATION_PENALTY_COINS} coins.`,
+            body: `Un Manager ha invalidato un tuo sondaggio (ID: ${surveyId}).`,
         });
         return { success: true };
     } catch (e) {
@@ -547,23 +469,14 @@ export async function invalidateConfermeSurvey(surveyId: string): Promise<{ succ
             invalidatedBy: session.id,
             invalidatedAt: new Date(),
         }).where(and(eq(confermeLeadSurveys.id, surveyId), eq(confermeLeadSurveys.companyId, ctx.companyId)));
-        await db.update(users)
-            .set({ walletCoins: sql`${users.walletCoins} + ${INVALIDATION_PENALTY_COINS}` })
-            .where(and(eq(users.id, row.confermeUserId), eq(users.companyId, ctx.companyId)));
-        await db.insert(coinTransactions).values({
-            id: crypto.randomUUID(),
-            userId: row.confermeUserId,
-            companyId: ctx.companyId,
-            amount: INVALIDATION_PENALTY_COINS,
-            reason: COIN_REASON_SURVEY_INVALIDATED,
-        });
+        // Niente penalità in monete: vecchia economia congelata (PO 25/10/2026).
         await db.insert(notifications).values({
             id: crypto.randomUUID(),
             recipientUserId: row.confermeUserId,
             companyId: ctx.companyId,
             type: "survey_invalidated",
             title: "Sondaggio invalidato",
-            body: `Un Manager ha invalidato un tuo sondaggio (ID: ${surveyId}). Penalità: ${INVALIDATION_PENALTY_COINS} coins.`,
+            body: `Un Manager ha invalidato un tuo sondaggio (ID: ${surveyId}).`,
         });
         return { success: true };
     } catch (e) {

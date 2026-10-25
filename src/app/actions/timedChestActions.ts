@@ -7,6 +7,7 @@ import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { getStreakMultiplier } from "@/lib/streakUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 /**
  * Chest rarity tiers — same weights as LOOT_DROP but independent config for timed chests.
@@ -70,6 +71,8 @@ export async function claimTimedChestReward(userId: string): Promise<{
     };
     error?: string;
 }> {
+    // Forziere a tempo spento dal restyle "Diretta" (PO 25/10/2026): vedi src/lib/economy/legacy.ts.
+    if (VECCHIA_ECONOMIA_CONGELATA) return { success: false, error: 'Forziere a tempo non più attivo' };
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);

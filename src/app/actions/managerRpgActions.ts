@@ -6,6 +6,7 @@ import { eq, and, inArray, sql, gte, lte, isNotNull } from "drizzle-orm";
 import { getEvolutionStage, GAME_CONSTANTS, ROADMAP_REWARDS, EVOLUTION_STAGES, UNLOCKABLE_TITLES } from "@/lib/gamificationEngine";
 import { parseISO, endOfMonth, getDay, addDays, isWithinInterval } from "date-fns";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 // ---- Helpers replicated from gdoPerformanceActions to avoid circular deps ----
 
@@ -385,6 +386,9 @@ export async function updateGdoBaseSalary(userId: string, newSalary: number) {
 }
 
 export async function addGdoCoins(userId: string, amount: number) {
+    // Vecchie monete congelate dal restyle "Diretta" (PO 25/10/2026). Questa
+    // action non controllava nessun ruolo: chiunque poteva accreditarsi monete.
+    if (VECCHIA_ECONOMIA_CONGELATA) throw new Error("Le vecchie monete sono congelate");
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     const u = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, userId)));

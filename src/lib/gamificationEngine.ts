@@ -164,9 +164,10 @@ export async function awardXpAndCoins(
         const { getActiveEventMultipliers } = await import('@/lib/seasonalEventUtils');
         const eventMult = await getActiveEventMultipliers();
 
-        // Apply equipped creature bonus
-        const { getEquippedCreatureBonus } = await import('@/app/actions/creatureActions');
-        const creatureBonus = await getEquippedCreatureBonus(userId);
+        // Bonus creatura spento (restyle "Diretta", PO 25/10/2026): le creature
+        // non esistono più e non moltiplicano niente. awardXpAndCoins non viene
+        // più chiamata dai flussi degli esiti: resta per lo storico.
+        const creatureBonus = { xpBonus: 0, coinBonus: 0 };
 
         // Combined multipliers: streak × event × (1 + creature bonus)
         const effectiveXp = Math.floor(reward.xp * streakMult * eventMult.xp * (1 + creatureBonus.xpBonus));

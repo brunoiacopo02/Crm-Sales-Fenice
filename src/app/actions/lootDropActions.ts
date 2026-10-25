@@ -6,6 +6,7 @@ import { eq, and, isNotNull, count } from "drizzle-orm";
 import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
 
 /**
  * Roll a weighted random rarity for loot drop.
@@ -43,6 +44,8 @@ export async function triggerLootDrop(userId: string): Promise<{
     };
     error?: string;
 }> {
+    // Loot spento dal restyle "Diretta" (PO 25/10/2026): vedi src/lib/economy/legacy.ts.
+    if (VECCHIA_ECONOMIA_CONGELATA) return { success: false, error: 'Loot non più attivo' };
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
@@ -121,6 +124,8 @@ export async function getUserPendingLootDrops(userId: string): Promise<{
         droppedAt: Date;
     }>;
 }> {
+    // Nessun loot da aprire: la vecchia economia è congelata (src/lib/economy/legacy.ts).
+    if (VECCHIA_ECONOMIA_CONGELATA) return { drops: [] };
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
@@ -158,6 +163,7 @@ export async function openLootDrop(userId: string, lootDropId: string): Promise<
     };
     error?: string;
 }> {
+    if (VECCHIA_ECONOMIA_CONGELATA) return { success: false, error: 'Loot non più attivo' };
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
