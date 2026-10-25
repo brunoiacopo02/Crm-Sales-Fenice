@@ -146,6 +146,18 @@ export function resolveRoutingWindow(now: Date): RoutingWindow {
 }
 
 /**
+ * La domenica (a Roma) i lead freschi sono SOLO del bot (PO 25/10/2026: "la
+ * domenica è solo gestione del bot, da lunedì vanno ai GDO"). Vince su tutto:
+ * kill-switch BOT_ROUTING, finestre di rientro, flag dei GDO (acAutoIntake,
+ * tetti, scorte). Il webhook AC la usa anche per togliere il ripiego sugli
+ * umani: con il bot non disponibile il lead finisce nei fallimenti
+ * recuperabili, non a un GDO.
+ */
+export function freschiSoloAlBot(now: Date): boolean {
+    return romeClock(now).weekday === 0;
+}
+
+/**
  * Legge un istante ISO da una env. Un valore illeggibile vale come env assente:
  * una finestra scritta male non deve poter cambiare il routing di nascosto.
  */
@@ -203,6 +215,8 @@ export function finestraRientro(now: Date): 'gdo_only' | 'bot_half' | null {
  * perché per i giorni che copre deve vincere sulle fasce orarie.
  */
 export function getLeadRouting(now: Date): LeadRouting {
+    // Domenica: tutto al bot, prima di qualunque interruttore (PO 25/10/2026).
+    if (freschiSoloAlBot(now)) return 'bot_only';
     const raw = process.env.BOT_ROUTING?.trim().toLowerCase();
     if (raw && OFF_VALUES.has(raw)) return 'legacy';
     const rientro = finestraRientro(now);

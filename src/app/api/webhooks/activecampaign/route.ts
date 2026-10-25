@@ -16,7 +16,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
-import { getLeadRouting, finestraRientro, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, finestraRientro, freschiSoloAlBot, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
 import { ordineRipiegoFreschi, type LivelloFreschi } from "@/lib/diretta/instradamento";
 import { inviaNotificaAppenaArrivato } from "@/lib/diretta/notificaArrivoDb";
@@ -1238,7 +1238,9 @@ export async function POST(req: NextRequest) {
             // delle env, 12 lead su 12 stavano ancora andando al bot.
             const rientro = finestraRientro(now);
             const holidayWindow = !rientro && isBotHolidayWindow(now);
-            const routing: LeadRouting = holidayWindow ? 'bot_only' : getLeadRouting(now);
+            // Domenica (PO 25/10/2026): i freschi solo al bot, mai ai GDO, qualunque flag.
+            const domenicaSoloBot = freschiSoloAlBot(now);
+            const routing: LeadRouting = holidayWindow || domenicaSoloBot ? 'bot_only' : getLeadRouting(now);
 
             // Pipeline autonoma venditore: i primi N lead freschi vanno a lui, poi
             // tutto torna esattamente come prima.
@@ -1390,7 +1392,9 @@ export async function POST(req: NextRequest) {
                     if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
                 } else {
                     eligible = await selectBotPool(false);
-                    if (eligible.length === 0) { eligible = await selectFreshWithOverflow(); fallbackUsed = true; }
+                    // La domenica niente ripiego sugli umani: senza bot il lead va
+                    // nei fallimenti recuperabili (no_gdo), non a un GDO.
+                    if (eligible.length === 0 && !domenicaSoloBot) { eligible = await selectFreshWithOverflow(); fallbackUsed = true; }
                 }
 
                 if (eligible.length === 0) {

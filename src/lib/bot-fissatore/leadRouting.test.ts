@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRoutingWindow, getLeadRouting, BOT_DAILY_MIN } from './leadRouting';
+import { resolveRoutingWindow, getLeadRouting, freschiSoloAlBot, BOT_DAILY_MIN } from './leadRouting';
 
 /** Istante UTC → Date. Il server Vercel gira in UTC, la regola è su Europe/Rome. */
 const utc = (iso: string) => new Date(iso);
@@ -166,7 +166,8 @@ test('BOT_ROUTING=off riporta il round-robin storico', () => {
     for (const off of ['off', 'OFF', 'none', 'disabled', 'false', '0']) {
         withEnv(off, () => {
             assert.equal(getLeadRouting(utc('2026-08-24T11:00:00Z')), 'legacy');
-            assert.equal(getLeadRouting(utc('2026-08-23T09:00:00Z')), 'legacy');
+            // La domenica no: dal 25/10/2026 e' del bot anche con l'interruttore spento.
+            assert.equal(getLeadRouting(utc('2026-08-23T09:00:00Z')), 'bot_only');
             // Anche la fascia protetta del sabato cede all'interruttore.
             assert.equal(getLeadRouting(utc('2026-08-22T10:00:00Z')), 'legacy');
         });
@@ -257,7 +258,8 @@ test('scaduta la sospensione subentra il meta e meta', () => {
     withRientro({ sospesoFino: '2026-09-19T11:00:00Z', metaFino: '2026-09-20T22:00:00Z' }, () => {
         assert.equal(getLeadRouting(utc('2026-09-19T10:59:00Z')), 'gdo_only');
         assert.equal(getLeadRouting(utc('2026-09-19T11:00:00Z')), 'bot_half');
-        assert.equal(getLeadRouting(utc('2026-09-20T12:00:00Z')), 'bot_half');
+        // Domenica 20/09: dal 25/10/2026 la domenica vince anche sul rientro.
+        assert.equal(getLeadRouting(utc('2026-09-20T12:00:00Z')), 'bot_only');
     });
 });
 
@@ -285,5 +287,43 @@ test('il kill-switch BOT_ROUTING=off vince anche sul rientro', () => {
         withEnv('off', () => {
             assert.equal(getLeadRouting(utc('2026-09-18T12:00:00Z')), 'legacy');
         });
+    });
+});
+
+// ===== Domenica solo bot (PO 25/10/2026) =====
+
+test('domenica: i freschi vanno solo al bot, qualunque interruttore', () => {
+    // 25/10/2026 e' domenica ed e' il giorno del cambio d'ora (CEST → CET alle 03:00).
+    const istanti = [
+        '2026-10-24T22:00:00Z', // 00:00 Roma (CEST)
+        '2026-10-25T09:00:00Z', // 10:00 Roma (CET)
+        '2026-10-25T14:00:00Z', // 15:00 Roma, fascia GDO dei feriali
+        '2026-10-25T22:59:00Z', // 23:59 Roma
+    ];
+    for (const iso of istanti) {
+        assert.equal(freschiSoloAlBot(utc(iso)), true, iso);
+        withRientro({ sospesoFino: '2026-12-31T00:00:00Z' }, () => {
+            assert.equal(getLeadRouting(utc(iso)), 'bot_only', `${iso} con sospensione`);
+        });
+        withRientro({ metaFino: '2026-12-31T00:00:00Z' }, () => {
+            assert.equal(getLeadRouting(utc(iso)), 'bot_only', `${iso} con meta e meta`);
+        });
+        withEnv('off', () => {
+            assert.equal(getLeadRouting(utc(iso)), 'bot_only', `${iso} con BOT_ROUTING=off`);
+        });
+    }
+});
+
+test('lunedi-sabato: invariato, i freschi possono andare ai GDO', () => {
+    // Sabato 24/10 23:59 Roma e lunedi 26/10 00:00 Roma (CET, +1) non sono domenica.
+    assert.equal(freschiSoloAlBot(utc('2026-10-24T21:59:00Z')), false);
+    assert.equal(freschiSoloAlBot(utc('2026-10-25T23:00:00Z')), false);
+    // Lunedi 26/10 15:00 Roma: fascia mista, come prima.
+    assert.equal(getLeadRouting(utc('2026-10-26T14:00:00Z')), 'bot_first');
+    withEnv('off', () => {
+        assert.equal(getLeadRouting(utc('2026-10-26T14:00:00Z')), 'legacy');
+    });
+    withRientro({ sospesoFino: '2026-12-31T00:00:00Z' }, () => {
+        assert.equal(getLeadRouting(utc('2026-10-26T14:00:00Z')), 'gdo_only');
     });
 });
