@@ -203,12 +203,14 @@ export interface VoceGiorno {
     quote: unknown | null
     reflection: string | null
     approved: boolean
+    /** Spiegazione spenta dall'admin: si vede come approvata senza testo. */
+    showReflection?: boolean
 }
 
 export function statoVoce(v: VoceGiorno): StatoVoce {
     if (!v.quote) return 'manca'
     if (!v.approved) return 'da_approvare'
-    return v.reflection?.trim() ? 'approvata' : 'approvata_vuota'
+    return v.reflection?.trim() && v.showReflection !== false ? 'approvata' : 'approvata_vuota'
 }
 
 /** Il giorno ha una riflessione (o un consiglio) approvata con un testo. */

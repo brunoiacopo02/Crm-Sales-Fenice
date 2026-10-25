@@ -6,6 +6,8 @@
 // - Consiglio di vendita: senza approvazione solo la frase e l'autore; se
 //   manca la frase quel giorno non c'è consiglio. Con l'approvazione il
 //   consiglio va nell'approfondimento e, se manca la frase, il titolo è la tecnica.
+// - Se l'admin spegne la spiegazione (showReflection false) il giorno resta
+//   approvato ma si vede come senza: sola frase e autore.
 // - La bozza suggerita (suggestedReflection) non si mostra mai così com'è.
 
 export interface DisplayRow {
@@ -18,6 +20,8 @@ export interface DisplayRow {
     isActive: boolean
     approved: boolean
     reflection: string | null
+    /** Spiegazione online (migr. 0052); assente = online, come prima. */
+    showReflection?: boolean
 }
 
 export interface ShownQuote {
@@ -49,7 +53,7 @@ export function canSee(roles: readonly string[], role: string | null | undefined
 }
 
 function approvedText(row: DisplayRow): string | null {
-    if (!row.approved) return null
+    if (!row.approved || row.showReflection === false) return null
     const t = row.reflection?.trim()
     return t ? t : null
 }

@@ -4,8 +4,8 @@
 // una volta ogni quarto d'ora al massimo. Il filtro per ruolo è fatto dopo,
 // in memoria. Le modifiche dell'admin invalidano la cache (QUOTES_CACHE_TAG).
 //
-// Non dipende dalla migrazione 0048: se la colonna technique non c'è ancora,
-// si legge senza (la tecnica serve solo al titolo di alcuni consigli). E un
+// Non dipende dalle migrazioni 0048 e 0052: se technique o showReflection non
+// ci sono ancora, si legge senza (spiegazione online, come prima). E un
 // errore qualsiasi ferma le letture per qualche minuto: unstable_cache non
 // salva le eccezioni, e senza freno ogni render rifarebbe la query che fallisce.
 
@@ -39,7 +39,7 @@ async function loadDayRows(day: string): Promise<DisplayRow[]> {
     if (!senzaColonne0048.fermo()) {
         try {
             return await db
-                .select({ ...campiBase, technique: dailyQuotes.technique })
+                .select({ ...campiBase, technique: dailyQuotes.technique, showReflection: dailyQuoteSchedule.showReflection })
                 .from(dailyQuoteSchedule)
                 .innerJoin(dailyQuotes, eq(dailyQuotes.id, dailyQuoteSchedule.quoteId))
                 .where(eq(dailyQuoteSchedule.day, day))
@@ -58,7 +58,7 @@ async function loadDayRows(day: string): Promise<DisplayRow[]> {
 }
 
 // La chiave include il giorno (argomento): a mezzanotte di Roma si legge una riga nuova.
-const cachedDayRows = unstable_cache(loadDayRows, ['daily-quotes-day-v1'], {
+const cachedDayRows = unstable_cache(loadDayRows, ['daily-quotes-day-v2'], {
     revalidate: 900,
     tags: [QUOTES_CACHE_TAG],
 })

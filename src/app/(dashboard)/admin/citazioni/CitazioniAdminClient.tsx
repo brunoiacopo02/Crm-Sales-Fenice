@@ -7,11 +7,14 @@
 // sua fonte, campo per modificarla o riscriverla (al massimo 10 righe) e i
 // pulsanti Approva, Togli approvazione e Cambia frase. I giorni approvati si
 // chiudono in una scheda corta, che si riapre con Modifica.
+// Ogni giorno l'admin può anche saltare la frase ed estrarne un'altra a caso
+// (con la sua spiegazione), scegliere se la spiegazione va online e scrivere
+// una frase sua, con autore e spiegazione.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { ExternalLink } from "lucide-react"
-import { approveQuoteDay, assignQuoteToDay, listQuoteChoices, unapproveQuoteDay } from "@/app/actions/quoteActions"
+import { approveQuoteDay, assignQuoteToDay, drawAnotherQuote, listQuoteChoices, unapproveQuoteDay, writeOwnQuote } from "@/app/actions/quoteActions"
 import { countLines, REFLECTION_MAX_LINES } from "@/lib/quotes/display"
 import type { ActionResult, AdminCalendarDay, AdminDayEntry, AdminQuote, QuoteChoice } from "@/lib/quotes/adminTypes"
 import { giornoDaSistemare, giorniTesto, maiuscola, riepilogoCalendario, statoVoce, statoVoceTesto } from "@/lib/diretta/centro"
@@ -109,7 +112,7 @@ export function CitazioniAdminClient({ days, closedDays }: { days: AdminCalendar
                     <div className="mt-3 grid items-start gap-4 lg:grid-cols-2">
                         {(["citazione", "vendita"] as const).map(kind => (
                             <EntryCard
-                                key={`${kind}-${d[kind].quote?.id ?? "vuoto"}-${d[kind].approved ? 1 : 0}-${d[kind].reflection ?? ""}`}
+                                key={`${kind}-${d[kind].quote?.id ?? "vuoto"}-${d[kind].approved ? 1 : 0}-${d[kind].showReflection ? 1 : 0}-${d[kind].reflection ?? ""}`}
                                 day={d.day}
                                 kind={kind}
                                 entry={d[kind]}
@@ -156,12 +159,14 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
     const [error, setError] = useState<string | null>(null)
     const [picking, setPicking] = useState(false)
     const [aperta, setAperta] = useState(!entry.approved)
+    const [online, setOnline] = useState(entry.showReflection)
+    const [scrivendo, setScrivendo] = useState(false)
     const [pending, startTransition] = useTransition()
     const lines = countLines(text)
     const tooLong = lines > REFLECTION_MAX_LINES
     const stato = statoVoce(entry)
     const nomeTesto = kind === "citazione" ? "riflessione" : "consiglio"
-    const nonSalvato = entry.approved && text.trim() !== (entry.reflection ?? "").trim()
+    const nonSalvato = entry.approved && (text.trim() !== (entry.reflection ?? "").trim() || online !== entry.showReflection)
 
     const run = (fn: () => Promise<ActionResult>, after?: () => void) => {
         setError(null)
@@ -180,7 +185,23 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
         })
     }
 
-    const approva = () => run(() => approveQuoteDay(day, kind, text))
+    const approva = () => run(() => approveQuoteDay(day, kind, text, online))
+    const estrai = () => run(() => drawAnotherQuote(day, kind), () => { onAssigned(); setPicking(false); setScrivendo(false) })
+    const apriScelta = () => { setScrivendo(false); setPicking(p => !p) }
+    const apriScrivi = () => { setPicking(false); setScrivendo(s => !s) }
+    const altreAzioni = (
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+            <button type="button" className={bottone("testo", "piccola")} disabled={pending} onClick={estrai}>
+                {q ? "Salta, estrai un'altra" : "Estrai a caso"}
+            </button>
+            <button type="button" className={bottone("testo", "piccola")} disabled={pending} onClick={apriScelta} aria-expanded={picking}>
+                {picking ? "Chiudi la scelta" : q ? "Cambia frase" : "Scegli tu"}
+            </button>
+            <button type="button" className={bottone("testo", "piccola")} disabled={pending} onClick={apriScrivi} aria-expanded={scrivendo}>
+                {scrivendo ? "Chiudi" : "Scrivi la tua"}
+            </button>
+        </div>
+    )
 
     return (
         <article className="flex min-w-0 flex-col gap-4 rounded-[16px] bg-[#262626] p-5">
@@ -199,8 +220,11 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
                         <>
                             {entry.reflection?.trim() ? (
                                 <div className="border-t-2 border-[#2E2E2E] pt-4">
-                                    <div className="text-[13px] text-[#BFBFBF]">{kind === "citazione" ? "Riflessione approvata" : "Consiglio approvato"}</div>
-                                    <div className="mt-1 whitespace-pre-line text-[14px] leading-relaxed">{entry.reflection}</div>
+                                    <div className="text-[13px] text-[#BFBFBF]">
+                                        {kind === "citazione" ? "Riflessione approvata" : "Consiglio approvato"}
+                                        {!entry.showReflection && <span className="font-semibold text-[#FF9330]">, non online: si vede solo la frase</span>}
+                                    </div>
+                                    <div className={`mt-1 whitespace-pre-line text-[14px] leading-relaxed ${entry.showReflection ? "" : "text-[#8C8C8C]"}`}>{entry.reflection}</div>
                                 </div>
                             ) : (
                                 <div className="border-t-2 border-[#2E2E2E] pt-4 text-[14px] text-[#BFBFBF]">
@@ -214,9 +238,7 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
                                 <button type="button" className={bottone("linea", "piccola")} disabled={pending} onClick={() => run(() => unapproveQuoteDay(day, kind))}>
                                     Togli approvazione
                                 </button>
-                                <button type="button" className={`${bottone("testo", "piccola")} ml-auto`} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
-                                    {picking ? "Chiudi la scelta" : "Cambia frase"}
-                                </button>
+                                {altreAzioni}
                             </div>
                         </>
                     ) : (
@@ -260,6 +282,21 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
                                         {lines} righe su {REFLECTION_MAX_LINES}{tooLong ? ", troppe: va accorciato" : ""}
                                     </div>
                                     {nonSalvato && <div className="text-[#BFBFBF]">Modifiche non salvate</div>}
+                                </div>
+                                <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-[14px]">
+                                    <input
+                                        type="checkbox"
+                                        checked={online && !!text.trim()}
+                                        disabled={pending || !text.trim()}
+                                        onChange={e => setOnline(e.target.checked)}
+                                        className="h-5 w-5 accent-[#FF9330]"
+                                    />
+                                    <span>
+                                        {kind === "citazione" ? "Metti online la riflessione" : "Metti online il consiglio"}
+                                        <span className="text-[#BFBFBF]">{online || !text.trim() ? ", in Approfondisci" : ": spento, si vede solo la frase"}</span>
+                                    </span>
+                                </label>
+                                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[13px]">
                                     {kind === "vendita" && !entry.approved && (
                                         <div className="text-[#BFBFBF]">
                                             {q.text.trim() ? "Senza approvazione si vede solo la frase." : "Senza frase e senza approvazione quel giorno non c'è consiglio."}
@@ -278,16 +315,14 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
                                     </button>
                                 )}
                                 {entry.approved && (
-                                    <button type="button" className={bottone("testo")} disabled={pending} onClick={() => { setText(iniziale); setAperta(false) }}>
+                                    <button type="button" className={bottone("testo")} disabled={pending} onClick={() => { setText(iniziale); setOnline(entry.showReflection); setAperta(false) }}>
                                         Annulla
                                     </button>
                                 )}
                                 <button type="button" className={bottone("testo")} disabled={pending || !text} onClick={() => setText("")}>
                                     Svuota
                                 </button>
-                                <button type="button" className={`${bottone("testo")} ml-auto`} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
-                                    {picking ? "Chiudi la scelta" : "Cambia frase"}
-                                </button>
+                                {altreAzioni}
                             </div>
                         </>
                     )}
@@ -295,13 +330,21 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
             ) : (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-[14px] text-[#BFBFBF]">Nessuna frase assegnata a questo giorno.</div>
-                    <button type="button" className={bottone("primario", "piccola")} disabled={pending} onClick={() => setPicking(p => !p)} aria-expanded={picking}>
-                        {picking ? "Chiudi la scelta" : "Scegli una frase"}
-                    </button>
+                    {altreAzioni}
                 </div>
             )}
 
             {error && <div role="alert" className="text-[14px] font-semibold text-[#FF9330]">{error}</div>}
+
+            {scrivendo && (
+                <OwnQuoteForm
+                    day={day}
+                    kind={kind}
+                    approved={entry.approved}
+                    pending={pending}
+                    onSave={(input) => run(() => writeOwnQuote(day, kind, input), () => { onAssigned(); setScrivendo(false) })}
+                />
+            )}
 
             {picking && (
                 <Picker
@@ -314,6 +357,72 @@ function EntryCard({ day, kind, entry, loadChoices, onAssigned }: {
                 />
             )}
         </article>
+    )
+}
+
+const FRASE_MAX_RIGHE = 2
+
+function OwnQuoteForm({ day, kind, approved, pending, onSave }: {
+    day: string
+    kind: Kind
+    approved: boolean
+    pending: boolean
+    onSave: (input: { text: string; author: string; reflection: string; showReflection: boolean }) => void
+}) {
+    const [frase, setFrase] = useState("")
+    const [autore, setAutore] = useState("")
+    const [spiegazione, setSpiegazione] = useState("")
+    const [online, setOnline] = useState(true)
+    const righeFrase = countLines(frase)
+    const righe = countLines(spiegazione)
+    const troppa = righeFrase > FRASE_MAX_RIGHE || righe > REFLECTION_MAX_LINES
+    const id = `own-${kind}-${day}`
+    return (
+        <div className="flex flex-col gap-3 border-t-2 border-[#2E2E2E] pt-4">
+            <div className="text-[13px] text-[#BFBFBF]">
+                {approved ? "Il giorno è approvato: la tua frase prende il suo posto, già approvata." : "La tua frase prende il posto di quella del giorno, già approvata."}
+            </div>
+            <div>
+                <label htmlFor={`${id}-frase`} className="text-[13px] text-[#BFBFBF]">{kind === "citazione" ? "Citazione" : "Frase del consiglio"}</label>
+                <textarea id={`${id}-frase`} value={frase} onChange={e => setFrase(e.target.value)} rows={2} className={`${CAMPO} mt-1.5 resize-y`} />
+                <div className={`mt-1 text-[13px] tabular-nums ${righeFrase > FRASE_MAX_RIGHE ? "font-semibold text-[#FF9330]" : "text-[#BFBFBF]"}`}>
+                    {righeFrase} righe su {FRASE_MAX_RIGHE}
+                </div>
+            </div>
+            <div>
+                <label htmlFor={`${id}-autore`} className="text-[13px] text-[#BFBFBF]">Autore</label>
+                <input id={`${id}-autore`} value={autore} onChange={e => setAutore(e.target.value)} maxLength={80} className={`${CERCA} mt-1.5`} />
+            </div>
+            <div>
+                <label htmlFor={`${id}-spieg`} className="text-[13px] text-[#BFBFBF]">
+                    {kind === "citazione" ? "Riflessione (facoltativa)" : "Consiglio (facoltativo)"}
+                </label>
+                <textarea id={`${id}-spieg`} value={spiegazione} onChange={e => setSpiegazione(e.target.value)} rows={6} className={`${CAMPO} mt-1.5 resize-y`} />
+                <div className={`mt-1 text-[13px] tabular-nums ${righe > REFLECTION_MAX_LINES ? "font-semibold text-[#FF9330]" : "text-[#BFBFBF]"}`}>
+                    {righe} righe su {REFLECTION_MAX_LINES}
+                </div>
+                <label className="mt-2 flex cursor-pointer items-center gap-2.5 text-[14px]">
+                    <input
+                        type="checkbox"
+                        checked={online && !!spiegazione.trim()}
+                        disabled={pending || !spiegazione.trim()}
+                        onChange={e => setOnline(e.target.checked)}
+                        className="h-5 w-5 accent-[#FF9330]"
+                    />
+                    <span>{kind === "citazione" ? "Metti online la riflessione" : "Metti online il consiglio"}</span>
+                </label>
+            </div>
+            <div>
+                <button
+                    type="button"
+                    className={bottone("primario")}
+                    disabled={pending || troppa || !frase.trim() || !autore.trim()}
+                    onClick={() => onSave({ text: frase, author: autore, reflection: spiegazione, showReflection: online })}
+                >
+                    Salva e approva
+                </button>
+            </div>
+        </div>
     )
 }
 

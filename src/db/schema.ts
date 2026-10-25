@@ -1951,6 +1951,8 @@ export const dailyQuoteSchedule = pgTable('dailyQuoteSchedule', {
     approved: boolean('approved').default(false).notNull(),
     approvedBy: text('approvedBy'),
     approvedAt: timestamp('approvedAt', { withTimezone: true, mode: 'date' }),
+    // migr. 0052: la spiegazione approvata va in "Approfondisci" solo se true
+    showReflection: boolean('showReflection').default(true).notNull(),
 }, (t) => [primaryKey({ columns: [t.day, t.kind] })]);
 
 // Premi in euro della settimana lun-sab (migr. 0051, PO 25/10/2026): classifica

@@ -26,6 +26,8 @@ export interface AdminDayEntry {
     reflection: string | null
     approved: boolean
     approvedAt: string | null
+    /** La spiegazione approvata va online (migr. 0052). */
+    showReflection: boolean
 }
 
 export interface AdminCalendarDay {
@@ -47,6 +49,14 @@ export interface QuoteChoice {
     occasions: string[]
     /** Giorni in cui è già in calendario (passati e futuri). */
     usedOn: string[]
+}
+
+/** Frase scritta dall'admin per un giorno. */
+export interface OwnQuoteInput {
+    text: string
+    author: string
+    reflection: string
+    showReflection: boolean
 }
 
 export type ActionResult = { ok: true } | { ok: false; error: string }

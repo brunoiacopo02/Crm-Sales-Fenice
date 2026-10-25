@@ -115,6 +115,7 @@ test('citazioni: stato di una voce', () => {
     assert.equal(statoVoce(voce(true, false, 'bozza')), 'da_approvare')
     assert.equal(statoVoce(voce(true, true, '  ')), 'approvata_vuota')
     assert.equal(statoVoce(voce(true, true, 'Riflessione')), 'approvata')
+    assert.equal(statoVoce({ ...voce(true, true, 'Riflessione'), showReflection: false }), 'approvata_vuota')
     assert.equal(haRiflessioneApprovata(voce(true, true, 'Riflessione')), true)
     assert.equal(haRiflessioneApprovata(voce(true, false, 'Riflessione')), false)
     assert.equal(statoVoceTesto('approvata_vuota', 'citazione'), 'Approvata senza riflessione')

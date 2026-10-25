@@ -78,3 +78,13 @@ test('righe: a capo per parola a 90 caratteri, righe vuote contate', () => {
     assert.equal(countLines('uno\n\ndue'), 3)
     assert.equal(countLines('x'.repeat(200)), 3)
 })
+
+test('spiegazione spenta dall’admin: citazione e consiglio restano, senza approfondimento', () => {
+    const citazione = shownCitazione(row({ approved: true, reflection: 'Riflessione', showReflection: false }), 'GDO')
+    assert.equal(citazione?.text, 'Non abbiamo poco tempo, ma ne abbiamo perduto molto.')
+    assert.equal(citazione?.deepen, null)
+    const vendita = shownVendita(row({ kind: 'vendita', text: 'Chi fa domande guida.', approved: true, reflection: 'Consiglio', showReflection: false }), 'GDO')
+    assert.deepEqual(vendita, { text: 'Chi fa domande guida.', author: 'Seneca', deepen: null })
+    // senza frase e con il consiglio spento, quel giorno non c'è consiglio
+    assert.equal(shownVendita(row({ kind: 'vendita', text: '', technique: 'Tecnica', approved: true, reflection: 'Consiglio', showReflection: false }), 'GDO'), null)
+})

@@ -3,9 +3,12 @@
 // Citazione del giorno e consiglio di vendita (PO 25/10/2026).
 // - getTodayQuotes: quello che vede chi lavora oggi, filtrato per ruolo (in cache).
 // - Il resto è solo ADMIN: calendario dei prossimi giorni, approvazione delle
-//   riflessioni e dei consigli, cambio della citazione assegnata a un giorno.
+//   riflessioni e dei consigli (con la spiegazione online o no), cambio della
+//   citazione assegnata a un giorno, a mano o estraendone un'altra a caso, e
+//   frasi scritte dall'admin.
 // Ogni modifica invalida la cache del giorno, così le schermate la vedono subito.
 
+import { randomInt, randomUUID } from 'node:crypto'
 import { revalidatePath, updateTag } from 'next/cache'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/db'
@@ -15,11 +18,16 @@ import { toRomeDateStr } from '@/lib/dateUtils'
 import { readTodayQuotes, QUOTES_CACHE_TAG } from '@/lib/quotes/today'
 import { countLines, emptyToday, REFLECTION_MAX_LINES, type TodayQuotes } from '@/lib/quotes/display'
 import { addDays, isValidDay, parseClosedDays, workingDaysInRange, QUOTES_CLOSED_DAYS_KEY } from '@/lib/quotes/calendar'
-import type { ActionResult, AdminCalendarDay, AdminDayEntry, AdminQuote, QuoteChoice } from '@/lib/quotes/adminTypes'
+import type { ActionResult, AdminCalendarDay, AdminDayEntry, AdminQuote, OwnQuoteInput, QuoteChoice } from '@/lib/quotes/adminTypes'
 
 type Kind = 'citazione' | 'vendita'
 const isKind = (k: unknown): k is Kind => k === 'citazione' || k === 'vendita'
 const REFLECTION_MAX_CHARS = 2000
+/** La frase sta in 2 righe, l'autore in una. */
+const PHRASE_MAX_LINES = 2
+const AUTHOR_MAX_CHARS = 80
+/** Nell'estrazione si evitano le frasi già in calendario a meno di 120 giorni. */
+const DRAW_GAP_DAYS = 120
 
 /** ADMIN letto dalla tabella users, non dai metadati della sessione. */
 function requireAdmin(): Promise<{ id: string } | null> {
@@ -62,7 +70,7 @@ function toAdminQuote(q: QuoteRow): AdminQuote {
     }
 }
 
-const emptyEntry = (): AdminDayEntry => ({ quote: null, reflection: null, approved: false, approvedAt: null })
+const emptyEntry = (): AdminDayEntry => ({ quote: null, reflection: null, approved: false, approvedAt: null, showReflection: true })
 
 /** Prossimi giorni lavorativi (da oggi) con citazione e consiglio assegnati. */
 export async function getQuoteCalendar(count = 14): Promise<
@@ -93,6 +101,7 @@ export async function getQuoteCalendar(count = 14): Promise<
                 reflection: s.reflection,
                 approved: s.approved,
                 approvedAt: s.approvedAt ? s.approvedAt.toISOString() : null,
+                showReflection: s.showReflection,
             }
         }
         return { ok: true, days: calendar, closedDays }
@@ -108,18 +117,29 @@ function checkDay(day: string, kind: string): string | null {
     return null
 }
 
-/** Approva il testo così com'è, modificato o riscritto (vuoto = giorno confermato senza approfondimento). */
-export async function approveQuoteDay(day: string, kind: string, reflection: string): Promise<ActionResult> {
+/** Testo della spiegazione ripulito, o l'errore da mostrare. */
+function cleanReflection(reflection: string): { text: string } | { error: string } {
+    const text = (reflection ?? '').replace(/\r\n/g, '\n').trim()
+    if (text.length > REFLECTION_MAX_CHARS) return { error: 'Testo troppo lungo.' }
+    if (countLines(text) > REFLECTION_MAX_LINES) return { error: `Al massimo ${REFLECTION_MAX_LINES} righe.` }
+    return { text }
+}
+
+/**
+ * Approva il testo così com'è, modificato o riscritto (vuoto = giorno confermato senza approfondimento).
+ * Con showReflection false il testo resta salvato ma online va la sola frase.
+ */
+export async function approveQuoteDay(day: string, kind: string, reflection: string, showReflection = true): Promise<ActionResult> {
     const admin = await requireAdmin()
     if (!admin) return { ok: false, error: 'Non autorizzato.' }
     const invalid = checkDay(day, kind)
     if (invalid) return { ok: false, error: invalid }
-    const text = (reflection ?? '').replace(/\r\n/g, '\n').trim()
-    if (text.length > REFLECTION_MAX_CHARS) return { ok: false, error: 'Testo troppo lungo.' }
-    if (countLines(text) > REFLECTION_MAX_LINES) return { ok: false, error: `Al massimo ${REFLECTION_MAX_LINES} righe.` }
+    const clean = cleanReflection(reflection)
+    if ('error' in clean) return { ok: false, error: clean.error }
+    const text = clean.text
     try {
         const updated = await db.update(dailyQuoteSchedule)
-            .set({ reflection: text || null, approved: true, approvedBy: admin.id, approvedAt: new Date() })
+            .set({ reflection: text || null, approved: true, approvedBy: admin.id, approvedAt: new Date(), showReflection: showReflection !== false })
             .where(and(eq(dailyQuoteSchedule.day, day), eq(dailyQuoteSchedule.kind, kind)))
             .returning({ day: dailyQuoteSchedule.day })
         if (updated.length === 0) return { ok: false, error: 'Quel giorno non ha una citazione assegnata.' }
@@ -164,7 +184,7 @@ export async function assignQuoteToDay(day: string, kind: string, quoteId: strin
             .values({ day, kind, quoteId, reflection: null, approved: false })
             .onConflictDoUpdate({
                 target: [dailyQuoteSchedule.day, dailyQuoteSchedule.kind],
-                set: { quoteId, reflection: null, approved: false, approvedBy: null, approvedAt: null },
+                set: { quoteId, reflection: null, approved: false, approvedBy: null, approvedAt: null, showReflection: true },
             })
     } catch (e) {
         console.error('[citazioni] cambio citazione', e)
@@ -200,4 +220,92 @@ export async function listQuoteChoices(kind: string): Promise<{ ok: true; items:
         console.error('[citazioni] elenco citazioni', e)
         return { ok: false, error: 'Elenco non disponibile.' }
     }
+}
+
+const dayNumber = (day: string) => Math.round(Date.parse(`${day}T12:00:00Z`) / 86_400_000)
+
+/**
+ * Salta la frase del giorno e ne estrae un'altra a caso, da approvare come le
+ * altre (la spiegazione suggerita arriva nel campo). Prima quelle con frase e
+ * spiegazione mai in calendario a meno di 120 giorni, poi quelle con la sola
+ * frase, poi qualsiasi frase diversa da quella del giorno.
+ */
+export async function drawAnotherQuote(day: string, kind: string): Promise<ActionResult> {
+    const admin = await requireAdmin()
+    if (!admin) return { ok: false, error: 'Non autorizzato.' }
+    const invalid = checkDay(day, kind)
+    if (invalid) return { ok: false, error: invalid }
+    try {
+        const [quotes, scheduled] = await Promise.all([
+            db.select({ id: dailyQuotes.id, text: dailyQuotes.text, suggestedReflection: dailyQuotes.suggestedReflection })
+                .from(dailyQuotes).where(and(eq(dailyQuotes.kind, kind), eq(dailyQuotes.isActive, true))),
+            db.select({ day: dailyQuoteSchedule.day, quoteId: dailyQuoteSchedule.quoteId })
+                .from(dailyQuoteSchedule).where(eq(dailyQuoteSchedule.kind, kind)),
+        ])
+        const current = scheduled.find(s => s.day === day)?.quoteId ?? null
+        const target = dayNumber(day)
+        const nearby = new Set(scheduled
+            .filter(s => s.day !== day && Math.abs(dayNumber(s.day) - target) <= DRAW_GAP_DAYS)
+            .map(s => s.quoteId))
+        const others = quotes.filter(q => q.id !== current && q.text.trim())
+        const tiers = [
+            others.filter(q => !nearby.has(q.id) && q.suggestedReflection?.trim()),
+            others.filter(q => !nearby.has(q.id)),
+            others,
+        ]
+        const pool = tiers.find(t => t.length > 0)
+        if (!pool) return { ok: false, error: 'Non ci sono altre frasi da estrarre.' }
+        const quoteId = pool[randomInt(pool.length)].id
+        await db.insert(dailyQuoteSchedule)
+            .values({ day, kind, quoteId, reflection: null, approved: false })
+            .onConflictDoUpdate({
+                target: [dailyQuoteSchedule.day, dailyQuoteSchedule.kind],
+                set: { quoteId, reflection: null, approved: false, approvedBy: null, approvedAt: null, showReflection: true },
+            })
+    } catch (e) {
+        console.error('[citazioni] estrazione', e)
+        return { ok: false, error: 'Estrazione non riuscita.' }
+    }
+    invalidate()
+    return { ok: true }
+}
+
+/**
+ * Frase scritta dall'admin per quel giorno: entra fra le frasi (fonte 'admin')
+ * e il giorno risulta già approvato, con la spiegazione online o no.
+ */
+export async function writeOwnQuote(day: string, kind: string, input: OwnQuoteInput): Promise<ActionResult> {
+    const admin = await requireAdmin()
+    if (!admin) return { ok: false, error: 'Non autorizzato.' }
+    const invalid = checkDay(day, kind)
+    if (invalid) return { ok: false, error: invalid }
+    const text = (input?.text ?? '').replace(/\r\n/g, '\n').trim()
+    const author = (input?.author ?? '').replace(/\s+/g, ' ').trim()
+    if (!text) return { ok: false, error: 'Scrivi la frase.' }
+    if (countLines(text) > PHRASE_MAX_LINES) return { ok: false, error: `La frase sta al massimo in ${PHRASE_MAX_LINES} righe.` }
+    if (!author) return { ok: false, error: "Scrivi l'autore." }
+    if (author.length > AUTHOR_MAX_CHARS) return { ok: false, error: 'Autore troppo lungo.' }
+    const clean = cleanReflection(input?.reflection ?? '')
+    if ('error' in clean) return { ok: false, error: clean.error }
+    const reflection = clean.text || null
+    const showReflection = input?.showReflection !== false
+    const quoteId = `admin-${randomUUID()}`
+    const now = new Date()
+    const approval = { quoteId, reflection, approved: true, approvedBy: admin.id, approvedAt: now, showReflection }
+    try {
+        await db.transaction(async tx => {
+            await tx.insert(dailyQuotes).values({
+                id: quoteId, kind, text, author, suggestedReflection: reflection,
+                reflectionSource: 'admin', verified: true, isActive: true,
+            })
+            await tx.insert(dailyQuoteSchedule)
+                .values({ day, kind, ...approval })
+                .onConflictDoUpdate({ target: [dailyQuoteSchedule.day, dailyQuoteSchedule.kind], set: approval })
+        })
+    } catch (e) {
+        console.error("[citazioni] frase scritta dall'admin", e)
+        return { ok: false, error: 'Salvataggio non riuscito.' }
+    }
+    invalidate()
+    return { ok: true }
 }
