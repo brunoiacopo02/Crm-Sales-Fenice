@@ -10,6 +10,7 @@ const OutcomeModal = dynamic(
 )
 import { Flame, Inbox } from "lucide-react"
 import { DirettaUiProvider } from "./diretta/DirettaUi"
+import { GIORNI_LAVORATIVI_QUARTA, SOGLIA_FISSAGGIO_QUARTA } from "@/lib/diretta/quartaChiamata"
 
 type LeadList = any[]
 
@@ -251,7 +252,7 @@ export function PipelineBoard({
                                 </button>
                                 {/* Tooltip */}
                                 <div className="absolute hidden group-hover:block w-56 sm:w-64 p-2.5 bg-ash-800 text-white text-xs rounded-lg shadow-elevated -bottom-12 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none max-w-[calc(100vw-2rem)]">
-                                    Attiva perché il tuo tasso di fissaggio è sotto 14% (ultimi 7 giorni).
+                                    Attiva perché il tuo fissaggio sui lead chiamati è sotto il {SOGLIA_FISSAGGIO_QUARTA}% (ultimi {GIORNI_LAVORATIVI_QUARTA} giorni lavorativi).
                                     <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-ash-800" />
                                 </div>
                             </div>
