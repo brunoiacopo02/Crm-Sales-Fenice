@@ -43,6 +43,12 @@ const RUOLI = ['GDO', 'CONFERME']
 // alle Conferme non si offre.
 const SOLO_GDO = ['GDO']
 
+/**
+ * Articoli tolti dal catalogo: lo script li spegne (isActive false) senza
+ * cancellarli, così le richieste già fatte restano leggibili in /admin/premi.
+ */
+export const RITIRATI_NEGOZIO: readonly string[] = ['cena-con-bruno-e-federico', 'mezza-giornata-venditore']
+
 export const CATALOGO_NEGOZIO: CatalogItem[] = [
     {
         id: 'corso-fenice-academy',
@@ -56,17 +62,22 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
         description: 'Un sabato intero a casa, pagato. La data si concorda e va approvata: se non si può, le Scintille tornano nel saldo.',
         kind: 'permesso', currency: 'S', price: 6400, imageUrl: null, giftable: false, sortOrder: 20, roles: RUOLI,
     },
-    {
-        id: 'cena-con-bruno-e-federico',
-        name: 'Cena con Bruno e Federico',
-        description: 'Una cena con Bruno e Federico, offerta. La sera si sceglie insieme.',
-        kind: 'concreto', currency: 'S', price: 5200, imageUrl: null, giftable: false, sortOrder: 30, roles: RUOLI,
-    },
+    // "Cena con Bruno e Federico" tolta (PO 25/10/2026): nessun premio che
+    // metta i titolari sopra gli altri, in sala si è tutti alla pari.
     {
         id: 'pausa-30-bruno-fissa',
         name: "Mezz'ora di pausa: fissa Bruno per te",
         description: "Trenta minuti di pausa in più, quando vuoi durante il turno (non all'inizio né alla fine). In quella mezz'ora Bruno chiama i tuoi lead e fissa gli appuntamenti al posto tuo. Il momento si concorda.",
         kind: 'permesso', currency: 'S', price: 3800, imageUrl: null, giftable: false, sortOrder: 40, roles: SOLO_GDO,
+    },
+    {
+        // Booster dei fissati (src/lib/economy/booster.ts): parte all'acquisto,
+        // un'ora, al massimo 3 fissati raddoppiati, uno al giorno. A 15 rende
+        // fra -5 e +15 Scintille nette: vale solo se in quell'ora si fissa.
+        id: 'booster-fissati',
+        name: 'Booster: fissati doppi per un\'ora',
+        description: 'Per i prossimi 60 minuti ogni appuntamento fissato vale il doppio delle Scintille, fino a 3 appuntamenti. Parte appena lo compri, solo durante il turno, uno al giorno.',
+        kind: 'booster', currency: 'S', price: 15, imageUrl: null, giftable: false, sortOrder: 45, roles: SOLO_GDO,
     },
     {
         id: 'merenda-sala',

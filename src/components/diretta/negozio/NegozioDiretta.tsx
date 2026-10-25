@@ -8,17 +8,18 @@ import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-    CalendarOff, Clock, Coffee, Cookie, Frame, Gift, GraduationCap, Headphones, Type, UtensilsCrossed, Wine,
+    CalendarOff, Clock, Coffee, Cookie, Frame, Gift, GraduationCap, Headphones, Type, UtensilsCrossed, Zap,
     type LucideIcon,
 } from "lucide-react"
 import { buyReward, setProfileImage, type NegozioArticolo, type NegozioView } from "@/app/actions/negozioActions"
 import { daApprovare, GIFT_TO_MAX, isDigitale } from "@/lib/diretta/negozio"
+import { oraRoma } from "@/lib/diretta/formato"
 import { AvatarDiretta, STATO_TESTO, TitoloDiretta, btn, dataBreve, numero, prezzoTesto } from "./ui"
 
 const ICONE: Record<string, LucideIcon> = {
     'corso-fenice-academy': GraduationCap,
     'sabato-libero': CalendarOff,
-    'cena-con-bruno-e-federico': Wine,
+    'booster-fissati': Zap,
     'mezza-giornata-venditore': Headphones,
     'uscita-30-minuti': Clock,
     'merenda-sala': Cookie,
@@ -53,6 +54,8 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
 
     const corso = view.articoli.find(a => a.kind === 'corso')
     const premi = view.articoli.filter(a => a.kind === 'concreto' || a.kind === 'permesso')
+    const potenziamenti = view.articoli.filter(a => a.kind === 'booster')
+    const boosterFino = view.boosterFino ? new Date(view.boosterFino) : null
     const immagini = view.articoli.filter(a => a.kind === 'immagine')
     const personalizzazioni = view.articoli.filter(a => a.kind === 'personalizzazione')
     const ultime = view.acquisti.slice(0, 5)
@@ -76,7 +79,8 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                 setEsito({
                     itemId: a.id, ok: true,
                     testo: r.status === 'consegnato'
-                        ? (a.kind === 'immagine' ? 'Fatto, è tua. Puoi usarla subito come immagine profilo.' : 'Fatto, è già attiva.')
+                        ? (a.kind === 'immagine' ? 'Fatto, è tua. Puoi usarla subito come immagine profilo.'
+                            : a.kind === 'booster' ? 'Booster attivo: per un\'ora i tuoi fissati valgono doppio.' : 'Fatto, è già attiva.')
                         : 'Richiesta inviata. Ti arriva una notifica quando è pronta.',
                 })
                 // Per chi mostra il saldo altrove (barra in alto).
@@ -113,6 +117,9 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
 
     /** Pulsante o stato a destra dell'articolo. */
     const azione = (a: NegozioArticolo) => {
+        if (a.kind === 'booster' && boosterFino) {
+            return <div className="text-sm font-semibold text-[var(--d-orange)]">Attivo fino alle {oraRoma(boosterFino)}</div>
+        }
         if (a.posseduto && isDigitale(a.kind)) {
             if (a.kind === 'immagine') {
                 if (a.imageUrl && inUso === a.imageUrl) return <div className="text-sm font-medium text-[var(--d-muted)]">In uso</div>
@@ -131,7 +138,7 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
         }
         return (
             <button type="button" className={btn.linea} onClick={() => apri(a)}>
-                {isDigitale(a.kind) ? 'Prendi' : 'Richiedi'}
+                {a.kind === 'booster' ? 'Attiva' : isDigitale(a.kind) ? 'Prendi' : 'Richiedi'}
             </button>
         )
     }
@@ -276,6 +283,15 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                     </div>
                     {saldo.piume >= corso.price && <div className="mt-4 flex">{azione(corso)}</div>}
                     {dettaglio(corso)}
+                </section>
+            )}
+
+            {potenziamenti.length > 0 && (
+                <section>
+                    <h2 className="text-lg font-semibold">Potenziamenti</h2>
+                    <div className="mt-1 divide-y-2 divide-[var(--d-surface)]">
+                        {potenziamenti.map(a => riga(a, icona(a)))}
+                    </div>
                 </section>
             )}
 

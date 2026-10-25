@@ -3,9 +3,10 @@
 // vero dell'acquisto gira in transazione, con la riga utente bloccata, ma le
 // condizioni sono tutte qui.
 
-export type RewardKind = 'concreto' | 'permesso' | 'immagine' | 'personalizzazione' | 'corso'
+export type RewardKind = 'concreto' | 'permesso' | 'immagine' | 'personalizzazione' | 'corso' | 'booster'
 export type PurchaseStatus = 'richiesto' | 'consegnato' | 'annullato'
 export type BuyError = 'utente' | 'articolo' | 'ruolo' | 'non_regalabile' | 'gia_tuo' | 'saldo'
+    | 'booster_turno' | 'booster_attivo' | 'booster_oggi'
 
 /** Chi riceve un regalo: nome e cognome, niente di più lungo di così. */
 export const GIFT_TO_MAX = 80
@@ -39,7 +40,8 @@ export function daApprovare(kind: string): boolean {
 
 /** Stato con cui nasce la richiesta: i digitali sono già consegnati. */
 export function statoIniziale(kind: string): PurchaseStatus {
-    return isDigitale(kind) ? 'consegnato' : 'richiesto'
+    // il booster parte all'acquisto: niente da consegnare
+    return isDigitale(kind) || kind === 'booster' ? 'consegnato' : 'richiesto'
 }
 
 /** Nome di chi riceve il regalo, ripulito. Vuoto = nessun regalo. */
@@ -122,6 +124,9 @@ export function messaggioErrore(e: BuyError | 'diretta' | 'errore'): string {
         case 'gia_tuo': return 'Ce l\'hai già: lo trovi nel profilo.'
         case 'saldo': return 'Il saldo non basta per questo premio.'
         case 'diretta': return 'Il negozio nuovo non è ancora attivo per il tuo ruolo.'
+        case 'booster_turno': return 'Il booster si attiva solo durante il turno.'
+        case 'booster_attivo': return 'Hai già un booster attivo.'
+        case 'booster_oggi': return 'Il booster di oggi l\'hai già usato: domani ce n\'è un altro.'
         default: return 'Qualcosa non ha funzionato. Riprova tra poco.'
     }
 }

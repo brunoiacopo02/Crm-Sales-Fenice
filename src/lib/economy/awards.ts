@@ -19,6 +19,7 @@ import { guadagnaPremiPersonali, peakWindow, stepReached, type GamificationTarge
 import { stessoMondo } from '@/lib/prova/regole'
 import { leadDelMondoDiAccount } from '@/lib/prova/sql'
 import { readGamificationTargets } from '@/lib/diretta/settings'
+import { boostIdemKey, boosterAttivo, raddoppia, CAUSALE_BOOSTER } from './booster'
 import { contaFissati } from '@/lib/diretta/fissati'
 import { leggiFissati, leggiMembriSquadra } from '@/lib/diretta/fissatiDb'
 import { creditOnce, reverseOnce } from './ledger'
@@ -109,6 +110,7 @@ export async function awardFissato(input: { userId: string; leadId: string; comp
         }).from(currencyLedger).where(eq(currencyLedger.leadId, leadId))
         const righeOggi = await tx.select({
             idemKey: currencyLedger.idemKey, reason: currencyLedger.reason, amount: currencyLedger.amount,
+            createdAt: currencyLedger.createdAt, metadata: currencyLedger.metadata,
         }).from(currencyLedger).where(and(
             eq(currencyLedger.userId, userId),
             gte(currencyLedger.createdAt, start),
@@ -126,6 +128,17 @@ export async function awardFissato(input: { userId: string; leadId: string; comp
                 idemKey: piano.idemKey, leadId, companyId, metadata: { giorno },
             }, tx)
             if (ok) guadagnate += rules.fissato.scintille
+            // Booster in corso (comprato in negozio): lo stesso fissato paga
+            // ancora una volta, fino a maxFissati per booster.
+            const attivo = ok ? boosterAttivo(righeOggi, at) : null
+            if (attivo && raddoppia(attivo, rules.booster)) {
+                const doppio = await creditOnce({
+                    userId, currency: 'S', amount: rules.fissato.scintille, reason: CAUSALE_BOOSTER,
+                    idemKey: boostIdemKey(piano.idemKey), leadId, companyId,
+                    metadata: { giorno, purchaseId: attivo.purchaseId },
+                }, tx)
+                if (doppio) guadagnate += rules.fissato.scintille
+            }
         }
 
         // Fissati validi del giorno: la stessa query della home e della pagina
@@ -268,6 +281,8 @@ export async function reverseFissato(lead: LeadPerStorno, prima: Date, motivo: s
     let scritti = 0
     for (const k of fissatiDaStornare(registro, lead.id, dal)) {
         if (await reverseOnce(k, `storno fissato: ${motivo}`)) scritti++
+        // il raddoppio del booster segue il suo fissato
+        if (await reverseOnce(boostIdemKey(k), `storno booster: ${motivo}`)) scritti++
     }
     return scritti
 }

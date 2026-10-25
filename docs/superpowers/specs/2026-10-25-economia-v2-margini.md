@@ -243,7 +243,6 @@ Settimana al massimo del patto: 640 Scintille e 13,5 Piume (sezione 3.1). I test
 |---|---|---|---|---|---|---|---|---|---|
 | Corso Fenice Academy a scelta, regalabile | 175 Piume | 13,0 | 4,3 mesi | 4,6 mesi | 3,3 mesi | **3,0 mesi** | 8,1 sett. | 3,8 mesi | 2,8 mesi |
 | Sabato libero, pagato (da approvare) | 6.400 Scintille | 10,0 | 2,5 mesi | 3,0 mesi | 2,1 mesi | 2,3 mesi | 6,3 sett. | 2,8 mesi | 2,0 mesi |
-| Cena con Bruno e Federico, offerta | 5.200 Scintille | 8,1 | 2,1 mesi | 2,4 mesi | 7,4 sett. | 8,1 sett. | 5,2 sett. | 2,3 mesi | 7,2 sett. |
 | Mezz'ora di pausa: fissa Bruno per te (solo GDO) | 3.800 Scintille | 5,9 | 6,5 sett. | 7,6 sett. | 5,4 sett. | 5,9 sett. | 3,8 sett. | solo GDO | solo GDO |
 | Merenda per la sala | 1.900 Scintille | 3,0 | 3,3 sett. | 3,8 sett. | 2,7 sett. | 3,0 sett. | 1,9 sett. | 3,7 sett. | 2,6 sett. |
 | Uscita 30 minuti prima (da approvare) | 1.350 Scintille | 2,1 | 2,3 sett. | 2,7 sett. | 1,9 sett. | 2,1 sett. | 1,3 sett. | 2,6 sett. | 1,9 sett. |
@@ -285,7 +284,6 @@ Settimana al massimo del patto: 640 Scintille e 13,5 Piume (sezione 3.1). I test
 |---|---|---|---|---|---|---|---|---|
 | Corso Fenice Academy | 175 Piume | 300 € | costo vivo stimato (tutor e piattaforma), da confermare; listino 1.870-3.670 € | 0,55 | 0,14 | 12.861 € | 2,3% | 1,71 per Piuma |
 | Sabato libero | 6.400 Scintille | 296 € | 6,5 ore pagate (69 €) + metà della produzione persa (227 €) | 0,54 | 0,14 | 9.900 € | 3,0% | 0,046 per Scintilla |
-| Cena con Bruno e Federico | 5.200 Scintille | 150 € | 3 persone a 50 € | 0,28 | 0,07 | 8.044 € | 1,9% | 0,029 per Scintilla |
 | Mezz'ora in cui fissa Bruno (solo GDO) | 3.800 Scintille | 5 € | mezz'ora di pausa pagata; la produzione la fa Bruno (stima da confermare) | 0,01 | 0,00 | 5.878 € | 0,1% | 0,001 per Scintilla |
 | Merenda per la sala | 1.900 Scintille | 30 € | 8-10 persone | 0,06 | 0,01 | 2.939 € | 1,0% | 0,016 per Scintilla |
 | Uscita 30 minuti prima | 1.350 Scintille | 23 € | mezz'ora pagata (5 €) + metà della produzione persa | 0,04 | 0,01 | 2.088 € | 1,1% | 0,017 per Scintilla |
@@ -419,3 +417,12 @@ Esempio di `economy_rules` da scrivere solo se si vuole cambiare qualcosa (tutto
 6. Le stime dei forzieri dipendono da quanti GDO fissano davvero ogni giorno: con meno di 8 il forziere raro arriva più di rado e le Scintille scendono di circa 80 a settimana.
 7. **Euro e presenze scritte in anticipo**: le monete aspettano un esito registrato a appuntamento passato, il bonus da 12 euro e la classifica invece contano il latch `presentedAt` come i KPI. Un "Presenziato" scritto in anticipo e mai corretto conta per gli euro. Si può applicare la stessa verifica anche lì, oppure togliere i bottoni dello Storico per gli appuntamenti futuri.
 8. **Costo della mezz'ora in cui fissa Bruno**: qui 5 euro (la pausa pagata); il tempo di Bruno non è contato.
+
+## Aggiornamento 25/10/2026 sera: cena tolta, booster dei fissati
+
+- **Cena con Bruno e Federico tolta** (PO): nessun premio che metta i titolari sopra gli altri, in sala si è tutti alla pari. L'articolo resta in `rewardItems` spento (`RITIRATI_NEGOZIO`), le richieste già fatte restano leggibili.
+- **Booster dei fissati** (`src/lib/economy/booster.ts`, articolo `booster-fissati`, solo GDO): 15 Scintille, parte all'acquisto e dura 60 minuti; ogni fissato che paga in quell'ora paga una seconda volta (+10), fino a 3 fissati; uno al giorno, solo durante il turno, non sopra un altro booster.
+  - Resa netta: da -5 (1 fissato nell'ora) a +15 (3 o più). Con il ritmo medio (~1,1 fissati l'ora) va quasi in pari; conviene solo nell'ora in cui si spinge davvero, di solito la punta.
+  - Freno al farming: al massimo +15 netti al giorno, ~+90 a settimana, ~14% del massimo del patto (640). Non tocca il tetto di 15 fissati pagati né gli scalini, e il raddoppio si storna insieme al suo fissato (`boost:<chiave del fissato>`).
+  - Costo per l'azienda: 0 € diretti; le Scintille in più valgono al massimo ~90 a settimana a testa nel margine del negozio.
+  - Rischio: spinge a forzare appuntamenti in quell'ora. Mitigato da tetto di 3 e storno; se dopo il lancio le disdette dei fissati col booster salgono, si paga il raddoppio solo a conferma avvenuta.

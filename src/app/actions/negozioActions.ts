@@ -8,7 +8,7 @@
 // spendono lo stesso saldo due volte. Le regole stanno in lib/diretta/negozio.ts.
 
 import { randomUUID } from "crypto"
-import { and, asc, desc, eq, ne } from "drizzle-orm"
+import { and, asc, desc, eq, gte, lt, ne } from "drizzle-orm"
 import { revalidatePath, updateTag } from "next/cache"
 import { after } from "next/server"
 import { numeroIt } from "@/lib/diretta/formato"
@@ -17,6 +17,12 @@ import { appSettings, notifications, rewardItems, rewardPurchases, users } from 
 import { assertSalesArea, currentTenant } from "@/lib/tenancy"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { creditOnce, type Currency } from "@/lib/economy/ledger"
+import { currencyLedger } from "@/db/schema"
+import { boosterAttivo, puoComprareBooster, KIND_BOOSTER } from "@/lib/economy/booster"
+import { readEconomyRules } from "@/lib/economy/awards"
+import { readGamificationTargets } from "@/lib/diretta/settings"
+import { shiftWindow } from "@/lib/diretta/config"
+import { dayBoundsRome } from "@/lib/dateUtils"
 import { DIRETTA_FLAG_KEYS, personName } from "@/lib/diretta/config"
 import {
     canTransition, checkPurchase, isDigitale, messaggioErrore, nomeValuta, ownedItemIds, statoIniziale,
@@ -65,6 +71,8 @@ export interface NegozioView {
     stile: StileProfilo
     articoli: NegozioArticolo[]
     acquisti: NegozioAcquisto[]
+    /** Fine del booster in corso (ISO), null se non ce n'è uno attivo. */
+    boosterFino: string | null
 }
 
 const asCurrency = (c: string): 'S' | 'P' => (c === 'P' ? 'P' : 'S')
@@ -100,6 +108,15 @@ export async function getNegozioView(): Promise<NegozioView> {
     ])
 
     const owned = ownedItemIds(purchases)
+    const adesso = new Date()
+    const { start, end } = dayBoundsRome(adesso)
+    const righeOggi = me.role === 'GDO' ? await db.select({
+        reason: currencyLedger.reason, amount: currencyLedger.amount,
+        createdAt: currencyLedger.createdAt, metadata: currencyLedger.metadata,
+    }).from(currencyLedger).where(and(
+        eq(currencyLedger.userId, me.id), gte(currencyLedger.createdAt, start), lt(currencyLedger.createdAt, end),
+    )) : []
+    const booster = boosterAttivo(righeOggi, adesso)
     return {
         nome: personName(me),
         ruolo: me.role,
@@ -116,6 +133,7 @@ export async function getNegozioView(): Promise<NegozioView> {
             currency: asCurrency(p.currency), price: p.price, status: asStatus(p.status), giftTo: p.giftTo,
             createdAt: p.createdAt.toISOString(), handledAt: p.handledAt ? p.handledAt.toISOString() : null,
         })),
+        boosterFino: booster ? booster.fino.toISOString() : null,
     }
 }
 
@@ -180,6 +198,22 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
             if (!item) return { ok: false, error: 'articolo' }
 
             const now = new Date()
+            // Booster: si compra solo in turno, uno alla volta e uno al giorno;
+            // durata scritta sull'addebito, così vale quella del momento.
+            let booster: { minuti: number } | null = null
+            if (item.kind === KIND_BOOSTER) {
+                const [targets, rules] = await Promise.all([readGamificationTargets(), readEconomyRules()])
+                const { start, end } = dayBoundsRome(now)
+                const righeOggi = await tx.select({
+                    reason: currencyLedger.reason, amount: currencyLedger.amount,
+                    createdAt: currencyLedger.createdAt, metadata: currencyLedger.metadata,
+                }).from(currencyLedger).where(and(
+                    eq(currencyLedger.userId, user.id), gte(currencyLedger.createdAt, start), lt(currencyLedger.createdAt, end),
+                ))
+                const puo = puoComprareBooster({ righeOggi, now, turno: shiftWindow(now, targets), rules: rules.booster })
+                if (!puo.ok) return { ok: false, error: puo.error }
+                booster = { minuti: rules.booster.minuti }
+            }
             const status = statoIniziale(item.kind)
             await tx.insert(rewardPurchases).values({
                 id: purchaseId,
@@ -200,7 +234,7 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
                 amount: -item.price,
                 reason: 'negozio',
                 idemKey: `buy:${purchaseId}`,
-                metadata: { purchaseId, itemId: item.id },
+                metadata: booster ? { purchaseId, itemId: item.id, booster: true, minuti: booster.minuti } : { purchaseId, itemId: item.id },
                 companyId: FENICE,
             }, tx)
             if (!debited) throw new Error('NEGOZIO_DEBITO_NON_SCRITTO')

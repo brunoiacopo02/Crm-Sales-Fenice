@@ -67,12 +67,19 @@ test('immagini profilo: 6-8, due più care (in settimane) del premio concreto pi
     assert.ok(piuCare.length >= 2, 'servono due immagini preziose sopra il premio concreto più economico')
 })
 
-test('testi: niente tetti in euro, pranzo su Glovo in ufficio, cena con Bruno e Federico offerta', () => {
+test('testi: niente tetti in euro, pranzo su Glovo in ufficio, niente cena con i titolari', () => {
     for (const i of CATALOGO_NEGOZIO) assert.doesNotMatch(`${i.name} ${i.description}`, /euro|€/i, i.id)
     assert.match(CATALOGO_NEGOZIO.find(i => i.id === 'pranzo-offerto')!.description, /Glovo.*in ufficio/)
-    const cena = CATALOGO_NEGOZIO.find(i => i.id === 'cena-con-bruno-e-federico')!
-    assert.match(`${cena.name} ${cena.description}`, /Bruno e Federico/)
-    assert.match(cena.description, /offerta/)
+    // PO 25/10/2026: in sala si è tutti alla pari, i titolari non sono un premio
+    assert.ok(!CATALOGO_NEGOZIO.some(i => /cena/i.test(i.name)))
+})
+
+test('booster: solo GDO, poco caro, si attiva da solo e non si regala', () => {
+    const b = CATALOGO_NEGOZIO.find(i => i.kind === 'booster')!
+    assert.deepEqual(b.roles, ['GDO'])
+    assert.equal(b.currency, 'S')
+    assert.ok(b.price > 0 && b.price < 50)
+    assert.equal(b.giftable, false)
 })
 
 test('tempi: un GDO medio arriva al corso in 4-5 mesi, un campione in meno di due', () => {
@@ -104,15 +111,14 @@ test('personalizzazioni del catalogo e registro coincidono', () => {
     assert.deepEqual(pers, Object.keys(PERSONALIZZAZIONI).sort())
 })
 
-test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno (solo GDO)", () => {
+test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno e il booster (solo GDO)", () => {
     for (const i of CATALOGO_NEGOZIO) {
-        const attesi = i.id === 'pausa-30-bruno-fissa' ? ['GDO'] : ['CONFERME', 'GDO']
+        const attesi = i.id === 'pausa-30-bruno-fissa' || i.kind === 'booster' ? ['GDO'] : ['CONFERME', 'GDO']
         assert.deepEqual([...i.roles].sort(), attesi, i.id)
     }
 })
 
 test('settimane al massimo dei premi principali', () => {
     assert.ok(settimane('caffe-cornetto') >= 1 && settimane('caffe-cornetto') < 1.2)
-    assert.ok(settimane('cena-con-bruno-e-federico') >= 7)
     assert.ok(settimane('sabato-libero') >= 9)
 })

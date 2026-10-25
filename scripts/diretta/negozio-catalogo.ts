@@ -17,7 +17,7 @@
 import { inArray } from 'drizzle-orm'
 import { db } from '../../src/db'
 import { rewardItems } from '../../src/db/schema'
-import { CATALOGO_NEGOZIO, settimaneAlMassimo, type CatalogItem } from '../../src/lib/diretta/negozioCatalogo'
+import { CATALOGO_NEGOZIO, RITIRATI_NEGOZIO, settimaneAlMassimo, type CatalogItem } from '../../src/lib/diretta/negozioCatalogo'
 
 const FENICE = 'fenice'
 
@@ -89,12 +89,15 @@ async function main() {
         console.log(`  ~ ${item.id}`)
         for (const d of diff) console.log(`      ${d}`)
     }
-    if (fuoriCatalogo.length > 0) {
-        console.log(`Fuori catalogo (lasciati come sono): ${fuoriCatalogo.map(r => `${r.id}${r.isActive ? '' : ' (spento)'}`).join(', ')}`)
+    const daSpegnere = fuoriCatalogo.filter(r => r.isActive && RITIRATI_NEGOZIO.includes(r.id))
+    const restanti = fuoriCatalogo.filter(r => !daSpegnere.includes(r))
+    if (daSpegnere.length > 0) console.log(`Ritirati, da spegnere: ${daSpegnere.map(r => r.id).join(', ')}`)
+    if (restanti.length > 0) {
+        console.log(`Fuori catalogo (lasciati come sono): ${restanti.map(r => `${r.id}${r.isActive ? '' : ' (spento)'}`).join(', ')}`)
     }
 
     const daScrivere = [...nuovi, ...daAllineare.map(d => d.item)]
-    if (daScrivere.length === 0) {
+    if (daScrivere.length === 0 && daSpegnere.length === 0) {
         console.log('\nNiente da scrivere: rewardItems è già allineato al catalogo.')
         return
     }
@@ -110,8 +113,13 @@ async function main() {
                 .values({ id: item.id, companyId: FENICE, ...values })
                 .onConflictDoUpdate({ target: rewardItems.id, set: values })
         }
+        if (daSpegnere.length > 0) {
+            await tx.update(rewardItems).set({ isActive: false })
+                .where(inArray(rewardItems.id, daSpegnere.map(r => r.id)))
+        }
     })
     const dopo = await db.select({ id: rewardItems.id }).from(rewardItems).where(inArray(rewardItems.id, ids))
+    if (daSpegnere.length > 0) console.log(`Spenti: ${daSpegnere.length} articoli ritirati.`)
     console.log(`\nScritto: ${daScrivere.length} articoli. In rewardItems ora ci sono ${dopo.length} articoli del catalogo.`)
 }
 

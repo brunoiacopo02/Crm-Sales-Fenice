@@ -14,6 +14,7 @@
 // Vale lo stadio più alto raggiunto (confermato, presentato, chiuso): quando il
 // lead sale si accredita solo la differenza, quando scende si storna.
 
+import { DEFAULT_BOOSTER, parseBooster, type BoosterRules } from './booster'
 import { dayBoundsRome } from '@/lib/dateUtils'
 import { stepReached, guadagnaPremiPersonali, type GamificationTargets } from '@/lib/diretta/config'
 
@@ -90,6 +91,8 @@ export interface EconomyRules {
         /** Presenze minime per stare sul podio (e prendere il premio). */
         minPresenze: number
     }
+    /** Booster dei fissati comprato in negozio (./booster): il prezzo sta nell'articolo. */
+    booster: BoosterRules
 }
 
 export const DEFAULT_ECONOMY_RULES: EconomyRules = {
@@ -112,6 +115,7 @@ export const DEFAULT_ECONOMY_RULES: EconomyRules = {
         perPersona: {},
     },
     classifica: { premiEuro: [50, 25, 10], minPresenze: 1 },
+    booster: DEFAULT_BOOSTER,
 }
 
 // ── Lettura delle regole ────────────────────────────────────────────────
@@ -233,6 +237,7 @@ export function parseEconomyRules(raw: string | null | undefined): EconomyRules 
             premiEuro: premi,
             minPresenze: intero(classifica.minPresenze, d.classifica.minPresenze, 1),
         },
+        booster: parseBooster(saved.booster),
     }
 }
 
