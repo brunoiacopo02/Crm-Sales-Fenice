@@ -5,6 +5,11 @@
  *   node --import tsx --env-file=.env.local scripts/diretta/economia-azzera.ts --apply   # esegue
  *
  * Cosa fa, nell'ordine:
+ *  0. Nessun benvenuto (decisione PO 25/10/2026 sera): nessuno parte con
+ *     Scintille regalate. Le 200 date la prima volta a Riccardo (119) e Zora
+ *     (106) si stornano con reverseOnce (riga negativa 'storno:<chiave>'),
+ *     così il registro resta completo e il saldo torna a zero. Va PRIMA del
+ *     punto 1, che altrimenti azzererebbe le stesse 200 una seconda volta.
  *  1. Saldi Scintille e Piume a zero. Oggi sono già a zero; se qualcuno li ha
  *     mossi provando su una preview (che usa il DB di produzione), per ogni
  *     saldo diverso da zero scrive una riga di azzeramento nel registro, con
@@ -12,7 +17,6 @@
  *     walletCoins non si tocca: resta come storico della vecchia economia.
  *  2. Disattiva i vecchi articoli del negozio (shopItems.isActive = false).
  *     Mai cancellati.
- *  3. 200 Scintille di benvenuto a Riccardo (119) e Zora (106), chiave fissa.
  *
  * Idempotente: un secondo giro non scrive niente. Va eseguito PRIMA che i GDO
  * comincino a fissare (lunedì 26/10 prima delle 13:30): se nel registro ci
@@ -22,24 +26,20 @@
 import { and, count, eq, inArray, notInArray, or, ne, sql, sum } from 'drizzle-orm'
 import { db } from '../../src/db'
 import { currencyLedger, shopItems, users } from '../../src/db/schema'
-import { creditOnce } from '../../src/lib/economy/ledger'
+import { creditOnce, reverseOnce } from '../../src/lib/economy/ledger'
 import { nonDaAccountDiProva } from '../../src/lib/prova/sql'
 
 const APPLY = process.argv.includes('--apply')
 const FORZA = process.argv.includes('--forza')
 const TAG = 'diretta-2026-10-26'
 
-const BENVENUTO = [
-    { gdoCode: 119, firstName: 'Riccardo' },
-    { gdoCode: 106, firstName: 'Zora' },
-] as const
-const SCINTILLE_BENVENUTO = 200
+/** Causale dello storno del vecchio benvenuto. */
+const CAUSALE_STORNO_BENVENUTO = 'storno benvenuto: nessuno parte con Scintille regalate'
 
 /** Causali che non sono premi veri: le scrive solo questo script. */
-const CAUSALI_GO_LIVE = ['benvenuto', 'azzeramento']
+const CAUSALI_GO_LIVE = ['benvenuto', 'azzeramento', CAUSALE_STORNO_BENVENUTO]
 
 const chiaveAzzeramento = (valuta: 'S' | 'P', userId: string) => `${valuta}:azzeramento:${userId}:${TAG}`
-const chiaveBenvenuto = (userId: string) => `S:benvenuto:${userId}:${TAG}`
 
 async function chiaviEsistenti(chiavi: string[]): Promise<Set<string>> {
     if (!chiavi.length) return new Set()
@@ -60,6 +60,19 @@ async function main() {
     }).from(currencyLedger).groupBy(currencyLedger.reason, currencyLedger.currency)
     console.log(`\nRegistro Scintille/Piume: ${registro.length ? '' : 'vuoto'}`)
     for (const r of registro) console.log(`  ${r.currency} ${r.reason.padEnd(28)} righe ${r.righe}  totale ${r.totale}`)
+
+    // ── 0. Niente benvenuto: storno di quello già dato (prima dei saldi) ─
+    const benvenuti = await db.select({ idemKey: currencyLedger.idemKey, userId: currencyLedger.userId, amount: currencyLedger.amount })
+        .from(currencyLedger).where(eq(currencyLedger.reason, 'benvenuto'))
+    const giaStornati = await chiaviEsistenti(benvenuti.map(b => `storno:${b.idemKey}`))
+    const daStornare = benvenuti.filter(b => !giaStornati.has(`storno:${b.idemKey}`))
+    console.log(`
+0. Benvenuto: nessuno. Righe di benvenuto nel registro ${benvenuti.length}, da stornare ${daStornare.length}`)
+    for (const b of daStornare) {
+        if (!APPLY) { console.log(`  ${b.userId}: ${b.amount} da stornare`); continue }
+        const ok = await reverseOnce(b.idemKey, CAUSALE_STORNO_BENVENUTO)
+        console.log(`  ${b.userId}: ${ok ? `stornate ${b.amount}` : 'già stornate'}`)
+    }
 
     // Gli account di prova (users.isTest, migr. 0050) non si azzerano e il loro
     // registro non conta come premi veri: hanno un saldo di prova per il
@@ -107,33 +120,6 @@ async function main() {
             .where(and(eq(shopItems.isActive, true), inArray(shopItems.id, attivi.map(a => a.id))))
             .returning({ id: shopItems.id })
         console.log(`  Disattivati: ${spenti.length}`)
-    }
-
-    // ── 3. Benvenuto a Riccardo e Zora ──────────────────────────────────
-    console.log(`\n3. Benvenuto: ${SCINTILLE_BENVENUTO} Scintille`)
-    const persone = await db.select({ id: users.id, gdoCode: users.gdoCode, firstName: users.firstName, role: users.role })
-        .from(users).where(inArray(users.gdoCode, BENVENUTO.map(b => b.gdoCode)))
-    const giaDati = await chiaviEsistenti(persone.map(p => chiaveBenvenuto(p.id)))
-    for (const b of BENVENUTO) {
-        const p = persone.find(x => x.gdoCode === b.gdoCode)
-        if (!p || p.role !== 'GDO' || p.firstName?.trim() !== b.firstName) {
-            console.log(`  ${b.gdoCode}: SALTATO, l'account non corrisponde a ${b.firstName} (trovato: ${p?.firstName ?? 'nessuno'})`)
-            continue
-        }
-        if (giaDati.has(chiaveBenvenuto(p.id))) {
-            console.log(`  ${b.firstName} (${b.gdoCode}): già accreditate`)
-            continue
-        }
-        if (!APPLY) {
-            console.log(`  ${b.firstName} (${b.gdoCode}): da accreditare`)
-            continue
-        }
-        const ok = await creditOnce({
-            userId: p.id, currency: 'S', amount: SCINTILLE_BENVENUTO, reason: 'benvenuto',
-            idemKey: chiaveBenvenuto(p.id),
-            metadata: { nota: 'Benvenuto nella nuova economia (PO 25/10/2026)' },
-        })
-        console.log(`  ${b.firstName} (${b.gdoCode}): ${ok ? 'accreditate' : 'già presenti'}`)
     }
 
     // Controllo finale: il saldo in cache su users deve essere la somma del registro.

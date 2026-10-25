@@ -1,11 +1,10 @@
 /**
- * Ridistribuzione per lunedì 26/10/2026 (PO, domenica 25/10 sera).
+ * Ridistribuzione per lunedì 26/10/2026 (PO, domenica 25/10 sera, decisioni finali).
  *
- * Bruno: "bilancia i lead ridati dal bot di tutti e fai arrivare tutti a 40
- * nuovi; Christel e Beatrice dal pool dei ridati parcheggiati, senza levarli
- * agli altri; Noemi e Lavinia prima dagli eccessi, poi dal pool. Seconde e
- * terze al massimo 40 a testa, Noemi e Lavinia da rimpolpare, anche con quelle
- * di Lorenzo (118), che si svuota."
+ * Squadra di lunedì, tutti presenti e trattati allo stesso modo (Christel 114
+ * e Beatrice 112 in malattia ma contate come presenti): 105, 106, 107, 110,
+ * 112, 114, 115, 116, 119. Lorenzo (118) si svuota: prima, seconde e terze a
+ * 0; gli restano solo i richiami, che non si spostano mai.
  *
  * Colonne = quelle della pipeline GDO (getPipelineLeads): lead aperti senza
  * richiamo; "Prima chiamata" callCount 0 oppure "Ti ha cercato" aperto,
@@ -13,50 +12,58 @@
  * callCount 0: si riconosce solo dall'evento REASSIGNED_FROM_BOT.
  *
  * Chi NON si sposta mai (resta a chi lo ha e conta nella sua colonna):
- *   - i lead con un richiamo (recallDate): vincolo del PO, di qualunque GDO;
+ *   - i lead con un richiamo (recallDate), di qualunque GDO;
  *   - "Ti ha cercato" aperto: la richiesta è stata data a quella persona;
  *   - i lead del lancio (eLeadDelLancio): tolti ai GDO il 24/10;
- *   - le infornate fuori KPI/senso unico, i lead di prova.
+ *   - le infornate fuori KPI/senso unico, i lead di prova, Serenamente
+ *     (solo companyId fenice).
  *
  * Algoritmo, nell'ordine:
- *   1. Prima chiamata, obiettivo 40. Chi ne ha più di 40 cede l'eccesso (i
- *      ridati restituiti da più tempo); Lorenzo cede tutto. L'eccesso va prima
- *      a Noemi e Lavinia, poi a chi è sotto (mai Christel e Beatrice). Poi il
- *      pool parcheggiato: Noemi e Lavinia, Christel e Beatrice, poi gli altri.
- *   2. Seconde e terze, tetto 40. Chi è sopra cede le chiamate più recenti (tiene
- *      quelle in cima alla sua coda, ferme da più tempo); Lorenzo cede tutto,
- *      anche le seconde e terze parcheggiate stamattina da lead-lorenzo.ts.
- *      Vanno prima a Noemi e Lavinia, poi a chi è sotto 40.
- *   Ogni lead si sposta una volta sola; dentro un gruppo si dà a turno il lead
- *   migliore a chi ne ha meno, così la qualità resta pari.
+ *   1. Prima chiamata, obiettivo 40 per tutti e 9. Fonti: le eccedenze (tutto
+ *      Lorenzo e chi è sopra 40, che cede i ridati restituiti da più tempo),
+ *      poi il pool parcheggiato, i ridati dal bot più recenti per primi
+ *      (ultima REASSIGNED_FROM_BOT).
+ *   2. Seconde e terze, obiettivo 30 e 30. Chi è sopra cede l'eccedenza (le
+ *      chiamate più recenti: tiene la cima della coda, ferma da più tempo);
+ *      Lorenzo cede tutto. Chi è sotto riceve prima le eccedenze degli altri,
+ *      poi i parcheggiati (chiamati per ultimi prima).
+ *      Solo lead coerenti col tentativo: almeno callCount chiamate VERE di una
+ *      persona (callLogs di un utente non bot) dopo l'ultima restituzione del
+ *      bot. callCount da solo non basta (il bot lo azzera e lo può muovere).
+ *   3. Le eccedenze che non servono a nessuno (e quelle non coerenti)
+ *      tornano nel pool: assignedToId null + RIDATO_PARCHEGGIATO.
+ *   Ogni lead si sposta una volta sola; dentro un gruppo si dà a turno a chi
+ *   ne ha meno, così la qualità resta pari. Se i lead adatti non bastano, chi
+ *   resta scoperto resta sotto obiettivo.
  *
- * Pool parcheggiato (assignedToId null, ultimo RIDATO_PARCHEGGIATO), in ordine
- * di preferenza: stella_fuori_selezione (chat interrotta, parcheggiati il
- * 20/10 "da riassegnare"), lorenzo_solo_ridati_migliori (stamattina),
- * mai_risposto_al_bot (dal 19/10). Il lancio (lancio_tolto_a_tutti) non si usa.
- * Esclusi anche i lead che nel DB del bot risultano scartati o con
- * appuntamento (lista ESCLUSI_DAL_BOT, letta il 25/10 sera): questo script non
- * vede il DB del bot.
+ * Pool parcheggiato: assignedToId null con un RIDATO_PARCHEGGIATO, qualunque
+ * motivo tranne il lancio (lancio_tolto_a_tutti). Esclusi i lead che nel DB
+ * del bot sono in lavorazione, scartati o con appuntamento (ESCLUSI_DAL_BOT,
+ * letti dal DB del bot il 25/10 sera: questo script non vede il DB del bot).
  *
- * Scrittura (--esegui), in transazione, rileggendo ogni lead sotto lock con lo
- * stesso predicato: assignedToId nuovo, assignedAt come il CRM (COALESCE: la
- * prima presa in carico non si riscrive), stato/tentativi/storico invariati,
- * evento REASSIGNED_ADMIN con chi lo aveva, colonna e assignedAt di prima.
+ * Scrittura (--esegui): prima salva in scripts/diretta/ripristino/ lo stato di
+ * ogni lead da spostare, poi in transazione rilegge ogni lead sotto lock con
+ * lo stesso predicato e salta chi è cambiato: assignedToId nuovo, assignedAt
+ * come il CRM (COALESCE), stato/tentativi/storico invariati, evento
+ * REASSIGNED_ADMIN (o RIDATO_PARCHEGGIATO per chi torna nel pool).
  * updatedAt sfalsato di 1 ms per lead: il feed /api/bot/lead-status ha il
  * cursore solo su updatedAt e si blocca con 200+ righe allo stesso istante.
  * Nessuna notifica ai GDO, nessun webhook marketing, nessuna chiamata al bot.
  *
- * --ripristina annulla: rimette ogni lead spostato da questo script, se è
- * ancora aperto e ancora del GDO che lo ha ricevuto, a chi lo aveva (null per
- * il pool) con l'assignedAt di prima.
+ * --ripristina [--file=...] legge il file di ripristino (di default l'ultimo)
+ * e rimette a chi lo aveva ogni lead ancora aperto, ancora dove questo script
+ * lo ha messo e con gli stessi tentativi. Prova a vuoto senza --esegui.
  *
  *   node --import tsx --env-file=.env.local scripts/diretta/ridistribuzione-26-10.ts
- *        [--esegui | --ripristina] [--obiettivo=40] [--elenco]
+ *        [--esegui | --ripristina [--file=...] [--esegui]] [--prima=40] [--seconde-terze=30]
+ *        [--elenco] [--candidati=file.json]
  *
  * Dry-run di default: solo letture, stampa il piano.
  */
 
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { db } from '../../src/db'
 import { botContactRequests, callLogs, leadEvents, leads, users } from '../../src/db/schema'
@@ -66,21 +73,29 @@ import { confrontaMigliori, type LeadEreditato } from '../../src/lib/diretta/rid
 
 const FENICE = 'fenice'
 const MOTIVO = 'ridistribuzione_26_10'
-const NOTA = 'PO 25/10/2026 sera: ridati bilanciati a 40 in prima chiamata, seconde e terze al massimo 40, Lorenzo svuotato'
+const MOTIVO_PARCHEGGIO = 'ridistribuzione_26_10_eccedenza'
+const NOTA = 'PO 25/10/2026 sera: tutti a 40 in prima chiamata, 30 in seconde e 30 in terze, Lorenzo svuotato'
 const LOTTO = 300
+const CARTELLA_RIPRISTINO = path.resolve('scripts/diretta/ripristino')
 
-// Squadra di lunedì. Lorenzo (118) si svuota.
+// Squadra di lunedì, tutti uguali. Lorenzo (118) si svuota.
 const SQUADRA = [105, 106, 107, 110, 112, 114, 115, 116, 119] as const
 const SVUOTA = 118
-const PRIORITA = [107, 116] as const          // Noemi, Lavinia
-const SOLO_DAL_POOL = [114, 112] as const     // Christel, Beatrice: prima chiamata solo dal pool
 
-const MOTIVI_POOL = ['stella_fuori_selezione', 'lorenzo_solo_ridati_migliori', 'mai_risposto_al_bot'] as const
+/** Motivi di parcheggio che NON fanno parte del pool usabile. */
+const MOTIVI_FUORI_POOL = ['lancio_tolto_a_tutti'] as const
 
-// Dal DB del bot (25/10/2026 sera): esito DA_SCARTARE o APPUNTAMENTO sulla
-// conversazione, oppure chat ripresa dal bot (ai_status active). Fra i
-// candidati del pool in prima chiamata ne è risultato uno solo.
-const ESCLUSI_DAL_BOT = new Set<string>(['f5259f82-0448-4f7f-8200-1a1288ff1303'])
+// Dal DB del bot (25/10/2026 sera): conversazione in lavorazione (ai_status
+// active) oppure esito DA_SCARTARE / APPUNTAMENTO. Letti sui candidati del
+// pool parcheggiato (prima, seconde e terze) con --candidati.
+const ESCLUSI_DAL_BOT = new Set<string>([
+    'f5259f82-0448-4f7f-8200-1a1288ff1303',
+    // controllo del 25/10 sera sui candidati di questo piano (prima + seconde + terze, con margine)
+    'c25a2475-a0d3-4421-80be-64e92c80af70', // DA_SCARTARE
+    'cded1e1f-b8f2-4c49-ac95-48fdad207da8', // DA_SCARTARE
+    '60fdbefe-ce99-476e-8c5d-0150327a114d', // DA_SCARTARE
+    '6210d500-7b5c-4bd7-840b-caf4d71e6f2c', // chat attiva nel bot
+])
 
 type Colonna = 'P' | 'S' | 'T'
 const NOME_COLONNA: Record<Colonna, string> = { P: 'Prima Chiamata', S: 'Seconda Chiamata', T: 'Terza Chiamata' }
@@ -88,6 +103,14 @@ const NOME_COLONNA: Record<Colonna, string> = { P: 'Prima Chiamata', S: 'Seconda
 function opzione(nome: string): string | undefined {
     const pref = `--${nome}=`
     return process.argv.find((a) => a.startsWith(pref))?.slice(pref.length)
+}
+
+function intero(nome: string, predefinito: number): number {
+    const raw = opzione(nome)
+    if (raw === undefined) return predefinito
+    const n = Number(raw)
+    if (!Number.isInteger(n) || n < 0 || n > 500) throw new Error(`--${nome} non valido (${raw})`)
+    return n
 }
 
 function lotti<T>(lista: readonly T[]): T[][] {
@@ -102,19 +125,35 @@ interface Lead extends LeadEreditato {
     recallDate: Date | null
     lastCallDate: Date | null
     assignedAt: Date | null
+    updatedAt: Date | null
     funnel: string | null
     lancio: boolean
     contaKpi: boolean
     sensoUnico: boolean
     motivoParcheggio: string | null
+    /** Chiamate vere di una persona (utente non bot) dopo l'ultima restituzione del bot. */
+    chiamateUmaneGiro: number
 }
 
 interface Mossa {
     lead: Lead
     colonna: Colonna
     da: string | null
-    a: string
+    /** null = torna nel pool parcheggiato. */
+    a: string | null
     origine: string
+}
+
+interface RigaRipristino {
+    id: string
+    colonna: Colonna
+    da: string | null
+    a: string | null
+    origine: string
+    status: string
+    callCount: number
+    assignedAt: string | null
+    updatedAt: string | null
 }
 
 const ms = (d: Date | null) => d?.getTime() ?? 0
@@ -123,11 +162,11 @@ async function main() {
     const esegui = process.argv.includes('--esegui')
     const ripristina = process.argv.includes('--ripristina')
     const elenco = process.argv.includes('--elenco')
-    const obiettivo = Number(opzione('obiettivo') ?? 40)
-    if (!Number.isInteger(obiettivo) || obiettivo < 0 || obiettivo > 500) throw new Error(`--obiettivo non valido`)
-    if (esegui && ripristina) throw new Error('--esegui e --ripristina insieme non hanno senso')
+    const obiettivoP = intero('prima', 40)
+    const obiettivoST = intero('seconde-terze', 30)
+    const fileCandidati = opzione('candidati')
 
-    if (ripristina) return annulla()
+    if (ripristina) return annulla(esegui)
 
     // ── GDO ────────────────────────────────────────────────────────────────
     const gdoRows = await db.select({
@@ -151,6 +190,7 @@ async function main() {
         return g ? `${g.firstName?.trim() || 'GDO'} (${g.gdoCode})` : id.slice(0, 8)
     }
     const tutti = [...SQUADRA, SVUOTA].map(idDi)
+    const bot = new Set((await db.select({ id: users.id }).from(users).where(eq(users.isBot, true))).map((u) => u.id))
 
     // ── Lead: aperti dei GDO + parcheggiati non assegnati ───────────────────
     const aperti = and(
@@ -163,6 +203,7 @@ async function main() {
     const colonne = {
         id: leads.id, assignedToId: leads.assignedToId, status: leads.status, callCount: leads.callCount,
         recallDate: leads.recallDate, lastCallDate: leads.lastCallDate, assignedAt: leads.assignedAt,
+        updatedAt: leads.updatedAt,
         createdAt: leads.createdAt, funnel: leads.funnel, launchBucket: leads.launchBucket,
         lancioPool: leads.lancioPool, humanTestCohort: leads.humanTestCohort, intakeBatch: leads.intakeBatch,
         isTest: leads.isTest, reservedSalespersonId: leads.reservedSalespersonId,
@@ -179,7 +220,7 @@ async function main() {
     const segnali = new Map<string, Date>()
     const parcheggio = new Map<string, { t: Date; motivo: string | null }>()
     const cercati = new Set<string>()
-    const chiamate = new Map<string, number>()
+    const chiamateLog = new Map<string, { userId: string | null; t: Date }[]>()
     for (const blocco of lotti(ids)) {
         const ev = await db.select({
             leadId: leadEvents.leadId, eventType: leadEvents.eventType, timestamp: leadEvents.timestamp,
@@ -204,13 +245,15 @@ async function main() {
         const cr = await db.select({ leadId: botContactRequests.leadId }).from(botContactRequests)
             .where(and(inArray(botContactRequests.leadId, blocco), ne(botContactRequests.status, 'closed')))
         for (const c of cr) cercati.add(c.leadId)
-        const cl = await db.select({ leadId: callLogs.leadId, n: sql<number>`count(*)::int` })
-            .from(callLogs).where(inArray(callLogs.leadId, blocco)).groupBy(callLogs.leadId)
-        for (const c of cl) chiamate.set(c.leadId, c.n)
+        const cl = await db.select({ leadId: callLogs.leadId, userId: callLogs.userId, t: callLogs.createdAt })
+            .from(callLogs).where(inArray(callLogs.leadId, blocco))
+        for (const c of cl) chiamateLog.set(c.leadId, [...(chiamateLog.get(c.leadId) ?? []), { userId: c.userId, t: c.t }])
     }
 
     const lead: Lead[] = righe.map((r) => {
         const rit = ritorni.get(r.id) ?? null
+        const log = chiamateLog.get(r.id) ?? []
+        const umaneGiro = log.filter((c) => c.userId && !bot.has(c.userId) && (!rit || c.t > rit.t)).length
         return {
             id: r.id,
             assignedToId: r.assignedToId,
@@ -219,8 +262,9 @@ async function main() {
             recallDate: r.recallDate,
             lastCallDate: r.lastCallDate,
             assignedAt: r.assignedAt,
+            updatedAt: r.updatedAt,
             funnel: r.funnel,
-            chiamateTotali: chiamate.get(r.id) ?? 0,
+            chiamateTotali: log.length,
             ridatoIl: rit?.t ?? null,
             ultimoSegnale: segnali.get(r.id) ?? null,
             tiHaCercato: cercati.has(r.id),
@@ -231,6 +275,7 @@ async function main() {
             contaKpi: contaNeiKpi(r),
             sensoUnico: !!r.intakeBatch && BATCH_SENSO_UNICO.includes(r.intakeBatch),
             motivoParcheggio: r.assignedToId ? null : (parcheggio.get(r.id)?.motivo ?? null),
+            chiamateUmaneGiro: umaneGiro,
         }
     })
 
@@ -244,17 +289,22 @@ async function main() {
     }
     const spostabile = (l: Lead) => !l.recallDate && !l.tiHaCercato && !l.lancio && l.contaKpi && !l.sensoUnico
         && l.callCount <= 2 && !ESCLUSI_DAL_BOT.has(l.id)
+    /** Si può mettere nella colonna di un GDO: in seconde/terze solo con le chiamate vere di quel tentativo. */
+    const coerente = (l: Lead, col: Colonna) => col === 'P' || l.chiamateUmaneGiro >= l.callCount
+    const obiettivoDi = (col: Colonna) => (col === 'P' ? obiettivoP : obiettivoST)
 
     // ── Conteggi di partenza ────────────────────────────────────────────────
     const conta = new Map<string, Record<Colonna | 'R' | 'X', number>>()
     for (const id of tutti) conta.set(id, { P: 0, S: 0, T: 0, R: 0, X: 0 })
     const bloccati = new Map<string, { cercati: number; lancio: number; altro: number }>()
     for (const id of tutti) bloccati.set(id, { cercati: 0, lancio: 0, altro: 0 })
+    let incoerentiTenuti = 0
     for (const l of lead) {
         if (!l.assignedToId) continue
-        conta.get(l.assignedToId)![colonnaDi(l)]++
         const c = colonnaDi(l)
+        conta.get(l.assignedToId)![c]++
         if (c === 'P' || c === 'S' || c === 'T') {
+            if (!coerente(l, c)) incoerentiTenuti++
             if (!spostabile(l)) {
                 const b = bloccati.get(l.assignedToId)!
                 if (l.tiHaCercato) b.cercati++
@@ -268,23 +318,18 @@ async function main() {
     // ── Pool parcheggiato ───────────────────────────────────────────────────
     const pool = lead.filter((l) => !l.assignedToId)
     const esclusionePool = (l: Lead): string | null => {
-        if (!l.motivoParcheggio || !(MOTIVI_POOL as readonly string[]).includes(l.motivoParcheggio)) return `motivo ${l.motivoParcheggio ?? '—'} non usato`
+        if (!l.motivoParcheggio || (MOTIVI_FUORI_POOL as readonly string[]).includes(l.motivoParcheggio)) return `motivo ${l.motivoParcheggio ?? '—'} non usato`
         if (l.lancio) return 'lancio'
-        // In prima chiamata si danno solo ridati; le seconde e terze di Lorenzo
-        // valgono anche se non sono passate dal bot (pool database compresi).
-        if (!l.ridatoIl && colonnaDi(l) === 'P') return 'mai ridato dal bot (prima chiamata)'
         if (l.recallDate) return 'con richiamo'
         if (l.tiHaCercato) return '"Ti ha cercato" aperto'
-        if (ESCLUSI_DAL_BOT.has(l.id)) return 'scartato/fissato nel bot'
+        if (ESCLUSI_DAL_BOT.has(l.id)) return 'in lavorazione/scartato/fissato nel bot'
         if (!l.contaKpi || l.sensoUnico) return 'infornata fuori KPI'
         if (l.callCount > 2) return '3+ tentativi'
+        const c = colonnaDi(l) as Colonna
+        // In prima chiamata si danno solo ridati dal bot.
+        if (c === 'P' && !l.ridatoIl) return 'mai ridato dal bot (prima chiamata)'
+        if (!coerente(l, c)) return 'tentativi senza chiamate vere di una persona'
         return null
-    }
-    const ordinePool = (a: Lead, b: Lead) => {
-        const ma = MOTIVI_POOL.indexOf(a.motivoParcheggio as typeof MOTIVI_POOL[number])
-        const mb = MOTIVI_POOL.indexOf(b.motivoParcheggio as typeof MOTIVI_POOL[number])
-        if (ma !== mb) return ma - mb
-        return confrontaMigliori(a, b)
     }
     const poolUsabile: Record<Colonna, Lead[]> = { P: [], S: [], T: [] }
     for (const l of pool) {
@@ -292,27 +337,33 @@ async function main() {
         const c = colonnaDi(l)
         if (c === 'P' || c === 'S' || c === 'T') poolUsabile[c].push(l)
     }
-    poolUsabile.P.sort(ordinePool)
-    // Seconde e terze dal pool: solo quelle di Lorenzo (il PO non ha chiesto le altre).
-    poolUsabile.S = poolUsabile.S.filter((l) => l.motivoParcheggio === 'lorenzo_solo_ridati_migliori')
-    poolUsabile.T = poolUsabile.T.filter((l) => l.motivoParcheggio === 'lorenzo_solo_ridati_migliori')
+    // Prima: i ridati più recenti. Seconde/terze: i chiamati per ultimi.
+    poolUsabile.P.sort((a, b) => ms(b.ridatoIl) - ms(a.ridatoIl) || (a.id < b.id ? -1 : 1))
+    for (const c of ['S', 'T'] as const) poolUsabile[c].sort((a, b) => ms(b.lastCallDate) - ms(a.lastCallDate) || (a.id < b.id ? -1 : 1))
+
+    if (fileCandidati) {
+        // Per il controllo sul DB del bot: tutti i candidati del pool, nell'ordine in cui verrebbero usati.
+        fs.writeFileSync(fileCandidati, JSON.stringify({
+            P: poolUsabile.P.map((l) => l.id), S: poolUsabile.S.map((l) => l.id), T: poolUsabile.T.map((l) => l.id),
+        }))
+        console.log(`Candidati del pool scritti in ${fileCandidati}`)
+    }
 
     // ── Piano ───────────────────────────────────────────────────────────────
     const mosse: Mossa[] = []
     const usati = new Set<string>()
     const lorenzo = idDi(SVUOTA)
-    const priorita = PRIORITA.map(idDi)
-    const soloPool = new Set<string>(SOLO_DAL_POOL.map(idDi))
     const squadra = SQUADRA.map(idDi)
 
-    // Dà i lead (già in ordine, migliori prima) a turno a chi ne ha meno nel gruppo, fino all'obiettivo.
-    const distribuisci = (col: Colonna, offerta: { lead: Lead; origine: string }[], gruppo: string[]) => {
+    // Dà i lead (già in ordine) a turno a chi ne ha meno nella squadra, fino all'obiettivo.
+    const distribuisci = (col: Colonna, offerta: { lead: Lead; origine: string }[]) => {
         const resto: { lead: Lead; origine: string }[] = []
+        const obiettivo = obiettivoDi(col)
         for (const o of offerta) {
             if (usati.has(o.lead.id)) continue
-            const sotto = gruppo.filter((g) => conta.get(g)![col] < obiettivo)
-            if (sotto.length === 0) { resto.push(o); continue }
-            sotto.sort((x, y) => conta.get(x)![col] - conta.get(y)![col] || gruppo.indexOf(x) - gruppo.indexOf(y))
+            const sotto = squadra.filter((g) => g !== o.lead.assignedToId && conta.get(g)![col] < obiettivo)
+            if (sotto.length === 0 || !coerente(o.lead, col)) { resto.push(o); continue }
+            sotto.sort((x, y) => conta.get(x)![col] - conta.get(y)![col] || squadra.indexOf(x) - squadra.indexOf(y))
             const a = sotto[0]
             const da = o.lead.assignedToId
             mosse.push({ lead: o.lead, colonna: col, da, a, origine: o.origine })
@@ -328,53 +379,46 @@ async function main() {
         const out: { lead: Lead; origine: string }[] = []
         for (const g of [...squadra, lorenzo]) {
             const miei = lead.filter((l) => l.assignedToId === g && colonnaDi(l) === col && spostabile(l))
-            const quanti = g === lorenzo ? miei.length : Math.max(0, conta.get(g)![col] - obiettivo)
+            const quanti = g === lorenzo ? miei.length : Math.min(miei.length, Math.max(0, conta.get(g)![col] - obiettivoDi(col)))
             if (quanti === 0) continue
             // Prima: cede i restituiti da più tempo. Seconde/terze: tiene la cima
             // della sua coda (chiamati da più tempo) e cede i chiamati per ultimi.
             const ordine = col === 'P'
                 ? [...miei].sort((a, b) => ms(a.ridatoIl ?? a.assignedAt) - ms(b.ridatoIl ?? b.assignedAt) || (a.id < b.id ? -1 : 1))
                 : [...miei].sort((a, b) => ms(b.lastCallDate) - ms(a.lastCallDate) || (a.id < b.id ? -1 : 1))
-            for (const l of ordine.slice(0, quanti)) out.push({ lead: l, origine: g === lorenzo ? 'lorenzo' : 'eccesso' })
+            for (const l of ordine.slice(0, quanti)) out.push({ lead: l, origine: g === lorenzo ? 'lorenzo' : 'eccedenza' })
         }
         return out
+    }
+    // Le eccedenze rimaste: tornano nel pool (chi le cedeva scende all'obiettivo).
+    const parcheggia = (col: Colonna, resto: { lead: Lead; origine: string }[]) => {
+        for (const o of resto) {
+            if (usati.has(o.lead.id) || !o.lead.assignedToId) continue
+            mosse.push({ lead: o.lead, colonna: col, da: o.lead.assignedToId, a: null, origine: `${o.origine}:al_pool` })
+            usati.add(o.lead.id)
+            conta.get(o.lead.assignedToId)![col]--
+        }
     }
     const migliorePrima = (a: { lead: Lead }, b: { lead: Lead }) => confrontaMigliori(a.lead, b.lead)
     const piuFermoPrima = (a: { lead: Lead }, b: { lead: Lead }) =>
         ms(a.lead.lastCallDate) - ms(b.lead.lastCallDate) || (a.lead.id < b.lead.id ? -1 : 1)
 
-    // 1. Prima chiamata
-    {
-        const offerta = eccessi('P').sort(migliorePrima)
-        const altri = squadra.filter((g) => !priorita.includes(g) && !soloPool.has(g))
-        let resto = distribuisci('P', offerta, priorita)
-        resto = distribuisci('P', resto, altri)
-        const dalPool = poolUsabile.P.map((l) => ({ lead: l, origine: `pool:${l.motivoParcheggio}` }))
-        let rp = distribuisci('P', dalPool, priorita)
-        rp = distribuisci('P', rp, [...soloPool])
-        distribuisci('P', rp, altri)
-        // Eccessi che non trovano posto restano a chi li ha (Lorenzo compreso: lo dice il rapporto).
-        void resto
-    }
-    // 2. Seconde e terze
-    for (const col of ['S', 'T'] as const) {
-        const offerta = [
-            ...eccessi(col),
-            ...poolUsabile[col].map((l) => ({ lead: l, origine: 'pool:lorenzo_solo_ridati_migliori' })),
-        ].sort(piuFermoPrima)
-        const resto = distribuisci(col, offerta, priorita)
-        distribuisci(col, resto, squadra.filter((g) => !priorita.includes(g)))
+    for (const col of ['P', 'S', 'T'] as const) {
+        const offerta = eccessi(col).sort(col === 'P' ? migliorePrima : piuFermoPrima)
+        const resto = distribuisci(col, offerta)
+        distribuisci(col, poolUsabile[col].map((l) => ({ lead: l, origine: `pool:${l.motivoParcheggio}` })))
+        parcheggia(col, resto)
     }
 
     // ── Rapporto ────────────────────────────────────────────────────────────
     const pad = (s: string | number, n: number) => String(s).padStart(n)
-    console.log(`Ridistribuzione 26/10 — obiettivo ${obiettivo} in prima, tetto ${obiettivo} in seconde e terze.`)
+    console.log(`Ridistribuzione 26/10 — prima chiamata ${obiettivoP}, seconde ${obiettivoST}, terze ${obiettivoST}.`)
     console.log(`Lead aperti Fenice dei GDO: ${deiGdo.length}; parcheggiati non assegnati: ${parcheggiati.length}.\n`)
-    console.log('GDO                 | Prima        | Seconde      | Terze        | Richiami (fermi)')
-    console.log('                    | prima → dopo | prima → dopo | prima → dopo |')
+    console.log('GDO                 | Prima        | Seconde      | Terze        | Richiami')
+    console.log('                    | prima → dopo | prima → dopo | prima → dopo | prima → dopo')
     for (const g of [...squadra, lorenzo]) {
         const p = prima.get(g)!, d = conta.get(g)!
-        console.log(`${nomeDi(g).padEnd(20)}| ${pad(p.P, 4)} → ${pad(d.P, 4)}  | ${pad(p.S, 4)} → ${pad(d.S, 4)}  | ${pad(p.T, 4)} → ${pad(d.T, 4)}  | ${pad(p.R, 4)}`)
+        console.log(`${nomeDi(g).padEnd(20)}| ${pad(p.P, 4)} → ${pad(d.P, 4)}  | ${pad(p.S, 4)} → ${pad(d.S, 4)}  | ${pad(p.T, 4)} → ${pad(d.T, 4)}  | ${pad(p.R, 4)} → ${pad(d.R, 4)}`)
     }
 
     console.log('\nMovimenti per GDO (entrano / escono, da dove):')
@@ -423,19 +467,42 @@ async function main() {
             else if (c === 'P' || c === 'S' || c === 'T') usabili[c]++
         }
         const u = mosse.filter((m) => !m.da && m.lead.motivoParcheggio === motivo)
-        const uP = u.filter((m) => m.colonna === 'P').length
-        const uST = u.length - uP
+        const per = (c: Colonna) => u.filter((m) => m.colonna === c).length
         const tot = usabili.P + usabili.S + usabili.T
         console.log(`  ${motivo}: ${lista.length} — utilizzabili ${tot} (prima ${usabili.P}, seconde ${usabili.S}, terze ${usabili.T})`
             + `${cause.size ? `; esclusi: ${[...cause].map(([k, n]) => `${k} ${n}`).join(', ')}` : ''}`)
-        if (u.length) console.log(`      usati dal piano ${u.length} (prima ${uP}, seconde/terze ${uST}); restano utilizzabili ${tot - u.length}`)
+        if (u.length) console.log(`      usati dal piano ${u.length} (prima ${per('P')}, seconde ${per('S')}, terze ${per('T')})`)
     }
 
-    const noSotto = [...squadra].filter((g) => conta.get(g)!.P < obiettivo)
-    if (noSotto.length) console.log(`\nSotto ${obiettivo} in prima chiamata perché i lead non bastano: ${noSotto.map(nomeDi).join(', ')}`)
+    // Fonti
+    console.log('\nLead spostati per fonte:')
+    const perFonte = new Map<string, number>()
+    for (const m of mosse) {
+        const k = `${NOME_COLONNA[m.colonna]} · ${m.a === null ? 'torna nel pool' : m.da === null ? `dal ${m.origine}` : m.origine === 'lorenzo' ? 'da Lorenzo' : "dall'eccedenza di un GDO"}`
+        perFonte.set(k, (perFonte.get(k) ?? 0) + 1)
+    }
+    for (const [k, n] of perFonte) console.log(`  ${k}: ${n}`)
+
+    // Controlli delle regole
+    const violazioni: string[] = []
+    for (const m of mosse) {
+        if (m.lead.recallDate) violazioni.push(`${m.lead.id}: ha un richiamo`)
+        if (m.a && !coerente(m.lead, m.colonna)) violazioni.push(`${m.lead.id}: in ${NOME_COLONNA[m.colonna]} senza le chiamate vere`)
+        if (m.lead.lancio || m.lead.tiHaCercato) violazioni.push(`${m.lead.id}: lancio o "Ti ha cercato"`)
+        if (m.a === lorenzo) violazioni.push(`${m.lead.id}: dato a Lorenzo`)
+    }
+    for (const g of [...squadra, lorenzo]) if (prima.get(g)!.R !== conta.get(g)!.R) violazioni.push(`${nomeDi(g)}: richiami cambiati`)
     const lorRes = conta.get(lorenzo)!
-    console.log(`\n${nomeDi(lorenzo)} dopo: prima ${lorRes.P}, seconde ${lorRes.S}, terze ${lorRes.T}, richiami ${lorRes.R}.`)
-    console.log(`Totale lead da spostare: ${mosse.length} (prima ${mosse.filter((m) => m.colonna === 'P').length}, seconde ${mosse.filter((m) => m.colonna === 'S').length}, terze ${mosse.filter((m) => m.colonna === 'T').length}).`)
+    if (lorRes.P + lorRes.S + lorRes.T > 0) violazioni.push(`Lorenzo non a 0: prima ${lorRes.P}, seconde ${lorRes.S}, terze ${lorRes.T}`)
+    console.log(`\nControlli: ${violazioni.length ? `${violazioni.length} VIOLAZIONI` : 'nessun richiamo spostato, nessun lead senza chiamate vere in seconde/terze, Lorenzo a 0'}`)
+    for (const v of violazioni.slice(0, 20)) console.log(`  ${v}`)
+    console.log(`(Lead già in seconde/terze di qualcuno senza le chiamate vere, lasciati dove sono: ${incoerentiTenuti})`)
+
+    for (const col of ['P', 'S', 'T'] as const) {
+        const sotto = squadra.filter((g) => conta.get(g)![col] < obiettivoDi(col))
+        if (sotto.length) console.log(`Sotto obiettivo in ${NOME_COLONNA[col]} (lead adatti finiti): ${sotto.map((g) => `${nomeDi(g)} ${conta.get(g)![col]}`).join(', ')}`)
+    }
+    console.log(`\nTotale lead da spostare: ${mosse.length} (prima ${mosse.filter((m) => m.colonna === 'P').length}, seconde ${mosse.filter((m) => m.colonna === 'S').length}, terze ${mosse.filter((m) => m.colonna === 'T').length}; al pool ${mosse.filter((m) => !m.a).length}).`)
 
     if (elenco) {
         console.log('\nElenco:')
@@ -446,6 +513,19 @@ async function main() {
         console.log('\nDry-run: nessuna scrittura. --esegui per applicare, --elenco per vedere i lead uno per uno.')
         return
     }
+    if (violazioni.length) throw new Error('Violazioni delle regole: non scrivo.')
+
+    // ── File di ripristino (prima di scrivere) ──────────────────────────────
+    fs.mkdirSync(CARTELLA_RIPRISTINO, { recursive: true })
+    const fileRipristino = path.join(CARTELLA_RIPRISTINO, `ridistribuzione-26-10-${new Date().toISOString().replace(/[:.]/g, '-')}.json`)
+    const righeRipristino: RigaRipristino[] = mosse.map((m) => ({
+        id: m.lead.id, colonna: m.colonna, da: m.da, a: m.a, origine: m.origine,
+        status: m.lead.status, callCount: m.lead.callCount,
+        assignedAt: m.lead.assignedAt ? m.lead.assignedAt.toISOString() : null,
+        updatedAt: m.lead.updatedAt ? m.lead.updatedAt.toISOString() : null,
+    }))
+    fs.writeFileSync(fileRipristino, JSON.stringify({ creato: new Date().toISOString(), motivo: MOTIVO, mosse: righeRipristino }, null, 1))
+    console.log(`\nFile di ripristino: ${fileRipristino}`)
 
     // ── Scrittura ───────────────────────────────────────────────────────────
     const base = Date.now()
@@ -464,105 +544,123 @@ async function main() {
                 // Cambiato da quando è stato letto (chiamato, richiamo, spostato): non si tocca.
                 if (!r || r.assignedToId !== m.da || r.callCount !== m.lead.callCount || r.recallDate) continue
                 const t = new Date(base + i++)
-                await tx.update(leads)
-                    .set({
-                        assignedToId: m.a,
-                        assignedAt: sql`COALESCE(${leads.assignedAt}, ${t})`,
-                        updatedAt: t,
-                        version: sql`${leads.version} + 1`,
+                if (m.a) {
+                    await tx.update(leads)
+                        .set({
+                            assignedToId: m.a,
+                            assignedAt: sql`COALESCE(${leads.assignedAt}, ${t})`,
+                            updatedAt: t,
+                            version: sql`${leads.version} + 1`,
+                        })
+                        .where(and(aperti, eq(leads.id, m.lead.id)))
+                    eventi.push({
+                        id: crypto.randomUUID(),
+                        leadId: m.lead.id,
+                        eventType: 'REASSIGNED_ADMIN',
+                        userId: null,
+                        fromSection: NOME_COLONNA[m.colonna],
+                        toSection: NOME_COLONNA[m.colonna],
+                        timestamp: t,
+                        metadata: {
+                            reason: MOTIVO, nota: NOTA, origine: m.origine,
+                            fromAssigneeId: m.da, toAssigneeId: m.a, toGdoCode: codiceDi.get(m.a) ?? null,
+                            colonna: m.colonna, stato: r.status, callCount: r.callCount, recallDate: null,
+                            assignedAtPrima: r.assignedAt ? r.assignedAt.toISOString() : null,
+                        },
+                        companyId: FENICE,
                     })
-                    .where(and(aperti, eq(leads.id, m.lead.id)))
-                eventi.push({
-                    id: crypto.randomUUID(),
-                    leadId: m.lead.id,
-                    eventType: 'REASSIGNED_ADMIN',
-                    userId: null,
-                    fromSection: NOME_COLONNA[m.colonna],
-                    toSection: NOME_COLONNA[m.colonna],
-                    timestamp: t,
-                    metadata: {
-                        reason: MOTIVO,
-                        nota: NOTA,
-                        origine: m.origine,
-                        fromAssigneeId: m.da,
-                        toAssigneeId: m.a,
-                        toGdoCode: codiceDi.get(m.a) ?? null,
-                        colonna: m.colonna,
-                        stato: r.status,
-                        callCount: r.callCount,
-                        recallDate: null,
-                        assignedAtPrima: r.assignedAt ? r.assignedAt.toISOString() : null,
-                    },
-                    companyId: FENICE,
-                })
+                } else {
+                    await tx.update(leads)
+                        .set({ assignedToId: null, updatedAt: t, version: sql`${leads.version} + 1` })
+                        .where(and(aperti, eq(leads.id, m.lead.id)))
+                    eventi.push({
+                        id: crypto.randomUUID(),
+                        leadId: m.lead.id,
+                        eventType: 'RIDATO_PARCHEGGIATO',
+                        userId: null,
+                        timestamp: t,
+                        metadata: {
+                            nota: NOTA, motivo: MOTIVO_PARCHEGGIO, reason: MOTIVO, colonna: m.colonna,
+                            tolto_a: m.da, stato: r.status, callCount: r.callCount, recallDate: null,
+                            assignedAtPrima: r.assignedAt ? r.assignedAt.toISOString() : null,
+                        },
+                        companyId: FENICE,
+                    })
+                }
                 n++
             }
             if (eventi.length) await tx.insert(leadEvents).values(eventi)
         }
         return n
     })
-    console.log(`\nScritto: ${scritti} lead spostati su ${mosse.length} pianificati (evento REASSIGNED_ADMIN, reason ${MOTIVO}).`)
-    console.log('Per annullare: --ripristina.')
+    console.log(`\nScritto: ${scritti} lead su ${mosse.length} pianificati (REASSIGNED_ADMIN / RIDATO_PARCHEGGIATO, reason ${MOTIVO}).`)
+    console.log(`Per annullare: --ripristina --file=${fileRipristino} --esegui`)
 }
 
-async function annulla() {
-    const ev = await db.select({
-        leadId: leadEvents.leadId,
-        timestamp: leadEvents.timestamp,
-        da: sql<string | null>`${leadEvents.metadata}->>'fromAssigneeId'`,
-        a: sql<string | null>`${leadEvents.metadata}->>'toAssigneeId'`,
-        assignedAtPrima: sql<string | null>`${leadEvents.metadata}->>'assignedAtPrima'`,
-        colonna: sql<string | null>`${leadEvents.metadata}->>'colonna'`,
-    }).from(leadEvents).where(and(
-        eq(leadEvents.companyId, FENICE),
-        eq(leadEvents.eventType, 'REASSIGNED_ADMIN'),
-        sql`${leadEvents.metadata}->>'reason' = ${MOTIVO}`,
-    ))
-    // L'ultimo spostamento di questo script per lead.
-    const ultimo = new Map<string, (typeof ev)[number]>()
-    for (const e of ev) {
-        const p = ultimo.get(e.leadId)
-        if (!p || p.timestamp < e.timestamp) ultimo.set(e.leadId, e)
+async function annulla(esegui: boolean) {
+    let file = opzione('file')
+    if (!file) {
+        const nomi = fs.existsSync(CARTELLA_RIPRISTINO)
+            ? fs.readdirSync(CARTELLA_RIPRISTINO).filter((f) => f.startsWith('ridistribuzione-26-10-') && f.endsWith('.json')).sort()
+            : []
+        if (!nomi.length) throw new Error(`Nessun file di ripristino in ${CARTELLA_RIPRISTINO}`)
+        file = path.join(CARTELLA_RIPRISTINO, nomi[nomi.length - 1])
     }
-    console.log(`Spostamenti di ${MOTIVO} trovati: ${ultimo.size}.`)
-    if (!process.argv.includes('--esegui-ripristino')) {
-        console.log('Prova a vuoto del ripristino. Aggiungi --esegui-ripristino per scrivere.')
+    const dati = JSON.parse(fs.readFileSync(file, 'utf8')) as { mosse: RigaRipristino[] }
+    console.log(`Ripristino da ${file}: ${dati.mosse.length} lead.`)
+    const aperti = and(
+        eq(leads.companyId, FENICE), inArray(leads.status, ['NEW', 'IN_PROGRESS']),
+        isNull(leads.appointmentDate), isNull(leads.presentedAt),
+    )
+    const ora = new Map<string, { assignedToId: string | null; callCount: number; recallDate: Date | null }>()
+    for (const blocco of lotti(dati.mosse.map((m) => m.id))) {
+        const r = await db.select({ id: leads.id, assignedToId: leads.assignedToId, callCount: leads.callCount, recallDate: leads.recallDate })
+            .from(leads).where(and(aperti, inArray(leads.id, blocco)))
+        for (const x of r) ora.set(x.id, x)
+    }
+    // Si rimette solo chi è ancora dove lo ha messo lo script, con gli stessi tentativi.
+    const daRimettere = dati.mosse.filter((m) => {
+        const r = ora.get(m.id)
+        return r && r.assignedToId === m.a && r.callCount === m.callCount && !r.recallDate
+    })
+    console.log(`Ancora come li ha lasciati lo script: ${daRimettere.length}; gli altri sono stati lavorati o spostati e restano dove sono.`)
+    if (!esegui) {
+        console.log('Prova a vuoto del ripristino. Aggiungi --esegui per scrivere.')
         return
     }
     const base = Date.now()
     const n = await db.transaction(async (tx) => {
         let k = 0
         let i = 0
-        for (const e of ultimo.values()) {
-            if (!e.a) continue
+        for (const m of daRimettere) {
             const t = new Date(base + i++)
             const res = await tx.update(leads)
                 .set({
-                    assignedToId: e.da,
-                    assignedAt: e.assignedAtPrima ? new Date(e.assignedAtPrima) : null,
+                    assignedToId: m.da,
+                    assignedAt: m.assignedAt ? new Date(m.assignedAt) : null,
                     updatedAt: t,
                     version: sql`${leads.version} + 1`,
                 })
                 .where(and(
-                    eq(leads.id, e.leadId), eq(leads.companyId, FENICE), eq(leads.assignedToId, e.a),
-                    inArray(leads.status, ['NEW', 'IN_PROGRESS']), isNull(leads.appointmentDate), isNull(leads.presentedAt),
+                    aperti, eq(leads.id, m.id), eq(leads.callCount, m.callCount),
+                    m.a ? eq(leads.assignedToId, m.a) : isNull(leads.assignedToId),
                 ))
                 .returning({ id: leads.id })
             if (res.length === 0) continue
             await tx.insert(leadEvents).values({
                 id: crypto.randomUUID(),
-                leadId: e.leadId,
+                leadId: m.id,
                 eventType: 'REASSIGNED_ADMIN',
                 userId: null,
                 timestamp: t,
-                metadata: { reason: `${MOTIVO}_annullata`, fromAssigneeId: e.a, toAssigneeId: e.da, colonna: e.colonna },
+                metadata: { reason: `${MOTIVO}_annullata`, fromAssigneeId: m.a, toAssigneeId: m.da, colonna: m.colonna },
                 companyId: FENICE,
             })
             k++
         }
         return k
     })
-    console.log(`Ripristinati: ${n} (gli altri sono già stati lavorati, fissati o spostati di nuovo e restano dove sono).`)
+    console.log(`Ripristinati: ${n}.`)
 }
 
 main()
