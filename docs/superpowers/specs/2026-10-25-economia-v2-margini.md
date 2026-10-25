@@ -1,6 +1,7 @@
 # Economia v2: valori, scenari e margini
 
 Data: 25/10/2026, sera. Ramo `feat/diretta-economia2`, partito da `feat/restyle-diretta`.
+Aggiornato il 25/10 notte dopo il collaudo: valori nuovi delle Conferme decisi da Bruno (Scintille 4 / 22 / 30, tetto 14; obiettivi presenze 14 e 20, chiusure 4 e 6), negozio con le Piume solo per il corso, presenze e chiusure pagate solo se registrate a appuntamento passato. Le tabelle sono rifatte con lo stesso modello.
 Decisioni di partenza: memoria `project_restyle_gdo_diretta.md` ("Decisioni 25/10 mattina, seconda tornata"), patto con Paolo (Doc "Paolo · Responsabile GDO, Conferme e HR"), bonus del 25/10.
 
 Tutti i numeri delle tabelle escono dalle regole vere del codice (`src/lib/economy/rules.ts`), dal catalogo vero (`src/lib/diretta/negozioCatalogo.ts`) e dal modello degli scenari (`src/lib/economy/scenari.ts`), con dati di ottobre letti dal DB di produzione (solo SELECT). Se cambia un valore nelle regole, le tabelle si rifanno con lo stesso modello.
@@ -8,11 +9,12 @@ Tutti i numeri delle tabelle escono dalle regole vere del codice (`src/lib/econo
 ## In breve
 
 - **Sullo stesso lead le Piume non si sommano più.** Vale lo stadio più alto: confermato 1, presentato 2, chiuso 4. Prima una chiusura valeva 1 + 2 (o 4) + 5 = 8-10 Piume, adesso 4. A parità di lavoro un GDO prende il **45% di Piume in meno**.
-- **Le Scintille comprano lo stile, le Piume comprano le cose vere.** Caffè, pranzo e merenda non si comprano più con le Scintille, cioè con il solo volume di fissati: i premi che costano soldi si pagano solo con risultati verificati da Conferme e venditori.
+- **Le Piume comprano solo il corso, le Scintille tutto il resto.** Regola di Bruno del 25/10: il corso si paga con i risultati verificati da Conferme e venditori; premi concreti, permessi, immagini e personalizzazioni si comprano in Scintille, così conta anche il ritmo.
+- **Presenze e chiusure pagano solo se registrate a appuntamento passato.** Il server accetta "Presenziato" anche prima dell'ora dell'appuntamento (logica di sempre), ma le monete aspettano un esito scritto all'ora dell'appuntamento o dopo, di solito quello del venditore dopo la call.
 - **I premi concreti chiedono da 1 a 10 settimane al massimo del patto.** Il corso costa 175 Piume, cioè **3,0 mesi** sempre al massimo del patto (7,4 appuntamenti per giornata, 12,7% di conferma). Un GDO medio ci mette 4,3 mesi.
-- **Le Conferme guadagnano anche loro.** Scintille sulle conferme, pagate soprattutto quando il lead si presenta, di più se la conferma arriva con un'ora d'anticipo. Piume su due obiettivi settimanali: presenze (16 e 22) e chiusure (5 e 7). Una Conferma brava arriva al corso in 3,1 mesi.
+- **Le Conferme guadagnano anche loro.** Scintille sulle conferme, pagate soprattutto quando il lead si presenta, di più se la conferma arriva con un'ora d'anticipo: 4 alla conferma, 22 in tutto alla presenza, 30 con un'ora d'anticipo. Piume su due obiettivi settimanali, alleggeriti da Bruno il 25/10 sera: presenze (14 e 20) e chiusure (4 e 6). Una Conferma brava arriva al corso in 2,8 mesi, una media in 3,8.
 - **Classifica dei primi tre** da lunedì a sabato: 50, 25 e 10 euro lordi. Ordine per presenze, poi fissati validi, poi alfabeto. L'admin registra i vincitori a settimana chiusa.
-- **Costo totale**, negozio e bonus in euro: **1.307 euro al mese** con una squadra come quella di ottobre, **2.276** con tutta la squadra al massimo del patto. Si ripaga con **2,4 presenze in più al mese** nel primo caso e con **4,2** nel secondo, su 118 e 173 presenze del mese. Passare da ottobre al patto vale circa **+29.800 euro di margine al mese**, contro 968 euro di costo in più.
+- **Costo totale**, negozio e bonus in euro, contando come spesa ogni Piuma e ogni Scintilla: **1.987 euro al mese** con una squadra come quella di ottobre, **3.101** con tutta la squadra al massimo del patto. Si ripaga con **3,7 presenze in più al mese** nel primo caso e con **5,7** nel secondo, su 118 e 173 presenze del mese. Passare da ottobre al patto vale circa **+29.800 euro di margine al mese**, contro 1.114 euro di costo in più. Sono più alti di prima (1.307 e 2.276) perché ora le Scintille comprano premi che costano soldi e le Piume valgono un corso (1,71 euro l'una).
 
 ## 1. Le regole nuove
 
@@ -45,7 +47,15 @@ Esempi:
 
 Si toglie anche la Piuma in più dalla 5ª presenza della settimana: quella presenza la paga già il bonus di 12 euro, e premiarla due volte va contro la parsimonia.
 
-Le Piume entrano solo se l'esito lo scrive lo staff (Conferme, venditori, manager, admin, ruolo letto dal DB) e mai il GDO stesso; contano gli esiti dal 26/10. Ogni gradino ha una chiave idempotente (`P:lead:<lead>:<gradino>`): doppio clic e due salvataggi simultanei accreditano una volta sola.
+Le Piume entrano solo se l'esito lo scrive lo staff (Conferme, venditori, manager, admin, ruolo letto dal DB) e mai il GDO stesso. Ogni gradino ha una chiave idempotente (`P:lead:<lead>:<gradino>`): doppio clic e due salvataggi simultanei accreditano una volta sola.
+
+Presenza e chiusura pagano solo se verificate (`esitiVerificati` in `rules.ts`, dal collaudo del 25/10):
+- l'ora dell'appuntamento è passata;
+- c'è un esito registrato all'ora dell'appuntamento o dopo: "Chiuso" o "Non chiuso" per la presenza, "Chiuso" per la chiusura (eventi `salesperson_outcome_set` di Conferme e venditori, e `RECONCILED` delle chiusure applicate dal foglio).
+
+Un "Presenziato" scritto in anticipo non paga mai da solo: paga l'esito che il venditore registra dopo la call. Se il venditore scrive "Lead non presenziato", il latch `presentedAt` resta (logica di sempre, conta per i KPI) ma per le monete non è una presenza.
+
+Avvio del 26/10: contano sia il fatto sia la sua registrazione. La conferma guarda quando è stata scritta; presenza e chiusura guardano l'ora dell'appuntamento, e la verifica chiede che la registrazione sia arrivata dopo, quindi anche lei dal 26/10. Così un esito scritto il 25/10 non paga, anche per un appuntamento dal 26 in poi, e un appuntamento di prima dell'avvio registrato in ritardo resta del periodo vecchio, come per il bonus presenze e la classifica, che contano per settimana dell'appuntamento.
 
 ### 1.3 Conferme: Scintille per lead
 
@@ -53,13 +63,15 @@ Solo per il ruolo CONFERME letto dal DB, account attivo e non bot. Anche qui val
 
 | Stadio | Scintille del lead | Note |
 |---|---|---|
-| Confermato **prima dell'ora dell'appuntamento** | 3 | Al massimo 12 conferme pagate al giorno a persona. |
-| Presentato | 20 in tutto (+17) | La presenza la scrive il venditore. |
-| Presentato, con conferma arrivata almeno un'ora prima | 26 in tutto (+23) | È la regola "lead gestiti in tempo". |
+| Confermato **prima dell'ora dell'appuntamento** | 4 | Al massimo 14 conferme pagate al giorno a persona. |
+| Presentato | 22 in tutto (+18) | La presenza la scrive il venditore, a appuntamento passato. |
+| Presentato, con conferma arrivata almeno un'ora prima | 30 in tutto (+26) | È la regola "lead gestiti in tempo". |
+
+Valori decisi da Bruno il 25/10 sera (prima: 3, 20, 26 e tetto 12).
 
 Perché così:
 - **La conferma fatta a call iniziata non paga.** Fra il 7/9 e il 24/10 il 10% delle conferme delle Conferme è stato registrato dopo l'ora dell'appuntamento, e quei lead si sono presentati quasi tutti (34 su 35): il lead era già davanti al venditore. Serve al conteggio delle presenze del GDO, ma non è lavoro di conferma.
-- **Il grosso si paga alla presenza**, cioè quando un altro (il venditore) certifica che la conferma era vera. Confermare a vuoto rende 3 Scintille, e con il tetto di 12 al giorno al massimo 36. Non c'è nessuno storno per un lead che non si presenta: niente perdite da spiegare, la presenza semplicemente non arriva.
+- **Il grosso si paga alla presenza**, cioè quando un altro (il venditore) certifica che la conferma era vera. Confermare a vuoto rende 4 Scintille, e con il tetto di 14 al giorno al massimo 56. Non c'è nessuno storno per un lead che non si presenta: niente perdite da spiegare, la presenza semplicemente non arriva.
 - **"In tempo" vuol dire prima dell'appuntamento, non veloce.** Abbiamo scartato i lead lavorati all'ora e i minuti dall'arrivo in board: si gonfiano con i non risposto e con gli scarti, che alzano il conteggio senza un lead in più davanti al venditore. L'anticipo misurato sull'ora dell'appuntamento invece è il tempo che conta per il venditore, e lo paga solo una presenza vera. Nei dati: il 57% delle conferme e il 59% delle presenze confermate arrivano con almeno un'ora d'anticipo.
 - **Chi conferma per primo tiene il lead.** Se un collega riconferma lo stesso lead (2 casi su 636 da agosto), il premio resta a chi l'aveva confermato. Se la conferma viene tolta e rifatta da un altro, passa a lui. Una conferma già pagata resta valida anche se poi viene risalvata a call iniziata, per esempio per cambiare venditore.
 - **Chi conferma non si premia da solo.** Se l'esito del venditore lo scrive la stessa persona che ha confermato, quel lead per lei resta confermato e non presentato. Oggi le Conferme non scrivono esiti dei venditori (zero casi dal 7/9), ma la funzione lo permette.
@@ -70,8 +82,10 @@ Settimana da lunedì a sabato, solo lead confermati dalla persona prima dell'app
 
 | Obiettivo | 1° scalino | 2° scalino | Piume |
 |---|---|---|---|
-| Presenze della settimana | 16 | 22 | 3 al primo, altre 4 al secondo |
-| Chiusure della settimana | 5 | 7 | 4 al primo, altre 5 al secondo |
+| Presenze della settimana | 14 | 20 | 3 al primo, altre 4 al secondo |
+| Chiusure della settimana | 4 | 6 | 4 al primo, altre 5 al secondo |
+
+Soglie alleggerite da Bruno il 25/10 sera (prima: presenze 16 e 22, chiusure 5 e 7). Contano solo presenze e chiusure verificate, come al punto 1.2.
 
 Al massimo 16 Piume a settimana. Gli scalini si accreditano appena raggiunti e si stornano se il conteggio scende (chiusura tolta, presenza annullata). Si riallineano a ogni esito per la settimana in corso e per quella prima, e di nuovo quando l'admin registra i premi della settimana.
 
@@ -91,8 +105,8 @@ Il bonus Conferme conta le chiusure dei lead confermati da un account Conferme, 
 
 ### 1.6 A cosa servono le due monete
 
-- **Scintille**: si guadagnano col ritmo (GDO) e con le conferme (Conferme). Comprano immagini profilo e personalizzazioni, che non costano niente all'azienda. Fissare tanto e male non porta a nessun premio che costa soldi.
-- **Piume**: si guadagnano solo con risultati scritti da altri (conferme, presenze, chiusure). Comprano i premi concreti, i permessi e il corso.
+- **Scintille**: si guadagnano col ritmo (GDO) e con le conferme (Conferme). Dal 25/10 (regola di Bruno) comprano tutti i premi tranne il corso: premi concreti, permessi, immagini profilo e personalizzazioni. I fissati tolti prima che le Conferme li vedano si stornano, così fissare e togliere non rende.
+- **Piume**: si guadagnano solo con risultati scritti da altri (conferme, presenze, chiusure verificate). Comprano solo il corso.
 
 ## 2. Dati di partenza (ottobre 2026)
 
@@ -196,12 +210,12 @@ Conferma media = la squadra di settembre-ottobre divisa per due persone. Conferm
 
 | Scenario | Scintille: conferme | Scintille: presenze | Scintille: in tempo | Scintille a settimana | Scintille al mese | Piume: presenze | Piume: chiusure | Piume a settimana | Piume al mese |
 |---|---|---|---|---|---|---|---|---|---|
-| Conferma media | 66 | 323 | 67 | **456** | 1.977 | 3,5 | 4,8 | **8,3** | 35,9 |
-| Conferma brava | 90 | 442 | 101 | **633** | 2.745 | 6,2 | 7,0 | **13,2** | 57,3 |
+| Conferma media | 88 | 342 | 90 | **520** | 2.252 | 4,5 | 6,2 | **10,6** | 46,1 |
+| Conferma brava | 120 | 468 | 135 | **723** | 3.134 | 6,6 | 7,9 | **14,5** | 62,7 |
 
-Probabilità degli scalini in una settimana: la media arriva a 16 presenze nel 79% delle settimane e a 22 nel 27%, a 5 chiusure nel 71% e a 7 nel 39%; la brava a 16 presenze nel 99%, a 22 nell'81%, a 5 chiusure nel 90%, a 7 nel 69%.
+Probabilità degli scalini in una settimana: la media arriva a 14 presenze nel 90% delle settimane e a 20 nel 44%, a 4 chiusure nell'85% e a 6 nel 55%; la brava a 14 presenze quasi sempre, a 20 nel 90%, a 4 chiusure nel 96%, a 6 nell'81%.
 
-Le Conferme guadagnano come i GDO: la media come il GDO medio, la brava come il GDO al massimo del patto. Così lo stesso negozio vale per tutti.
+Con i valori nuovi le Conferme guadagnano un po' più dei GDO alla pari: la media prende meno Scintille del GDO medio (520 contro 581 a settimana) ma più Piume (10,6 contro 9,3); la brava supera il GDO al massimo del patto (723 Scintille e 14,5 Piume contro 641 e 13,5). Lo stesso negozio vale per tutti, tranne la mezz'ora in cui fissa Bruno, che è solo dei GDO.
 
 ### 3.3 Prima e dopo
 
@@ -223,22 +237,22 @@ Settimana al massimo del patto: 640 Scintille e 13,5 Piume (sezione 3.1). I test
 
 | Premio | Prezzo | Settimane al massimo del patto | GDO medio | GDO alla linea | GDO bravo | GDO al massimo | GDO campione | Conferma media | Conferma brava |
 |---|---|---|---|---|---|---|---|---|---|
-| Corso Fenice Academy a scelta, regalabile | 175 Piume | 13,0 | 4,3 mesi | 4,6 mesi | 3,3 mesi | **3,0 mesi** | 1,9 mesi | 4,9 mesi | 3,1 mesi |
-| Sabato libero, pagato (da approvare) | 135 Piume | 10,0 | 3,3 mesi | 3,5 mesi | 2,6 mesi | 2,3 mesi | 6,3 sett. | 3,8 mesi | 2,4 mesi |
-| Cena con Bruno e Federico, offerta | 110 Piume | 8,1 | 2,7 mesi | 2,9 mesi | 2,1 mesi | 1,9 mesi | 5,1 sett. | 3,1 mesi | 1,9 mesi |
-| Mezza giornata con un venditore (da approvare) | 55 Piume | 4,1 | 5,9 sett. | 6,2 sett. | 4,5 sett. | 4,1 sett. | 2,5 sett. | 6,6 sett. | 4,2 sett. |
-| Merenda per la sala | 40 Piume | 3,0 | 4,3 sett. | 4,5 sett. | 3,3 sett. | 3,0 sett. | 1,9 sett. | 4,8 sett. | 3,0 sett. |
-| Uscita 30 minuti prima (da approvare) | 28 Piume | 2,1 | 3,0 sett. | 3,2 sett. | 2,3 sett. | 2,1 sett. | 1,3 sett. | 3,4 sett. | 2,1 sett. |
-| Pranzo offerto: un ordine su Glovo che arriva in ufficio | 28 Piume | 2,1 | 3,0 sett. | 3,2 sett. | 2,3 sett. | 2,1 sett. | 1,3 sett. | 3,4 sett. | 2,1 sett. |
-| Caffè e cornetto | 14 Piume | 1,0 | 1,5 sett. | 1,6 sett. | 1,1 sett. | 1,0 sett. | 4 gg | 1,7 sett. | 1,1 sett. |
-| Titolo «Voce della sala» | 1.900 Scintille | 3,0 | 3,3 sett. | 3,8 sett. | 2,7 sett. | 3,0 sett. | 1,9 sett. | 4,2 sett. | 3,0 sett. |
-| Cornice Fenice | 1.300 Scintille | 2,0 | 2,2 sett. | 2,6 sett. | 1,8 sett. | 2,0 sett. | 1,3 sett. | 2,8 sett. | 2,1 sett. |
-| Fenice d'oro (immagine) | 2.600 Scintille | 4,1 | 4,5 sett. | 5,2 sett. | 3,7 sett. | 4,1 sett. | 2,6 sett. | 5,7 sett. | 4,1 sett. |
-| Fiamma viva (immagine) | 1.600 Scintille | 2,5 | 2,8 sett. | 3,2 sett. | 2,3 sett. | 2,5 sett. | 1,6 sett. | 3,5 sett. | 2,5 sett. |
-| Civetta (immagine) | 650 Scintille | 1,0 | 1,1 sett. | 1,3 sett. | 6 gg | 1,0 sett. | 4 gg | 1,4 sett. | 1,0 sett. |
-| Falco (immagine) | 480 Scintille | 0,8 | 5 gg | 6 gg | 4 gg | 4 gg | 3 gg | 1,1 sett. | 5 gg |
+| Corso Fenice Academy a scelta, regalabile | 175 Piume | 13,0 | 4,3 mesi | 4,6 mesi | 3,3 mesi | **3,0 mesi** | 8,1 sett. | 3,8 mesi | 2,8 mesi |
+| Sabato libero, pagato (da approvare) | 6.400 Scintille | 10,0 | 2,5 mesi | 3,0 mesi | 2,1 mesi | 2,3 mesi | 6,3 sett. | 2,8 mesi | 2,0 mesi |
+| Cena con Bruno e Federico, offerta | 5.200 Scintille | 8,1 | 2,1 mesi | 2,4 mesi | 7,4 sett. | 8,1 sett. | 5,2 sett. | 2,3 mesi | 7,2 sett. |
+| Mezz'ora di pausa: fissa Bruno per te (solo GDO) | 3.800 Scintille | 5,9 | 6,5 sett. | 7,6 sett. | 5,4 sett. | 5,9 sett. | 3,8 sett. | solo GDO | solo GDO |
+| Merenda per la sala | 1.900 Scintille | 3,0 | 3,3 sett. | 3,8 sett. | 2,7 sett. | 3,0 sett. | 1,9 sett. | 3,7 sett. | 2,6 sett. |
+| Uscita 30 minuti prima (da approvare) | 1.350 Scintille | 2,1 | 2,3 sett. | 2,7 sett. | 1,9 sett. | 2,1 sett. | 1,3 sett. | 2,6 sett. | 1,9 sett. |
+| Pranzo offerto: un ordine su Glovo che arriva in ufficio | 1.350 Scintille | 2,1 | 2,3 sett. | 2,7 sett. | 1,9 sett. | 2,1 sett. | 1,3 sett. | 2,6 sett. | 1,9 sett. |
+| Caffè e cornetto | 650 Scintille | 1,0 | 1,1 sett. | 1,3 sett. | 6 gg | 1,0 sett. | 4 gg | 1,3 sett. | 5 gg |
+| Titolo «Voce della sala» | 1.900 Scintille | 3,0 | 3,3 sett. | 3,8 sett. | 2,7 sett. | 3,0 sett. | 1,9 sett. | 3,7 sett. | 2,6 sett. |
+| Cornice Fenice | 1.300 Scintille | 2,0 | 2,2 sett. | 2,6 sett. | 1,8 sett. | 2,0 sett. | 1,3 sett. | 2,5 sett. | 1,8 sett. |
+| Fenice d'oro (immagine) | 2.600 Scintille | 4,1 | 4,5 sett. | 5,2 sett. | 3,7 sett. | 4,1 sett. | 2,6 sett. | 5,0 sett. | 3,6 sett. |
+| Fiamma viva (immagine) | 1.600 Scintille | 2,5 | 2,8 sett. | 3,2 sett. | 2,3 sett. | 2,5 sett. | 1,6 sett. | 3,1 sett. | 2,2 sett. |
+| Civetta (immagine) | 650 Scintille | 1,0 | 1,1 sett. | 1,3 sett. | 6 gg | 1,0 sett. | 4 gg | 1,3 sett. | 5 gg |
+| Falco (immagine) | 480 Scintille | 0,8 | 5 gg | 6 gg | 4 gg | 4 gg | 3 gg | 6 gg | 4 gg |
 | Volpe (immagine) | 320 Scintille | 0,5 | 3 gg | 4 gg | 3 gg | 3 gg | 2 gg | 4 gg | 3 gg |
-| Squalo (immagine) | 300 Scintille | 0,5 | 3 gg | 4 gg | 3 gg | 3 gg | 2 gg | 4 gg | 3 gg |
+| Squalo (immagine) | 300 Scintille | 0,5 | 3 gg | 4 gg | 3 gg | 3 gg | 2 gg | 3 gg | 2 gg |
 
 "gg" = giornate di lavoro, "sett." = settimane lun-sab. Fenice d'oro, Fiamma viva, il titolo e la cornice costano più settimane di caffè, pranzo e uscita anticipata: le immagini più rare valgono più di certi premi concreti, come chiesto. Le 200 Scintille di benvenuto di Riccardo e Zora valgono due terzi della Squalo.
 
@@ -247,38 +261,38 @@ Settimana al massimo del patto: 640 Scintille e 13,5 Piume (sezione 3.1). I test
 | Premio | Prima | Settimane al massimo, prima | Adesso | Settimane al massimo, adesso |
 |---|---|---|---|---|
 | Corso | 400 Piume | 16,4 | 175 Piume | 13,0 |
-| Sabato libero | 180 Piume | 7,4 | 135 Piume | 10,0 |
-| Cena | 120 Piume, per due fino a 70 euro | 4,9 | 110 Piume, con Bruno e Federico | 8,1 |
-| Mezza giornata con un venditore | 60 Piume | 2,5 | 55 Piume | 4,1 |
-| Uscita 30 minuti prima | 30 Piume | 1,2 | 28 Piume | 2,1 |
-| Merenda per la sala | 1.500 Scintille | 2,1 | 40 Piume | 3,0 |
-| Pranzo | 1.300 Scintille, fino a 15 euro | 1,8 | 28 Piume, Glovo in ufficio | 2,1 |
-| Caffè e cornetto | 700 Scintille | 1,0 | 14 Piume | 1,0 |
+| Sabato libero | 180 Piume | 7,4 | 6.400 Scintille | 10,0 |
+| Cena | 120 Piume, per due fino a 70 euro | 4,9 | 5.200 Scintille, con Bruno e Federico | 8,1 |
+| Mezza giornata con un venditore | 60 Piume | 2,5 | tolta, al suo posto la mezz'ora in cui fissa Bruno: 3.800 Scintille, solo GDO | 5,9 |
+| Uscita 30 minuti prima | 30 Piume | 1,2 | 1.350 Scintille | 2,1 |
+| Merenda per la sala | 1.500 Scintille | 2,1 | 1.900 Scintille | 3,0 |
+| Pranzo | 1.300 Scintille, fino a 15 euro | 1,8 | 1.350 Scintille, Glovo in ufficio | 2,1 |
+| Caffè e cornetto | 700 Scintille | 1,0 | 650 Scintille | 1,0 |
 | Titolo | 50 Piume | 2,0 | 1.900 Scintille | 3,0 |
 | Cornice | 900 Scintille | 1,2 | 1.300 Scintille | 2,0 |
 
-"Prima" misurato con le regole della v1 (24,4 Piume e 723 Scintille a settimana al massimo del patto). Il corso diventa un po' più vicino (era quasi 4 mesi, ora 3, come chiesto); tutto il resto si allontana, e i premi che costano soldi escono dalle Scintille. Spendendo tutto, un GDO medio costava circa 116 euro al mese di negozio con la v1 e ne costa circa 50 con la v2; al massimo del patto da circa 157 a circa 72.
+"Prima" misurato con le regole della v1 (24,4 Piume e 723 Scintille a settimana al massimo del patto). Il corso diventa un po' più vicino (era quasi 4 mesi, ora 3, come chiesto); tutto il resto si allontana. Dal 25/10 i premi che costano soldi si comprano in Scintille e le Piume servono solo per il corso. Spendendo tutto, un GDO medio costa circa 115 euro al mese di negozio (69 di Piume nel corso, 46 di Scintille nei premi concreti), al massimo del patto circa 151 (100 e 51).
 
 ## 5. Margine
 
 ### 5.1 Premi del negozio
 
-| Premio | Prezzo | Costo stimato | Come | Presenze per ripagarlo | Chiusure per ripagarlo | Margine in più di un GDO al massimo (sulla linea) nel tempo per guadagnarlo | Costo su quel margine | Euro per Piuma |
+| Premio | Prezzo | Costo stimato | Come | Presenze per ripagarlo | Chiusure per ripagarlo | Margine in più di un GDO al massimo (sulla linea) nel tempo per guadagnarlo | Costo su quel margine | Euro per unità |
 |---|---|---|---|---|---|---|---|---|
-| Corso Fenice Academy | 175 Piume | 300 € | costo vivo stimato (tutor e piattaforma), da confermare; listino 1.870-3.670 € | 0,55 | 0,14 | 12.861 € | 2,3% | 1,71 |
-| Sabato libero | 135 Piume | 296 € | 6,5 ore pagate (69 €) + metà della produzione persa (227 €) | 0,54 | 0,14 | 9.921 € | 3,0% | 2,19 |
-| Cena con Bruno e Federico | 110 Piume | 150 € | 3 persone a 50 € | 0,28 | 0,07 | 8.084 € | 1,9% | 1,36 |
-| Mezza giornata con un venditore | 55 Piume | 113 € | nessuna ora in più pagata; metà della produzione persa in 3,25 ore | 0,21 | 0,05 | 4.042 € | 2,8% | 2,05 |
-| Merenda per la sala | 40 Piume | 30 € | 8-10 persone | 0,06 | 0,01 | 2.940 € | 1,0% | 0,75 |
-| Uscita 30 minuti prima | 28 Piume | 23 € | mezz'ora pagata (5 €) + metà della produzione persa | 0,04 | 0,01 | 2.058 € | 1,1% | 0,82 |
-| Pranzo su Glovo in ufficio | 28 Piume | 20 € | scontrino medio di un ordine, consegna compresa | 0,04 | 0,01 | 2.058 € | 1,0% | 0,71 |
-| Caffè e cornetto | 14 Piume | 3 € | al bar | 0,01 | 0,00 | 1.029 € | 0,3% | 0,21 |
+| Corso Fenice Academy | 175 Piume | 300 € | costo vivo stimato (tutor e piattaforma), da confermare; listino 1.870-3.670 € | 0,55 | 0,14 | 12.861 € | 2,3% | 1,71 per Piuma |
+| Sabato libero | 6.400 Scintille | 296 € | 6,5 ore pagate (69 €) + metà della produzione persa (227 €) | 0,54 | 0,14 | 9.900 € | 3,0% | 0,046 per Scintilla |
+| Cena con Bruno e Federico | 5.200 Scintille | 150 € | 3 persone a 50 € | 0,28 | 0,07 | 8.044 € | 1,9% | 0,029 per Scintilla |
+| Mezz'ora in cui fissa Bruno (solo GDO) | 3.800 Scintille | 5 € | mezz'ora di pausa pagata; la produzione la fa Bruno (stima da confermare) | 0,01 | 0,00 | 5.878 € | 0,1% | 0,001 per Scintilla |
+| Merenda per la sala | 1.900 Scintille | 30 € | 8-10 persone | 0,06 | 0,01 | 2.939 € | 1,0% | 0,016 per Scintilla |
+| Uscita 30 minuti prima | 1.350 Scintille | 23 € | mezz'ora pagata (5 €) + metà della produzione persa | 0,04 | 0,01 | 2.088 € | 1,1% | 0,017 per Scintilla |
+| Pranzo su Glovo in ufficio | 1.350 Scintille | 20 € | scontrino medio di un ordine, consegna compresa | 0,04 | 0,01 | 2.088 € | 1,0% | 0,015 per Scintilla |
+| Caffè e cornetto | 650 Scintille | 3 € | al bar | 0,01 | 0,00 | 1.005 € | 0,3% | 0,005 per Scintilla |
 | Immagini, titolo e cornice | Scintille | 0 € | digitali | 0 | 0 | - | - | - |
 
 Come leggerla:
 - **Produzione persa**: un GDO al massimo del patto produce circa 70 euro di margine per ora al telefono (1,14 fissati all'ora × 61 euro). Nei permessi contiamo metà di quella produzione, perché i lead non chiamati restano in coda e se ne recupera una parte. Se i lead non mancano mai, il costo vero è solo quello delle ore pagate.
 - **Margine in più**: al massimo del patto un GDO fa 1,82 presenze in più a settimana rispetto alla linea, cioè circa 990 euro di margine. Il corso chiede 13 settimane a quel ritmo, quindi 12.861 euro di margine in più; il corso ne costa il 2,3%.
-- **Euro per Piuma**: in media 1,23 euro, al massimo 2,19 (se tutte le Piume diventassero sabati liberi).
+- **Euro per unità**: la Piuma vale un corso, 1,71 euro. La Scintilla spesa in premi concreti vale in media 0,018 euro (media semplice dei sette premi concreti e permessi), al massimo 0,046 se tutte diventassero sabati liberi; nelle immagini e nelle personalizzazioni non costa niente.
 - **Corso**: il costo vero è quello di erogarlo, non il listino. Il valore di 300 euro è un'ipotesi da verificare. Se viene regalato a qualcuno che l'avrebbe comprato si perde una vendita (2.093 euro di margine); se va a un dipendente o a un esterno, il trattamento fiscale è da chiedere al consulente.
 
 ### 5.2 Bonus presenze dei GDO (12 euro dalla 5ª)
@@ -320,13 +334,14 @@ Ogni chiusura oltre la soglia costa 33 euro all'azienda (24 lordi × 1,38) e val
 | Classifica (lordo) | 368 € |
 | Bonus Conferme (lordo, 12 chiusure di squadra a settimana) | 26 € |
 | Bonus in euro: costo azienda (× 1,38) | 822 € |
-| Negozio: 395 Piume al mese × 1,23 € | 485 € |
-| **Totale** | **1.307 €** |
-| Totale se tutte le Piume diventano sabati liberi | 1.688 € |
-| Presenze in più al mese per ripagarlo | **2,4** |
-| Chiusure in più al mese per ripagarlo | 0,62 |
+| Negozio, corso: 415 Piume al mese × 1,71 € | 712 € |
+| Negozio, premi in Scintille: 24.636 Scintille al mese × 0,018 € | 453 € |
+| **Totale** | **1.987 €** |
+| Totale se tutte le Scintille diventano sabati liberi | 2.674 € |
+| Presenze in più al mese per ripagarlo | **3,7** |
+| Chiusure in più al mese per ripagarlo | 0,95 |
 | Presenze GDO del mese (squadra) | 118 |
-| Costo sul margine delle presenze GDO del mese | 2,0% |
+| Costo sul margine delle presenze GDO del mese | 3,1% |
 
 **Squadra al patto: 8 GDO al massimo del patto, 2 Conferme brave**
 
@@ -336,17 +351,18 @@ Ogni chiusura oltre la soglia costa 33 euro all'azienda (24 lordi × 1,38) e val
 | Classifica (lordo) | 368 € |
 | Bonus Conferme (lordo, 16 chiusure di squadra a settimana) | 165 € |
 | Bonus in euro: costo azienda (× 1,38) | 1.559 € |
-| Negozio: 583 Piume al mese × 1,23 € | 716 € |
-| **Totale** | **2.276 €** |
-| Totale se tutte le Piume diventano sabati liberi | 2.838 € |
-| Presenze in più al mese per ripagarlo | **4,2** |
-| Chiusure in più al mese per ripagarlo | 1,09 |
+| Negozio, corso: 594 Piume al mese × 1,71 € | 1.018 € |
+| Negozio, premi in Scintille: 28.472 Scintille al mese × 0,018 € | 523 € |
+| **Totale** | **3.101 €** |
+| Totale se tutte le Scintille diventano sabati liberi | 3.894 € |
+| Presenze in più al mese per ripagarlo | **5,7** |
+| Chiusure in più al mese per ripagarlo | 1,48 |
 | Presenze GDO del mese (squadra) | 173 |
-| Costo sul margine delle presenze GDO del mese | 2,4% |
+| Costo sul margine delle presenze GDO del mese | 3,3% |
 
-Da ottobre al patto: +55 presenze al mese, circa +29.800 euro di margine, contro 968 euro di costo in più.
+Da ottobre al patto: +55 presenze al mese, circa +29.800 euro di margine, contro 1.114 euro di costo in più.
 
-Il negozio è contato come se ogni Piuma venisse spesa: è un tetto, non una previsione. Le Scintille non costano niente. Le Piume dei forzieri sono comprese.
+Il negozio è contato come se ogni Piuma diventasse un corso e ogni Scintilla un premio concreto: è un tetto, non una previsione, perché una parte delle Scintille va in immagini e personalizzazioni, che non costano niente. Le Piume dei forzieri sono comprese.
 
 ## 6. La classifica dei primi tre
 
@@ -365,6 +381,7 @@ Il negozio è contato come se ogni Piuma venisse spesa: è un tetto, non una pre
 |---|---|
 | Regole e default, motore a gradini (stadi, scalini, obiettivi) | `src/lib/economy/rules.ts`, test in `rules.test.ts` (49) |
 | Accrediti e storni: Piume del GDO a stadi, Scintille e obiettivi delle Conferme | `src/lib/economy/awards.ts` (`syncLeadPiume` resta il punto unico, già chiamato da Conferme, venditori, annullamento admin e riconciliazione) |
+| Presenze e chiusure verificate (registrate a appuntamento passato) | `esitiVerificati` e `registrazioniDaEventi` in `src/lib/economy/rules.ts`, letti da `sincronizzaLead` e dagli obiettivi delle Conferme |
 | Premi della settimana (conti, settimana lun-sab, snapshot) | `src/lib/economy/premiSettimana.ts`, `settimanaDb.ts`, test in `premiSettimana.test.ts` |
 | Modello degli scenari | `src/lib/economy/scenari.ts`, test in `scenari.test.ts` |
 | Action admin e pagina | `src/app/actions/premiSettimanaActions.ts`, `/admin/diretta/premi-settimana`, link da `/admin/diretta` |
@@ -375,7 +392,7 @@ Il negozio è contato come se ogni Piuma venisse spesa: è un tetto, non una pre
 
 Da fare al go-live, nell'ordine:
 1. applicare la migrazione 0049 (senza, la pagina dei premi della settimana non registra; il resto funziona);
-2. `npx tsx --env-file=.env.local scripts/diretta/negozio-catalogo.ts`, controllare l'elenco, poi `--apply`;
+2. `npx tsx --env-file=.env.local scripts/diretta/negozio-catalogo.ts`, controllare l'elenco, poi `--apply` (allinea anche i ruoli: la mezz'ora in cui fissa Bruno diventa solo dei GDO);
 3. nessuna azione sui saldi: le regole nuove partono dal 26/10 come le vecchie.
 
 Esempio di `economy_rules` da scrivere solo se si vuole cambiare qualcosa (tutto il resto resta al default):
@@ -396,3 +413,5 @@ Esempio di `economy_rules` da scrivere solo se si vuole cambiare qualcosa (tutto
 4. **Fenici della settimana** nella pagina Squadra: restano accanto al podio; da togliere se "solo i primi tre" vale anche per loro.
 5. **Bonus Conferme e conferme a call iniziata**: il bonus in euro conta le chiusure di tutti i lead confermati dalle Conferme, anche quelli confermati dopo l'ora dell'appuntamento (circa il 10%). Le Scintille e le Piume delle Conferme invece non li contano.
 6. Le stime dei forzieri dipendono da quanti GDO fissano davvero ogni giorno: con meno di 8 il forziere raro arriva più di rado e le Scintille scendono di circa 80 a settimana.
+7. **Euro e presenze scritte in anticipo**: le monete aspettano un esito registrato a appuntamento passato, il bonus da 12 euro e la classifica invece contano il latch `presentedAt` come i KPI. Un "Presenziato" scritto in anticipo e mai corretto conta per gli euro. Si può applicare la stessa verifica anche lì, oppure togliere i bottoni dello Storico per gli appuntamenti futuri.
+8. **Costo della mezz'ora in cui fissa Bruno**: qui 5 euro (la pausa pagata); il tempo di Bruno non è contato.
